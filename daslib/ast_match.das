@@ -280,20 +280,17 @@ def qm_rtti(expr : Expression const?) : string {
 
 [macro_function]
 def private make_is_check(at : LineInfo; var expr : ExpressionPtr&; rtti_name : string) : ExpressionPtr {
-    var inscope result <- new ExprIsVariant(at = at, value <- expr, name := rtti_name)
-    return <- result
+    return <- new ExprIsVariant(at = at, value <- expr, name := rtti_name)
 }
 
 [macro_function]
 def private make_not(at : LineInfo; var expr : ExpressionPtr&) : ExpressionPtr {
-    var inscope result <- new ExprOp1(at = at, op := "!", subexpr <- expr)
-    return <- result
+    return <- new ExprOp1(at = at, op := "!", subexpr <- expr)
 }
 
 [macro_function]
 def private make_var_ref(at : LineInfo; name : string) : ExpressionPtr {
-    var inscope result <- new ExprVar(at = at, name := name)
-    return <- result
+    return <- new ExprVar(at = at, name := name)
 }
 
 [macro_function]
@@ -304,8 +301,7 @@ def private qm_guard(at : LineInfo; var cond : ExpressionPtr&; var fail_call : E
     unsafe {
         (reinterpret<ExprBlock?> fail_blk).list |> emplace(fail_ret)
     }
-    var inscope result <- new ExprIfThenElse(at = at, cond <- cond, if_true <- fail_blk)
-    return <- result
+    return <- new ExprIfThenElse(at = at, cond <- cond, if_true <- fail_blk)
 }
 
 [macro_function]
@@ -1504,11 +1500,10 @@ class private QMatch : AstCallMacro {
         }
 
         var inscope mkblk <- new ExprMakeBlock(at = at, _block <- blk)
-        var inscope result <- new ExprCall(at = at,
+        return <- new ExprCall(at = at,
             name := "qm_run",
             arguments := array<ExpressionPtr>(expr_arg, mkblk)
         )
-        return <- result
     }
 }
 
@@ -1566,11 +1561,10 @@ class private QMatchBlock : AstCallMacro {
         }
 
         var inscope mkblk <- new ExprMakeBlock(at = at, _block <- blk)
-        var inscope result <- new ExprCall(at = at,
+        return <- new ExprCall(at = at,
             name := "qm_run",
             arguments := array<ExpressionPtr>(expr_arg, mkblk)
         )
-        return <- result
     }
 }
 
@@ -1633,10 +1627,9 @@ class private QMatchFunction : AstCallMacro {
 
         var inscope func_arg <- clone_expression(call.arguments[0])
         var inscope mkblk_f <- new ExprMakeBlock(at = at, _block <- blk)
-        var inscope result <- new ExprCall(at = at,
+        return <- new ExprCall(at = at,
             name := "qm_run_function",
             arguments := array<ExpressionPtr>(func_arg, mkblk_f)
         )
-        return <- result
     }
 }
