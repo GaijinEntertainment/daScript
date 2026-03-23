@@ -400,7 +400,10 @@ ENDFUNCTION()
 
 
 FOREACH(_module ${_modules})
-    INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
+    # Skip daspkg-installed modules that build themselves (standalone CMake)
+    IF(NOT EXISTS "${PROJECT_SOURCE_DIR}/modules/${_module}/.daspkg_standalone")
+        INCLUDE(modules/${_module}/CMakeLists.txt OPTIONAL)
+    ENDIF()
 ENDFOREACH()
 
 # Clean stale .shared_module files. When a module is disabled, its .shared_module
@@ -1307,6 +1310,7 @@ install(FILES
 
 install(FILES ${PROJECT_SOURCE_DIR}/install/README.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
+install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/install/skills DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)

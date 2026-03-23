@@ -740,7 +740,7 @@ def cmd_introduce(root, source : string) {
         let exit_code = run_cmd("git clone --depth 1 \"{git_url}\" \"{tmp_dir}\"", output)
         if (exit_code != 0) {
             print("Error: failed to clone {git_url}:\n{output}\n")
-            rmdir_rec(tmp_dir)
+            force_rmdir(tmp_dir)
             return
         }
         pkg_dir = tmp_dir
@@ -751,7 +751,7 @@ def cmd_introduce(root, source : string) {
     var manifest : PackageManifest
     if (!read_manifest(pkg_dir, manifest)) {
         if (!empty(source)) {
-            rmdir_rec(pkg_dir)
+            force_rmdir(pkg_dir)
         }
         return
     }
@@ -760,7 +760,7 @@ def cmd_introduce(root, source : string) {
     var idx : table<string; IndexEntry>
     if (!fetch_index(root, idx)) {
         if (!empty(source)) {
-            rmdir_rec(pkg_dir)
+            force_rmdir(pkg_dir)
         }
         print("Error: failed to fetch package index\n")
         return
@@ -768,14 +768,14 @@ def cmd_introduce(root, source : string) {
     if (idx |> key_exists(manifest.name)) {
         print("Error: package '{manifest.name}' already exists in the index\n")
         if (!empty(source)) {
-            rmdir_rec(pkg_dir)
+            force_rmdir(pkg_dir)
         }
         return
     }
 
     // cleanup temp clone
     if (!empty(source)) {
-        rmdir_rec(pkg_dir)
+        force_rmdir(pkg_dir)
     }
 
     // step 4: modify index and create PR via gh
@@ -904,7 +904,7 @@ def cmd_update_index(root : string) {
             print("Updating {name}...\n")
             let tmp_dir = "{tmp_base}/{name}"
             if (fexist(tmp_dir)) {
-                rmdir_rec(tmp_dir)
+                force_rmdir(tmp_dir)
             }
             let git_url = "https://{url}.git"
             var output : string
@@ -973,12 +973,12 @@ def cmd_update_index(root : string) {
                 }
             }
 
-            rmdir_rec(tmp_dir)
+            force_rmdir(tmp_dir)
             updated ++
         }
     }
 
-    rmdir_rec(tmp_base)
+    force_rmdir(tmp_base)
 
     // write updated index
     let cache_dir = get_index_cache_dir(root)

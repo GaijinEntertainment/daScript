@@ -1,0 +1,27 @@
+# Build artifacts
+build/
+bin/
+lib/
+.cache/
+
+# JIT
+.jitted_scripts/
+
+# AOT
+_aot_generated/
+
+# daspkg
+daspkg.lock
+.daspkg_global.lock
+.daspkg_standalone
+modules/.daspkg_tmp/
+modules/.daspkg_backup/
+modules/.daspkg_cache/
+modules/.daspkg.log
+
+# IDE
+.vscode/
+
+# MCP
+.mcp.json
+sgconfig.yml

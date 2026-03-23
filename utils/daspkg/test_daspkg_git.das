@@ -30,7 +30,7 @@ def test_install_git_basic(t : T?) {
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_package"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -47,7 +47,7 @@ def test_install_git_version_v1(t : T?) {
         let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "return \"1.0\"") >= 0)
         t |> success(find(src, "new_in_v2") < 0)
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -66,7 +66,7 @@ def test_install_version_with_v_prefix(t : T?) {
         // verify v1.0 content
         let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "return \"1.0\"") >= 0)
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -83,7 +83,7 @@ def test_install_git_version_v2(t : T?) {
         let src = fread("{tmp_root}/modules/daspkg-test-versions/daslib/test_versions.das")
         t |> success(find(src, "return \"2.0\"") >= 0)
         t |> success(find(src, "new_in_v2") >= 0)
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -105,7 +105,7 @@ def test_install_with_dependencies(t : T?) {
         t |> success(fexist("{tmp_root}/modules/daspkg-test-deps/daslib/test_deps.das"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -119,7 +119,7 @@ def test_fetch_index(t : T?) {
         t |> success(length(index) > 0, "index has entries")
         t |> success(index |> key_exists("daspkg-test-pure"), "test-pure in index")
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -135,7 +135,7 @@ def test_cmd_install_by_name(t : T?) {
         t |> success(has_package(lf, "daspkg-test-pure"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -153,7 +153,7 @@ def test_cmd_update_single(t : T?) {
         // verify still present after update
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -183,8 +183,8 @@ def test_cmd_update_recopies_local(t : T?) {
         let content = fread("{tmp_root}/modules/localpkg/hello.das")
         t |> equal(content, "// hello v2\n")
         // cleanup
-        rmdir_rec(tmp_root)
-        rmdir_rec(src_dir)
+        force_rmdir(tmp_root)
+        force_rmdir(src_dir)
     }
 }
 
@@ -199,7 +199,7 @@ def test_cmd_update_nonexistent(t : T?) {
         cmd_update(tmp_root, "nonexistent")
         t |> success(true)
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -219,7 +219,7 @@ def test_cmd_update_all_integration(t : T?) {
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-deps/daslib/test_deps.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -248,7 +248,7 @@ def test_cmd_update_preserves_version(t : T?) {
         t |> success(find(src, "\"1.0\"") >= 0)
         t |> success(find(src, "new_in_v2") < 0)
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -266,7 +266,7 @@ def test_cmd_install_all_integration(t : T?) {
         t |> success(has_package(lf, "daspkg-test-pure"))
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -282,7 +282,7 @@ def test_cmd_check_integration(t : T?) {
         cmd_check(tmp_root)
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/.das_module"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -300,7 +300,7 @@ def test_cmd_install_already_installed(t : T?) {
         cmd_install(tmp_root, "github.com/borisbat/daspkg-test-pure", false)
         t |> success(fexist("{tmp_root}/modules/daspkg-test-pure/daslib/test_pure.das"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -321,7 +321,7 @@ def test_install_local_auto_build(t : T?) {
         // verify shared module was produced
         t |> success(fexist("{tmp_root}/modules/daspkg-example-c/dasModuleFastMath.shared_module"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -343,7 +343,7 @@ def test_update_local_auto_build(t : T?) {
         cmd_update(tmp_root, "daspkg-example-c")
         t |> success(fexist(module_file))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -399,8 +399,8 @@ def test_full_workflow_local(t : T?) {
         t |> equal("hi, world", strip(output), "correct output v2")
 
         // cleanup
-        rmdir_rec(tmp_root)
-        rmdir_rec(pkg_src)
+        force_rmdir(tmp_root)
+        force_rmdir(pkg_src)
     }
 }
 
@@ -418,14 +418,14 @@ def test_cmd_build_integration(t : T?) {
         // remove any pre-existing build artifacts
         let module_file = "{pkg_dir}/dasModuleFastMath.shared_module"
         if (fexist(module_file)) remove(module_file)
-        if (fexist("{pkg_dir}/_build")) rmdir_rec("{pkg_dir}/_build")
+        if (fexist("{pkg_dir}/_build")) force_rmdir("{pkg_dir}/_build")
         // run cmd_build
         cmd_build(tmp_root)
         // verify build happened
         t |> success(fexist("{pkg_dir}/_build"))
         t |> success(fexist(module_file))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -456,7 +456,7 @@ def test_cmd_upgrade_single(t : T?) {
         t |> success(find(src, "\"2.0\"") >= 0)
         t |> success(find(src, "new_in_v2") >= 0)
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -476,7 +476,7 @@ def test_cmd_upgrade_already_latest(t : T?) {
         t |> success(read_lock_file(tmp_root, lf2))
         t |> equal(get_package(lf2, "daspkg-test-versions").tag, tag_before)
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -496,8 +496,8 @@ def test_cmd_upgrade_local_skips(t : T?) {
         cmd_upgrade(tmp_root, "localpkg")
         t |> success(has_package(lf, "localpkg"))
         // cleanup
-        rmdir_rec(tmp_root)
-        rmdir_rec(src_dir)
+        force_rmdir(tmp_root)
+        force_rmdir(src_dir)
     }
 }
 
@@ -520,7 +520,7 @@ def test_cmd_upgrade_all_integration(t : T?) {
         // daspkg-test-pure should still be present
         t |> success(has_package(lf2, "daspkg-test-pure"))
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -551,7 +551,7 @@ def test_cmd_upgrade_dep_constraint(t : T?) {
         t |> success(find(src, "\"2.0\"") >= 0)
         t |> success(find(src, "new_in_v2") >= 0)
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -573,7 +573,7 @@ def test_dependency_cycle_detection(t : T?) {
         // if we got here, cycle detection worked
         t |> success(true, "cycle detection prevented infinite recursion")
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
     }
 }
 
@@ -605,6 +605,216 @@ def test_cmd_update_rollback(t : T?) {
         read_lock_file(tmp_root, lf3)
         t |> success(has_package(lf3, "daspkg-test-pure"), "lockfile entry restored")
         // cleanup
-        rmdir_rec(tmp_root)
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_install_global_basic(t : T?) {
+    t |> run("installs package globally to das_root/modules") @(t : T?) {
+        let das_root = get_das_root()
+        // install v1.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        t |> success(has_package(glf, "daspkg-test-versions"))
+        t |> equal(get_package(glf, "daspkg-test-versions").tag, "v1.0")
+        t |> success(get_package(glf, "daspkg-test-versions").global)
+        t |> success(fexist("{das_root}/modules/daspkg-test-versions/.das_module"))
+        // verify global lock file was written
+        var glf2 : LockFile
+        t |> success(read_global_lock_file(glf2))
+        t |> success(has_package(glf2, "daspkg-test-versions"))
+        // cleanup
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_local_auto_uses_global(t : T?) {
+    t |> run("local install uses compatible global version") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_auto_global"
+        mkdir(tmp_root)
+        // install v1.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        // local install with no version constraint — should auto-use global
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions", false)
+        var lf : LockFile
+        t |> success(read_lock_file(tmp_root, lf))
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        let entry = get_package(lf, "daspkg-test-versions")
+        t |> success(entry.global, "entry should be marked global")
+        t |> equal(entry.tag, "v1.0")
+        // verify no local directory was created
+        t |> success(!fexist("{tmp_root}/modules/daspkg-test-versions"), "no local copy")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_global_version_mismatch(t : T?) {
+    t |> run("local install errors on version mismatch with global") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_ver_mismatch"
+        mkdir(tmp_root)
+        // install v2.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "2.0", glf, [is_root = true, is_global = true])
+        // local install requesting v1.0 — should NOT auto-use global (version mismatch)
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions@1.0", false)
+        var lf : LockFile
+        read_lock_file(tmp_root, lf)
+        // should NOT have installed anything (error, no --force)
+        t |> success(!has_package(lf, "daspkg-test-versions"), "should not install on mismatch")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_global_version_mismatch_force(t : T?) {
+    t |> run("--force installs locally despite global version mismatch") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_force_local"
+        mkdir(tmp_root)
+        // install v2.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "2.0", glf, [is_root = true, is_global = true])
+        // local install requesting v1.0 with --force — should install locally
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions@1.0", true)
+        var lf : LockFile
+        t |> success(read_lock_file(tmp_root, lf))
+        t |> success(has_package(lf, "daspkg-test-versions"), "should install locally with --force")
+        let entry = get_package(lf, "daspkg-test-versions")
+        t |> success(!entry.global, "should NOT be global")
+        t |> equal(entry.tag, "v1.0", "should be v1.0")
+        t |> success(fexist("{tmp_root}/modules/daspkg-test-versions"), "local directory exists")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_remove_global_reference(t : T?) {
+    t |> run("removing global reference doesn't delete global directory") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_rm_ref"
+        mkdir(tmp_root)
+        // install globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        // local install auto-uses global
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions", false)
+        var lf : LockFile
+        read_lock_file(tmp_root, lf)
+        t |> success(has_package(lf, "daspkg-test-versions"))
+        // remove from project (not --global)
+        cmd_remove(tmp_root, "daspkg-test-versions")
+        var lf2 : LockFile
+        read_lock_file(tmp_root, lf2)
+        t |> success(!has_package(lf2, "daspkg-test-versions"), "removed from project lock")
+        // global directory should still exist
+        t |> success(fexist("{das_root}/modules/daspkg-test-versions"), "global dir intact")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_install_all_version_constraint(t : T?) {
+    t |> run("cmd_install_all passes version constraint to global check") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_constraint"
+        mkdir(tmp_root)
+        // install v2.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "2.0", glf, [is_root = true, is_global = true])
+        // create a .das_package that requires =1.0
+        fopen("{tmp_root}/.das_package", "wb") <| $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n\n[export]\ndef package() \{\n    package_name(\"test\")\n    package_description(\"test\")\n\}\n\n[export]\ndef dependencies(version : string) \{\n    require_package(\"daspkg-test-versions\", \"=1.0\")\n\}\n")
+        }
+        // cmd_install_all should detect mismatch and NOT install
+        cmd_install_all(tmp_root, false)
+        var lf : LockFile
+        read_lock_file(tmp_root, lf)
+        t |> success(!has_package(lf, "daspkg-test-versions"), "should not auto-use v2.0 when =1.0 required")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_remove_global_package(t : T?) {
+    t |> run("remove --global deletes directory and lock entry") @(t : T?) {
+        let das_root = get_das_root()
+        // install globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        t |> success(fexist("{das_root}/modules/daspkg-test-versions"))
+        // remove globally
+        cmd_remove(das_root, "daspkg-test-versions", [is_global = true])
+        t |> success(!fexist("{das_root}/modules/daspkg-test-versions"), "directory removed")
+        var glf2 : LockFile
+        read_global_lock_file(glf2)
+        t |> success(!has_package(glf2, "daspkg-test-versions"), "lock entry removed")
+        // cleanup
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_update_global_package(t : T?) {
+    t |> run("update --global re-installs at pinned version") @(t : T?) {
+        let das_root = get_das_root()
+        // install v1.0 globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        t |> equal(get_package(glf, "daspkg-test-versions").tag, "v1.0")
+        // update — should re-install v1.0 (pinned version)
+        cmd_update(das_root, "daspkg-test-versions", [is_global = true])
+        var glf2 : LockFile
+        read_global_lock_file(glf2)
+        t |> success(has_package(glf2, "daspkg-test-versions"), "still installed after update")
+        t |> equal(get_package(glf2, "daspkg-test-versions").tag, "v1.0", "still v1.0")
+        // cleanup
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
+    }
+}
+
+[test]
+def test_local_update_rejects_global_entry(t : T?) {
+    t |> run("update without --global rejects global entry") @(t : T?) {
+        let das_root = get_das_root()
+        let tmp_root = "{das_root}/_daspkg_test_upd_reject"
+        mkdir(tmp_root)
+        // install globally
+        var glf : LockFile
+        install_git(das_root, "daspkg-test-versions", "github.com/borisbat/daspkg-test-versions", "1.0", glf, [is_root = true, is_global = true])
+        // local install auto-uses global
+        cmd_install(tmp_root, "github.com/borisbat/daspkg-test-versions", false)
+        // try update without --global — should refuse
+        cmd_update(tmp_root, "daspkg-test-versions")
+        // verify nothing changed — still global reference
+        var lf : LockFile
+        read_lock_file(tmp_root, lf)
+        t |> success(get_package(lf, "daspkg-test-versions").global, "still global reference")
+        // cleanup
+        force_rmdir(tmp_root)
+        force_rmdir("{das_root}/modules/daspkg-test-versions")
+        remove(global_lock_file_path())
     }
 }

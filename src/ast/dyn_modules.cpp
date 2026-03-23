@@ -83,7 +83,45 @@ static Result init_dyn_modules(smart_ptr<FileAccess> fa, string path, TextWriter
     }
 }
 
-static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, das::TextWriter &tout) {
+// Collect directory names under path/modules/ without loading anything
+static das_hash_set<das::string> collect_module_names(const das::string &path) {
+    das_hash_set<das::string> result;
+#if DAS_NO_FILEIO
+    return result;
+#else
+    das::string modules_path = path + "/modules/";
+#if defined(_MSC_VER)
+    _finddata_t c_file;
+    intptr_t hFile;
+    das::string findPath = modules_path + "/*";
+    if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
+        do {
+            if (c_file.name[0] == '.') {
+                continue;
+            }
+            result.insert(das::string(c_file.name));
+        } while (_findnext(hFile, &c_file) == 0);
+        _findclose(hFile);
+    }
+#else
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir(modules_path.c_str())) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            if (ent->d_name[0] == '.') {
+                continue;
+            }
+            result.insert(das::string(ent->d_name));
+        }
+        closedir(dir);
+    }
+#endif
+    return result;
+#endif // DAS_NO_FILEIO
+}
+
+static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, das::TextWriter &tout,
+                                    const das_hash_set<das::string> *skip_set = nullptr) {
     // FileAccess do not support iteratinf over directory.
 #if DAS_NO_FILEIO
     return false;
@@ -100,6 +138,10 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
             if (strcmp(c_file.name, ".") == 0 || strcmp(c_file.name, "..") == 0) {
                 continue;
             }
+            if (skip_set && skip_set->count(das::string(c_file.name))) {
+                tout << "Warning: local '" << c_file.name << "' shadows global — using local\n";
+                continue;
+            }
             all_good &= Result::OK == init_dyn_modules(fa, modules_path + c_file.name, tout, false);
         } while (_findnext(hFile, &c_file) == 0);
     }
@@ -110,6 +152,10 @@ static bool init_modules_for_folder(FileAccessPtr fa, const das::string &path, d
     if ((dir = opendir (modules_path.c_str())) != NULL) {
         while ((ent = readdir (dir)) != NULL) {
             if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
+                continue;
+            }
+            if (skip_set && skip_set->count(das::string(ent->d_name))) {
+                tout << "Warning: local '" << ent->d_name << "' shadows global — using local\n";
                 continue;
             }
             all_good &= Result::OK == init_dyn_modules(fa, modules_path + ent->d_name, tout, false);
@@ -125,12 +171,19 @@ bool require_dynamic_modules(FileAccessPtr file_access,
                              const das::string &das_root,
                              const das::string &project_root,
                              das::TextWriter &tout) {
-    // Always init for dasroot.
-    bool all_good = das::init_modules_for_folder(file_access, das_root, tout);
-    if (!project_root.empty() &&
+    bool has_project = !project_root.empty() &&
         normalizeFileName(das_root.c_str()) !=
-        normalizeFileName(project_root.c_str())) {
-        // Init for project_root.
+        normalizeFileName(project_root.c_str());
+    // Collect local module names first so we can skip shadows in das_root
+    das_hash_set<das::string> local_names;
+    if (has_project) {
+        local_names = collect_module_names(project_root);
+    }
+    // Always init for dasroot, skipping names that exist locally
+    bool all_good = das::init_modules_for_folder(file_access, das_root, tout,
+        local_names.empty() ? nullptr : &local_names);
+    if (has_project) {
+        // Init for project_root (no skipping)
         all_good &= das::init_modules_for_folder(file_access, project_root, tout);
     }
     return all_good;

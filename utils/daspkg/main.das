@@ -36,6 +36,7 @@ def print_usage() {
     print("\nOptions:\n")
     print("  --root <path>   Project root (default: current directory)\n")
     print("  --force         Force reinstall\n")
+    print("  --global, -g    Operate on global modules (das_root/modules/)\n")
     print("  --color         Enable colored output\n")
     print("  --no-color      Disable colored output\n")
     print("  --verbose, -v   Print detailed progress\n")
@@ -55,37 +56,38 @@ def main() {
     let root = get_full_file_name(parsed.root)
     log_init(root)
     let command = parsed.command
+    let is_global = parsed.global_flag
 
     if (command == "list") {
-        cmd_list(root, parsed.json)
+        cmd_list(root, parsed.json, is_global)
     } elif (command == "install") {
         if (empty(parsed.command_arg)) {
-            cmd_install_all(root, parsed.force)
+            cmd_install_all(root, parsed.force, is_global)
         } else {
-            cmd_install(root, parsed.command_arg, parsed.force)
+            cmd_install(root, parsed.command_arg, parsed.force, is_global)
         }
     } elif (command == "remove") {
         if (empty(parsed.command_arg)) {
             print("Error: remove requires a package name\n")
         } else {
-            cmd_remove(root, parsed.command_arg)
+            cmd_remove(root, parsed.command_arg, is_global)
         }
     } elif (command == "update") {
         if (empty(parsed.command_arg)) {
-            cmd_update_all(root)
+            cmd_update_all(root, is_global)
         } else {
-            cmd_update(root, parsed.command_arg)
+            cmd_update(root, parsed.command_arg, is_global)
         }
     } elif (command == "upgrade") {
         if (empty(parsed.command_arg)) {
-            cmd_upgrade_all(root)
+            cmd_upgrade_all(root, is_global)
         } else {
-            cmd_upgrade(root, parsed.command_arg)
+            cmd_upgrade(root, parsed.command_arg, is_global)
         }
     } elif (command == "build") {
-        cmd_build(root)
+        cmd_build(root, is_global)
     } elif (command == "check") {
-        cmd_check(root, parsed.json)
+        cmd_check(root, parsed.json, is_global)
     } elif (command == "doctor") {
         cmd_doctor()
     } elif (command == "search") {
