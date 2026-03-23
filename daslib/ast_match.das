@@ -906,7 +906,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             var inscope cond <- qmacro($i(cast_var).value != $v(string(cv.value)))
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
-        }
+        } // TODO: support other constant types
         return
     }
 
@@ -964,7 +964,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 if (*pv != null) {
                     let child_pattern = get_ptr(*pv)
                     let child_var = next_var(index)
-                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)); })
+                    body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).$f(name)); })
                     if (!is_wildcard_call(child_pattern) && !(child_pattern is ExprTag)) {
                         var inscope ncond <- qmacro($i(child_var) == null)
                         var inscope nfail <- qmacro(qm_fail_null())
@@ -973,7 +973,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     generate_match(child_pattern, child_var, body, index, at)
                 } else {
                     // Pattern's child is null — require actual's child is also null
-                        var inscope ncond <- qmacro($i(cast_var).$f(name) != null)
+                    var inscope ncond <- qmacro($i(cast_var).$f(name) != null)
                     var inscope nfail <- qmacro(qm_fail_field($i(actual_var)))
                     body |> emplace_new <| qm_guard(at, ncond, nfail)
                 }
@@ -1263,7 +1263,6 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 pending_b_save = save_var
                 pending_b_vname = b_vname
             }
-            pass
         } elif (wc_name == "_any") {
             // Exactly one — advance pos by exactly 1
             let b_vname = get_wildcard_b_tag(pat)
