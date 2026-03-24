@@ -46,7 +46,7 @@ def is_typedecl_ptr(t : TypeDeclPtr) {
     if (pt == null) {
         return false
     }
-    if (pt.baseType != Type.tHandle || pt.annotation.name != "TypeDecl" || pt.annotation._module.name != "ast") {
+    if (pt.baseType != Type.tHandle || pt.annotation.name != "TypeDecl" || pt.annotation._module.name != "ast_core") {
         return false
     }
     return true
@@ -130,7 +130,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
         let className = "{func.name}`TypeMacro"
         var inscope parentType <- typeinfo ast_typedecl(type<ast::AstTypeMacro>)
         if (parentType == null) {
-            errors := "ast::AstTypeMacro not found"
+            errors := "ast_core::AstTypeMacro not found"
             return false
         }
         var inscope cls <- make_class(className, parentType.structType, compiling_module())

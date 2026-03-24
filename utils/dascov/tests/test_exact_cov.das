@@ -7,9 +7,9 @@ require daslib/coverage
 require daslib/strings_boost
 require dastest/testing_boost
 
-require debugapi
-require fio
-require rtti
+require daslib/debugger
+require daslib/fio
+require daslib/rtti
 require strings
 
 def compile_and_simulate(input : string; var access; var mg : ModuleGroup?; cop; blk) {

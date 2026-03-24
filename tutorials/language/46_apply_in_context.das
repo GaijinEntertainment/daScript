@@ -28,7 +28,7 @@
 options gen2
 
 require daslib/apply_in_context
-require debugapi
+require daslib/debugger
 
 // ============================================================
 // Section 1: Setting up a named context

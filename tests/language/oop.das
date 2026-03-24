@@ -1,7 +1,7 @@
 // Tests OOP: classes, constructors, finalizers, inheritance, virtual dispatch, RTTI
 options gen2
 require dastest/testing_boost public
-require rtti
+require daslib/rtti
 
 var delFoo = 0
 var delFoo3D = 0

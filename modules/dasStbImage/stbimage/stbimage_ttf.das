@@ -17,7 +17,7 @@ require stbtruetype public
 require stbimage/stbimage_boost
 require daslib/safe_addr
 require math
-require fio
+require daslib/fio
 require strings
 
 // ============================================================================

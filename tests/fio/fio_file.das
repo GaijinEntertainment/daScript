@@ -4,7 +4,7 @@ require daslib/faker
 require daslib/fuzzer
 require daslib/strings_boost
 
-require fio
+require daslib/fio
 
 let TOTAL_FUZZ_FILES = 100
 

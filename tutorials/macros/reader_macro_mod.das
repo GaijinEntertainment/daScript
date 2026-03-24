@@ -28,7 +28,7 @@ options no_aot
 
 module reader_macro_mod
 
-require ast
+require daslib/ast
 require strings
 require daslib/ast_boost
 require daslib/strings_boost

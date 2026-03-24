@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-require fio
+require daslib/fio
 
 [test]
 def test_passing(t : T?) {

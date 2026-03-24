@@ -8,8 +8,8 @@ module opengl_state shared private
 
 require opengl
 require glfw
-require debugapi
-require rtti
+require daslib/debugger
+require daslib/rtti
 
 require daslib/safe_addr
 

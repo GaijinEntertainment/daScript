@@ -11,7 +11,7 @@ module das_source_formatter_fio shared private
 //! Wraps ``das_source_formatter`` with file I/O. ``format_file`` reads,
 //! formats, and optionally writes back a ``.das`` source file.
 
-require fio
+require daslib/fio
 require strings
 require daslib/defer
 require daslib/das_source_formatter

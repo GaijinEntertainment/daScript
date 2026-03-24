@@ -21,10 +21,10 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
-require debugapi
+require daslib/debugger
 require math
 require jit
-require fio
+require daslib/fio
 
 // uncomment to enable debug
 /*
@@ -5790,7 +5790,7 @@ class public LlvmJitVisitor : AstVisitor {
         if (thisBlock != null) {
             return LLVMGetParam(ffunc, uint(thisBlock.arguments |> length))
         } else {
-            panic("not in block")
+            failed("not in block")
             return null
         }
     }
@@ -5801,7 +5801,7 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (thisFunc != null) {
             return LLVMGetParam(ffunc, uint(thisFunc.arguments |> length))
         } else {
-            panic("not in block or function")
+            failed("not in block or function")
             return null
         }
     }
@@ -5812,7 +5812,7 @@ class public LlvmJitVisitor : AstVisitor {
         } elif (thisFunc != null) {
             return LLVMGetParam(ffunc, uint(thisFunc.arguments |> length + 1))
         } else {
-            panic("not in block or function")
+            failed("not in block or function")
             return null
         }
     }
@@ -6323,6 +6323,10 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     var inscope adapter = make_visitor(*visitor)
     visitor.adapter := adapter
 
+    // dummy Function with 0 arguments so get_context_param returns LLVMGetParam(ffunc, 0u)
+    var inscope dummyFunc <- new Function(name := fn_name)
+    visitor.thisFunc = get_ptr(dummyFunc)
+
     let globals_fn_type = LLVMFunctionType(types.t_void,
         array<LLVMTypeRef>(types.LLVMVoidPtrType())
     )
@@ -6341,7 +6345,7 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     prog |> for_each_module <| $(mod) {
         mod |> for_each_global() <| $(glob) {
             if (glob.init != null && glob.flags.used) {
-                visit_expression(glob.init, adapter)
+                // compute global variable destination pointer before visiting init expression
                 let isSolidContext = glob._module.moduleFlags.isSolidContext
                 var vptr : LLVMOpaqueValue?
                 if (!isSolidContext) {
@@ -6357,7 +6361,6 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                     if (glob._type.isString) {
                         vptr = LLVMBuildLoadData2Aligned(visitor.g_builder, type_to_llvm_type(glob._type), vptr, glob._type.alignOf, "global_var_r2v_{glob.name}")
                     }
-
                 } else {
                     var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
                     let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
@@ -6365,7 +6368,13 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                     global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
                     vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
                 }
-                visitor.build_copy(vptr, glob.init)
+                // register CMRES destination so init expressions that return by copy/move
+                // write directly into the global variable's memory
+                let usedCmres = visitor.make_call_to_cmres(glob.init, vptr)
+                visit_expression(glob.init, adapter)
+                if (!usedCmres) {
+                    visitor.build_copy(vptr, glob.init)
+                }
             }
         }
     }

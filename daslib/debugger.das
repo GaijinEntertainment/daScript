@@ -4,9 +4,11 @@ options remove_unused_symbols = false
 options no_aot = true
 options strict_smart_pointers = true
 
-require debugapi
+module debugger shared public
 
-require rtti public
+require debugapi public
+
+require daslib/rtti public
 
 class DapiDebugAgent {
     def abstract onInstall(agent : DebugAgent?) : void

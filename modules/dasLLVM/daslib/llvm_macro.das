@@ -11,7 +11,7 @@ require llvm/daslib/llvm_jit_common
 require daslib/ast_boost
 require daslib/strings_boost
 
-require fio
+require daslib/fio
 require jit
 
 module llvm_macro shared private

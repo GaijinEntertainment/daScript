@@ -12,8 +12,8 @@ module lpipe shared private
 //! on the preceding line. Useful when a function takes multiple block arguments
 //! and only ``<|`` can be used for the first one.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost

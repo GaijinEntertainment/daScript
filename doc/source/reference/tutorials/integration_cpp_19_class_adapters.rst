@@ -139,7 +139,7 @@ byte arrays).  The module loads it with ``compileBuiltinModule``:
        Module_Tutorial19() : Module("tutorial_19") {
            ModuleLibrary lib(this);
            lib.addBuiltInModule();
-           addBuiltinDependency(lib, Module::require("rtti"));
+           addBuiltinDependency(lib, Module::require("rtti_core"));
 
            addExtern<DAS_BIND_FUN(addObject)>(*this, lib, "add_object",
                SideEffects::modifyExternal, "addObject");
@@ -163,7 +163,7 @@ to provide implementations:
 
    options gen2
    require tutorial_19
-   require rtti
+   require daslib/rtti
 
    class ExampleObject : TutorialBaseClass {
        position : float3

@@ -230,8 +230,6 @@ namespace das {
 #endif
     }
 
-    #include "fio.das.inc"
-
     struct FStatAnnotation : ManagedStructureAnnotation <FStat,true> {
         FStatAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("FStat", ml) {
             validationNeverFails = true;
@@ -1189,7 +1187,7 @@ namespace das {
 
     class Module_FIO : public Module {
     public:
-        Module_FIO() : Module("fio") {
+        Module_FIO() : Module("fio_core") {
             DAS_PROFILE_SECTION("Module_FIO");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
@@ -1408,8 +1406,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_fs_disk_space)>(*this, lib, "builtin_disk_space",
                 SideEffects::modifyArgumentAndExternal, "builtin_fs_disk_space")
                     ->args({"path","info","error","context","at"});
-            // add builtin module
-            compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
             uint32_t verifyFlags = uint32_t(VerifyBuiltinFlags::verifyAll);
             verifyFlags &= ~VerifyBuiltinFlags::verifyHandleTypes;  // we skip annotatins due to FILE and FStat

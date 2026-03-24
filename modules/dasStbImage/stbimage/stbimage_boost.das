@@ -15,7 +15,7 @@ require stbimage public
 require raster
 require daslib/safe_addr
 require daslib/class_boost
-require fio
+require daslib/fio
 require strings
 require math
 

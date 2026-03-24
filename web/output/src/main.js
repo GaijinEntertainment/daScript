@@ -206,7 +206,7 @@ runScript = function(text,onComplete)
 
 
     FS.writeFile('main.das',text);
-    callMain(['main.das']);
+    Module.callMain(['main.das']);
 
 
 

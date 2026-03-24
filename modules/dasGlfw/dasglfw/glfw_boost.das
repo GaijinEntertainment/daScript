@@ -8,7 +8,7 @@ module glfw_boost shared
 require glfw public
 require daslib/safe_addr
 require math
-require rtti
+require daslib/rtti
 
 def glfwInitOpenGL(major : int = 3; minor : int = 3; dctx : bool = false; compat : bool = false) {
     this_context().category |= bitfield(1u << 3u)   // setup OpenGL flag

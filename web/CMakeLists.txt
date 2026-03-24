@@ -26,7 +26,17 @@ add_link_options(-fwasm-exceptions)
 add_compile_definitions(DAS_ENABLE_EXCEPTIONS)
 add_compile_definitions(_EMSCRIPTEN_VER)
 
-set(CMAKE_CXX_FLAGS "-s TOTAL_MEMORY=128MB")
+add_link_options(
+    # Default STACK_SIZE is 64KB, not enough for daslang.
+    -sSTACK_SIZE=4MB
+    # `callMain` should be exported.
+    -sEXPORTED_RUNTIME_METHODS=callMain
+    # INVOKE_RUN needed to disable running daslang on initialization
+    # (it will print help message and exit).
+    -sINVOKE_RUN=0
+)
+# embed daslang standard library into wasm binary.
+add_link_options(--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@daslib)
 
 INCLUDE(../CMakeCommon.txt)
 
@@ -362,6 +372,7 @@ SET(BUILTIN_SRC
 ../include/daScript/builtin/debugapi_gen.inc
 
 
+../src/builtin/modules.cpp
 ../src/builtin/module_builtin.h
 ../src/builtin/module_builtin.cpp
 ../src/builtin/module_builtin_misc_types.cpp
@@ -371,7 +382,6 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_vector.cpp
 ../src/builtin/module_builtin_vector_ctor.cpp
 ../src/builtin/module_builtin_array.cpp
-../src/builtin/module_builtin_das.cpp
 ../src/builtin/module_builtin_math.cpp
 ../src/builtin/module_builtin_string.cpp
 ../src/builtin/module_builtin_rtti.h
@@ -394,27 +404,9 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_debugger.cpp
 ../src/builtin/module_builtin_jobque.cpp
 ../src/builtin/module_file_access.cpp
-../src/builtin/builtin.das.inc
-../src/builtin/builtin.das
-../src/builtin/fio.das.inc
-../src/builtin/fio.das
-../src/builtin/rtti.das.inc
-../src/builtin/rtti.das
-../src/builtin/ast.das.inc
-../src/builtin/ast.das
-../src/builtin/network.das.inc
-../src/builtin/network.das
-../src/builtin/debugger.das.inc
-../src/builtin/debugger.das
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/builtin.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/fio.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/rtti.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/ast.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/network.das)
-CMAKE_TEXT_XXD(libDaScript ../src/builtin/debugger.das)
 
 SET(MISC_SRC
 ../include/daScript/misc/enums.h

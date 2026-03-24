@@ -31,7 +31,7 @@ require dashv/dashv_boost
 require daslib/json
 require daslib/json_boost
 require daslib/jobque_boost
-require debugapi
+require daslib/debugger
 require live_host
 
 var live_api_port : int = 9090

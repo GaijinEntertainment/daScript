@@ -15,11 +15,11 @@ module profiler shared private
 //! in ``chrome://tracing`` or Perfetto.
 //! See also ``profiler_boost`` for cross-context profiler control.
 
-require debugapi
-require fio
+require daslib/debugger
+require daslib/fio
 require strings
 require uriparser
-require ast
+require daslib/ast
 
 struct PerfNode {
     //! Performance tree node with timing data.

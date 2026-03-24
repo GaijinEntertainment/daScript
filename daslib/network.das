@@ -2,9 +2,10 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
-require network
+module network shared public
 
-require rtti
+require network_core public
+require daslib/rtti
 
 class Server {
     _server : smart_ptr<NetworkServer>

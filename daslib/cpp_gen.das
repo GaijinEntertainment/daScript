@@ -7,7 +7,7 @@ options unsafe_table_lookup = false
 
 module cpp_gen public
 
-require fio
+require daslib/fio
 require daslib/defer
 require daslib/json
 require daslib/json_boost

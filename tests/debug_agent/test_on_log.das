@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
-require debugapi
+require daslib/debugger
 
 var log_count : int = 0
 var last_log_level : int = -1

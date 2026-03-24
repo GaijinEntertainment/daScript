@@ -6,7 +6,7 @@ require dastest/testing_boost public
 require daslib/json
 require daslib/json_boost
 require strings
-require fio
+require daslib/fio
 
 require tools/compile_check public
 require tools/list_functions public
@@ -248,7 +248,7 @@ def test_ast_dump_file_ast_mode(t : T?) {
     t |> run("file ast mode returns S-expression") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "ast", ""), text, is_error)
+        parse_result(do_ast_dump("", fixture_path("_fixture_valid.das"), "add", "ast_core", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "def add") >= 0, "should contain function header")
         t |> success(find(text, "ExprReturn") >= 0, "should contain ExprReturn node")
@@ -372,7 +372,7 @@ def test_list_module_api_annotations(t : T?) {
     t |> run("lists call macros from ast") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_list_module_api("ast", "", "annotations"), text, is_error)
+        parse_result(do_list_module_api("ast_core", "", "annotations"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "quote") >= 0, "should list quote call macro")
         t |> success(find(text, "Call macros") >= 0, "should have Call macros section")
@@ -795,7 +795,7 @@ def test_describe_type(t : T?) {
     t |> run("describes handled type fields") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_describe_type("TypeDecl", "ast"), text, is_error)
+        parse_result(do_describe_type("TypeDecl", "ast_core"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "handled TypeDecl") >= 0, "should be handled type")
         t |> success(find(text, "baseType") >= 0, "should have baseType field")
@@ -804,7 +804,7 @@ def test_describe_type(t : T?) {
     t |> run("describes enum values") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_describe_type("Type", "ast"), text, is_error)
+        parse_result(do_describe_type("Type", "ast_core"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "enum Type") >= 0, "should be enum")
         t |> success(find(text, "tInt") >= 0, "should have tInt value")
@@ -812,7 +812,7 @@ def test_describe_type(t : T?) {
     t |> run("describes bitfield flags") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_describe_type("FunctionFlags", "ast"), text, is_error)
+        parse_result(do_describe_type("FunctionFlags", "ast_core"), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "bitfield FunctionFlags") >= 0, "should be bitfield")
         t |> success(find(text, "builtIn") >= 0, "should have builtIn flag")

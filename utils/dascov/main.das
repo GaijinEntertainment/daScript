@@ -4,8 +4,8 @@ options no_coverage
 
 require daslib/coverage
 require daslib/ast_boost
-require debugapi
-require fio
+require daslib/debugger
+require daslib/fio
 require strings
 
 def public compile_and_simulate(input : string, var access; var mg : ModuleGroup?, cop, blk) {

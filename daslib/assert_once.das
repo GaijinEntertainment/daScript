@@ -12,8 +12,8 @@ module assert_once shared private
 //! After the first failed check, the assertion is permanently disabled via
 //! an auto-generated global flag variable.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

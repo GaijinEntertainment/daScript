@@ -22,7 +22,7 @@ options no_aot
 
 module type_macro_mod
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 

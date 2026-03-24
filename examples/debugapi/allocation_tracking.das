@@ -30,8 +30,8 @@ options gen2
 options persistent_heap = true
 options debugger = true
 
-require rtti
-require debugapi
+require daslib/rtti
+require daslib/debugger
 require strings
 
 // ============================================================

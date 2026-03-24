@@ -2,7 +2,7 @@ options gen2
 
 require sqlite/sqlite_boost
 
-require fio
+require daslib/fio
 require math
 require daslib/defer
 require daslib/regex_boost

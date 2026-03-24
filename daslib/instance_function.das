@@ -12,8 +12,8 @@ module instance_function shared private
 //! function with an instantiation of the named generic, substituting the specified
 //! type parameters. Useful for creating concrete exports of generic functions.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/defer

@@ -17,7 +17,7 @@ module regex_boost shared private
 //! where ``i`` = case-insensitive, ``s`` = dotAll (dot matches newline).
 //! Example: ``%regex~hello~i%%`` for case-insensitive match.
 
-require ast
+require daslib/ast
 require strings
 require daslib/ast_boost
 require daslib/regex public

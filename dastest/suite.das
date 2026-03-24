@@ -4,10 +4,10 @@ options relaxed_pointer_const
 
 module suite shared
 
-require ast
+require daslib/ast
 require strings
-require debugapi
-require fio
+require daslib/debugger
+require daslib/fio
 require daslib/strings_boost
 require daslib/json_boost
 require daslib/defer

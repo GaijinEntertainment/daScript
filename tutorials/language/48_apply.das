@@ -23,7 +23,7 @@
 options gen2
 options rtti
 
-require rtti
+require daslib/rtti
 require daslib/apply
 require daslib/strings_boost
 

@@ -6,7 +6,7 @@ options no_unused_function_arguments = false
 
 module audio_resource private
 
-require fio
+require daslib/fio
 
 def public audio_fopen(name : string; mode : string; blk : block<(f : file) : void>) {
     var fname = "{get_das_root()}/modules/dasAudio/examples/{name}"

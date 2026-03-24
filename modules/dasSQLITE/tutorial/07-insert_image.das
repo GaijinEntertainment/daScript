@@ -4,7 +4,7 @@ options gen2
 require sqlite/sqlite_boost
 require daslib/stringify
 require daslib/defer
-require fio
+require daslib/fio
 
 [export]
 def main {

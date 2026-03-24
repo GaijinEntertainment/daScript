@@ -31,7 +31,7 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/generic_return
 require strings
-require ast
+require daslib/ast
 
 [structure_macro(name="interface")]
 class InterfaceMacro : AstStructureAnnotation {

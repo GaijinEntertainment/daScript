@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 
 require dastest/testing_boost public
-require fio
+require daslib/fio
 require strings
 
 [test]

@@ -103,7 +103,7 @@ static const char * VIOLATES_UNSAFE =
 // A script that tries to require a banned module.
 static const char * VIOLATES_MODULE =
     "options gen2\n"
-    "require fio\n"                   // blocked by module_allowed (not whitelisted)
+    "require daslib/fio\n"                   // blocked by module_allowed (not whitelisted)
     "\n"
     "[export]\n"
     "def test() {\n"

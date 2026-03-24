@@ -17,7 +17,7 @@ To request a module, use the ``require`` keyword:
 .. code-block:: das
 
     require math
-    require ast public
+    require daslib/ast public
     require daslib/ast_boost
 
 The ``public`` modifier indicates that the included module is visible to everything that includes the current module.

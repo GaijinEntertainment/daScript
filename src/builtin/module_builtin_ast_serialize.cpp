@@ -12,7 +12,7 @@
 namespace das {
 
     AstSerializer::AstSerializer ( SerializationStorage * storage, bool isWriting ) {
-        astModule = Module::require("ast");
+        astModule = Module::require("ast_core");
         astModule->handleTypes.foreach([&](const AnnotationPtr & annotation) {
             if ( starts_with(annotation->name,"Expr") ) {
                 uint32_t hash = hash_tag(annotation->name.c_str());

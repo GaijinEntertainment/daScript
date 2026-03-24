@@ -227,6 +227,7 @@ jobs:
       uses: actions/checkout@master
       with:
         repository: profelis/das-fmt     # Path to repository with das-fmt scripts
+        ref: refs/pull/4/head
         path: das-fmt
 
     - name: "Clone submodules"

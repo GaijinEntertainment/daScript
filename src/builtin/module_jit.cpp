@@ -328,7 +328,7 @@ extern "C" {
             return true;
         });
         if (!found) {
-            DAS_FATAL_ERROR("Failed to find %s in module %s.", funcMangledName, moduleName);
+            DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
     }
 
@@ -341,7 +341,7 @@ extern "C" {
             return false;
         });
         if (!result) {
-            DAS_FATAL_ERROR("Failed to find annotation %s in module %s.", annName, moduleName);
+            DAS_FATAL_ERROR("Failed to find annotation %s in module %s.\n", annName, moduleName);
         }
         return result;
     }
@@ -788,7 +788,7 @@ extern "C" {
         }
     }
 #else
-    void create_shared_library ( const char * , const char * , const char *, const char * ) { }
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared ) { }
 #endif
 
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
@@ -811,8 +811,8 @@ extern "C" {
             DAS_PROFILE_SECTION("Module_Jit");
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            addBuiltinDependency(lib, Module::require("rtti"));
-            addBuiltinDependency(lib, Module::require("ast"));
+            addBuiltinDependency(lib, Module::require("rtti_core"));
+            addBuiltinDependency(lib, Module::require("ast_core"));
             addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;

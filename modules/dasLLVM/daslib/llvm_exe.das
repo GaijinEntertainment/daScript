@@ -22,10 +22,10 @@ require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
-require debugapi
+require daslib/debugger
 require math
 require jit
-require fio
+require daslib/fio
 
 module llvm_exe shared private
 

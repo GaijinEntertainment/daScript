@@ -2,11 +2,11 @@ options gen2
 options indenting = 4
 options rtti
 
-require fio
+require daslib/fio
 require strings
 require uriparser
-require debugapi
-require ast
+require daslib/debugger
+require daslib/ast
 require daslib/json_boost
 require daslib/jobque_boost
 

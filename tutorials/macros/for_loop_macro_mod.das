@@ -8,7 +8,7 @@ options no_aot
 
 module for_loop_macro_mod
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 require strings
 

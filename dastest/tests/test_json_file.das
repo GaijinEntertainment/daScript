@@ -4,7 +4,7 @@ options no_unused_block_arguments = false
 
 require dastest/testing_boost public
 require daslib/json_boost
-require fio
+require daslib/fio
 require strings
 
 def dastest_root() : string {

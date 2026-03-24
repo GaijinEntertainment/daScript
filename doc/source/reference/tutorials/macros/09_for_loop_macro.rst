@@ -67,7 +67,7 @@ Prerequisites
 
 ::
 
-  require ast                // AST node types (ExprFor, ExprCall, etc.)
+  require daslib/ast                // AST node types (ExprFor, ExprCall, etc.)
   require daslib/ast_boost   // AstForLoopMacro base class, [for_loop_macro]
   require strings            // find, slice — for splitting the iterator name
 

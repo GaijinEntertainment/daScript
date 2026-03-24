@@ -5,7 +5,7 @@ options indenting = 4
 
 require stbimage
 require daslib/safe_addr
-require fio
+require daslib/fio
 require dastest/testing_boost public
 
 def make_rgba_pixels(var pixels : uint8[16]) {

@@ -21,7 +21,7 @@ module contracts shared private
 //!   * ``[expect_any_numeric]`` — numeric scalars (int, float, etc.)
 //!   * ``[expect_any_workhorse_raw]`` — non-abstract non-const types
 
-require ast
+require daslib/ast
 require daslib/ast_boost
 
 def public isYetAnotherVectorTemplate(td : TypeDeclPtr) {

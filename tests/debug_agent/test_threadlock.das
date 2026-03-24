@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require dastest/testing_boost public
-require debugapi
+require daslib/debugger
 
 var tl_counter : int = 0
 

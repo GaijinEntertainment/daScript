@@ -1,7 +1,7 @@
 options gen2
 require dastest/testing_boost
 
-require rtti
+require daslib/rtti
 
 require daslib/fuzzer
 require daslib/faker

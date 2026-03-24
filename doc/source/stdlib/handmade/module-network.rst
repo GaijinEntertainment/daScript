@@ -6,4 +6,4 @@ All functions and symbols are in "network" module, use require to get access to 
 
 .. code-block:: das
 
-    require network
+    require daslib/network

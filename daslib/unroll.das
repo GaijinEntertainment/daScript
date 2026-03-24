@@ -12,8 +12,8 @@ module unroll shared private
 //! each iteration at compile time. The loop variable is substituted with
 //! the constant index in each unrolled copy.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

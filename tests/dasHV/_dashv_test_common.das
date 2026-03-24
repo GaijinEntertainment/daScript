@@ -13,7 +13,7 @@ module _dashv_test_common shared public
 
 require dashv/dashv_boost public
 require daslib/jobque_boost public
-require fio public
+require daslib/fio public
 
 // ──────────────────────────────────────────────────────────────────────────
 // Port assignments — each test file uses a unique port

@@ -107,7 +107,7 @@ Basic structure:
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {
@@ -164,7 +164,7 @@ Complete examples
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {
@@ -178,7 +178,7 @@ Complete examples
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {
@@ -193,7 +193,7 @@ Complete examples
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {
@@ -217,7 +217,7 @@ Complete examples
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {
@@ -409,7 +409,7 @@ The ``.das_module`` maps ``require`` paths:
 .. code-block:: das
 
    options gen2
-   require fio
+   require daslib/fio
 
    [export]
    def initialize(project_path : string) {

@@ -13,8 +13,8 @@ module static_let shared private
 //! is renamed under the hood to avoid collisions. ``static_let_finalize`` additionally
 //! deletes the variable on context shutdown.
 
-require ast
-require rtti
+require daslib/ast
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 

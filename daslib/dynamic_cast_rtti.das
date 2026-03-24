@@ -11,7 +11,7 @@ module dynamic_cast_rtti shared private
 //! Provides ``is_instance_of`` and ``as_instance_of`` functions that test
 //! and cast a class pointer to a derived type using RTTI at runtime.
 
-require rtti
+require daslib/rtti
 require daslib/contracts
 require daslib/templates
 require daslib/templates_boost

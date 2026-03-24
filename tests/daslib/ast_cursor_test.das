@@ -6,7 +6,7 @@ options no_unused_block_arguments = false
 require dastest/testing_boost public
 require daslib/ast_boost
 require daslib/ast_cursor
-require rtti
+require daslib/rtti
 require strings
 
 def fixture_path() : string {
