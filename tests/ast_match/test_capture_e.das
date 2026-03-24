@@ -2,7 +2,7 @@ options gen2
 options indenting = 4
 options rtti
 
-require ast
+require daslib/ast
 require daslib/ast_match
 require daslib/ast_boost
 require daslib/templates_boost

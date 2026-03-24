@@ -14,12 +14,12 @@ module ast_match shared public
 //! system as ``qmacro`` but in reverse: ``$e`` clones a matched expression,
 //! ``$v`` extracts a constant value, ``$i`` extracts an identifier name.
 
-require ast public
-require rtti
+require daslib/ast public
+require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
-require strings
+require daslib/strings
 
 // ── Result types ────────────────────────────────────────────────────────
 
