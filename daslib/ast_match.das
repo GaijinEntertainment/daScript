@@ -235,7 +235,10 @@ def qm_extract_remaining_args(args : dasvector`smart_ptr`Variable; from_logical 
             }
         }
         if (logical >= from_logical) {
-            result |> emplace_new <| clone_variable(arg)
+            {
+                var inscope cloned <- clone_variable(arg)
+                result |> emplace(cloned)
+            }
         }
         logical ++
     }
@@ -280,7 +283,10 @@ def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int;
     //! Extract statements [from_pos, to_pos) from a block into an array (cloned).
     var blk = blk_expr as ExprBlock
     for (i in range(from_pos, to_pos)) {
-        result |> emplace_new <| clone_expression(blk.list[i])
+        {
+            var inscope cloned <- clone_expression(blk.list[i])
+            result |> emplace(cloned)
+        }
     }
 }
 
