@@ -350,13 +350,13 @@ def qm_make_zero_const(call_name : string) : ExpressionPtr {
     //! Create a zero-value ExprConst for the range first component.
     //! range → 0, urange → 0u, range64 → 0l, urange64 → 0ul.
     if (call_name == "range") {
-        return <- qmacro(0)
+        return <- quote(0)
     } elif (call_name == "urange") {
-        return <- qmacro(0u)
+        return <- quote(0u)
     } elif (call_name == "range64") {
-        return <- qmacro(0l)
+        return <- quote(0l)
     } elif (call_name == "urange64") {
-        return <- qmacro(0ul)
+        return <- quote(0ul)
     }
     return <- default<ExpressionPtr>
 }
