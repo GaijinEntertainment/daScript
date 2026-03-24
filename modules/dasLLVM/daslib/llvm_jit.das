@@ -2714,6 +2714,10 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, blk.if_end)
         if (blk.if_true_terminates && blk.if_false_terminates) {
             LLVMBuildUnreachable(g_builder)
+            // Dead code after fully-terminating if-else still gets visited.
+            // Position builder at a dummy block to avoid a CE.
+            var dead_block = append_basic_block("dead_at_line_{int(expr.at.line)}_")
+            LLVMPositionBuilderAtEnd(g_builder, dead_block)
         }
         return expr
     }

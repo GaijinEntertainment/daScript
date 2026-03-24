@@ -4,6 +4,7 @@
 
 set(DAS_UTILS
     aot
+    benchctl
     dascov
     daspkg
     mcp
