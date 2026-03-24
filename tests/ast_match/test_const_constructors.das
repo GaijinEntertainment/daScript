@@ -16,7 +16,7 @@ def target_range13() : range {
 def test_range_one_val_folded(t : T?) {
     // Compiled: range(13) folds to ExprConstRange(0, 13)
     var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_range13)
-    if (get_ptr(func) == null) { t |> success(false, "not found"); return; }
+    if (get_ptr(func) == null) { t |> success(false, "not found"); return ; }
     var x_val : int
     let r = qmatch_function(func) $ {
         return range($v(x_val), 13)

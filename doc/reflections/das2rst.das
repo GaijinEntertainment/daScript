@@ -674,9 +674,10 @@ def document_module_ast_match(root : string) {
         group_by_regex("Match execution", mod, %regex~.*(qm_run|qm_run_function)$%%),
         group_by_regex("Result builders", mod, %regex~.*(qm_ok|qm_fail_.*)$%%),
         group_by_regex("Value extraction", mod, %regex~.*(qm_extract)$%%),
-        group_by_regex("Name and type extraction", mod, %regex~.*(qm_extract_name|qm_extract_call_name|qm_extract_field_name|qm_extract_type|qm_rtti)$%%),
+        group_by_regex("Name and type extraction", mod, %regex~.*(qm_extract_name|qm_extract_call_name|qm_extract_field_name|qm_extract_type|qm_rtti|qm_call_name_matches)$%%),
         group_by_regex("Argument filtering", mod, %regex~.*(qm_count_real_args|qm_real_arg_index|qm_extract_remaining_args|qm_is_fake_arg|qm_count_real_call_args|qm_real_call_arg_index)$%%),
-        group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%)
+        group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%),
+        group_by_regex("Constant construction", mod, %regex~.*(qm_make_zero_const)$%%)
     )
     document("AST pattern matching", mod, "ast_match.rst", groups)
 }
