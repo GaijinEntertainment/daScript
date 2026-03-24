@@ -705,6 +705,173 @@ def private get_wildcard_b_tag(pattern : Expression?) : string {
 // Generated code uses var (not let) for all variables so as-cast returns
 // non-const and field access gives non-const smart_ptr<Expression>.
 
+// Map from constructor call name to the ExprConst* RTTI name that constant folding produces.
+// Returns "" if the call is not a known constant constructor.
+[macro_function]
+def private const_constructor_rtti(call_name : string) : string {
+    if (call_name == "range") { return "ExprConstRange"; }
+    if (call_name == "urange") { return "ExprConstURange"; }
+    if (call_name == "range64") { return "ExprConstRange64"; }
+    if (call_name == "urange64") { return "ExprConstURange64"; }
+    if (call_name == "int2") { return "ExprConstInt2"; }
+    if (call_name == "int3") { return "ExprConstInt3"; }
+    if (call_name == "int4") { return "ExprConstInt4"; }
+    if (call_name == "uint2") { return "ExprConstUInt2"; }
+    if (call_name == "uint3") { return "ExprConstUInt3"; }
+    if (call_name == "uint4") { return "ExprConstUInt4"; }
+    if (call_name == "float2") { return "ExprConstFloat2"; }
+    if (call_name == "float3") { return "ExprConstFloat3"; }
+    if (call_name == "float4") { return "ExprConstFloat4"; }
+    return ""
+}
+
+
+[macro_function]
+def private qm_const_value_guard(at : LineInfo; cast_var : string; actual_var : string; var cond : ExpressionPtr&; var body : array<ExpressionPtr>&) {
+    var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
+    body |> emplace_new <| qm_guard(at, cond, fail)
+}
+
+[macro_function]
+def private generate_const_constructor_match(call : ExprCall?; folded_rtti : string; actual_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
+    //! Handle constant constructor calls (range, int2, float3, etc.) that may be constant-folded.
+    //! The pattern is an ExprCall like ``range(1, 10)`` but the compiled AST may have
+    //! ``ExprConstRange`` instead. Clone the pattern call expression and compare the folded
+    //! constant's value against it directly — the compiler will fold the clone too.
+    body |> emplace_new <| qm_rtti_guard(at, actual_var, folded_rtti)
+    let cast_var = next_var(index)
+    var inscope as_val <- make_var_ref(at, actual_var)
+    var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := folded_rtti)
+    body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
+    // Clone the pattern call — compiler will constant-fold it to the same type
+    var inscope pat_clone <- clone_expression(unsafe(reinterpret<ExpressionPtr>(call)))
+    let pat_var = next_var(index)
+    body |> emplace_new <| qmacro_expr(${ var $i(pat_var) = $e(pat_clone); })
+    var inscope cond <- qmacro($i(cast_var).value != $i(pat_var))
+    qm_const_value_guard(at, cast_var, actual_var, cond, body)
+}
+
+[macro_function]
+def private generate_const_match(pattern : Expression?; rtti : string; actual_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
+    //! Generate matching code for ExprConst* nodes — RTTI guard + value comparison.
+    body |> emplace_new <| qm_rtti_guard(at, actual_var, rtti)
+    let cast_var = next_var(index)
+    var inscope as_val <- make_var_ref(at, actual_var)
+    var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := rtti)
+    body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
+    // Scalar types with .value that supports !=
+    if (rtti == "ExprConstInt") {
+        var val = (pattern as ExprConstInt).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstFloat") {
+        var val = (pattern as ExprConstFloat).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstBool") {
+        var val = (pattern as ExprConstBool).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstString") {
+        var inscope cond <- qmacro($i(cast_var).value != $v(string((pattern as ExprConstString).value)))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt64") {
+        var val = (pattern as ExprConstInt64).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt") {
+        var val = (pattern as ExprConstUInt).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstDouble") {
+        var val = (pattern as ExprConstDouble).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt64") {
+        var val = (pattern as ExprConstUInt64).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt8") {
+        var val = (pattern as ExprConstInt8).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt8") {
+        var val = (pattern as ExprConstUInt8).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt16") {
+        var val = (pattern as ExprConstInt16).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt16") {
+        var val = (pattern as ExprConstUInt16).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstEnumeration") {
+        var inscope cond <- qmacro($i(cast_var).value != $v(string((pattern as ExprConstEnumeration).value)))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstBitfield") {
+        var val = (pattern as ExprConstBitfield).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstPtr") {
+        // ExprConstPtr always represents null — just RTTI match is sufficient
+        pass
+    } elif (rtti == "ExprConstRange") {
+        var val = (pattern as ExprConstRange).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstURange") {
+        var val = (pattern as ExprConstURange).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstRange64") {
+        var val = (pattern as ExprConstRange64).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstURange64") {
+        var val = (pattern as ExprConstURange64).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt2") {
+        var val = (pattern as ExprConstInt2).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt3") {
+        var val = (pattern as ExprConstInt3).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstInt4") {
+        var val = (pattern as ExprConstInt4).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt2") {
+        var val = (pattern as ExprConstUInt2).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt3") {
+        var val = (pattern as ExprConstUInt3).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstUInt4") {
+        var val = (pattern as ExprConstUInt4).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstFloat2") {
+        var val = (pattern as ExprConstFloat2).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstFloat3") {
+        var val = (pattern as ExprConstFloat3).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } elif (rtti == "ExprConstFloat4") {
+        var val = (pattern as ExprConstFloat4).value
+        var inscope cond <- qmacro($i(cast_var).value != $v(val))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    }
+}
+
 [macro_function]
 def private generate_match(pattern : Expression?; actual_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
     if (pattern == null) {
@@ -990,37 +1157,18 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     // ── ExprConst* — RTTI check + value comparison ────────────
     if (rtti |> starts_with("ExprConst")) {
-        body |> emplace_new <| qm_rtti_guard(at, actual_var, rtti)
-        // Generate: var cast = actual as ExprConstXxx
-        let cast_var = next_var(index)
-        var inscope as_val <- make_var_ref(at, actual_var)
-        var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := rtti)
-        body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
-        if (rtti == "ExprConstInt") {
-            let cv = pattern as ExprConstInt
-            var val = cv.value
-            var inscope cond <- qmacro($i(cast_var).value != $v(val))
-            var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
-            body |> emplace_new <| qm_guard(at, cond, fail)
-        } elif (rtti == "ExprConstFloat") {
-            let cv = pattern as ExprConstFloat
-            var val = cv.value
-            var inscope cond <- qmacro($i(cast_var).value != $v(val))
-            var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
-            body |> emplace_new <| qm_guard(at, cond, fail)
-        } elif (rtti == "ExprConstBool") {
-            let cv = pattern as ExprConstBool
-            var val = cv.value
-            var inscope cond <- qmacro($i(cast_var).value != $v(val))
-            var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
-            body |> emplace_new <| qm_guard(at, cond, fail)
-        } elif (rtti == "ExprConstString") {
-            let cv = pattern as ExprConstString
-            var inscope cond <- qmacro($i(cast_var).value != $v(string(cv.value)))
-            var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
-            body |> emplace_new <| qm_guard(at, cond, fail)
-        } // TODO: support other constant types
+        generate_const_match(pattern, rtti, actual_var, body, index, at)
         return
+    }
+
+    // ── ExprCall that might be a constant constructor (range, int2, float3, etc.) ────
+    if (rtti == "ExprCall") {
+        let call = pattern as ExprCall
+        let folded_rtti = const_constructor_rtti(string(call.name))
+        if (!empty(folded_rtti)) {
+            generate_const_constructor_match(call, folded_rtti, actual_var, body, index, at)
+            return
+        }
     }
 
     // ── ExprCall / ExprInvoke — match name + arguments only ─────
