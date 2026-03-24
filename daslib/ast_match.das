@@ -725,11 +725,75 @@ def private const_constructor_rtti(call_name : string) : string {
     return ""
 }
 
+// Map folded ExprConst RTTI to the scalar ExprConst RTTI for component extraction.
+[macro_function]
+def private const_component_expr_rtti(folded_rtti : string) : string {
+    if (folded_rtti == "ExprConstRange" || folded_rtti == "ExprConstInt2"
+        || folded_rtti == "ExprConstInt3" || folded_rtti == "ExprConstInt4") {
+        return "ExprConstInt"
+    }
+    if (folded_rtti == "ExprConstURange" || folded_rtti == "ExprConstUInt2"
+        || folded_rtti == "ExprConstUInt3" || folded_rtti == "ExprConstUInt4") {
+        return "ExprConstUInt"
+    }
+    if (folded_rtti == "ExprConstRange64") { return "ExprConstInt64"; }
+    if (folded_rtti == "ExprConstURange64") { return "ExprConstUInt64"; }
+    if (folded_rtti == "ExprConstFloat2" || folded_rtti == "ExprConstFloat3"
+        || folded_rtti == "ExprConstFloat4") {
+        return "ExprConstFloat"
+    }
+    return ""
+}
+
+// Component field names for each vector/range ExprConst type.
+[macro_function]
+def private const_component_fields(folded_rtti : string) : array<string> {
+    if (folded_rtti == "ExprConstRange" || folded_rtti == "ExprConstURange"
+        || folded_rtti == "ExprConstRange64" || folded_rtti == "ExprConstURange64") {
+        return <- array<string>("x", "y")
+    }
+    if (folded_rtti |> ends_with("2")) { return <- array<string>("x", "y"); }
+    if (folded_rtti |> ends_with("3")) { return <- array<string>("x", "y", "z"); }
+    if (folded_rtti |> ends_with("4")) { return <- array<string>("x", "y", "z", "w"); }
+    return <- array<string>()
+}
+
+// Check if any argument in an ExprCall contains a tag expression.
+[macro_function]
+def private has_tags_in_args(call : ExprCall?) : bool {
+    // Top-level check only — tags nested inside expressions (e.g. 1.0 + $v(x))
+    // would prevent constant folding, so the call stays as ExprCall and hits the
+    // normal matching path instead of reaching here.
+    for (arg in call.arguments) {
+        let a = get_ptr(arg)
+        if (a != null && a.__rtti == "ExprTag") {
+            return true
+        }
+    }
+    return false
+}
 
 [macro_function]
 def private qm_const_value_guard(at : LineInfo; cast_var : string; actual_var : string; var cond : ExpressionPtr&; var body : array<ExpressionPtr>&) {
     var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
     body |> emplace_new <| qm_guard(at, cond, fail)
+}
+
+[macro_function]
+def private generate_synth_component(comp_rtti : string; synth_var : string; cast_var : string; field_name : string; var body : array<ExpressionPtr>&; at : LineInfo) {
+    //! Synthesize a ``var inscope synth <- new ExprConstXxx(value = cast_var.value.field)``
+    //! so that the component can be fed through generate_match for tag handling.
+    if (comp_rtti == "ExprConstInt") {
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(synth_var) <- new ExprConstInt(value = $i(cast_var).value.$f(field_name)); })
+    } elif (comp_rtti == "ExprConstUInt") {
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(synth_var) <- new ExprConstUInt(value = $i(cast_var).value.$f(field_name)); })
+    } elif (comp_rtti == "ExprConstFloat") {
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(synth_var) <- new ExprConstFloat(value = $i(cast_var).value.$f(field_name)); })
+    } elif (comp_rtti == "ExprConstInt64") {
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(synth_var) <- new ExprConstInt64(value = $i(cast_var).value.$f(field_name)); })
+    } elif (comp_rtti == "ExprConstUInt64") {
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(synth_var) <- new ExprConstUInt64(value = $i(cast_var).value.$f(field_name)); })
+    }
 }
 
 [macro_function]
@@ -743,12 +807,28 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
     var inscope as_val <- make_var_ref(at, actual_var)
     var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := folded_rtti)
     body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
-    // Clone the pattern call — compiler will constant-fold it to the same type
-    var inscope pat_clone <- clone_expression(unsafe(reinterpret<ExpressionPtr>(call)))
-    let pat_var = next_var(index)
-    body |> emplace_new <| qmacro_expr(${ var $i(pat_var) = $e(pat_clone); })
-    var inscope cond <- qmacro($i(cast_var).value != $i(pat_var))
-    qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    if (!has_tags_in_args(call)) {
+        // Fast path: all args are constants — clone the call, compiler folds it, compare with !=
+        var inscope pat_clone <- clone_expression(unsafe(reinterpret<ExpressionPtr>(call)))
+        let pat_var = next_var(index)
+        body |> emplace_new <| qmacro_expr(${ var $i(pat_var) = $e(pat_clone); })
+        var inscope cond <- qmacro($i(cast_var).value != $i(pat_var))
+        qm_const_value_guard(at, cast_var, actual_var, cond, body)
+    } else {
+        // Slow path: some args have tags ($v, $e, etc.) — synthesize per-component ExprConst
+        // expressions from the folded value and match each arg individually
+        let comp_rtti = const_component_expr_rtti(folded_rtti)
+        var inscope fields <- const_component_fields(folded_rtti)
+        for (arg, field_name in call.arguments, fields) {
+            let child = get_ptr(arg)
+            if (child == null) {
+                continue
+            }
+            let synth_var = next_var(index)
+            generate_synth_component(comp_rtti, synth_var, cast_var, field_name, body, at)
+            generate_match(child, synth_var, body, index, at)
+        }
+    }
 }
 
 [macro_function]
