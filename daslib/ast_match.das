@@ -468,7 +468,9 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         if (pat_type.firstType != null && length(pat_type.firstType.dimExpr) == 1) {
             let tag_expr = get_ptr(pat_type.firstType.dimExpr[0])
             if (tag_expr != null && tag_expr is ExprVar) {
-                body |> emplace_new <| qmacro_expr(${ $i((tag_expr as ExprVar).name) |> move_new <| clone_type($i(td_var)); })
+                let tmp = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var inscope $i(tmp) <- clone_type($i(td_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i((tag_expr as ExprVar).name) |> move <| $i(tmp); })
             }
         }
         return
@@ -911,7 +913,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         if (tag.name == "e" || tag.name == "") {
             let var_expr = tag.subexpr as ExprVar
             if (var_expr != null) {
-                body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) |> move_new <| clone_expression($i(actual_var)); })
+                let tmp = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var inscope $i(tmp) <- clone_expression($i(actual_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i(var_expr.name) |> move <| $i(tmp); })
             }
             return
         } elif (tag.name == "v") {
@@ -1604,9 +1608,12 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     // Unwrap ExprMakeBlock if present
     var inscope vref_blk <- make_var_ref(at, blk_var)
     var inscope is_mkblk <- make_is_check(at, vref_blk, "ExprMakeBlock")
-    var inscope unwrap <- qmacro_expr(${ $i(blk_var) |> move_new <| clone_expression(($i(blk_var) as ExprMakeBlock)._block); })
+    let tmp_var = next_var(index)
+    var inscope unwrap_1 <- qmacro_expr(${ var inscope $i(tmp_var) <- clone_expression(($i(blk_var) as ExprMakeBlock)._block); })
+    var inscope unwrap_2 <- qmacro_expr(${ $i(blk_var) |> move <| $i(tmp_var); })
     var inscope unwrap_blk <- new ExprBlock(at = at)
-    unwrap_blk.list |> emplace(unwrap)
+    unwrap_blk.list |> emplace(unwrap_1)
+    unwrap_blk.list |> emplace(unwrap_2)
     var inscope unwrap_if <- new ExprIfThenElse(at = at, cond <- is_mkblk, if_true <- unwrap_blk)
     body |> emplace(unwrap_if)
     // Now verify it's ExprBlock
