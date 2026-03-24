@@ -65,3 +65,4 @@ examples/*/modules/
 
 # Claude Code (local settings)
 .claude/settings.json
+examples/daslive/sequence/modules/.daspkg.log
