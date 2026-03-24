@@ -40,6 +40,7 @@ SET(AOT_DASLIB_MODULE_FILES
     daslib/strings_boost.das
     daslib/temp_strings.das
     daslib/templates.das
+    daslib/templates_boost.das
     daslib/type_traits.das
     daslib/bitfield_trait.das
     daslib/defer.das
