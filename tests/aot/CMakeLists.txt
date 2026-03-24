@@ -15,6 +15,7 @@ SET(AOT_DASLIB_MODULE_FILES
     daslib/archive.das
     daslib/ast_boost.das
     daslib/ast_cursor.das
+    daslib/ast_match.das
     daslib/base64.das
     daslib/bool_array.das
     daslib/coroutines.das
