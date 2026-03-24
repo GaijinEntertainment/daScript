@@ -430,6 +430,41 @@ def test_wildcard1_one_passes(t : T?) {
     t |> success(r.matched, "wildcard1 with 1 prefix should pass")
 }
 
+[test]
+def test_wildcard1_two_prefix(t : T?) {
+    // { print(); print(); a + b } — _wildcard1 should scan forward to find a + b
+    var inscope expr <- make_block_3()
+    let r = qmatch_block(expr) $ {
+        _wildcard1()
+        a + b
+    }
+    t |> success(r.matched, "wildcard1 with 2 prefix should pass (scan forward)")
+}
+
+[test]
+def test_wildcard1_sandwich(t : T?) {
+    // { print(); print(); a + b; return c; print() } — _wildcard1 on both sides
+    var inscope expr <- make_block_4()
+    let r = qmatch_block(expr) $ {
+        _wildcard1()
+        return c
+        _wildcard1()
+    }
+    t |> success(r.matched, "wildcard1 sandwich should match")
+}
+
+[test]
+def test_wildcard1_sandwich_too_few_before(t : T?) {
+    // { a + b; return c; print() } — a + b is at pos 0, no room for 1+ before it
+    var inscope expr <- make_block_4()
+    let r = qmatch_block(expr) $ {
+        _wildcard1()
+        a + b
+        _wildcard()
+    }
+    t |> success(!r.matched, "wildcard1 needs 1+ before a+b but it is at position 0")
+}
+
 // _any — exactly one
 
 [test]

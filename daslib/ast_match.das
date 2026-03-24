@@ -1717,7 +1717,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
             let prev_is_wildcard = pat_idx > 0 && !empty(get_wildcard_name(get_ptr(pat_block.list[pat_idx - 1])))
             let prev_wc = prev_is_wildcard ? get_wildcard_name(get_ptr(pat_block.list[pat_idx - 1])) : ""
 
-            if (prev_wc == "_wildcard" || prev_wc == "_optional") {
+            if (prev_wc == "_wildcard" || prev_wc == "_wildcard1" || prev_wc == "_optional") {
                 // Scan forward: build an inner matcher block and call qm_scan
                 let elem_var = next_var(index)
 
