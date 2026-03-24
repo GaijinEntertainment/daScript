@@ -159,5 +159,97 @@ def test_type_in_block_wrong(t : T?) {
     t |> success(!r.matched, "type<int> in block should not match type<float>")
 }
 
-[export]
-def main() {}
+// ── auto (wildcard type) ─────────────────────────────────────────────
+
+[test]
+def test_auto_matches_int(t : T?) {
+    var inscope expr <- qmacro(type<int>)
+    let r = qmatch(expr, type<auto>)
+    t |> success(r.matched, "type<auto> should match type<int>")
+}
+
+[test]
+def test_auto_matches_float(t : T?) {
+    var inscope expr <- qmacro(type<float>)
+    let r = qmatch(expr, type<auto>)
+    t |> success(r.matched, "type<auto> should match type<float>")
+}
+
+[test]
+def test_auto_matches_string(t : T?) {
+    var inscope expr <- qmacro(type<string>)
+    let r = qmatch(expr, type<auto>)
+    t |> success(r.matched, "type<auto> should match type<string>")
+}
+
+[test]
+def test_auto_matches_pointer(t : T?) {
+    var inscope expr <- qmacro(type<int?>)
+    let r = qmatch(expr, type<auto>)
+    t |> success(r.matched, "type<auto> should match type<int?>")
+}
+
+[test]
+def test_array_auto_matches_array_int(t : T?) {
+    var inscope expr <- qmacro(type<array<int>>)
+    let r = qmatch(expr, type<array<auto>>)
+    t |> success(r.matched, "type<array<auto>> should match type<array<int>>")
+}
+
+[test]
+def test_array_auto_matches_array_float(t : T?) {
+    var inscope expr <- qmacro(type<array<float>>)
+    let r = qmatch(expr, type<array<auto>>)
+    t |> success(r.matched, "type<array<auto>> should match type<array<float>>")
+}
+
+[test]
+def test_array_auto_rejects_non_array(t : T?) {
+    var inscope expr <- qmacro(type<int>)
+    let r = qmatch(expr, type<array<auto>>)
+    t |> success(!r.matched, "type<array<auto>> should not match type<int>")
+}
+
+[test]
+def test_table_auto_value(t : T?) {
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<string; auto>>)
+    t |> success(r.matched, "type<table<string;auto>> should match type<table<string;int>>")
+}
+
+[test]
+def test_table_auto_key(t : T?) {
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<auto; int>>)
+    t |> success(r.matched, "type<table<auto;int>> should match type<table<string;int>>")
+}
+
+[test]
+def test_table_auto_both(t : T?) {
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<auto; auto>>)
+    t |> success(r.matched, "type<table<auto;auto>> should match type<table<string;int>>")
+}
+
+[test]
+def test_table_auto_wrong_key(t : T?) {
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<int; auto>>)
+    t |> success(!r.matched, "type<table<int;auto>> should not match type<table<string;int>>")
+}
+
+[test]
+def test_auto_in_call(t : T?) {
+    var inscope expr <- qmacro(foo(type<array<int>>))
+    let r = qmatch(expr, foo(type<array<auto>>))
+    t |> success(r.matched, "foo(type<array<auto>>) should match foo(type<array<int>>)")
+}
+
+[test]
+def test_auto_in_block(t : T?) {
+    var inscope expr <- qmacro($ { foo(type<array<int>>); })
+    let r = qmatch_block(expr) $ {
+        foo(type<array<auto>>)
+    }
+    t |> success(r.matched, "type<array<auto>> in block should match")
+}

@@ -130,6 +130,3 @@ def test_v_in_block(t : T?) {
     t |> success(r.matched, "should extract return value in block")
     t |> equal(val, 42)
 }
-
-[export]
-def main() {}

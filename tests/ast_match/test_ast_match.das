@@ -485,5 +485,137 @@ def test_two_fixed_with_wildcards(t : T?) {
     }
 }
 
-[export]
-def main() {}
+// ── _optional — zero or one ──────────────────────────────────────────
+
+[test]
+def test_optional_zero(t : T?) {
+    // { a + b } — _optional() matches 0, then fixed matches a + b
+    var inscope expr <- make_block_1()
+    let r = qmatch_block(expr) $ {
+        _optional()
+        a + b
+    }
+    t |> success(r.matched, "optional(0) + fixed on 1-stmt block should match")
+}
+
+[test]
+def test_optional_one(t : T?) {
+    // { print(); a + b } — _optional() matches print(), then fixed matches a + b
+    var inscope expr <- make_block_2()
+    let r = qmatch_block(expr) $ {
+        _optional()
+        a + b
+    }
+    t |> success(r.matched, "optional(1) + fixed on 2-stmt block should match")
+}
+
+[test]
+def test_optional_two_fails(t : T?) {
+    // { print(); print(); a + b } — _optional() can't match 2, should fail
+    var inscope expr <- make_block_3()
+    let r = qmatch_block(expr) $ {
+        _optional()
+        a + b
+    }
+    t |> success(!r.matched, "optional + fixed on 3-stmt block should fail (2 before fixed)")
+}
+
+[test]
+def test_optional_trailing_zero(t : T?) {
+    // { a + b } — fixed matches, trailing _optional() matches 0
+    var inscope expr <- make_block_1()
+    let r = qmatch_block(expr) $ {
+        a + b
+        _optional()
+    }
+    t |> success(r.matched, "fixed + trailing optional(0) should match")
+}
+
+[test]
+def test_optional_trailing_one(t : T?) {
+    // { a + b; return c; print() } — fixed matches a+b, trailing _optional() matches 1? No, 2 remain
+    // Use { print(); a + b } — fixed matches print(), trailing _optional() matches a+b (1)
+    var inscope expr <- make_block_2()
+    let r = qmatch_block(expr) $ {
+        print()
+        _optional()
+    }
+    t |> success(r.matched, "fixed + trailing optional(1) should match")
+}
+
+[test]
+def test_optional_trailing_two_fails(t : T?) {
+    // { print(); print(); a + b } — fixed matches print(), trailing _optional() has 2 remaining
+    var inscope expr <- make_block_3()
+    let r = qmatch_block(expr) $ {
+        print()
+        _optional()
+    }
+    t |> success(!r.matched, "fixed + trailing optional with 2 remaining should fail")
+}
+
+[test]
+def test_optional_trailing_only_zero(t : T?) {
+    // Empty block — trailing _optional() alone matches 0
+    var inscope expr <- qmacro($ { })
+    let r = qmatch_block(expr) $ {
+        _optional()
+    }
+    t |> success(r.matched, "trailing optional on empty block should match")
+}
+
+[test]
+def test_optional_trailing_only_one(t : T?) {
+    // { a + b } — _optional() alone matches 1
+    var inscope expr <- make_block_1()
+    let r = qmatch_block(expr) $ {
+        _optional()
+    }
+    t |> success(r.matched, "trailing optional on 1-stmt block should match")
+}
+
+[test]
+def test_optional_trailing_only_two_fails(t : T?) {
+    // { print(); a + b } — _optional() alone can't match 2
+    var inscope expr <- make_block_2()
+    let r = qmatch_block(expr) $ {
+        _optional()
+    }
+    t |> success(!r.matched, "trailing optional on 2-stmt block should fail")
+}
+
+[test]
+def test_optional_sandwich(t : T?) {
+    // { a + b; return c; print() } — fixed, _optional(), fixed
+    var inscope expr <- make_block_4()
+    let r = qmatch_block(expr) $ {
+        a + b
+        _optional()
+        print()
+    }
+    t |> success(r.matched, "fixed + optional(1) + fixed should match")
+}
+
+[test]
+def test_optional_sandwich_zero(t : T?) {
+    // { a + b; print() } — 2 stmts, fixed + _optional(0) + fixed
+    var inscope expr <- qmacro($ { a + b; print(); })
+    let r = qmatch_block(expr) $ {
+        a + b
+        _optional()
+        print()
+    }
+    t |> success(r.matched, "fixed + optional(0) + fixed should match")
+}
+
+[test]
+def test_optional_sandwich_two_fails(t : T?) {
+    // { a + b; foo(); bar(); print() } — 4 stmts, 2 between fixed stmts
+    var inscope expr <- qmacro($ { a + b; foo(); bar(); print(); })
+    let r = qmatch_block(expr) $ {
+        a + b
+        _optional()
+        print()
+    }
+    t |> success(!r.matched, "fixed + optional + fixed with 2 between should fail")
+}

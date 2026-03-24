@@ -58,7 +58,8 @@ let r = qmatch_function(func) $(a, b : int) : int {
 | `_wildcard($b(v))` | 0 or more, captured | Statements stored in `v` |
 | `_wildcard1()` | 1 or more statements | At least one before/after |
 | `_wildcard1($b(v))` | 1 or more, captured | Statements stored in `v` |
-| `_optional()` | 0 or 1 statement | |
+| `_optional()` | 0 or 1 statement | Enforced: fails if 2+ |
+| `_optional($b(v))` | 0 or 1, captured | Statement (if any) in `v` |
 | `_any()` | Exactly 1 statement | |
 | `_any($b(v))` | Exactly 1, captured | Single statement in `v` |
 
@@ -94,6 +95,19 @@ struct QMatchResult {
 - `dim` — fixed dimension comparison
 - `dimExpr` — expression matching (supports `$e`/`$v`/`$i` captures inside type expressions)
 - `$t(var)` — captures entire TypeDecl when `isTag` flag is set
+- `auto` — wildcard, matches any type in that position
+
+### `auto` (type wildcard)
+
+Use `auto` in any type position within a pattern to match any type:
+```das
+qmatch(expr, type<auto>)                   // matches any type
+qmatch(expr, type<array<auto>>)            // matches array<int>, array<float>, ...
+qmatch(expr, type<table<string; auto>>)    // matches table with string keys, any value
+qmatch(expr, type<table<auto; auto>>)      // matches any table
+```
+
+`auto` can be combined with `$t` — use `auto` when you don't need the matched type, `$t(var)` when you want to capture it.
 
 ## Argument & Return Type Matching
 

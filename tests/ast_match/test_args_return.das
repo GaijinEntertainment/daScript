@@ -279,6 +279,3 @@ def test_a_block_capture(t : T?) {
     t |> success(r.matched, "block $a should match")
     t |> equal(length(rest), 2, "block should capture 2 remaining args")
 }
-
-[export]
-def main() {}

@@ -131,6 +131,3 @@ def test_i_for_capture(t : T?) {
     t |> success(r.matched, "should capture for iterator name")
     t |> equal(iter_name, "x")
 }
-
-[export]
-def main() {}

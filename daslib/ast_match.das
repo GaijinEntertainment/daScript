@@ -3,6 +3,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers = true
+options stack = 1_048_576
 
 module ast_match shared public
 
@@ -390,6 +391,11 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         return
     }
 
+    // ── auto — match any type (wildcard) ─────────────────────
+    if (pat_type.baseType == Type.autoinfer) {
+        return
+    }
+
     // ── baseType ────────────────────────────────────────────
     var bt_int = int(pat_type.baseType)
     var inscope bt_cond <- qmacro(int($i(td_var).baseType) != $v(bt_int))
@@ -756,6 +762,39 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         return
     }
 
+    // ── ExprMakeBlock — lightweight inline block matching ───────
+    if (pattern is ExprMakeBlock) {
+        body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprMakeBlock")
+        let pat_mkblk = pattern as ExprMakeBlock
+        var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
+        // Unwrap ExprMakeBlock → ExprBlock at runtime
+        let blk_var = next_var(index)
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(blk_var) <- clone_expression(($i(actual_var) as ExprMakeBlock)._block); })
+        body |> emplace_new <| qm_rtti_guard(at, blk_var, "ExprBlock")
+        let cast_var = next_var(index)
+        var inscope as_val_b <- make_var_ref(at, blk_var)
+        var inscope as_cast_b <- new ExprAsVariant(at = at, value <- as_val_b, name := "ExprBlock")
+        body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_b); })
+        // Match arguments and return type
+        generate_pattern_args_match(pat_block, cast_var, "returnType", actual_var, body, index, at)
+        // Match statements
+        let n_stmts = length(pat_block.list)
+        if (n_stmts > 0) {
+            var inscope sc <- qmacro(length($i(cast_var).list) != $v(n_stmts))
+            var inscope sf <- qmacro(qm_fail_list($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, sc, sf)
+            for (stmt, i in pat_block.list, range(n_stmts)) {
+                let child_pat = get_ptr(stmt)
+                if (child_pat != null) {
+                    let child_var = next_var(index)
+                    body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).list[$v(i)]); })
+                    generate_match(child_pat, child_var, body, index, at)
+                }
+            }
+        }
+        return
+    }
+
     // ── ExprFor — handle iteratorsTags for $i capture ─────────
     if (pattern is ExprFor) {
         var pat_for = pattern as ExprFor
@@ -907,6 +946,56 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, cond, fail)
         } // TODO: support other constant types
+        return
+    }
+
+    // ── ExprCall / ExprInvoke — match name + arguments only ─────
+    if (rtti == "ExprCall" || rtti == "ExprInvoke") {
+        body |> emplace_new <| qm_rtti_guard(at, actual_var, rtti)
+        let cast_var = next_var(index)
+        var inscope as_val_c <- make_var_ref(at, actual_var)
+        var inscope as_cast_c <- new ExprAsVariant(at = at, value <- as_val_c, name := rtti)
+        body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_c); })
+        // Match name (ExprCall only) and collect argument vector
+        var n_args = 0
+        if (rtti == "ExprCall") {
+            let call = pattern as ExprCall
+            if (!empty(call.name)) {
+                var inscope nc <- qmacro($i(cast_var).name != $v(string(call.name)))
+                var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, nc, nf)
+            }
+            n_args = length(call.arguments)
+            if (n_args > 0) {
+                var inscope ac <- qmacro(length($i(cast_var).arguments) != $v(n_args))
+                var inscope af <- qmacro(qm_fail_list($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, ac, af)
+                for (arg, i in call.arguments, range(n_args)) {
+                    let child_pattern = get_ptr(arg)
+                    if (child_pattern != null) {
+                        let child_var = next_var(index)
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$v(i)]); })
+                        generate_match(child_pattern, child_var, body, index, at)
+                    }
+                }
+            }
+        } elif (rtti == "ExprInvoke") {
+            let inv = pattern as ExprInvoke
+            n_args = length(inv.arguments)
+            if (n_args > 0) {
+                var inscope ac <- qmacro(length($i(cast_var).arguments) != $v(n_args))
+                var inscope af <- qmacro(qm_fail_list($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, ac, af)
+                for (arg, i in inv.arguments, range(n_args)) {
+                    let child_pattern = get_ptr(arg)
+                    if (child_pattern != null) {
+                        let child_var = next_var(index)
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$v(i)]); })
+                        generate_match(child_pattern, child_var, body, index, at)
+                    }
+                }
+            }
+        }
         return
     }
 
@@ -1255,13 +1344,24 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 }
             }
         } elif (wc_name == "_optional") {
-            // Zero or one — similar to _wildcard for $b
+            // Zero or one — like _wildcard but limited to at most 1 statement
             let b_vname = get_wildcard_b_tag(pat)
             if (!empty(b_vname)) {
                 let save_var = next_var(index)
                 body |> emplace_new <| qmacro_expr(${ var $i(save_var) = $i(pos_var); })
                 pending_b_save = save_var
                 pending_b_vname = b_vname
+            }
+            if (pat_idx == pat_len - 1) {
+                // Trailing _optional — at most 1 remaining statement
+                var inscope cond <- qmacro($i(len_var) - $i(pos_var) > 1)
+                var inscope fail <- qmacro(qm_fail_list($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, cond, fail)
+                if (!empty(pending_b_vname)) {
+                    body |> emplace_new <| qmacro_expr(${ qm_extract_stmts($i(blk_var), $i(pending_b_save), $i(len_var), $i(pending_b_vname)); })
+                    pending_b_save = ""
+                    pending_b_vname = ""
+                }
             }
         } elif (wc_name == "_any") {
             // Exactly one — advance pos by exactly 1
@@ -1302,9 +1402,16 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 }
                 var inscope inner_mkblk <- new ExprMakeBlock(at = at, _block <- inner_blk)
 
-                // Generate: var scan_r = qm_scan(blk_var, pos_var, len_var, inner_block)
+                // Generate: var scan_r = qm_scan(blk_var, pos_var, scan_limit, inner_block)
+                // For _optional, limit scan to pos+2 (try at most positions pos and pos+1)
                 let scan_r_var = next_var(index)
-                body |> emplace_new <| qmacro_expr(${ var $i(scan_r_var) = qm_scan($i(blk_var), $i(pos_var), $i(len_var), $e(inner_mkblk)); })
+                if (prev_wc == "_optional") {
+                    let limit_var = next_var(index)
+                    body |> emplace_new <| qmacro_expr(${ var $i(limit_var) = $i(pos_var) + 2 < $i(len_var) ? $i(pos_var) + 2 : $i(len_var); })
+                    body |> emplace_new <| qmacro_expr(${ var $i(scan_r_var) = qm_scan($i(blk_var), $i(pos_var), $i(limit_var), $e(inner_mkblk)); })
+                } else {
+                    body |> emplace_new <| qmacro_expr(${ var $i(scan_r_var) = qm_scan($i(blk_var), $i(pos_var), $i(len_var), $e(inner_mkblk)); })
+                }
                 // Guard on scan result
                 var inscope scan_cond <- qmacro($i(scan_r_var).matched == false)
                 var inscope scan_fail <- qmacro($i(scan_r_var))

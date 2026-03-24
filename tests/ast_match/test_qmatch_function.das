@@ -79,6 +79,3 @@ def test_function_wrong_pattern(t : T?) {
     }
     t |> success(!r.matched, "wrong pattern should not match")
 }
-
-[export]
-def main() {}

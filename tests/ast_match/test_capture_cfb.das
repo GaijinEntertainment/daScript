@@ -180,6 +180,3 @@ def test_b_no_tag_still_works(t : T?) {
     }
     t |> success(r.matched, "wildcard without $b should still work")
 }
-
-[export]
-def main() {}

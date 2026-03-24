@@ -224,6 +224,213 @@ def test_return_capture(t : T?) {
     }
 }
 
+// ── for — double iterators ───────────────────────────────────────────
+
+[test]
+def test_for_two_iterators(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (k, v in keys, values) {
+            print()
+        }
+    }
+    t |> success(r.matched, "for with two iterators should match")
+}
+
+[test]
+def test_for_two_iterators_wrong_name(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (k, x in keys, values) {
+            print()
+        }
+    }
+    t |> success(!r.matched, "wrong second iterator name should fail")
+}
+
+[test]
+def test_for_two_iterators_wrong_source(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (k, v in keys, other) {
+            print()
+        }
+    }
+    t |> success(!r.matched, "wrong second source should fail")
+}
+
+[test]
+def test_for_iterator_count_mismatch(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (k in keys) {
+            print()
+        }
+    }
+    t |> success(!r.matched, "iterator count mismatch should fail")
+}
+
+// ── for — $i capture ────────────────────────────────────────────────
+
+[test]
+def test_for_capture_single_with_two_iterators(t : T?) {
+    // $i tag only works on the first iterator (parser limitation)
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    var name1 : string
+    let r = qmatch_block(expr) $ {
+        for ($i(name1), v in keys, values) {
+            print()
+        }
+    }
+    t |> success(r.matched, "should capture first iterator, match second fixed")
+    t |> equal(name1, "k")
+}
+
+[test]
+def test_for_capture_first_wrong_second(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    var name1 : string
+    let r = qmatch_block(expr) $ {
+        for ($i(name1), x in keys, values) {
+            print()
+        }
+    }
+    t |> success(!r.matched, "$i capture + wrong fixed name should fail")
+}
+
+// ── for — $e capture on sources ─────────────────────────────────────
+
+[test]
+def test_for_capture_source(t : T?) {
+    var inscope expr <- qmacro($ { for (x in range(10)) { print(); }; })
+    var inscope src : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        for (x in $e(src)) {
+            print()
+        }
+    }
+    t |> success(r.matched, "should capture for loop source")
+    if (r.matched) {
+        t |> success(src != null, "captured source should not be null")
+    }
+}
+
+[test]
+def test_for_capture_two_sources(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+    var inscope src1 : ExpressionPtr
+    var inscope src2 : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        for (k, v in $e(src1), $e(src2)) {
+            print()
+        }
+    }
+    t |> success(r.matched, "should capture both sources")
+    if (r.matched) {
+        t |> success(src1 != null, "first source should not be null")
+        t |> success(src2 != null, "second source should not be null")
+    }
+}
+
+// ── for — $e capture on body ────────────────────────────────────────
+
+[test]
+def test_for_capture_body(t : T?) {
+    var inscope expr <- qmacro($ { for (x in arr) { a + b; }; })
+    var inscope body_expr : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        for (x in arr) {
+            $e(body_expr)
+        }
+    }
+    t |> success(r.matched, "should capture for body")
+    if (r.matched) {
+        t |> success(body_expr != null, "captured body should not be null")
+    }
+}
+
+// ── for — mixed capture ($i + $e) ───────────────────────────────────
+
+[test]
+def test_for_capture_iterator_and_source(t : T?) {
+    var inscope expr <- qmacro($ { for (x in range(10)) { print(); }; })
+    var iter_name : string
+    var inscope src : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        for ($i(iter_name) in $e(src)) {
+            print()
+        }
+    }
+    t |> success(r.matched, "should capture iterator name and source")
+    t |> equal(iter_name, "x")
+    if (r.matched) {
+        t |> success(src != null, "captured source should not be null")
+    }
+}
+
+[test]
+def test_for_capture_iterator_and_sources(t : T?) {
+    var inscope expr <- qmacro($ { for (k, v in keys, values) { a + b; }; })
+    var name1 : string
+    var inscope src1 : ExpressionPtr
+    var inscope src2 : ExpressionPtr
+    var inscope body_expr : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        for ($i(name1), v in $e(src1), $e(src2)) {
+            $e(body_expr)
+        }
+    }
+    t |> success(r.matched, "should capture iterator, sources, and body")
+    t |> equal(name1, "k")
+    if (r.matched) {
+        t |> success(src1 != null, "first source not null")
+        t |> success(src2 != null, "second source not null")
+        t |> success(body_expr != null, "body not null")
+    }
+}
+
+// ── for — with range() source ───────────────────────────────────────
+
+[test]
+def test_for_range_source(t : T?) {
+    var inscope expr <- qmacro($ { for (i in range(10)) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (i in range(10)) {
+            print()
+        }
+    }
+    t |> success(r.matched, "for with range(10) should match")
+}
+
+[test]
+def test_for_range_wrong_arg(t : T?) {
+    var inscope expr <- qmacro($ { for (i in range(10)) { print(); }; })
+    let r = qmatch_block(expr) $ {
+        for (i in range(20)) {
+            print()
+        }
+    }
+    t |> success(!r.matched, "range(10) should not match range(20)")
+}
+
+// ── for — in wildcard context ───────────────────────────────────────
+
+[test]
+def test_for_in_wildcard(t : T?) {
+    var inscope expr <- qmacro($ { var x = 0; for (i in arr) { x += i; }; print(); })
+    var iter_name : string
+    var inscope body_expr : ExpressionPtr
+    let r = qmatch_block(expr) $ {
+        _wildcard()
+        for ($i(iter_name) in arr) {
+            $e(body_expr)
+        }
+        _wildcard()
+    }
+    t |> success(r.matched, "for inside wildcards should match")
+    t |> equal(iter_name, "i")
+}
+
 // ── Mixed with wildcards ────────────────────────────────────────────────
 
 [test]
@@ -250,6 +457,3 @@ def test_while_after_wildcard(t : T?) {
     }
     t |> success(r.matched, "should find while after wildcard")
 }
-
-[export]
-def main() {}

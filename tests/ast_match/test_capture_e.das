@@ -81,6 +81,3 @@ def test_e_in_block(t : T?) {
         t |> equal(string(get_ptr(captured).__rtti), "ExprOp2")
     }
 }
-
-[export]
-def main() {}

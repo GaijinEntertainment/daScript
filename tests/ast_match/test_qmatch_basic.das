@@ -80,6 +80,3 @@ def test_op2(t : T?) {
     var inscope expr2 <- qmacro(x + b)
     t |> success(!qmatch(expr2, a + b).matched, "x+b != a+b")
 }
-
-[export]
-def main() {}
