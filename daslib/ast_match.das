@@ -44,11 +44,10 @@ struct QMatchResult {
 
 // ── Runtime helpers ─────────────────────────────────────────────────────
 
-def qm_run(expr : ExpressionPtr; blk : block<(var arg : ExpressionPtr) : QMatchResult>) : QMatchResult {
-    //! Clone expression and invoke a matching block on the copy.
+def qm_run(var expr : ExpressionPtr&; blk : block<(var arg : ExpressionPtr) : QMatchResult>) : QMatchResult {
+    //! Invoke a matching block on the expression.
     //! Used internally by the ``qmatch`` macro.
-    var inscope copy <- clone_expression(expr)
-    return invoke(blk, copy)
+    return invoke(blk, expr)
 }
 
 def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionPtr; var func_ptr : Function?) : QMatchResult>) : QMatchResult {
@@ -56,8 +55,7 @@ def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionP
     if (func == null) {
         return qm_fail_null()
     }
-    var inscope body <- clone_expression(func.body)
-    return invoke(blk, body, get_ptr(func))
+    return invoke(blk, func.body, get_ptr(func))
 }
 
 def qm_ok() : QMatchResult {
@@ -103,19 +101,15 @@ def qm_fail_wildcard(var expr : ExpressionPtr) : QMatchResult {
 def qm_scan(var blk_expr : ExpressionPtr&; var pos : int&; len : int; matcher : block<(var elem : ExpressionPtr) : QMatchResult>) : QMatchResult {
     //! Scan block statements from pos to len, trying matcher at each position.
     //! On first success, update pos to the position after the match and return ok.
-    var inscope blk_copy <- clone_expression(blk_expr)
-    var blk = blk_copy as ExprBlock
+    var blk = blk_expr as ExprBlock
     for (scan_pos in range(pos, len)) {
-        {
-            var inscope elem <- clone_expression(blk.list[scan_pos])
-            let r = invoke(matcher, elem)
-            if (r.matched) {
-                pos = scan_pos + 1
-                return qm_ok()
-            }
+        let r = invoke(matcher, blk.list[scan_pos])
+        if (r.matched) {
+            pos = scan_pos + 1
+            return qm_ok()
         }
     }
-    return qm_fail_wildcard(clone_expression(blk_expr))
+    return qm_fail_wildcard(blk_expr)
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : int&) : QMatchResult {

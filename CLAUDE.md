@@ -152,13 +152,11 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - Most types (structs, arrays, tables) always pass by reference — `&` is unnecessary on them
 - Only **workhorse types** (`int`, `float`, `bool`, `string`, etc. — `isWorkhorseType` on the C++ side) pass by value
-- **`smart_ptr<T>` also passes by value (move)** — like workhorse types, needs explicit `&` for pass-by-reference
-  - `def foo(var p : ExpressionPtr)` — **moves** the caller's smart_ptr, zeroing it
-  - `def foo(var p : ExpressionPtr&)` — pass by **reference**, caller keeps ownership
-  - Without `&`, passing a `var inscope` smart_ptr zeroes it on entry, then `inscope` cleanup double-frees
-- **`TypeDeclPtr` follows the same rules as `ExpressionPtr`** — pass by value moves, use `&` for reference
+- **`smart_ptr<T>` passes by value (raw pointer copy)** — no refcount bump, no move. Currently safe because AST lifetime outlives typical usage, but planned to be replaced with pool-owned memory + GC
+  - `def foo(var p : ExpressionPtr)` — copies the pointer, caller's variable is unchanged
+  - `def foo(var p : ExpressionPtr&)` — pass by **reference**
+- **`TypeDeclPtr` follows the same rules as `ExpressionPtr`**
   - Use `TypeDecl?` (never `TypeDecl const?`) — use `var` with `get_ptr()` for mutable access
-  - Same `var`/`&` discipline as Expression pointers
 - **`var s : string`** — writable local copy, changes do NOT propagate back to the caller
 - **`var s : string&`** — pass by reference, changes propagate back. Use `&` for string out-parameters
 - **`clone_string(s)`** — clones a string into the current context's heap. Required for cross-context calls where the source context may be destroyed
