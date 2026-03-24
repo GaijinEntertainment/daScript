@@ -83,7 +83,9 @@ With argument and return type matching:
         return x
     }
 
-Omitting arguments or return type matches any.
+Arguments are matched strictly — if the pattern specifies zero arguments, the target must also have
+zero arguments. Use ``$a(var)`` to match any remaining arguments (see below). Omitting the return
+type matches any return type.
 
 qmatch_function
 ^^^^^^^^^^^^^^^
@@ -195,8 +197,12 @@ Matches the field value, captures the field name:
 $a(var) — remaining arguments
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In ``qmatch_function`` or ``qmatch_block``, captures remaining arguments after
-the explicitly listed ones:
+Captures remaining arguments after the explicitly listed ones as ``array<VariablePtr>``.
+Works in both ``qmatch_function`` and ``qmatch_block``. Fixed arguments before ``$a``
+are matched by name and type as usual; everything after goes into the array.
+``$a`` must be the last argument in the pattern.
+
+Capture remaining function arguments:
 
 .. code-block:: das
 
@@ -204,19 +210,71 @@ the explicitly listed ones:
     let r = qmatch_function(func) $(a : int; $a(rest)) {
         _wildcard()
     }
+    // rest contains all arguments after `a`
+
+Capture all arguments (no fixed prefix):
+
+.. code-block:: das
+
+    var inscope rest : array<VariablePtr>
+    let r = qmatch_function(func) $($a(rest)) {
+        _wildcard()
+    }
+    // rest contains every argument
+
+Works the same on block arguments:
+
+.. code-block:: das
+
+    var inscope rest : array<VariablePtr>
+    let r = qmatch_block(blk) $(a : int; $a(rest)) {
+        return a
+    }
+
+If all fixed arguments match but no arguments remain, ``$a`` captures an empty array
+and the match succeeds. If there are fewer actual arguments than fixed ones in the pattern,
+the match fails.
 
 $b(var) — statement range capture
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-On wildcards, captures the matched statements:
+Passed as an argument to a wildcard (``_wildcard``, ``_wildcard1``, ``_optional``, ``_any``),
+captures the matched statements as ``array<ExpressionPtr>``. Each statement is cloned.
+
+Capture trailing statements (everything after ``foo()``):
+
+.. code-block:: das
+
+    var inscope stmts : array<ExpressionPtr>
+    let r = qmatch_block(blk) $ {
+        foo()
+        _wildcard($b(stmts))
+    }
+
+Capture leading statements (everything before ``baz()``):
 
 .. code-block:: das
 
     var inscope stmts : array<ExpressionPtr>
     let r = qmatch_block(blk) $ {
         _wildcard($b(stmts))
-        return x
+        baz()
     }
+
+Capture a middle range between two fixed statements:
+
+.. code-block:: das
+
+    var inscope stmts : array<ExpressionPtr>
+    let r = qmatch_block(blk) $ {
+        foo()
+        _wildcard($b(stmts))
+        bar()
+    }
+    // stmts contains everything between foo() and bar()
+
+When the wildcard matches zero statements, ``$b`` captures an empty array.
+The ``$b`` tag is optional — wildcards work without it, they just don't capture.
 
 ---------
 Wildcards

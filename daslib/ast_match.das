@@ -346,6 +346,21 @@ def qm_rtti(expr : Expression const?) : string {
     return string(expr.__rtti)
 }
 
+def qm_make_zero_const(call_name : string) : ExpressionPtr {
+    //! Create a zero-value ExprConst for the range first component.
+    //! range → 0, urange → 0u, range64 → 0l, urange64 → 0ul.
+    if (call_name == "range") {
+        return <- qmacro(0)
+    } elif (call_name == "urange") {
+        return <- qmacro(0u)
+    } elif (call_name == "range64") {
+        return <- qmacro(0l)
+    } elif (call_name == "urange64") {
+        return <- qmacro(0ul)
+    }
+    return <- default<ExpressionPtr>
+}
+
 // ── Compile-time AST builders ───────────────────────────────────────────
 
 [macro_function]
@@ -590,7 +605,8 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
     //! Generate code to match argument names, types, and return type.
     //! target_var — runtime variable with .arguments and return type field
     //! ret_field — "returnType" for ExprBlock, "result" for Function
-    //! If pattern has no arguments, skip argument checks.
+    //! Arguments always match strictly — 0 pattern args means 0 actual args.
+    //! Use $a(var) to capture remaining arguments beyond the fixed ones.
     //! If pattern has no return type (null), skip return type check.
 
     let n_args = length(pat_block.arguments)
@@ -655,6 +671,11 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
         if (has_a_tag && !empty(a_tag_vname)) {
             body |> emplace_new <| qmacro_expr(${ qm_extract_remaining_args($i(target_var).arguments, $v(n_fixed), $i(a_tag_vname)); })
         }
+    } else {
+        // No pattern arguments — require target has 0 real args
+        var inscope cond <- qmacro(qm_count_real_args($i(target_var).arguments) != 0)
+        var inscope fail <- qmacro(qm_fail_list($i(expr_var)))
+        body |> emplace_new <| qm_guard(at, cond, fail)
     }
 
     // Return type matching
@@ -743,6 +764,13 @@ def private const_component_expr_rtti(folded_rtti : string) : string {
         return "ExprConstFloat"
     }
     return ""
+}
+
+// Returns true if the constant constructor is a range type (range, urange, range64, urange64).
+// Range one-value form: range(y) = range(0, y). Vector one-value form: float2(v) = float2(v, v).
+[macro_function]
+def private is_range_constructor(call_name : string) : bool {
+    return call_name == "range" || call_name == "urange" || call_name == "range64" || call_name == "urange64"
 }
 
 // Component field names for each vector/range ExprConst type.
@@ -1242,11 +1270,114 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     }
 
     // ── ExprCall that might be a constant constructor (range, int2, float3, etc.) ────
+    // The compiler folds these into ExprConst* but raw qmacro output keeps them as ExprCall.
+    // Generate a runtime check: if the actual is the folded form, match as constant;
+    // otherwise match as ExprCall with one-value expansion support.
     if (rtti == "ExprCall") {
         let call = pattern as ExprCall
-        let folded_rtti = const_constructor_rtti(string(call.name))
+        let call_name = string(call.name)
+        let folded_rtti = const_constructor_rtti(call_name)
         if (!empty(folded_rtti)) {
-            generate_const_constructor_match(call, folded_rtti, actual_var, body, index, at)
+            let is_folded_var = next_var(index)
+            body |> emplace_new <| qmacro_expr(${ var $i(is_folded_var) = qm_rtti($i(actual_var)) == $v(folded_rtti); })
+            // If folded: match as constant constructor and return ok
+            var inscope folded_body : array<ExpressionPtr>
+            generate_const_constructor_match(call, folded_rtti, actual_var, folded_body, index, at)
+            folded_body |> emplace_new <| qmacro_expr(${ return qm_ok(); })
+            var inscope folded_blk <- new ExprBlock(at = at)
+            for (stmt in folded_body) {
+                folded_blk.list |> emplace(stmt)
+            }
+            var inscope folded_cond <- make_var_ref(at, is_folded_var)
+            var inscope folded_if <- new ExprIfThenElse(at = at, cond <- folded_cond, if_true <- folded_blk)
+            body |> emplace(folded_if)
+            // Unfolded: match as ExprCall with one-value expansion
+            body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprCall")
+            let cast_var = next_var(index)
+            var inscope as_val_c <- make_var_ref(at, actual_var)
+            var inscope as_cast_c <- new ExprAsVariant(at = at, value <- as_val_c, name := "ExprCall")
+            body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_c); })
+            if (!empty(call_name)) {
+                var inscope nc <- qmacro(!qm_call_name_matches($i(cast_var), $v(call_name)))
+                var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, nc, nf)
+            }
+            let n_pat_args = length(call.arguments)
+            if (n_pat_args > 0) {
+                // One-value expansion: range(y) = range(0, y), float2(v) = float2(v, v)
+                // Generate: if actual has 1 arg and pattern has N, apply expansion;
+                // if actual has N args, match directly; otherwise fail.
+                let n_actual_var = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var $i(n_actual_var) = qm_count_real_call_args($i(cast_var).arguments); })
+                let is_one_val = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var $i(is_one_val) = $i(n_actual_var) == 1 && $v(n_pat_args) > 1; })
+                // Guard: actual args must be 1 (one-value) or N (full form)
+                var inscope ac <- qmacro(!$i(is_one_val) && $i(n_actual_var) != $v(n_pat_args))
+                var inscope af <- qmacro(qm_fail_list($i(actual_var)))
+                body |> emplace_new <| qm_guard(at, ac, af)
+                // Get the single actual arg for one-value expansion
+                let single_arg_var = next_var(index)
+                body |> emplace_new <| qmacro_expr(${ var inscope $i(single_arg_var) <- clone_expression($i(cast_var).arguments[qm_real_call_arg_index($i(cast_var).arguments, 0)]); })
+                let is_range = is_range_constructor(call_name)
+                for (arg, i in call.arguments, range(n_pat_args)) {
+                    let child_pattern = get_ptr(arg)
+                    if (child_pattern == null) {
+                        continue
+                    }
+                    let child_var = next_var(index)
+                    if (is_range && i == 0) {
+                        // Range first component: full form uses actual arg[0], one-value form uses 0
+                        var inscope full_body : array<ExpressionPtr>
+                        let phys_full = next_var(index)
+                        full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, 0); })
+                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        var inscope one_body : array<ExpressionPtr>
+                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| qm_make_zero_const($v(call_name)); })
+                        // if (is_one_val) { child = zero } else { child = actual[0] }
+                        var inscope one_blk <- new ExprBlock(at = at)
+                        for (s in one_body) { one_blk.list |> emplace(s); }
+                        var inscope full_blk <- new ExprBlock(at = at)
+                        for (s in full_body) { full_blk.list |> emplace(s); }
+                        var inscope branch_cond <- make_var_ref(at, is_one_val)
+                        var inscope branch_if <- new ExprIfThenElse(at = at, cond <- branch_cond, if_true <- one_blk, if_false <- full_blk)
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) : ExpressionPtr; })
+                        body |> emplace(branch_if)
+                    } elif (is_range && i == 1) {
+                        // Range second component: full form uses actual arg[1], one-value form uses actual arg[0]
+                        var inscope full_body : array<ExpressionPtr>
+                        let phys_full = next_var(index)
+                        full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, 1); })
+                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        var inscope one_body : array<ExpressionPtr>
+                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(single_arg_var)); })
+                        var inscope one_blk <- new ExprBlock(at = at)
+                        for (s in one_body) { one_blk.list |> emplace(s); }
+                        var inscope full_blk <- new ExprBlock(at = at)
+                        for (s in full_body) { full_blk.list |> emplace(s); }
+                        var inscope branch_cond <- make_var_ref(at, is_one_val)
+                        var inscope branch_if <- new ExprIfThenElse(at = at, cond <- branch_cond, if_true <- one_blk, if_false <- full_blk)
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) : ExpressionPtr; })
+                        body |> emplace(branch_if)
+                    } else {
+                        // Vector broadcast: full form uses actual arg[i], one-value form uses actual arg[0]
+                        var inscope full_body : array<ExpressionPtr>
+                        let phys_full = next_var(index)
+                        full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); })
+                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        var inscope one_body : array<ExpressionPtr>
+                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(single_arg_var)); })
+                        var inscope one_blk <- new ExprBlock(at = at)
+                        for (s in one_body) { one_blk.list |> emplace(s); }
+                        var inscope full_blk <- new ExprBlock(at = at)
+                        for (s in full_body) { full_blk.list |> emplace(s); }
+                        var inscope branch_cond <- make_var_ref(at, is_one_val)
+                        var inscope branch_if <- new ExprIfThenElse(at = at, cond <- branch_cond, if_true <- one_blk, if_false <- full_blk)
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) : ExpressionPtr; })
+                        body |> emplace(branch_if)
+                    }
+                    generate_match(child_pattern, child_var, body, index, at)
+                }
+            }
             return
         }
     }

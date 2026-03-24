@@ -34,7 +34,7 @@ def test_function_simple(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return a + b
     }
     if (!r.matched && r.expr != null) {
@@ -55,10 +55,10 @@ def test_function_if_return(t : T?) {
     }
     // After optimization, if/else return may fold into ternary
     var inscope cond : ExpressionPtr
-    let r_ternary = qmatch_function(func) $ {
+    let r_ternary = qmatch_function(func) $(a, b, c : int) {
         return $e(cond) ? $e(cond) : $e(cond)
     }
-    let r_if = qmatch_function(func) $ {
+    let r_if = qmatch_function(func) $(a, b, c : int) {
         if (a < 5) {
             return b
         } else {
@@ -74,7 +74,7 @@ def test_function_wrong_pattern(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return a - b
     }
     t |> success(!r.matched, "wrong pattern should not match")

@@ -64,7 +64,7 @@ def test_int64_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : int64) {
         return x + 100l
     }
     if (!r.matched && r.expr != null) {
@@ -82,7 +82,7 @@ def test_int64_mismatch(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : int64) {
         return x + 200l
     }
     t |> success(!r.matched, "wrong int64 value should not match")
@@ -94,7 +94,7 @@ def test_uint_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : uint) {
         return x + 0xFFu
     }
     if (!r.matched && r.expr != null) {
@@ -112,7 +112,7 @@ def test_uint_mismatch(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : uint) {
         return x + 0x00u
     }
     t |> success(!r.matched, "wrong uint value should not match")
@@ -124,7 +124,7 @@ def test_double_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : double) {
         return x + 3.14lf
     }
     if (!r.matched && r.expr != null) {
@@ -142,7 +142,7 @@ def test_double_mismatch(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : double) {
         return x + 2.71lf
     }
     t |> success(!r.matched, "wrong double value should not match")
@@ -154,7 +154,7 @@ def test_uint64_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : uint64) {
         return x + 1000ul
     }
     if (!r.matched && r.expr != null) {
@@ -172,7 +172,7 @@ def test_null_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : int?) {
         return x == null
     }
     if (!r.matched && r.expr != null) {
@@ -281,7 +281,7 @@ def test_identity_enum(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : Type) {
         return x
     }
     t |> success(r.matched, "identity should match")

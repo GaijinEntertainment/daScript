@@ -90,16 +90,16 @@ def test_func_no_return_matches_any(t : T?) {
 }
 
 [test]
-def test_func_no_args_matches_body_only(t : T?) {
+def test_func_no_args_fails_when_target_has_args(t : T?) {
     var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
     if (get_ptr(func) == null) {
         return
     }
-    // No args in pattern — should only check body
+    // No args in pattern — target has args, should fail
     let r = qmatch_function(func) $ {
         return a + b
     }
-    t |> success(r.matched, "no args in pattern should match body only")
+    t |> success(!r.matched, "no args in pattern should fail when target has args")
 }
 
 [test]
@@ -156,13 +156,13 @@ def test_block_args_wrong_type(t : T?) {
 }
 
 [test]
-def test_block_no_args_matches_any(t : T?) {
+def test_block_no_args_fails_when_target_has_args(t : T?) {
     var inscope expr <- qmacro($(a : int) : int { return a; })
-    // No args in pattern — match body only
+    // No args in pattern — target has args, should fail
     let r = qmatch_block(expr) $ {
         return a
     }
-    t |> success(r.matched, "no args in block pattern should match any")
+    t |> success(!r.matched, "no args in block pattern should fail when target has args")
 }
 
 // ── $a(var) — capture remaining arguments ────────────────────────────────

@@ -61,7 +61,7 @@ def test_add_int_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return generic_add(a, b)
     }
     if (!r.matched && r.expr != null) {
@@ -79,7 +79,7 @@ def test_add_float_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : float) {
         return generic_add(a, b)
     }
     if (!r.matched && r.expr != null) {
@@ -97,7 +97,7 @@ def test_identity_match(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(x : int) {
         return generic_identity(x)
     }
     if (!r.matched && r.expr != null) {
@@ -115,7 +115,7 @@ def test_wrong_generic_name(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return generic_identity(a)
     }
     t |> success(!r.matched, "wrong generic name should not match")
@@ -127,7 +127,7 @@ def test_wrong_pattern(t : T?) {
     if (get_ptr(func) == null) {
         return
     }
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return a + b
     }
     // target_add_int calls generic_add(a,b), not a+b directly
@@ -141,7 +141,7 @@ def test_capture_names(t : T?) {
         return
     }
     var call_name, lhs_name, rhs_name : string
-    let r = qmatch_function(func) $ {
+    let r = qmatch_function(func) $(a, b : int) {
         return $c(call_name)($i(lhs_name), $i(rhs_name))
     }
     if (r.matched) {
@@ -163,10 +163,10 @@ def test_branch_match(t : T?) {
     }
     // After optimization, may fold to ternary or stay as call
     var inscope cond : ExpressionPtr
-    let r_call = qmatch_function(func) $ {
+    let r_call = qmatch_function(func) $(a : int; threshold : int) {
         return generic_branch(a, threshold)
     }
-    let r_ternary = qmatch_function(func) $ {
+    let r_ternary = qmatch_function(func) $(a : int; threshold : int) {
         return $e(cond) ? $e(cond) : $e(cond)
     }
     t |> success(r_call.matched || r_ternary.matched, "should match call or ternary")
