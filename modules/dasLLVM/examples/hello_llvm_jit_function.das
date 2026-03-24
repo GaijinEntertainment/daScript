@@ -40,7 +40,10 @@ def main {
     LLVMVerifyModule(mod, LLVMVerifierFailureAction.LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
     LLVMLinkInMCJIT()
+    LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
+    LLVMInitializeAllTargetMCs()
+    LLVMInitializeAllAsmPrinters()
     LLVMCreateJITCompilerForModule(engine, mod)
     var pfun = LLVMGetFunctionAddress(engine, "sum")
     unsafe {
