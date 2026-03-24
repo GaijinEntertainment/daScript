@@ -172,23 +172,17 @@ def test_if_chain_to_nested_ternary(t : T?) {
     }
 }
 
-// Void trailing return removed — body is single call, no return
+// Void trailing return removed — body is print("hello\n"), no return
 [test]
 def test_void_trailing_return(t : T?) {
     var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_void_trailing_return)
     if (get_ptr(func) == null) { t |> success(false, "function not found"); return; }
-    // After optimization: just print(...) — no trailing return
-    // Use $e to match the call (compiler adds __context__/__lineinfo__ args)
-    var inscope body : ExpressionPtr
+    // After optimization: just print("hello\n") — trailing return removed
+    // Fake args (__context__, __lineinfo__) are filtered automatically
     let r = qmatch_function(func) $ {
-        $e(body)
+        print("hello\n")
     }
-    t |> match_report(r, "void trailing return should be removed")
-    if (r.matched) {
-        // The single statement should be a call to print, not a return
-        t |> success(body is ExprCall, "body should be a call, not return")
-        t |> success(!(body is ExprReturn), "should not have return")
-    }
+    t |> match_report(r, "void trailing return should be removed, body is print")
 }
 
 // Nested block flattened: body is `var x = a+1; return x` (not wrapped in block)

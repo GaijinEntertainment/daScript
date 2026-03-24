@@ -229,6 +229,41 @@ def qm_extract_remaining_args(args : dasvector`smart_ptr`Variable; from_logical 
     }
 }
 
+def qm_is_fake_arg(arg : ExpressionPtr) : bool {
+    //! Returns true if the expression is a compiler-injected fakeContext or fakeLineInfo.
+    if (arg._type != null) {
+        let bt = arg._type.baseType
+        return bt == Type.fakeContext || bt == Type.fakeLineInfo
+    }
+    return false
+}
+
+def qm_count_real_call_args(args : dasvector`smart_ptr`Expression) : int {
+    //! Count call arguments excluding fakeContext and fakeLineInfo expressions.
+    var count = 0
+    for (arg in args) {
+        if (!qm_is_fake_arg(arg)) {
+            count ++
+        }
+    }
+    return count
+}
+
+def qm_real_call_arg_index(args : dasvector`smart_ptr`Expression; logical_idx : int) : int {
+    //! Map logical call argument index (skipping fake args) to physical index.
+    var logical = 0
+    for (arg, phys in args, range(length(args))) {
+        if (qm_is_fake_arg(arg)) {
+            continue
+        }
+        if (logical == logical_idx) {
+            return phys
+        }
+        logical ++
+    }
+    return -1
+}
+
 def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int; var result : array<ExpressionPtr>&) : void {
     //! Extract statements [from_pos, to_pos) from a block into an array (cloned).
     var blk = blk_expr as ExprBlock
@@ -956,8 +991,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var inscope as_val_c <- make_var_ref(at, actual_var)
         var inscope as_cast_c <- new ExprAsVariant(at = at, value <- as_val_c, name := rtti)
         body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_c); })
-        // Match name (ExprCall only) and collect argument vector
-        var n_args = 0
+        // Match name (ExprCall only) then match arguments (skipping fakeContext/fakeLineInfo)
         if (rtti == "ExprCall") {
             let call = pattern as ExprCall
             if (!empty(call.name)) {
@@ -965,32 +999,36 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, nc, nf)
             }
-            n_args = length(call.arguments)
+            let n_args = length(call.arguments)
             if (n_args > 0) {
-                var inscope ac <- qmacro(length($i(cast_var).arguments) != $v(n_args))
+                var inscope ac <- qmacro(qm_count_real_call_args($i(cast_var).arguments) != $v(n_args))
                 var inscope af <- qmacro(qm_fail_list($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, ac, af)
                 for (arg, i in call.arguments, range(n_args)) {
                     let child_pattern = get_ptr(arg)
                     if (child_pattern != null) {
+                        let phys_var = next_var(index)
+                        body |> emplace_new <| qmacro_expr(${ var $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); })
                         let child_var = next_var(index)
-                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$v(i)]); })
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$i(phys_var)]); })
                         generate_match(child_pattern, child_var, body, index, at)
                     }
                 }
             }
         } elif (rtti == "ExprInvoke") {
             let inv = pattern as ExprInvoke
-            n_args = length(inv.arguments)
+            let n_args = length(inv.arguments)
             if (n_args > 0) {
-                var inscope ac <- qmacro(length($i(cast_var).arguments) != $v(n_args))
+                var inscope ac <- qmacro(qm_count_real_call_args($i(cast_var).arguments) != $v(n_args))
                 var inscope af <- qmacro(qm_fail_list($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, ac, af)
                 for (arg, i in inv.arguments, range(n_args)) {
                     let child_pattern = get_ptr(arg)
                     if (child_pattern != null) {
+                        let phys_var = next_var(index)
+                        body |> emplace_new <| qmacro_expr(${ var $i(phys_var) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); })
                         let child_var = next_var(index)
-                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$v(i)]); })
+                        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_expression($i(cast_var).arguments[$i(phys_var)]); })
                         generate_match(child_pattern, child_var, body, index, at)
                     }
                 }
