@@ -47,7 +47,6 @@ struct QMatchResult {
 def qm_run(var expr : ExpressionPtr&; blk : block<(var arg : ExpressionPtr) : QMatchResult>) : QMatchResult {
     //! Invoke a matching block on the expression.
     //! Used internally by the ``qmatch`` macro.
-    print("qm_run input: {debug_expression(expr)}\n")
     return invoke(blk, expr)
 }
 
@@ -56,7 +55,6 @@ def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionP
     if (func == null) {
         return qm_fail_null()
     }
-    print("qm_run_function func={func.name}\n  body: {debug_expression(func.body)}\n")
     return invoke(blk, func.body, get_ptr(func))
 }
 
