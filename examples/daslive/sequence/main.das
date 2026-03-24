@@ -15,7 +15,7 @@ require daslib/json_boost
 require daslib/safe_addr
 require daslib/math_boost
 require opengl/opengl_ttf
-require fio
+require daslib/fio
 require gameplay
 require bot_random
 require bot_greedy

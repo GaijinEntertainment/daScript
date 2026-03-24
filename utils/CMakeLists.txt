@@ -10,7 +10,7 @@ set(DAS_UTILS
 )
 
 if(NOT DAS_SQLITE_DISABLED)
-    list(APPEND DAS_UTILS benchctl)
+    # list(APPEND DAS_UTILS benchctl)
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies.

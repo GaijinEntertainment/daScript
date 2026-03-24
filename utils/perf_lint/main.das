@@ -2,7 +2,7 @@ options gen2
 
 require daslib/perf_lint
 require daslib/ast_boost
-require fio
+require daslib/fio
 require strings
 require daslib/strings_boost
 
