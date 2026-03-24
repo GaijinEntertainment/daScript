@@ -32,12 +32,7 @@ def can_visit_folder(folder_name : string; var result : bool?) {
         }
     }
     if (folder_name == "ast_match") {
-        let args <- get_command_line_arguments()
-        for (arg in args) {
-            if (arg == "-jit" || arg == "--use-aot") {
-                *result = false
-                return
-            }
-        }
+        *result = false
+        return
     }
 }
