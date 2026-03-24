@@ -26,6 +26,7 @@ require daslib/ast
 require daslib/rtti
 require daslib/ast_boost
 require daslib/templates_boost
+require daslib/archive
 
 [lint_macro]
 class LiveVarsLint : AstPassMacro {
