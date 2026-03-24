@@ -290,10 +290,29 @@ def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int;
     }
 }
 
+def qm_call_name_matches(call : ExprCall?; expected_name : string) : bool {
+    //! Check if a call's name matches, accounting for generic instantiation.
+    //! When a generic function is instantiated, the call name is mangled
+    //! (e.g. ``generic_add`123456``). This checks the mangled name first,
+    //! then falls back to the ``fromGeneric`` original name.
+    if (call.name == expected_name) {
+        return true
+    }
+    if (call.func != null && call.func.fromGeneric != null) {
+        return call.func.fromGeneric.name == expected_name
+    }
+    return false
+}
+
 def qm_extract_call_name(var expr : ExpressionPtr) : string {
-    //! Extract call name from ExprCall or similar.
+    //! Extract call name from ExprCall. If the call targets a generic instance,
+    //! returns the original generic name (before mangling).
     if (expr is ExprCall) {
-        return string((expr as ExprCall).name)
+        let call = expr as ExprCall
+        if (call.func != null && call.func.fromGeneric != null) {
+            return string(call.func.fromGeneric.name)
+        }
+        return string(call.name)
     }
     return ""
 }
@@ -1015,7 +1034,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         if (rtti == "ExprCall") {
             let call = pattern as ExprCall
             if (!empty(call.name)) {
-                var inscope nc <- qmacro($i(cast_var).name != $v(string(call.name)))
+                var inscope nc <- qmacro(!qm_call_name_matches($i(cast_var), $v(string(call.name))))
                 var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, nc, nf)
             }
