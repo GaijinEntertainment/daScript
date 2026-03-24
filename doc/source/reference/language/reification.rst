@@ -337,6 +337,7 @@ prints:
 
 .. seealso::
 
+    :ref:`AST Matching <ast_matching>` for the reverse direction — matching compiled AST against patterns using the same tag system,
     :ref:`Macros <macros>` for macro registration and the compilation lifecycle where reification is used,
     :ref:`Generic programming <generic_programming>` for ``typeinfo`` and AST manipulation context.
 
