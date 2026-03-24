@@ -860,6 +860,13 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
 }
 
 [macro_function]
+def private cm_helper(val : auto; cast_var, actual_var : string; var body : array<ExpressionPtr>&; at : LineInfo) {
+    //! Generate: if (cast_var.value != val) { return fail }
+    var inscope cond <- qmacro($i(cast_var).value != $v(val))
+    qm_const_value_guard(at, cast_var, actual_var, cond, body)
+}
+
+[macro_function]
 def private generate_const_match(pattern : Expression?; rtti : string; actual_var : string; var body : array<ExpressionPtr>&; var index : int&; at : LineInfo) {
     //! Generate matching code for ExprConst* nodes — RTTI guard + value comparison.
     body |> emplace_new <| qm_rtti_guard(at, actual_var, rtti)
@@ -867,117 +874,34 @@ def private generate_const_match(pattern : Expression?; rtti : string; actual_va
     var inscope as_val <- make_var_ref(at, actual_var)
     var inscope as_cast <- new ExprAsVariant(at = at, value <- as_val, name := rtti)
     body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
-    // Scalar types with .value that supports !=
-    if (rtti == "ExprConstInt") {
-        var val = (pattern as ExprConstInt).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstFloat") {
-        var val = (pattern as ExprConstFloat).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstBool") {
-        var val = (pattern as ExprConstBool).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstString") {
-        var inscope cond <- qmacro($i(cast_var).value != $v(string((pattern as ExprConstString).value)))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt64") {
-        var val = (pattern as ExprConstInt64).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt") {
-        var val = (pattern as ExprConstUInt).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstDouble") {
-        var val = (pattern as ExprConstDouble).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt64") {
-        var val = (pattern as ExprConstUInt64).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt8") {
-        var val = (pattern as ExprConstInt8).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt8") {
-        var val = (pattern as ExprConstUInt8).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt16") {
-        var val = (pattern as ExprConstInt16).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt16") {
-        var val = (pattern as ExprConstUInt16).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstEnumeration") {
-        var inscope cond <- qmacro($i(cast_var).value != $v(string((pattern as ExprConstEnumeration).value)))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstBitfield") {
-        var val = (pattern as ExprConstBitfield).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstPtr") {
-        // ExprConstPtr always represents null — just RTTI match is sufficient
-        pass
-    } elif (rtti == "ExprConstRange") {
-        var val = (pattern as ExprConstRange).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstURange") {
-        var val = (pattern as ExprConstURange).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstRange64") {
-        var val = (pattern as ExprConstRange64).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstURange64") {
-        var val = (pattern as ExprConstURange64).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt2") {
-        var val = (pattern as ExprConstInt2).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt3") {
-        var val = (pattern as ExprConstInt3).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstInt4") {
-        var val = (pattern as ExprConstInt4).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt2") {
-        var val = (pattern as ExprConstUInt2).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt3") {
-        var val = (pattern as ExprConstUInt3).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstUInt4") {
-        var val = (pattern as ExprConstUInt4).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstFloat2") {
-        var val = (pattern as ExprConstFloat2).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstFloat3") {
-        var val = (pattern as ExprConstFloat3).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    } elif (rtti == "ExprConstFloat4") {
-        var val = (pattern as ExprConstFloat4).value
-        var inscope cond <- qmacro($i(cast_var).value != $v(val))
-        qm_const_value_guard(at, cast_var, actual_var, cond, body)
-    }
+    if (rtti == "ExprConstInt") { cm_helper((pattern as ExprConstInt).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstFloat") { cm_helper((pattern as ExprConstFloat).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstBool") { cm_helper((pattern as ExprConstBool).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstString") { cm_helper(string((pattern as ExprConstString).value), cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt64") { cm_helper((pattern as ExprConstInt64).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt") { cm_helper((pattern as ExprConstUInt).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstDouble") { cm_helper((pattern as ExprConstDouble).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt64") { cm_helper((pattern as ExprConstUInt64).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt8") { cm_helper((pattern as ExprConstInt8).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt8") { cm_helper((pattern as ExprConstUInt8).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt16") { cm_helper((pattern as ExprConstInt16).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt16") { cm_helper((pattern as ExprConstUInt16).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstEnumeration") { cm_helper(string((pattern as ExprConstEnumeration).value), cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstBitfield") { cm_helper((pattern as ExprConstBitfield).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstPtr") { pass; } // null — RTTI match is sufficient
+    elif (rtti == "ExprConstRange") { cm_helper((pattern as ExprConstRange).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstURange") { cm_helper((pattern as ExprConstURange).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstRange64") { cm_helper((pattern as ExprConstRange64).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstURange64") { cm_helper((pattern as ExprConstURange64).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt2") { cm_helper((pattern as ExprConstInt2).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt3") { cm_helper((pattern as ExprConstInt3).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstInt4") { cm_helper((pattern as ExprConstInt4).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt2") { cm_helper((pattern as ExprConstUInt2).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt3") { cm_helper((pattern as ExprConstUInt3).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstUInt4") { cm_helper((pattern as ExprConstUInt4).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstFloat2") { cm_helper((pattern as ExprConstFloat2).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstFloat3") { cm_helper((pattern as ExprConstFloat3).value, cast_var, actual_var, body, at); }
+    elif (rtti == "ExprConstFloat4") { cm_helper((pattern as ExprConstFloat4).value, cast_var, actual_var, body, at); }
 }
 
 [macro_function]
