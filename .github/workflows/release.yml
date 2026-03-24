@@ -189,9 +189,6 @@ jobs:
           ./vcpkg/vcpkg install openssl:${{ matrix.architecture == 32 && 'x86' || 'x64' }}-windows --binarycaching
           echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
           echo "CMAKE_TOOLCHAIN_FILE=$(pwd)/vcpkg/scripts/buildsystems/vcpkg.cmake" >> $GITHUB_ENV
-      - name: "Clone submodules"
-        run: |
-          git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
       - name: "Build: Daslang Linux with modules"
         if: runner.os != 'Windows'
         run: |

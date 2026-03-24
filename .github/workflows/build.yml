@@ -223,18 +223,6 @@ jobs:
             ;;
         esac
 
-    - name: "Clone required repos"
-      uses: actions/checkout@master
-      with:
-        repository: profelis/das-fmt     # Path to repository with das-fmt scripts
-        ref: refs/pull/4/head
-        path: das-fmt
-
-    - name: "Clone submodules"
-      if: matrix.target != 'linux_arm' # support opengl in glfw on linux arm
-      run: |
-        # Some of them will be disabled, but who cares
-        git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
     - name: "Build: Daslang"
       run: |
         set -eux
