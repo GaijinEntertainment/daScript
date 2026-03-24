@@ -138,7 +138,8 @@ The variable type determines which constant type is expected:
     let r = qmatch(expr, a + $v(val))
     // r.matched if the right operand is ExprConstInt; val receives the value
 
-Supported types: ``int``, ``float``, ``bool``, ``string``, ``int64``, ``uint``, ``double``.
+Supported types: ``int``, ``float``, ``bool``, ``string``, ``int64``, ``uint``, ``double``,
+``uint64``, ``int8``, ``uint8``, ``int16``, ``uint16``.
 
 $i(var) — identifier name
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
