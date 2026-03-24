@@ -1088,24 +1088,12 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var ann = unsafe(reinterpret<BasicStructureAnnotation?> get_expression_annotation(pattern))
         if (ann != null) {
             for_each_field(*ann) $(name, cppName, xtype, offset) {
-                if (offset == 0xFFFFFFFFu) {
-                    return
-                }
-                if (qm_skip_field(rtti, name)) {
-                    return
-                }
-                if (name == "iteratorsTags") {
-                    return
-                }
-                if (name == "iteratorsAt" || name == "iteratorVariables" || name == "iteratorsTupleExpansion" || name == "iteratorsAka") {
-                    return
-                }
-                if (name == "visibility" || name == "allowIteratorOptimization" || name == "canShadow") {
-                    return
-                }
-                if (length(xtype.dim) != 0) {
-                    return
-                }
+                return if (offset == 0xFFFFFFFFu)
+                return if (qm_skip_field(rtti, name))
+                return if (name == "iteratorsTags")
+                return if (name == "iteratorsAt" || name == "iteratorVariables" || name == "iteratorsTupleExpansion" || name == "iteratorsAka")
+                return if (name == "visibility" || name == "allowIteratorOptimization" || name == "canShadow")
+                return if (length(xtype.dim) != 0)
                 var p8 : int8?
                 unsafe {
                     p8 = (reinterpret<int8?> pattern) + int(offset)
@@ -1375,12 +1363,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     // Field-by-field matching via annotation reflection
     for_each_field(*ann) $(name, cppName, xtype, offset) {
-        if (offset == 0xFFFFFFFFu) {
-            return
-        }
-        if (qm_skip_field(rtti, name)) {
-            return
-        }
+        return if (offset == 0xFFFFFFFFu)
+        return if (qm_skip_field(rtti, name))
         if (length(xtype.dim) != 0) {
             panic("qmatch: fixed-size array field '{name}' not supported")
         }
