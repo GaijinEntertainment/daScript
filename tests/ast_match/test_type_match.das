@@ -69,15 +69,15 @@ def test_type_array_wrong_elem(t : T?) {
 
 [test]
 def test_type_table(t : T?) {
-    var inscope expr <- qmacro(type<table<string;int>>)
-    let r = qmatch(expr, type<table<string;int>>)
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<string; int>>)
     t |> success(r.matched, "type<table<string;int>> should match")
 }
 
 [test]
 def test_type_table_wrong_value(t : T?) {
-    var inscope expr <- qmacro(type<table<string;int>>)
-    let r = qmatch(expr, type<table<string;float>>)
+    var inscope expr <- qmacro(type<table<string; int>>)
+    let r = qmatch(expr, type<table<string; float>>)
     t |> success(!r.matched, "type<table<string;int>> should not match type<table<string;float>>")
 }
 

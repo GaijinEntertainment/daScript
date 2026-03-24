@@ -152,6 +152,13 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - Most types (structs, arrays, tables) always pass by reference — `&` is unnecessary on them
 - Only **workhorse types** (`int`, `float`, `bool`, `string`, etc. — `isWorkhorseType` on the C++ side) pass by value
+- **`smart_ptr<T>` also passes by value (move)** — like workhorse types, needs explicit `&` for pass-by-reference
+  - `def foo(var p : ExpressionPtr)` — **moves** the caller's smart_ptr, zeroing it
+  - `def foo(var p : ExpressionPtr&)` — pass by **reference**, caller keeps ownership
+  - Without `&`, passing a `var inscope` smart_ptr zeroes it on entry, then `inscope` cleanup double-frees
+- **`TypeDeclPtr` follows the same rules as `ExpressionPtr`** — pass by value moves, use `&` for reference
+  - Use `TypeDecl?` (never `TypeDecl const?`) — use `var` with `get_ptr()` for mutable access
+  - Same `var`/`&` discipline as Expression pointers
 - **`var s : string`** — writable local copy, changes do NOT propagate back to the caller
 - **`var s : string&`** — pass by reference, changes propagate back. Use `&` for string out-parameters
 - **`clone_string(s)`** — clones a string into the current context's heap. Required for cross-context calls where the source context may be destroyed
@@ -221,6 +228,24 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
 - `#pragma optimize` in AOT-generated code must be wrapped in `#ifdef _MSC_VER` — Clang warns on unknown pragmas
 - **Macro-generated struct variables** need `default<$t(st)>` initialization (not `var x : $t(st)`) — avoids "uninitialized variable" errors for structs without field defaults
+
+### Code style — prefer idiomatic forms
+
+| Don't write | Write instead | Why |
+|---|---|---|
+| `string(x.__rtti) == "ExprFoo"` | `x is ExprFoo` | `is` works on both smart_ptr and raw ptrs |
+| `get_ptr(x) == null` | `x == null` | smart_ptr supports `==`/`!=` null directly |
+| `get_ptr(x).field` | `x.field` | smart_ptr auto-dereferences for field access |
+| `string(das_str) == "lit"` | `das_str == "lit"` | `das_string` compares directly with `string` |
+| `!empty(string(das_str))` | `!empty(das_str)` | `empty()` works on `das_string` |
+| `let v = string(x.name); $i(v)` | `$i(x.name)` | qmacro `$i`/`$f` accept `das_string` directly |
+| `var copy = val; $v(copy)` | `$v(val)` | qmacro `$v` works with `let` vars and loop vars |
+| `if (true) { ... }` | `{ ... }` | bare blocks create lexical scope in gen2 |
+| `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
+| `unsafe { (reinterpret<ExprBlock?> blk).list }` | `blk.list` | smart_ptr auto-dereferences |
+| `unsafe(reinterpret<T?> get_ptr(x))` | make param `var` + `get_ptr(x)` | `var` param gives non-const access, no reinterpret needed |
+
+**Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from smart_ptr field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
 ## Key Directories
 

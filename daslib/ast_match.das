@@ -264,7 +264,7 @@ def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMa
 }
 
 def qm_rtti(var expr : ExpressionPtr) : string {
-    return string(get_ptr(expr).__rtti)
+    return string(expr.__rtti)
 }
 
 def qm_rtti(expr : Expression const?) : string {
@@ -801,7 +801,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 }
                 let bt = xtype.baseType
                 // Reuse the same field matching logic from the generic handler
-                if (bt == Type.tHandle && string(xtype.annotation.name) == "dasvector`das_string") {
+                if (bt == Type.tHandle && xtype.annotation.name == "dasvector`das_string") {
                     let pv = unsafe(reinterpret<dasvector`das_string?> p8)
                     let pat_len = length(*pv)
                     if (pat_len > 0) {
@@ -841,7 +841,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             generate_match(child_pattern, child_var, body, index, at)
                         }
                     }
-                } elif (bt == Type.tHandle && string(xtype.annotation.name) == "dasvector`smart_ptr`Expression") {
+                } elif (bt == Type.tHandle && xtype.annotation.name == "dasvector`smart_ptr`Expression") {
                     let pv = unsafe(reinterpret<dasvector`smart_ptr`Expression?> p8)
                     let pat_len = length(*pv)
                     if (pat_len > 0) {
@@ -978,7 +978,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     body |> emplace_new <| qm_guard(at, ncond, nfail)
                 }
             }
-        } elif (bt == Type.tHandle && string(xtype.annotation.name) == "das_string") {
+        } elif (bt == Type.tHandle && xtype.annotation.name == "das_string") {
             // das_string field
             let pv = unsafe(reinterpret<das_string?> p8)
             if (!empty(*pv)) {
@@ -986,7 +986,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
             }
-        } elif (bt == Type.tHandle && string(xtype.annotation.name) == "dasvector`smart_ptr`Expression") {
+        } elif (bt == Type.tHandle && xtype.annotation.name == "dasvector`smart_ptr`Expression") {
             // Expression vector field (block.list, call.arguments)
             let pv = unsafe(reinterpret<dasvector`smart_ptr`Expression?> p8)
             let pat_len = length(*pv)
@@ -1003,9 +1003,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     }
                 }
             }
-        } elif (bt == Type.tHandle && string(xtype.annotation.name) == "dasvector`smart_ptr`Variable") {
+        } elif (bt == Type.tHandle && xtype.annotation.name == "dasvector`smart_ptr`Variable") {
             // Variable vector (ExprLet.variables) — match name, type, init
-            let pv = unsafe(reinterpret<dasvector`smart_ptr`Variable?> p8)
+            var pv = unsafe(reinterpret<dasvector`smart_ptr`Variable?> p8)
             let pat_len = length(*pv)
             if (pat_len > 0) {
                 var inscope cond <- qmacro(length($i(cast_var).$f(name)) != $v(pat_len))
@@ -1019,7 +1019,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             // $i capture — extract variable name
                             let src = get_ptr(pat_v.source)
                             if (src is ExprVar) {
-                                body |> emplace_new <| qmacro_expr(${ $i((src as ExprVar).name) = string($i(cast_var).$f(name)[$v(vi)].name); })
+                                body |> emplace_new <| qmacro_expr(${ $i((src as ExprVar).name) = $i(cast_var).$f(name)[$v(vi)].name; })
                             }
                         } else {
                             if (!empty(pat_v.name)) {
@@ -1037,7 +1037,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         }
                         // Type matching (skip autoinfer)
                         if (pat_v._type != null) {
-                            var pat_td = unsafe(reinterpret<TypeDecl?> pat_v._type)
+                            var pat_td = get_ptr(pat_v._type)
                             if (pat_td.baseType != Type.autoinfer) {
                                 let td_var = next_var(index)
                                 body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(cast_var).$f(name)[$v(vi)]._type); })
@@ -1047,7 +1047,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     }
                 }
             }
-        } elif (bt == Type.tHandle && string(xtype.annotation.name) == "dasvector`das_string") {
+        } elif (bt == Type.tHandle && xtype.annotation.name == "dasvector`das_string") {
             // String vector (ExprFor.iterators) — match name strings
             let pv = unsafe(reinterpret<dasvector`das_string?> p8)
             let pat_len = length(*pv)

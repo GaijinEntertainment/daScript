@@ -46,15 +46,21 @@ let r = qmatch_function(func) $(a, b : int) : int {
 | `$i(var)` | For iterator | `string` | `for ($i(name) in arr)` captures iterator name |
 | `$t(var)` | Type position | `TypeDeclPtr` | `type<$t(captured)>` captures type |
 | `$a(var)` | Argument list | `array<VariablePtr>` | `$(a : int; $a(rest))` captures remaining args |
+| `$c(var)` | Call expr | `string` | `$c(name)(a, b)` matches call args, captures call name |
+| `$f(var)` | Field expr | `string` | `obj.$f(name)` matches field value, captures field name |
+| `$b(var)` | Wildcard range | `array<ExpressionPtr>` | `_wildcard($b(stmts))` captures matched statements |
 
 ## Wildcards (Block/Function patterns only)
 
 | Wildcard | Matches | Example |
 |----------|---------|---------|
 | `_wildcard()` | 0 or more statements | Leading/trailing/sandwich |
+| `_wildcard($b(v))` | 0 or more, captured | Statements stored in `v` |
 | `_wildcard1()` | 1 or more statements | At least one before/after |
+| `_wildcard1($b(v))` | 1 or more, captured | Statements stored in `v` |
 | `_optional()` | 0 or 1 statement | |
 | `_any()` | Exactly 1 statement | |
+| `_any($b(v))` | Exactly 1, captured | Single statement in `v` |
 
 ## Result Type
 
@@ -112,6 +118,9 @@ Pattern block arguments match Function's arguments (filtering hidden `fakeContex
 - `qm_extract(expr, var)` — overloaded for int/float/bool/string/int64/uint/double
 - `qm_extract_name(expr)` — extracts identifier name from common expression types
 - `qm_extract_type(expr, var)` — extracts TypeDeclPtr from ExprTypeDecl
+- `qm_extract_call_name(expr)` — extracts call name from ExprCall
+- `qm_extract_field_name(expr)` — extracts field name from ExprField/ExprSafeField/variant
+- `qm_extract_stmts(blk_expr, from, to, result)` — extracts statement range [from, to) into `array<ExpressionPtr>`
 - `qm_count_real_args(args)` / `qm_real_arg_index(args, idx)` — filter fakeContext/fakeLineInfo
 - `qm_extract_remaining_args(args, from_logical, result)` — collect remaining real args into `array<VariablePtr>`
 
@@ -131,7 +140,7 @@ Pattern block arguments match Function's arguments (filtering hidden `fakeContex
 - `ExprFor` — custom handler for `iteratorsTags` ($i capture on iterators)
 - `ExprTag` with `$i` + `value=ExprLet` — clears placeholder name, matches ExprLet, captures variable name
 
-## Test Files (138 tests)
+## Test Files (153 tests)
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -140,6 +149,7 @@ Pattern block arguments match Function's arguments (filtering hidden `fakeContex
 | `test_capture_e.das` | 6 | `$e` on children, whole expr, clone independence |
 | `test_capture_v.das` | 12 | `$v` int/float/bool/string, wrong type, in compound |
 | `test_capture_i.das` | 11 | `$i` on ExprVar, op2, const, let decl, for iterator |
+| `test_capture_cfb.das` | 15 | `$c` call name, `$f` field name, `$b` statement range |
 | `test_control_flow.das` | 19 | if/else, while, for, return, mixed with wildcards |
 | `test_qmatch_function.das` | 3 | Compiled function body matching |
 | `test_type_match.das` | 17 | TypeDecl matching, `$t` capture |
@@ -147,9 +157,6 @@ Pattern block arguments match Function's arguments (filtering hidden `fakeContex
 
 ## Not Yet Implemented
 
-- `$b(var)` — capture statement range in wildcards as `array<ExpressionPtr>`
-- `$c(var)` — extract call name as string
-- `$f(var)` — extract field name as string
 - `_optional()` scan path same as `_wildcard()` (no 0-or-1 limit enforced)
-- Phase 2: semantic pattern expansion (comprehension/generator recipes)
-- Phase 2: `[ast_check]` compile-time annotation
+- Semantic pattern expansion (comprehension/generator recipes)
+- `[ast_check]` compile-time annotation
