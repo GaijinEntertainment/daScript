@@ -31,4 +31,8 @@ def can_visit_folder(folder_name : string; var result : bool?) {
             }
         }
     }
+    if (folder_name == "ast_match") {
+        *result = false
+        return
+    }
 }

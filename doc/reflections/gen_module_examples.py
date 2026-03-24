@@ -813,6 +813,16 @@ elimination, tree shaking, and optimizing generated output.""",
     "require daslib/ast_used",
 )
 
+reg("ast_match",
+    """The AST_MATCH module provides AST pattern matching via reverse reification.
+It matches expressions and blocks against structural patterns using the same
+tag system as qmacro but in reverse: $e clones a matched expression, $v extracts
+a constant value, $i extracts an identifier name, $c extracts a call name,
+$f extracts a field name, $b captures a statement range, $t captures a type,
+and $a captures remaining arguments.""",
+    "require daslib/ast_match",
+)
+
 reg("async_boost",
     """The ASYNC_BOOST module implements an async/await pattern for daslang using
 channels and coroutines. It provides ``async`` for launching concurrent tasks
