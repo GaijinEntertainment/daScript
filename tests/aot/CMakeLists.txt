@@ -61,6 +61,9 @@ FILE(GLOB AOT_APPLY_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/apply/*.das")
 # AOT for archive test files
 FILE(GLOB AOT_ARCHIVE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/archive/*.das")
 
+# AOT for ast_match test files
+FILE(GLOB AOT_AST_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/ast_match/*.das")
+
 # AOT for assert_once test files
 FILE(GLOB AOT_ASSERT_ONCE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/assert_once/*.das")
 
@@ -229,6 +232,10 @@ DAS_AOT("${AOT_APPLY_FILES}" APPLY_AOT_GENERATED_SRC test_aot_apply daslang)
 add_custom_target(test_aot_archive)
 SET(ARCHIVE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_ARCHIVE_FILES}" ARCHIVE_AOT_GENERATED_SRC test_aot_archive daslang)
+
+add_custom_target(test_aot_ast_match)
+SET(AST_MATCH_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_AST_MATCH_FILES}" AST_MATCH_AOT_GENERATED_SRC test_aot_ast_match daslang)
 
 add_custom_target(test_aot_assert_once)
 SET(ASSERT_ONCE_AOT_GENERATED_SRC)
@@ -403,6 +410,7 @@ SOURCE_GROUP_FILES("aot generated" TESTING_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ALGORITHM_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" APPLY_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ARCHIVE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" AST_MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ASSERT_ONCE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" ASYNC_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" BARE_BLOCK_AOT_GENERATED_SRC)
@@ -453,6 +461,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${ALGORITHM_AOT_GENERATED_SRC}
     ${APPLY_AOT_GENERATED_SRC}
     ${ARCHIVE_AOT_GENERATED_SRC}
+    ${AST_MATCH_AOT_GENERATED_SRC}
     ${ASSERT_ONCE_AOT_GENERATED_SRC}
     ${ASYNC_AOT_GENERATED_SRC}
     ${BARE_BLOCK_AOT_GENERATED_SRC}
@@ -499,7 +508,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_tests test_aot_testing
-    test_aot_algorithm test_aot_apply test_aot_archive
+    test_aot_algorithm test_aot_apply test_aot_archive test_aot_ast_match
     test_aot_assert_once test_aot_async test_aot_bare_block test_aot_base64
     test_aot_bitfields test_aot_bool_array
     test_aot_data_walker test_aot_debug
