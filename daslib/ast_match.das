@@ -793,8 +793,7 @@ def private has_tags_in_args(call : ExprCall?) : bool {
     // would prevent constant folding, so the call stays as ExprCall and hits the
     // normal matching path instead of reaching here.
     for (arg in call.arguments) {
-        let a = get_ptr(arg)
-        if (a != null && a.__rtti == "ExprTag") {
+        if (arg != null && arg.__rtti == "ExprTag") {
             return true
         }
     }
