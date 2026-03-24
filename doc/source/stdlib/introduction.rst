@@ -50,6 +50,7 @@ Reflection and AST
 * :doc:`ast_boost <generated/ast_boost>` — AST convenience helpers: queries, annotation manipulation, expression generation, visitor utilities
 * :doc:`ast_block_to_loop <generated/ast_block_to_loop>` — AST transform that converts block-based iteration to explicit loops (used by DECS)
 * :doc:`ast_used <generated/ast_used>` — collect all types used by a set of functions (for code generation)
+* :doc:`ast_match <generated/ast_match>` — AST pattern matching via reverse reification: match expressions against structural patterns
 * :doc:`quote <generated/quote>` — AST quasiquotation for constructing syntax trees from inline code
 * :doc:`type_traits <generated/type_traits>` — compile-time type introspection and manipulation macros
 * :doc:`typemacro_boost <generated/typemacro_boost>` — type macro and template structure support infrastructure

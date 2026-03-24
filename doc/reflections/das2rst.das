@@ -41,6 +41,7 @@ require daslib/unroll
 require daslib/assert_once
 require daslib/ast_block_to_loop
 require daslib/ast_cursor
+require daslib/ast_match
 require daslib/ast_used
 require daslib/constant_expression
 require daslib/uriparser_boost
@@ -667,6 +668,19 @@ def document_module_ast_used(root : string) {
     document("AST type usage collection", mod, "ast_used.rst", groups)
 }
 
+def document_module_ast_match(root : string) {
+    var mod = find_module("ast_match")
+    var groups <- array<DocGroup>(
+        group_by_regex("Match execution", mod, %regex~.*(qm_run|qm_run_function)$%%),
+        group_by_regex("Result builders", mod, %regex~.*(qm_ok|qm_fail_.*)$%%),
+        group_by_regex("Value extraction", mod, %regex~.*(qm_extract)$%%),
+        group_by_regex("Name and type extraction", mod, %regex~.*(qm_extract_name|qm_extract_call_name|qm_extract_field_name|qm_extract_type|qm_rtti)$%%),
+        group_by_regex("Argument filtering", mod, %regex~.*(qm_count_real_args|qm_real_arg_index|qm_extract_remaining_args|qm_is_fake_arg|qm_count_real_call_args|qm_real_call_arg_index)$%%),
+        group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%)
+    )
+    document("AST pattern matching", mod, "ast_match.rst", groups)
+}
+
 def document_module_constexpr(root : string) {
     var mod = find_module("constant_expression")
     var groups <- array<DocGroup>(
@@ -1273,6 +1287,7 @@ def main {
     document_module_ast_boost(root)
     document_module_ast_cursor(root)
     document_module_ast_used(root)
+    document_module_ast_match(root)
     document_module_async_boost(root)
     document_module_base64(root)
     document_module_bitfield_boost(root)

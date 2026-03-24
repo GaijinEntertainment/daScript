@@ -23,26 +23,30 @@ require daslib/strings
 
 // ── Result types ────────────────────────────────────────────────────────
 
+//! Error codes for pattern matching failures.
 enum QMatchError : int {
-    ok
-    rtti_mismatch
-    field_mismatch
-    const_type_mismatch
-    type_mismatch
-    list_length
-    wildcard_not_found
-    null_expression
+    ok                  //! Match succeeded.
+    rtti_mismatch       //! Expression RTTI type does not match the pattern.
+    field_mismatch      //! A named field (name, op, etc.) differs between pattern and expression.
+    const_type_mismatch //! $v extraction failed — expression is not the expected constant type.
+    type_mismatch       //! TypeDecl comparison failed — types do not match.
+    list_length         //! Block statement count mismatch (after wildcard resolution).
+    wildcard_not_found  //! Wildcard could not find a matching statement.
+    null_expression     //! A null expression was passed where a non-null was expected.
 }
 
+//! Result of a pattern match attempt.
 struct QMatchResult {
-    matched : bool
-    error   : QMatchError
-    expr    : Expression const?
+    matched : bool              //! True if the pattern matched the expression.
+    error   : QMatchError       //! Error code describing why the match failed (ok when matched).
+    expr    : Expression const? //! Pointer to the expression where matching failed (null on success).
 }
 
 // ── Runtime helpers ─────────────────────────────────────────────────────
 
 def qm_run(expr : ExpressionPtr; blk : block<(var arg : ExpressionPtr) : QMatchResult>) : QMatchResult {
+    //! Clone expression and invoke a matching block on the copy.
+    //! Used internally by the ``qmatch`` macro.
     var inscope copy <- clone_expression(expr)
     return invoke(blk, copy)
 }
@@ -57,34 +61,42 @@ def qm_run_function(var func : FunctionPtr&; blk : block<(var body : ExpressionP
 }
 
 def qm_ok() : QMatchResult {
+    //! Return a successful match result.
     return QMatchResult(matched = true)
 }
 
 def qm_fail_rtti(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — expression RTTI type does not match the pattern.
     return QMatchResult(error = QMatchError.rtti_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_field(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — a named field differs between pattern and expression.
     return QMatchResult(error = QMatchError.field_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_null() : QMatchResult {
+    //! Return a failure — null expression encountered.
     return QMatchResult(error = QMatchError.null_expression)
 }
 
 def qm_fail_list(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — block statement count mismatch.
     return QMatchResult(error = QMatchError.list_length, expr = get_ptr(expr))
 }
 
 def qm_fail_const(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — constant type does not match $v extraction target.
     return QMatchResult(error = QMatchError.const_type_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_type(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — TypeDecl comparison failed.
     return QMatchResult(error = QMatchError.type_mismatch, expr = get_ptr(expr))
 }
 
 def qm_fail_wildcard(var expr : ExpressionPtr) : QMatchResult {
+    //! Return a failure — wildcard could not find a matching statement.
     return QMatchResult(error = QMatchError.wildcard_not_found, expr = get_ptr(expr))
 }
 
@@ -116,6 +128,7 @@ def qm_extract(var expr : ExpressionPtr; var val : int&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : float&) : QMatchResult {
+    //! Extract float from ExprConstFloat. Fails if wrong type.
     if (expr is ExprConstFloat) {
         val = (expr as ExprConstFloat).value
         return qm_ok()
@@ -124,6 +137,7 @@ def qm_extract(var expr : ExpressionPtr; var val : float&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : bool&) : QMatchResult {
+    //! Extract bool from ExprConstBool. Fails if wrong type.
     if (expr is ExprConstBool) {
         val = (expr as ExprConstBool).value
         return qm_ok()
@@ -132,6 +146,7 @@ def qm_extract(var expr : ExpressionPtr; var val : bool&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : string&) : QMatchResult {
+    //! Extract string from ExprConstString. Fails if wrong type.
     if (expr is ExprConstString) {
         val = string((expr as ExprConstString).value)
         return qm_ok()
@@ -140,6 +155,7 @@ def qm_extract(var expr : ExpressionPtr; var val : string&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : int64&) : QMatchResult {
+    //! Extract int64 from ExprConstInt64. Fails if wrong type.
     if (expr is ExprConstInt64) {
         val = (expr as ExprConstInt64).value
         return qm_ok()
@@ -148,6 +164,7 @@ def qm_extract(var expr : ExpressionPtr; var val : int64&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : uint&) : QMatchResult {
+    //! Extract uint from ExprConstUInt. Fails if wrong type.
     if (expr is ExprConstUInt) {
         val = (expr as ExprConstUInt).value
         return qm_ok()
@@ -156,6 +173,7 @@ def qm_extract(var expr : ExpressionPtr; var val : uint&) : QMatchResult {
 }
 
 def qm_extract(var expr : ExpressionPtr; var val : double&) : QMatchResult {
+    //! Extract double from ExprConstDouble. Fails if wrong type.
     if (expr is ExprConstDouble) {
         val = (expr as ExprConstDouble).value
         return qm_ok()
@@ -300,10 +318,12 @@ def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMa
 }
 
 def qm_rtti(var expr : ExpressionPtr) : string {
+    //! Return the RTTI type name of an expression (smart_ptr overload).
     return string(expr.__rtti)
 }
 
 def qm_rtti(expr : Expression const?) : string {
+    //! Return the RTTI type name of an expression (raw pointer overload).
     return string(expr.__rtti)
 }
 

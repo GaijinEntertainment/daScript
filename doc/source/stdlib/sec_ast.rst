@@ -20,4 +20,5 @@ templates, quoting, and macro infrastructure.
    generated/ast_block_to_loop.rst
    generated/ast_cursor.rst
    generated/ast_used.rst
+   generated/ast_match.rst
    generated/constexpr.rst
