@@ -70,12 +70,24 @@ class PerfLintVisitor : AstVisitor {
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
     warnings : array<string>
+    // dedup: reported (file_hash, line, column) to suppress duplicate warnings from generic instantiations
+    reported_locations : array<uint64>
 
     def PerfLintVisitor() {
         pass
     }
 
+    def location_key(at : LineInfo) : uint64 {
+        return uint64(at.line) | (uint64(at.column) << uint64(20))
+    }
+
     def perf_warning(text : string; at : LineInfo) : void {
+        // Deduplicate warnings — same source location reported once, regardless of generic instantiations
+        let key = self->location_key(at)
+        if (reported_locations |> has_value(key)) {
+            return
+        }
+        reported_locations |> push(key)
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && length(current_function.inferStack) > 0) {
@@ -562,7 +574,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
-        if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
+        if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
         }
     }
@@ -577,7 +589,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
-        if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
+        if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
         }
     }
