@@ -118,6 +118,7 @@ build all C tutorials directly against the SDK — see
    tutorials/integration_c_08_serialization.rst
    tutorials/integration_c_09_aot.rst
    tutorials/integration_c_10_threading.rst
+   tutorials/integration_c_11_type_introspection.rst
 
 .. _tutorials_integration_cpp:
 

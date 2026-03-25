@@ -450,6 +450,192 @@ After simulation, global variables are accessible by name or index:
 See :ref:`tutorial_integration_c_context_variables`.
 
 
+Type introspection
+==================
+
+After simulation, the C API can inspect the types, struct layouts,
+enumerations, and function signatures of a compiled program.  All
+returned pointers are borrowed from the context — no allocation or
+cleanup is needed.
+
+Querying variable types
+-----------------------
+
+.. code-block:: c
+
+   int idx = das_context_find_variable(ctx, "entities");
+   das_type_info * ti = das_context_get_variable_type(ctx, idx);
+
+   das_base_type bt = das_type_info_get_type(ti);   // DAS_TYPE_ARRAY
+   int sz = das_type_info_get_size(ti);
+   const char * desc = das_type_info_get_description(ti);  // "array<Entity>"
+
+``das_context_get_variable_type(ctx, idx)``
+   Returns the type info for the global variable at *idx*.
+
+``das_type_info_get_type(info)``
+   Returns the base type (``das_base_type`` enum: ``DAS_TYPE_INT``,
+   ``DAS_TYPE_FLOAT``, ``DAS_TYPE_STRUCTURE``, ``DAS_TYPE_ARRAY``, etc.).
+
+``das_type_info_get_size(info)`` / ``das_type_info_get_align(info)``
+   Returns the size and alignment in bytes.
+
+``das_type_info_get_flags(info)``
+   Returns a bitmask of ``DAS_TYPEINFO_FLAG_*`` constants (ref, pod,
+   const, smart_ptr, handled, etc.).
+
+``das_type_info_get_description(info)``
+   Returns a human-readable type string (e.g. ``"array<int>"``).
+   Valid until the next call on the same thread.
+
+``das_type_info_get_mangled_name(info)``
+   Returns the mangled name string.  Same lifetime rules.
+
+
+Navigating composite types
+--------------------------
+
+.. code-block:: c
+
+   // array<Entity> -> Entity
+   das_type_info * elem = das_type_info_get_first_type(ti);
+
+   // table<string; int> -> key=string, value=int
+   das_type_info * key = das_type_info_get_first_type(ti);
+   das_type_info * val = das_type_info_get_second_type(ti);
+
+   // tuple<int; float; string> -> 3 sub-types
+   int n = das_type_info_get_arg_count(ti);
+   das_type_info * t0 = das_type_info_get_arg_type(ti, 0);
+   int off0 = das_type_info_get_tuple_field_offset(ti, 0);
+
+``das_type_info_get_first_type(info)``
+   For arrays/pointers/iterators: the element type.
+   For tables: the key type.
+
+``das_type_info_get_second_type(info)``
+   For tables: the value type.
+
+``das_type_info_get_arg_count(info)``
+   Number of sub-types (tuples, variants, function types).
+
+``das_type_info_get_arg_type(info, idx)``
+   The *idx*-th sub-type.
+
+``das_type_info_get_tuple_field_offset(info, idx)``
+   Byte offset of the *idx*-th field in a tuple.
+
+``das_type_info_get_variant_field_offset(info, idx)``
+   Byte offset of the *idx*-th field in a variant.
+
+``das_type_info_get_dim_count(info)`` / ``das_type_info_get_dim(info, idx)``
+   Fixed-array dimension count and sizes.
+
+
+Struct layout
+-------------
+
+.. code-block:: c
+
+   das_struct_info * si = das_type_info_get_struct(elem);
+   int nfields = das_struct_info_get_field_count(si);
+   int struct_size = das_struct_info_get_size(si);
+
+   for (int f = 0; f < nfields; f++) {
+       const char * name = das_struct_info_get_field_name(si, f);
+       int offset = das_struct_info_get_field_offset(si, f);
+       das_type_info * ft = das_struct_info_get_field_type(si, f);
+       das_base_type bt = das_type_info_get_type(ft);
+       int fsz = das_type_info_get_size(ft);
+   }
+
+``das_type_info_get_struct(info)``
+   Returns the ``das_struct_info`` for a ``DAS_TYPE_STRUCTURE`` type,
+   or NULL.
+
+``das_struct_info_get_name(si)`` / ``das_struct_info_get_module(si)``
+   Name and module of the structure.
+
+``das_struct_info_get_field_count(si)`` / ``das_struct_info_get_size(si)``
+   Number of fields and total size in bytes.
+
+``das_struct_info_get_field_name(si, idx)``
+   Name of the *idx*-th field.
+
+``das_struct_info_get_field_offset(si, idx)``
+   Byte offset of the *idx*-th field.
+
+``das_struct_info_get_field_type(si, idx)``
+   Type info for the *idx*-th field.  Can be used recursively
+   (e.g. a nested struct field).
+
+``das_struct_info_get_flags(si)``
+   Bitmask: ``DAS_STRUCTINFO_FLAG_CLASS``, ``DAS_STRUCTINFO_FLAG_LAMBDA``, etc.
+
+
+Enum values
+-----------
+
+.. code-block:: c
+
+   das_enum_info * ei = das_type_info_get_enum(ftype);
+   int nvals = das_enum_info_get_count(ei);
+   for (int v = 0; v < nvals; v++) {
+       const char * vname = das_enum_info_get_value_name(ei, v);
+       int64_t val = das_enum_info_get_value(ei, v);
+   }
+
+``das_type_info_get_enum(info)``
+   Returns the ``das_enum_info`` for an enumeration type, or NULL.
+
+``das_enum_info_get_name(ei)`` / ``das_enum_info_get_module(ei)``
+   Name and module.
+
+``das_enum_info_get_count(ei)``
+   Number of values.
+
+``das_enum_info_get_value_name(ei, idx)`` / ``das_enum_info_get_value(ei, idx)``
+   Name and integer value of the *idx*-th entry.
+
+
+Function signatures
+-------------------
+
+.. code-block:: c
+
+   das_func_info * fi = das_function_get_info(fn);
+   int nargs = das_func_info_get_arg_count(fi);
+   for (int a = 0; a < nargs; a++) {
+       const char * name = das_func_info_get_arg_name(fi, a);
+       das_type_info * atype = das_func_info_get_arg_type(fi, a);
+   }
+   das_type_info * ret = das_func_info_get_result(fi);
+
+``das_function_get_info(func)``
+   Returns the debug metadata for a function handle.
+
+``das_func_info_get_name(fi)`` / ``das_func_info_get_cpp_name(fi)``
+   Function name and C++ mangled name.
+
+``das_func_info_get_arg_count(fi)``
+   Number of arguments.
+
+``das_func_info_get_arg_name(fi, idx)`` / ``das_func_info_get_arg_type(fi, idx)``
+   Name and type of the *idx*-th argument.
+
+``das_func_info_get_result(fi)``
+   Return type.
+
+``das_func_info_get_flags(fi)``
+   Bitmask: ``DAS_FUNCINFO_FLAG_INIT``, ``DAS_FUNCINFO_FLAG_BUILTIN``,
+   ``DAS_FUNCINFO_FLAG_PRIVATE``, ``DAS_FUNCINFO_FLAG_SHUTDOWN``.
+
+``das_context_get_total_functions(ctx)`` / ``das_context_get_function(ctx, idx)``
+   Enumerate all functions in a simulated context.
+
+See :ref:`tutorial_integration_c_type_introspection`.
+
+
 Serialization
 =============
 

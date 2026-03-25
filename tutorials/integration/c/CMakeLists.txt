@@ -103,6 +103,13 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_10
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/10_threading.c
 )
 
+#################################
+# Tutorial 11 — Type Introspection
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_11
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/11_type_introspection.c
+)
+
 # Install C integration tutorial source files
 file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.c
