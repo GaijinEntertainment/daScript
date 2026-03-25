@@ -63,6 +63,8 @@ class PerfLintVisitor : AstVisitor {
     // PERF006: known-length loop tracking
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
+    // PERF006: suppress when loop has break/continue (unpredictable iteration count)
+    loop_has_early_exit : array<bool>
     // PERF009: track last move-initialized variable for redundant return detection
     @do_not_delete pending_move_var : Variable?
     @safe_when_uninitialized pending_move_at : LineInfo
@@ -362,6 +364,7 @@ class PerfLintVisitor : AstVisitor {
             loop_depth++
             if_depth_stack |> push(0)
             current_for_known_length = true
+            loop_has_early_exit |> push(false)
         }
     }
 
@@ -414,6 +417,9 @@ class PerfLintVisitor : AstVisitor {
             if (length(if_depth_stack) > 0) {
                 if_depth_stack |> pop()
             }
+            if (length(loop_has_early_exit) > 0) {
+                loop_has_early_exit |> pop()
+            }
         }
         return <- expr
     }
@@ -423,6 +429,7 @@ class PerfLintVisitor : AstVisitor {
             scope_stack |> push(length(var_stack))
             loop_depth++
             if_depth_stack |> push(0)
+            loop_has_early_exit |> push(false)
             in_while_cond = true
         }
     }
@@ -441,9 +448,26 @@ class PerfLintVisitor : AstVisitor {
             if (length(if_depth_stack) > 0) {
                 if_depth_stack |> pop()
             }
+            if (length(loop_has_early_exit) > 0) {
+                loop_has_early_exit |> pop()
+            }
         }
         in_while_cond = false
         return <- expr
+    }
+
+    // --- break/continue tracking (for PERF006 early-exit suppression) ---
+
+    def override preVisitExprBreak(expr : smart_ptr<ExprBreak>) : void {
+        if (in_closure == 0 && length(loop_has_early_exit) > 0) {
+            loop_has_early_exit[length(loop_has_early_exit) - 1] = true
+        }
+    }
+
+    def override preVisitExprContinue(expr : smart_ptr<ExprContinue>) : void {
+        if (in_closure == 0 && length(loop_has_early_exit) > 0) {
+            loop_has_early_exit[length(loop_has_early_exit) - 1] = true
+        }
     }
 
     // --- if-depth tracking (for PERF006 conditional suppression) ---
@@ -548,7 +572,8 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         let in_conditional = length(if_depth_stack) > 0 && if_depth_stack[length(if_depth_stack) - 1] > 0
-        if (in_closure == 0 && known_length_loop_depth > 0 && !in_conditional) {
+        let has_early_exit = length(loop_has_early_exit) > 0 && loop_has_early_exit[length(loop_has_early_exit) - 1]
+        if (in_closure == 0 && known_length_loop_depth > 0 && !in_conditional && !has_early_exit) {
             if (self->is_array_func(expr, "push") || self->is_array_func(expr, "push_clone") || self->is_array_func(expr, "emplace")) {
                 var path = ""
                 let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)

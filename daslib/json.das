@@ -254,7 +254,7 @@ def private _lexer(var stext : string implicit) {
                                     // invalid hex sequence, preserve as-is
                                     push(str, uint8('\\'))
                                     push(str, uint8('u'))
-                                    for (b in hex_str) {
+                                    for (b in hex_str) { // PERF006 — hex_str is 4 bytes max; keep
                                         push(str, b)
                                     }
                                     if (!valid_hex) {
