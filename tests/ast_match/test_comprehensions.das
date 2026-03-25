@@ -243,3 +243,56 @@ def test_local_fn_post_inference_wrong_body(t : T?) {
     }
     t |> success(!r.matched, "wrong body in local function should fail")
 }
+
+[test]
+def test_local_fn_capture_body(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+    if (get_ptr(func) == null) {
+        return
+    }
+    var inscope body_expr : ExpressionPtr
+    let r = qmatch_function(func) $() {
+        var f = @@(x : int) { $e(body_expr); }
+        feint("{f}")
+    }
+    t |> success(r.matched, "should match with $e capture on local fn body")
+    if (r.matched) {
+        t |> equal(string(get_ptr(body_expr).__rtti), "ExprReturn")
+    }
+}
+
+[export]
+def target_with_local_fn_two_args() {
+    var f = @@(a : int; b : float) { return float(a) + b; }
+    feint("{f}")
+}
+
+[test]
+def test_local_fn_match_two_args(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn_two_args)
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var f = @@(a : int; b : float) { return float(a) + b; }
+        feint("{f}")
+    }
+    t |> success(r.matched, "should match local fn with two args")
+}
+
+[test]
+def test_local_fn_capture_var_name(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+    if (get_ptr(func) == null) {
+        return
+    }
+    var vname : string
+    let r = qmatch_function(func) $() {
+        var $i(vname) = @@(x : int) { return x + 1; }
+        feint("{f}")
+    }
+    t |> success(r.matched, "should match with $i capture on let variable name")
+    if (r.matched) {
+        t |> equal(vname, "f")
+    }
+}
