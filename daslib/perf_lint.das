@@ -21,6 +21,7 @@ module perf_lint shared private
 //!   PERF006 — push/emplace in loop without prior reserve()
 //!   PERF007 — unnecessary string(das_string) in comparison
 //!   PERF008 — unnecessary get_ptr() for is/as type checks
+//!   PERF009 — redundant move-init variable immediately returned
 
 require daslib/ast_boost
 require strings
@@ -62,6 +63,9 @@ class PerfLintVisitor : AstVisitor {
     // PERF006: known-length loop tracking
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
+    // PERF009: track last move-initialized variable for redundant return detection
+    @do_not_delete pending_move_var : Variable?
+    @safe_when_uninitialized pending_move_at : LineInfo
     warning_count : int = 0
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
@@ -298,6 +302,32 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprLetVariable(expr : smart_ptr<ExprLet>; var v : VariablePtr; last : bool) : void {
         if (in_closure == 0) {
             var_stack |> push(VarStackEntry(v = get_ptr(v), depth = loop_depth, is_iter = false))
+        }
+        // PERF009: track last move-initialized variable
+        if (last && v.flags.init_via_move) {
+            pending_move_var = get_ptr(v)
+            pending_move_at = expr.at
+        }
+    }
+
+    // --- PERF009: redundant move-init variable before return ---
+
+    def override preVisitExprBlockExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) : void {
+        if (pending_move_var != null) {
+            var e = get_ptr(expr)
+            if (e is ExprReturn) {
+                var ret = e as ExprReturn
+                if (ret.returnFlags.moveSemantics && ret.subexpr != null) {
+                    var sub = get_ptr(ret.subexpr)
+                    if (sub is ExprRef2Value) {
+                        sub = get_ptr((sub as ExprRef2Value).subexpr)
+                    }
+                    if (sub is ExprVar && get_ptr((sub as ExprVar).variable) == pending_move_var) {
+                        self->perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at)
+                    }
+                }
+            }
+            pending_move_var = null
         }
     }
 

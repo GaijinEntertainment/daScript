@@ -223,6 +223,22 @@ is unnecessary.
     if (expr is ExprVar) { ... }
     var v = expr as ExprCall
 
+PERF009 — redundant move-init variable immediately returned
+=============================================================
+
+``var x <- expr(); return <- x`` introduces an unnecessary intermediate variable.
+The value is moved in and then immediately moved out. Simplify to
+``return <- expr()``.
+
+.. code-block:: das
+
+    // Bad — redundant variable
+    var inscope result <- make_thing()
+    return <- result                        // PERF009
+
+    // Good — direct return
+    return <- make_thing()
+
 ----------------
 Important notes
 ----------------
