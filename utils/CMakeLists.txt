@@ -2,11 +2,6 @@
 # Each utility with a main.das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
-# Currently Windows/MSVC only — daslang -exe requires MSVC toolchain.
-
-if(NOT MSVC)
-    return()
-endif()
 
 set(DAS_UTILS
     aot
@@ -25,10 +20,13 @@ file(GLOB DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/daslib/*.das)
 file(GLOB DASLLVM_DASLIB_SOURCES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/daslib/*.das)
 
 # daslang -exe appends `.exe` to the output path.
-# CMAKE_CFG_INTDIR resolves to the config name (Release, Debug, etc.)
-# on multi-config generators, and to "." on single-config generators —
-# so utilities always land next to the compiler binary.
-set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin/${CMAKE_CFG_INTDIR})
+# On multi-config generators (MSVC), place next to daslang in bin/<Config>/.
+# On single-config generators (Make/Ninja), place in bin/.
+if(MSVC)
+    set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin/${CMAKE_CFG_INTDIR})
+else()
+    set(UTIL_BIN_DIR ${PROJECT_SOURCE_DIR}/bin)
+endif()
 
 foreach(util ${DAS_UTILS})
     set(UTIL_MAIN ${PROJECT_SOURCE_DIR}/utils/${util}/main.das)
