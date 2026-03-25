@@ -1,0 +1,202 @@
+options gen2
+options indenting = 4
+options rtti
+
+require daslib/ast
+require daslib/ast_match
+require daslib/ast_boost
+require daslib/templates_boost
+require dastest/testing_boost public
+
+// ── Array comprehension ─────────────────────────────────────────────────
+
+[test]
+def test_array_comprehension_match(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, [for (x in range(10)); x])
+    t |> success(r.matched, "array comprehension should match")
+}
+
+[test]
+def test_array_comprehension_wrong_source(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, [for (x in range(5)); x])
+    t |> success(!r.matched, "wrong source should fail")
+}
+
+[test]
+def test_array_comprehension_wrong_subexpr(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, [for (x in range(10)); y])
+    t |> success(!r.matched, "wrong subexpr should fail")
+}
+
+[test]
+def test_array_comprehension_with_where(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x; where x > 5])
+    let r = qmatch(expr, [for (x in range(10)); x; where x > 5])
+    t |> success(r.matched, "array comprehension with where should match")
+}
+
+[test]
+def test_array_comprehension_where_mismatch(t : T?) {
+    // Pattern has where, actual doesn't
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, [for (x in range(10)); x; where x > 5])
+    t |> success(!r.matched, "pattern with where vs actual without should fail")
+}
+
+[test]
+def test_array_comprehension_no_where_mismatch(t : T?) {
+    // Pattern has no where, actual does
+    var inscope expr <- qmacro([for (x in range(10)); x; where x > 5])
+    let r = qmatch(expr, [for (x in range(10)); x])
+    t |> success(!r.matched, "pattern without where vs actual with should fail")
+}
+
+[test]
+def test_array_comprehension_capture_subexpr(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x * 2])
+    var inscope sub : ExpressionPtr
+    let r = qmatch(expr, [for (x in range(10)); $e(sub)])
+    t |> success(r.matched, "should match with $e capture on subexpr")
+    if (r.matched) {
+        t |> equal(string(get_ptr(sub).__rtti), "ExprOp2")
+    }
+}
+
+[test]
+def test_array_comprehension_capture_iterator(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    var name : string
+    let r = qmatch(expr, [for ($i(name) in range(10)); x])
+    t |> success(r.matched, "should match with $i on iterator")
+    if (r.matched) {
+        t |> equal(name, "x")
+    }
+}
+
+[test]
+def test_array_comprehension_wildcard_subexpr(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x * x + 1])
+    let r = qmatch(expr, [for (x in range(10)); _any()])
+    t |> success(r.matched, "wildcard subexpr should match anything")
+}
+
+// ── Array vs table mismatch ─────────────────────────────────────────────
+
+[test]
+def test_array_vs_table_mismatch(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, {for (x in range(10)); x})
+    t |> success(!r.matched, "array pattern vs table actual should fail")
+}
+
+[test]
+def test_table_vs_array_mismatch(t : T?) {
+    var inscope expr <- qmacro({for (x in range(10)); x})
+    let r = qmatch(expr, [for (x in range(10)); x])
+    t |> success(!r.matched, "table pattern vs array actual should fail")
+}
+
+// ── Table comprehension ─────────────────────────────────────────────────
+
+[test]
+def test_table_comprehension_match(t : T?) {
+    var inscope expr <- qmacro({for (x in range(10)); x => x * x})
+    let r = qmatch(expr, {for (x in range(10)); x => x * x})
+    t |> success(r.matched, "table comprehension should match")
+}
+
+[test]
+def test_table_comprehension_key_only(t : T?) {
+    var inscope expr <- qmacro({for (x in range(10)); x})
+    let r = qmatch(expr, {for (x in range(10)); x})
+    t |> success(r.matched, "table comprehension key-only should match")
+}
+
+[test]
+def test_table_comprehension_capture_subexpr(t : T?) {
+    var inscope expr <- qmacro({for (x in range(10)); x => x * x})
+    var inscope sub : ExpressionPtr
+    let r = qmatch(expr, {for (x in range(10)); $e(sub)})
+    t |> success(r.matched, "should match with $e capture on table subexpr")
+    if (r.matched) {
+        // subexpr is x => x * x, which is ExprMakeTuple
+        t |> success(get_ptr(sub) != null, "captured subexpr should not be null")
+    }
+}
+
+[test]
+def test_table_comprehension_wrong_subexpr(t : T?) {
+    var inscope expr <- qmacro({for (x in range(10)); x => x * x})
+    let r = qmatch(expr, {for (x in range(10)); x => x + x})
+    t |> success(!r.matched, "wrong table subexpr should fail")
+}
+
+// ── Generator comprehension ─────────────────────────────────────────────
+
+[test]
+def test_generator_comprehension_match(t : T?) {
+    var inscope expr <- qmacro([iterator for(x in range(10)); x])
+    let r = qmatch(expr, [iterator for(x in range(10)); x])
+    t |> success(r.matched, "generator comprehension should match")
+}
+
+[test]
+def test_generator_vs_array_mismatch(t : T?) {
+    var inscope expr <- qmacro([iterator for(x in range(10)); x])
+    let r = qmatch(expr, [for (x in range(10)); x])
+    t |> success(!r.matched, "generator pattern vs array should fail")
+}
+
+[test]
+def test_array_vs_generator_mismatch(t : T?) {
+    var inscope expr <- qmacro([for (x in range(10)); x])
+    let r = qmatch(expr, [iterator for(x in range(10)); x])
+    t |> success(!r.matched, "array pattern vs generator should fail")
+}
+
+// ── ExprMakeBlock mmFlags ───────────────────────────────────────────────
+
+[test]
+def test_block_matches_block(t : T?) {
+    var inscope expr <- qmacro($ { return 1; })
+    let r = qmatch(expr, $ { return 1; })
+    t |> success(r.matched, "plain block should match plain block")
+}
+
+[test]
+def test_block_not_lambda(t : T?) {
+    var inscope expr <- qmacro(@() { return 1; })
+    let r = qmatch(expr, $ { return 1; })
+    t |> success(!r.matched, "plain block pattern should not match lambda")
+}
+
+[test]
+def test_lambda_matches_lambda(t : T?) {
+    var inscope expr <- qmacro(@(x) { return x + 1; })
+    let r = qmatch(expr, @(x) { return x + 1; })
+    t |> success(r.matched, "lambda should match lambda")
+}
+
+[test]
+def test_lambda_not_block(t : T?) {
+    var inscope expr <- qmacro($ { return 1; })
+    let r = qmatch(expr, @() { return 1; })
+    t |> success(!r.matched, "lambda pattern should not match plain block")
+}
+
+[test]
+def test_local_function_matches(t : T?) {
+    var inscope expr <- qmacro(@@(x) { return x + 1; })
+    let r = qmatch(expr, @@(x) { return x + 1; })
+    t |> success(r.matched, "local function should match local function")
+}
+
+[test]
+def test_local_function_not_lambda(t : T?) {
+    var inscope expr <- qmacro(@(x) { return x + 1; })
+    let r = qmatch(expr, @@(x) { return x + 1; })
+    t |> success(!r.matched, "local function pattern should not match lambda")
+}

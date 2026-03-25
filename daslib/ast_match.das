@@ -1046,6 +1046,29 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     if (pattern is ExprMakeBlock) {
         body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprMakeBlock")
         let pat_mkblk = pattern as ExprMakeBlock
+        // Match mmFlags (isLambda, isLocalFunction) to distinguish block/lambda/local-function
+        let mkblk_cast = next_var(index)
+        var inscope as_val_mkb <- make_var_ref(at, actual_var)
+        var inscope as_cast_mkb <- new ExprAsVariant(at = at, value <- as_val_mkb, name := "ExprMakeBlock")
+        body |> emplace_new <| qmacro_expr(${ var $i(mkblk_cast) = $e(as_cast_mkb); })
+        if (pat_mkblk.mmFlags.isLambda) {
+            var inscope cl <- qmacro(!$i(mkblk_cast).mmFlags.isLambda)
+            var inscope fl <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, cl, fl)
+        } else {
+            var inscope cl <- qmacro($i(mkblk_cast).mmFlags.isLambda)
+            var inscope fl <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, cl, fl)
+        }
+        if (pat_mkblk.mmFlags.isLocalFunction) {
+            var inscope clf <- qmacro(!$i(mkblk_cast).mmFlags.isLocalFunction)
+            var inscope flf <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, clf, flf)
+        } else {
+            var inscope clf <- qmacro($i(mkblk_cast).mmFlags.isLocalFunction)
+            var inscope flf <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, clf, flf)
+        }
         var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
         // Unwrap ExprMakeBlock → ExprBlock at runtime
         let blk_var = next_var(index)
@@ -1071,6 +1094,82 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     generate_match(child_pat, child_var, body, index, at)
                 }
             }
+        }
+        return
+    }
+
+    // ── ExprArrayComprehension — array/table/generator comprehension ─
+    if (pattern is ExprArrayComprehension) {
+        let pat_ac = pattern as ExprArrayComprehension
+        let pat_gen = pat_ac.generatorSyntax
+        let pat_tbl = pat_ac.tableSyntax
+        // RTTI guard
+        body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprArrayComprehension")
+        // Cast actual to ExprArrayComprehension
+        let cast_var = next_var(index)
+        var inscope as_val_ac <- make_var_ref(at, actual_var)
+        var inscope as_cast_ac <- new ExprAsVariant(at = at, value <- as_val_ac, name := "ExprArrayComprehension")
+        body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_ac); })
+        // Match generatorSyntax (both true and false enforced)
+        if (pat_gen) {
+            var inscope cg <- qmacro($i(cast_var).generatorSyntax == false)
+            var inscope fg <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, cg, fg)
+        } else {
+            var inscope cg <- qmacro($i(cast_var).generatorSyntax)
+            var inscope fg <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, cg, fg)
+        }
+        // Match tableSyntax (both true and false enforced)
+        if (pat_tbl) {
+            var inscope ct <- qmacro($i(cast_var).tableSyntax == false)
+            var inscope ft <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, ct, ft)
+        } else {
+            var inscope ct <- qmacro($i(cast_var).tableSyntax)
+            var inscope ft <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, ct, ft)
+        }
+        // Recurse into exprFor
+        let pat_for = get_ptr(pat_ac.exprFor)
+        if (pat_for != null) {
+            let for_var = next_var(index)
+            body |> emplace_new <| qmacro_expr(${ var inscope $i(for_var) <- clone_expression($i(cast_var).exprFor); })
+            if (!is_wildcard_call(pat_for) && !(pat_for is ExprTag)) {
+                var inscope nc <- qmacro($i(for_var) == null)
+                var inscope nf <- qmacro(qm_fail_null())
+                body |> emplace_new <| qm_guard(at, nc, nf)
+            }
+            generate_match(pat_for, for_var, body, index, at)
+        }
+        // Recurse into subexpr
+        let pat_sub = get_ptr(pat_ac.subexpr)
+        if (pat_sub != null) {
+            let sub_var = next_var(index)
+            body |> emplace_new <| qmacro_expr(${ var inscope $i(sub_var) <- clone_expression($i(cast_var).subexpr); })
+            if (!is_wildcard_call(pat_sub) && !(pat_sub is ExprTag)) {
+                var inscope nc <- qmacro($i(sub_var) == null)
+                var inscope nf <- qmacro(qm_fail_null())
+                body |> emplace_new <| qm_guard(at, nc, nf)
+            }
+            generate_match(pat_sub, sub_var, body, index, at)
+        }
+        // Handle exprWhere
+        if (pat_ac.exprWhere != null) {
+            let pat_where = get_ptr(pat_ac.exprWhere)
+            let where_var = next_var(index)
+            body |> emplace_new <| qmacro_expr(${ var inscope $i(where_var) <- clone_expression($i(cast_var).exprWhere); })
+            if (!is_wildcard_call(pat_where) && !(pat_where is ExprTag)) {
+                var inscope nc <- qmacro($i(where_var) == null)
+                var inscope nf <- qmacro(qm_fail_null())
+                body |> emplace_new <| qm_guard(at, nc, nf)
+            }
+            generate_match(pat_where, where_var, body, index, at)
+        } else {
+            // Pattern has no where clause — actual shouldn't either
+            var inscope nc <- qmacro($i(cast_var).exprWhere != null)
+            var inscope nf <- qmacro(qm_fail_field($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, nc, nf)
         }
         return
     }
