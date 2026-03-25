@@ -159,8 +159,9 @@ The rule traces through field access chains (``self.items``, ``data.buffer``, et
 to find the root variable, and distinguishes different field paths — ``reserve(t.a, N)``
 does not suppress a warning for ``t.b |> push(x)``.
 
-Conditional pushes (inside ``if``/``else``) are not flagged — the number of items is
-unpredictable, so ``reserve`` would be guesswork.
+Conditional pushes (inside ``if``/``else``) and loops with ``break``/``continue``
+are not flagged — the number of items is unpredictable, so ``reserve`` would be
+guesswork.
 
 .. code-block:: das
 
@@ -187,6 +188,14 @@ unpredictable, so ``reserve`` would be guesswork.
         if (i > 500) {
             result |> push(i)
         }
+    }
+
+    // Good — loop with break, no warning
+    for (x in data) {
+        if (x == sentinel) {
+            break
+        }
+        result |> push(x)
     }
 
 PERF007 — unnecessary ``string(das_string)`` in comparison
@@ -238,6 +247,19 @@ The value is moved in and then immediately moved out. Simplify to
 
     // Good — direct return
     return <- make_thing()
+
+------------------------------
+Suppressing specific warnings
+------------------------------
+
+To suppress a warning on a specific line, add a ``// nolint:PERFxxx`` comment
+on the same line as the flagged expression::
+
+    let ch = character_at(s, idx) // nolint:PERF003 single indexed access, not a loop
+
+The suppression is exact: ``// nolint:PERF003`` only suppresses PERF003, not other
+rules. The comment must appear after ``//`` on the same line that triggers the warning.
+An optional explanation after the code is recommended but not required.
 
 ----------------
 Important notes
