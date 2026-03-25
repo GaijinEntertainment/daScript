@@ -5,6 +5,10 @@ options no_unused_function_arguments = false
 options strict_smart_pointers = true
 options stack = 1_048_576
 
+// this module is not AOT compiled. there are major issues with current ExpressionPtr and TypeDeclPtr
+// return-call patterns, which we are not going to address - until we get rid of smart_ptr altogether on das side
+options no_aot
+
 module ast_match shared public
 
 //! AST pattern matching — reverse reification.
