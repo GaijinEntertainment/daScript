@@ -2,6 +2,11 @@
 # Each utility with a main.das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
+# Currently Windows/MSVC only — daslang -exe requires MSVC toolchain.
+
+if(NOT MSVC)
+    return()
+endif()
 
 set(DAS_UTILS
     aot
