@@ -286,6 +286,7 @@ def qm_real_call_arg_index(args : dasvector`smart_ptr`Expression; logical_idx : 
 def qm_extract_stmts(var blk_expr : ExpressionPtr; from_pos : int; to_pos : int; var result : array<ExpressionPtr>&) : void {
     //! Extract statements [from_pos, to_pos) from a block into an array (cloned).
     var blk = blk_expr as ExprBlock
+    result |> reserve(to_pos - from_pos)
     for (i in range(from_pos, to_pos)) {
         {
             var inscope cloned <- clone_expression(blk.list[i])

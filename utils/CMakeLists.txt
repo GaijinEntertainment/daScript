@@ -79,10 +79,10 @@ ADD_CUSTOM_TARGET(run_utils_tests
     COMMENT "Running utils tests"
 )
 
-# Install utility executables into the flat bin/ directory.
+# Install utility executables (OPTIONAL — only present when -exe targets are built).
 foreach(util ${DAS_UTILS})
     install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe
-        DESTINATION ${DAS_INSTALL_BINDIR})
+        DESTINATION ${DAS_INSTALL_BINDIR} OPTIONAL)
 endforeach()
 install(PROGRAMS ${UTIL_BIN_DIR}/dastest.exe
-    DESTINATION ${DAS_INSTALL_BINDIR})
+    DESTINATION ${DAS_INSTALL_BINDIR} OPTIONAL)
