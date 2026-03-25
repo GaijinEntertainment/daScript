@@ -2025,15 +2025,15 @@ def function_name(func : FunctionPtr | Function?) {
             }
             // .name`&&= / `||= / `^^= → ".name &&=" etc (double-char compound assign)
             if (length(safeName) > 4 && safeName |> ends_with("=")) {
-                let p4 = safeName.character_at(length(safeName) - 4) // PERF003 — single access for operator parsing; keep
+                let p4 = safeName.character_at(length(safeName) - 4) // nolint:PERF003 single access for operator parsing
                 if (p4 == '`') {
                     let op2 = safeName |> slice(length(safeName) - 3, length(safeName))
                     safeName = "{safeName |> slice(0, length(safeName) - 4)} {op2}"
                 }
             }
             // .name`+= / `-= / `*= etc → ".name +=" (single-char compound assign)
-            if (length(safeName) > 3 && safeName |> ends_with("=") && safeName.character_at(length(safeName) - 3) == '`') { // PERF003 — keep
-                let op = character_at(safeName, length(safeName) - 2) // PERF003 — keep
+            if (length(safeName) > 3 && safeName |> ends_with("=") && safeName.character_at(length(safeName) - 3) == '`') { // nolint:PERF003
+                let op = character_at(safeName, length(safeName) - 2) // nolint:PERF003
                 safeName = "{safeName |> slice(0,-3)} {op.to_char()}="
             }
             return (length(func.arguments) == 0
