@@ -189,6 +189,40 @@ unpredictable, so ``reserve`` would be guesswork.
         }
     }
 
+PERF007 — unnecessary ``string(das_string)`` in comparison
+============================================================
+
+``das_string`` supports direct comparison with string literals and other
+``das_string`` values via ``==`` and ``!=``. Wrapping in ``string()`` allocates
+a new string unnecessarily.
+
+.. code-block:: das
+
+    // Bad — unnecessary allocation
+    if (string(name) == "foo") { ... }      // PERF007
+    if (string(a) == string(b)) { ... }     // PERF007
+
+    // Good — direct comparison
+    if (name == "foo") { ... }
+    if (a == b) { ... }
+
+PERF008 — unnecessary ``get_ptr()`` for ``is``/``as``
+======================================================
+
+``smart_ptr<Expression>`` and ``smart_ptr<TypeDecl>`` support ``is`` and ``as``
+type checks directly. Calling ``get_ptr()`` first to convert to a raw pointer
+is unnecessary.
+
+.. code-block:: das
+
+    // Bad — get_ptr is redundant
+    if (get_ptr(expr) is ExprVar) { ... }   // PERF008
+    var v = get_ptr(expr) as ExprCall       // PERF008
+
+    // Good — direct type check
+    if (expr is ExprVar) { ... }
+    var v = expr as ExprCall
+
 ----------------
 Important notes
 ----------------

@@ -21,6 +21,8 @@ def main() {
         print("  PERF004  string interpolation reassignment in loop (O(n^2))\n")
         print("  PERF005  length(string) in while condition\n")
         print("  PERF006  push/emplace in loop without reserve()\n")
+        print("  PERF007  unnecessary string(das_string) in comparison\n")
+        print("  PERF008  unnecessary get_ptr() for is/as type checks\n")
         unsafe {
             fio::exit(1)
         }
