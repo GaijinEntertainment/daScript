@@ -34,7 +34,7 @@ def can_visit_folder(folder_name : string; var result : bool?) {
     if (folder_name == "ast_match") {
         let args <- get_command_line_arguments()
         for (arg in args) {
-            if (arg == "--use-aot" || arg == "-jit" || starts_with(arg, "--cov-path")) {
+            if (arg == "--use-aot" || arg == "-jit") {
                 *result = false
                 return
             }

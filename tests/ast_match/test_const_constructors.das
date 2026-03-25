@@ -7,7 +7,7 @@ require daslib/templates_boost
 require daslib/ast_match
 require dastest/testing_boost public
 
-[export]
+[export, marker(no_coverage)]
 def target_range13() : range {
     return range(13)
 }
