@@ -365,6 +365,47 @@ def qm_make_zero_const(call_name : string) : ExpressionPtr {
     return <- default<ExpressionPtr>
 }
 
+def qm_convert_local_function(var expr : ExpressionPtr) : ExpressionPtr {
+    //! Reverse generateLocalFunction: ExprAddr → ExprMakeBlock(isLocalFunction=true).
+    //! Returns null if the expression is not a generated local function.
+    if (!(expr is ExprAddr)) {
+        return <- default<ExpressionPtr>
+    }
+    let ea = expr as ExprAddr
+    if (ea.func == null || !ea.func.flags.generated) {
+        return <- default<ExpressionPtr>
+    }
+    if (find(string(ea.func.name), "`function") < 0) {
+        return <- default<ExpressionPtr>
+    }
+    let fn = ea.func
+    // Reconstruct ExprBlock with args + return type + body
+    var inscope blk <- new ExprBlock(at = fn.at)
+    blk.returnType |> move_new <| clone_type(fn.result)
+    for (arg in fn.arguments) {
+        blk.arguments |> emplace_new <| clone_variable(arg)
+    }
+    // Clone body statements
+    var inscope fn_body <- clone_expression(fn.body)
+    let fn_blk = fn_body as ExprBlock
+    if (fn_blk != null) {
+        for (stmt in fn_blk.list) {
+            blk.list |> emplace_new <| clone_expression(stmt)
+        }
+    }
+    // Wrap in ExprMakeBlock with isLocalFunction flag
+    return <- new ExprMakeBlock(at = fn.at, _block <- blk, mmFlags = ExprMakeBlockFlags.isLocalFunction)
+}
+
+def qm_resolve_local_function(var expr : ExpressionPtr) : ExpressionPtr {
+    //! If expr is ExprMakeBlock, clone it. If ExprAddr (post-inference local function),
+    //! convert back to ExprMakeBlock. Returns null if neither works.
+    if (expr is ExprMakeBlock) {
+        return <- clone_expression(expr)
+    }
+    return <- qm_convert_local_function(expr)
+}
+
 // ── Compile-time AST builders ───────────────────────────────────────────
 
 [macro_function]
@@ -799,7 +840,7 @@ def private has_tags_in_args(call : ExprCall?) : bool {
     // would prevent constant folding, so the call stays as ExprCall and hits the
     // normal matching path instead of reaching here.
     for (arg in call.arguments) {
-        if (arg != null && arg.__rtti == "ExprTag") {
+        if (arg != null && arg is ExprTag) {
             return true
         }
     }
@@ -1044,11 +1085,22 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     // ── ExprMakeBlock — lightweight inline block matching ───────
     if (pattern is ExprMakeBlock) {
-        body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprMakeBlock")
         let pat_mkblk = pattern as ExprMakeBlock
+        // For local function patterns, also accept ExprAddr (post-inference form)
+        var eff_actual = actual_var
+        if (pat_mkblk.mmFlags.isLocalFunction) {
+            let eff_var = next_var(index)
+            body |> emplace_new <| qmacro_expr(${ var inscope $i(eff_var) <- qm_resolve_local_function($i(actual_var)); })
+            var inscope nc <- qmacro($i(eff_var) == null)
+            var inscope nf <- qmacro(qm_fail_rtti($i(actual_var)))
+            body |> emplace_new <| qm_guard(at, nc, nf)
+            eff_actual = eff_var
+        } else {
+            body |> emplace_new <| qm_rtti_guard(at, actual_var, "ExprMakeBlock")
+        }
         // Match mmFlags (isLambda, isLocalFunction) to distinguish block/lambda/local-function
         let mkblk_cast = next_var(index)
-        var inscope as_val_mkb <- make_var_ref(at, actual_var)
+        var inscope as_val_mkb <- make_var_ref(at, eff_actual)
         var inscope as_cast_mkb <- new ExprAsVariant(at = at, value <- as_val_mkb, name := "ExprMakeBlock")
         body |> emplace_new <| qmacro_expr(${ var $i(mkblk_cast) = $e(as_cast_mkb); })
         if (pat_mkblk.mmFlags.isLambda) {
@@ -1072,7 +1124,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
         // Unwrap ExprMakeBlock → ExprBlock at runtime
         let blk_var = next_var(index)
-        body |> emplace_new <| qmacro_expr(${ var inscope $i(blk_var) <- clone_expression(($i(actual_var) as ExprMakeBlock)._block); })
+        body |> emplace_new <| qmacro_expr(${ var inscope $i(blk_var) <- clone_expression(($i(eff_actual) as ExprMakeBlock)._block); })
         body |> emplace_new <| qm_rtti_guard(at, blk_var, "ExprBlock")
         let cast_var = next_var(index)
         var inscope as_val_b <- make_var_ref(at, blk_var)

@@ -1,8 +1,10 @@
 options gen2
 options indenting = 4
 options rtti
+options no_coverage
 
 require daslib/ast
+require daslib/rtti
 require daslib/ast_match
 require daslib/ast_boost
 require daslib/templates_boost
@@ -199,4 +201,45 @@ def test_local_function_not_lambda(t : T?) {
     var inscope expr <- qmacro(@(x) { return x + 1; })
     let r = qmatch(expr, @@(x) { return x + 1; })
     t |> success(!r.matched, "local function pattern should not match lambda")
+}
+
+// ── Post-inference local function matching (ExprAddr fallback) ──────────
+
+[export]
+def target_with_local_fn() {
+    var f = @@(x : int) { return x + 1; }
+    feint("{f}")
+}
+
+[export]
+def target_with_local_fn_wrong() {
+    var f = @@(x : int) { return x - 1; }
+    feint("{f}")
+}
+
+[test]
+def test_local_fn_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+    t |> success(get_ptr(func) != null, "should find target_with_local_fn")
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var f = @@(x : int) { return x + 1; }
+        feint("{f}")
+    }
+    t |> success(r.matched, "should match post-inference local function via ExprAddr")
+}
+
+[test]
+def test_local_fn_post_inference_wrong_body(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var f = @@(x : int) { return x - 1; }
+        feint("{f}")
+    }
+    t |> success(!r.matched, "wrong body in local function should fail")
 }
