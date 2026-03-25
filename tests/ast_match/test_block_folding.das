@@ -12,14 +12,14 @@ require dastest/testing_boost public
 // ── Target functions — these go through the full compiler/optimizer ──
 
 // BlockFolding: dead code after return is removed
-[export]
+[export, marker(no_coverage)]
 def fold_dead_code(a : int) : int {
     return a + 1
     return a + 2
 }
 
 // CondFolding: if/else return → ternary
-[export]
+[export, marker(no_coverage)]
 def fold_if_else_return(a, b, c : int) : int {
     if (a < 5) {
         return b
@@ -29,7 +29,7 @@ def fold_if_else_return(a, b, c : int) : int {
 }
 
 // CondFolding: chain of if-return → nested ternary
-[export]
+[export, marker(no_coverage)]
 def fold_if_chain(a, b : int) : int {
     if (a == 1) {
         return 10
@@ -44,14 +44,14 @@ def fold_if_chain(a, b : int) : int {
 }
 
 // BlockFolding: trailing return on void function removed
-[export]
+[export, marker(no_coverage)]
 def fold_void_trailing_return() : void {
     print("hello\n")
     return
 }
 
 // BlockFolding: nested block flattened into parent
-[export]
+[export, marker(no_coverage)]
 def fold_nested_block(a : int) : int {
     {
         var x = a + 1
@@ -60,7 +60,7 @@ def fold_nested_block(a : int) : int {
 }
 
 // BlockFolding: dead code after terminating if/else
-[export]
+[export, marker(no_coverage)]
 def fold_dead_after_if_else(a, b : int) : int {
     if (a > 0) {
         return a
@@ -71,7 +71,7 @@ def fold_dead_after_if_else(a, b : int) : int {
 }
 
 // CondFolding: if-break chain → if/else in for
-[export]
+[export, marker(no_coverage)]
 def fold_if_break(a : int) : int {
     var s = 0
     for (i in range(10)) {
@@ -84,7 +84,7 @@ def fold_if_break(a : int) : int {
 }
 
 // CondFolding: if-continue chain → if/else in for
-[export]
+[export, marker(no_coverage)]
 def fold_if_continue(a : int) : int {
     var s = 0
     for (i in range(10)) {
@@ -97,7 +97,7 @@ def fold_if_continue(a : int) : int {
 }
 
 // CondFolding: longer chain — 5 conditions
-[export]
+[export, marker(no_coverage)]
 def fold_if_chain_5(a : int) : int {
     if (a == 1) { return 10; }
     if (a == 2) { return 20; }
@@ -108,7 +108,7 @@ def fold_if_chain_5(a : int) : int {
 }
 
 // CondFolding: if-return with computation before return
-[export]
+[export, marker(no_coverage)]
 def fold_if_with_work(a, b : int) : int {
     if (a > 0) {
         return a + b

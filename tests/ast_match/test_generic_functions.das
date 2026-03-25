@@ -32,22 +32,22 @@ def generic_branch(a : auto; threshold : int) : auto {
 
 // ── Target functions that call generics ──────────────────────────────────
 
-[export]
+[export, marker(no_coverage)]
 def target_add_int(a, b : int) : int {
     return generic_add(a, b)
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_add_float(a, b : float) : float {
     return generic_add(a, b)
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_identity(x : int) : int {
     return generic_identity(x)
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_branch(a : int; threshold : int) : int {
     return generic_branch(a, threshold)
 }

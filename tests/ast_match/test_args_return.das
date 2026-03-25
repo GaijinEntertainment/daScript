@@ -11,12 +11,12 @@ require dastest/testing_boost public
 
 // ── Target functions ─────────────────────────────────────────────────────
 
-[export]
+[export, marker(no_coverage)]
 def target_add(a, b : int) : int {
     return a + b
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_three(x, y, z : float) : float {
     return x + y + z
 }
@@ -167,7 +167,7 @@ def test_block_no_args_fails_when_target_has_args(t : T?) {
 
 // ── $a(var) — capture remaining arguments ────────────────────────────────
 
-[export]
+[export, marker(no_coverage)]
 def target_five(a, b : int; c : float; d : string; e : bool) : int {
     return a
 }

@@ -11,47 +11,47 @@ require dastest/testing_boost public
 
 // ── Target functions with various constant types ─────────────────────────
 
-[export]
+[export, marker(no_coverage)]
 def target_int64(x : int64) : int64 {
     return x + 100l
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_uint(x : uint) : uint {
     return x + 0xFFu
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_double(x : double) : double {
     return x + 3.14lf
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_uint64(x : uint64) : uint64 {
     return x + 1000ul
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_null_check(x : int?) : bool {
     return x == null
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_range() : range {
     return range(1, 10)
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_enum(x : Type) : Type {
     return x
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_float2() : float2 {
     return float2(1.0, 2.0)
 }
 
-[export]
+[export, marker(no_coverage)]
 def target_int2() : int2 {
     return int2(3, 4)
 }
@@ -289,7 +289,7 @@ def test_identity_enum(t : T?) {
 
 // ── Tag capture in constant constructors ─────────────────────────────────
 
-[export]
+[export, marker(no_coverage)]
 def target_float4() : float4 {
     return float4(1.0, 2.0, 3.0, 4.0)
 }
