@@ -402,6 +402,7 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
     manifest.author = meta.author
     manifest.license = meta.license
     manifest.min_sdk = meta.min_sdk
+    manifest.tags |> reserve(length(meta.tags))
     for (tag in meta.tags) {
         manifest.tags |> push_clone(tag)
     }
@@ -421,6 +422,7 @@ def read_manifest(pkg_dir : string; var manifest : PackageManifest) : bool {
     // extract dependencies
     var deps : array<PackageDependency>
     if (run_das_package_deps(das_package, "", deps)) {
+        manifest.dependencies |> reserve(length(deps))
         for (d in deps) {
             manifest.dependencies |> push_clone(package_name_from_source(d.source))
         }
@@ -467,6 +469,7 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
     }
     if (length(entry.tags) > 0) {
         var arr : array<JsonValue?>
+        arr |> reserve(length(entry.tags))
         for (t in entry.tags) {
             arr |> push(JV(t))
         }
@@ -496,6 +499,7 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
     }
     if (length(entry.dependencies) > 0) {
         var arr : array<JsonValue?>
+        arr |> reserve(length(entry.dependencies))
         for (d in entry.dependencies) {
             arr |> push(JV(d))
         }
@@ -514,9 +518,11 @@ def private manifest_to_entry(manifest : PackageManifest; url : string) : IndexE
     entry.license = manifest.license
     entry.min_sdk = manifest.min_sdk
     entry.has_native = manifest.has_native
+    entry.tags |> reserve(length(manifest.tags))
     for (t in manifest.tags) {
         entry.tags |> push_clone(t)
     }
+    entry.dependencies |> reserve(length(manifest.dependencies))
     for (d in manifest.dependencies) {
         entry.dependencies |> push_clone(d)
     }
@@ -534,6 +540,7 @@ def serialize_index(index : table<string; IndexEntry>) : string {
         return a._0 < b._0
     }
     var arr : array<JsonValue?>
+    arr |> reserve(length(name_to_jv))
     for (p in name_to_jv) {
         arr |> emplace(p._1)
     }
@@ -554,12 +561,16 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
     // build sorted list of (name, entry) pairs for use inside build_string block
     var sorted_names : array<string>
     var sorted_entries : array<IndexEntry>
+    let num_entries = length(index)
+    sorted_names |> reserve(num_entries)
+    sorted_entries |> reserve(num_entries)
     for (name, entry in keys(index), values(index)) {
         sorted_names |> push_clone(name)
         sorted_entries |> push_clone(entry)
     }
     // sort both arrays by name
     var order : array<int>
+    order |> reserve(length(sorted_names))
     for (i in range(length(sorted_names))) {
         order |> push(i)
     }
@@ -568,6 +579,8 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
     }
     var names : array<string>
     var entries : array<IndexEntry>
+    names |> reserve(length(order))
+    entries |> reserve(length(order))
     for (i in order) {
         names |> push_clone(sorted_names[i])
         entries |> push_clone(sorted_entries[i])
@@ -930,6 +943,7 @@ def cmd_update_index(root : string) {
                 }
                 if (length(manifest.tags) > 0) {
                     delete index[name].tags
+                    index[name].tags |> reserve(length(manifest.tags))
                     for (t in manifest.tags) {
                         index[name].tags |> push_clone(t)
                     }
@@ -937,6 +951,7 @@ def cmd_update_index(root : string) {
                 index[name].has_native = manifest.has_native
                 if (length(manifest.dependencies) > 0) {
                     delete index[name].dependencies
+                    index[name].dependencies |> reserve(length(manifest.dependencies))
                     for (d in manifest.dependencies) {
                         index[name].dependencies |> push_clone(d)
                     }

@@ -34,7 +34,7 @@ def do_list_module_api(module_name : string; filter : string = ""; section : str
 }
 
 def is_operator_function(name : string) : bool {
-    let ch = character_at(name, 0)
+    let ch = first_character(name)
     return !is_alpha(ch) && !is_number(ch) && ch != '_'
 }
 

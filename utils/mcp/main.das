@@ -44,9 +44,9 @@ def main() {
                 if (len == 0) {
                     break
                 }
-                if (character_at(chunk, len - 1) == '\n') {
+                if (character_at(chunk, len - 1) == '\n') { // nolint:PERF003
                     // got full line — append without the trailing newline
-                    if (len > 1 && character_at(chunk, len - 2) == '\r') {
+                    if (len > 1 && character_at(chunk, len - 2) == '\r') { // nolint:PERF003
                         write(w, slice(chunk, 0, len - 2))
                     } else {
                         write(w, slice(chunk, 0, len - 1))

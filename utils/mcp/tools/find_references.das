@@ -247,7 +247,7 @@ class RefVisitor : AstVisitor {
     def override preVisitExprField(expr : smart_ptr<ExprField>) : void {
         if (target.kind == RefTargetKind.field) {
             let f = get_ptr(expr)
-            if (string(f.name) == target.field_name && f.value != null && f.value._type != null) {
+            if (f.name == target.field_name && f.value != null && f.value._type != null) {
                 var vt = get_ptr(f.value._type)
                 if (vt.structType == null && vt.firstType != null) {
                     vt = get_ptr(vt.firstType)
@@ -263,7 +263,7 @@ class RefVisitor : AstVisitor {
     def override preVisitExprSafeField(expr : smart_ptr<ExprSafeField>) : void {
         if (target.kind == RefTargetKind.field) {
             let f = get_ptr(expr)
-            if (string(f.name) == target.field_name && f.value != null && f.value._type != null) {
+            if (f.name == target.field_name && f.value != null && f.value._type != null) {
                 var vt = get_ptr(f.value._type)
                 if (vt.structType == null && vt.firstType != null) {
                     vt = get_ptr(vt.firstType)
@@ -289,7 +289,7 @@ class RefVisitor : AstVisitor {
     def override preVisitExprConstBitfield(expr : smart_ptr<ExprConstBitfield>) : void {
         if (target.kind == RefTargetKind.alias) {
             let e = get_ptr(expr)
-            if (e._type != null && !empty(e._type.alias) && string(e._type.alias) == target.alias_name) {
+            if (e._type != null && !empty(e._type.alias) && e._type.alias == target.alias_name) {
                 add_ref(e.at, "bitfield value")
             }
         }
@@ -309,7 +309,7 @@ class RefVisitor : AstVisitor {
             }
         }
         if (target.kind == RefTargetKind.alias && !empty(td.alias)) {
-            if (string(td.alias) == target.alias_name) {
+            if (td.alias == target.alias_name) {
                 add_ref(td.at, "alias ref")
             }
         }

@@ -115,7 +115,7 @@ def is_local_path(source : string) : bool {
     if (starts_with(source, ".\\") || starts_with(source, "..\\")) {
         return true
     }
-    if (length(source) > 2 && character_at(source, 1) == ':') {
+    if (length(source) > 2 && character_at(source, 1) == ':') { // nolint:PERF003
         return true
     }
     return false

@@ -148,11 +148,11 @@ def extract_name_from_text(text, kind : string) : string {
                 }
             }
             // Handle block form: "let private {" -> skip
-            if (character_at(rest, 0) == '{') {
+            if (first_character(rest) == '{') {
                 return ""
             }
             // Handle annotations before name
-            if (character_at(rest, 0) == '[') {
+            if (first_character(rest) == '[') {
                 let close = find(rest, "]")
                 if (close >= 0) {
                     rest = strip(slice(rest, close + 1))

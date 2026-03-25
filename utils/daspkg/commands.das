@@ -790,6 +790,7 @@ def cmd_update_all(root : string; is_global : bool = false) {
     }
     // collect names first — cmd_update modifies lf.packages
     var names : array<string>
+    names |> reserve(length(lf.packages))
     for (entry in lf.packages) {
         names |> push_clone(entry.name)
     }

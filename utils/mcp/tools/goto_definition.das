@@ -32,7 +32,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
         var ln = fgets(f)
         // strip trailing newline/cr
         while (length(ln) > 0) {
-            let last_ch = character_at(ln, length(ln) - 1)
+            let last_ch = character_at(ln, length(ln) - 1) // nolint:PERF003
             if (last_ch == '\n' || last_ch == '\r') {
                 ln = slice(ln, 0, length(ln) - 1)
             } else {
@@ -136,7 +136,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
         if (value_type != null && value_type.structType != null) {
             let st = value_type.structType
             for (fld in st.fields) {
-                if (string(fld.name) == field_name) {
+                if (fld.name == field_name) {
                     let file = lineinfo_file(fld.at)
                     let line = int(fld.at.line)
                     return DefinitionResult(
