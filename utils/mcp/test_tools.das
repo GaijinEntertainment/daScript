@@ -28,7 +28,6 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
-require tools/perf_lint_tool public
 require tools/lint_tool public
 
 // helper: parse tool result JSON, return (text, isError)
@@ -1158,18 +1157,18 @@ def test_list_requires_json(t : T?) {
     }
 }
 
-// ── perf_lint ────────────────────────────────────────────────────────
+// ── perf_lint (merged into lint) ─────────────────────────────────────
 
 [test]
 def test_perf_lint_warnings(t : T?) {
     t |> run("detects PERF001 warning") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_perf_lint(fixture_path("_fixture_perf_lint.das")), text, is_error)
+        let ok = parse_result(do_lint(fixture_path("_fixture_perf_lint.das")), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "PERF001") >= 0, "should contain PERF001")
-        t |> success(find(text, "1 performance warning") >= 0, "should report 1 warning")
+        t |> success(find(text, "lint issue") >= 0, "should report lint issues")
     }
 }
 
@@ -1178,10 +1177,10 @@ def test_perf_lint_clean(t : T?) {
     t |> run("clean file has no warnings") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_perf_lint(fixture_path("_fixture_valid.das")), text, is_error)
+        let ok = parse_result(do_lint(fixture_path("_fixture_valid.das")), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should not be error")
-        t |> success(find(text, "No performance warnings") >= 0, "should say no warnings")
+        t |> success(find(text, "No lint issues") >= 0, "should say no issues")
     }
 }
 
@@ -1190,7 +1189,7 @@ def test_perf_lint_compile_error(t : T?) {
     t |> run("compile error reports failure") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_perf_lint(fixture_path("_fixture_error.das")), text, is_error)
+        let ok = parse_result(do_lint(fixture_path("_fixture_error.das")), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "Compilation failed") >= 0, "should contain 'Compilation failed'")
@@ -1202,7 +1201,7 @@ def test_perf_lint_no_match(t : T?) {
     t |> run("no files matched reports error") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_perf_lint("nonexistent_dir_xyz/*.das"), text, is_error)
+        let ok = parse_result(do_lint("nonexistent_dir_xyz/*.das"), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "no files matched") >= 0, "should mention no files matched")
