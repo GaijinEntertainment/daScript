@@ -303,10 +303,21 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             var_stack |> push(VarStackEntry(v = get_ptr(v), depth = loop_depth, is_iter = false))
         }
-        // PERF009: track last move-initialized variable
-        if (last && v.flags.init_via_move) {
-            pending_move_var = get_ptr(v)
-            pending_move_at = expr.at
+        // PERF009: track last move-initialized variable (only explicit `var x <- expr`)
+        if (last && v.flags.init_via_move && v.init != null) {
+            var dominated_by_clone = false
+            // Exclude compiler-lowered `:=` (clone_to_move) on non-copyable types
+            var ini = get_ptr(v.init)
+            if (ini is ExprCall) {
+                let ecall = ini as ExprCall
+                if (ecall.func != null && ecall.func.fromGeneric != null) {
+                    dominated_by_clone = ecall.func.fromGeneric.name == "clone_to_move"
+                }
+            }
+            if (!dominated_by_clone) {
+                pending_move_var = get_ptr(v)
+                pending_move_at = expr.at
+            }
         }
     }
 
