@@ -1116,7 +1116,7 @@ def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen 
             parser |> log_plain <| "Returning result at index {parser.index}"
         }
 
-        var result : $t(return_type) <-  (true, val, parser.index)
+        var result : $t(return_type) <-  (true, val, parser.index) // nolint:PERF009 macro-generated tuple
         return <- result
     }
 

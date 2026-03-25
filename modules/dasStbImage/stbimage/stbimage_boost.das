@@ -492,8 +492,7 @@ struct public Image {
         //! Grey conversion uses ITU-R BT.601 luminance (0.299R + 0.587G + 0.114B).
         //! Added alpha is set to max (255 / 65535 / 1.0).
         if (target_channels == channels) {
-            var result = Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
-            return <- result
+            return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
         }
         var result = Image(width = width, height = height, channels = target_channels, bpc = bpc)
         let num_pixels = width * height
@@ -516,8 +515,7 @@ struct public Image {
         //! Conversion is linear (no gamma correction).
         //! uint8 range [0,255], uint16 range [0,65535], float range [0.0,1.0].
         if (target_bpc == bpc) {
-            var result = Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
-            return <- result
+            return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
         }
         var result = Image(width = width, height = height, channels = channels, bpc = target_bpc)
         let count = width * height * channels
