@@ -98,4 +98,9 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 	install(FILES ${DASLLVM_BINDINGS} DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/bindings)
 	install(FILES ${DAS_LLVM_DIR}/.das_module DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLLVM/)
 
+	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_jit.das)
+	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm.das)
+	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit.das)
+	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit_function.das)
+
 ENDIF()

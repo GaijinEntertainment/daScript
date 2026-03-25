@@ -69,8 +69,6 @@ def parse_csv(CSV : string; blk : block<(val : array<Row>; err : array<ParsingEr
 
 
 let s1 = %stringify~1,"hello",3.141%%
-let s2 = %stringify~1,"hello",3.141,%%
-
 let s3 = %stringify~1,"hello",3.141
 2,"goodbye",6.789
 %%
@@ -79,14 +77,6 @@ let s3 = %stringify~1,"hello",3.141
 def main {
     parse_csv(s1) <| $(s1; err) {
         print("c1 = {s1}\n")
-    }
-
-    parse_csv(s2) <| $(s2; err) {
-        print("c2 = {s2}\n")
-
-        for (e in err) {
-            "{e}\n" |> print
-        }
     }
 
     parse_csv(s3) <| $(c3; err) {

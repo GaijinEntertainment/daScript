@@ -83,10 +83,6 @@ def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitS
 class JIT_LLVM : AstSimulateMacro {
     def override simulate(prog : Program?; var ctx : Context?) : bool {
         return true if (is_in_completion() || is_compiling_macros() || is_folding())
-        if (!prog.policies.jit_enabled) {
-            error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
-            return false
-        }
         var funcs : array<FunctionPtr>
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()

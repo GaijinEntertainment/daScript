@@ -231,7 +231,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                         */
                     }
                     if ( !libhandle ) {
-                        libhandle = loadDynamicLibrary((getDasRoot() + "/" + library).c_str());
+                        libhandle = loadDynamicLibrary((getDasRoot() + "/lib/" + library).c_str());
                     }
                 }
             }

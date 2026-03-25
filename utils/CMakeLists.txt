@@ -4,6 +4,7 @@
 
 set(DAS_UTILS
     aot
+    benchctl
     dascov
     daspkg
     mcp
@@ -33,7 +34,40 @@ foreach(util ${DAS_UTILS})
     add_custom_target(${util}_exe DEPENDS ${UTIL_OUT})
 endforeach()
 
+SET(TEST_MAIN ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
+SET(TEST_OUT ${PROJECT_SOURCE_DIR}/bin/dastest.exe)
+
+add_custom_command(
+    OUTPUT  ${TEST_OUT}
+    COMMAND daslang -exe -output ${PROJECT_SOURCE_DIR}/bin/dastest ${TEST_MAIN}
+    DEPENDS ${TEST_MAIN} daslang ${DASLIB_SOURCES} ${DASLLVM_DASLIB_SOURCES}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Building dastest executable (daslang -exe)"
+)
+add_custom_target(dastest_exe DEPENDS ${TEST_OUT})
+
+
 add_custom_target(all_utils_exe)
 foreach(util ${DAS_UTILS})
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
+add_dependencies(all_utils_exe dastest_exe)
+
+SET(DAS_UTILS_TO_TEST
+    dascov
+    mcp
+    perf_lint
+)
+
+FOREACH(_das ${DAS_UTILS_TO_TEST})
+    LIST(APPEND _run_utils_tests
+        COMMAND ${CMAKE_COMMAND} -E echo "Running tests ${_das}"
+        COMMAND daslang ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --test ${PROJECT_SOURCE_DIR}/utils/${_das}
+        DEPENDS das-fmt tree_sitter_daslang
+    )
+ENDFOREACH()
+ADD_CUSTOM_TARGET(run_utils_tests
+    ${_run_utils_tests}
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Running utils tests"
+)

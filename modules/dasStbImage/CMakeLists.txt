@@ -52,4 +52,5 @@ IF ((NOT DAS_STBIMAGE_INCLUDED) AND (NOT ${DAS_STBIMAGE_DISABLED}))
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasStbImage
     )
 
+    ADD_EXAMPLE_RUN(modules/dasStbImage/examples/ttf_render_test.das)
 ENDIF()

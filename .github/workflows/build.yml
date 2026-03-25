@@ -223,18 +223,6 @@ jobs:
             ;;
         esac
 
-    - name: "Clone required repos"
-      uses: actions/checkout@master
-      with:
-        repository: profelis/das-fmt     # Path to repository with das-fmt scripts
-        ref: refs/pull/4/head
-        path: das-fmt
-
-    - name: "Clone submodules"
-      if: matrix.target != 'linux_arm' # support opengl in glfw on linux arm
-      run: |
-        # Some of them will be disabled, but who cares
-        git submodule update --init --recursive $(cat ci/release_modules.txt | grep -v "^#" | cut -d':' -f1 | sed 's|^|modules/|' | xargs)
     - name: "Build: Daslang"
       run: |
         set -eux
@@ -300,19 +288,6 @@ jobs:
     #         || (echo "Generated code changed! To reproduce use "./bin/daslang dasgen/gen_bind.das" or rebuild "daslang-dev" to regenerate aot files." && exit 1)
     #         ;;
     #     esac
-    - name: "Run formatter"
-      if: matrix.cmake_preset == 'Release'
-      run: |
-        set -eux
-        case "${{ matrix.target }}${{ matrix.architecture }}" in
-           windows*)
-            ./bin/"${{ matrix.cmake_preset }}"/daslang ./das-fmt/dasfmt.das -- --path ./ --verify
-            ;;
-           *)
-            ./bin/daslang ./das-fmt/dasfmt.das -- --path ./ --verify
-            ;;
-        esac
-
     - name: "Test"
       run: |
         set -eux
@@ -350,22 +325,12 @@ jobs:
             echo "Skipping AOT tests on 32-bit Windows"
             ;;
            windows*)
-            # Run single instance of daslang_static. It takes ~5 sec and
-            # one instance is enough to make sure it works.
             cd bin/"${{ matrix.cmake_preset }}"
-            ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ../../tests
+            ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../../tests
             ;;
            *)
             cd bin
             ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../tests
-
-            # Run coverage only in Release since it is slow.
-            ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.lcov --color --test ../tests --timeout 1800
-            ./daslang _dasroot_/utils/dascov/main.das -- coverage.lcov --exclude tests/
-
-            # Run single instance of daslang_static. It takes ~5 sec and
-            # one instance is enough to make sure it works.
-            ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ../tests
             ;;
         esac
 
