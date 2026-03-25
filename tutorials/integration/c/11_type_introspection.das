@@ -30,7 +30,7 @@ var entities : array<Entity>
 
 [export]
 def spawn_entity(n : string; px, py, pz : float) {
-    entities |> emplace(Entity(name=n, transform=Transform(x=px, y=py, z=pz)))
+    entities |> emplace(Entity(name = n, transform = Transform(x = px, y = py, z = pz)))
 }
 
 [export]
