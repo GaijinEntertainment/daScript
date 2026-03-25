@@ -2143,7 +2143,7 @@ def LLVMOrcJITTargetMachineBuilderGetTargetTriple(JTMB : LLVMOrcOpaqueJITTargetM
 def LLVMOrcJITTargetMachineBuilderSetTargetTriple(JTMB : LLVMOrcOpaqueJITTargetMachineBuilder? implicit; TargetTriple : string implicit) : void {}
 [extern(cdecl, name="LLVMOrcObjectLayerAddObjectFile", library="LLVM.dll")]
 def LLVMOrcObjectLayerAddObjectFile(ObjLayer : LLVMOrcOpaqueObjectLayer? implicit; JD : LLVMOrcOpaqueJITDylib? implicit; ObjBuffer : LLVMOpaqueMemoryBuffer? implicit) : LLVMOpaqueError? {}
-[extern(cdecl, name="LLVMOrcObjectLayerAddObjectFileWithRT", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMOrcObjectLayerAddObjectFileWithRT", library="LLVM.dll")]
 def LLVMOrcObjectLayerAddObjectFileWithRT(ObjLayer : LLVMOrcOpaqueObjectLayer? implicit; RT : LLVMOrcOpaqueResourceTracker? implicit; ObjBuffer : LLVMOpaqueMemoryBuffer? implicit) : LLVMOpaqueError? {}
 [extern(cdecl, name="LLVMOrcObjectLayerEmit", library="LLVM.dll")]
 def LLVMOrcObjectLayerEmit(ObjLayer : LLVMOrcOpaqueObjectLayer? implicit; R : LLVMOrcOpaqueMaterializationResponsibility? implicit; ObjBuffer : LLVMOpaqueMemoryBuffer? implicit) : void {}
@@ -2203,157 +2203,157 @@ def LLVMOrcLLJITGetObjTransformLayer(J : LLVMOrcOpaqueLLJIT? implicit) : LLVMOrc
 def LLVMOrcLLJITGetIRTransformLayer(J : LLVMOrcOpaqueLLJIT? implicit) : LLVMOrcOpaqueIRTransformLayer? {}
 [extern(cdecl, name="LLVMOrcLLJITGetDataLayoutStr", library="LLVM.dll")]
 def LLVMOrcLLJITGetDataLayoutStr(J : LLVMOrcOpaqueLLJIT? implicit) : string {}
-[extern(cdecl, name="lto_get_version", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_get_version", library="LLVM.dll")]
 def lto_get_version() : string {}
-[extern(cdecl, name="lto_get_error_message", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_get_error_message", library="LLVM.dll")]
 def lto_get_error_message() : string {}
-[extern(cdecl, name="lto_module_is_object_file", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_is_object_file", library="LLVM.dll")]
 def lto_module_is_object_file(path : string implicit) : bool {}
-[extern(cdecl, name="lto_module_is_object_file_for_target", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_is_object_file_for_target", library="LLVM.dll")]
 def lto_module_is_object_file_for_target(path : string implicit; target_triple_prefix : string implicit) : bool {}
-[extern(cdecl, name="lto_module_has_objc_category", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_has_objc_category", library="LLVM.dll")]
 def lto_module_has_objc_category(mem : void const? implicit; length : uint64) : bool {}
-[extern(cdecl, name="lto_module_is_object_file_in_memory", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_is_object_file_in_memory", library="LLVM.dll")]
 def lto_module_is_object_file_in_memory(mem : void const? implicit; length : uint64) : bool {}
-[extern(cdecl, name="lto_module_is_object_file_in_memory_for_target", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_is_object_file_in_memory_for_target", library="LLVM.dll")]
 def lto_module_is_object_file_in_memory_for_target(mem : void const? implicit; length : uint64; target_triple_prefix : string implicit) : bool {}
-[extern(cdecl, name="lto_module_create", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create", library="LLVM.dll")]
 def lto_module_create(path : string implicit) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_from_memory", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_from_memory", library="LLVM.dll")]
 def lto_module_create_from_memory(mem : void const? implicit; length : uint64) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_from_memory_with_path", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_from_memory_with_path", library="LLVM.dll")]
 def lto_module_create_from_memory_with_path(mem : void const? implicit; length : uint64; path : string implicit) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_in_local_context", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_in_local_context", library="LLVM.dll")]
 def lto_module_create_in_local_context(mem : void const? implicit; length : uint64; path : string implicit) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_in_codegen_context", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_in_codegen_context", library="LLVM.dll")]
 def lto_module_create_in_codegen_context(mem : void const? implicit; length : uint64; path : string implicit; cg : LLVMOpaqueLTOCodeGenerator? implicit) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_from_fd", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_from_fd", library="LLVM.dll")]
 def lto_module_create_from_fd(fd : int; path : string implicit; file_size : uint64) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_create_from_fd_at_offset", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_create_from_fd_at_offset", library="LLVM.dll")]
 def lto_module_create_from_fd_at_offset(fd : int; path : string implicit; file_size : uint64; map_size : uint64; offset : int64) : LLVMOpaqueLTOModule? {}
-[extern(cdecl, name="lto_module_dispose", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_dispose", library="LLVM.dll")]
 def lto_module_dispose(mod : LLVMOpaqueLTOModule? implicit) : void {}
-[extern(cdecl, name="lto_module_get_target_triple", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_target_triple", library="LLVM.dll")]
 def lto_module_get_target_triple(mod : LLVMOpaqueLTOModule? implicit) : string {}
-[extern(cdecl, name="lto_module_set_target_triple", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_set_target_triple", library="LLVM.dll")]
 def lto_module_set_target_triple(mod : LLVMOpaqueLTOModule? implicit; triple : string implicit) : void {}
-[extern(cdecl, name="lto_module_get_num_symbols", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_num_symbols", library="LLVM.dll")]
 def lto_module_get_num_symbols(mod : LLVMOpaqueLTOModule? implicit) : uint {}
-[extern(cdecl, name="lto_module_get_symbol_name", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_symbol_name", library="LLVM.dll")]
 def lto_module_get_symbol_name(mod : LLVMOpaqueLTOModule? implicit; index : uint) : string {}
-[extern(cdecl, name="lto_module_get_symbol_attribute", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_symbol_attribute", library="LLVM.dll")]
 def lto_module_get_symbol_attribute(mod : LLVMOpaqueLTOModule? implicit; index : uint) : lto_symbol_attributes {}
-[extern(cdecl, name="lto_module_get_linkeropts", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_linkeropts", library="LLVM.dll")]
 def lto_module_get_linkeropts(mod : LLVMOpaqueLTOModule? implicit) : string {}
-[extern(cdecl, name="lto_module_get_macho_cputype", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_get_macho_cputype", library="LLVM.dll")]
 def lto_module_get_macho_cputype(mod : LLVMOpaqueLTOModule? implicit; out_cputype : uint? implicit; out_cpusubtype : uint? implicit) : bool {}
-[extern(cdecl, name="lto_module_has_ctor_dtor", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_has_ctor_dtor", library="LLVM.dll")]
 def lto_module_has_ctor_dtor(mod : LLVMOpaqueLTOModule? implicit) : bool {}
-[extern(cdecl, name="lto_codegen_create", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_create", library="LLVM.dll")]
 def lto_codegen_create() : LLVMOpaqueLTOCodeGenerator? {}
-[extern(cdecl, name="lto_codegen_create_in_local_context", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_create_in_local_context", library="LLVM.dll")]
 def lto_codegen_create_in_local_context() : LLVMOpaqueLTOCodeGenerator? {}
-[extern(cdecl, name="lto_codegen_dispose", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_dispose", library="LLVM.dll")]
 def lto_codegen_dispose(_argument_0x0 : LLVMOpaqueLTOCodeGenerator? implicit) : void {}
-[extern(cdecl, name="lto_codegen_add_module", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_add_module", library="LLVM.dll")]
 def lto_codegen_add_module(cg : LLVMOpaqueLTOCodeGenerator? implicit; mod : LLVMOpaqueLTOModule? implicit) : bool {}
-[extern(cdecl, name="lto_codegen_set_module", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_module", library="LLVM.dll")]
 def lto_codegen_set_module(cg : LLVMOpaqueLTOCodeGenerator? implicit; mod : LLVMOpaqueLTOModule? implicit) : void {}
-[extern(cdecl, name="lto_codegen_set_debug_model", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_debug_model", library="LLVM.dll")]
 def lto_codegen_set_debug_model(cg : LLVMOpaqueLTOCodeGenerator? implicit; _argument_0x1 : lto_debug_model) : bool {}
-[extern(cdecl, name="lto_codegen_set_pic_model", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_pic_model", library="LLVM.dll")]
 def lto_codegen_set_pic_model(cg : LLVMOpaqueLTOCodeGenerator? implicit; _argument_0x1 : lto_codegen_model) : bool {}
-[extern(cdecl, name="lto_codegen_set_cpu", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_cpu", library="LLVM.dll")]
 def lto_codegen_set_cpu(cg : LLVMOpaqueLTOCodeGenerator? implicit; cpu : string implicit) : void {}
-[extern(cdecl, name="lto_codegen_set_assembler_path", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_assembler_path", library="LLVM.dll")]
 def lto_codegen_set_assembler_path(cg : LLVMOpaqueLTOCodeGenerator? implicit; path : string implicit) : void {}
-[extern(cdecl, name="lto_codegen_set_assembler_args", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_assembler_args", library="LLVM.dll")]
 def lto_codegen_set_assembler_args(cg : LLVMOpaqueLTOCodeGenerator? implicit; args : string? implicit; nargs : int) : void {}
-[extern(cdecl, name="lto_codegen_add_must_preserve_symbol", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_add_must_preserve_symbol", library="LLVM.dll")]
 def lto_codegen_add_must_preserve_symbol(cg : LLVMOpaqueLTOCodeGenerator? implicit; symbol : string implicit) : void {}
-[extern(cdecl, name="lto_codegen_write_merged_modules", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_write_merged_modules", library="LLVM.dll")]
 def lto_codegen_write_merged_modules(cg : LLVMOpaqueLTOCodeGenerator? implicit; path : string implicit) : bool {}
-[extern(cdecl, name="lto_codegen_compile", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_compile", library="LLVM.dll")]
 def lto_codegen_compile(cg : LLVMOpaqueLTOCodeGenerator? implicit; length : uint64? implicit) : void const? {}
-[extern(cdecl, name="lto_codegen_compile_to_file", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_compile_to_file", library="LLVM.dll")]
 def lto_codegen_compile_to_file(cg : LLVMOpaqueLTOCodeGenerator? implicit; name : string? implicit) : bool {}
-[extern(cdecl, name="lto_codegen_optimize", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_optimize", library="LLVM.dll")]
 def lto_codegen_optimize(cg : LLVMOpaqueLTOCodeGenerator? implicit) : bool {}
-[extern(cdecl, name="lto_codegen_compile_optimized", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_compile_optimized", library="LLVM.dll")]
 def lto_codegen_compile_optimized(cg : LLVMOpaqueLTOCodeGenerator? implicit; length : uint64? implicit) : void const? {}
-[extern(cdecl, name="lto_api_version", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_api_version", library="LLVM.dll")]
 def lto_api_version() : uint {}
-[extern(cdecl, name="lto_set_debug_options", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_set_debug_options", library="LLVM.dll")]
 def lto_set_debug_options(_options : string const? implicit; number : int) : void {}
-[extern(cdecl, name="lto_codegen_debug_options", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_debug_options", library="LLVM.dll")]
 def lto_codegen_debug_options(cg : LLVMOpaqueLTOCodeGenerator? implicit; _argument_0x1 : string implicit) : void {}
-[extern(cdecl, name="lto_codegen_debug_options_array", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_debug_options_array", library="LLVM.dll")]
 def lto_codegen_debug_options_array(cg : LLVMOpaqueLTOCodeGenerator? implicit; _argument_0x1 : string const? implicit; number : int) : void {}
-[extern(cdecl, name="lto_initialize_disassembler", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_initialize_disassembler", library="LLVM.dll")]
 def lto_initialize_disassembler() : void {}
-[extern(cdecl, name="lto_codegen_set_should_internalize", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_should_internalize", library="LLVM.dll")]
 def lto_codegen_set_should_internalize(cg : LLVMOpaqueLTOCodeGenerator? implicit; ShouldInternalize : bool) : void {}
-[extern(cdecl, name="lto_codegen_set_should_embed_uselists", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_codegen_set_should_embed_uselists", library="LLVM.dll")]
 def lto_codegen_set_should_embed_uselists(cg : LLVMOpaqueLTOCodeGenerator? implicit; ShouldEmbedUselists : bool) : void {}
-[extern(cdecl, name="lto_input_create", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_input_create", library="LLVM.dll")]
 def lto_input_create(buffer : void const? implicit; buffer_size : uint64; path : string implicit) : LLVMOpaqueLTOInput? {}
-[extern(cdecl, name="lto_input_dispose", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_input_dispose", library="LLVM.dll")]
 def lto_input_dispose(input : LLVMOpaqueLTOInput? implicit) : void {}
-[extern(cdecl, name="lto_input_get_num_dependent_libraries", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_input_get_num_dependent_libraries", library="LLVM.dll")]
 def lto_input_get_num_dependent_libraries(input : LLVMOpaqueLTOInput? implicit) : uint {}
-[extern(cdecl, name="lto_input_get_dependent_library", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_input_get_dependent_library", library="LLVM.dll")]
 def lto_input_get_dependent_library(input : LLVMOpaqueLTOInput? implicit; index : uint64; size : uint64? implicit) : string {}
-[extern(cdecl, name="lto_runtime_lib_symbols_list", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_runtime_lib_symbols_list", library="LLVM.dll")]
 def lto_runtime_lib_symbols_list(size : uint64? implicit) : string const? {}
-[extern(cdecl, name="thinlto_create_codegen", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_create_codegen", library="LLVM.dll")]
 def thinlto_create_codegen() : LLVMOpaqueThinLTOCodeGenerator? {}
-[extern(cdecl, name="thinlto_codegen_dispose", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_dispose", library="LLVM.dll")]
 def thinlto_codegen_dispose(cg : LLVMOpaqueThinLTOCodeGenerator? implicit) : void {}
-[extern(cdecl, name="thinlto_codegen_add_module", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_add_module", library="LLVM.dll")]
 def thinlto_codegen_add_module(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; identifier : string implicit; data : string implicit; length : int) : void {}
-[extern(cdecl, name="thinlto_codegen_process", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_process", library="LLVM.dll")]
 def thinlto_codegen_process(cg : LLVMOpaqueThinLTOCodeGenerator? implicit) : void {}
-[extern(cdecl, name="thinlto_module_get_num_objects", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_module_get_num_objects", library="LLVM.dll")]
 def thinlto_module_get_num_objects(cg : LLVMOpaqueThinLTOCodeGenerator? implicit) : uint {}
-[extern(cdecl, name="thinlto_module_get_object", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_module_get_object", library="LLVM.dll")]
 def thinlto_module_get_object(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; index : uint) : LTOObjectBuffer {}
-[extern(cdecl, name="thinlto_module_get_num_object_files", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_module_get_num_object_files", library="LLVM.dll")]
 def thinlto_module_get_num_object_files(cg : LLVMOpaqueThinLTOCodeGenerator? implicit) : uint {}
-[extern(cdecl, name="thinlto_module_get_object_file", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_module_get_object_file", library="LLVM.dll")]
 def thinlto_module_get_object_file(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; index : uint) : string {}
-[extern(cdecl, name="thinlto_codegen_set_pic_model", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_pic_model", library="LLVM.dll")]
 def thinlto_codegen_set_pic_model(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; _argument_0x1 : lto_codegen_model) : bool {}
-[extern(cdecl, name="thinlto_codegen_set_savetemps_dir", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_savetemps_dir", library="LLVM.dll")]
 def thinlto_codegen_set_savetemps_dir(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; save_temps_dir : string implicit) : void {}
-[extern(cdecl, name="thinlto_set_generated_objects_dir", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_set_generated_objects_dir", library="LLVM.dll")]
 def thinlto_set_generated_objects_dir(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; save_temps_dir : string implicit) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cpu", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cpu", library="LLVM.dll")]
 def thinlto_codegen_set_cpu(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; cpu : string implicit) : void {}
-[extern(cdecl, name="thinlto_codegen_disable_codegen", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_disable_codegen", library="LLVM.dll")]
 def thinlto_codegen_disable_codegen(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; disable : bool) : void {}
-[extern(cdecl, name="thinlto_codegen_set_codegen_only", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_codegen_only", library="LLVM.dll")]
 def thinlto_codegen_set_codegen_only(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; codegen_only : bool) : void {}
-[extern(cdecl, name="thinlto_debug_options", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_debug_options", library="LLVM.dll")]
 def thinlto_debug_options(_options : string const? implicit; number : int) : void {}
-[extern(cdecl, name="lto_module_is_thinlto", library="LLVM.dll")]
+[extern(cdecl, late, name="lto_module_is_thinlto", library="LLVM.dll")]
 def lto_module_is_thinlto(mod : LLVMOpaqueLTOModule? implicit) : bool {}
-[extern(cdecl, name="thinlto_codegen_add_must_preserve_symbol", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_add_must_preserve_symbol", library="LLVM.dll")]
 def thinlto_codegen_add_must_preserve_symbol(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; name : string implicit; length : int) : void {}
-[extern(cdecl, name="thinlto_codegen_add_cross_referenced_symbol", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_add_cross_referenced_symbol", library="LLVM.dll")]
 def thinlto_codegen_add_cross_referenced_symbol(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; name : string implicit; length : int) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_dir", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_dir", library="LLVM.dll")]
 def thinlto_codegen_set_cache_dir(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; cache_dir : string implicit) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_pruning_interval", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_pruning_interval", library="LLVM.dll")]
 def thinlto_codegen_set_cache_pruning_interval(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; interval : int) : void {}
-[extern(cdecl, name="thinlto_codegen_set_final_cache_size_relative_to_available_space", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_final_cache_size_relative_to_available_space", library="LLVM.dll")]
 def thinlto_codegen_set_final_cache_size_relative_to_available_space(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; percentage : uint) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_entry_expiration", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_entry_expiration", library="LLVM.dll")]
 def thinlto_codegen_set_cache_entry_expiration(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; expiration : uint) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_size_bytes", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_size_bytes", library="LLVM.dll")]
 def thinlto_codegen_set_cache_size_bytes(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; max_size_bytes : uint) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_size_megabytes", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_size_megabytes", library="LLVM.dll")]
 def thinlto_codegen_set_cache_size_megabytes(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; max_size_megabytes : uint) : void {}
-[extern(cdecl, name="thinlto_codegen_set_cache_size_files", library="LLVM.dll")]
+[extern(cdecl, late, name="thinlto_codegen_set_cache_size_files", library="LLVM.dll")]
 def thinlto_codegen_set_cache_size_files(cg : LLVMOpaqueThinLTOCodeGenerator? implicit; max_size_files : uint) : void {}
 [extern(cdecl, name="LLVMCreateBinary", library="LLVM.dll")]
 def LLVMCreateBinary(MemBuf : LLVMOpaqueMemoryBuffer? implicit; Context : LLVMOpaqueContext? implicit; ErrorMessage : string? implicit) : LLVMOpaqueBinary? {}
@@ -2433,55 +2433,55 @@ def LLVMIsSymbolIteratorAtEnd(ObjectFile : LLVMOpaqueObjectFile? implicit; SI : 
 def LLVMOrcCreateRTDyldObjectLinkingLayerWithSectionMemoryManager(ES : LLVMOrcOpaqueExecutionSession? implicit) : LLVMOrcOpaqueObjectLayer? {}
 [extern(cdecl, name="LLVMOrcRTDyldObjectLinkingLayerRegisterJITEventListener", library="LLVM.dll")]
 def LLVMOrcRTDyldObjectLinkingLayerRegisterJITEventListener(RTDyldObjLinkingLayer : LLVMOrcOpaqueObjectLayer? implicit; Listener : LLVMOpaqueJITEventListener? implicit) : void {}
-[extern(cdecl, name="LLVMRemarkStringGetData", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkStringGetData", library="LLVM.dll")]
 def LLVMRemarkStringGetData(String : LLVMRemarkOpaqueString? implicit) : string {}
-[extern(cdecl, name="LLVMRemarkStringGetLen", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkStringGetLen", library="LLVM.dll")]
 def LLVMRemarkStringGetLen(String : LLVMRemarkOpaqueString? implicit) : uint {}
-[extern(cdecl, name="LLVMRemarkDebugLocGetSourceFilePath", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkDebugLocGetSourceFilePath", library="LLVM.dll")]
 def LLVMRemarkDebugLocGetSourceFilePath(DL : LLVMRemarkOpaqueDebugLoc? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkDebugLocGetSourceLine", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkDebugLocGetSourceLine", library="LLVM.dll")]
 def LLVMRemarkDebugLocGetSourceLine(DL : LLVMRemarkOpaqueDebugLoc? implicit) : uint {}
-[extern(cdecl, name="LLVMRemarkDebugLocGetSourceColumn", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkDebugLocGetSourceColumn", library="LLVM.dll")]
 def LLVMRemarkDebugLocGetSourceColumn(DL : LLVMRemarkOpaqueDebugLoc? implicit) : uint {}
-[extern(cdecl, name="LLVMRemarkArgGetKey", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkArgGetKey", library="LLVM.dll")]
 def LLVMRemarkArgGetKey(Arg : LLVMRemarkOpaqueArg? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkArgGetValue", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkArgGetValue", library="LLVM.dll")]
 def LLVMRemarkArgGetValue(Arg : LLVMRemarkOpaqueArg? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkArgGetDebugLoc", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkArgGetDebugLoc", library="LLVM.dll")]
 def LLVMRemarkArgGetDebugLoc(Arg : LLVMRemarkOpaqueArg? implicit) : LLVMRemarkOpaqueDebugLoc? {}
-[extern(cdecl, name="LLVMRemarkEntryDispose", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryDispose", library="LLVM.dll")]
 def LLVMRemarkEntryDispose(Remark : LLVMRemarkOpaqueEntry? implicit) : void {}
-[extern(cdecl, name="LLVMRemarkEntryGetType", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetType", library="LLVM.dll")]
 def LLVMRemarkEntryGetType(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkType {}
-[extern(cdecl, name="LLVMRemarkEntryGetPassName", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetPassName", library="LLVM.dll")]
 def LLVMRemarkEntryGetPassName(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkEntryGetRemarkName", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetRemarkName", library="LLVM.dll")]
 def LLVMRemarkEntryGetRemarkName(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkEntryGetFunctionName", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetFunctionName", library="LLVM.dll")]
 def LLVMRemarkEntryGetFunctionName(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueString? {}
-[extern(cdecl, name="LLVMRemarkEntryGetDebugLoc", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetDebugLoc", library="LLVM.dll")]
 def LLVMRemarkEntryGetDebugLoc(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueDebugLoc? {}
-[extern(cdecl, name="LLVMRemarkEntryGetHotness", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetHotness", library="LLVM.dll")]
 def LLVMRemarkEntryGetHotness(Remark : LLVMRemarkOpaqueEntry? implicit) : uint64 {}
-[extern(cdecl, name="LLVMRemarkEntryGetNumArgs", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetNumArgs", library="LLVM.dll")]
 def LLVMRemarkEntryGetNumArgs(Remark : LLVMRemarkOpaqueEntry? implicit) : uint {}
-[extern(cdecl, name="LLVMRemarkEntryGetFirstArg", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetFirstArg", library="LLVM.dll")]
 def LLVMRemarkEntryGetFirstArg(Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueArg? {}
-[extern(cdecl, name="LLVMRemarkEntryGetNextArg", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkEntryGetNextArg", library="LLVM.dll")]
 def LLVMRemarkEntryGetNextArg(It : LLVMRemarkOpaqueArg? implicit; Remark : LLVMRemarkOpaqueEntry? implicit) : LLVMRemarkOpaqueArg? {}
-[extern(cdecl, name="LLVMRemarkParserCreateYAML", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserCreateYAML", library="LLVM.dll")]
 def LLVMRemarkParserCreateYAML(Buf : void const? implicit; Size : uint64) : LLVMRemarkOpaqueParser? {}
-[extern(cdecl, name="LLVMRemarkParserCreateBitstream", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserCreateBitstream", library="LLVM.dll")]
 def LLVMRemarkParserCreateBitstream(Buf : void const? implicit; Size : uint64) : LLVMRemarkOpaqueParser? {}
-[extern(cdecl, name="LLVMRemarkParserGetNext", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserGetNext", library="LLVM.dll")]
 def LLVMRemarkParserGetNext(Parser : LLVMRemarkOpaqueParser? implicit) : LLVMRemarkOpaqueEntry? {}
-[extern(cdecl, name="LLVMRemarkParserHasError", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserHasError", library="LLVM.dll")]
 def LLVMRemarkParserHasError(Parser : LLVMRemarkOpaqueParser? implicit) : int {}
-[extern(cdecl, name="LLVMRemarkParserGetErrorMessage", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserGetErrorMessage", library="LLVM.dll")]
 def LLVMRemarkParserGetErrorMessage(Parser : LLVMRemarkOpaqueParser? implicit) : string {}
-[extern(cdecl, name="LLVMRemarkParserDispose", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkParserDispose", library="LLVM.dll")]
 def LLVMRemarkParserDispose(Parser : LLVMRemarkOpaqueParser? implicit) : void {}
-[extern(cdecl, name="LLVMRemarkVersion", library="LLVM.dll")]
+[extern(cdecl, late, name="LLVMRemarkVersion", library="LLVM.dll")]
 def LLVMRemarkVersion() : uint {}
 [extern(cdecl, name="LLVMLoadLibraryPermanently", library="LLVM.dll")]
 def LLVMLoadLibraryPermanently(Filename : string implicit) : int {}

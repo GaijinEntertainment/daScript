@@ -322,11 +322,26 @@ extern "C" {
             auto fn = module->findFunction(funcMangledName);
             if ( fn && fn->builtIn ) {
                 *dllGlobal = static_cast<BuiltInFunction *>(fn.get())->getBuiltinAddress();
-                found = true;
-                return false;
+                found = *dllGlobal != nullptr;
+                return !found;
             }
             return true;
         });
+        if ( !found && strcmp(moduleName, "dasbind") == 0 && strncmp(funcMangledName, "@dasbind::__dasbind__", 21) == 0 ) {
+            Module::foreach([&](Module * module) -> bool {
+                if ( module->name != "dasbind" ) return true;
+                auto resolverFn = module->findUniqueFunction("__dasbind_resolve");
+                if ( resolverFn && resolverFn->builtIn ) {
+                    auto resolver = (void * (*)(const char *))
+                        static_cast<BuiltInFunction *>(resolverFn.get())->getBuiltinAddress();
+                    if ( resolver ) {
+                        *dllGlobal = resolver(funcMangledName);
+                        found = *dllGlobal != nullptr;
+                    }
+                }
+                return false;
+            });
+        }
         if (!found) {
             DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
