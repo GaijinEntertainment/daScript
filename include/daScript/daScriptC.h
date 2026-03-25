@@ -82,6 +82,10 @@ typedef struct dasPolicies das_policies;
 typedef struct dasSerializedData das_serialized_data;
 typedef struct dasEnvironmentHandle das_environment;
 typedef struct dasReuseCacheGuardHandle das_reuse_cache_guard;
+typedef struct dasTypeInfoHandle das_type_info;
+typedef struct dasStructInfoHandle das_struct_info;
+typedef struct dasEnumInfoHandle das_enum_info;
+typedef struct dasFuncInfoHandle das_func_info;
 
 typedef struct {
     float x, y, z, w;
@@ -529,6 +533,240 @@ DAS_API void das_serialized_data_release ( das_serialized_data * blob );
 // Return 1 if the function has been AOT-linked, 0 otherwise.
 // Use this after simulation to check whether functions execute as native code.
 DAS_API int das_function_is_aot ( das_function * func );
+
+// --- Type introspection: base type enum ---
+
+// Base type classification for das_type_info.
+// Numeric values match the internal C++ Type enum.
+typedef enum das_base_type {
+    DAS_TYPE_VOID = 9,
+    DAS_TYPE_BOOL,
+    DAS_TYPE_INT8,
+    DAS_TYPE_UINT8,
+    DAS_TYPE_INT16,
+    DAS_TYPE_UINT16,
+    DAS_TYPE_INT64,
+    DAS_TYPE_UINT64,
+    DAS_TYPE_INT,
+    DAS_TYPE_INT2,
+    DAS_TYPE_INT3,
+    DAS_TYPE_INT4,
+    DAS_TYPE_UINT,
+    DAS_TYPE_UINT2,
+    DAS_TYPE_UINT3,
+    DAS_TYPE_UINT4,
+    DAS_TYPE_FLOAT,
+    DAS_TYPE_FLOAT2,
+    DAS_TYPE_FLOAT3,
+    DAS_TYPE_FLOAT4,
+    DAS_TYPE_DOUBLE,
+    DAS_TYPE_RANGE,
+    DAS_TYPE_URANGE,
+    DAS_TYPE_RANGE64,
+    DAS_TYPE_URANGE64,
+    DAS_TYPE_STRING,
+    DAS_TYPE_STRUCTURE,
+    DAS_TYPE_HANDLE,
+    DAS_TYPE_ENUMERATION,
+    DAS_TYPE_ENUMERATION8,
+    DAS_TYPE_ENUMERATION16,
+    DAS_TYPE_ENUMERATION64,
+    DAS_TYPE_BITFIELD,
+    DAS_TYPE_BITFIELD8,
+    DAS_TYPE_BITFIELD16,
+    DAS_TYPE_BITFIELD64,
+    DAS_TYPE_POINTER,
+    DAS_TYPE_FUNCTION,
+    DAS_TYPE_LAMBDA,
+    DAS_TYPE_ITERATOR,
+    DAS_TYPE_ARRAY,
+    DAS_TYPE_TABLE,
+    DAS_TYPE_BLOCK,
+    DAS_TYPE_TUPLE,
+    DAS_TYPE_VARIANT
+} das_base_type;
+
+// --- Type introspection: flag constants ---
+
+// TypeInfo flags (bitmask).
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_REF;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_REF_TYPE;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_CAN_COPY;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_POD;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_RAW_POD;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_CONST;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_TEMP;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_SMART_PTR;
+extern DAS_API uint32_t DAS_TYPEINFO_FLAG_IS_HANDLED;
+
+// StructInfo flags (bitmask).
+extern DAS_API uint32_t DAS_STRUCTINFO_FLAG_CLASS;
+extern DAS_API uint32_t DAS_STRUCTINFO_FLAG_LAMBDA;
+extern DAS_API uint32_t DAS_STRUCTINFO_FLAG_HEAP_GC;
+extern DAS_API uint32_t DAS_STRUCTINFO_FLAG_STRING_HEAP_GC;
+
+// FuncInfo flags (bitmask).
+extern DAS_API uint32_t DAS_FUNCINFO_FLAG_INIT;
+extern DAS_API uint32_t DAS_FUNCINFO_FLAG_BUILTIN;
+extern DAS_API uint32_t DAS_FUNCINFO_FLAG_PRIVATE;
+extern DAS_API uint32_t DAS_FUNCINFO_FLAG_SHUTDOWN;
+
+// --- Type introspection: entry points ---
+
+// Return the type info for a global variable at index 'idx'.
+// Returns NULL if out of range. The returned pointer is valid for the
+// lifetime of the context and must not be freed.
+DAS_API das_type_info * das_context_get_variable_type ( das_context * context, int idx );
+
+// Return the total number of simulated functions in the context.
+DAS_API int das_context_get_total_functions ( das_context * context );
+
+// Return the function handle at index 'idx', or NULL if out of range.
+DAS_API das_function * das_context_get_function ( das_context * context, int idx );
+
+// Return the debug info (FuncInfo) for a function handle.
+// Returns NULL if the function has no debug info.
+DAS_API das_func_info * das_function_get_info ( das_function * func );
+
+// --- Type introspection: TypeInfo accessors ---
+
+// Return the base type classification (DAS_TYPE_*).
+DAS_API das_base_type das_type_info_get_type ( das_type_info * info );
+
+// Return the size in bytes of this type.
+DAS_API int das_type_info_get_size ( das_type_info * info );
+
+// Return the alignment in bytes.
+DAS_API int das_type_info_get_align ( das_type_info * info );
+
+// Return the flags bitmask (DAS_TYPEINFO_FLAG_*).
+DAS_API uint32_t das_type_info_get_flags ( das_type_info * info );
+
+// Return the 64-bit type hash.
+DAS_API uint64_t das_type_info_get_hash ( das_type_info * info );
+
+// Return a human-readable type description (e.g. "array<int>", "MyStruct").
+// The returned string is in a thread-local buffer and is valid until the
+// next call to this function on the same thread.
+DAS_API const char * das_type_info_get_description ( das_type_info * info );
+
+// Return the mangled name string for this type.
+// Same thread-local lifetime as das_type_info_get_description().
+DAS_API const char * das_type_info_get_mangled_name ( das_type_info * info );
+
+// --- Type introspection: composite type navigation ---
+
+// For arrays, pointers, iterators: return the element/pointee type.
+// For tables: return the key type.
+// Returns NULL if not applicable.
+DAS_API das_type_info * das_type_info_get_first_type ( das_type_info * info );
+
+// For tables: return the value type. Returns NULL if not applicable.
+DAS_API das_type_info * das_type_info_get_second_type ( das_type_info * info );
+
+// For tuples, variants, function types: return the number of sub-types.
+DAS_API int das_type_info_get_arg_count ( das_type_info * info );
+
+// Return the i-th sub-type, or NULL if out of range.
+DAS_API das_type_info * das_type_info_get_arg_type ( das_type_info * info, int idx );
+
+// Return the name of the i-th sub-type, or NULL.
+DAS_API const char * das_type_info_get_arg_name ( das_type_info * info, int idx );
+
+// For tuples: return the byte offset of the i-th field.
+DAS_API int das_type_info_get_tuple_field_offset ( das_type_info * info, int idx );
+
+// For variants: return the byte offset of the i-th field.
+DAS_API int das_type_info_get_variant_field_offset ( das_type_info * info, int idx );
+
+// Return the number of fixed-array dimensions (0 = not a fixed-array).
+DAS_API int das_type_info_get_dim_count ( das_type_info * info );
+
+// Return the size of the i-th fixed-array dimension.
+DAS_API int das_type_info_get_dim ( das_type_info * info, int idx );
+
+// --- Type introspection: structures ---
+
+// For tStructure types: return the StructInfo.
+// Returns NULL if the type is not a structure.
+DAS_API das_struct_info * das_type_info_get_struct ( das_type_info * info );
+
+// Return the structure name.
+DAS_API const char * das_struct_info_get_name ( das_struct_info * info );
+
+// Return the module name that defines this structure.
+DAS_API const char * das_struct_info_get_module ( das_struct_info * info );
+
+// Return the number of fields.
+DAS_API int das_struct_info_get_field_count ( das_struct_info * info );
+
+// Return the total size of the structure in bytes.
+DAS_API int das_struct_info_get_size ( das_struct_info * info );
+
+// Return the structure flags bitmask (DAS_STRUCTINFO_FLAG_*).
+DAS_API uint32_t das_struct_info_get_flags ( das_struct_info * info );
+
+// Return the 64-bit hash of the structure.
+DAS_API uint64_t das_struct_info_get_hash ( das_struct_info * info );
+
+// Return the name of the i-th field, or NULL if out of range.
+DAS_API const char * das_struct_info_get_field_name ( das_struct_info * info, int idx );
+
+// Return the byte offset of the i-th field, or -1 if out of range.
+DAS_API int das_struct_info_get_field_offset ( das_struct_info * info, int idx );
+
+// Return the type info for the i-th field, or NULL if out of range.
+DAS_API das_type_info * das_struct_info_get_field_type ( das_struct_info * info, int idx );
+
+// --- Type introspection: enumerations ---
+
+// For tEnumeration/tEnumeration8/16/64 types: return the EnumInfo.
+// Returns NULL if the type is not an enumeration.
+DAS_API das_enum_info * das_type_info_get_enum ( das_type_info * info );
+
+// Return the enumeration name.
+DAS_API const char * das_enum_info_get_name ( das_enum_info * info );
+
+// Return the module name that defines this enumeration.
+DAS_API const char * das_enum_info_get_module ( das_enum_info * info );
+
+// Return the number of values in the enumeration.
+DAS_API int das_enum_info_get_count ( das_enum_info * info );
+
+// Return the name of the i-th value, or NULL if out of range.
+DAS_API const char * das_enum_info_get_value_name ( das_enum_info * info, int idx );
+
+// Return the integer value of the i-th entry, or 0 if out of range.
+DAS_API int64_t das_enum_info_get_value ( das_enum_info * info, int idx );
+
+// --- Type introspection: function info ---
+
+// Return the function name.
+DAS_API const char * das_func_info_get_name ( das_func_info * info );
+
+// Return the C++ mangled name.
+DAS_API const char * das_func_info_get_cpp_name ( das_func_info * info );
+
+// Return the number of arguments.
+DAS_API int das_func_info_get_arg_count ( das_func_info * info );
+
+// Return the type info for the i-th argument, or NULL if out of range.
+DAS_API das_type_info * das_func_info_get_arg_type ( das_func_info * info, int idx );
+
+// Return the name of the i-th argument, or NULL if out of range.
+DAS_API const char * das_func_info_get_arg_name ( das_func_info * info, int idx );
+
+// Return the return type info.
+DAS_API das_type_info * das_func_info_get_result ( das_func_info * info );
+
+// Return the 64-bit function hash.
+DAS_API uint64_t das_func_info_get_hash ( das_func_info * info );
+
+// Return the function flags bitmask (DAS_FUNCINFO_FLAG_*).
+DAS_API uint32_t das_func_info_get_flags ( das_func_info * info );
+
+// Return the stack size needed by this function.
+DAS_API int das_func_info_get_stack_size ( das_func_info * info );
 
 #ifdef __cplusplus
 }

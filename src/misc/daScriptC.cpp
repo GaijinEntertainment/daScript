@@ -686,4 +686,301 @@ int das_function_is_aot ( das_function * func ) {
     return ((SimFunction *)func)->aot ? 1 : 0;
 }
 
+// --- Type introspection: flag constants ---
+
+uint32_t DAS_TYPEINFO_FLAG_REF          = TypeInfo::flag_ref;
+uint32_t DAS_TYPEINFO_FLAG_REF_TYPE     = TypeInfo::flag_refType;
+uint32_t DAS_TYPEINFO_FLAG_CAN_COPY     = TypeInfo::flag_canCopy;
+uint32_t DAS_TYPEINFO_FLAG_IS_POD       = TypeInfo::flag_isPod;
+uint32_t DAS_TYPEINFO_FLAG_IS_RAW_POD   = TypeInfo::flag_isRawPod;
+uint32_t DAS_TYPEINFO_FLAG_IS_CONST     = TypeInfo::flag_isConst;
+uint32_t DAS_TYPEINFO_FLAG_IS_TEMP      = TypeInfo::flag_isTemp;
+uint32_t DAS_TYPEINFO_FLAG_IS_SMART_PTR = TypeInfo::flag_isSmartPtr;
+uint32_t DAS_TYPEINFO_FLAG_IS_HANDLED   = TypeInfo::flag_isHandled;
+
+uint32_t DAS_STRUCTINFO_FLAG_CLASS          = StructInfo::flag_class;
+uint32_t DAS_STRUCTINFO_FLAG_LAMBDA         = StructInfo::flag_lambda;
+uint32_t DAS_STRUCTINFO_FLAG_HEAP_GC        = StructInfo::flag_heapGC;
+uint32_t DAS_STRUCTINFO_FLAG_STRING_HEAP_GC = StructInfo::flag_stringHeapGC;
+
+uint32_t DAS_FUNCINFO_FLAG_INIT     = FuncInfo::flag_init;
+uint32_t DAS_FUNCINFO_FLAG_BUILTIN  = FuncInfo::flag_builtin;
+uint32_t DAS_FUNCINFO_FLAG_PRIVATE  = FuncInfo::flag_private;
+uint32_t DAS_FUNCINFO_FLAG_SHUTDOWN = FuncInfo::flag_shutdown;
+
+// --- Static assertions: C constants must match C++ values ---
+
+static_assert(DAS_TYPE_VOID == (int)Type::tVoid, "DAS_TYPE_VOID mismatch");
+static_assert(DAS_TYPE_BOOL == (int)Type::tBool, "DAS_TYPE_BOOL mismatch");
+static_assert(DAS_TYPE_INT8 == (int)Type::tInt8, "DAS_TYPE_INT8 mismatch");
+static_assert(DAS_TYPE_UINT8 == (int)Type::tUInt8, "DAS_TYPE_UINT8 mismatch");
+static_assert(DAS_TYPE_INT16 == (int)Type::tInt16, "DAS_TYPE_INT16 mismatch");
+static_assert(DAS_TYPE_UINT16 == (int)Type::tUInt16, "DAS_TYPE_UINT16 mismatch");
+static_assert(DAS_TYPE_INT64 == (int)Type::tInt64, "DAS_TYPE_INT64 mismatch");
+static_assert(DAS_TYPE_UINT64 == (int)Type::tUInt64, "DAS_TYPE_UINT64 mismatch");
+static_assert(DAS_TYPE_INT == (int)Type::tInt, "DAS_TYPE_INT mismatch");
+static_assert(DAS_TYPE_INT2 == (int)Type::tInt2, "DAS_TYPE_INT2 mismatch");
+static_assert(DAS_TYPE_INT3 == (int)Type::tInt3, "DAS_TYPE_INT3 mismatch");
+static_assert(DAS_TYPE_INT4 == (int)Type::tInt4, "DAS_TYPE_INT4 mismatch");
+static_assert(DAS_TYPE_UINT == (int)Type::tUInt, "DAS_TYPE_UINT mismatch");
+static_assert(DAS_TYPE_UINT2 == (int)Type::tUInt2, "DAS_TYPE_UINT2 mismatch");
+static_assert(DAS_TYPE_UINT3 == (int)Type::tUInt3, "DAS_TYPE_UINT3 mismatch");
+static_assert(DAS_TYPE_UINT4 == (int)Type::tUInt4, "DAS_TYPE_UINT4 mismatch");
+static_assert(DAS_TYPE_FLOAT == (int)Type::tFloat, "DAS_TYPE_FLOAT mismatch");
+static_assert(DAS_TYPE_FLOAT2 == (int)Type::tFloat2, "DAS_TYPE_FLOAT2 mismatch");
+static_assert(DAS_TYPE_FLOAT3 == (int)Type::tFloat3, "DAS_TYPE_FLOAT3 mismatch");
+static_assert(DAS_TYPE_FLOAT4 == (int)Type::tFloat4, "DAS_TYPE_FLOAT4 mismatch");
+static_assert(DAS_TYPE_DOUBLE == (int)Type::tDouble, "DAS_TYPE_DOUBLE mismatch");
+static_assert(DAS_TYPE_RANGE == (int)Type::tRange, "DAS_TYPE_RANGE mismatch");
+static_assert(DAS_TYPE_URANGE == (int)Type::tURange, "DAS_TYPE_URANGE mismatch");
+static_assert(DAS_TYPE_RANGE64 == (int)Type::tRange64, "DAS_TYPE_RANGE64 mismatch");
+static_assert(DAS_TYPE_URANGE64 == (int)Type::tURange64, "DAS_TYPE_URANGE64 mismatch");
+static_assert(DAS_TYPE_STRING == (int)Type::tString, "DAS_TYPE_STRING mismatch");
+static_assert(DAS_TYPE_STRUCTURE == (int)Type::tStructure, "DAS_TYPE_STRUCTURE mismatch");
+static_assert(DAS_TYPE_HANDLE == (int)Type::tHandle, "DAS_TYPE_HANDLE mismatch");
+static_assert(DAS_TYPE_ENUMERATION == (int)Type::tEnumeration, "DAS_TYPE_ENUMERATION mismatch");
+static_assert(DAS_TYPE_ENUMERATION8 == (int)Type::tEnumeration8, "DAS_TYPE_ENUMERATION8 mismatch");
+static_assert(DAS_TYPE_ENUMERATION16 == (int)Type::tEnumeration16, "DAS_TYPE_ENUMERATION16 mismatch");
+static_assert(DAS_TYPE_ENUMERATION64 == (int)Type::tEnumeration64, "DAS_TYPE_ENUMERATION64 mismatch");
+static_assert(DAS_TYPE_BITFIELD == (int)Type::tBitfield, "DAS_TYPE_BITFIELD mismatch");
+static_assert(DAS_TYPE_BITFIELD8 == (int)Type::tBitfield8, "DAS_TYPE_BITFIELD8 mismatch");
+static_assert(DAS_TYPE_BITFIELD16 == (int)Type::tBitfield16, "DAS_TYPE_BITFIELD16 mismatch");
+static_assert(DAS_TYPE_BITFIELD64 == (int)Type::tBitfield64, "DAS_TYPE_BITFIELD64 mismatch");
+static_assert(DAS_TYPE_POINTER == (int)Type::tPointer, "DAS_TYPE_POINTER mismatch");
+static_assert(DAS_TYPE_FUNCTION == (int)Type::tFunction, "DAS_TYPE_FUNCTION mismatch");
+static_assert(DAS_TYPE_LAMBDA == (int)Type::tLambda, "DAS_TYPE_LAMBDA mismatch");
+static_assert(DAS_TYPE_ITERATOR == (int)Type::tIterator, "DAS_TYPE_ITERATOR mismatch");
+static_assert(DAS_TYPE_ARRAY == (int)Type::tArray, "DAS_TYPE_ARRAY mismatch");
+static_assert(DAS_TYPE_TABLE == (int)Type::tTable, "DAS_TYPE_TABLE mismatch");
+static_assert(DAS_TYPE_BLOCK == (int)Type::tBlock, "DAS_TYPE_BLOCK mismatch");
+static_assert(DAS_TYPE_TUPLE == (int)Type::tTuple, "DAS_TYPE_TUPLE mismatch");
+static_assert(DAS_TYPE_VARIANT == (int)Type::tVariant, "DAS_TYPE_VARIANT mismatch");
+
+// --- Type introspection: entry points ---
+
+das_type_info * das_context_get_variable_type ( das_context * context, int idx ) {
+    return (das_type_info *) ((Context *)context)->getVariableInfo(idx);
+}
+
+int das_context_get_total_functions ( das_context * context ) {
+    return ((Context *)context)->getTotalFunctions();
+}
+
+das_function * das_context_get_function ( das_context * context, int idx ) {
+    return (das_function *) ((Context *)context)->getFunction(idx);
+}
+
+das_func_info * das_function_get_info ( das_function * func ) {
+    return (das_func_info *) ((SimFunction *)func)->debugInfo;
+}
+
+// --- Type introspection: TypeInfo accessors ---
+
+das_base_type das_type_info_get_type ( das_type_info * info ) {
+    return (das_base_type) ((TypeInfo *)info)->type;
+}
+
+int das_type_info_get_size ( das_type_info * info ) {
+    return getTypeSize((TypeInfo *)info);
+}
+
+int das_type_info_get_align ( das_type_info * info ) {
+    return getTypeAlign((TypeInfo *)info);
+}
+
+uint32_t das_type_info_get_flags ( das_type_info * info ) {
+    return ((TypeInfo *)info)->flags;
+}
+
+uint64_t das_type_info_get_hash ( das_type_info * info ) {
+    return ((TypeInfo *)info)->hash;
+}
+
+const char * das_type_info_get_description ( das_type_info * info ) {
+    static thread_local string buf;
+    buf = debug_type((TypeInfo *)info);
+    return buf.c_str();
+}
+
+const char * das_type_info_get_mangled_name ( das_type_info * info ) {
+    static thread_local string buf;
+    buf = getTypeInfoMangledName((TypeInfo *)info);
+    return buf.c_str();
+}
+
+// --- Type introspection: composite type navigation ---
+
+das_type_info * das_type_info_get_first_type ( das_type_info * info ) {
+    return (das_type_info *) ((TypeInfo *)info)->firstType;
+}
+
+das_type_info * das_type_info_get_second_type ( das_type_info * info ) {
+    return (das_type_info *) ((TypeInfo *)info)->secondType;
+}
+
+int das_type_info_get_arg_count ( das_type_info * info ) {
+    return (int) ((TypeInfo *)info)->argCount;
+}
+
+das_type_info * das_type_info_get_arg_type ( das_type_info * info, int idx ) {
+    auto * ti = (TypeInfo *)info;
+    if ( idx < 0 || idx >= (int)ti->argCount ) return nullptr;
+    return (das_type_info *) ti->argTypes[idx];
+}
+
+const char * das_type_info_get_arg_name ( das_type_info * info, int idx ) {
+    auto * ti = (TypeInfo *)info;
+    if ( idx < 0 || idx >= (int)ti->argCount || !ti->argNames ) return nullptr;
+    return ti->argNames[idx];
+}
+
+int das_type_info_get_tuple_field_offset ( das_type_info * info, int idx ) {
+    return getTupleFieldOffset((TypeInfo *)info, idx);
+}
+
+int das_type_info_get_variant_field_offset ( das_type_info * info, int idx ) {
+    return getVariantFieldOffset((TypeInfo *)info, idx);
+}
+
+int das_type_info_get_dim_count ( das_type_info * info ) {
+    return (int) ((TypeInfo *)info)->dimSize;
+}
+
+int das_type_info_get_dim ( das_type_info * info, int idx ) {
+    auto * ti = (TypeInfo *)info;
+    if ( idx < 0 || idx >= (int)ti->dimSize ) return 0;
+    return (int) ti->dim[idx];
+}
+
+// --- Type introspection: structures ---
+
+das_struct_info * das_type_info_get_struct ( das_type_info * info ) {
+    auto * ti = (TypeInfo *)info;
+    if ( ti->type != Type::tStructure ) return nullptr;
+    return (das_struct_info *) ti->structType;
+}
+
+const char * das_struct_info_get_name ( das_struct_info * info ) {
+    return ((StructInfo *)info)->name;
+}
+
+const char * das_struct_info_get_module ( das_struct_info * info ) {
+    return ((StructInfo *)info)->module_name;
+}
+
+int das_struct_info_get_field_count ( das_struct_info * info ) {
+    return (int) ((StructInfo *)info)->count;
+}
+
+int das_struct_info_get_size ( das_struct_info * info ) {
+    return (int) ((StructInfo *)info)->size;
+}
+
+uint32_t das_struct_info_get_flags ( das_struct_info * info ) {
+    return ((StructInfo *)info)->flags;
+}
+
+uint64_t das_struct_info_get_hash ( das_struct_info * info ) {
+    return ((StructInfo *)info)->hash;
+}
+
+const char * das_struct_info_get_field_name ( das_struct_info * info, int idx ) {
+    auto * si = (StructInfo *)info;
+    if ( idx < 0 || idx >= (int)si->count ) return nullptr;
+    return si->fields[idx]->name;
+}
+
+int das_struct_info_get_field_offset ( das_struct_info * info, int idx ) {
+    auto * si = (StructInfo *)info;
+    if ( idx < 0 || idx >= (int)si->count ) return -1;
+    return (int) si->fields[idx]->offset;
+}
+
+das_type_info * das_struct_info_get_field_type ( das_struct_info * info, int idx ) {
+    auto * si = (StructInfo *)info;
+    if ( idx < 0 || idx >= (int)si->count ) return nullptr;
+    return (das_type_info *) si->fields[idx];
+}
+
+// --- Type introspection: enumerations ---
+
+das_enum_info * das_type_info_get_enum ( das_type_info * info ) {
+    auto * ti = (TypeInfo *)info;
+    switch ( ti->type ) {
+        case Type::tEnumeration:
+        case Type::tEnumeration8:
+        case Type::tEnumeration16:
+        case Type::tEnumeration64:
+            return (das_enum_info *) ti->enumType;
+        default:
+            return nullptr;
+    }
+}
+
+const char * das_enum_info_get_name ( das_enum_info * info ) {
+    return ((EnumInfo *)info)->name;
+}
+
+const char * das_enum_info_get_module ( das_enum_info * info ) {
+    return ((EnumInfo *)info)->module_name;
+}
+
+int das_enum_info_get_count ( das_enum_info * info ) {
+    return (int) ((EnumInfo *)info)->count;
+}
+
+const char * das_enum_info_get_value_name ( das_enum_info * info, int idx ) {
+    auto * ei = (EnumInfo *)info;
+    if ( idx < 0 || idx >= (int)ei->count ) return nullptr;
+    return ei->fields[idx]->name;
+}
+
+int64_t das_enum_info_get_value ( das_enum_info * info, int idx ) {
+    auto * ei = (EnumInfo *)info;
+    if ( idx < 0 || idx >= (int)ei->count ) return 0;
+    return ei->fields[idx]->value;
+}
+
+// --- Type introspection: function info ---
+
+const char * das_func_info_get_name ( das_func_info * info ) {
+    return ((FuncInfo *)info)->name;
+}
+
+const char * das_func_info_get_cpp_name ( das_func_info * info ) {
+    return ((FuncInfo *)info)->cppName;
+}
+
+int das_func_info_get_arg_count ( das_func_info * info ) {
+    return (int) ((FuncInfo *)info)->count;
+}
+
+das_type_info * das_func_info_get_arg_type ( das_func_info * info, int idx ) {
+    auto * fi = (FuncInfo *)info;
+    if ( idx < 0 || idx >= (int)fi->count ) return nullptr;
+    return (das_type_info *) fi->fields[idx];
+}
+
+const char * das_func_info_get_arg_name ( das_func_info * info, int idx ) {
+    auto * fi = (FuncInfo *)info;
+    if ( idx < 0 || idx >= (int)fi->count ) return nullptr;
+    return fi->fields[idx]->name;
+}
+
+das_type_info * das_func_info_get_result ( das_func_info * info ) {
+    return (das_type_info *) ((FuncInfo *)info)->result;
+}
+
+uint64_t das_func_info_get_hash ( das_func_info * info ) {
+    return ((FuncInfo *)info)->hash;
+}
+
+uint32_t das_func_info_get_flags ( das_func_info * info ) {
+    return ((FuncInfo *)info)->flags;
+}
+
+int das_func_info_get_stack_size ( das_func_info * info ) {
+    return (int) ((FuncInfo *)info)->stackSize;
+}
+
 }
