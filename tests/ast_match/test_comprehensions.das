@@ -296,3 +296,112 @@ def test_local_fn_capture_var_name(t : T?) {
         t |> equal(vname, "f")
     }
 }
+
+// ── Post-inference comprehension matching (ExprInvoke fallback) ─────────
+
+[export]
+def target_comp_array() {
+    var a <- [for (x in range(10)); x * x]
+    feint("{a}")
+}
+
+[export]
+def target_comp_table() {
+    var t <- {for (x in range(10)); x => x * x}
+    feint("{t}")
+}
+
+[export]
+def target_comp_where() {
+    var a <- [for (x in range(10)); x * x; where x > 3]
+    feint("{a}")
+}
+
+[test]
+def test_comp_array_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+    t |> success(get_ptr(func) != null, "should find target_comp_array")
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var a <- [for (x in range(10)); x * x]
+        feint("{a}")
+    }
+    t |> success(r.matched, "should match post-inference array comprehension")
+}
+
+[test]
+def test_comp_table_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_table)
+    t |> success(get_ptr(func) != null, "should find target_comp_table")
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var t <- {for (x in range(10)); x => x * x}
+        feint("{t}")
+    }
+    t |> success(r.matched, "should match post-inference table comprehension")
+}
+
+[test]
+def test_comp_where_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_where)
+    t |> success(get_ptr(func) != null, "should find target_comp_where")
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var a <- [for (x in range(10)); x * x; where x > 3]
+        feint("{a}")
+    }
+    t |> success(r.matched, "should match post-inference comprehension with where")
+}
+
+[test]
+def test_comp_wrong_body_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+    if (get_ptr(func) == null) {
+        return
+    }
+    let r = qmatch_function(func) $() {
+        var a <- [for (x in range(10)); x + x]
+        feint("{a}")
+    }
+    t |> success(!r.matched, "wrong subexpr should fail post-inference")
+}
+
+[test]
+def test_comp_capture_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+    if (get_ptr(func) == null) {
+        return
+    }
+    var inscope sub_expr : ExpressionPtr
+    let r = qmatch_function(func) $() {
+        var a <- [for (x in range(10)); $e(sub_expr)]
+        feint("{a}")
+    }
+    t |> success(r.matched, "should match with $e capture on comprehension subexpr")
+    if (r.matched) {
+        t |> success(sub_expr != null, "captured subexpr should not be null")
+    }
+}
+
+[test]
+def test_comp_capture_iterator_post_inference(t : T?) {
+    var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+    if (get_ptr(func) == null) {
+        return
+    }
+    var iter_name : string
+    let r = qmatch_function(func) $() {
+        var a <- [for ($i(iter_name) in range(10)); $i(iter_name) * $i(iter_name)]
+        feint("{a}")
+    }
+    t |> success(r.matched, "should match with $i capture on iterator name")
+    if (r.matched) {
+        t |> equal(iter_name, "x")
+    }
+}

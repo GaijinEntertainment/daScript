@@ -2304,6 +2304,7 @@ namespace das {
             cexpr->subexpr = subexpr->clone();
         cexpr->moveSemantics = moveSemantics;
         cexpr->fromYield = fromYield;
+        cexpr->fromComprehension = fromComprehension;
         return cexpr;
     }
 
