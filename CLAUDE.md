@@ -296,8 +296,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
-| `perf_lint` | Running `perf_lint.das` manually or requiring the module for performance warnings |
-| `lint` | Running `lint.das` manually or requiring the module for code quality checks |
+| `lint` | Running lint/perf_lint manually or requiring the modules for code quality and performance checks |
 | `live_launch` | Manually starting `daslang-live.exe` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

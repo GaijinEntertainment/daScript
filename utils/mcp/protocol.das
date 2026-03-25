@@ -33,7 +33,6 @@ require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
 require tools/aot public
-require tools/perf_lint_tool public
 require tools/lint_tool public
 require tools/live public
 
@@ -414,17 +413,8 @@ def handle_tools_list(id_json : string) : string {
         ["file"]
     ))
     result.tools |> emplace(make_tool(
-        "perf_lint",
-        "Run performance lint on daScript file(s). Detects string += in loops, character_at misuse, push without reserve, and other perf anti-patterns (PERF001-006). Supports single file, comma-separated list, or glob pattern.",
-        {
-            "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern"),
-            "project" => PROJECT_PROP
-        },
-        ["file"]
-    ))
-    result.tools |> emplace(make_tool(
         "lint",
-        "Run paranoid lint checks on daScript file(s). Detects unused variables, variables that can be const, unreachable code, and naming issues. Supports single file, comma-separated list, or glob pattern.",
+        "Run lint and performance checks on daScript file(s). Combines paranoid lint (unused variables, const suggestions, unreachable code, naming) with performance lint (PERF001-009: string concat in loops, character_at misuse, push without reserve, unnecessary string/get_ptr conversions, redundant move-return). Supports single file, comma-separated list, or glob pattern.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern"),
             "project" => PROJECT_PROP
@@ -562,8 +552,6 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_outline(arg1, arg2)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
-    } elif (tool_name == "perf_lint") {
-        return do_perf_lint(arg1, project)
     } elif (tool_name == "lint") {
         return do_lint(arg1, project)
     } elif (tool_name == "live_status") {
@@ -735,7 +723,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "function")
-    } elif (name == "perf_lint" || name == "lint") {
+    } elif (name == "lint") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
