@@ -183,6 +183,11 @@ namespace  das {
         static __forceinline void SetDiv  ( double & a, double b, Context &, LineInfo * ) { a /= b; }
         static __forceinline double Mod ( double a, double b, Context &, LineInfo * ) { return fmod(a,b); }
         static __forceinline void SetMod ( double & a, double b, Context &, LineInfo * ) { a = fmod(a,b); }
+        static __forceinline double Floor    ( double a, Context &, LineInfo * )          { return ::floor(a); }
+        static __forceinline double Ceil     ( double a, Context &, LineInfo * )          { return ::ceil(a); }
+        static __forceinline double Round    ( double a, Context &, LineInfo * )          { return ::round(a); }
+        static __forceinline double Fract    ( double a, Context &, LineInfo * )          { return a - ::floor(a); }
+        static __forceinline double Sat      ( double a, Context &, LineInfo * )          { return a > 0 ? (a < 1.0 ? a : 1.0) : 0.0; }
         static __forceinline int Trunci ( double a, Context &, LineInfo * )          { return int(trunc(a)); }
         static __forceinline int Roundi ( double a, Context &, LineInfo * )          { return int(round(a)); }
         static __forceinline int Floori ( double a, Context &, LineInfo * )          { return int(floor(a)); }

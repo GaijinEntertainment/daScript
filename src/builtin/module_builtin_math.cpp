@@ -112,6 +112,12 @@ namespace das {
     MATH_FUN_OP1(Sat)
     MATH_FUN_OP3(Lerp)
     IMPLEMENT_OP3_FUNCTION_POLICY(Lerp,Double,double);
+    //common - double
+    IMPLEMENT_OP1_FUNCTION_POLICY(Floor,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY(Ceil,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY(Fract,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY(Round,Double,double);
+    IMPLEMENT_OP1_FUNCTION_POLICY(Sat,Double,double);
 
     // mad
     MATH_FUN_OP3A(Mad)
@@ -633,6 +639,12 @@ namespace das {
             addFunction( make_smart<BuiltInFn<Sim_MadS<uint4>,   uint4, uint4,  uint32_t,  uint4> >("mad", lib, "MadS")->args({"a","b","c"}) );
             // and double
             addFunctionOp3<double>(*this,lib);
+            // double common (sqrt/rsqrt/rcp already registered as externs below)
+            addFunction( make_smart<BuiltInFn<Sim_Floor<double>,    double,   double>   >("floor",       lib, "Floor")->arg("x") );
+            addFunction( make_smart<BuiltInFn<Sim_Ceil<double>,     double,   double>   >("ceil",        lib, "Ceil")->arg("x") );
+            addFunction( make_smart<BuiltInFn<Sim_Fract<double>,    double,   double>   >("fract",       lib, "Fract")->arg("x") );
+            addFunction( make_smart<BuiltInFn<Sim_Round<double>,    double,   double>   >("round",       lib, "Round")->arg("x") );
+            addFunction( make_smart<BuiltInFn<Sim_Sat<double>,      double,   double>   >("saturate",    lib, "Sat")->arg("x") );
             //common
             addFunctionCommon<float>(*this, lib);
             addFunctionCommon<float2>(*this,lib);
