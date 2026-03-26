@@ -5063,6 +5063,11 @@ class public LlvmJitVisitor : AstVisitor {
                 // return <- blah // where blah is string and such
                 var lres = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), expr.subexpr._type.alignOf, "")
                 expr_res = lres
+            } elif (expr.subexpr._type.flags.ref && expr.returnFlags.moveSemantics) {
+                // return <- blah // where blah is lambda, smart_ptr, or other non-workhorse ref
+                var src = getE(expr.subexpr)
+                expr_res = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_abi_type(returnType), src, expr.subexpr._type.alignOf, "result_before_move")
+                LLVMBuildStore(g_builder, LLVMConstNull(type_to_llvm_abi_type(returnType)), src)
             } else {
                 expr_res = getE(expr.subexpr)
             }
