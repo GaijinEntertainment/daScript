@@ -25,6 +25,12 @@ namespace das {
     //  r2v(a ? b : c)      = a ? r2v(b) : r2v(c)
     //  r2v(cast(x))        = cast(r2v(x))
     class RefFolding : public PassVisitor {
+    public:
+        virtual bool canVisitStructure ( Structure * st ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
+
     protected:
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( expr->subexpr->rtti_isCast() ) {
@@ -139,6 +145,17 @@ namespace das {
     }
 
     class BlockFolding : public PassVisitor {
+    public:
+        virtual bool canVisitStructure ( Structure * st ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * fun ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
+        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override { return false; }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override { return false; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
+        virtual bool canVisitNamedCall ( ExprNamedCall * expr ) override { return false; }
+
     protected:
         das_set<int32_t> labels;
         bool allLabels = false;
@@ -267,6 +284,13 @@ namespace das {
     };
 
     class CondFolding : public PassVisitor {
+    public:
+        virtual bool canVisitStructure ( Structure * st ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * fun ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
+
     protected:
         Function * func = nullptr;
         virtual void preVisit ( Function * f ) override {

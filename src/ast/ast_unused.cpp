@@ -677,9 +677,13 @@ namespace das {
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
+        virtual bool canVisitStructure ( Structure * st ) override { return false; }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
         virtual bool canVisitArgumentInit ( Function * , const VariablePtr &, Expression * ) override { return false; }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * fun ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
+
     // ExprLet
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !var->access_get && !var->access_ref && !var->access_init && !var->access_pass ) {
