@@ -43,7 +43,7 @@
             document.getElementById(anchorId).scrollIntoView();
         }
         document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('#menu a[data-page]').forEach(function(a) {
+            document.querySelectorAll('a[data-page]').forEach(function(a) {
                 a.addEventListener('click', function(e) {
                     e.preventDefault();
                     showPage(this.dataset.page, true);
@@ -73,7 +73,7 @@
             <a href="#" data-page="download">Downloads and Links</a>
             <a href="#" data-page="devstate">Development State</a>
             <a href="#" data-page="performance">Performance</a>
-            <a href="#" data-page="work">Work in Progress</a>
+            <a href="#" data-page="work">Change List</a>
             <a href="#" data-page="documentation">Documentation</a>
             <a href="#" data-page="sandbox">Try it online!</a>
             <a href="https://github.com/GaijinEntertainment/daScript/wiki">Wiki</a>
@@ -97,6 +97,9 @@
         <div class="news">
             <h2>News</h2>
             <ul  style="list-style-type:none;">
+            <li>
+                <b>March 25th, 2026</b>: 0.6.1 is just about ready. See the <a href="#" data-page="work">Change List</a> for what's new.
+            </li>
             <li>
                 <b>March 1st, 2026</b>: <span style="color: rgb(176, 117, 8); font-weight: bold;">Daslang 0.6.0 is officially released!</span> Check out the
                 <a href="https://github.com/GaijinEntertainment/daScript/releases/tag/v0.6.0">0.6.0 release</a>.
@@ -677,17 +680,126 @@ def fibI(n)
         </div><!-- end page-performance -->
 
         <div class="page" id="page-work">
-        <h2 id="work">Work in Progress</h2>
-        <p></p>
+        <h2 id="work">Change List</h2>
+
+        <h3>0.6.1 (April 2026)</h3>
+
+        <h4>VSCode Extension: dastest Integration</h4>
+        <p>Run tests and benchmarks directly from the editor &mdash; inline buttons, Test Explorer panel, per-test pass/fail feedback without leaving the IDE.</p>
         <ul>
-            <li>RELEASES</li>
-            <li>External modules and packaging</li>
-            <li>Extended support for LLVM. JIT. Standalone executables.</li>
-            <li>Documentation and Tutorials</li>
-            <li>Performance and Stability</li>
-            <li>Extending standard libraries</li>
-            <li>Integration support</li>
+            <li>Inline run buttons for individual tests and benchmarks</li>
+            <li>Test Explorer integration with per-test results</li>
+            <li>JIT and isolated mode setting toggles (read fresh each run, no reload needed)</li>
+            <li>Live stdout/stderr streaming during tests (previously silent until completion)</li>
+            <li>Cross-platform compiler auto-detection</li>
+            <li>Better error messages (compiler not found vs dastest not found)</li>
+            <li>dastest isolated mode fixes (forward --bench, full per-test JSON results)</li>
         </ul>
+
+        <h4>daspkg: Package Manager</h4>
+        <ul>
+            <li>Full-featured package manager built entirely in daslang</li>
+            <li><b>Commands</b>: install (local/git/index), update, upgrade, remove, build, check, list, doctor, introduce, withdraw</li>
+            <li><b>.das_package manifests</b> &mdash; executable daslang scripts (not static JSON) with SDK-aware build logic, conditional steps, programmatic version checks</li>
+            <li><b>Dependency resolution</b> &mdash; transitive deps, semver constraints (&gt;=1.0,&lt;2.0), version/branch pinning, cycle detection, update rollback</li>
+            <li><b>Global install</b> &mdash; --global installs to das_root/modules/, shared across projects; auto-use compatible global versions; shadow detection</li>
+            <li><b>Native module builds</b> &mdash; CMake-based automatic compilation with doctor for toolchain validation</li>
+            <li><b>Ecosystem migration</b> &mdash; dasImgui, dasImguiNodeEditor, dasMinfft, dasTelegram extracted from submodules to standalone daspkg packages</li>
+            <li>4 example packages: ImGui, node-editor, minfft, Claude API Telegram bot</li>
+            <li>151 unit tests + 70 integration tests</li>
+        </ul>
+
+        <h4>daslang-live: Live-Reloading Application Host</h4>
+        <ul>
+            <li>New daslang-live.exe &mdash; compile/init/update/shutdown lifecycle, automatic GC, hot reload on file changes</li>
+            <li>6 live modules (live_commands, live_api, live_watch, decs_live, glfw_live, opengl_live)</li>
+            <li>@live macro replaces ~60 lines of manual reload boilerplate</li>
+            <li>REST API with help endpoint, error guard (503 on compile/exception errors)</li>
+            <li>Exception recovery &mdash; clears corrupted persistent store, recovers on reload</li>
+            <li>Single-instance enforcement, dependency file watching, -cwd flag</li>
+            <li>9 examples including Arcanoid (full 3D Breakout) and Sequence (board game with 3 AI bots)</li>
+        </ul>
+
+        <h4>AST Pattern Matching: daslib/ast_match</h4>
+        <ul>
+            <li>Pattern matching on compiled AST using qmacro tags in reverse ($e, $v, $i, $t, $c, $f, $b, $a)</li>
+            <li>Three macros: qmatch, qmatch_block, qmatch_function</li>
+            <li>Wildcards, comprehension matching, block/lambda/local-function discrimination</li>
+            <li>305 tests, full language reference documentation</li>
+        </ul>
+
+        <h4>Compiler-Free Standalone Executables</h4>
+        <ul>
+            <li>Builtin .das moved to daslib/ &mdash; all built-in .das wrappers eliminated from compileBuiltinModule</li>
+            <li>Standalone exes no longer need the compiler &mdash; libDaScript can be split into runtime-only and compiler libraries</li>
+            <li>Minimal runtime &mdash; possible to run daScript contexts with only C++-bound modules, no .das parsing at all</li>
+            <li>~10ms faster compilation on static builds (35ms &rarr; 25ms for hello world), ~7ms on dynamic</li>
+        </ul>
+
+        <h4>Performance Lint: daslib/perf_lint</h4>
+        <ul>
+            <li>9 rules: PERF001&ndash;PERF009 (string concat in loop, character_at usage, push without reserve, unnecessary conversions, redundant move-init)</li>
+            <li>Expression chain walking, closure-aware, inferStack reporting</li>
+            <li>Auto-lint via require daslib/perf_lint or standalone batch tool</li>
+        </ul>
+
+        <h4>More New Features</h4>
+        <ul>
+            <li><b>Pointer safe-at</b> &mdash; a?[index] for pointer types, returns null if pointer is null (interpreter, AOT, JIT)</li>
+            <li><b>C API type introspection</b> &mdash; ~40 new C functions to query struct layouts, enum values, function signatures</li>
+            <li><b>New builtins</b> &mdash; get_module_file_name, get_key (O(1) table value-to-key), first_character, with_das_string, system(), daslib/command_line</li>
+        </ul>
+
+        <h4>Performance</h4>
+        <ul>
+            <li>Faster CondFolding &mdash; optimizer handles multiple transforms per pass</li>
+            <li>Bulk DECS creation &mdash; create_entities ~10x faster (174ns vs 1772ns for 1000 entities)</li>
+            <li>Optimized character_at &mdash; scans to index instead of full strlen</li>
+        </ul>
+
+        <h4>MCP Server (AI Tools)</h4>
+        <ul>
+            <li>7 new live tools for controlling daslang-live from AI assistants</li>
+            <li>lint tool runs both paranoid lint and perf_lint in one pass</li>
+            <li>shutdown tool, failures_only param for run_test</li>
+            <li>Fix ast-grep venv detection, standalone exe subprocess hang, temp file collisions</li>
+        </ul>
+
+        <h4>Bug Fixes</h4>
+        <ul>
+            <li>AOT das_null_coalescing wrong type source</li>
+            <li>ASAN support on MSVC (missing __declspec, libhv flag forwarding)</li>
+            <li>ModuleGroup use-after-free in daslang-live</li>
+            <li>Fuzzer-found crashes (clone/ascend, type-macro size queries)</li>
+            <li>Fusion ASAN false positives</li>
+            <li>Cross-platform path hardcoding in tests</li>
+            <li>JIT standalone exe fixes, JIT node coverage</li>
+            <li>Array/table lock access flags</li>
+            <li>Handled const string type emission</li>
+        </ul>
+
+        <h4>File I/O</h4>
+        <ul>
+            <li>Explicit error reporting &mdash; Go-style string error out-params on 16 filesystem functions</li>
+            <li>Fixed stat/fstat side effects annotation</li>
+        </ul>
+
+        <h4>stb Libraries</h4>
+        <ul>
+            <li>stbtt glyph shape API exposed</li>
+            <li>Two-layer safe stb_truetype API (70 tests, zero unsafe in high-level Font methods)</li>
+        </ul>
+
+        <h4>Documentation &amp; CI</h4>
+        <ul>
+            <li>Full daslang-live RST documentation</li>
+            <li>CMake install overhaul (complete examples, modules, tutorials, utilities)</li>
+            <li>Updated CLI help for all command-line switches</li>
+            <li>Custom CI runners (Linux/Windows fat, macOS xlarge)</li>
+            <li>Extended CI checks, correct timeouts</li>
+            <li>Codebase-wide lint sweep (daslib, modules, examples, tutorials)</li>
+        </ul>
+
         </div><!-- end page-work -->
 
         <div class="page" id="page-documentation">
@@ -721,7 +833,7 @@ def fibI(n)
 
         <h3>Latest release</h3>
         <p>
-            Daslang lates release 0.6.0 can be found on <a href="https://github.com/GaijinEntertainment/daScript/releases/tag/v0.6.0">GitHub</a>.
+            Daslang latest release 0.6.0 can be found on <a href="https://github.com/GaijinEntertainment/daScript/releases/tag/v0.6.0">GitHub</a>.
         </p>
         <h3>GitHub Repository</h3>
         <p>

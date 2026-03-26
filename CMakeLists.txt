@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.16)
-project (DAS VERSION 0.6.0)
+project (DAS VERSION 0.6.1)
 include(GNUInstallDirs)
 
 # for now we gonna run with exceptions enabled
