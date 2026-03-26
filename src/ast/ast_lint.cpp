@@ -656,7 +656,7 @@ namespace das {
                         arg->at, CompilationError::cant_be_null);
                 }
             }
-            if ( expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
+            if ( expr->func->fromGeneric && expr->func->fromGeneric->module->name=="builtin" ) {
                 if ( expr->func->fromGeneric->name=="to_table_move" ) {
                     verifyToTableMove(expr);
                 }

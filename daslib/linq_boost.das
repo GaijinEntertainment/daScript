@@ -503,7 +503,7 @@ var private linqCalls = {
     "contains" => LinqCall(name = "contains"),
 // skippable
     "to_table" => LinqCall(name = "to_table"),
-    "to_array" => LinqCall(name = "to_array", moduleName = "$", skip = true),
+    "to_array" => LinqCall(name = "to_array", moduleName = "builtin", skip = true),
     "to_sequence" => LinqCall(name = "to_sequence", skip = true),
 }
 

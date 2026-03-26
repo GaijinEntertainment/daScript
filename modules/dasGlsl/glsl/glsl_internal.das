@@ -384,7 +384,7 @@ class GlslExport : AstVisitor {
         }
         if (fun.flags.builtIn) {
             pass
-        } elif (fun._module.name == "$") {
+        } elif (fun._module.name == "builtin") {
             pass
         } elif (fun._module.name == "glsl_common") {
             pass

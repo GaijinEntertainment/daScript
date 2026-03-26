@@ -1269,7 +1269,7 @@ namespace das {
             return false;
         if (!call->func->fromGeneric)
             return false;
-        if (!(call->func->fromGeneric->name == "to_array_move" && call->func->fromGeneric->module->name == "$"))
+        if (!(call->func->fromGeneric->name == "to_array_move" && call->func->fromGeneric->module->name == "builtin"))
             return false;
         return true;
     }

@@ -1170,7 +1170,6 @@ namespace das
             return requireModule.find(objModule) != requireModule.end();
         }
         bool compileBuiltinModule ( const string & name, const unsigned char * const str, unsigned int str_len );//will replace last symbol to 0
-        bool compileBuiltinModule ( const string & modName, const string & filePath, const FileAccessPtr & access );
         static Module * require ( const string & name );
         static Module * requireEx ( const string & name, bool allowPromoted );
         static void Initialize();
@@ -1727,7 +1726,7 @@ namespace das
             if ( needHeader ) ss << "candidates are:";
             for ( auto & fn : result ) {
                 ss << "\n\t";
-                if ( fn->module && !fn->module->name.empty() && !(fn->module->name=="$") )
+                if ( fn->module && !fn->module->name.empty() && !(fn->module->name=="builtin") )
                     ss << fn->module->name << "::";
                 ss << fn->describe();
             }
