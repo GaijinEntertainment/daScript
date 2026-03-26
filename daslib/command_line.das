@@ -21,7 +21,7 @@ def get_das_exe() : string {
     // Normalize to forward slashes
     exe = replace(exe, "\\", "/")
     // If relative path, make absolute using das_root
-    if (find(exe, ":") < 0 && character_at(exe, 0) != '/') {
+    if (find(exe, ":") < 0 && first_character(exe) != '/') {
         exe = "{get_das_root()}/{exe}"
     }
     // Strip the filename, keep the directory

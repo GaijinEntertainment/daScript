@@ -394,7 +394,7 @@ class GlslExport : AstVisitor {
             funname = "{funname}_in_{fun._module.name}"
         }
         while (stnames |> key_exists(funname)) {
-            funname = "_{funname}"
+            funname = "_{funname}" // nolint:PERF004 rarely iterates more than once
         }
         return funname
     }

@@ -939,6 +939,32 @@ namespace das {
         return res;
     }
 
+    void get_file_source_line(FileInfo * info, uint32_t line, const TBlock<void,TTemporary<const char *>> & blk, Context * context, LineInfoArg * at) {
+        if ( !info || line == 0 ) return;
+        const char * src = nullptr;
+        uint32_t len = 0;
+        info->getSourceAndLength(src, len);
+        if ( !src || len == 0 ) return;
+        uint32_t curLine = 1;
+        const char * lineStart = src;
+        const char * srcEnd = src + len;
+        while ( lineStart < srcEnd && curLine < line ) {
+            if ( *lineStart == '\n' ) curLine++;
+            lineStart++;
+        }
+        if ( curLine != line ) return;
+        const char * lineEnd = lineStart;
+        while ( lineEnd < srcEnd && *lineEnd != '\n' && *lineEnd != '\r' ) lineEnd++;
+        // make a temporary null-terminated copy on the stack
+        uint32_t lineLen = uint32_t(lineEnd - lineStart);
+        char * tmp = (char *)alloca(lineLen + 1);
+        memcpy(tmp, lineStart, lineLen);
+        tmp[lineLen] = 0;
+        vec4f args[1];
+        args[0] = cast<const char *>::from(tmp);
+        context->invoke(blk, args, nullptr, at);
+    }
+
     void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at) {
         module->functions.foreach([&](auto fn) {
             vec4f args[1];
@@ -1400,6 +1426,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(clone_file_info)>(*this, lib,  "clone_file_info",
                                                            SideEffects::none, "clone_file_info")
             ->args({"name","tab_size", "context", "at"});
+        addExtern<DAS_BIND_FUN(get_file_source_line)>(*this, lib,  "get_file_source_line",
+                                                           SideEffects::modifyExternal, "get_file_source_line")
+            ->args({"info","line", "blk", "context", "at"});
         addExtern<DAS_BIND_FUN(for_each_module_function)>(*this, lib,  "for_each_module_function",
                                                           SideEffects::modifyExternal, "for_each_module_function")
             ->args({"module","blk", "context", "at"});

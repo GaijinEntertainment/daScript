@@ -49,7 +49,7 @@ def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : Expressi
         return <- cLet
     } elif (fnCall |> is_expr_like_call()) {
         var pCall = unsafe(reinterpret<ExprLooksLikeCall?> fnCall)
-        if (string(pCall.name) == "lpipe") {// not piping pipe into pipe
+        if (pCall.name == "lpipe") {// not piping pipe into pipe
             return <- default<ExpressionPtr>
         }
         pCall.arguments |> emplace(arg)

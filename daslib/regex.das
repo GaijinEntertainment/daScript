@@ -661,6 +661,7 @@ def private mk_union(var left, right : ReNode?) : ReNode? {
     if (left.op == ReOp.Union) {
         left.at.y = right.at.y
         if (right.op == ReOp.Union) {// union(union(x),union(y)) = union(xy)
+            left.all |> reserve(length(left.all) + length(right.all))
             for (x in right.all) {
                 push(left.all, x)
             }

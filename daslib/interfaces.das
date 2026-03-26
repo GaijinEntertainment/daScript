@@ -161,7 +161,7 @@ class ImplementsMacro : AstStructureAnnotation {
                 // or a separate [implements] annotation already generated it)
                 var already_exists = false
                 for (efld in st.fields) {
-                    if (string(efld.name) == anc_get_name) {
+                    if (efld.name == anc_get_name) {
                         already_exists = true
                         break
                     }
@@ -422,7 +422,7 @@ class InterfaceAsIs : AstVariantMacro {
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType
         for (fld in st.fields) {
-            if (string(fld.name) == getter_field) {
+            if (fld.name == getter_field) {
                 // ── Code generation ──
                 // Replace `expr is IFoo` with the literal `true`.
                 return <- quote(true)
@@ -456,7 +456,7 @@ class InterfaceAsIs : AstVariantMacro {
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType
         for (fld in st.fields) {
-            if (string(fld.name) == getter_field) {
+            if (fld.name == getter_field) {
                 // ── Code generation ──
                 // Build the getter function name: "Widget`get`IDrawable"
                 let func_name = "{st.name}`get`{iname}"
@@ -495,7 +495,7 @@ class InterfaceAsIs : AstVariantMacro {
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType
         for (fld in st.fields) {
-            if (string(fld.name) == getter_field) {
+            if (fld.name == getter_field) {
                 // ── Code generation ──
                 let func_name = "{st.name}`get`{iname}"
                 // clone_expression is needed because expr.value appears

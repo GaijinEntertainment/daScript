@@ -1182,12 +1182,11 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
             unsafe {
                 _builtin_make_temp_array(gc_dummy, addr(src[0]), size)
             }
-            var lmb <- @  capture(<- gc_dummy) {
+            return <- @  capture(<- gc_dummy) {
                 pass
             } finally {
                 memzero(gc_dummy)
             }
-            return <- lmb
         } else {
             var gc_dummy : array<TT -const -& -#>
             let stride = typeinfo sizeof(type<TT -const -& -#>)
@@ -1195,12 +1194,11 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
             unsafe {
                 _builtin_make_temp_array(gc_dummy, addr(src[0]), size)
             }
-            var lmb <- @  capture(<- gc_dummy) {
+            return <- @  capture(<- gc_dummy) {
                 pass
             } finally {
                 memzero(gc_dummy)
             }
-            return <- lmb
         }
     }
     cv.info.clonner = @@(var dst : array<uint8>; src : array<uint8>) {

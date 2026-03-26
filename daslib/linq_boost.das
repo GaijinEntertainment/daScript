@@ -518,7 +518,7 @@ def private is_linq_call(var expr : Expression?) : bool {
         }
         if (linqCalls.key_exists(funcName)) {
             let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
-            if (linqCall.moduleName == string(call.func._module.name)) {
+            if (linqCall.moduleName == call.func._module.name) {
                 return true
             }
         }
@@ -542,7 +542,7 @@ def private flatten_linq(var expr : ExpressionPtr)  {
                 break
             }
             var linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
-            if (linqCall.moduleName != string(topFunc._module.name)) {
+            if (linqCall.moduleName != topFunc._module.name) {
                 break
             }
             if (!linqCall.skip) {

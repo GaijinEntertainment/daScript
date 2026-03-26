@@ -88,6 +88,7 @@ def do_compile_check(file : string; project : string = ""; json : bool = false) 
     }
     // JSON mode
     var results : array<CompileResult>
+    results |> reserve(length(files))
     for (f in files) {
         results |> emplace(compile_check_single_json(f, project))
     }

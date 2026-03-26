@@ -127,6 +127,7 @@ struct Particle {
 def do_allocations() {
     // Array push triggers heap allocations as the array grows
     var arr : array<int>
+    arr |> reserve(10)
     for (i in range(10)) {
         arr |> push(i)
     }

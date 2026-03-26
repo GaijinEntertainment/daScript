@@ -625,7 +625,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     }
 
     // ── baseType ────────────────────────────────────────────
-    var bt_int = int(pat_type.baseType)
+    let bt_int = int(pat_type.baseType)
     var inscope bt_cond <- qmacro(int($i(td_var).baseType) != $v(bt_int))
     body |> emplace_new <| qm_type_guard(at, expr_var, bt_cond)
 
@@ -1213,7 +1213,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
             var inscope flf <- qmacro(qm_fail_field($i(actual_var)))
             body |> emplace_new <| qm_guard(at, clf, flf)
         }
-        var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
+        var pat_block = pat_mkblk._block as ExprBlock
         // Unwrap ExprMakeBlock → ExprBlock at runtime
         let blk_var = next_var(index)
         body |> emplace_new <| qmacro_expr(${ var inscope $i(blk_var) <- clone_expression(($i(eff_actual) as ExprMakeBlock)._block); })
@@ -1764,7 +1764,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         } elif (bt == Type.tInt) {
             let pv = unsafe(reinterpret<int?> p8)
             if (*pv != 0) {
-                var fval = *pv
+                let fval = *pv
                 var inscope cond <- qmacro($i(cast_var).$f(name) != $v(fval))
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
@@ -1772,7 +1772,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         } elif (bt == Type.tUInt) {
             let pv = unsafe(reinterpret<uint?> p8)
             if (*pv != 0u) {
-                var fval = *pv
+                let fval = *pv
                 var inscope cond <- qmacro($i(cast_var).$f(name) != $v(fval))
                 var inscope fail <- qmacro(qm_fail_field($i(actual_var)))
                 body |> emplace_new <| qm_guard(at, cond, fail)
@@ -2153,7 +2153,7 @@ class private QMatchBlock : AstCallMacro {
             return <- default<ExpressionPtr>
         }
         let pat_mkblk = pat_arg as ExprMakeBlock
-        var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
+        var pat_block = pat_mkblk._block as ExprBlock
         if (pat_block == null) {
             macro_error(prog, at, "qmatch_block: could not extract block from pattern")
             return <- default<ExpressionPtr>
@@ -2211,7 +2211,7 @@ class private QMatchFunction : AstCallMacro {
             return <- default<ExpressionPtr>
         }
         let pat_mkblk = pat_arg as ExprMakeBlock
-        var pat_block = get_ptr(pat_mkblk._block) as ExprBlock
+        var pat_block = pat_mkblk._block as ExprBlock
         if (pat_block == null) {
             macro_error(prog, at, "qmatch_function: could not extract block from pattern")
             return <- default<ExpressionPtr>

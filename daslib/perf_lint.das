@@ -19,6 +19,9 @@ module perf_lint shared private
 //!   PERF004 — string interpolation reassignment in loop (O(n²))
 //!   PERF005 — length(string) in while condition (strlen each iteration)
 //!   PERF006 — push/emplace in loop without prior reserve()
+//!   PERF007 — unnecessary string(das_string) in comparison
+//!   PERF008 — unnecessary get_ptr() for is/as type checks
+//!   PERF009 — redundant move-init variable immediately returned
 
 require daslib/ast_boost
 require strings
@@ -60,16 +63,57 @@ class PerfLintVisitor : AstVisitor {
     // PERF006: known-length loop tracking
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
+    // PERF006: suppress when loop has break/continue (unpredictable iteration count)
+    loop_has_early_exit : array<bool>
+    // PERF009: track last move-initialized variable for redundant return detection
+    @do_not_delete pending_move_var : Variable?
+    @safe_when_uninitialized pending_move_at : LineInfo
     warning_count : int = 0
     // collection mode — when true, warnings are appended to `warnings` instead of to_log
     collect_warnings : bool = false
     warnings : array<string>
-
+    // dedup: reported (file_hash, line, column) to suppress duplicate warnings from generic instantiations
+    reported_locations : array<uint64>
     def PerfLintVisitor() {
         pass
     }
 
+    def location_key(at : LineInfo) : uint64 {
+        return uint64(at.line) | (uint64(at.column) << uint64(20))
+    }
+
+    def is_suppressed(text : string; at : LineInfo) : bool {
+        if (at.fileInfo == null || at.line == 0u) {
+            return false
+        }
+        // extract PERFxxx code from warning text (e.g. "PERF003: ...")
+        let colon = find(text, ":")
+        if (colon < 0) {
+            return false
+        }
+        let code = slice(text, 0, colon)
+        var found = false
+        get_file_source_line(at.fileInfo, at.line) <| $(line) {
+            // look for "// nolint:PERFxxx" or "// nolint(PERFxxx)" in a comment
+            let nolint_pos = find(line, "nolint")
+            if (nolint_pos >= 0) {
+                found = find(line, code, nolint_pos) >= 0
+            }
+        }
+        return found
+    }
+
     def perf_warning(text : string; at : LineInfo) : void {
+        // Deduplicate warnings — same source location reported once, regardless of generic instantiations
+        let key = self->location_key(at)
+        if (reported_locations |> has_value(key)) {
+            return
+        }
+        reported_locations |> push(key)
+        // Check inline suppression: // PERFxxx on the same line
+        if (self->is_suppressed(text, at)) {
+            return
+        }
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && length(current_function.inferStack) > 0) {
@@ -218,6 +262,42 @@ class PerfLintVisitor : AstVisitor {
         return null
     }
 
+    // --- PERF007/PERF008 helpers ---
+
+    def is_string_of_das_string(expr : Expression?) : bool {
+        //! Returns true if expr is a string(X) call where X is das_string.
+        return false if (expr == null)
+        var inner = expr
+        if (inner is ExprRef2Value) {
+            inner = get_ptr((inner as ExprRef2Value).subexpr)
+        }
+        return false if (inner == null || !(inner is ExprCall))
+        var call = inner as ExprCall
+        if (length(call.arguments) < 1) {
+            return false
+        }
+        // After inference, string() calls may have FakeContext/FakeLineInfo extra args.
+        // Check the function name and first argument type.
+        if (call.name != "string") {
+            return false
+        }
+        var arg = get_ptr(call.arguments[0])
+        if (arg._type == null || arg._type.baseType != Type.tHandle) {
+            return false
+        }
+        return arg._type.annotation != null && arg._type.annotation.name == "das_string"
+    }
+
+    def is_get_ptr_of_smart_ptr(expr : Expression?) : bool {
+        //! Returns true if expr is a get_ptr(X) call where X is a smart_ptr.
+        return false if (expr == null || !(expr is ExprCall))
+        var call = expr as ExprCall
+        if (call.func == null || call.func.fromGeneric == null) {
+            return false
+        }
+        return call.func.fromGeneric.name == "get_ptr"
+    }
+
     // --- function tracking ---
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
@@ -261,6 +341,43 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0) {
             var_stack |> push(VarStackEntry(v = get_ptr(v), depth = loop_depth, is_iter = false))
         }
+        // PERF009: track last move-initialized variable (only explicit `var x <- expr`)
+        if (last && v.flags.init_via_move && v.init != null) {
+            var dominated_by_clone = false
+            // Exclude compiler-lowered `:=` (clone_to_move) on non-copyable types
+            var ini = get_ptr(v.init)
+            if (ini is ExprCall) {
+                let ecall = ini as ExprCall
+                if (ecall.func != null && ecall.func.fromGeneric != null) {
+                    dominated_by_clone = ecall.func.fromGeneric.name == "clone_to_move"
+                }
+            }
+            if (!dominated_by_clone) {
+                pending_move_var = get_ptr(v)
+                pending_move_at = expr.at
+            }
+        }
+    }
+
+    // --- PERF009: redundant move-init variable before return ---
+
+    def override preVisitExprBlockExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) : void {
+        if (pending_move_var != null) {
+            var e = get_ptr(expr)
+            if (e is ExprReturn) {
+                var ret = e as ExprReturn
+                if (ret.returnFlags.moveSemantics && ret.subexpr != null) {
+                    var sub = get_ptr(ret.subexpr)
+                    if (sub is ExprRef2Value) {
+                        sub = get_ptr((sub as ExprRef2Value).subexpr)
+                    }
+                    if (sub is ExprVar && get_ptr((sub as ExprVar).variable) == pending_move_var) {
+                        self->perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at)
+                    }
+                }
+            }
+            pending_move_var = null
+        }
     }
 
     // --- loop tracking ---
@@ -271,6 +388,7 @@ class PerfLintVisitor : AstVisitor {
             loop_depth++
             if_depth_stack |> push(0)
             current_for_known_length = true
+            loop_has_early_exit |> push(false)
         }
     }
 
@@ -323,6 +441,9 @@ class PerfLintVisitor : AstVisitor {
             if (length(if_depth_stack) > 0) {
                 if_depth_stack |> pop()
             }
+            if (length(loop_has_early_exit) > 0) {
+                loop_has_early_exit |> pop()
+            }
         }
         return <- expr
     }
@@ -332,6 +453,7 @@ class PerfLintVisitor : AstVisitor {
             scope_stack |> push(length(var_stack))
             loop_depth++
             if_depth_stack |> push(0)
+            loop_has_early_exit |> push(false)
             in_while_cond = true
         }
     }
@@ -350,9 +472,26 @@ class PerfLintVisitor : AstVisitor {
             if (length(if_depth_stack) > 0) {
                 if_depth_stack |> pop()
             }
+            if (length(loop_has_early_exit) > 0) {
+                loop_has_early_exit |> pop()
+            }
         }
         in_while_cond = false
         return <- expr
+    }
+
+    // --- break/continue tracking (for PERF006 early-exit suppression) ---
+
+    def override preVisitExprBreak(expr : smart_ptr<ExprBreak>) : void {
+        if (in_closure == 0 && length(loop_has_early_exit) > 0) {
+            loop_has_early_exit[length(loop_has_early_exit) - 1] = true
+        }
+    }
+
+    def override preVisitExprContinue(expr : smart_ptr<ExprContinue>) : void {
+        if (in_closure == 0 && length(loop_has_early_exit) > 0) {
+            loop_has_early_exit[length(loop_has_early_exit) - 1] = true
+        }
     }
 
     // --- if-depth tracking (for PERF006 conditional suppression) ---
@@ -371,6 +510,8 @@ class PerfLintVisitor : AstVisitor {
     }
 
     // --- PERF001: string += in loop ---
+    // --- PERF007: unnecessary string(das_string) in comparison ---
+    // --- PERF008: unnecessary get_ptr() for is/as ---
 
     def override preVisitExprOp2(expr : smart_ptr<ExprOp2>) : void {
         if (in_closure > 0) {
@@ -380,6 +521,28 @@ class PerfLintVisitor : AstVisitor {
             let v = self->find_string_var_from_expr(get_ptr(expr.left))
             if (v != null && self->is_defined_outside_loop(v)) {
                 self->perf_warning("PERF001: string += in loop creates O(n^2) allocations; use build_string() instead", expr.at)
+            }
+        }
+        // PERF007: string(das_string) == or != comparison
+        if (expr.op == "==" || expr.op == "!=") {
+            let left_is = self->is_string_of_das_string(get_ptr(expr.left))
+            let right_is = self->is_string_of_das_string(get_ptr(expr.right))
+            if (left_is || right_is) {
+                self->perf_warning("PERF007: string(das_string) in comparison is unnecessary; das_string supports == and != directly", expr.at)
+            }
+        }
+        // PERF008: get_ptr(x).__rtti == "Type" is expanded from `get_ptr(x) is Type`
+        if (expr.op == "==") {
+            var left = get_ptr(expr.left)
+            // Unwrap ExprRef2Value — compiler inserts these for value-type reads
+            if (left is ExprRef2Value) {
+                left = get_ptr((left as ExprRef2Value).subexpr)
+            }
+            if (left is ExprField) {
+                var field = left as ExprField
+                if (field.name == "__rtti" && self->is_get_ptr_of_smart_ptr(get_ptr(field.value))) {
+                    self->perf_warning("PERF008: get_ptr() is unnecessary for is/as; smart_ptr supports type checks directly", expr.at)
+                }
             }
         }
     }
@@ -433,7 +596,8 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         let in_conditional = length(if_depth_stack) > 0 && if_depth_stack[length(if_depth_stack) - 1] > 0
-        if (in_closure == 0 && known_length_loop_depth > 0 && !in_conditional) {
+        let has_early_exit = length(loop_has_early_exit) > 0 && loop_has_early_exit[length(loop_has_early_exit) - 1]
+        if (in_closure == 0 && known_length_loop_depth > 0 && !in_conditional && !has_early_exit) {
             if (self->is_array_func(expr, "push") || self->is_array_func(expr, "push_clone") || self->is_array_func(expr, "emplace")) {
                 var path = ""
                 let rv = self->find_expr_path(get_ptr(expr.arguments[0]), path)
@@ -459,7 +623,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
-        if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
+        if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
         }
     }
@@ -474,7 +638,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var v = self->find_string_var_from_expr(get_ptr(expr.left))
-        if (v != null && self->is_defined_outside_loop(v) && get_ptr(expr.right) is ExprStringBuilder) {
+        if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
         }
     }

@@ -1805,11 +1805,12 @@ class public CppAot : AstVisitor {
         } else {
             if (that._type.baseType == Type.tBool) {
                 var op = "";
-                match (string(that.op)) {
+                let that_op = string(that.op)
+                match (that_op) {
                     if ("&") { op = "&&"; }
                     if ("|") { op = "||"; }
                     if ("^" || "^^") { op = "!="; }
-                    if (_) { op = string(that.op); }
+                    if (_) { op = that_op; }
                 }
                 write(*ss, " {op} ");
             } else {

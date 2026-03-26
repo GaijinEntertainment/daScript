@@ -26,7 +26,7 @@ struct ToolResult {
 
 // query matching: case-insensitive substring by default, "=foo" for exact case-sensitive
 def symbol_matches(name, query : string) : bool {
-    if (length(query) > 0 && character_at(query, 0) == '=') {
+    if (length(query) > 0 && first_character(query) == '=') {
         return name == slice(query, 1)
     }
     return find(to_lower(name), to_lower(query)) >= 0
@@ -316,7 +316,7 @@ def resolve_path(path : string) : string {
     if (empty(path)) {
         return get_das_root()
     }
-    if (length(path) > 0 && character_at(path, 0) != '/' && find(path, ":") < 0) {
+    if (length(path) > 0 && first_character(path) != '/' && find(path, ":") < 0) {
         return "{get_das_root()}/{path}"
     }
     return path
