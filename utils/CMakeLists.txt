@@ -10,14 +10,16 @@ endif()
 
 set(DAS_UTILS
     aot
-    benchctl
     dascov
     daspkg
-    mcp
 )
 
 if(NOT DAS_SQLITE_DISABLED)
-    # list(APPEND DAS_UTILS benchctl)
+    list(APPEND DAS_UTILS benchctl)
+endif()
+
+if(NOT DAS_HV_DISABLED)
+    list(APPEND DAS_UTILS mcp)
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies.
