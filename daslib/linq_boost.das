@@ -411,8 +411,8 @@ var private linqCalls = {
     "select_to_array" => LinqCall(name = "select"),
     "select_many" => LinqCall(name = "select_many"),
     "select_many_to_array" => LinqCall(name = "select_many"),
-    "zip" => LinqCall(name = "zip", recursive = [1]),
-    "zip_to_array" => LinqCall(name = "zip", recursive = [1]),
+    "zip" => LinqCall(name = "zip", recursive = [1, 2]),
+    "zip_to_array" => LinqCall(name = "zip", recursive = [1, 2]),
 // sorting data
     "reverse" => LinqCall(name = "reverse", inplace = true),
     "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
@@ -768,7 +768,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
                     }
                 }
                 for (i in cll._1.recursive) {   // this is where we make recursion
-                    if (i >= 1 && i < cll._0.arguments |> length) {
+                    if (i >= 1 && i < cll._0.arguments |> length && is_linq_call(cll._0.arguments[i].get_ptr())) {
                         var inscope argExpr <- make_call(cll._0.at, "_fold")
                         (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
                         cll._0.arguments[i] |> move <| argExpr

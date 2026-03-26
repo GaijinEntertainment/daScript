@@ -2738,6 +2738,41 @@ def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c :
     return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>)
 }
 
+// zip3 with result selector
+
+[unused_argument(tt, uu, ww)]
+def private zip3_impl(var a; tt : auto(TT); var b; uu : auto(UU); var c; ww : auto(WW); result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
+    //! Merges three iterators into an array by applying a specified function
+    var buffer : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&>
+    static_if ((typeinfo is_array(a) || typeinfo is_dim(a)) && (typeinfo is_array(b) || typeinfo is_dim(b)) && (typeinfo is_array(c) || typeinfo is_dim(c))) {
+        buffer |> reserve(min(length(a), min(length(b), length(c))))
+    }
+    for (itA, itB, itC in a, b, c) {
+        buffer.push_clone(result_selector(itA, itB, itC))
+    }
+    return <- buffer
+}
+
+[unused_argument(tt, uu, ww)]
+def private zip3_impl_const(a : auto(ARGT); tt : auto(TT); b : auto(ARGTS); uu : auto(UU); c : auto(ARGC); ww : auto(WW); result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
+    return <- zip3_impl(unsafe(reinterpret<ARGT -const>(a)), type<TT -const -&>, unsafe(reinterpret<ARGTS -const>(b)), type<UU -const -&>, unsafe(reinterpret<ARGC -const>(c)), type<WW -const -&>, result_selector)
+}
+
+def zip(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : iterator<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
+    //! Merges three iterators into an iterator by applying a specified function
+    return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, result_selector).to_sequence_move()
+}
+
+def zip(a : array<auto(TT)>; b : array<auto(UU)>; c : array<auto(WW)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
+    //! Merges three arrays into an array by applying a specified function
+    return <- zip3_impl_const(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, result_selector)
+}
+
+def zip_to_array(var a : iterator<auto(TT)>; var b : iterator<auto(UU)>; var c : iterator<auto(WW)>; result_selector : block<(l : TT -&; r : UU -&; w : WW -&) : auto>) : array<typedecl(result_selector(type<TT>, type<UU>, type<WW>)) -const -&> {
+    //! Merges three iterators into an array by applying a specified function
+    return <- zip3_impl(a, type<TT -const -&>, b, type<UU -const -&>, c, type<WW -const -&>, result_selector)
+}
+
 def public order_unique_folded(var a : array<auto(TT)>) : array<TT -const -&> {
     //! sort and remove duplicate elements from an array
     var arr <- order(a)
