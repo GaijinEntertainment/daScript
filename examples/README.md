@@ -81,6 +81,29 @@ Requires the `stbimage` module and (for OpenGL variants) `dasGlfw` / `dasImgui`.
 | `toy_path_tracer_opengl_hdr.das` | Real-time path tracer with HDR tonemapping |
 | `toy_path_tracer_profile.das` | Path tracer performance benchmark |
 
+## opengl/ — OpenGL Examples
+
+Introductory OpenGL examples using the `dasOpenGL` and `dasGlfw` modules.
+Requires `dasGlfw` and `dasOpenGL` to be enabled in the build (`DAS_GLFW_DISABLED=OFF`).
+
+```
+daslang.exe examples/opengl/01_hello_triangle.das
+```
+
+| File | Description |
+|------|-------------|
+| `01_hello_triangle.das` | Colored triangle with vertex/fragment shaders |
+| `02_hello_image.das` | Textured quad from a PNG image |
+| `03_hello_cube.das` | Rotating 3D cube with depth testing |
+| `04_hello_render_to_texture.das` | Render-to-texture via framebuffer objects |
+| `05_hello_compute.das` | Compute shader example |
+| `06_hello_ttf.das` | TrueType font rendering via `opengl_ttf` |
+| `07_hello_gen.das` | Procedural geometry generation via `opengl_gen` |
+| `09_hello_mesh.das` | OBJ mesh loading and rendering |
+
+Assets (`image.png`, `droidsansmono.ttf`, `orb.obj`) are bundled in the directory.
+The mesh and font were taken from BGFX examples.
+
 ## uncategorized/ — Miscellaneous Examples
 
 Standalone examples that don't fit neatly into other categories.

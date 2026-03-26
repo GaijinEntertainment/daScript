@@ -26,19 +26,4 @@ IF(NOT DAS_OPENGL_INCLUDED)
         PATTERN "_aot_generated" EXCLUDE
     )
 
-    file(GLOB DAS_OPENGL_EXAMPLES
-        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/*.das
-    )
-
-    install(FILES ${DAS_OPENGL_EXAMPLES}
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl
-    )
-    install(FILES
-        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/image.png
-        # This mesh was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/assets/meshes`
-        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/orb.obj
-        # This font was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/runtime/font`
-        ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/droidsansmono.ttf
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
-    )
 ENDIF()

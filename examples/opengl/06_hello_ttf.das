@@ -27,9 +27,9 @@ def main {
     glfwMakeContextCurrent(window)
     // create ttf internals, load font with oversampling=2 for GPU rendering
     create_ttf_objects()
-    font <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf", [oversampling = 2])
+    font <- load_ttf("{get_das_root()}/examples/opengl/droidsansmono.ttf", [oversampling = 2])
     if (!!empty(font.bitmap.bytes)) {
-        font <- load_ttf("{get_das_root()}/examples/media/droidsansmono.ttf", [oversampling = 2])
+        font <- load_ttf("{get_das_root()}/examples/opengl/media/droidsansmono.ttf", [oversampling = 2])
     }
     if (!!empty(font.bitmap.bytes)) {
         panic("can't load droidsansmono.ttf")

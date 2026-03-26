@@ -2,17 +2,24 @@
 # Each utility with a main.das is compiled via daslang -exe and the
 # resulting binary is placed next to the daslang compiler binary
 # (e.g. bin/Release/ on multi-config generators, bin/ on single-config).
+# Requires LLVM for -exe compilation.
+
+if(DAS_LLVM_DISABLED)
+    return()
+endif()
 
 set(DAS_UTILS
     aot
-    benchctl
     dascov
     daspkg
-    mcp
 )
 
 if(NOT DAS_SQLITE_DISABLED)
-    # list(APPEND DAS_UTILS benchctl)
+    list(APPEND DAS_UTILS benchctl)
+endif()
+
+if(NOT DAS_HV_DISABLED)
+    list(APPEND DAS_UTILS mcp)
 endif()
 
 # Collect daslib and LLVM daslib sources as dependencies.
@@ -54,7 +61,7 @@ add_custom_command(
 add_custom_target(dastest_exe DEPENDS ${UTIL_BIN_DIR}/dastest.exe)
 
 
-add_custom_target(all_utils_exe)
+add_custom_target(all_utils_exe ALL)
 foreach(util ${DAS_UTILS})
     add_dependencies(all_utils_exe ${util}_exe)
 endforeach()
@@ -80,9 +87,24 @@ ADD_CUSTOM_TARGET(run_utils_tests
 )
 
 # Install utility executables (OPTIONAL — only present when -exe targets are built).
+# UTIL_BIN_DIR uses CMAKE_CFG_INTDIR which doesn't resolve at install time on
+# multi-config generators. Use install(CODE) with CMAKE_INSTALL_CONFIG_NAME.
+if(MSVC)
+    set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin/\${CMAKE_INSTALL_CONFIG_NAME}")
+else()
+    set(_UTIL_INSTALL_PATTERN "${PROJECT_SOURCE_DIR}/bin")
+endif()
 foreach(util ${DAS_UTILS})
-    install(PROGRAMS ${UTIL_BIN_DIR}/${util}.exe
-        DESTINATION ${DAS_INSTALL_BINDIR} OPTIONAL)
+    install(CODE "
+        set(_util_exe \"${_UTIL_INSTALL_PATTERN}/${util}.exe\")
+        if(EXISTS \"\${_util_exe}\")
+            file(INSTALL \"\${_util_exe}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${DAS_INSTALL_BINDIR}\")
+        endif()
+    ")
 endforeach()
-install(PROGRAMS ${UTIL_BIN_DIR}/dastest.exe
-    DESTINATION ${DAS_INSTALL_BINDIR} OPTIONAL)
+install(CODE "
+    set(_util_exe \"${_UTIL_INSTALL_PATTERN}/dastest.exe\")
+    if(EXISTS \"\${_util_exe}\")
+        file(INSTALL \"\${_util_exe}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/${DAS_INSTALL_BINDIR}\")
+    endif()
+")
