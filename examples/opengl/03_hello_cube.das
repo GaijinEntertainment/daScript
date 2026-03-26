@@ -96,8 +96,8 @@ def create_gl_objects {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW)
     // texture
     texture = load_image_from_file("image.png",
-        "{get_das_root()}/modules/dasOpenGL/examples",
-        "{get_das_root()}/examples/media"
+        "{get_das_root()}/examples/opengl",
+        "{get_das_root()}/examples/opengl/media"
     )
 }
 

@@ -1483,6 +1483,22 @@ install(FILES ${DAS_HV_EXAMPLES}
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/hv
 )
 
+# Install opengl examples
+file(GLOB DAS_OPENGL_EXAMPLES
+    ${PROJECT_SOURCE_DIR}/examples/opengl/*.das
+)
+install(FILES ${DAS_OPENGL_EXAMPLES}
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl
+)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/examples/opengl/image.png
+    # This mesh was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/assets/meshes`
+    ${PROJECT_SOURCE_DIR}/examples/opengl/orb.obj
+    # This font was taken from BGFX `modules/dasBGFX/bgfx/bgfx/examples/runtime/font`
+    ${PROJECT_SOURCE_DIR}/examples/opengl/droidsansmono.ttf
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl/media
+)
+
 # Install language tutorial .das files
 file(GLOB LANGUAGE_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/language/*.das
