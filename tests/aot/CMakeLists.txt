@@ -208,6 +208,9 @@ SET(AOT_STBIMAGE_MODULE_FILES
     modules/dasStbImage/stbimage/stbimage_ttf.das
 )
 
+# AOT for jit test files
+FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/jit/*.das")
+
 # AOT for language test files
 FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -387,6 +390,10 @@ add_custom_target(test_aot_lpipe)
 SET(LPIPE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LPIPE_FILES}" LPIPE_AOT_GENERATED_SRC test_aot_lpipe daslang)
 
+add_custom_target(test_aot_jit)
+SET(JIT_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_JIT_FILES}" JIT_AOT_GENERATED_SRC test_aot_jit daslang)
+
 add_custom_target(test_aot_language)
 SET(LANGUAGE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_LANGUAGE_TEST_FILES}" LANGUAGE_AOT_GENERATED_SRC test_aot_language daslang)
@@ -449,6 +456,7 @@ SOURCE_GROUP_FILES("aot generated" TEMPLATE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" TYPE_TRAITS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" URI_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LPIPE_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" JIT_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
@@ -500,6 +508,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${TYPE_TRAITS_AOT_GENERATED_SRC}
     ${URI_AOT_GENERATED_SRC}
     ${LPIPE_AOT_GENERATED_SRC}
+    ${JIT_AOT_GENERATED_SRC}
     ${LANGUAGE_AOT_GENERATED_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
     ${DASLIB_MODULES_AOT_GENERATED_SRC}
@@ -526,6 +535,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
     test_aot_template test_aot_type_traits test_aot_uri
     test_aot_lpipe
+    test_aot_jit
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
     test_aot_stbimage test_aot_stbimage_modules
