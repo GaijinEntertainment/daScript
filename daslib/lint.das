@@ -94,7 +94,7 @@ class LintVisitor : AstVisitor {
         exprForTerminator |> push(intptr(get_ptr(expr)))
     }
     def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
-        if (expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "$") {
+        if (expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "builtin") {
             if (length(exprForTerminator) > 0) {
                 exprForTerminator |> pop()
             }

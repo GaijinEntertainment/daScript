@@ -1294,7 +1294,7 @@ namespace das {
     }
 
     Expression * ast_makeMoveArgument ( yyscan_t scanner, Expression * expr, const LineInfo & at ) {
-        auto moveExpr = new ExprCall(at, "$::consume_argument");
+        auto moveExpr = new ExprCall(at, "builtin::consume_argument");
         moveExpr->arguments.push_back(expr);
         return moveExpr;
     }

@@ -3960,15 +3960,11 @@ def public getRequiredModulesFor(program : ProgramPtr) {
     program.get_ptr() |> for_each_module($(mod) {
         if (mod.name == "") {
             // nothing, its main program module. i.e ::
-        } elif (mod.moduleFlags.fromExtraDependency && mod.name != "$") {
+        } elif (mod.moduleFlags.fromExtraDependency && mod.name != "builtin") {
             // nothing, it was added by aot-module.
         } else {
             modules_str |> push(build_string() $(wr) {
-                if (mod.name == "$") {
-                    write(wr, " // require builtin\n");
-                } else {
-                    write(wr, " // require {mod.name}\n");
-                }
+                write(wr, " // require {mod.name}\n")
                 if (!(mod |> aot_require(unsafe(addr(wr))))) {
                     write(wr, "  // AOT disabled due to this module\n");
                     noAotModule = true;

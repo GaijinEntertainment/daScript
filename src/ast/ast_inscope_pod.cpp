@@ -12,7 +12,7 @@ namespace das {
         PodVisitor ( TextWriter * logs_ = nullptr ) : logs(logs_) {}
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            if ( fun->fromGeneric && fun->fromGeneric->module->name=="$" ) return false;
+            if ( fun->fromGeneric && fun->fromGeneric->module->name=="builtin" ) return false;
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual void preVisit ( Function * fun ) override {

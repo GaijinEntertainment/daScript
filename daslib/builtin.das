@@ -2,6 +2,12 @@ options gen2
 options indenting = 4
 options remove_unused_symbols = false
 
+// This is builtin module. It included by default
+// in every other module. Compiler can freely
+// use anything from this module during it's
+// transformations.
+module builtin shared public !inscope
+
 let {
     print_flags_debugger = (
             print_flags.escapeString

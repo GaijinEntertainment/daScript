@@ -1098,11 +1098,13 @@ namespace das {
         string modName;
         auto builtinModule = Module::require("$");
         DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.")
-        if (!builtinModule->getFileInfo()) {
-            // compile daslib builtin module into its C++ module (once)
-            builtinModule->compileBuiltinModule("builtin.das", getDasRoot() + "/daslib/builtin.das", access);
+        auto builtin_path = getDasRoot() + "/daslib/builtin.das";
+        bool allGood = addExtraDependency("builtin", builtin_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
+        if ( !allGood ) {
+            auto res = make_smart<Program>();
+            res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::syntax_error);
+            return res;
         }
-        bool allGood = true;
         for ( const auto & em : access->getExtraModules() ) {
             allGood = addExtraDependency(em.first, em.second, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs) && allGood;
         }

@@ -689,17 +689,6 @@ namespace das {
         return appendBuiltinModuleContent(this, program, modName);
     }
 
-    bool Module::compileBuiltinModule ( const string & modName, const string & filePath, const FileAccessPtr & access ) {
-        TextWriter issues;
-        ModuleGroup dummyLibGroup;
-        auto program = parseDaScript(filePath, modName, access, issues, dummyLibGroup, true);
-        const char *src; uint32_t length;
-        access->getFileInfo(filePath)->getSourceAndLength(src, length);
-        ownFileInfo = make_unique<TextFileInfo>((char *) src, uint32_t(length), false);
-        DAS_ASSERTF(ownFileInfo,"something went wrong and FileInfo for builtin module can not be obtained");
-        return appendBuiltinModuleContent(this, program, modName);
-    }
-
     bool isValidBuiltinName ( const string & name, bool canPunkt ) {
         if ( name.size()>=2 && name[0]=='.' && name[1]=='`') {  // any name starting with .` is ok
             return true;

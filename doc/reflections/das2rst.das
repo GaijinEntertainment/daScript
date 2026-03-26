@@ -122,7 +122,7 @@ dot|normalize|fast_normalize)$%%),
 }
 
 def document_module_builtin(root : string) {
-    var mod = get_module("$")
+    var mod = [get_module("$"), find_module("builtin")]
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_%%)),

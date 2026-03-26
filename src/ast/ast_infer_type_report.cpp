@@ -314,7 +314,7 @@ namespace das {
                 if (!reportPrivateFunctions && isPrivate)
                     continue;
                 ss << "\t";
-                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "$"))
+                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "builtin"))
                     ss << missFn->module->name << "::";
                 ss << describeFunction(missFn);
                 if (missFn->builtIn) {
@@ -401,7 +401,7 @@ namespace das {
                 if (!reportPrivateFunctions && isPrivate)
                     continue;
                 ss << "\t";
-                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "$"))
+                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "builtin"))
                     ss << missFn->module->name << "::";
                 ss << describeFunction(missFn);
                 if (missFn->builtIn) {
@@ -472,7 +472,7 @@ namespace das {
                 if (!reportPrivateFunctions && isPrivate)
                     continue;
                 ss << "\t";
-                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "$"))
+                if (missFn->module && !missFn->module->name.empty() && !(missFn->module->name == "builtin"))
                     ss << missFn->module->name << "::";
                 ss << describeFunction(missFn);
                 if (missFn->builtIn) {
@@ -558,7 +558,7 @@ namespace das {
                             bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,thisModule);
                             if ( !reportPrivateFunctions && isPrivate ) continue;
                             ss << "\t";
-                            if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
+                            if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="builtin") )
                                 ss << missFn->module->name << "::";
                             ss << describeFunction(missFn);
                             if ( missFn->builtIn ) {

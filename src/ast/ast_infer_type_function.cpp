@@ -37,6 +37,10 @@ namespace das {
         } else if (pFn->module == mod || pFn->module == thisMod) {
             return true;
         }
+        // builtin module can access private functions of $
+        if (pFn->module->name == "$" && mod->name == "builtin") {
+            return true;
+        }
         if (pFn->fromGeneric) {
             auto origin = pFn->getOrigin();
             return (origin->module == mod) || (origin->module == thisMod);
@@ -676,7 +680,7 @@ namespace das {
         return newCall;
     }
     bool InferTypes::isConsumeArgumentFunc(Function *fn) {
-        if (fn->fromGeneric && fn->fromGeneric->module->name == "$" && fn->fromGeneric->name == "consume_argument") {
+        if (fn->fromGeneric && fn->fromGeneric->module->name == "builtin" && fn->fromGeneric->name == "consume_argument") {
             return true;
         }
         return false;

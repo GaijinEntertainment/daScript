@@ -732,8 +732,18 @@ def make_table_(tab : array<array<string>>; withHeader : bool = false) {
 
 def is_handmade(mod : Module?) {
     // several modules are handmade even though they are built-in
-    if (mod.name == "ast_boost" || mod.name == "strings_boost" || mod.name == "regex" || mod.name == "regex_boost" || mod.name == "rst") {
-        return true
+    let builtins = [
+        "ast_boost",
+        "builtin",
+        "strings_boost",
+        "regex",
+        "regex_boost",
+        "rst"
+    ]
+    for (name in builtins) {
+        if (mod.name == name) {
+            return true
+        }
     }
     return mod.moduleFlags.builtIn && !mod.moduleFlags.promoted
 }
@@ -1950,7 +1960,7 @@ def function_needs_documenting(func : FunctionPtr | Function?) {
     }
     var isBuiltin = false
     peek(func._module.name) $(name) {
-        if (name == "$") {
+        if (name == "$" || name == "builtin") {
             isBuiltin = true
         }
     }
