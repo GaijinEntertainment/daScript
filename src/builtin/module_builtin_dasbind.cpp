@@ -303,19 +303,69 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
     };
 
+    struct SimNode_DasBindCallLate : SimNode_ExtFuncCallBase {
+        FastCallWrapper wrapper;
+        void * fnptr;
+        uint64_t code;
+        bool isOpengl;
+        SimNode_DasBindCallLate ( const LineInfo & at, const char * fnName, FastCallWrapper wrp,
+                                  uint64_t c, bool ogl )
+            : SimNode_ExtFuncCallBase(at,fnName), wrapper(wrp), fnptr(nullptr), code(c), isOpengl(ogl) {}
+        void bind ( Context & context ) {
+            string crash_and_burn;
+            withBind(code,[&](BoundFunction * bf){
+                if ( bf ) {
+                    if ( !bf->fun ) {
+                        if ( isOpengl ) fnptr = openGlGetFunctionAddress(bf->name.c_str());
+                        if ( !fnptr ) {
+                            void * libhandle = bindDynamicLibrary(bf->library);
+                            if ( !libhandle ) {
+                                crash_and_burn = "can't load library " + bf->library;
+                                return;
+                            }
+                            fnptr = getFunctionAddress(libhandle, bf->name.c_str());
+                        }
+                        if ( fnptr ) bf->fun = fnptr;
+                        else crash_and_burn = "failed to bind " + bf->name;
+                    } else {
+                        fnptr = bf->fun;
+                    }
+                } else {
+                    crash_and_burn = "internal error. missing BoundFunction";
+                }
+            });
+            if ( !crash_and_burn.empty() ) context.throw_error_at(debugInfo, "%s",crash_and_burn.c_str());
+        }
+        DAS_EVAL_ABI vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            if ( !fnptr ) bind(context);
+            vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+            evalArgs(context, args);
+            return wrapper(fnptr, args);
+        }
+    };
+
     struct DasBindFunction : BuiltInFunction {
         void * dllAddress;
         FastCallWrapper wrapper;
-        DasBindFunction ( const string & dasName, void * addr, FastCallWrapper wrp )
+        bool isLate;
+        uint64_t bindCode;
+        bool isOpengl;
+        DasBindFunction ( const string & dasName, void * addr, FastCallWrapper wrp,
+                          bool late = false, uint64_t code = 0, bool ogl = false )
             : BuiltInFunction(dasName.c_str(), dasName.c_str())
-            , dllAddress(addr), wrapper(wrp) {
+            , dllAddress(addr), wrapper(wrp), isLate(late), bindCode(code), isOpengl(ogl) {
             callBased = true;
         }
         void * getBuiltinAddress() const override {
+            // null for late-bound.
             return dllAddress;
         }
         SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
             const char * fnName = context.code->allocateName(this->name);
+            if ( isLate ) {
+                return context.code->makeNode<SimNode_DasBindCallLate>(at, fnName, wrapper, bindCode, isOpengl);
+            }
             return context.code->makeNode<SimNode_DasBindCall>(at, fnName, wrapper, dllAddress);
         }
     };
@@ -451,23 +501,28 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             fun->userScenario = true;
             fun->noAot = true;         // TODO: generate custom C++ to invoke the call directly
             auto ba = parseExternArgs(args);
-            if ( ba.late || ba.api==ApiType::api_opengl ) {
-                fun->requestNoJit = true;
-                return true;
-            }
-            // For non-late, non-opengl functions: resolve DLL and create a BuiltInFunction
-            // so that the JIT can call getBuiltinAddress() and generate a direct call
+            // Create a BuiltInFunction so the JIT can call getBuiltinAddress()
             if ( !is_in_completion() && !ba.fn_name.empty() && ba.api!=ApiType::api_unknown ) {
                 void * libhandle = nullptr;
                 if ( !ba.library.empty() ) {
                     libhandle = bindDynamicLibrary(ba.library);
-                    if ( !libhandle ) return true;  // fall back to simulate-time resolution
                 }
-                void * funptr = getFunctionAddress(libhandle, ba.fn_name.c_str());
-                if ( !funptr ) return true;  // fall back to simulate-time resolution
+                void * funptr = nullptr;
+                if ( ba.api==ApiType::api_opengl ) {
+                    funptr = openGlGetFunctionAddress(ba.fn_name.c_str());
+                }
+                if ( !funptr && libhandle ) {
+                    funptr = getFunctionAddress(libhandle, ba.fn_name.c_str());
+                }
                 auto wrp = computeWrapper(fun.get());
                 string bindName = "__dasbind__" + ba.fn_name + "@@" + ba.library;
-                auto bif = make_smart<DasBindFunction>(bindName, funptr, wrp);
+                bool isOpengl = ba.api==ApiType::api_opengl;
+                bool isLate = !funptr;
+                uint64_t bindCode = 0;
+                if ( isLate ) {
+                    bindCode = lateBind(ba.fn_name, ba.library, nullptr);
+                }
+                auto bif = make_smart<DasBindFunction>(bindName, funptr, wrp, isLate, bindCode, isOpengl);
                 bif->result = fun->result;
                 for ( auto & arg : fun->arguments ) {
                     auto newArg = make_smart<Variable>();
@@ -593,7 +648,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             void * libhandle = nullptr;
             if ( !ba.library.empty() ) {
                 libhandle = bindDynamicLibrary(ba.library);
-                if ( !libhandle && !ba.late ) {
+                if ( !libhandle && !ba.late && ba.api!=ApiType::api_opengl ) {
                     err = "can't load library " + ba.library;
                     return nullptr;
                 }
@@ -657,6 +712,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         const char * libStart = sep + 2;
         const char * libEnd = strchr(libStart, ' ');
         string library = libEnd ? string(libStart, libEnd - libStart) : string(libStart);
+        void * funptr = openGlGetFunctionAddress(symbol.c_str());
+        if ( funptr ) return funptr;
         void * libhandle = bindDynamicLibrary(library.c_str());
         if ( !libhandle ) return nullptr;
         return getFunctionAddress(libhandle, symbol.c_str());
