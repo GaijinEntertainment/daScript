@@ -6,5 +6,16 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleAudio.shared_module", "Module_Audio")
     }
+    register_native_path("audio", "audio_wav", "{project_path}/audio/audio_wav.das")
     register_native_path("live", "audio_live", "{project_path}/audio/audio_live.das")
+    register_native_path("strudel", "strudel", "{project_path}/strudel/strudel.das")
+    register_native_path("strudel", "strudel_event", "{project_path}/strudel/strudel_event.das")
+    register_native_path("strudel", "strudel_time", "{project_path}/strudel/strudel_time.das")
+    register_native_path("strudel", "strudel_pattern", "{project_path}/strudel/strudel_pattern.das")
+    register_native_path("strudel", "strudel_synth", "{project_path}/strudel/strudel_synth.das")
+    register_native_path("strudel", "strudel_scheduler", "{project_path}/strudel/strudel_scheduler.das")
+    register_native_path("strudel", "strudel_mini", "{project_path}/strudel/strudel_mini.das")
+    register_native_path("strudel", "strudel_samples", "{project_path}/strudel/strudel_samples.das")
+    register_native_path("strudel", "strudel_player", "{project_path}/strudel/strudel_player.das")
+    register_native_path("strudel", "strudel_live", "{project_path}/strudel/strudel_live.das")
 }
