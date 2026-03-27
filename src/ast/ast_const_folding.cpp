@@ -23,8 +23,26 @@ namespace das {
         Visitor::visitProgram(prog);
     }
 
+    void PassVisitor::preVisit ( Function * f ) {
+        Visitor::preVisit(f);
+        func = f;
+    }
+
+    FunctionPtr PassVisitor::visit ( Function * f ) {
+        func = nullptr;
+        return Visitor::visit(f);
+    }
+
     void PassVisitor::reportFolding() {
         anyFolding = true;
+        if (func) {
+            // Mark the function as dirty for the current and
+            // upcoming optimization pass.
+            // Non-optimizer passes that derive from PassVisitor
+            // have round always set to 0, so this assignment
+            // wouldn't affect anything
+            func->optimizationRound = round;
+        }
     }
 
     class SetSideEffectVisitor : public Visitor {
@@ -450,12 +468,12 @@ namespace das {
      */
     class ConstFolding : public FoldingVisitor {
     public:
-        ConstFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
+        ConstFolding( const ProgramPtr & prog, int round ) : FoldingVisitor(prog, round) {}
     public:
         vector<Function *> needRun;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
+            return !fun->stub && !fun->isTemplate && funcIsDirty(fun);    // we don't do a thing with templates
         }
         // function which is fully a nop
         bool isNop ( const FunctionPtr & func ) {
@@ -923,9 +941,9 @@ namespace das {
         visit(nse);
     }
 
-    bool Program::optimizationConstFolding() {
+    bool Program::optimizationConstFolding(int round) {
         checkSideEffects();
-        ConstFolding cfe(this);
+        ConstFolding cfe(this, round);
         visit(cfe);
         bool any = cfe.didAnything();
         if ( !cfe.needRun.empty() ) {

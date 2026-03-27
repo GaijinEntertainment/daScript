@@ -1010,6 +1010,7 @@ namespace das
         uint64_t hash = 0;
         uint64_t aotHash = 0;
 
+        int32_t optimizationRound = 0;
         bool isFullyInferred = false;
         string inferredSource;
 
@@ -1661,11 +1662,11 @@ namespace das
         void inferLint(TextWriter & logs);
         void checkSideEffects();
         void foldUnsafe();
-        bool optimizationRefFolding();
-        bool optimizationConstFolding();
-        bool optimizationBlockFolding();
-        bool optimizationCondFolding();
-        bool optimizationUnused(TextWriter & logs);
+        bool optimizationRefFolding(int round);
+        bool optimizationConstFolding(int round);
+        bool optimizationBlockFolding(int round);
+        bool optimizationCondFolding(int round);
+        bool optimizationUnused(TextWriter & logs, int round);
         void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();

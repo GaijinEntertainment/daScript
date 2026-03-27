@@ -307,20 +307,35 @@ namespace das {
 
     class PassVisitor : public Visitor {
     public:
+        explicit PassVisitor(int round) : round(round) {}
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;
         virtual void reportFolding();
-        virtual bool canVisitFunction ( Function * func ) override { return !func->isTemplate; }
+        virtual void preVisit ( Function * f ) override;
+        virtual FunctionPtr visit ( Function * f ) override;
+        virtual bool canVisitFunction ( Function * f ) override {
+            // The optimization round checks whether the function
+            // was changed (marked as dirty) during the current or previous
+            // optimization run.
+            // The round counter starts with 1 and the func's counter
+            // starts with 0.
+            return !f->isTemplate && funcIsDirty(f);
+        }
+        bool funcIsDirty( Function * f ) const {
+            return f->optimizationRound >= (round - 1);
+        }
         __forceinline bool didAnything() const { return anyFolding; }
     protected:
         bool        anyFolding = false;
+        int         round = 0;
         Program *   program = nullptr;
+        Function *  func = nullptr;
     };
 
     class FoldingVisitor : public PassVisitor {
     public:
-        FoldingVisitor(const ProgramPtr & prog)
-            : ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
+        FoldingVisitor(const ProgramPtr & prog, int round = -1)
+            : PassVisitor(round), ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
             ctx.thisProgram = prog.get();
             ctx.thisHelper = &helper;
             ctx.heap = make_smart<LinearHeapAllocator>();

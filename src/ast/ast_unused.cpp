@@ -673,9 +673,11 @@ namespace das {
 
 
     class RemoveUnusedLocalVariables : public PassVisitor {
+    public:
+        using PassVisitor::PassVisitor;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
-            return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
+            return funcIsDirty(fun) && !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
         virtual bool canVisitStructure ( Structure * st ) override { return false; }
         virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
@@ -789,10 +791,10 @@ namespace das {
         faf.MarkSideEffects(*thisModule);
     }
 
-    bool Program::optimizationUnused(TextWriter & logs) {
+    bool Program::optimizationUnused(TextWriter & logs, int round) {
         buildAccessFlags(logs);
         // remove itselft
-        RemoveUnusedLocalVariables context;
+        RemoveUnusedLocalVariables context(round);
         visit(context);
         return context.didAnything();
     }
