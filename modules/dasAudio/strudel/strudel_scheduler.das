@@ -73,7 +73,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                             }
                             sched.voices |> erase(k)
                         }
-                        k -= 1
+                        k --
                     }
                 }
                 sched.voices |> push(new Voice(
@@ -129,17 +129,17 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
             }
             sched.voices |> erase(i)
         }
-        i -= 1
+        i --
     }
     return <- output
 }
 
 // Set tempo in BPM (assumes 4 beats per cycle).
-def set_bpm(var sched : Scheduler&; bpm : double) {
+def set_bpm(var sched : Scheduler; bpm : double) {
     sched.cps = bpm / 240.0lf
 }
 
 // Set cycles per second directly.
-def setcps(var sched : Scheduler&; cps : double) {
+def setcps(var sched : Scheduler; cps : double) {
     sched.cps = cps
 }

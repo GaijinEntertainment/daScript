@@ -28,6 +28,7 @@ enum TokenKind {
     AT          // @
     QUESTION    // ?
     COLON       // :
+    PIPE        // |
     EOF_TOKEN
 }
 
@@ -47,55 +48,58 @@ def tokenize(input : string) : array<Token> {
         while (i < n) {
             let ch = int(data[i])
             if (ch == ' ' || ch == '\t' || ch == '\n') {
-                i += 1
+                i ++
             } elif (ch == '~') {
                 tokens |> push(Token(kind = TokenKind.TILDE, text = "~", pos = i))
-                i += 1
+                i ++
             } elif (ch == '[') {
                 tokens |> push(Token(kind = TokenKind.LBRACKET, text = "[", pos = i))
-                i += 1
+                i ++
             } elif (ch == ']') {
                 tokens |> push(Token(kind = TokenKind.RBRACKET, text = "]", pos = i))
-                i += 1
+                i ++
             } elif (ch == '<') {
                 tokens |> push(Token(kind = TokenKind.LANGLE, text = "<", pos = i))
-                i += 1
+                i ++
             } elif (ch == '>') {
                 tokens |> push(Token(kind = TokenKind.RANGLE, text = ">", pos = i))
-                i += 1
+                i ++
             } elif (ch == '(') {
                 tokens |> push(Token(kind = TokenKind.LPAREN, text = "(", pos = i))
-                i += 1
+                i ++
             } elif (ch == ')') {
                 tokens |> push(Token(kind = TokenKind.RPAREN, text = ")", pos = i))
-                i += 1
+                i ++
             } elif (ch == ',') {
                 tokens |> push(Token(kind = TokenKind.COMMA, text = ",", pos = i))
-                i += 1
+                i ++
             } elif (ch == '*') {
                 tokens |> push(Token(kind = TokenKind.STAR, text = "*", pos = i))
-                i += 1
+                i ++
             } elif (ch == '/') {
                 tokens |> push(Token(kind = TokenKind.SLASH, text = "/", pos = i))
-                i += 1
+                i ++
             } elif (ch == '!') {
                 tokens |> push(Token(kind = TokenKind.BANG, text = "!", pos = i))
-                i += 1
+                i ++
             } elif (ch == '@') {
                 tokens |> push(Token(kind = TokenKind.AT, text = "@", pos = i))
-                i += 1
+                i ++
             } elif (ch == '?') {
                 tokens |> push(Token(kind = TokenKind.QUESTION, text = "?", pos = i))
-                i += 1
+                i ++
             } elif (ch == ':') {
                 tokens |> push(Token(kind = TokenKind.COLON, text = ":", pos = i))
-                i += 1
+                i ++
+            } elif (ch == '|') {
+                tokens |> push(Token(kind = TokenKind.PIPE, text = "|", pos = i))
+                i ++
             } elif (ch >= '0' && ch <= '9') {
                 let start = i
                 while (i < n) {
                     let c = int(data[i])
                     if ((c >= '0' && c <= '9') || c == '.') {
-                        i += 1
+                        i ++
                     } else {
                         break
                     }
@@ -106,14 +110,14 @@ def tokenize(input : string) : array<Token> {
                 while (i < n) {
                     let c = int(data[i])
                     if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-                        i += 1
+                        i ++
                     } else {
                         break
                     }
                 }
                 tokens |> push(Token(kind = TokenKind.WORD, text = slice(input, start, i), pos = start))
             } else {
-                i += 1  // skip unknown
+                i ++  // skip unknown
             }
         }
     }
@@ -143,7 +147,7 @@ def peek(p : Parser) : Token {
 
 def advance(var p : Parser) : Token {
     let tok = p.tokens[p.pos]
-    p.pos += 1
+    p.pos ++
     return tok
 }
 
@@ -309,9 +313,9 @@ def parse_note_name(name : string) : float {
     if (n == 3) {
         let mod = character_at(name, 1)
         if (mod == 's' || mod == '#') {
-            semitone += 1
+            semitone ++
         } elif (mod == 'b') {
-            semitone -= 1
+            semitone --
         } else {
             return -1.0
         }
@@ -323,6 +327,49 @@ def parse_note_name(name : string) : float {
     }
     let octave = int(octCh) - int('0')
     return float((octave + 1) * 12 + semitone)
+}
+
+// ─── Bar-aware parsing ───
+
+// Parse notation with | bar separators.
+// "A B | C D E" = cat([fastcat([A, B]), fastcat([C, D, E])])
+// Each bar plays for one cycle; notes within a bar subdivide evenly.
+def parse_bars(var p : Parser) : Pattern {
+    // check if there are any PIPE tokens — if not, fall back to regular parsing
+    var has_pipes = false
+    for (tok in p.tokens) {
+        if (tok.kind == TokenKind.PIPE) {
+            has_pipes = true
+            break
+        }
+    }
+    if (!has_pipes) {
+        return <- parse_pattern(p)
+    }
+    // collect bars separated by |
+    var bars : array<Pattern>
+    while (!at_end(p)) {
+        if (is_element_start(p)) {
+            var bar <- parse_pattern(p)
+            bars |> emplace <| bar
+        } else {
+            // empty bar before pipe or at end
+            var sil <- silence()
+            bars |> emplace <| sil
+        }
+        if (peek(p).kind == TokenKind.PIPE) {
+            advance(p)
+        } else {
+            break
+        }
+    }
+    if (length(bars) == 0) {
+        return <- silence()
+    }
+    if (length(bars) == 1) {
+        return <- bars[0]
+    }
+    return <- cat(bars)
 }
 
 // ─── Public API ───
@@ -340,6 +387,16 @@ def s(notation : string) : Pattern {
 // note("c3 ~ e3 g3") → pattern with note events (sound defaults to "sine")
 def note_pattern(notation : string; sound : string = "sine") : Pattern {
     var pat <- s(notation)
+    return <- set_sound(sound, pat)
+}
+
+// Parse mini-notation with | bar separators for sequential melodies.
+// "e4 e4 f4 g4 | g4 f4 e4 d4" → each bar is one cycle, notes subdivide evenly.
+def seq(notation : string; sound : string = "sine") : Pattern {
+    var tokens <- tokenize(notation)
+    var p = Parser()
+    p.tokens <- tokens
+    var pat <- parse_bars(p)
     return <- set_sound(sound, pat)
 }
 

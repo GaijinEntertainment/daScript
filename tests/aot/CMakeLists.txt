@@ -113,6 +113,19 @@ SET(AOT_LIVE_HOST_MODULE_FILES
     modules/dasLiveHost/live/live_vars.das
 )
 
+# AOT for strudel test files (audio-independent only; audio-dependent tests
+# require dasAudio which may be disabled in CI)
+SET(AOT_STRUDEL_FILES
+    tests/strudel/test_midi.das
+)
+IF(NOT DAS_AUDIO_DISABLED)
+    LIST(APPEND AOT_STRUDEL_FILES
+        tests/strudel/test_midi_player.das
+        tests/strudel/test_samples.das
+        tests/strudel/test_sequencer.das
+    )
+ENDIF()
+
 # AOT for dynamic_cast_rtti test files
 FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dynamic_cast_rtti/*.das")
 
@@ -293,6 +306,10 @@ DAS_AOT("${AOT_LIVE_HOST_FILES}" LIVE_HOST_AOT_GENERATED_SRC test_aot_live_host 
 add_custom_target(test_aot_live_host_modules)
 SET(LIVE_HOST_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LIVE_HOST_MODULE_FILES}" LIVE_HOST_MODULES_AOT_GENERATED_SRC test_aot_live_host_modules daslang)
+
+add_custom_target(test_aot_strudel)
+SET(STRUDEL_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_STRUDEL_FILES}" STRUDEL_AOT_GENERATED_SRC test_aot_strudel daslang)
 
 add_custom_target(test_aot_dynamic_cast_rtti)
 SET(DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
@@ -515,6 +532,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DECS_MODULES_AOT_GENERATED_SRC}
     ${STBIMAGE_AOT_GENERATED_SRC}
     ${STBIMAGE_MODULES_AOT_GENERATED_SRC}
+    ${STRUDEL_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -539,6 +557,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
     test_aot_stbimage test_aot_stbimage_modules
+    test_aot_strudel
 )
 target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src)
 target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT)

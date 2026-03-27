@@ -108,6 +108,16 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `var inscope` declares automatic cleanup; struct fields need defaults or `@safe_when_uninitialized`
 - `<-` is memcpy+memset(0), NOT smart_ptr-aware — see `skills/das_macros.md` for smart_ptr patterns
 
+### Context heaps and threading
+
+- **`new Foo()` allocates on the current context's heap** — each context has its own heap
+- **Contexts cannot retain data from other contexts** — only copy. A pointer into context A's heap is invalid in context B
+- **Threads run in separate contexts** — `new_thread() <| @{ ... }` creates a new context. Data must be copied/cloned when crossing thread boundaries
+- `clone_string(s)` clones a string into the current context's heap — required when passing strings across contexts
+- `:=` on strings does a clone (new allocation in current context); `=` copies the pointer (unsafe across contexts)
+- **Channel data**: when sending data through channels, the receiving context gets a temporary reference (`#`) — clone/copy what you need before the callback returns
+- **Implication for threaded audio**: parsed data (arrays, structs) created on the main thread cannot be referenced by pointer from the audio thread. Either clone into the audio thread's context, or use C++-side shared memory that lives outside any daScript context
+
 ### Unsafe
 
 - **`unsafe(expr)`** — narrow-scope unsafe, preferred over `unsafe { block }`. Limits unsafe to the exact expression that needs it
