@@ -110,6 +110,13 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_11
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/11_type_introspection.c
 )
 
+#################################
+# Tutorial 12 — Mock ECS
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_12
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/12_ecs.c
+)
+
 # Install C integration tutorial source files
 file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/c/*.c

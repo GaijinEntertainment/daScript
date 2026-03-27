@@ -360,6 +360,9 @@ DAS_API void das_enumeration_add_value ( das_enumeration * enu, const char * nam
 // Create a new module with the given name.
 // After populating it with bindings, add it to a module group with das_modulegroup_add_module().
 DAS_API das_module * das_module_create ( char * name );
+// Find an already-registered module by name (e.g. "rtti_core", "$").
+// Returns NULL if no module with that name exists.
+DAS_API das_module * das_module_find ( const char * name );
 // Bind a C interop function (aligned, vec4f calling convention) to a module.
 // 'name' is the daslang function name, 'cppName' is the C symbol name.
 // 'sideffects' is a combination of SIDEEFFECTS_* flags.
