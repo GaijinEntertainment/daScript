@@ -50,8 +50,25 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 
     #ADD_MODULE_DAS(medialib medialib dasbox_AUDIO_utils)
 	ADD_MODULE_DAS(audio audio audio_boost)
+	ADD_MODULE_DAS(audio audio audio_wav)
+	ADD_MODULE_DAS(strudel strudel strudel)
+	ADD_MODULE_DAS(strudel strudel strudel_event)
+	ADD_MODULE_DAS(strudel strudel strudel_time)
+	ADD_MODULE_DAS(strudel strudel strudel_pattern)
+	ADD_MODULE_DAS(strudel strudel strudel_synth)
+	ADD_MODULE_DAS(strudel strudel strudel_scheduler)
+	ADD_MODULE_DAS(strudel strudel strudel_mini)
+	ADD_MODULE_DAS(strudel strudel strudel_samples)
+	ADD_MODULE_DAS(strudel strudel strudel_player)
+	ADD_MODULE_DAS(strudel strudel strudel_live)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasAudio/audio
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasAudio
+        FILES_MATCHING
+        PATTERN "*.das"
+    )
+
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasAudio/strudel
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasAudio
         FILES_MATCHING
         PATTERN "*.das"
@@ -62,6 +79,16 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
     )
     install(FILES ${DAS_AUDIO_EXAMPLES}
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/audio
+    )
+
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daStrudel/
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daStrudel
+        FILES_MATCHING
+        PATTERN "*.das"
+    )
+
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/media/
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
 
 	install(FILES ${miniaudio_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME MINIAUDIO.LICENSE)

@@ -82,11 +82,12 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
         }
     } else if ( nChannels==2 ) {
         float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
-        float volumeL = volume * ma_min(1.0f + pan, 1.0f);
-        float volumeR = volume * ma_min(1.0f - pan, 1.0f);
+        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+        float volumeL = volume * cosf(angle);
+        float volumeR = volume * sinf(angle);
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
+            OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
         }
     } else if ( nChannels==4 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
@@ -116,11 +117,12 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
             volume = ma_max(volume+dvolume,tvolume);
         }
     } else if ( nChannels==2 ) {
+        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+        float panL = cosf(angle);
+        float panR = sinf(angle);
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            float volumeL = volume * ma_min(1.0f + pan, 1.0f);
-            float volumeR = volume * ma_min(1.0f - pan, 1.0f);
-            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
+            OutFrames[i*2+0] += InFrames[i*2+0] * volume * panL;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volume * panR;
             volume = ma_max(volume+dvolume,tvolume);
         }
     } else if ( nChannels==4 ) {
@@ -155,11 +157,12 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
             volume = ma_min(volume+dvolume,tvolume);
         }
     } else if ( nChannels==2 ) {
+        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+        float panL = cosf(angle);
+        float panR = sinf(angle);
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            float volumeL = volume * ma_min(1.0f + pan, 1.0f);
-            float volumeR = volume * ma_min(1.0f - pan, 1.0f);
-            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
+            OutFrames[i*2+0] += InFrames[i*2+0] * volume * panL;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volume * panR;
             volume = ma_min(volume+dvolume,tvolume);
         }
     } else if ( nChannels==4 ) {
