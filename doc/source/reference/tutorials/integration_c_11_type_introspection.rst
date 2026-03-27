@@ -221,6 +221,8 @@ Expected output::
 
    Previous tutorial: :ref:`tutorial_integration_c_threading`
 
+   Next tutorial: :ref:`tutorial_integration_c_ecs`
+
    C API reference: :ref:`embedding_c_api`
 
    daScriptC.h API header: ``include/daScript/daScriptC.h``

@@ -419,6 +419,10 @@ das_module * das_module_create ( char * name ) {
     return (das_module *) new Module(name);
 }
 
+das_module * das_module_find ( const char * name ) {
+    return (das_module *) Module::require(name);
+}
+
 void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args ) {
     auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
     fn->setSideEffects((das::SideEffects) sideffects);

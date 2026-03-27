@@ -3471,6 +3471,18 @@ namespace das
                         ann.push_back(tann);
                     }
                 }
+                if ( ann.size()==0 ) {
+                    // Fallback: resolve module-qualified names globally (e.g. "rtti_core::TypeInfo")
+                    string modName, shortName;
+                    splitTypeName(annName, modName, shortName);
+                    if ( !modName.empty() ) {
+                        if ( auto mod = Module::require(modName) ) {
+                            if ( auto tann = mod->findAnnotation(shortName) ) {
+                                ann.push_back(tann);
+                            }
+                        }
+                    }
+                }
                 if ( ann.size()!=1 ) error("unresolved annotation '" + annName + "'", ch);
                 pt->annotation = (TypeAnnotation *) ann.back().get();
                 if ( !pt->annotation->rtti_isHandledTypeAnnotation() ) error("'" + annName + "' is not a handled type", ch);
