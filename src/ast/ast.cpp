@@ -3481,24 +3481,25 @@ namespace das {
         bool logPass = options.getBoolOption("log_optimization_passes",false);
         bool log = logOpt || logPass;
         bool any, last;
+        int optimizationRound = 1;
         if (log) {
             logs << *this << "\n";
         }
         do {
-            if ( log ) logs << "OPTIMIZE:\n"; if ( logPass ) logs << *this;
+            if ( log ) logs << "OPTIMIZE " << optimizationRound << ":\n"; if ( logPass ) logs << *this;
             any = false;
-            last = optimizationRefFolding();    if ( failed() ) break;  any |= last;
+            last = optimizationRefFolding(optimizationRound);    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REF FOLDING: " << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
-            last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
+            last = optimizationUnused(logs, optimizationRound);    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
-            last = optimizationConstFolding();  if ( failed() ) break;  any |= last;
+            last = optimizationConstFolding(optimizationRound);  if ( failed() ) break;  any |= last;
             if ( log ) logs << "CONST FOLDING:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
-            last = optimizationCondFolding();  if ( failed() ) break;  any |= last;
+            last = optimizationCondFolding(optimizationRound);  if ( failed() ) break;  any |= last;
             if ( log ) logs << "COND FOLDING:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
-            last = optimizationBlockFolding();  if ( failed() ) break;  any |= last;
+            last = optimizationBlockFolding(optimizationRound);  if ( failed() ) break;  any |= last;
             if ( log ) logs << "BLOCK FOLDING:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
             // this is here again for a reason
-            last = optimizationUnused(logs);    if ( failed() ) break;  any |= last;
+            last = optimizationUnused(logs, optimizationRound);    if ( failed() ) break;  any |= last;
             if ( log ) logs << "REMOVE UNUSED:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
             // now, user macros
             last = false;
@@ -3521,6 +3522,7 @@ namespace das {
             if ( failed() ) break;
             any |= last;
             if ( log ) logs << "MACROS:" << (last ? "optimized" : "nothing") << "\n"; if ( logPass ) logs << *this;
+            optimizationRound++;
         } while ( any );
     }
 }
