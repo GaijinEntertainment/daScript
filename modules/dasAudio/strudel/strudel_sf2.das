@@ -66,6 +66,13 @@ enum SF2GenOper {
     overridingRootKey = 58
 }
 
+// ─── SF2 Sample Types ───
+
+let public SF2_SAMPLE_MONO   = 1u
+let public SF2_SAMPLE_RIGHT  = 2u
+let public SF2_SAMPLE_LEFT   = 4u
+let public SF2_SAMPLE_LINKED = 8u
+
 // ─── SF2 Data Structures ───
 
 struct SF2SampleHeader {

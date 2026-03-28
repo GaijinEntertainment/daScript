@@ -176,6 +176,7 @@ struct MidiChannelState {
     sustain    : bool = false   // CC64 (sustain pedal)
     mod_wheel  : int = 0        // CC1 (0-127, mod wheel → vibrato depth)
     reverb     : float = 1.0    // CC91 (0.0-1.0, reverb send depth multiplier)
+    chorus     : float = 1.0    // CC93 (0.0-1.0, chorus send depth multiplier)
     pitch_bend : float = 0.0    // pitch bend in semitones (-2..+2 default range)
 }
 
@@ -229,12 +230,16 @@ struct SF2VoiceMeta {
     exclusive_class : int = 0
     sustain_held : bool = false
     reverb_send : float = 0.0
+    chorus_send : float = 0.0
 }
 
 var private g_sf2_meta : array<SF2VoiceMeta>  // parallel to state.csf2_voices
 var private g_reverb : I3DL2Reverb?
 var private g_reverb_send_buf : array<float>  // interleaved stereo reverb send bus
 var private g_reverb_out_buf : array<float>   // reverb output
+var private g_chorus : ma_chorus?
+var private g_chorus_send_buf : array<float>  // interleaved stereo chorus send bus
+var private g_chorus_out_buf : array<float>   // chorus output
 
 def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int) {
     let bank = ch == 9 ? 128 : 0
@@ -255,6 +260,13 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
     }
     let preset = state.sf2.presets[preset_idx]
     for (z in zones) {
+        // skip rightSample zones — the paired leftSample zone handles both channels
+        let inst = state.sf2.instruments[z.x]
+        let izone = inst.zones[z.y]
+        let sid = get_generator(*izone, int(SF2GenOper.sampleID), -1)
+        if (sid >= 0 && sid < length(state.sf2.samples) && state.sf2.samples[sid].sample_type == SF2_SAMPLE_RIGHT) {
+            continue
+        }
         var pzone : SF2Zone const?
         for (pz in preset.zones) {
             let inst_gen = get_generator(*pz, int(SF2GenOper.instrument), -1)
@@ -275,8 +287,9 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
                 }
             }
             let rsend = sf2_get_reverb_send(*state.sf2, z.x, z.y, pzone, preset.global_zone)
+            let csend = sf2_get_chorus_send(*state.sf2, z.x, z.y, pzone, preset.global_zone)
             state.csf2_voices |> push(voice)
-            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend))
+            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend, chorus_send = csend))
         }
     }
 }
@@ -400,6 +413,8 @@ def process_events(var state : MidiPlaybackState) {
                 state.channels[ch].mod_wheel = ev.data2
             } elif (ev.data1 == 91) {
                 state.channels[ch].reverb = float(ev.data2) / 127.0
+            } elif (ev.data1 == 93) {
+                state.channels[ch].chorus = float(ev.data2) / 127.0
             } elif (ev.data1 == 64) {
                 let was_on = state.channels[ch].sustain
                 state.channels[ch].sustain = ev.data2 >= 64
@@ -541,15 +556,19 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         i --
     }
     // render C SF2 voices (apply channel volume + expression + pitch bend + mod wheel + track gain)
-    // prepare reverb send bus
+    // prepare reverb + chorus send buses
     let buf_samples = chunkFrames * 2
     if (length(g_reverb_send_buf) < buf_samples) {
         g_reverb_send_buf |> resize(buf_samples)
         g_reverb_out_buf |> resize(buf_samples)
+        g_chorus_send_buf |> resize(buf_samples)
+        g_chorus_out_buf |> resize(buf_samples)
     }
     var has_reverb_send = false
+    var has_chorus_send = false
     for (s in range(buf_samples)) {
         g_reverb_send_buf[s] = 0.0
+        g_chorus_send_buf[s] = 0.0
     }
     var si = length(state.csf2_voices) - 1
     while (si >= 0) {
@@ -558,6 +577,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             let ch_state & = unsafe(state.channels[ch_idx])
             let mix_gain = ch_state.volume * ch_state.expression * state.gain
             let reverb_send = g_sf2_meta[si].reverb_send * ch_state.reverb
+            let chorus_send = g_sf2_meta[si].chorus_send * ch_state.chorus
             // temporarily scale attenuation for this chunk; set pitch bend + mod wheel on voice
             let saved_atten = state.csf2_voices[si].attenuation
             let saved_vib_lfo = state.csf2_voices[si].vib_lfo_to_pitch
@@ -568,24 +588,28 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             if (ch_state.mod_wheel > 0) {
                 state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo + float(ch_state.mod_wheel) / 127.0 * 50.0
             }
-            if (reverb_send > 0.001) {
-                // render with dry/wet split (C-side temp buffer + split)
+            if (reverb_send > 0.001 || chorus_send > 0.001) {
+                // render with dry/reverb/chorus split
+                let dry_gain = max(0.0, 1.0 - reverb_send - chorus_send)
                 unsafe {
-                    ma_sf2_voice_render_send(
+                    ma_sf2_voice_render_send2(
                         addr(state.csf2_voices[si]),
                         addr(state.sf2.sample_data[0]),
                         length(state.sf2.sample_data),
                         addr(output[0]),
                         addr(g_reverb_send_buf[0]),
+                        addr(g_chorus_send_buf[0]),
                         0,
                         chunkFrames,
-                        1.0 - reverb_send,
-                        reverb_send
+                        dry_gain,
+                        reverb_send,
+                        chorus_send
                     )
                 }
-                has_reverb_send = true
+                if (reverb_send > 0.001) { has_reverb_send = true; }
+                if (chorus_send > 0.001) { has_chorus_send = true; }
             } else {
-                // no reverb — render directly to output
+                // no effects — render directly to output
                 unsafe {
                     ma_sf2_voice_render(
                         addr(state.csf2_voices[si]),
@@ -616,6 +640,18 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         }
         for (s in range(buf_samples)) {
             output[s] += g_reverb_out_buf[s]
+        }
+    }
+    // process chorus send bus and mix into output
+    if (has_chorus_send && g_chorus != null) {
+        for (s in range(buf_samples)) {
+            g_chorus_out_buf[s] = 0.0
+        }
+        unsafe {
+            chorus_process(g_chorus, addr(g_chorus_send_buf[0]), addr(g_chorus_out_buf[0]), chunkFrames)
+        }
+        for (s in range(buf_samples)) {
+            output[s] += g_chorus_out_buf[s]
         }
     }
     // advance time
@@ -691,6 +727,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     set_sample_rate(g_reverb, float(SAMPLE_RATE))
     let reverb_props = get_preset(I3DL2Preset.ConcertHall)
     set_properties(g_reverb, reverb_props)
+    // initialize chorus
+    g_chorus = new ma_chorus
+    chorus_init(g_chorus, float(SAMPLE_RATE))
+    let chorus_cfg = chorus_config_default()
+    chorus_set_config(g_chorus, chorus_cfg)
     // pending add-track commands (extracted from gather to avoid # lifetime issues)
     var pending_adds : array<MidiTrackCmd>
     var running = true
@@ -839,6 +880,9 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     unsafe {
         if (g_reverb != null) {
             delete g_reverb
+        }
+        if (g_chorus != null) {
+            delete g_chorus
         }
     }
     done_channel |> push(new MidiCommand(shutdown = true))
@@ -998,12 +1042,18 @@ def public midi_is_playing() : bool {
     return g_midi_running
 }
 
-// Initialize reverb for offline rendering (midi_tick without midi_init/thread).
+// Initialize reverb + chorus for offline rendering (midi_tick without midi_init/thread).
 def public midi_init_reverb() {
     if (g_reverb == null) {
         g_reverb = new I3DL2Reverb
         set_sample_rate(g_reverb, float(SAMPLE_RATE))
         let props = get_preset(I3DL2Preset.ConcertHall)
         set_properties(g_reverb, props)
+    }
+    if (g_chorus == null) {
+        g_chorus = new ma_chorus
+        chorus_init(g_chorus, float(SAMPLE_RATE))
+        let chorus_cfg = chorus_config_default()
+        chorus_set_config(g_chorus, chorus_cfg)
     }
 }
