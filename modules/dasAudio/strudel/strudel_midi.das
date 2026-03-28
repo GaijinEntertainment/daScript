@@ -276,7 +276,7 @@ def parse_midi(data : array<uint8>) : MidiFile {
 
 def load_midi(path : string) : MidiFile {
     var data : array<uint8>
-    fopen(path, "rb") <| $(f) {
+    fopen(path, "rb") $(f) {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
@@ -307,7 +307,7 @@ def merge_tracks(midi : MidiFile) : array<MidiEvent> {
             merged |> push(e)
         }
     }
-    sort(merged) <| $(a, b) {
+    sort(merged) $(a, b) {
         if (a.tick != b.tick) {
             return a.tick < b.tick
         }

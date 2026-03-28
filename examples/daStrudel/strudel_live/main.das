@@ -17,7 +17,7 @@ require daslib/json_boost
 let MEDIA = "{get_das_root()}/examples/media"
 
 def strudel_main(var state : StrudelState?) {
-    var drums <- s("bd [hh hh] sd [hh cp]")
+    let drums <- s("bd [hh hh] sd [hh cp]")
     strudel_add_track(state, "drums", drums)
     strudel_set_bpm(120.0lf)
     strudel_play(state, @@strudel_on_command)
@@ -32,7 +32,7 @@ def strudel_on_command(var state : StrudelState?; cmd : string) {
     let action = parts[0]
     let name = parts[1]
     if (action == "play" && length(parts) >= 3) {
-        var pat <- s(parts[2])
+        let pat <- s(parts[2])
         strudel_add_track(state, name, pat)
     } elif (action == "stop") {
         let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
@@ -137,7 +137,7 @@ def shutdown() {
 [export]
 def main() {
     print("daStrudel live (standalone)\n")
-    with_audio_system() <| $() {
+    with_audio_system() {
         load_samples()
         strudel_init(@@strudel_main)
         print("playing... press Ctrl+C to stop\n")

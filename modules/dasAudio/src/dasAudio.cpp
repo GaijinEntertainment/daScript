@@ -56,6 +56,10 @@ MAKE_TYPE_FACTORY(ma_decoder,ma_decoder);
 
 MAKE_TYPE_FACTORY(ma_limiter,ma_limiter);
 
+MAKE_TYPE_FACTORY(ma_sf2_envelope,ma_sf2_envelope);
+MAKE_TYPE_FACTORY(ma_sf2_biquad,ma_sf2_biquad);
+MAKE_TYPE_FACTORY(ma_sf2_voice,ma_sf2_voice);
+
 DAS_BASE_BIND_ENUM ( ma_format, ma_format, \
     ma_format_unknown, \
     ma_format_u8, \
@@ -402,6 +406,72 @@ struct MALimiterAnnotation : ManagedStructureAnnotation<ma_limiter> {
     }
 };
 
+// SF2 voice
+struct MASF2EnvelopeAnnotation : ManagedStructureAnnotation<ma_sf2_envelope> {
+    MASF2EnvelopeAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_sf2_envelope", mlib, "ma_sf2_envelope") {
+        addField<DAS_BIND_MANAGED_FIELD(stage)>("stage","stage");
+        addField<DAS_BIND_MANAGED_FIELD(level)>("level","level");
+        addField<DAS_BIND_MANAGED_FIELD(release_level)>("release_level","release_level");
+        addField<DAS_BIND_MANAGED_FIELD(slope)>("slope","slope");
+        addField<DAS_BIND_MANAGED_FIELD(is_exponential)>("is_exponential","is_exponential");
+        addField<DAS_BIND_MANAGED_FIELD(is_amp_env)>("is_amp_env","is_amp_env");
+        addField<DAS_BIND_MANAGED_FIELD(midi_velocity)>("midi_velocity","midi_velocity");
+        addField<DAS_BIND_MANAGED_FIELD(samples_until_next)>("samples_until_next","samples_until_next");
+        addField<DAS_BIND_MANAGED_FIELD(delay_sec)>("delay_sec","delay_sec");
+        addField<DAS_BIND_MANAGED_FIELD(attack_sec)>("attack_sec","attack_sec");
+        addField<DAS_BIND_MANAGED_FIELD(hold_sec)>("hold_sec","hold_sec");
+        addField<DAS_BIND_MANAGED_FIELD(decay_sec)>("decay_sec","decay_sec");
+        addField<DAS_BIND_MANAGED_FIELD(sustain_level)>("sustain_level","sustain_level");
+        addField<DAS_BIND_MANAGED_FIELD(release_sec)>("release_sec","release_sec");
+    }
+};
+
+struct MASF2BiquadAnnotation : ManagedStructureAnnotation<ma_sf2_biquad> {
+    MASF2BiquadAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_sf2_biquad", mlib, "ma_sf2_biquad") {
+        addField<DAS_BIND_MANAGED_FIELD(q_inv)>("q_inv","q_inv");
+        addField<DAS_BIND_MANAGED_FIELD(active)>("active","active");
+    }
+};
+
+struct MASF2VoiceAnnotation : ManagedStructureAnnotation<ma_sf2_voice> {
+    MASF2VoiceAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_sf2_voice", mlib, "ma_sf2_voice") {
+        addField<DAS_BIND_MANAGED_FIELD(sample_start)>("sample_start","sample_start");
+        addField<DAS_BIND_MANAGED_FIELD(sample_end)>("sample_end","sample_end");
+        addField<DAS_BIND_MANAGED_FIELD(loop_start)>("loop_start","loop_start");
+        addField<DAS_BIND_MANAGED_FIELD(loop_end)>("loop_end","loop_end");
+        addField<DAS_BIND_MANAGED_FIELD(loop_mode)>("loop_mode","loop_mode");
+        addField<DAS_BIND_MANAGED_FIELD(position)>("position","position");
+        addField<DAS_BIND_MANAGED_FIELD(phase_inc)>("phase_inc","phase_inc");
+        addField<DAS_BIND_MANAGED_FIELD(vol_env)>("vol_env","vol_env");
+        addField<DAS_BIND_MANAGED_FIELD(mod_env)>("mod_env","mod_env");
+        addField<DAS_BIND_MANAGED_FIELD(filter)>("filter","filter");
+        addField<DAS_BIND_MANAGED_FIELD(initial_filter_fc)>("initial_filter_fc","initial_filter_fc");
+        addField<DAS_BIND_MANAGED_FIELD(initial_filter_q)>("initial_filter_q","initial_filter_q");
+        addField<DAS_BIND_MANAGED_FIELD(mod_env_to_pitch)>("mod_env_to_pitch","mod_env_to_pitch");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_to_pitch)>("mod_lfo_to_pitch","mod_lfo_to_pitch");
+        addField<DAS_BIND_MANAGED_FIELD(vib_lfo_to_pitch)>("vib_lfo_to_pitch","vib_lfo_to_pitch");
+        addField<DAS_BIND_MANAGED_FIELD(mod_env_to_filter_fc)>("mod_env_to_filter_fc","mod_env_to_filter_fc");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_to_filter_fc)>("mod_lfo_to_filter_fc","mod_lfo_to_filter_fc");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_to_volume)>("mod_lfo_to_volume","mod_lfo_to_volume");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_phase)>("mod_lfo_phase","mod_lfo_phase");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_freq)>("mod_lfo_freq","mod_lfo_freq");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_delay)>("mod_lfo_delay","mod_lfo_delay");
+        addField<DAS_BIND_MANAGED_FIELD(mod_lfo_elapsed)>("mod_lfo_elapsed","mod_lfo_elapsed");
+        addField<DAS_BIND_MANAGED_FIELD(vib_lfo_phase)>("vib_lfo_phase","vib_lfo_phase");
+        addField<DAS_BIND_MANAGED_FIELD(vib_lfo_freq)>("vib_lfo_freq","vib_lfo_freq");
+        addField<DAS_BIND_MANAGED_FIELD(vib_lfo_delay)>("vib_lfo_delay","vib_lfo_delay");
+        addField<DAS_BIND_MANAGED_FIELD(vib_lfo_elapsed)>("vib_lfo_elapsed","vib_lfo_elapsed");
+        addField<DAS_BIND_MANAGED_FIELD(attenuation)>("attenuation","attenuation");
+        addField<DAS_BIND_MANAGED_FIELD(pan)>("pan","pan");
+        addField<DAS_BIND_MANAGED_FIELD(released)>("released","released");
+        addField<DAS_BIND_MANAGED_FIELD(finished)>("finished","finished");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
 struct I3DL2ReverbPropertiesAnnotation : ManagedStructureAnnotation<I3DL2ReverbProperties> {
     I3DL2ReverbPropertiesAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("I3DL2ReverbProperties", mlib, "I3DL2ReverbProperties") {
@@ -570,6 +640,26 @@ public:
             SideEffects::modifyArgument, "ma_volume_mixer_set_pan")->args({"mixer", "pan"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_process_pcm_frames)>(*this, lib, "ma_volume_mixer_process_pcm_frames",
             SideEffects::modifyArgument, "ma_volume_mixer_process_pcm_frames")->args({"mixer", "pFramesOut", "pFramesIn", "frameCount"});
+        // sf2 voice
+        addAnnotation(make_smart<MASF2EnvelopeAnnotation>(lib));
+        addAnnotation(make_smart<MASF2BiquadAnnotation>(lib));
+        addAnnotation(make_smart<MASF2VoiceAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_init)>(*this, lib, "ma_sf2_voice_init",
+            SideEffects::modifyArgument, "ma_sf2_voice_init")->args({"voice", "sample_rate"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_note_off)>(*this, lib, "ma_sf2_voice_note_off",
+            SideEffects::modifyArgument, "ma_sf2_voice_note_off")->args({"voice"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_end_quick)>(*this, lib, "ma_sf2_voice_end_quick",
+            SideEffects::modifyArgument, "ma_sf2_voice_end_quick")->args({"voice"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_render)>(*this, lib, "ma_sf2_voice_render",
+            SideEffects::modifyArgument, "ma_sf2_voice_render")->args({"voice", "sample_data", "sample_data_len", "output", "output_offset", "frame_count"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_is_finished)>(*this, lib, "ma_sf2_voice_is_finished",
+            SideEffects::none, "ma_sf2_voice_is_finished")->args({"voice"});
+        addExtern<DAS_BIND_FUN(ma_sf2_envelope_init)>(*this, lib, "ma_sf2_envelope_init",
+            SideEffects::modifyArgument, "ma_sf2_envelope_init")->args({"env"});
+        addExtern<DAS_BIND_FUN(ma_sf2_envelope_start)>(*this, lib, "ma_sf2_envelope_start",
+            SideEffects::modifyArgument, "ma_sf2_envelope_start")->args({"env", "sample_rate"});
+        addExtern<DAS_BIND_FUN(ma_sf2_biquad_setup)>(*this, lib, "ma_sf2_biquad_setup",
+            SideEffects::modifyArgument, "ma_sf2_biquad_setup")->args({"bq", "fc_normalized"});
         // decoder
         addAnnotation(make_smart<MADecoderConfigAnnotation>(lib));
         addAnnotation(make_smart<MADecoderAnnotation>(lib));

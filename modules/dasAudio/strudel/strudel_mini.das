@@ -42,7 +42,7 @@ struct Token {
 // Uses peek_data for O(1) per-character access instead of character_at (which is O(n)).
 def tokenize(input : string) : array<Token> {
     var tokens : array<Token>
-    peek_data(input) <| $(data) {
+    peek_data(input) $(data) {
         var i = 0
         let n = length(data)
         while (i < n) {
@@ -237,7 +237,7 @@ def parse_element(var p : Parser) : Pattern {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let idx = to_int(num.text)
-            var fn <- @capture(= idx) (e : Event) : Event {
+            let fn <- @capture(= idx) (e : Event) : Event {
                 var r = e; r.n = idx; return r
             }
             pat <- fmap(fn, pat)
@@ -297,36 +297,40 @@ def parse_note_name(name : string) : float {
     if (n < 2 || n > 3) {
         return -1.0
     }
-    let ch = first_character(name)
-    var semitone = -1
-    if (ch == 'c') { semitone = 0; }
-    elif (ch == 'd') { semitone = 2; }
-    elif (ch == 'e') { semitone = 4; }
-    elif (ch == 'f') { semitone = 5; }
-    elif (ch == 'g') { semitone = 7; }
-    elif (ch == 'a') { semitone = 9; }
-    elif (ch == 'b') { semitone = 11; }
-    if (semitone < 0) {
-        return -1.0
-    }
-    var octaveIdx = 1
-    if (n == 3) {
-        let mod = character_at(name, 1)
-        if (mod == 's' || mod == '#') {
-            semitone ++
-        } elif (mod == 'b') {
-            semitone --
-        } else {
-            return -1.0
+    var result = -1.0
+    peek_data(name) $(bytes) {
+        let ch = int(bytes[0])
+        var semitone = -1
+        if (ch == 'c') { semitone = 0; }
+        elif (ch == 'd') { semitone = 2; }
+        elif (ch == 'e') { semitone = 4; }
+        elif (ch == 'f') { semitone = 5; }
+        elif (ch == 'g') { semitone = 7; }
+        elif (ch == 'a') { semitone = 9; }
+        elif (ch == 'b') { semitone = 11; }
+        if (semitone < 0) {
+            return
         }
-        octaveIdx = 2
+        var octaveIdx = 1
+        if (n == 3) {
+            let mod = int(bytes[1])
+            if (mod == 's' || mod == '#') {
+                semitone ++
+            } elif (mod == 'b') {
+                semitone --
+            } else {
+                return
+            }
+            octaveIdx = 2
+        }
+        let octCh = int(bytes[octaveIdx])
+        if (octCh < '0' || octCh > '9') {
+            return
+        }
+        let octave = octCh - int('0')
+        result = float((octave + 1) * 12 + semitone)
     }
-    let octCh = character_at(name, octaveIdx)
-    if (octCh < '0' || octCh > '9') {
-        return -1.0
-    }
-    let octave = int(octCh) - int('0')
-    return float((octave + 1) * 12 + semitone)
+    return result
 }
 
 // ─── Bar-aware parsing ───
@@ -386,7 +390,7 @@ def s(notation : string) : Pattern {
 // Parse mini-notation for note patterns.
 // note("c3 ~ e3 g3") → pattern with note events (sound defaults to "sine")
 def note_pattern(notation : string; sound : string = "sine") : Pattern {
-    var pat <- s(notation)
+    let pat <- s(notation)
     return <- set_sound(sound, pat)
 }
 
@@ -396,7 +400,7 @@ def seq(notation : string; sound : string = "sine") : Pattern {
     var tokens <- tokenize(notation)
     var p = Parser()
     p.tokens <- tokens
-    var pat <- parse_bars(p)
+    let pat <- parse_bars(p)
     return <- set_sound(sound, pat)
 }
 
@@ -406,21 +410,21 @@ def seq(notation : string; sound : string = "sine") : Pattern {
 
 // every_fast(4, 2.0, "bd sd hh cp") — double speed every 4th cycle
 def every_fast(n : int; factor : double; notation : string) : Pattern {
-    var on <- fast(factor, s(notation))
-    var off <- s(notation)
+    let on <- fast(factor, s(notation))
+    let off <- s(notation)
     return <- every(n, on, off)
 }
 
 // every_slow(4, 2.0, "bd sd hh cp") — half speed every 4th cycle
 def every_slow(n : int; factor : double; notation : string) : Pattern {
-    var on <- slow(factor, s(notation))
-    var off <- s(notation)
+    let on <- slow(factor, s(notation))
+    let off <- s(notation)
     return <- every(n, on, off)
 }
 
 // every_degrade(4, 0.5, "bd sd hh cp") — randomly drop events every 4th cycle
 def every_degrade(n : int; prob : float; notation : string) : Pattern {
-    var on <- degrade(prob, s(notation))
-    var off <- s(notation)
+    let on <- degrade(prob, s(notation))
+    let off <- s(notation)
     return <- every(n, on, off)
 }

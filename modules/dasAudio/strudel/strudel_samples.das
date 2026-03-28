@@ -56,7 +56,7 @@ def is_audio_file(name : string) : bool {
 // Load a single sound from a directory of audio files.
 def load_sound(path : string; name : string; var bank : SampleBank) {
     var variations : array<Sample>
-    dir(path) <| $(file) {
+    dir(path) $(file) {
         if (file == "." || file == "..") {
             return
         }
@@ -75,13 +75,13 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
 
 // Load a Dirt-Samples style directory structure.
 def load_sample_dir(root : string; var bank : SampleBank) {
-    dir(root) <| $(entry) {
+    dir(root) $(entry) {
         if (entry == "." || entry == "..") {
             return
         }
         let subdir = "{root}/{entry}"
         var variations : array<Sample>
-        dir(subdir) <| $(file) {
+        dir(subdir) $(file) {
             if (file == "." || file == "..") {
                 return
             }
@@ -141,7 +141,7 @@ def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank)
 // Returns interleaved stereo, no gain/pan applied.
 def render_sample(bank : SampleBank; name : string; variation : int; speed : float) : array<float> {
     var stereo : array<float>
-    bank.sounds |> get(name) <| $(variations) {
+    bank.sounds |> get(name) $(variations) {
         if (length(variations) == 0) {
             return
         }
