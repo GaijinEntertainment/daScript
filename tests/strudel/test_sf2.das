@@ -5,8 +5,11 @@ options no_unused_function_arguments = false
 
 require strudel/strudel_sf2
 require dastest/testing_boost
+require daslib/fio
 require math
 require strings
+
+let SF2_DIR = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
 
 def roughly_equal(t : T?; expected, actual, tolerance : float) {
     let diff = abs(expected - actual)
@@ -55,7 +58,12 @@ def test_centibels_to_linear(t : T?) {
 
 [test]
 def test_load_fluidr3(t : T?) {
-    var sf2 = sf2_load("E:/FluidR3_GM.sf2")
+    var st : FStat
+    if (!stat("{SF2_DIR}/FluidR3_GM.sf2", st)) {
+        t->skip("FluidR3_GM.sf2 not available")
+        return
+    }
+    var sf2 = sf2_load("{SF2_DIR}/FluidR3_GM.sf2")
     if (sf2 == null) {
         t->skip("FluidR3_GM.sf2 not available")
         return

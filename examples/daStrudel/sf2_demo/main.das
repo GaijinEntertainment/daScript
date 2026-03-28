@@ -13,14 +13,18 @@ require daslib/fio
 
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
-    let big = "{dir}/FluidR3_GM.sf2"
     var st : FStat
-    if (stat(big, st)) {
-        return big
+    let musyng = "{dir}/Musyng Kite.sf2"
+    if (stat(musyng, st)) {
+        return musyng
     }
-    let small = "{dir}/GeneralUser GS v1.471.sf2"
-    if (stat(small, st)) {
-        return small
+    let fluid = "{dir}/FluidR3_GM.sf2"
+    if (stat(fluid, st)) {
+        return fluid
+    }
+    let generaluser = "{dir}/GeneralUser GS v1.471.sf2"
+    if (stat(generaluser, st)) {
+        return generaluser
     }
     return ""
 }

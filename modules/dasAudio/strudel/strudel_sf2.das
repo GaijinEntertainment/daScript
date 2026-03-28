@@ -88,12 +88,49 @@ struct SF2Generator {
     amount_hi : int         // unsigned byte (for ranges)
 }
 
+// SF2 modulator source flags (encoded in sfModSrcOper u16)
+// Bits 0-6: source index (CC number or general controller enum)
+// Bit 7: CC flag (0=general controller, 1=MIDI CC)
+// Bit 8: direction (0=positive, 1=negative)
+// Bit 9: polarity (0=unipolar, 1=bipolar)
+// Bits 10-15: type (0=linear, 1=concave, 2=convex, 3=switch)
+//
+// General controller indices (when CC flag = 0):
+//   0 = none (value = 1.0), 2 = noteOnVelocity, 3 = noteOnKey,
+//   10 = keyPressure, 13 = channelPressure, 14 = pitchWheel, 16 = pitchWheelSensitivity
+
+struct SF2Modulator {
+    src_oper  : int     // primary source (packed: index + flags)
+    dest_oper : int     // destination generator operator
+    amount    : int     // signed modulation amount
+    amt_src_oper : int  // secondary source (packed: index + flags)
+    transform : int     // transform type (0=linear, 2=absolute value)
+}
+
+// Unpack modulator source fields
+def sf2_mod_src_index(src : int) : int {
+    return src & int(0x7F)
+}
+def sf2_mod_src_cc(src : int) : bool {
+    return (src & int(0x80)) != 0
+}
+def sf2_mod_src_negative(src : int) : bool {
+    return (src & int(0x100)) != 0
+}
+def sf2_mod_src_bipolar(src : int) : bool {
+    return (src & int(0x200)) != 0
+}
+def sf2_mod_src_type(src : int) : int {
+    return (src >> 10) & int(0x3F)
+}
+
 struct SF2Zone {
     key_lo : int = 0
     key_hi : int = 127
     vel_lo : int = 0
     vel_hi : int = 127
     generators : array<SF2Generator>
+    modulators : array<SF2Modulator>
 }
 
 struct SF2InstrumentDef {
@@ -325,6 +362,28 @@ def private parse_generators(data : array<uint8>; offset, size : int) : array<SF
     return <- result
 }
 
+def private parse_modulators(data : array<uint8>; offset, size : int) : array<SF2Modulator> {
+    var result : array<SF2Modulator>
+    let record_size = 10
+    let count = size / record_size
+    if (count <= 1) {
+        return <- result  // last entry is terminal
+    }
+    result |> reserve(count - 1)
+    var cursor = offset
+    for (_ in range(count - 1)) {
+        var m = SF2Modulator()
+        m.src_oper = read_u16_le(data, cursor)
+        m.dest_oper = read_u16_le(data, cursor)
+        let amount = read_u16_le(data, cursor)
+        m.amount = amount >= int(0x8000) ? amount - int(0x10000) : amount
+        m.amt_src_oper = read_u16_le(data, cursor)
+        m.transform = read_u16_le(data, cursor)
+        result |> push(m)
+    }
+    return <- result
+}
+
 // ─── Zone Resolution ───
 
 def private has_generator(zone : SF2Zone; oper : int) : bool {
@@ -354,17 +413,24 @@ def public get_generator_range(zone : SF2Zone; oper : int) : int2 {
     return int2(0, 127)
 }
 
-def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>;
+def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>; all_mods : array<SF2Modulator>;
                           bag_start, bag_end : int; terminal_oper : int) : array<SF2Zone?> {
     var zones : array<SF2Zone?>
     zones |> reserve(bag_end - bag_start)
     for (bi in range(bag_start, bag_end)) {
         let gen_start = bags[bi].gen_index
         let gen_end = bi + 1 < length(bags) ? bags[bi + 1].gen_index : length(all_gens)
+        let mod_start = bags[bi].mod_index
+        let mod_end = bi + 1 < length(bags) ? bags[bi + 1].mod_index : length(all_mods)
         var zone = new SF2Zone()
         for (gi in range(gen_start, gen_end)) {
             if (gi < length(all_gens)) {
                 zone.generators |> push(all_gens[gi])
+            }
+        }
+        for (mi in range(mod_start, mod_end)) {
+            if (mi < length(all_mods)) {
+                zone.modulators |> push(all_mods[mi])
             }
         }
         // extract key/vel ranges
@@ -437,6 +503,8 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
     var raw_ibag : array<RawBag>
     var raw_pgen : array<SF2Generator>
     var raw_igen : array<SF2Generator>
+    var raw_pmod : array<SF2Modulator>
+    var raw_imod : array<SF2Modulator>
 
     // parse LIST chunks
     while (cursor < length(data) - 8) {
@@ -471,14 +539,9 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
                     if (sub_id == "smpl") {
                         let num_samples = sub_size / 2
                         result.sample_data |> resize(num_samples)
-                        for (i in range(num_samples)) {
-                            let lo = int(data[cursor + i * 2])
-                            let hi = int(data[cursor + i * 2 + 1])
-                            var v = lo | (hi << 8)
-                            if (v >= int(0x8000)) {
-                                v -= int(0x10000)
-                            }
-                            result.sample_data[i] = int16(v)
+                        // bulk copy — data is little-endian int16, same as native on x86/x64
+                        unsafe {
+                            memcpy(addr(result.sample_data[0]), addr(data[cursor]), sub_size)
                         }
                         cursor += sub_size
                     } else {
@@ -501,7 +564,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
                     } elif (sub_id == "pbag") {
                         raw_pbag <- parse_bags(data, sub_start, sub_size)
                     } elif (sub_id == "pmod") {
-                        // skip modulators for now
+                        raw_pmod <- parse_modulators(data, sub_start, sub_size)
                     } elif (sub_id == "pgen") {
                         raw_pgen <- parse_generators(data, sub_start, sub_size)
                     } elif (sub_id == "inst") {
@@ -509,7 +572,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
                     } elif (sub_id == "ibag") {
                         raw_ibag <- parse_bags(data, sub_start, sub_size)
                     } elif (sub_id == "imod") {
-                        // skip modulators for now
+                        raw_imod <- parse_modulators(data, sub_start, sub_size)
                     } elif (sub_id == "igen") {
                         raw_igen <- parse_generators(data, sub_start, sub_size)
                     } elif (sub_id == "shdr") {
@@ -537,7 +600,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
         inst.name = raw_inst[ii].name
         let bag_start = raw_inst[ii].ibag_index
         let bag_end = raw_inst[ii + 1].ibag_index
-        var zones <- resolve_zones(raw_ibag, raw_igen, bag_start, bag_end, int(SF2GenOper.sampleID))
+        var zones <- resolve_zones(raw_ibag, raw_igen, raw_imod, bag_start, bag_end, int(SF2GenOper.sampleID))
         inst.global_zone = split_global_zone(zones, int(SF2GenOper.sampleID))
         inst.zones <- zones
         result.instruments |> push(inst)
@@ -553,7 +616,7 @@ def public sf2_parse(data : array<uint8>) : SF2File? {
         preset.bank = raw_phdr[pi].bank
         let bag_start = raw_phdr[pi].pbag_index
         let bag_end = raw_phdr[pi + 1].pbag_index
-        var zones <- resolve_zones(raw_pbag, raw_pgen, bag_start, bag_end, int(SF2GenOper.instrument))
+        var zones <- resolve_zones(raw_pbag, raw_pgen, raw_pmod, bag_start, bag_end, int(SF2GenOper.instrument))
         preset.global_zone = split_global_zone(zones, int(SF2GenOper.instrument))
         preset.zones <- zones
         result.presets |> push(preset)
