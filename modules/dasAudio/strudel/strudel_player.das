@@ -211,7 +211,7 @@ def public strudel_remove_track(var state : StrudelState?; name : string) {
             unsafe { delete state.tracks[i]; }
             state.tracks |> erase(i)
         }
-        i -= 1
+        i --
     }
 }
 
@@ -344,11 +344,7 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
                 unsafe { delete state.tracks[i]; }
                 state.tracks |> erase(i)
             }
-            i -= 1
-        }
-        // clamp output
-        for (s in output) {
-            s = clamp(s, -1.0, 1.0)
+            i --
         }
         if (length(output) > 0) {
             append_to_pcm(state.sid, output)

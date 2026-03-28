@@ -54,7 +54,7 @@ def is_audio_file(name : string) : bool {
 }
 
 // Load a single sound from a directory of audio files.
-def load_sound(path : string; name : string; var bank : SampleBank&) {
+def load_sound(path : string; name : string; var bank : SampleBank) {
     var variations : array<Sample>
     dir(path) <| $(file) {
         if (file == "." || file == "..") {
@@ -74,7 +74,7 @@ def load_sound(path : string; name : string; var bank : SampleBank&) {
 }
 
 // Load a Dirt-Samples style directory structure.
-def load_sample_dir(root : string; var bank : SampleBank&) {
+def load_sample_dir(root : string; var bank : SampleBank) {
     dir(root) <| $(entry) {
         if (entry == "." || entry == "..") {
             return
@@ -96,6 +96,44 @@ def load_sample_dir(root : string; var bank : SampleBank&) {
             let soundName = to_lower(entry)
             bank.sounds[soundName] <- variations
         }
+    }
+}
+
+// Load audio from in-memory bytes (WAV, MP3, FLAC, OGG).
+// Uses miniaudio's memory decoder. Returns empty Sample on failure.
+def load_audio_memory(data : array<uint8>) : Sample {
+    var result : Sample
+    if (length(data) == 0) {
+        return <- result
+    }
+    // decode_audio crashes on invalid data (array index out of range)
+    // so we do our own decoding with proper error checking
+    var decoder = new ma_decoder
+    var config <- ma_decoder_config_init(ma_format.ma_format_f32, 0u, 0u)
+    let res = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)
+    if (res != ma_result.MA_SUCCESS) {
+        unsafe { delete decoder; }
+        return <- result
+    }
+    result.channels = int(decoder.outputChannels)
+    let totalFrames = int(ma_decoder_get_length_in_pcm_frames(decoder))
+    if (totalFrames > 0) {
+        result.data |> resize(totalFrames * result.channels)
+        ma_decoder_read_pcm_frames(decoder, unsafe(addr(result.data[0])), uint64(totalFrames))
+    }
+    ma_decoder_uninit(decoder)
+    unsafe { delete decoder; }
+    return <- result
+}
+
+// Load a sound from in-memory bytes into a sample bank.
+def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank) {
+    var sample <- load_audio_memory(data)
+    if (length(sample.data) > 0) {
+        let soundName = to_lower(name)
+        var variations : array<Sample>
+        variations |> emplace <| sample
+        bank.sounds[soundName] <- variations
     }
 }
 

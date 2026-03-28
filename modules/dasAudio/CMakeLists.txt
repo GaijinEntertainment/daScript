@@ -59,6 +59,8 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	ADD_MODULE_DAS(strudel strudel strudel_scheduler)
 	ADD_MODULE_DAS(strudel strudel strudel_mini)
 	ADD_MODULE_DAS(strudel strudel strudel_samples)
+	ADD_MODULE_DAS(strudel strudel strudel_midi)
+	ADD_MODULE_DAS(strudel strudel strudel_midi_player)
 	ADD_MODULE_DAS(strudel strudel strudel_player)
 	ADD_MODULE_DAS(strudel strudel strudel_live)
 

@@ -10,19 +10,12 @@ require audio/audio_boost
 require daslib/fio
 
 def strudel_main(var state : StrudelState?) {
-    var pats : array<Pattern>
-    // drums
-    var drums <- s("bd sd [hh hh] cp")
-    pats |> emplace <| drums
-    // bass line (sine oscillator, low octave)
-    var bass <- set_gain(0.4, note_pattern("c2 c2 f2 g2", "sine"))
-    pats |> emplace <| bass
-    // lead melody (sawtooth, higher octave)
-    var lead <- set_gain(0.3, note_pattern("<e4 d4> <c4 d4> <e4 f4> <g4 e4>", "sawtooth"))
-    pats |> emplace <| lead
-    var pat <- stack(pats)
     strudel_set_bpm(120.0lf)
-    strudel_play_pattern(state, pat)
+    strudel_play_pattern(state, stack([
+        s("bd sd [hh hh] cp"),
+        set_gain(0.4, note_pattern("c2 c2 f2 g2", "sine")),
+        set_gain(0.3, note_pattern("<e4 d4> <c4 d4> <e4 f4> <g4 e4>", "sawtooth"))
+    ]))
 }
 
 [export]

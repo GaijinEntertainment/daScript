@@ -18,4 +18,6 @@ def initialize(project_path : string) {
     register_native_path("strudel", "strudel_samples", "{project_path}/strudel/strudel_samples.das")
     register_native_path("strudel", "strudel_player", "{project_path}/strudel/strudel_player.das")
     register_native_path("strudel", "strudel_live", "{project_path}/strudel/strudel_live.das")
+    register_native_path("strudel", "strudel_midi", "{project_path}/strudel/strudel_midi.das")
+    register_native_path("strudel", "strudel_midi_player", "{project_path}/strudel/strudel_midi_player.das")
 }

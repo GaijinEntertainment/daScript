@@ -1029,10 +1029,14 @@ namespace das {
             case Type::tUInt2:      case Type::tUInt3:  case Type::tUInt4:  case Type::tUInt8:  case Type::tUInt16:
             case Type::tBitfield8:  case Type::tBitfield16:
             case Type::tEnumeration:    case Type::tEnumeration8:   case Type::tEnumeration16:  case Type::tEnumeration64:
+            case Type::tPointer:    case Type::tStructure:  case Type::tHandle:
+            case Type::tArray:      case Type::tTable:      case Type::tTuple:  case Type::tVariant:
+            case Type::tFunction:   case Type::tLambda:     case Type::tBlock:  case Type::tIterator:
                 def.index = RttiAny;
                 break;
             default:
-                DAS_VERIFYF(false,"unsupported type. i guess new Type::type has been added");
+                DAS_VERIFYF(false,"unsupported type %i in rtti_builtin_variable_value for %s. i guess new Type::type has been added",
+                    int(info.type), info.name ? info.name : "???");
             }
             /*
              * Due to alignment we can't simply copy value.
