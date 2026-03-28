@@ -219,7 +219,7 @@ def strudel_music_cmd(var state : StrudelState?; cmd : string) {
 }
 
 def strudel_music_main(var state : StrudelState?) {
-    strudel_set_bpm(118.0lf)
+    strudel_set_bpm(state, 118.0lf)
     setup_menu_music(state)
     strudel_play(state, @@strudel_music_cmd)
 }

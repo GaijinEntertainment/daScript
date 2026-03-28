@@ -42,7 +42,7 @@ def strudel_main(var state : StrudelState?) {
     var piano <- fmap(@(e) => piano_map(e), set_gain(0.6, melody))
     var drums <- set_gain(0.5, s("bd ~ sd ~"))
     let pat <- stack([piano, drums])
-    strudel_set_bpm(100.0lf)
+    strudel_set_bpm(state, 100.0lf)
     strudel_play_pattern(state, pat)
 }
 

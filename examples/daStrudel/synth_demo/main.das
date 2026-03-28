@@ -10,7 +10,7 @@ require audio/audio_boost
 require daslib/fio
 
 def strudel_main(var state : StrudelState?) {
-    strudel_set_bpm(120.0lf)
+    strudel_set_bpm(state, 120.0lf)
     strudel_play_pattern(state, stack([
         s("bd sd [hh hh] cp"),
         set_gain(0.4, note_pattern("c2 c2 f2 g2", "sine")),

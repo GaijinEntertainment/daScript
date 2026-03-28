@@ -297,6 +297,128 @@ def set_cut(c : int; var pat : Pattern) : Pattern {
     return <- fmap(fn, pat)
 }
 
+// ─── SF2 SoundFont Helpers ───
+
+// GM instrument name → program number mapping.
+def gm_program_by_name(name : string) : int {
+    // Piano family
+    if (name == "piano" || name == "acoustic_grand_piano") { return 0; }
+    if (name == "bright_piano") { return 1; }
+    if (name == "epiano" || name == "electric_piano") { return 4; }
+    if (name == "honkytonk") { return 3; }
+    if (name == "rhodes") { return 4; }
+    if (name == "chorus_piano") { return 5; }
+    if (name == "harpsichord") { return 6; }
+    if (name == "clavinet") { return 7; }
+    // Chromatic Percussion
+    if (name == "celesta") { return 8; }
+    if (name == "glockenspiel") { return 9; }
+    if (name == "music_box") { return 10; }
+    if (name == "vibraphone") { return 11; }
+    if (name == "marimba") { return 12; }
+    if (name == "xylophone") { return 13; }
+    if (name == "tubular_bells") { return 14; }
+    // Organ
+    if (name == "organ") { return 19; }
+    if (name == "church_organ") { return 19; }
+    if (name == "reed_organ") { return 20; }
+    if (name == "accordion") { return 21; }
+    if (name == "harmonica") { return 22; }
+    // Guitar
+    if (name == "guitar" || name == "nylon_guitar") { return 24; }
+    if (name == "steel_guitar") { return 25; }
+    if (name == "electric_guitar" || name == "clean_guitar") { return 27; }
+    if (name == "overdriven_guitar") { return 29; }
+    if (name == "distortion_guitar") { return 30; }
+    // Bass
+    if (name == "bass" || name == "acoustic_bass") { return 32; }
+    if (name == "electric_bass" || name == "finger_bass") { return 33; }
+    if (name == "pick_bass") { return 34; }
+    if (name == "fretless_bass") { return 35; }
+    if (name == "slap_bass") { return 36; }
+    if (name == "synth_bass") { return 38; }
+    // Strings
+    if (name == "violin") { return 40; }
+    if (name == "viola") { return 41; }
+    if (name == "cello") { return 42; }
+    if (name == "contrabass") { return 43; }
+    if (name == "strings" || name == "tremolo_strings") { return 44; }
+    if (name == "pizzicato") { return 45; }
+    if (name == "harp") { return 46; }
+    if (name == "timpani") { return 47; }
+    // Ensemble
+    if (name == "string_ensemble") { return 48; }
+    if (name == "synth_strings") { return 50; }
+    if (name == "choir") { return 52; }
+    if (name == "voice_oohs") { return 53; }
+    if (name == "orchestra_hit") { return 55; }
+    // Brass
+    if (name == "trumpet") { return 56; }
+    if (name == "trombone") { return 57; }
+    if (name == "tuba") { return 58; }
+    if (name == "muted_trumpet") { return 59; }
+    if (name == "french_horn") { return 60; }
+    if (name == "brass" || name == "brass_section") { return 61; }
+    // Reed
+    if (name == "soprano_sax") { return 64; }
+    if (name == "alto_sax") { return 65; }
+    if (name == "tenor_sax") { return 66; }
+    if (name == "baritone_sax") { return 67; }
+    if (name == "oboe") { return 68; }
+    if (name == "english_horn") { return 69; }
+    if (name == "bassoon") { return 70; }
+    if (name == "clarinet") { return 71; }
+    // Pipe
+    if (name == "piccolo") { return 72; }
+    if (name == "flute") { return 73; }
+    if (name == "recorder") { return 74; }
+    if (name == "pan_flute") { return 75; }
+    if (name == "shakuhachi") { return 77; }
+    if (name == "whistle") { return 78; }
+    if (name == "ocarina") { return 79; }
+    // Synth Lead
+    if (name == "synth_lead" || name == "square_lead") { return 80; }
+    if (name == "saw_lead") { return 81; }
+    // Synth Pad
+    if (name == "synth_pad" || name == "new_age") { return 88; }
+    if (name == "warm_pad") { return 89; }
+    // Ethnic
+    if (name == "sitar") { return 104; }
+    if (name == "banjo") { return 105; }
+    if (name == "shamisen") { return 106; }
+    if (name == "koto") { return 107; }
+    if (name == "kalimba") { return 108; }
+    if (name == "bagpipe") { return 109; }
+    if (name == "fiddle") { return 110; }
+    if (name == "shanai") { return 111; }
+    return -1
+}
+
+// set_sf2(0, pat) — set SF2 program number (GM instrument)
+def set_sf2(program : int; var pat : Pattern) : Pattern {
+    let fn <- @capture(= program) (e : Event) : Event {
+        var r = e; r.sf2_program = program; return r
+    }
+    return <- fmap(fn, pat)
+}
+
+// set_sf2("piano", pat) — set SF2 instrument by GM name
+def set_sf2(name : string; var pat : Pattern) : Pattern {
+    let program = gm_program_by_name(name)
+    let fn <- @capture(= program) (e : Event) : Event {
+        var r = e; r.sf2_program = program; return r
+    }
+    return <- fmap(fn, pat)
+}
+
+// set_sf2_bank(128, pat) — set SF2 bank (128 = percussion)
+def set_sf2_bank(bank : int; var pat : Pattern) : Pattern {
+    let fn <- @capture(= bank) (e : Event) : Event {
+        var r = e; r.sf2_bank = bank; return r
+    }
+    return <- fmap(fn, pat)
+}
+
 // ─── Euclidean Rhythms ───
 
 // Euclidean rhythm: play pattern at k evenly-spaced onsets across n subdivisions.

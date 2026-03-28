@@ -238,4 +238,190 @@ def test_save_and_load_manual(t : T?) {
     t |> equal(reference, 13)
 }
 
+// ─── Bulk serialization tests (is_raw path) ───
 
+struct RawPod {
+    x : int
+    y : int
+    z : int
+}
+
+struct NonRawStruct {
+    value : int
+    name : string
+}
+
+[test]
+def test_bulk_array_raw_pod(t : T?) {
+    t |> run("array<int> bulk path") @(t : T?) {
+        var reference <- [for (i in range(1000)); i * 7]
+        var data <- mem_archive_save(reference)
+        // bulk: 4 bytes length + 1000*4 bytes data = 4004
+        t |> equal(length(data), 4 + 1000 * typeinfo sizeof(type<int>))
+        var test : array<int>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 1000)
+        for (i in range(1000)) {
+            t |> equal(test[i], i * 7)
+        }
+    }
+    t |> run("array<float> bulk path") @(t : T?) {
+        var reference : array<float>
+        reference |> reserve(500)
+        for (i in range(500)) {
+            reference |> push(float(i) * 0.5)
+        }
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 4 + 500 * typeinfo sizeof(type<float>))
+        var test : array<float>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 500)
+        t |> equal(test[0], 0.0)
+        t |> equal(test[499], 249.5)
+    }
+    t |> run("array<RawPod> element-wise path (struct, not workhorse)") @(t : T?) {
+        var reference : array<RawPod>
+        reference |> reserve(100)
+        for (i in range(100)) {
+            reference |> push(RawPod(x = i, y = i * 2, z = i * 3))
+        }
+        var data <- mem_archive_save(reference)
+        var test : array<RawPod>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 100)
+        t |> equal(test[0].x, 0)
+        t |> equal(test[99].y, 198)
+        t |> equal(test[50].z, 150)
+    }
+}
+
+[test]
+def test_bulk_array_non_raw(t : T?) {
+    t |> run("array<string> element-wise path") @(t : T?) {
+        var reference : array<string>
+        reference |> push("hello")
+        reference |> push("world")
+        reference |> push("foo")
+        var data <- mem_archive_save(reference)
+        var test : array<string>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 3)
+        t |> equal(test[0], "hello")
+        t |> equal(test[1], "world")
+        t |> equal(test[2], "foo")
+    }
+    t |> run("array<NonRawStruct> element-wise path") @(t : T?) {
+        var reference : array<NonRawStruct>
+        reference |> push(NonRawStruct(value = 1, name = "one"))
+        reference |> push(NonRawStruct(value = 2, name = "two"))
+        var data <- mem_archive_save(reference)
+        var test : array<NonRawStruct>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 2)
+        t |> equal(test[0].value, 1)
+        t |> equal(test[0].name, "one")
+        t |> equal(test[1].value, 2)
+        t |> equal(test[1].name, "two")
+    }
+}
+
+[test]
+def test_bulk_array_empty(t : T?) {
+    t |> run("empty array<int>") @(t : T?) {
+        var reference : array<int>
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 4)  // just the length (0)
+        var test : array<int>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 0)
+    }
+}
+
+[test]
+def test_bulk_dim_raw_pod(t : T?) {
+    t |> run("int[5] bulk path") @(t : T?) {
+        var reference = fixed_array(10, 20, 30, 40, 50)
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 5 * typeinfo sizeof(type<int>))
+        var test : int[5]
+        data |> mem_archive_load(test)
+        delete data
+        for (i in range(5)) {
+            t |> equal(test[i], (i + 1) * 10)
+        }
+    }
+    t |> run("float[3] bulk path") @(t : T?) {
+        var reference = fixed_array(1.5, 2.5, 3.5)
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 3 * typeinfo sizeof(type<float>))
+        var test : float[3]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0], 1.5)
+        t |> equal(test[1], 2.5)
+        t |> equal(test[2], 3.5)
+    }
+    t |> run("RawPod[2] element-wise path (struct, not workhorse)") @(t : T?) {
+        var reference = fixed_array(RawPod(x = 1, y = 2, z = 3), RawPod(x = 4, y = 5, z = 6))
+        var data <- mem_archive_save(reference)
+        var test : RawPod[2]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0].x, 1)
+        t |> equal(test[1].z, 6)
+    }
+    t |> run("int[2][3] 2D bulk path") @(t : T?) {
+        var reference : int[2][3]
+        reference[0][0] = 11
+        reference[1][2] = 99
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 2 * 3 * typeinfo sizeof(type<int>))
+        var test : int[2][3]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0][0], 11)
+        t |> equal(test[1][2], 99)
+        t |> equal(test[0][1], 0)
+    }
+}
+
+[test]
+def test_bulk_dim_non_raw(t : T?) {
+    t |> run("string[3] element-wise path") @(t : T?) {
+        var reference = fixed_array("a", "bb", "ccc")
+        var data <- mem_archive_save(reference)
+        var test : string[3]
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(test[0], "a")
+        t |> equal(test[1], "bb")
+        t |> equal(test[2], "ccc")
+    }
+}
+
+[test]
+def test_bulk_array_int16(t : T?) {
+    // Simulates the SF2 sample_data use case (array<int16>)
+    t |> run("array<int16> bulk path") @(t : T?) {
+        var reference : array<int16>
+        reference |> reserve(10000)
+        for (i in range(10000)) {
+            reference |> push(int16(i % 32000))
+        }
+        var data <- mem_archive_save(reference)
+        t |> equal(length(data), 4 + 10000 * typeinfo sizeof(type<int16>))
+        var test : array<int16>
+        data |> mem_archive_load(test)
+        delete data
+        t |> equal(length(test), 10000)
+        t |> equal(int(test[0]), 0)
+        t |> equal(int(test[9999]), 9999 % 32000)
+        t |> equal(int(test[5000]), 5000)
+    }
+}

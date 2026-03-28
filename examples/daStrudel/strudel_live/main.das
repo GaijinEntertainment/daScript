@@ -8,6 +8,7 @@ require audio/audio_boost
 require live/audio_live
 require live/live_commands
 require live/live_api
+require live/live_watch_boost
 require live_host
 require daslib/fio
 require daslib/strings_boost
@@ -19,7 +20,7 @@ let MEDIA = "{get_das_root()}/examples/media"
 def strudel_main(var state : StrudelState?) {
     let drums <- s("bd [hh hh] sd [hh cp]")
     strudel_add_track(state, "drums", drums)
-    strudel_set_bpm(120.0lf)
+    strudel_set_bpm(state, 120.0lf)
     strudel_play(state, @@strudel_on_command)
 }
 

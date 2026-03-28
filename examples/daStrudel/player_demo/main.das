@@ -27,6 +27,6 @@ def main() {
 
 def strudel_main(var state : StrudelState?) {
     let pat <- s("bd sd [hh hh] cp")
-    strudel_set_bpm(120.0lf)
+    strudel_set_bpm(state, 120.0lf)
     strudel_play_pattern(state, pat)
 }
