@@ -39,10 +39,12 @@ struct StrudelTrack {
     gain        : float = 1.0
     target_gain : float = 1.0
     fade_speed  : float = 0.0     // gain change per second (0 = no fade)
+    audio_vis_ptr : void?          // per-track PCM channel as void* (lifetime owned elsewhere)
 }
 
 // --- Shared state (passed to thread function) ---
 
+[safe_when_uninitialized]
 struct StrudelState {
     bank          : SampleBank?   // pointer to g_bank (immutable after load)
     sf2           : SF2File const? // pointer to g_sf2 (immutable after load)
@@ -53,6 +55,12 @@ struct StrudelState {
     done_channel  : Channel?      // thread -> main (done signal)
     audio_channel : void?         // audio command channel (for append_to_pcm on thread)
     tracks        : array<StrudelTrack?> // active tracks
+    playback_box  : LockBox?      // thread → main: current PlaybackTime
+    vis_channels  : array<Channel?> // hap channels (main creates, thread pushes)
+    audio_vis_channel : Channel?    // optional: master PCM chunks for spectrum analyzer
+    track_audio_channels : array<Channel?> // per-track PCM channels
+    vis_names     : array<string>      // parallel to vis_channels: name at index i
+    vis_look_ahead : float = 0.1      // how far ahead scheduler queries (seconds)
 }
 
 // --- Module globals ---
@@ -67,6 +75,33 @@ var private g_sf2 : SF2File?
 var private g_sf2_path : string   // path to loaded SF2 (for live-reload re-read)
 var private g_state : StrudelState
 var private g_cmd_fn : function<(var state : StrudelState?; cmd : string) : void>
+var private g_playback_box : LockBox?
+
+struct AudioChunk {
+    samples : array<float>
+}
+
+struct PlaybackTime {
+    wall_time : double
+    cps       : double
+}
+
+// Get current playback position and tempo from the audio thread.
+// Returns (wall_time, cps). Safe to call from the main/GL thread.
+def public strudel_get_playback_time() : tuple<double; double> {
+    var wt = 0.0lf
+    var cp = 0.5lf
+    if (g_playback_box != null) {
+        g_playback_box |> get() $(pt : PlaybackTime#) {
+            wt = pt.wall_time
+            cp = pt.cps
+        }
+    } else {
+        wt = g_wall_time
+        cp = g_cps
+    }
+    return wt => cp
+}
 
 // --- Public API ---
 
@@ -147,6 +182,36 @@ def public strudel_set_cps(var state : StrudelState?; cps : double) {
     state.cps = cps
 }
 
+def public strudel_add_vis_channel(var ch : Channel?) {
+    ch |> add_ref()
+    g_state.vis_channels |> push(ch)
+}
+
+def public strudel_set_audio_vis_channel(var ch : Channel?) {
+    ch |> add_ref()
+    g_state.audio_vis_channel = ch
+    g_state.audio_vis_channel |> add_ref()
+}
+
+def public strudel_add_track_audio_channel(var ch : Channel?) {
+    ch |> add_ref()
+    g_state.track_audio_channels |> push(ch)
+}
+
+// Register a named visualization: hap channel + audio channel + registry entry.
+// Called by create_track_vis on the main thread.
+def public strudel_register_vis(name : string; vis_index : int; var hap_ch, audio_ch : Channel?) {
+    hap_ch |> add_ref()
+    g_state.vis_channels |> push(hap_ch)
+    audio_ch |> add_ref()
+    g_state.track_audio_channels |> push(audio_ch)
+    g_state.vis_names |> push(name)
+}
+
+def public strudel_set_look_ahead(look_ahead : float) {
+    g_state.vis_look_ahead = look_ahead
+}
+
 def public strudel_command(cmd : string) {
     if (g_cmd_channel != null) {
         var sc = new StrudelCommand(shutdown = false)
@@ -191,6 +256,11 @@ def public strudel_init(fn : function<(var state : StrudelState?) : void>; cmd_f
         g_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     }
     g_cmd_fn = cmd_fn
+    // create playback time lockbox (shared via StrudelState pointer)
+    if (g_playback_box == null) {
+        g_playback_box = unsafe(lock_box_create())
+        g_playback_box |> add_ref()
+    }
     // create channels
     g_cmd_channel = unsafe(channel_create())
     g_cmd_channel |> add_ref()
@@ -207,6 +277,8 @@ def public strudel_init(fn : function<(var state : StrudelState?) : void>; cmd_f
     g_state.done_channel = g_done_channel
     g_state.done_channel |> add_ref()
     g_state.audio_channel = get_audio_command_channel()
+    g_state.playback_box = g_playback_box
+    g_state.playback_box |> add_ref()
     // spawn thread
     var state = unsafe(addr(g_state))
     var cmd_ch = g_cmd_channel
@@ -230,11 +302,20 @@ def public strudel_init(fn : function<(var state : StrudelState?) : void>; cmd_f
 def public strudel_add_track(var state : StrudelState?; name : string; var pat : Pattern; gain : float = 1.0) {
     // remove existing track with same name
     strudel_remove_track(state, name)
+    // auto-attach audio vis channel if name is in vis_registry
+    var audio_ptr : void?
+    for (vi in range(length(state.vis_names))) {
+        if (state.vis_names[vi] == name && vi < length(state.track_audio_channels)) {
+            audio_ptr = unsafe(reinterpret<void?>(state.track_audio_channels[vi]))
+            break
+        }
+    }
     state.tracks |> push(new StrudelTrack(
         name = name,
         pat <- pat,
         gain = gain,
-        target_gain = gain
+        target_gain = gain,
+        audio_vis_ptr = audio_ptr
     ))
     var track = state.tracks[length(state.tracks) - 1]
     track.sched.cps = state.cps
@@ -242,6 +323,26 @@ def public strudel_add_track(var state : StrudelState?; name : string; var pat :
     track.sched.sf2 = state.sf2
     if (state.sf2 != null) {
         init_reverb(track.sched)
+        init_chorus(track.sched)
+    }
+}
+
+def public strudel_add_track_with_vis(var state : StrudelState?; name : string; var pat : Pattern; var audio_ch : Channel?; gain : float = 1.0) {
+    strudel_remove_track(state, name)
+    state.tracks |> push(new StrudelTrack(
+        name = name,
+        pat <- pat,
+        gain = gain,
+        target_gain = gain,
+        audio_vis_ptr = unsafe(reinterpret<void?>(audio_ch))
+    ))
+    var track = state.tracks[length(state.tracks) - 1]
+    track.sched.cps = state.cps
+    track.sched.lastQueryEnd = state.wall_time * state.cps
+    track.sched.sf2 = state.sf2
+    if (state.sf2 != null) {
+        init_reverb(track.sched)
+        init_chorus(track.sched)
     }
 }
 
@@ -309,6 +410,7 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
     sched.sf2 = state.sf2
     if (state.sf2 != null) {
         init_reverb(sched)
+        init_chorus(sched)
     }
     var status_box <- unsafe(lock_box_create())
     set_status_update(state.sid, status_box)
@@ -318,13 +420,21 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
             sched.cps = state.cps
         }
         let t0 = ref_time_ticks()
-        var chunk <- tick(sched, pat, *state.bank, state.wall_time, float(CHUNK_SEC))
+        var chunk <- tick(sched, pat, *state.bank, state.wall_time, float(CHUNK_SEC), state.vis_look_ahead)
         if (length(chunk) > 0) {
             total_time += double(get_time_usec(t0)) / 1000.lf
             total_samples += uint64(length(chunk) / 2)
+            // send PCM to spectrum visualizer
+            if (state.audio_vis_channel != null) {
+                state.audio_vis_channel |> push_clone(AudioChunk(samples := chunk))
+            }
             append_to_pcm(state.sid, chunk)
         }
         state.wall_time += CHUNK_SEC
+        // update playback time for visualization
+        if (state.playback_box != null) {
+            state.playback_box |> set(PlaybackTime(wall_time = state.wall_time, cps = state.cps))
+        }
         var que_len = 0
         status_box |> get() $(st : AudioChannelStatus#) {
             que_len = st.stream_que_length
@@ -371,7 +481,12 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
                 track.sched.lastQueryEnd = state.wall_time * state.cps
                 track.sched.cps = state.cps
             }
-            var chunk <- tick(track.sched, track.pat, *state.bank, state.wall_time, float(CHUNK_SEC))
+            var chunk <- tick(track.sched, track.pat, *state.bank, state.wall_time, float(CHUNK_SEC), state.vis_look_ahead)
+            // per-track PCM for visualization (pre-mix)
+            if (track.audio_vis_ptr != null && length(chunk) > 0) {
+                var vis_ch = unsafe(reinterpret<Channel?>(track.audio_vis_ptr))
+                vis_ch |> push_clone(AudioChunk(samples := chunk))
+            }
             // mix into output with track gain via ma_volume_mixer
             if (length(chunk) > 0 && track.gain > 0.001) {
                 ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
@@ -406,11 +521,19 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
             i --
         }
         if (length(output) > 0) {
+            // send PCM to spectrum visualizer
+            if (state.audio_vis_channel != null) {
+                state.audio_vis_channel |> push_clone(AudioChunk(samples := output))
+            }
             append_to_pcm(state.sid, output)
         }
         total_time += double(get_time_usec(t0)) / 1000.lf
         total_samples += uint64(chunkSamples / 2)
         state.wall_time += CHUNK_SEC
+        // update playback time for visualization
+        if (state.playback_box != null) {
+            state.playback_box |> set(PlaybackTime(wall_time = state.wall_time, cps = state.cps))
+        }
         // buffer level feedback
         var que_len = 0
         status_box |> get() $(st : AudioChannelStatus#) {
