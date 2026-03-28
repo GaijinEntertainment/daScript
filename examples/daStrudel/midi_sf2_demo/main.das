@@ -2,9 +2,9 @@ options gen2
 options indenting = 4
 
 // MIDI player with SF2 SoundFont — plays a .mid file using a GM SoundFont.
-// Place FluidR3_GM.sf2 or GeneralUser GS v1.471.sf2 next to this file (see README.md).
+// Place a GM SoundFont next to this file (see README.md for download links).
 // Usage: daslang.exe main.das [-- path_to.mid]
-// Default: examples/media/midi/fur_elise.mid
+// Default: examples/media/midi/take_five.mid
 
 require strudel/strudel_midi_player
 require audio/audio_boost
@@ -13,14 +13,19 @@ require daslib/strings_boost
 
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
-    let big = "{dir}/FluidR3_GM.sf2"
     var st : FStat
-    if (stat(big, st)) {
-        return big
+    // prefer larger soundfonts — more samples, better quality
+    let musyng = "{dir}/Musyng Kite.sf2"
+    if (stat(musyng, st)) {
+        return musyng
     }
-    let small = "{dir}/GeneralUser GS v1.471.sf2"
-    if (stat(small, st)) {
-        return small
+    let fluid = "{dir}/FluidR3_GM.sf2"
+    if (stat(fluid, st)) {
+        return fluid
+    }
+    let generaluser = "{dir}/GeneralUser GS v1.471.sf2"
+    if (stat(generaluser, st)) {
+        return generaluser
     }
     return ""
 }

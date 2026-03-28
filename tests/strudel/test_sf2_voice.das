@@ -7,7 +7,10 @@ require strudel/strudel_sf2
 require strudel/strudel_sf2_voice
 require audio
 require dastest/testing_boost
+require daslib/fio
 require math
+
+let SF2_DIR = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
 
 def roughly_equal(t : T?; expected, actual, tolerance : float; msg : string = "") {
     let diff = abs(expected - actual)
@@ -140,9 +143,14 @@ def test_lfo(t : T?) {
 
 [test]
 def test_voice_pitch(t : T?) {
-    var sf2 = sf2_load("E:/FluidR3_GM.sf2")
-    if (sf2 == null) {
+    var st : FStat
+    if (!stat("{SF2_DIR}/FluidR3_GM.sf2", st)) {
         t->skip("FluidR3_GM.sf2 not available")
+        return
+    }
+    var sf2 = sf2_load("{SF2_DIR}/FluidR3_GM.sf2")
+    if (sf2 == null) {
+        t->skip("FluidR3_GM.sf2 failed to load")
         return
     }
     t |> run("piano C4 on root key has phase_inc near 1.0") <| @(t : T?) {
@@ -257,9 +265,14 @@ def test_loop_modes(t : T?) {
 
 [test]
 def test_c_voice_render(t : T?) {
-    var sf2 = sf2_load("E:/FluidR3_GM.sf2")
-    if (sf2 == null) {
+    var st : FStat
+    if (!stat("{SF2_DIR}/FluidR3_GM.sf2", st)) {
         t->skip("FluidR3_GM.sf2 not available")
+        return
+    }
+    var sf2 = sf2_load("{SF2_DIR}/FluidR3_GM.sf2")
+    if (sf2 == null) {
+        t->skip("FluidR3_GM.sf2 failed to load")
         return
     }
     t |> run("C voice produces non-zero output") <| @(t : T?) {

@@ -27,6 +27,199 @@ def public sf2_velocity_attenuation(velocity : int) : float {
     return centibels_to_linear(int(atten_cb))
 }
 
+// ─── Modulator Transform Curves ───
+
+// SF2 concave curve: (-200*2/960) * log10((127-i)/127) for i in 0..127
+// From SF2 spec page 73. FluidSynth uses the same formula.
+let private PEAK_ATTEN = 960.0
+
+def private sf2_concave(val : float) : float {
+    if (val <= 0.0) {
+        return 0.0
+    }
+    if (val >= 127.0) {
+        return 1.0
+    }
+    return clamp((-200.0 * 2.0 / PEAK_ATTEN) * log((127.0 - val) / 127.0) / 2.302585, 0.0, 1.0)
+}
+
+def private sf2_convex(val : float) : float {
+    if (val <= 0.0) {
+        return 0.0
+    }
+    if (val >= 127.0) {
+        return 1.0
+    }
+    return clamp(1.0 - (-200.0 * 2.0 / PEAK_ATTEN) * log(val / 127.0) / 2.302585, 0.0, 1.0)
+}
+
+// ─── Modulator Source Value ───
+
+// Get raw source value for a modulator source operand.
+// Returns the value and the range (typically 128.0, but 0x4000 for pitch wheel).
+// Returns (value, range) tuple. Range is typically 128.0, but 16384.0 for pitch wheel.
+def private sf2_mod_source_value(src : int; velocity, key : int; cc_values : int[128]) : tuple<float; float> {
+    if (sf2_mod_src_cc(src)) {
+        return float(cc_values[sf2_mod_src_index(src)]) => 128.0
+    }
+    let idx = sf2_mod_src_index(src)
+    if (idx == 0) {        // NONE — value is range (produces 1.0 after normalization)
+        return 128.0 => 128.0
+    } elif (idx == 2) {    // noteOnVelocity
+        return float(velocity) => 128.0
+    } elif (idx == 3) {    // noteOnKey
+        return float(key) => 128.0
+    } elif (idx == 10) {   // keyPressure — not implemented
+        return 0.0 => 128.0
+    } elif (idx == 13) {   // channelPressure — not implemented
+        return 0.0 => 128.0
+    } elif (idx == 14) {   // pitchWheel
+        return float(cc_values[127]) => 16384.0  // last CC slot as pitchwheel placeholder
+    } elif (idx == 16) {   // pitchWheelSensitivity — default 2 semitones
+        return 2.0 => 128.0
+    }
+    return 0.0 => 128.0
+}
+
+// Transform a raw source value into [0..1] (unipolar) or [-1..1] (bipolar).
+// Applies direction (positive/negative), polarity (unipolar/bipolar), and
+// mapping function (linear/concave/convex/switch).
+def private sf2_mod_transform_source(src : int; val, src_range : float) : float {
+    let idx = sf2_mod_src_index(src)
+    if (idx == 0 && !sf2_mod_src_cc(src)) {
+        return 1.0  // NONE source always returns 1.0
+    }
+    let val_norm = val / src_range
+    let inv_norm = 1.0 - 1.0 / src_range - val_norm
+    let is_negative = sf2_mod_src_negative(src)
+    let is_bipolar = sf2_mod_src_bipolar(src)
+    let map_type = sf2_mod_src_type(src)
+    let max_norm = (src_range - 1.0) / src_range
+    var v = 0.0
+    if (!is_bipolar) {
+        // unipolar [0..1]
+        v = is_negative ? inv_norm : val_norm
+        if (map_type == 3) {        // switch
+            v = v >= 0.5 ? 1.0 : 0.0
+        } elif (map_type == 1) {    // concave
+            v = min(sf2_concave(128.0 * v), max_norm)
+        } elif (map_type == 2) {    // convex
+            v = min(sf2_convex(128.0 * v), max_norm)
+        }
+        // else linear — keep as is
+    } else {
+        // bipolar [-1..1]
+        let base = is_negative ? inv_norm : val_norm
+        v = base == max_norm ? base : -1.0 + 2.0 * base
+        if (map_type == 3) {        // switch
+            v = v >= 0.0 ? 1.0 : -1.0
+        } elif (map_type == 1) {    // concave
+            v = v >= 0.0 ? min(sf2_concave(128.0 * v), max_norm) : -sf2_concave(128.0 * -v)
+        } elif (map_type == 2) {    // convex
+            v = v >= 0.0 ? min(sf2_convex(128.0 * v), max_norm) : -sf2_convex(128.0 * -v)
+        }
+        // else linear — keep as is
+    }
+    return v
+}
+
+// Evaluate a single SF2 modulator: amount * transform(src1) * transform(src2)
+def public sf2_mod_get_value(m : SF2Modulator; velocity, key : int; cc_values : int[128]) : float {
+    let s1 = sf2_mod_source_value(m.src_oper, velocity, key, cc_values)
+    let v1 = sf2_mod_transform_source(m.src_oper, s1._0, s1._1)
+    let s2 = sf2_mod_source_value(m.amt_src_oper, velocity, key, cc_values)
+    let v2 = sf2_mod_transform_source(m.amt_src_oper, s2._0, s2._1)
+    var result = float(m.amount) * v1 * v2
+    if (m.transform == 2) {  // absolute value transform
+        result = abs(result)
+    }
+    return result
+}
+
+// Apply all modulators from a zone to a generator accumulator.
+// gen_offsets[oper] += sum of modulator outputs targeting that generator.
+def public sf2_apply_modulators(zone : SF2Zone; velocity, key : int; cc_values : int[128]; var gen_offsets : float[64]) {
+    for (m in zone.modulators) {
+        let val = sf2_mod_get_value(m, velocity, key, cc_values)
+        if (m.dest_oper >= 0 && m.dest_oper < 64) {
+            gen_offsets[m.dest_oper] += val
+        }
+    }
+}
+
+// ─── SF2 Default Modulators (spec 8.4.1-8.4.10) ───
+
+// Two modulators match identity if they have the same src1, src2, and destination.
+def public sf2_mod_identity_match(a, b : SF2Modulator) : bool {
+    return a.src_oper == b.src_oper && a.amt_src_oper == b.amt_src_oper && a.dest_oper == b.dest_oper
+}
+
+// Check if any modulator in the zone overrides (has same identity as) a default modulator.
+def private sf2_zone_overrides(zone : SF2Zone; def_mod : SF2Modulator) : bool {
+    for (m in zone.modulators) {
+        if (sf2_mod_identity_match(m, def_mod)) {
+            return true
+        }
+    }
+    return false
+}
+
+// The 10 SF2 default modulators. Built from SF2.01 spec sections 8.4.1-8.4.10.
+// Encoding: src = index | (CC ? 0x80 : 0) | (negative ? 0x100 : 0) | (bipolar ? 0x200 : 0) | (type << 10)
+// type: 0=linear, 1=concave, 2=convex, 3=switch
+let private SF2_DEFAULT_MODS = fixed_array(
+    // #1: velocity → attenuation (concave, negative, unipolar) — 960 cB
+    SF2Modulator(src_oper = int(0x0502), amt_src_oper = 0, dest_oper = int(SF2GenOper.initialAttenuation), amount = 960, transform = 0),
+    // #2: velocity → filter cutoff (linear, negative, unipolar; switch, unipolar, positive)
+    // FluidSynth disables this (returns 0). We follow FluidSynth.
+    SF2Modulator(src_oper = int(0x0102), amt_src_oper = int(0x0C02), dest_oper = int(SF2GenOper.initialFilterFc), amount = 0, transform = 0),
+    // #3: channel pressure → vib LFO pitch (linear, positive, unipolar) — 50 cents
+    SF2Modulator(src_oper = int(0x000D), amt_src_oper = 0, dest_oper = int(SF2GenOper.vibLfoToPitch), amount = 50, transform = 0),
+    // #4: CC1 mod wheel → vib LFO pitch (CC, linear, positive, unipolar) — 50 cents
+    SF2Modulator(src_oper = int(0x0081), amt_src_oper = 0, dest_oper = int(SF2GenOper.vibLfoToPitch), amount = 50, transform = 0),
+    // #5: CC7 volume → attenuation (CC, concave, negative, unipolar) — 960 cB
+    SF2Modulator(src_oper = int(0x0587), amt_src_oper = 0, dest_oper = int(SF2GenOper.initialAttenuation), amount = 960, transform = 0),
+    // #6: CC10 pan → pan (CC, linear, bipolar, positive) — 500 (0.1% units)
+    SF2Modulator(src_oper = int(0x028A), amt_src_oper = 0, dest_oper = int(SF2GenOper.pan), amount = 500, transform = 0),
+    // #7: CC11 expression → attenuation (CC, concave, negative, unipolar) — 960 cB
+    SF2Modulator(src_oper = int(0x058B), amt_src_oper = 0, dest_oper = int(SF2GenOper.initialAttenuation), amount = 960, transform = 0),
+    // #8: CC91 → reverb send (CC, linear, positive, unipolar) — 200 (0.1% units)
+    SF2Modulator(src_oper = int(0x00DB), amt_src_oper = 0, dest_oper = int(SF2GenOper.reverbEffectsSend), amount = 200, transform = 0),
+    // #9: CC93 → chorus send (CC, linear, positive, unipolar) — 200 (0.1% units)
+    SF2Modulator(src_oper = int(0x00DD), amt_src_oper = 0, dest_oper = int(SF2GenOper.chorusEffectsSend), amount = 200, transform = 0),
+    // #10: pitch wheel × pitch wheel sensitivity → fine tune (bipolar, linear × unipolar, linear) — 12700 cents
+    SF2Modulator(src_oper = int(0x020E), amt_src_oper = int(0x0010), dest_oper = int(SF2GenOper.fineTune), amount = 12700, transform = 0)
+)
+
+// Apply default modulators that are not overridden by any zone modulator.
+// Call this AFTER applying zone modulators to gen_offsets.
+def public sf2_apply_default_modulators(izone : SF2Zone; global_izone : SF2Zone const?;
+                                        pzone : SF2Zone const?; global_pzone : SF2Zone const?;
+                                        velocity, key : int; cc_values : int[128]; var gen_offsets : float[64]) {
+    for (dm in SF2_DEFAULT_MODS) {
+        if (dm.amount == 0) {
+            continue  // disabled default (#2 vel→filter)
+        }
+        // check if any zone overrides this default
+        var overridden = sf2_zone_overrides(izone, dm)
+        if (!overridden && global_izone != null) {
+            overridden = sf2_zone_overrides(*global_izone, dm)
+        }
+        if (!overridden && pzone != null) {
+            overridden = sf2_zone_overrides(*pzone, dm)
+        }
+        if (!overridden && global_pzone != null) {
+            overridden = sf2_zone_overrides(*global_pzone, dm)
+        }
+        if (!overridden) {
+            let val = sf2_mod_get_value(dm, velocity, key, cc_values)
+            if (dm.dest_oper >= 0 && dm.dest_oper < 64) {
+                gen_offsets[dm.dest_oper] += val
+            }
+        }
+    }
+}
+
 // ─── Envelope ───
 
 enum SF2EnvStage {
@@ -383,8 +576,75 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
 
     // volume — SF2 spec centibels + concave velocity curve
     let atten_raw = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.initialAttenuation), 0)
-    out_voice.attenuation = centibels_to_linear(atten_raw) * sf2_velocity_attenuation(velocity)
+    // velocity→attenuation is now handled by default modulator #1 (concave curve, 960 cB)
+    out_voice.attenuation = centibels_to_linear(atten_raw)
     out_voice.pan = clamp(float(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.pan), 0)) / 500.0, -1.0, 1.0)
+
+    // ─── Apply modulators ───
+    // Compute modulator offsets from instrument zone, global instrument zone,
+    // preset zone, and global preset zone. All offsets are additive to the
+    // generator values already set above.
+    var cc_values : int[128]
+    // default CC values: CC7 (volume)=127, CC10 (pan)=64, CC11 (expression)=127
+    cc_values[7] = 127
+    cc_values[10] = 64
+    cc_values[11] = 127
+    var gen_offsets : float[64]
+    sf2_apply_modulators(*izone, velocity, note, cc_values, gen_offsets)
+    if (global_izone != null) {
+        // global zone modulators apply unless overridden by zone modulator with same src/dest
+        sf2_apply_modulators(*global_izone, velocity, note, cc_values, gen_offsets)
+    }
+    if (pzone != null) {
+        sf2_apply_modulators(*pzone, velocity, note, cc_values, gen_offsets)
+    }
+    if (global_pzone != null) {
+        sf2_apply_modulators(*global_pzone, velocity, note, cc_values, gen_offsets)
+    }
+    // Apply default modulators (SF2 spec 8.4.1-8.4.10) unless overridden by zone modulators
+    sf2_apply_default_modulators(*izone, global_izone, pzone, global_pzone, velocity, note, cc_values, gen_offsets)
+    // Apply offsets to voice parameters
+    // Pitch (cents)
+    let mod_pitch = gen_offsets[int(SF2GenOper.coarseTune)] * 100.0 + gen_offsets[int(SF2GenOper.fineTune)]
+    if (abs(mod_pitch) > 0.01) {
+        out_voice.phase_inc *= double(pow(2.0, mod_pitch / 1200.0))
+    }
+    // Filter cutoff (cents from 8.176 Hz)
+    let mod_fc = gen_offsets[int(SF2GenOper.initialFilterFc)]
+    if (abs(mod_fc) > 0.01) {
+        let new_fc_cents = filter_fc_cents + mod_fc
+        let new_fc_hz = new_fc_cents <= 13500.0 ? cents_to_hz(int(new_fc_cents)) : sr * 0.5
+        let new_fc_norm = new_fc_hz / sr
+        out_voice.filter.active = new_fc_norm < 0.499 ? 1 : 0
+        if (out_voice.filter.active != 0) {
+            unsafe { ma_sf2_biquad_setup(addr(out_voice.filter), new_fc_norm); }
+        }
+    }
+    // Filter Q (centibels)
+    let mod_q = gen_offsets[int(SF2GenOper.initialFilterQ)]
+    if (abs(mod_q) > 0.01) {
+        out_voice.initial_filter_q += mod_q / 10.0
+        out_voice.filter.q_inv = 1.0lf / pow(10.0lf, double(out_voice.initial_filter_q) / 20.0lf)
+    }
+    // Attenuation (centibels) — additive to existing
+    let mod_atten = gen_offsets[int(SF2GenOper.initialAttenuation)]
+    if (abs(mod_atten) > 0.01) {
+        out_voice.attenuation *= centibels_to_linear(int(mod_atten))
+    }
+    // Pan (0.1% units, ±500 = ±full)
+    let mod_pan = gen_offsets[int(SF2GenOper.pan)]
+    if (abs(mod_pan) > 0.01) {
+        out_voice.pan = clamp(out_voice.pan + mod_pan / 500.0, -1.0, 1.0)
+    }
+    // Modulation routing offsets (cents)
+    out_voice.mod_env_to_pitch += gen_offsets[int(SF2GenOper.modEnvToPitch)]
+    out_voice.mod_env_to_filter_fc += gen_offsets[int(SF2GenOper.modEnvToFilterFc)]
+    out_voice.mod_lfo_to_pitch += gen_offsets[int(SF2GenOper.modLfoToPitch)]
+    out_voice.mod_lfo_to_filter_fc += gen_offsets[int(SF2GenOper.modLfoToFilterFc)]
+    out_voice.mod_lfo_to_volume += gen_offsets[int(SF2GenOper.modLfoToVolume)]
+    out_voice.vib_lfo_to_pitch += gen_offsets[int(SF2GenOper.vibLfoToPitch)]
+    // Reverb/chorus send (0.1% units)
+    // These are handled externally by sf2_get_reverb_send, modulators add to the generator value
 
     // exclusive class — stored externally by the caller since ma_sf2_voice doesn't have it
     return true
