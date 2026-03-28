@@ -37,6 +37,9 @@
 #define I3DL32_REVERB_IMPLEMENTATION    1
 #include "reverb.h"
 
+#define MA_CHORUS_IMPLEMENTATION
+#include "chorus.h"
+
 #include "dasAudio.h"
 
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
@@ -59,6 +62,9 @@ MAKE_TYPE_FACTORY(ma_limiter,ma_limiter);
 MAKE_TYPE_FACTORY(ma_sf2_envelope,ma_sf2_envelope);
 MAKE_TYPE_FACTORY(ma_sf2_biquad,ma_sf2_biquad);
 MAKE_TYPE_FACTORY(ma_sf2_voice,ma_sf2_voice);
+
+MAKE_TYPE_FACTORY(ma_chorus_config,ma_chorus_config);
+MAKE_TYPE_FACTORY(ma_chorus,ma_chorus);
 
 DAS_BASE_BIND_ENUM ( ma_format, ma_format, \
     ma_format_unknown, \
@@ -443,6 +449,11 @@ struct MASF2VoiceAnnotation : ManagedStructureAnnotation<ma_sf2_voice> {
         addField<DAS_BIND_MANAGED_FIELD(loop_start)>("loop_start","loop_start");
         addField<DAS_BIND_MANAGED_FIELD(loop_end)>("loop_end","loop_end");
         addField<DAS_BIND_MANAGED_FIELD(loop_mode)>("loop_mode","loop_mode");
+        addField<DAS_BIND_MANAGED_FIELD(sample_start_r)>("sample_start_r","sample_start_r");
+        addField<DAS_BIND_MANAGED_FIELD(sample_end_r)>("sample_end_r","sample_end_r");
+        addField<DAS_BIND_MANAGED_FIELD(loop_start_r)>("loop_start_r","loop_start_r");
+        addField<DAS_BIND_MANAGED_FIELD(loop_end_r)>("loop_end_r","loop_end_r");
+        addField<DAS_BIND_MANAGED_FIELD(stereo)>("stereo","stereo");
         addField<DAS_BIND_MANAGED_FIELD(position)>("position","position");
         addField<DAS_BIND_MANAGED_FIELD(phase_inc)>("phase_inc","phase_inc");
         addField<DAS_BIND_MANAGED_FIELD(vol_env)>("vol_env","vol_env");
@@ -494,6 +505,44 @@ struct I3DL2ReverbAnnotation : ManagedStructureAnnotation<I3DL2Reverb,true,true>
         : ManagedStructureAnnotation("I3DL2Reverb", mlib, "I3DL2Reverb") {
     }
 };
+
+// ─── Chorus ───
+
+struct MaChorusConfigAnnotation : ManagedStructureAnnotation<ma_chorus_config> {
+    MaChorusConfigAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_chorus_config", mlib, "ma_chorus_config") {
+        addField<DAS_BIND_MANAGED_FIELD(rate)>("rate","rate");
+        addField<DAS_BIND_MANAGED_FIELD(depth)>("depth","depth");
+        addField<DAS_BIND_MANAGED_FIELD(feedback)>("feedback","feedback");
+        addField<DAS_BIND_MANAGED_FIELD(delay_ms)>("delay_ms","delay_ms");
+        addField<DAS_BIND_MANAGED_FIELD(wet)>("wet","wet");
+    }
+};
+
+struct MaChorusAnnotation : ManagedStructureAnnotation<ma_chorus,true,true> {
+    MaChorusAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_chorus", mlib, "ma_chorus") {
+    }
+};
+
+void dasAudio_chorusInit ( ma_chorus * chorus, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !chorus ) context->throw_error_at(at,"chorus is null");
+    ma_chorus_init(chorus, sample_rate);
+}
+
+void dasAudio_chorusProcess ( ma_chorus * chorus, float * input, float * output, int nSamples, Context * context, LineInfoArg * at ) {
+    if ( !chorus ) context->throw_error_at(at,"chorus is null");
+    ma_chorus_process(chorus, input, output, nSamples);
+}
+
+void dasAudio_chorusSetConfig ( ma_chorus * chorus, const ma_chorus_config & config, Context * context, LineInfoArg * at ) {
+    if ( !chorus ) context->throw_error_at(at,"chorus is null");
+    ma_chorus_set_config(chorus, &config);
+}
+
+ma_chorus_config dasAudio_chorusConfigDefault ( ) {
+    return ma_chorus_config_default();
+}
 
 struct MAHrtfAnnotation : ManagedStructureAnnotation<ma_hrtf> {
     MAHrtfAnnotation ( ModuleLibrary & mlib )
@@ -576,6 +625,17 @@ public:
             SideEffects::modifyArgumentAndExternal, "dasAudio_processMono")->args({"reverb", "input", "output", "nSamples", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_getReverbPreset),SimNode_ExtFuncCallRef>(*this, lib, "get_preset",
             SideEffects::modifyArgumentAndExternal, "dasAudio_getReverbPreset")->args({"preset", "context", "at"});
+        // chorus
+        addAnnotation(make_smart<MaChorusConfigAnnotation>(lib));
+        addAnnotation(make_smart<MaChorusAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_chorusInit)>(*this, lib, "chorus_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_chorusInit")->args({"chorus", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_chorusProcess)>(*this, lib, "chorus_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_chorusProcess")->args({"chorus", "input", "output", "nSamples", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_chorusSetConfig)>(*this, lib, "chorus_set_config",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_chorusSetConfig")->args({"chorus", "config", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_chorusConfigDefault),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "chorus_config_default",
+            SideEffects::none, "dasAudio_chorusConfigDefault");
         // mixer
         addExtern<DAS_BIND_FUN(dasAudio_init)>(*this, lib, "sound_initalize",
             SideEffects::modifyExternal, "dasAudio_init")->args({"mixer", "rate", "channels","context"});
@@ -655,6 +715,8 @@ public:
             SideEffects::modifyArgument, "ma_sf2_voice_render")->args({"voice", "sample_data", "sample_data_len", "output", "output_offset", "frame_count"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_render_send)>(*this, lib, "ma_sf2_voice_render_send",
             SideEffects::modifyArgument, "ma_sf2_voice_render_send")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "output_offset", "frame_count", "dry_gain", "wet_gain"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_render_send2)>(*this, lib, "ma_sf2_voice_render_send2",
+            SideEffects::modifyArgument, "ma_sf2_voice_render_send2")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "chorus_output", "output_offset", "frame_count", "dry_gain", "reverb_gain", "chorus_gain"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_is_finished)>(*this, lib, "ma_sf2_voice_is_finished",
             SideEffects::none, "ma_sf2_voice_is_finished")->args({"voice"});
         addExtern<DAS_BIND_FUN(ma_sf2_envelope_init)>(*this, lib, "ma_sf2_envelope_init",

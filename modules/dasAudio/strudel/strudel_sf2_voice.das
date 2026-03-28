@@ -508,6 +508,47 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     out_voice.loop_end = int(shdr.loop_end) + loop_end_offset
     out_voice.loop_mode = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.sampleModes), 0)
 
+    // stereo-linked sample detection
+    // Resolve the paired sample: use sample_link if it points to the matching type,
+    // otherwise fall back to adjacent sample (many SF2 editors leave sample_link=0
+    // but place L/R pairs adjacently in the shdr array).
+    if (shdr.sample_type == SF2_SAMPLE_LEFT || shdr.sample_type == SF2_SAMPLE_RIGHT) {
+        var link_idx = int(shdr.sample_link)
+        let expected_type = shdr.sample_type == SF2_SAMPLE_LEFT ? SF2_SAMPLE_RIGHT : SF2_SAMPLE_LEFT
+        // validate sample_link
+        if (link_idx < 0 || link_idx >= length(sf2.samples) || sf2.samples[link_idx].sample_type != expected_type) {
+            // fallback: adjacent sample (L at sid, R at sid+1; or R at sid, L at sid-1)
+            if (shdr.sample_type == SF2_SAMPLE_LEFT && sid + 1 < length(sf2.samples) && sf2.samples[sid + 1].sample_type == SF2_SAMPLE_RIGHT) {
+                link_idx = sid + 1
+            } elif (shdr.sample_type == SF2_SAMPLE_RIGHT && sid - 1 >= 0 && sf2.samples[sid - 1].sample_type == SF2_SAMPLE_LEFT) {
+                link_idx = sid - 1
+            } else {
+                link_idx = -1  // no valid pair found — stay mono
+            }
+        }
+        if (link_idx >= 0) {
+            let link_shdr = sf2.samples[link_idx]
+            out_voice.stereo = 1
+            if (shdr.sample_type == SF2_SAMPLE_LEFT) {
+                // main fields already set from left sample; populate right from link
+                out_voice.sample_start_r = int(link_shdr.start) + start_offset
+                out_voice.sample_end_r = int(link_shdr.end) + end_offset
+                out_voice.loop_start_r = int(link_shdr.loop_start) + loop_start_offset
+                out_voice.loop_end_r = int(link_shdr.loop_end) + loop_end_offset
+            } else {
+                // rightSample: swap — main becomes link (left), right becomes this sample
+                out_voice.sample_start_r = out_voice.sample_start
+                out_voice.sample_end_r = out_voice.sample_end
+                out_voice.loop_start_r = out_voice.loop_start
+                out_voice.loop_end_r = out_voice.loop_end
+                out_voice.sample_start = int(link_shdr.start) + start_offset
+                out_voice.sample_end = int(link_shdr.end) + end_offset
+                out_voice.loop_start = int(link_shdr.loop_start) + loop_start_offset
+                out_voice.loop_end = int(link_shdr.loop_end) + loop_end_offset
+            }
+        }
+    }
+
     // root key + pitch
     let override_root = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.overridingRootKey), -1)
     let root_key = override_root >= 0 ? override_root : shdr.original_pitch
@@ -662,5 +703,13 @@ def public sf2_get_reverb_send(sf2 : SF2File; inst_idx, izone_idx : int;
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let send = get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.reverbEffectsSend), 0)
+    return clamp(float(send) / 1000.0, 0.0, 1.0)
+}
+
+def public sf2_get_chorus_send(sf2 : SF2File; inst_idx, izone_idx : int;
+                               pzone : SF2Zone const?; global_pzone : SF2Zone const?) : float {
+    let inst = sf2.instruments[inst_idx]
+    let izone = inst.zones[izone_idx]
+    let send = get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.chorusEffectsSend), 0)
     return clamp(float(send) / 1000.0, 0.0, 1.0)
 }

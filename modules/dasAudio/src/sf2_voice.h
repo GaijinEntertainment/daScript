@@ -61,12 +61,18 @@ void ma_sf2_biquad_setup ( ma_sf2_biquad * bq, float fc_normalized );
 // ─── Voice ───
 
 struct ma_sf2_voice {
-    // sample addressing
+    // sample addressing (left / mono channel)
     int     sample_start;
     int     sample_end;
     int     loop_start;
     int     loop_end;
     int     loop_mode;          // 0=none, 1=continuous, 3=sustain-loop
+    // right channel (stereo-linked SF2 samples only; all zero when mono)
+    int     sample_start_r;
+    int     sample_end_r;
+    int     loop_start_r;
+    int     loop_end_r;
+    int     stereo;             // 0=mono, 1=stereo-linked pair
     // playback
     double  position;
     double  phase_inc;          // base pitch (computed from root key + tuning)
@@ -115,6 +121,11 @@ int  ma_sf2_voice_is_finished ( const ma_sf2_voice * voice );
 void ma_sf2_voice_render_send ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
                                 float * dry_output, float * reverb_output, int output_offset, int frame_count,
                                 float dry_gain, float wet_gain );
+// Render voice, split output into dry + reverb + chorus send buffers (additive).
+void ma_sf2_voice_render_send2 ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                 float * dry_output, float * reverb_output, float * chorus_output,
+                                 int output_offset, int frame_count,
+                                 float dry_gain, float reverb_gain, float chorus_gain );
 
 // ─── Implementation ───
 
@@ -340,13 +351,20 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const float sr = voice->sample_rate;
     const float iSr = 1.0f / sr;
 
-    // pan law: sqrt(0.5 ± pan)
-    float pan05 = voice->pan * 0.5f;
+    // pan law: sqrt(0.5 ± pan) for mono; for stereo-linked, pan acts as balance
     float l_gain, r_gain;
-    if ( pan05 <= -0.5f )       { l_gain = voice->attenuation; r_gain = 0.0f; }
-    else if ( pan05 >= 0.5f )   { l_gain = 0.0f; r_gain = voice->attenuation; }
-    else { l_gain = sqrtf(0.5f - pan05) * voice->attenuation;
-           r_gain = sqrtf(0.5f + pan05) * voice->attenuation; }
+    if ( voice->stereo ) {
+        // stereo-linked: both channels play, pan acts as balance (0 = neutral)
+        // SF2 zones set pan=-500(L)/ +500(R); we take from the L zone, so override to center
+        l_gain = voice->attenuation;
+        r_gain = voice->attenuation;
+    } else {
+        float pan05 = voice->pan * 0.5f;
+        if ( pan05 <= -0.5f )       { l_gain = voice->attenuation; r_gain = 0.0f; }
+        else if ( pan05 >= 0.5f )   { l_gain = 0.0f; r_gain = voice->attenuation; }
+        else { l_gain = sqrtf(0.5f - pan05) * voice->attenuation;
+               r_gain = sqrtf(0.5f + pan05) * voice->attenuation; }
+    }
 
     // hoist invariants
     const int has_mod_env_pitch = voice->mod_env_to_pitch != 0.0f;
@@ -369,6 +387,15 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const float inv_crossfade = crossfade_len > 0 ? 1.0f / (float)crossfade_len : 0.0f;
     const double base_phase_inc = voice->phase_inc;
     const float inv_32768 = 1.0f / 32768.0f;
+    // stereo-linked right channel invariants
+    const int is_stereo = voice->stereo;
+    const int sample_start_r = voice->sample_start_r;
+    const int sample_end_r = voice->sample_end_r;
+    const int loop_start_r = voice->loop_start_r;
+    const int loop_end_r = voice->loop_end_r;
+    const int loop_len_r = loop_end_r - loop_start_r;
+    const int crossfade_len_r = (is_stereo && do_loop && loop_len_r > MA_SF2_CROSSFADE_LEN * 2) ? MA_SF2_CROSSFADE_LEN : 0;
+    const float inv_crossfade_r = crossfade_len_r > 0 ? 1.0f / (float)crossfade_len_r : 0.0f;
 
     int f = 0;
     while ( f < frame_count ) {
@@ -436,11 +463,12 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
 
         for ( int s = 0; s < blk; s++ ) {
             int pos_i = (int)voice->position;
+            float frac = (float)(voice->position - (double)pos_i);
+
+            // ── left / mono channel interpolation ──
             int idx = sample_start + pos_i;
-            float sample = 0.0f;
+            float sample_l = 0.0f;
             if ( idx >= 0 && idx + 1 < sample_data_len && idx + 1 < sample_end ) {
-                float frac = (float)(voice->position - (double)pos_i);
-                // cubic Hermite interpolation (4-point, 3rd-order)
                 float sm1 = (idx - 1 >= 0) ? (float)sample_data[idx - 1] * inv_32768 : (float)sample_data[idx] * inv_32768;
                 float s0  = (float)sample_data[idx] * inv_32768;
                 float s1  = (float)sample_data[idx + 1] * inv_32768;
@@ -449,8 +477,8 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
                 float c1  = 0.5f * (s1 - sm1);
                 float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2;
                 float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1);
-                sample = ((c3 * frac + c2) * frac + c1) * frac + c0;
-                // crossfade near loop_end: blend with wrapped position
+                sample_l = ((c3 * frac + c2) * frac + c1) * frac + c0;
+                // crossfade near loop_end
                 if ( crossfade_len > 0 && looping_now ) {
                     int dist = loop_end - idx;
                     if ( dist >= 0 && dist < crossfade_len ) {
@@ -466,7 +494,7 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
                             float wc2 = wm1 - 2.5f * w0 + 2.0f * w1 - 0.5f * w2;
                             float wc3 = 0.5f * (w2 - wm1) + 1.5f * (w0 - w1);
                             float wsample = ((wc3 * frac + wc2) * frac + wc1) * frac + wc0;
-                            sample = sample * (1.0f - fade) + wsample * fade;
+                            sample_l = sample_l * (1.0f - fade) + wsample * fade;
                         }
                     }
                 }
@@ -475,15 +503,57 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
                 goto done;
             }
 
-            if ( use_filter )
-                sample = ma_sf2_biquad_tick(&voice->filter, sample);
+            // ── right channel interpolation (stereo-linked only) ──
+            float sample_r;
+            if ( is_stereo ) {
+                int idx_r = sample_start_r + pos_i;
+                sample_r = 0.0f;
+                if ( idx_r >= 0 && idx_r + 1 < sample_data_len && idx_r + 1 < sample_end_r ) {
+                    float sm1 = (idx_r - 1 >= 0) ? (float)sample_data[idx_r - 1] * inv_32768 : (float)sample_data[idx_r] * inv_32768;
+                    float s0  = (float)sample_data[idx_r] * inv_32768;
+                    float s1  = (float)sample_data[idx_r + 1] * inv_32768;
+                    float s2  = (idx_r + 2 < sample_data_len) ? (float)sample_data[idx_r + 2] * inv_32768 : s1;
+                    float c0  = s0;
+                    float c1  = 0.5f * (s1 - sm1);
+                    float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2;
+                    float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1);
+                    sample_r = ((c3 * frac + c2) * frac + c1) * frac + c0;
+                    // crossfade near loop_end_r
+                    if ( crossfade_len_r > 0 && looping_now ) {
+                        int dist = loop_end_r - idx_r;
+                        if ( dist >= 0 && dist < crossfade_len_r ) {
+                            float fade = (float)(crossfade_len_r - dist) * inv_crossfade_r;
+                            int wi = loop_start_r + (idx_r - (loop_end_r - crossfade_len_r));
+                            if ( wi >= loop_start_r && wi + 1 < sample_data_len ) {
+                                float wm1 = (wi - 1 >= 0) ? (float)sample_data[wi - 1] * inv_32768 : (float)sample_data[wi] * inv_32768;
+                                float w0  = (float)sample_data[wi] * inv_32768;
+                                float w1  = (float)sample_data[wi + 1] * inv_32768;
+                                float w2  = (wi + 2 < sample_data_len) ? (float)sample_data[wi + 2] * inv_32768 : w1;
+                                float wc0 = w0;
+                                float wc1 = 0.5f * (w1 - wm1);
+                                float wc2 = wm1 - 2.5f * w0 + 2.0f * w1 - 0.5f * w2;
+                                float wc3 = 0.5f * (w2 - wm1) + 1.5f * (w0 - w1);
+                                float wsample = ((wc3 * frac + wc2) * frac + wc1) * frac + wc0;
+                                sample_r = sample_r * (1.0f - fade) + wsample * fade;
+                            }
+                        }
+                    }
+                }
+            } else {
+                sample_r = sample_l;  // mono: same sample to both channels
+            }
+
+            if ( use_filter ) {
+                sample_l = ma_sf2_biquad_tick(&voice->filter, sample_l);
+                if ( is_stereo ) sample_r = ma_sf2_biquad_tick(&voice->filter, sample_r);
+            }
 
             int ofs = output_offset + (f + s) * 2;
-            output[ofs]     += sample * gain_l;
-            output[ofs + 1] += sample * gain_r;
+            output[ofs]     += sample_l * gain_l;
+            output[ofs + 1] += sample_r * gain_r;
             voice->position += phase_inc;
 
-            // loop management
+            // loop management (driven by left channel's loop points)
             if ( looping_now ) {
                 if ( sample_start + (int)voice->position >= loop_end )
                     voice->position -= (double)loop_len;
@@ -511,6 +581,22 @@ void ma_sf2_voice_render_send ( ma_sf2_voice * voice, const short * sample_data,
     for ( int i = 0; i < n; i++ ) {
         dry_output[output_offset + i]    += temp[i] * dry_gain;
         reverb_output[output_offset + i] += temp[i] * wet_gain;
+    }
+}
+
+void ma_sf2_voice_render_send2 ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                 float * dry_output, float * reverb_output, float * chorus_output,
+                                 int output_offset, int frame_count,
+                                 float dry_gain, float reverb_gain, float chorus_gain ) {
+    float temp[9600];
+    const int n = frame_count * 2;
+    if ( n > 9600 ) return;
+    for ( int i = 0; i < n; i++ ) temp[i] = 0.0f;
+    ma_sf2_voice_render(voice, sample_data, sample_data_len, temp, 0, frame_count);
+    for ( int i = 0; i < n; i++ ) {
+        dry_output[output_offset + i]    += temp[i] * dry_gain;
+        reverb_output[output_offset + i] += temp[i] * reverb_gain;
+        chorus_output[output_offset + i] += temp[i] * chorus_gain;
     }
 }
 
