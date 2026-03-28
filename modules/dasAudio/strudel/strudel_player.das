@@ -11,6 +11,7 @@ require strudel/strudel_pattern
 require strudel/strudel_synth
 require strudel/strudel_samples
 require strudel/strudel_scheduler
+require strudel/strudel_sf2
 require audio/audio_boost
 require audio
 require daslib/jobque_boost
@@ -44,6 +45,7 @@ struct StrudelTrack {
 
 struct StrudelState {
     bank          : SampleBank?   // pointer to g_bank (immutable after load)
+    sf2           : SF2File const? // pointer to g_sf2 (immutable after load)
     sid           : uint64        // PCM stream handle
     wall_time     : double        // playback position (thread updates this)
     cps           : double        // tempo
@@ -61,6 +63,8 @@ var private g_wall_time : double = 0.0lf
 var private g_cps : double = 0.5lf
 var private g_cmd_channel : Channel?
 var private g_done_channel : Channel?
+var private g_sf2 : SF2File?
+var private g_sf2_path : string   // path to loaded SF2 (for live-reload re-read)
 var private g_state : StrudelState
 var private g_cmd_fn : function<(var state : StrudelState?; cmd : string) : void>
 
@@ -87,6 +91,25 @@ def public strudel_load_sample_dir(root : string) {
     }
 }
 
+// Load an SF2 soundfont for use with set_sf2() patterns.
+def public strudel_load_sf2(path : string) : bool {
+    g_sf2 = sf2_load(path)
+    if (g_sf2 != null) {
+        g_sf2_path = path
+    }
+    return g_sf2 != null
+}
+
+// Get the path of the currently loaded SF2 (empty if none).
+def public strudel_get_sf2_path() : string {
+    return g_sf2_path
+}
+
+// Check if an SF2 soundfont is loaded (e.g. restored from live store).
+def public strudel_has_sf2() : bool {
+    return g_sf2 != null
+}
+
 def public strudel_set_volume(volume : float; time : float = 0.0) {
     if (g_sid != 0ul) {
         set_volume(g_sid, volume, time)
@@ -99,16 +122,29 @@ def public strudel_set_pause(paused : bool) {
     }
 }
 
+// Set tempo — works from main thread (before or after init) and from strudel thread.
+// From main thread: sets g_cps and sends command to thread.
+// From strudel thread: pass the state pointer to set tempo directly.
 def public strudel_set_bpm(bpm : double) {
+    g_cps = bpm / 240.0lf
     if (g_cmd_channel != null) {
         g_cmd_channel |> push(new StrudelCommand(set_bpm = bpm))
     }
 }
 
+def public strudel_set_bpm(var state : StrudelState?; bpm : double) {
+    state.cps = bpm / 240.0lf
+}
+
 def public strudel_set_cps(cps : double) {
+    g_cps = cps
     if (g_cmd_channel != null) {
         g_cmd_channel |> push(new StrudelCommand(set_cps = cps))
     }
+}
+
+def public strudel_set_cps(var state : StrudelState?; cps : double) {
+    state.cps = cps
 }
 
 def public strudel_command(cmd : string) {
@@ -162,6 +198,7 @@ def public strudel_init(fn : function<(var state : StrudelState?) : void>; cmd_f
     g_done_channel |> add_ref()
     // set up shared state
     g_state.bank = unsafe(addr(g_bank))
+    g_state.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
     g_state.sid = g_sid
     g_state.wall_time = g_wall_time
     g_state.cps = g_cps
@@ -202,6 +239,10 @@ def public strudel_add_track(var state : StrudelState?; name : string; var pat :
     var track = state.tracks[length(state.tracks) - 1]
     track.sched.cps = state.cps
     track.sched.lastQueryEnd = state.wall_time * state.cps
+    track.sched.sf2 = state.sf2
+    if (state.sf2 != null) {
+        init_reverb(track.sched)
+    }
 }
 
 def public strudel_remove_track(var state : StrudelState?; name : string) {
@@ -265,6 +306,10 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
     var sched = Scheduler()
     sched.cps = state.cps
     sched.lastQueryEnd = state.wall_time * state.cps
+    sched.sf2 = state.sf2
+    if (state.sf2 != null) {
+        init_reverb(sched)
+    }
     var status_box <- unsafe(lock_box_create())
     set_status_update(state.sid, status_box)
     while (strudel_process_commands(state)) {
@@ -435,6 +480,131 @@ def private deserialize_bank(var arch : Archive; var bank : SampleBank) {
         }
         bank.sounds[name] <- variations
     }
+}
+
+// --- SF2 Persistence ---
+
+def private serialize_zone(var arch : Archive; var zone : SF2Zone?&) {
+    var has = zone != null
+    arch |> serialize(has)
+    if (has) {
+        if (arch.reading) {
+            zone = new SF2Zone()
+        }
+        arch |> serialize(zone.key_lo)
+        arch |> serialize(zone.key_hi)
+        arch |> serialize(zone.vel_lo)
+        arch |> serialize(zone.vel_hi)
+        arch |> serialize(zone.generators)
+    }
+}
+
+def private serialize_sf2(var arch : Archive; var sf2 : SF2File?&) {
+    var has = sf2 != null
+    arch |> serialize(has)
+    if (!has) {
+        return
+    }
+    if (arch.reading) {
+        sf2 = new SF2File()
+    }
+    arch |> serialize(sf2.name)
+    arch |> serialize(sf2.sample_data)
+    // samples
+    var ns = length(sf2.samples)
+    arch |> serialize(ns)
+    if (arch.reading) {
+        sf2.samples |> resize(ns)
+    }
+    for (sh in sf2.samples) {
+        arch |> serialize(sh.name)
+        arch |> serialize(sh.start)
+        arch |> serialize(sh.end)
+        arch |> serialize(sh.loop_start)
+        arch |> serialize(sh.loop_end)
+        arch |> serialize(sh.sample_rate)
+        arch |> serialize(sh.original_pitch)
+        arch |> serialize(sh.pitch_correction)
+        arch |> serialize(sh.sample_link)
+        arch |> serialize(sh.sample_type)
+    }
+    // instruments
+    var ni = length(sf2.instruments)
+    arch |> serialize(ni)
+    if (arch.reading) {
+        sf2.instruments |> resize(ni)
+    }
+    for (inst in sf2.instruments) {
+        var has_inst = inst != null
+        arch |> serialize(has_inst)
+        if (has_inst) {
+            if (arch.reading) {
+                inst = new SF2InstrumentDef()
+            }
+            arch |> serialize(inst.name)
+            serialize_zone(arch, inst.global_zone)
+            var nz = length(inst.zones)
+            arch |> serialize(nz)
+            if (arch.reading) {
+                inst.zones |> resize(nz)
+            }
+            for (z in inst.zones) {
+                serialize_zone(arch, z)
+            }
+        }
+    }
+    // presets
+    var np = length(sf2.presets)
+    arch |> serialize(np)
+    if (arch.reading) {
+        sf2.presets |> resize(np)
+    }
+    for (pr in sf2.presets) {
+        var has_pr = pr != null
+        arch |> serialize(has_pr)
+        if (has_pr) {
+            if (arch.reading) {
+                pr = new SF2PresetDef()
+            }
+            arch |> serialize(pr.name)
+            arch |> serialize(pr.preset)
+            arch |> serialize(pr.bank)
+            serialize_zone(arch, pr.global_zone)
+            var nz = length(pr.zones)
+            arch |> serialize(nz)
+            if (arch.reading) {
+                pr.zones |> resize(nz)
+            }
+            for (z in pr.zones) {
+                serialize_zone(arch, z)
+            }
+        }
+    }
+    // preset_lookup
+    arch |> serialize(sf2.preset_lookup)
+}
+
+def public strudel_save_sf2_state() : array<uint8> {
+    if (g_sf2 == null) {
+        var empty : array<uint8>
+        return <- empty
+    }
+    var ser = new MemSerializer()
+    var arch = Archive(reading = false, stream = ser)
+    serialize_sf2(arch, g_sf2)
+    var data <- ser->extractData()
+    unsafe { delete ser; }
+    return <- data
+}
+
+def public strudel_restore_sf2_state(data : array<uint8>) {
+    if (length(data) == 0) {
+        return
+    }
+    var ser = new MemSerializer(data)
+    var arch = Archive(reading = true, stream = ser)
+    serialize_sf2(arch, g_sf2)
+    unsafe { delete ser; }
 }
 
 // Serialize player state to bytes (for live-reload persistence).

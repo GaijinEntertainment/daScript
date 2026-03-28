@@ -21,4 +21,6 @@ struct Event {
     sustain : float = 1.0       // envelope sustain level (1.0 = no shaping)
     release : float = 0.1       // envelope release time
     cut     : int = 0           // cut group (0 = no cut, >0 = kill same group)
+    sf2_program : int = -1      // SF2 GM program number (-1 = not SF2, use sample/oscillator)
+    sf2_bank    : int = 0       // SF2 bank (0 = melodic, 128 = percussion)
 }

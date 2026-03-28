@@ -997,3 +997,13 @@ def public midi_shutdown() {
 def public midi_is_playing() : bool {
     return g_midi_running
 }
+
+// Initialize reverb for offline rendering (midi_tick without midi_init/thread).
+def public midi_init_reverb() {
+    if (g_reverb == null) {
+        g_reverb = new I3DL2Reverb
+        set_sample_rate(g_reverb, float(SAMPLE_RATE))
+        let props = get_preset(I3DL2Preset.ConcertHall)
+        set_properties(g_reverb, props)
+    }
+}
