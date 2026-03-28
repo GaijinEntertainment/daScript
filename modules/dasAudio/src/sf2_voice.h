@@ -93,6 +93,8 @@ struct ma_sf2_voice {
     float   vib_lfo_freq;
     float   vib_lfo_delay;
     float   vib_lfo_elapsed;
+    // real-time channel modulation (set by MIDI player per chunk, not saved/restored)
+    float   pitch_bend_cents;   // pitch bend in cents (e.g. ±200 for ±2 semitones)
     // gain
     float   attenuation;        // linear gain (includes velocity)
     float   pan;                // -1 to 1
@@ -108,6 +110,11 @@ void ma_sf2_voice_end_quick ( ma_sf2_voice * voice );
 void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
                            float * output, int output_offset, int frame_count );
 int  ma_sf2_voice_is_finished ( const ma_sf2_voice * voice );
+// Render voice, split output into dry + reverb send buffers (additive).
+// dry_gain = 1.0 - reverb_send, wet_gain = reverb_send.
+void ma_sf2_voice_render_send ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                float * dry_output, float * reverb_output, int output_offset, int frame_count,
+                                float dry_gain, float wet_gain );
 
 // ─── Implementation ───
 
@@ -395,12 +402,13 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
 
         // pitch for this block
         double phase_inc = base_phase_inc;
-        if ( has_any_pitch_mod ) {
-            float pitch_mod_cents = 0.0f;
+        {
+            float pitch_mod_cents = voice->pitch_bend_cents;
             if ( has_mod_env_pitch ) pitch_mod_cents += voice->mod_env_to_pitch * mod;
             if ( has_mod_lfo_pitch ) pitch_mod_cents += voice->mod_lfo_to_pitch * mlfo;
             if ( has_vib_lfo_pitch ) pitch_mod_cents += voice->vib_lfo_to_pitch * vlfo;
-            phase_inc = base_phase_inc * (double)powf(2.0f, pitch_mod_cents / 1200.0f);
+            if ( pitch_mod_cents != 0.0f )
+                phase_inc = base_phase_inc * (double)powf(2.0f, pitch_mod_cents / 1200.0f);
         }
 
         // filter coefficients for this block
@@ -432,9 +440,16 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
             float sample = 0.0f;
             if ( idx >= 0 && idx + 1 < sample_data_len && idx + 1 < sample_end ) {
                 float frac = (float)(voice->position - (double)pos_i);
-                float s0 = (float)sample_data[idx] * inv_32768;
-                float s1 = (float)sample_data[idx + 1] * inv_32768;
-                sample = s0 + (s1 - s0) * frac;
+                // cubic Hermite interpolation (4-point, 3rd-order)
+                float sm1 = (idx - 1 >= 0) ? (float)sample_data[idx - 1] * inv_32768 : (float)sample_data[idx] * inv_32768;
+                float s0  = (float)sample_data[idx] * inv_32768;
+                float s1  = (float)sample_data[idx + 1] * inv_32768;
+                float s2  = (idx + 2 < sample_data_len) ? (float)sample_data[idx + 2] * inv_32768 : s1;
+                float c0  = s0;
+                float c1  = 0.5f * (s1 - sm1);
+                float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2;
+                float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1);
+                sample = ((c3 * frac + c2) * frac + c1) * frac + c0;
                 // crossfade near loop_end: blend with wrapped position
                 if ( crossfade_len > 0 && looping_now ) {
                     int dist = loop_end - idx;
@@ -442,9 +457,16 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
                         float fade = (float)(crossfade_len - dist) * inv_crossfade;
                         int wi = loop_start + (idx - (loop_end - crossfade_len));
                         if ( wi >= loop_start && wi + 1 < sample_data_len ) {
-                            float w0 = (float)sample_data[wi] * inv_32768;
-                            float w1 = (float)sample_data[wi + 1] * inv_32768;
-                            sample = sample * (1.0f - fade) + (w0 + (w1 - w0) * frac) * fade;
+                            float wm1 = (wi - 1 >= 0) ? (float)sample_data[wi - 1] * inv_32768 : (float)sample_data[wi] * inv_32768;
+                            float w0  = (float)sample_data[wi] * inv_32768;
+                            float w1  = (float)sample_data[wi + 1] * inv_32768;
+                            float w2  = (wi + 2 < sample_data_len) ? (float)sample_data[wi + 2] * inv_32768 : w1;
+                            float wc0 = w0;
+                            float wc1 = 0.5f * (w1 - wm1);
+                            float wc2 = wm1 - 2.5f * w0 + 2.0f * w1 - 0.5f * w2;
+                            float wc3 = 0.5f * (w2 - wm1) + 1.5f * (w0 - w1);
+                            float wsample = ((wc3 * frac + wc2) * frac + wc1) * frac + wc0;
+                            sample = sample * (1.0f - fade) + wsample * fade;
                         }
                     }
                 }
@@ -474,6 +496,22 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
         f += blk;
     }
 done:;
+}
+
+void ma_sf2_voice_render_send ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                float * dry_output, float * reverb_output, int output_offset, int frame_count,
+                                float dry_gain, float wet_gain ) {
+    // Render to a stack-local temp buffer, then split into dry + wet.
+    // Stack buffer for typical chunk sizes (up to 4800 stereo samples = 38.4KB).
+    float temp[9600];
+    const int n = frame_count * 2;
+    if ( n > 9600 ) return;  // safety: skip absurdly large chunks
+    for ( int i = 0; i < n; i++ ) temp[i] = 0.0f;
+    ma_sf2_voice_render(voice, sample_data, sample_data_len, temp, 0, frame_count);
+    for ( int i = 0; i < n; i++ ) {
+        dry_output[output_offset + i]    += temp[i] * dry_gain;
+        reverb_output[output_offset + i] += temp[i] * wet_gain;
+    }
 }
 
 #endif // MINIAUDIO_IMPLEMENTATION

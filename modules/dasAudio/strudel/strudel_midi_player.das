@@ -174,6 +174,9 @@ struct MidiChannelState {
     pan        : float = 0.0    // CC10 (-1=left, 0=center, 1=right)
     expression : float = 1.0    // CC11
     sustain    : bool = false   // CC64 (sustain pedal)
+    mod_wheel  : int = 0        // CC1 (0-127, mod wheel → vibrato depth)
+    reverb     : float = 1.0    // CC91 (0.0-1.0, reverb send depth multiplier)
+    pitch_bend : float = 0.0    // pitch bend in semitones (-2..+2 default range)
 }
 
 // ─── Playback State (per track) ───
@@ -225,9 +228,13 @@ struct SF2VoiceMeta {
     note : int = 0
     exclusive_class : int = 0
     sustain_held : bool = false
+    reverb_send : float = 0.0
 }
 
 var private g_sf2_meta : array<SF2VoiceMeta>  // parallel to state.csf2_voices
+var private g_reverb : I3DL2Reverb?
+var private g_reverb_send_buf : array<float>  // interleaved stereo reverb send bus
+var private g_reverb_out_buf : array<float>   // reverb output
 
 def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int) {
     let bank = ch == 9 ? 128 : 0
@@ -267,8 +274,9 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
                     }
                 }
             }
+            let rsend = sf2_get_reverb_send(*state.sf2, z.x, z.y, pzone, preset.global_zone)
             state.csf2_voices |> push(voice)
-            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl))
+            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend))
         }
     }
 }
@@ -388,6 +396,10 @@ def process_events(var state : MidiPlaybackState) {
                 state.channels[ch].pan = (float(ev.data2) / 63.5) - 1.0
             } elif (ev.data1 == 11) {
                 state.channels[ch].expression = float(ev.data2) / 127.0
+            } elif (ev.data1 == 1) {
+                state.channels[ch].mod_wheel = ev.data2
+            } elif (ev.data1 == 91) {
+                state.channels[ch].reverb = float(ev.data2) / 127.0
             } elif (ev.data1 == 64) {
                 let was_on = state.channels[ch].sustain
                 state.channels[ch].sustain = ev.data2 >= 64
@@ -408,6 +420,10 @@ def process_events(var state : MidiPlaybackState) {
                     }
                 }
             }
+        } elif (ev.kind == MidiEventKind.midi_pitch_bend) {
+            // 14-bit value: 0..16383, center=8192. Default range ±2 semitones.
+            let bend_norm = (float(ev.data1) - 8192.0) / 8192.0  // -1.0 to +1.0
+            state.channels[ch].pitch_bend = bend_norm * 2.0       // ±2 semitones
         } elif (ev.kind == MidiEventKind.midi_tempo) {
             state.tempo_usec = ev.tempo
             state.ticks_per_sec = double(state.ticks_per_qn) * 1000000.0lf / double(ev.tempo)
@@ -524,33 +540,83 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         }
         i --
     }
-    // render C SF2 voices (apply channel volume + expression + track gain)
+    // render C SF2 voices (apply channel volume + expression + pitch bend + mod wheel + track gain)
+    // prepare reverb send bus
+    let buf_samples = chunkFrames * 2
+    if (length(g_reverb_send_buf) < buf_samples) {
+        g_reverb_send_buf |> resize(buf_samples)
+        g_reverb_out_buf |> resize(buf_samples)
+    }
+    var has_reverb_send = false
+    for (s in range(buf_samples)) {
+        g_reverb_send_buf[s] = 0.0
+    }
     var si = length(state.csf2_voices) - 1
     while (si >= 0) {
         if (state.csf2_voices[si].finished == 0) {
             let ch_idx = g_sf2_meta[si].channel
             let ch_state & = unsafe(state.channels[ch_idx])
             let mix_gain = ch_state.volume * ch_state.expression * state.gain
-            // temporarily scale attenuation for this chunk
+            let reverb_send = g_sf2_meta[si].reverb_send * ch_state.reverb
+            // temporarily scale attenuation for this chunk; set pitch bend + mod wheel on voice
             let saved_atten = state.csf2_voices[si].attenuation
+            let saved_vib_lfo = state.csf2_voices[si].vib_lfo_to_pitch
             state.csf2_voices[si].attenuation = saved_atten * mix_gain
-            unsafe {
-                ma_sf2_voice_render(
-                    addr(state.csf2_voices[si]),
-                    addr(state.sf2.sample_data[0]),
-                    length(state.sf2.sample_data),
-                    addr(output[0]),
-                    0,
-                    chunkFrames
-                )
+            // pitch bend: semitones → cents, applied in C inner loop per block (smooth)
+            state.csf2_voices[si].pitch_bend_cents = ch_state.pitch_bend * 100.0
+            // mod wheel (CC1): adds up to 50 cents of vibrato depth (SF2 default modulator #2)
+            if (ch_state.mod_wheel > 0) {
+                state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo + float(ch_state.mod_wheel) / 127.0 * 50.0
+            }
+            if (reverb_send > 0.001) {
+                // render with dry/wet split (C-side temp buffer + split)
+                unsafe {
+                    ma_sf2_voice_render_send(
+                        addr(state.csf2_voices[si]),
+                        addr(state.sf2.sample_data[0]),
+                        length(state.sf2.sample_data),
+                        addr(output[0]),
+                        addr(g_reverb_send_buf[0]),
+                        0,
+                        chunkFrames,
+                        1.0 - reverb_send,
+                        reverb_send
+                    )
+                }
+                has_reverb_send = true
+            } else {
+                // no reverb — render directly to output
+                unsafe {
+                    ma_sf2_voice_render(
+                        addr(state.csf2_voices[si]),
+                        addr(state.sf2.sample_data[0]),
+                        length(state.sf2.sample_data),
+                        addr(output[0]),
+                        0,
+                        chunkFrames
+                    )
+                }
             }
             state.csf2_voices[si].attenuation = saved_atten
+            state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo
         }
         if (state.csf2_voices[si].finished != 0) {
             state.csf2_voices |> erase(si)
             g_sf2_meta |> erase(si)
         }
         si --
+    }
+    // process reverb send bus and mix into output
+    if (has_reverb_send && g_reverb != null) {
+        for (s in range(buf_samples)) {
+            g_reverb_out_buf[s] = 0.0
+        }
+        unsafe {
+            process_stereo(g_reverb, addr(g_reverb_send_buf[0]), addr(g_reverb_out_buf[0]), chunkFrames)
+        }
+        for (s in range(buf_samples)) {
+            output[s] += g_reverb_out_buf[s]
+        }
     }
     // advance time
     state.playback_time += double(chunk_seconds)
@@ -620,6 +686,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     var tracks : array<MidiPlaybackState?>
     var status_box <- unsafe(lock_box_create())
     set_status_update(sid, status_box)
+    // initialize reverb
+    g_reverb = new I3DL2Reverb
+    set_sample_rate(g_reverb, float(SAMPLE_RATE))
+    let reverb_props = get_preset(I3DL2Preset.ConcertHall)
+    set_properties(g_reverb, reverb_props)
     // pending add-track commands (extracted from gather to avoid # lifetime issues)
     var pending_adds : array<MidiTrackCmd>
     var running = true
@@ -765,6 +836,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         set_audio_thread_command_channel(null)
     }
     cmd_channel |> release()
+    unsafe {
+        if (g_reverb != null) {
+            delete g_reverb
+        }
+    }
     done_channel |> push(new MidiCommand(shutdown = true))
     done_channel |> release()
 }

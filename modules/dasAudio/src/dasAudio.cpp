@@ -464,6 +464,7 @@ struct MASF2VoiceAnnotation : ManagedStructureAnnotation<ma_sf2_voice> {
         addField<DAS_BIND_MANAGED_FIELD(vib_lfo_freq)>("vib_lfo_freq","vib_lfo_freq");
         addField<DAS_BIND_MANAGED_FIELD(vib_lfo_delay)>("vib_lfo_delay","vib_lfo_delay");
         addField<DAS_BIND_MANAGED_FIELD(vib_lfo_elapsed)>("vib_lfo_elapsed","vib_lfo_elapsed");
+        addField<DAS_BIND_MANAGED_FIELD(pitch_bend_cents)>("pitch_bend_cents","pitch_bend_cents");
         addField<DAS_BIND_MANAGED_FIELD(attenuation)>("attenuation","attenuation");
         addField<DAS_BIND_MANAGED_FIELD(pan)>("pan","pan");
         addField<DAS_BIND_MANAGED_FIELD(released)>("released","released");
@@ -652,6 +653,8 @@ public:
             SideEffects::modifyArgument, "ma_sf2_voice_end_quick")->args({"voice"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_render)>(*this, lib, "ma_sf2_voice_render",
             SideEffects::modifyArgument, "ma_sf2_voice_render")->args({"voice", "sample_data", "sample_data_len", "output", "output_offset", "frame_count"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_render_send)>(*this, lib, "ma_sf2_voice_render_send",
+            SideEffects::modifyArgument, "ma_sf2_voice_render_send")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "output_offset", "frame_count", "dry_gain", "wet_gain"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_is_finished)>(*this, lib, "ma_sf2_voice_is_finished",
             SideEffects::none, "ma_sf2_voice_is_finished")->args({"voice"});
         addExtern<DAS_BIND_FUN(ma_sf2_envelope_init)>(*this, lib, "ma_sf2_envelope_init",
