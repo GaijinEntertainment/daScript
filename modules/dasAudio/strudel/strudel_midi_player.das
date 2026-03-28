@@ -578,10 +578,13 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             let mix_gain = ch_state.volume * ch_state.expression * state.gain
             let reverb_send = g_sf2_meta[si].reverb_send * ch_state.reverb
             let chorus_send = g_sf2_meta[si].chorus_send * ch_state.chorus
-            // temporarily scale attenuation for this chunk; set pitch bend + mod wheel on voice
+            // temporarily scale attenuation for this chunk; set pitch bend + mod wheel + pan on voice
             let saved_atten = state.csf2_voices[si].attenuation
             let saved_vib_lfo = state.csf2_voices[si].vib_lfo_to_pitch
+            let saved_pan = state.csf2_voices[si].pan
             state.csf2_voices[si].attenuation = saved_atten * mix_gain
+            // CC10 pan: override voice pan with channel state (stereo voices ignore pan in C render)
+            state.csf2_voices[si].pan = ch_state.pan
             // pitch bend: semitones → cents, applied in C inner loop per block (smooth)
             state.csf2_voices[si].pitch_bend_cents = ch_state.pitch_bend * 100.0
             // mod wheel (CC1): adds up to 50 cents of vibrato depth (SF2 default modulator #2)
@@ -623,6 +626,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             }
             state.csf2_voices[si].attenuation = saved_atten
             state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo
+            state.csf2_voices[si].pan = saved_pan
         }
         if (state.csf2_voices[si].finished != 0) {
             state.csf2_voices |> erase(si)
