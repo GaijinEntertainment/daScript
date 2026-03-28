@@ -396,3 +396,11 @@ def public sf2_get_exclusive_class(sf2 : SF2File; inst_idx, izone_idx : int;
     let izone = inst.zones[izone_idx]
     return get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.exclusiveClass), 0)
 }
+
+def public sf2_get_reverb_send(sf2 : SF2File; inst_idx, izone_idx : int;
+                               pzone : SF2Zone const?; global_pzone : SF2Zone const?) : float {
+    let inst = sf2.instruments[inst_idx]
+    let izone = inst.zones[izone_idx]
+    let send = get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.reverbEffectsSend), 0)
+    return clamp(float(send) / 1000.0, 0.0, 1.0)
+}

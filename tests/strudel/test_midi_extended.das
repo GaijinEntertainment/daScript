@@ -222,3 +222,72 @@ def test_running_status(t : T?) {
         t |> equal(3, note_ons)
     }
 }
+
+// ─── Pitch Bend ───
+
+[test]
+def test_pitch_bend(t : T?) {
+    t |> run("pitch bend parsed from MIDI") <| @(t : T?) {
+        var d : array<uint8>
+        push_midi_header(d, 0u, 1u, 96u)
+        push_track_header(d, 7u)
+        // pitch bend ch0: LSB=0, MSB=96 → value = 96*128 = 12288 (above center 8192)
+        B(d, 0u, 0xE0u, 0u, 96u)
+        B(d, 0u, 0xFFu, 0x2Fu, 0u)
+        let midi = parse_midi(d)
+        let events = merge_tracks(midi)
+        var found = false
+        for (ev in events) {
+            if (ev.kind == MidiEventKind.midi_pitch_bend) {
+                t |> equal(12288, ev.data1)
+                t |> equal(0, ev.channel)
+                found = true
+            }
+        }
+        t |> success(found)
+    }
+    t |> run("pitch bend updates channel state") <| @(t : T?) {
+        var d : array<uint8>
+        push_midi_header(d, 0u, 1u, 96u)
+        push_track_header(d, 7u)
+        // center (8192) = LSB=0, MSB=64
+        B(d, 0u, 0xE0u, 0u, 64u)
+        B(d, 0u, 0xFFu, 0x2Fu, 0u)
+        let midi = parse_midi(d)
+        var state = MidiPlaybackState()
+        init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
+        process_events(state)
+        t |> success(abs(state.channels[0].pitch_bend) < 0.01)  // center = 0 semitones
+    }
+    t |> run("pitch bend max up = +2 semitones") <| @(t : T?) {
+        var d : array<uint8>
+        push_midi_header(d, 0u, 1u, 96u)
+        push_track_header(d, 7u)
+        // max bend up: LSB=127, MSB=127 → 16383
+        B(d, 0u, 0xE0u, 127u, 127u)
+        B(d, 0u, 0xFFu, 0x2Fu, 0u)
+        let midi = parse_midi(d)
+        var state = MidiPlaybackState()
+        init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
+        process_events(state)
+        t |> success(abs(state.channels[0].pitch_bend - 2.0) < 0.01)
+    }
+}
+
+// ─── Mod Wheel ───
+
+[test]
+def test_mod_wheel(t : T?) {
+    t |> run("CC1 sets mod wheel") <| @(t : T?) {
+        var d : array<uint8>
+        push_midi_header(d, 0u, 1u, 96u)
+        push_track_header(d, 7u)
+        B(d, 0u, 0xB0u, 1u, 100u)   // CC1 ch0, value 100
+        B(d, 0u, 0xFFu, 0x2Fu, 0u)
+        let midi = parse_midi(d)
+        var state = MidiPlaybackState()
+        init_playback(state, unsafe(addr(midi)), "test", 1.0, false)
+        process_events(state)
+        t |> equal(100, state.channels[0].mod_wheel)
+    }
+}
