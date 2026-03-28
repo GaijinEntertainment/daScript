@@ -20,7 +20,7 @@ def pure(value : Event) : Pattern {
         for (sub in splitSpans(span)) {
             let cyc = sameCycle(sub.start)
             let whole = TimeSpan(start = cyc, stop = cyc + 1.0lf)
-            result |> push(Hap(whole = whole, part = sub, value = value))
+            result |> push(Hap(whole = whole, part = sub, value = value)) // nolint:PERF006
         }
         return <- result
     }
@@ -47,6 +47,7 @@ def fast(n : double; var pat : Pattern) : Pattern {
         var result : array<Hap>
         let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
         var haps <- pat(innerSpan)
+        result |> reserve(length(haps))
         for (h in haps) {
             result |> push(Hap(
                 whole = TimeSpan(start = h.whole.start / n, stop = h.whole.stop / n),
@@ -71,6 +72,7 @@ def early(offset : double; var pat : Pattern) : Pattern {
         var result : array<Hap>
         let innerSpan = TimeSpan(start = span.start + offset, stop = span.stop + offset)
         var haps <- pat(innerSpan)
+        result |> reserve(length(haps))
         for (h in haps) {
             result |> push(Hap(
                 whole = TimeSpan(start = h.whole.start - offset, stop = h.whole.stop - offset),
@@ -98,7 +100,7 @@ def stack(var pats : array<Pattern>) : Pattern {
         for (pat in pats) {
             var haps <- pat(span)
             for (h in haps) {
-                result |> push(h)
+                result |> push(h) // nolint:PERF006
             }
             delete haps
         }
@@ -123,7 +125,7 @@ def cat(var pats : array<Pattern>) : Pattern {
             let innerSpan = TimeSpan(start = innerStart, stop = innerStop)
             var haps <- invoke(pats[idx], innerSpan)
             for (h in haps) {
-                result |> push(Hap(
+                result |> push(Hap( // nolint:PERF006
                     whole = TimeSpan(start = h.whole.start + cycle, stop = h.whole.stop + cycle),
                     part = TimeSpan(start = h.part.start + cycle, stop = h.part.stop + cycle),
                     has_whole = h.has_whole,
@@ -148,6 +150,7 @@ def fmap(var fn : lambda<(e : Event) : Event>; var pat : Pattern) : Pattern {
     return @capture(<- fn, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var haps <- pat(span)
+        result |> reserve(length(haps))
         for (h in haps) {
             result |> push(Hap(
                 whole = h.whole,
@@ -196,11 +199,11 @@ def every(n : int; var pat_on : Pattern; var pat_off : Pattern) : Pattern {
             }
             if (idx == 0) {
                 for (h in pat_on(sub)) {
-                    result |> push(h)
+                    result |> push(h) // nolint:PERF006
                 }
             } else {
                 for (h in pat_off(sub)) {
-                    result |> push(h)
+                    result |> push(h) // nolint:PERF006
                 }
             }
         }
@@ -240,7 +243,7 @@ def bjorklund(k, n : int) : array<bool> {
 
 // set_gain(0.5, pat) — set amplitude
 def set_gain(g : float; var pat : Pattern) : Pattern {
-    var fn <- @capture(= g) (e : Event) : Event {
+    let fn <- @capture(= g) (e : Event) : Event {
         var r = e; r.gain = g; return r
     }
     return <- fmap(fn, pat)
@@ -248,7 +251,7 @@ def set_gain(g : float; var pat : Pattern) : Pattern {
 
 // set_velocity(0.5, pat) — set expression/velocity
 def set_velocity(v : float; var pat : Pattern) : Pattern {
-    var fn <- @capture(= v) (e : Event) : Event {
+    let fn <- @capture(= v) (e : Event) : Event {
         var r = e; r.velocity = v; return r
     }
     return <- fmap(fn, pat)
@@ -256,7 +259,7 @@ def set_velocity(v : float; var pat : Pattern) : Pattern {
 
 // set_pan(0.0, pat) — set stereo position (0=left, 0.5=center, 1=right)
 def set_pan(p : float; var pat : Pattern) : Pattern {
-    var fn <- @capture(= p) (e : Event) : Event {
+    let fn <- @capture(= p) (e : Event) : Event {
         var r = e; r.pan = p; return r
     }
     return <- fmap(fn, pat)
@@ -264,7 +267,7 @@ def set_pan(p : float; var pat : Pattern) : Pattern {
 
 // set_speed(2.0, pat) — set sample playback speed
 def set_speed(spd : float; var pat : Pattern) : Pattern {
-    var fn <- @capture(= spd) (e : Event) : Event {
+    let fn <- @capture(= spd) (e : Event) : Event {
         var r = e; r.speed = spd; return r
     }
     return <- fmap(fn, pat)
@@ -272,7 +275,7 @@ def set_speed(spd : float; var pat : Pattern) : Pattern {
 
 // set_note(48.0, pat) — set MIDI note number
 def set_note(n : float; var pat : Pattern) : Pattern {
-    var fn <- @capture(= n) (e : Event) : Event {
+    let fn <- @capture(= n) (e : Event) : Event {
         var r = e; r.note = n; return r
     }
     return <- fmap(fn, pat)
@@ -280,7 +283,7 @@ def set_note(n : float; var pat : Pattern) : Pattern {
 
 // set_sound("sawtooth", pat) — change the sound name
 def set_sound(snd : string; var pat : Pattern) : Pattern {
-    var fn <- @capture(= snd) (e : Event) : Event {
+    let fn <- @capture(= snd) (e : Event) : Event {
         var r = e; r.s = snd; return r
     }
     return <- fmap(fn, pat)
@@ -288,7 +291,7 @@ def set_sound(snd : string; var pat : Pattern) : Pattern {
 
 // set_cut(1, pat) — set cut group (new voice kills previous in same group)
 def set_cut(c : int; var pat : Pattern) : Pattern {
-    var fn <- @capture(= c) (e : Event) : Event {
+    let fn <- @capture(= c) (e : Event) : Event {
         var r = e; r.cut = c; return r
     }
     return <- fmap(fn, pat)

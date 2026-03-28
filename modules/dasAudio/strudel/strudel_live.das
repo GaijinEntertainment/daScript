@@ -15,7 +15,7 @@ let private STORE_KEY = "__strudel_player"
 
 [before_reload]
 def private save_strudel_state() {
-    var data <- strudel_save_state()
+    let data <- strudel_save_state()
     if (length(data) > 0) {
         live_store_bytes(STORE_KEY, data)
     }

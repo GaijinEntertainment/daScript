@@ -14,6 +14,7 @@ enum MidiEventKind {
     midi_note_on
     midi_control_change
     midi_program_change
+    midi_pitch_bend
     midi_tempo
     midi_end_of_track
     midi_other
@@ -192,8 +193,16 @@ def parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
             if (status == firstByte) { cursor ++; }
             runningStatus = status
         } elif (msgType == int(0xE0)) {
-            // Pitch Bend — skip 2 data bytes
-            if (status == firstByte) { cursor += 2; } else { cursor ++; }
+            // Pitch Bend — 2 data bytes: LSB, MSB → 14-bit value (0..16383, center 8192)
+            let lsb = status == firstByte ? read_byte(data, cursor) : firstByte
+            let msb = read_byte(data, cursor)
+            let value14 = (msb << 7) | lsb
+            track.events |> push(MidiEvent(
+                tick = absTick,
+                kind = MidiEventKind.midi_pitch_bend,
+                channel = ch,
+                data1 = value14
+            ))
             runningStatus = status
         } elif (status == int(0xFF)) {
             // Meta event
@@ -276,7 +285,7 @@ def parse_midi(data : array<uint8>) : MidiFile {
 
 def load_midi(path : string) : MidiFile {
     var data : array<uint8>
-    fopen(path, "rb") <| $(f) {
+    fopen(path, "rb") $(f) {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {
@@ -307,7 +316,7 @@ def merge_tracks(midi : MidiFile) : array<MidiEvent> {
             merged |> push(e)
         }
     }
-    sort(merged) <| $(a, b) {
+    sort(merged) $(a, b) {
         if (a.tick != b.tick) {
             return a.tick < b.tick
         }

@@ -22,7 +22,7 @@ def main() {
         }
     }
     print("MIDI player — {path}\n")
-    with_audio_system() <| $() {
+    with_audio_system() {
         midi_load_samples(media)
         midi_init()
         if (midi_play("music", path, [gain = 0.6, looping = true])) {

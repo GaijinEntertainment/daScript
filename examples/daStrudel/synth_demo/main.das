@@ -21,7 +21,7 @@ def strudel_main(var state : StrudelState?) {
 [export]
 def main() {
     print("daStrudel synth demo (100%% generated)\n")
-    with_audio_system() <| $() {
+    with_audio_system() {
         strudel_init(@@strudel_main)
         print("playing 10 seconds...\n")
         sleep(10000u)

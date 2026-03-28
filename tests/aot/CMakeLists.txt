@@ -120,6 +120,8 @@ SET(AOT_STRUDEL_FILES
 )
 IF(NOT DAS_AUDIO_DISABLED)
     LIST(APPEND AOT_STRUDEL_FILES
+        tests/strudel/test_mini.das
+        tests/strudel/test_pattern.das
         tests/strudel/test_midi_player.das
         tests/strudel/test_samples.das
         tests/strudel/test_sequencer.das
@@ -559,7 +561,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_stbimage test_aot_stbimage_modules
     test_aot_strudel
 )
-target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src)
+target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${MIT_HRTF_INCLUDE_DIR})
 target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT)
 SETUP_CPP11(test_aot)
 SETUP_LTO(test_aot)
