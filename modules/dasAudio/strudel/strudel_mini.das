@@ -214,25 +214,25 @@ def parse_element(var p : Parser) : Pattern {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_double(num.text)
-            pat <- fast(n, pat)
+            pat <- pat |> fast(n)
         } elif (k == TokenKind.SLASH) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_double(num.text)
-            pat <- slow(n, pat)
+            pat <- pat |> slow(n)
         } elif (k == TokenKind.BANG) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
             let n = to_int(num.text)
             // replicate: "bd!3" ≈ fast(3, bd) — approximation since patterns aren't copyable
-            pat <- fast(double(n), pat)
+            pat <- pat |> fast(double(n))
         } elif (k == TokenKind.QUESTION) {
             advance(p)
             var prob = 0.5
             if (peek(p).kind == TokenKind.NUMBER) {
                 prob = to_float(expect_token(p, TokenKind.NUMBER).text)
             }
-            pat <- degrade(prob, pat)
+            pat <- pat |> degrade(prob)
         } elif (k == TokenKind.COLON) {
             advance(p)
             let num = expect_token(p, TokenKind.NUMBER)
@@ -240,7 +240,7 @@ def parse_element(var p : Parser) : Pattern {
             let fn <- @capture(= idx) (e : Event) : Event {
                 var r = e; r.n = idx; return r
             }
-            pat <- fmap(fn, pat)
+            pat <- pat |> fmap(fn)
         } else {
             break
         }
@@ -391,7 +391,7 @@ def s(notation : string) : Pattern {
 // note("c3 ~ e3 g3") → pattern with note events (sound defaults to "sine")
 def note_pattern(notation : string; sound : string = "sine") : Pattern {
     let pat <- s(notation)
-    return <- set_sound(sound, pat)
+    return <- pat |> set_sound(sound)
 }
 
 // Parse mini-notation with | bar separators for sequential melodies.
@@ -401,7 +401,7 @@ def seq(notation : string; sound : string = "sine") : Pattern {
     var p = Parser()
     p.tokens <- tokens
     let pat <- parse_bars(p)
-    return <- set_sound(sound, pat)
+    return <- pat |> set_sound(sound)
 }
 
 // ─── every() convenience helpers ───
@@ -410,21 +410,21 @@ def seq(notation : string; sound : string = "sine") : Pattern {
 
 // every_fast(4, 2.0, "bd sd hh cp") — double speed every 4th cycle
 def every_fast(n : int; factor : double; notation : string) : Pattern {
-    let on <- fast(factor, s(notation))
+    let on <- s(notation) |> fast(factor)
     let off <- s(notation)
     return <- every(n, on, off)
 }
 
 // every_slow(4, 2.0, "bd sd hh cp") — half speed every 4th cycle
 def every_slow(n : int; factor : double; notation : string) : Pattern {
-    let on <- slow(factor, s(notation))
+    let on <- s(notation) |> slow(factor)
     let off <- s(notation)
     return <- every(n, on, off)
 }
 
 // every_degrade(4, 0.5, "bd sd hh cp") — randomly drop events every 4th cycle
 def every_degrade(n : int; prob : float; notation : string) : Pattern {
-    let on <- degrade(prob, s(notation))
+    let on <- s(notation) |> degrade(prob)
     let off <- s(notation)
     return <- every(n, on, off)
 }

@@ -13,8 +13,8 @@ def strudel_main(var state : StrudelState?) {
     strudel_set_bpm(state, 120.0lf)
     strudel_play_pattern(state, stack([
         s("bd sd [hh hh] cp"),
-        set_gain(0.4, note_pattern("c2 c2 f2 g2", "sine")),
-        set_gain(0.3, note_pattern("<e4 d4> <c4 d4> <e4 f4> <g4 e4>", "sawtooth"))
+        note_pattern("c2 c2 f2 g2", "sine") |> set_gain(0.4),
+        note_pattern("<e4 d4> <c4 d4> <e4 f4> <g4 e4>", "sawtooth") |> set_gain(0.3)
     ]))
 }
 

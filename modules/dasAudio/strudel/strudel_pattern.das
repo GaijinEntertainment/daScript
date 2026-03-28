@@ -42,7 +42,7 @@ def atom(name : string) : Pattern {
 // ─── Time Manipulation ───
 
 // Speed up by factor n. The pattern repeats n times per cycle.
-def fast(n : double; var pat : Pattern) : Pattern {
+def fast(var pat : Pattern; n : double) : Pattern {
     return @capture(= n, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
@@ -62,12 +62,12 @@ def fast(n : double; var pat : Pattern) : Pattern {
 }
 
 // Slow down by factor n.
-def slow(n : double; var pat : Pattern) : Pattern {
-    return fast(1.0lf / n, pat)
+def slow(var pat : Pattern; n : double) : Pattern {
+    return fast(pat, 1.0lf / n)
 }
 
 // Shift pattern earlier in time by `offset` cycles.
-def early(offset : double; var pat : Pattern) : Pattern {
+def early(var pat : Pattern; offset : double) : Pattern {
     return @capture(= offset, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         let innerSpan = TimeSpan(start = span.start + offset, stop = span.stop + offset)
@@ -87,8 +87,8 @@ def early(offset : double; var pat : Pattern) : Pattern {
 }
 
 // Shift pattern later in time.
-def late(offset : double; var pat : Pattern) : Pattern {
-    return early(0.0lf - offset, pat)
+def late(var pat : Pattern; offset : double) : Pattern {
+    return early(pat, 0.0lf - offset)
 }
 
 // ─── Composition ───
@@ -140,13 +140,13 @@ def cat(var pats : array<Pattern>) : Pattern {
 // Like cat but all patterns squeezed into one cycle.
 def fastcat(var pats : array<Pattern>) : Pattern {
     let cn = double(length(pats))
-    return fast(cn, cat(pats))
+    return fast(cat(pats), cn)
 }
 
 // ─── Mapping ───
 
 // Transform the value of every event.
-def fmap(var fn : lambda<(e : Event) : Event>; var pat : Pattern) : Pattern {
+def fmap(var pat : Pattern; var fn : lambda<(e : Event) : Event>) : Pattern {
     return @capture(<- fn, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var haps <- pat(span)
@@ -168,7 +168,7 @@ def fmap(var fn : lambda<(e : Event) : Event>; var pat : Pattern) : Pattern {
 
 // Randomly remove events with given probability.
 // Uses deterministic hash of cycle position — same cycle = same result.
-def degrade(prob : float; var pat : Pattern) : Pattern {
+def degrade(var pat : Pattern; prob : float) : Pattern {
     return @capture(= prob, <- pat) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
         var haps <- pat(span)
@@ -241,60 +241,60 @@ def bjorklund(k, n : int) : array<bool> {
 // ─── Parameter Helpers ───
 // Each sets a single Event field via fmap.
 
-// set_gain(0.5, pat) — set amplitude
-def set_gain(g : float; var pat : Pattern) : Pattern {
+// pat |> set_gain(0.5) — set amplitude
+def set_gain(var pat : Pattern; g : float) : Pattern {
     let fn <- @capture(= g) (e : Event) : Event {
         var r = e; r.gain = g; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_velocity(0.5, pat) — set expression/velocity
-def set_velocity(v : float; var pat : Pattern) : Pattern {
+// pat |> set_velocity(0.5) — set expression/velocity
+def set_velocity(var pat : Pattern; v : float) : Pattern {
     let fn <- @capture(= v) (e : Event) : Event {
         var r = e; r.velocity = v; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_pan(0.0, pat) — set stereo position (0=left, 0.5=center, 1=right)
-def set_pan(p : float; var pat : Pattern) : Pattern {
+// pat |> set_pan(0.0) — set stereo position (0=left, 0.5=center, 1=right)
+def set_pan(var pat : Pattern; p : float) : Pattern {
     let fn <- @capture(= p) (e : Event) : Event {
         var r = e; r.pan = p; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_speed(2.0, pat) — set sample playback speed
-def set_speed(spd : float; var pat : Pattern) : Pattern {
+// pat |> set_speed(2.0) — set sample playback speed
+def set_speed(var pat : Pattern; spd : float) : Pattern {
     let fn <- @capture(= spd) (e : Event) : Event {
         var r = e; r.speed = spd; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_note(48.0, pat) — set MIDI note number
-def set_note(n : float; var pat : Pattern) : Pattern {
+// pat |> set_note(48.0) — set MIDI note number
+def set_note(var pat : Pattern; n : float) : Pattern {
     let fn <- @capture(= n) (e : Event) : Event {
         var r = e; r.note = n; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_sound("sawtooth", pat) — change the sound name
-def set_sound(snd : string; var pat : Pattern) : Pattern {
+// pat |> set_sound("sawtooth") — change the sound name
+def set_sound(var pat : Pattern; snd : string) : Pattern {
     let fn <- @capture(= snd) (e : Event) : Event {
         var r = e; r.s = snd; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_cut(1, pat) — set cut group (new voice kills previous in same group)
-def set_cut(c : int; var pat : Pattern) : Pattern {
+// pat |> set_cut(1) — set cut group (new voice kills previous in same group)
+def set_cut(var pat : Pattern; c : int) : Pattern {
     let fn <- @capture(= c) (e : Event) : Event {
         var r = e; r.cut = c; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
 // ─── SF2 SoundFont Helpers ───
@@ -394,36 +394,36 @@ def gm_program_by_name(name : string) : int {
     return -1
 }
 
-// set_sf2(0, pat) — set SF2 program number (GM instrument)
-def set_sf2(program : int; var pat : Pattern) : Pattern {
+// pat |> set_sf2(0) — set SF2 program number (GM instrument)
+def set_sf2(var pat : Pattern; program : int) : Pattern {
     let fn <- @capture(= program) (e : Event) : Event {
         var r = e; r.sf2_program = program; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_sf2("piano", pat) — set SF2 instrument by GM name
-def set_sf2(name : string; var pat : Pattern) : Pattern {
+// pat |> set_sf2("piano") — set SF2 instrument by GM name
+def set_sf2(var pat : Pattern; name : string) : Pattern {
     let program = gm_program_by_name(name)
     let fn <- @capture(= program) (e : Event) : Event {
         var r = e; r.sf2_program = program; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
-// set_sf2_bank(128, pat) — set SF2 bank (128 = percussion)
-def set_sf2_bank(bank : int; var pat : Pattern) : Pattern {
+// pat |> set_sf2_bank(128) — set SF2 bank (128 = percussion)
+def set_sf2_bank(var pat : Pattern; bank : int) : Pattern {
     let fn <- @capture(= bank) (e : Event) : Event {
         var r = e; r.sf2_bank = bank; return r
     }
-    return <- fmap(fn, pat)
+    return <- fmap(pat, fn)
 }
 
 // ─── Euclidean Rhythms ───
 
 // Euclidean rhythm: play pattern at k evenly-spaced onsets across n subdivisions.
 // euclid(3, 8, atom("bd")) → kick on steps 0, 3, 6 of an 8-step cycle
-def euclid(k, n : int; var pat : Pattern) : Pattern {
+def euclid(var pat : Pattern; k, n : int) : Pattern {
     var rhythm <- bjorklund(k, n)
     let nf = double(n)
     return @capture(<- rhythm, = nf, <- pat) (span : TimeSpan) : array<Hap> {
