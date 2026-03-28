@@ -101,6 +101,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang_live.md` | Working with `daslang-live.exe`, live-reload lifecycle, REST API, `[live_command]`, `[before_reload]`/`[after_reload]`, persistent store, `live/glfw_live`, `live/live_api` |
 | `skills/perf_lint.md` | Adding new performance lint rules to `daslib/perf_lint.das` |
 | `skills/version_update.md` | Bumping the daslang version number (all files that need updating) |
+| `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
