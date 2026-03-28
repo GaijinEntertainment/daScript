@@ -161,7 +161,7 @@ def test_note_names_sharps_flats(t : T?) {
 [test]
 def test_every(t : T?) {
     // every(2, fast_bd, normal_bd) — fast on even cycles, normal on odd
-    var on <- fast(2.0lf, atom("bd"))
+    var on <- atom("bd") |> fast(2.0lf)
     var off <- atom("bd")
     var pat <- every(2, on, off)
     // cycle 0: on (fast) = 2 events

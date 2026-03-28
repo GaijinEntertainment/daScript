@@ -61,7 +61,7 @@ def test_atom(t : T?) {
 
 [test]
 def test_fast(t : T?) {
-    var pat <- fast(2.0lf, atom("bd"))
+    var pat <- atom("bd") |> fast(2.0lf)
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 2)
     t |> success(abs(haps[0].whole.start - 0.0lf) < 0.001lf)
@@ -72,7 +72,7 @@ def test_fast(t : T?) {
 
 [test]
 def test_slow(t : T?) {
-    var pat <- slow(2.0lf, atom("bd"))
+    var pat <- atom("bd") |> slow(2.0lf)
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 1)
     t |> success(abs(haps[0].whole.start - 0.0lf) < 0.001lf)
@@ -139,7 +139,7 @@ def test_fastcat(t : T?) {
 [test]
 def test_fmap(t : T?) {
     var fn <- @(e : Event) : Event { return Event(s = e.s, gain = 0.5); }
-    var pat <- fmap(fn, atom("bd"))
+    var pat <- atom("bd") |> fmap(fn)
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 1)
     t |> equal(haps[0].value.s, "bd")
@@ -148,10 +148,10 @@ def test_fmap(t : T?) {
 
 [test]
 def test_degrade(t : T?) {
-    var pat <- degrade(1.0, atom("bd"))
+    var pat <- atom("bd") |> degrade(1.0)
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 0)
-    var pat2 <- degrade(0.0, atom("bd"))
+    var pat2 <- atom("bd") |> degrade(0.0)
     var haps2 <- pat2(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps2), 1)
 }
@@ -171,7 +171,7 @@ def test_bjorklund(t : T?) {
 
 [test]
 def test_euclid(t : T?) {
-    var pat <- euclid(3, 8, atom("bd"))
+    var pat <- atom("bd") |> euclid(3, 8)
     var haps <- pat(TimeSpan(start = 0.0lf, stop = 1.0lf))
     t |> equal(length(haps), 3)
 }

@@ -47,17 +47,17 @@ def main() {
     // build the pattern
     let pat <- stack([
         // drums — SF2 GM percussion (bank 128)
-        set_gain(0.7, set_sf2_bank(128, set_sf2(0,
-            note_pattern("c2 ~ [~ c2] ~, ~ eb2 ~ eb2, [~ fs2] [~ fs2] [~ fs2] [~ fs2]")))),
+        note_pattern("c2 ~ [~ c2] ~, ~ eb2 ~ eb2, [~ fs2] [~ fs2] [~ fs2] [~ fs2]")
+            |> set_sf2(0) |> set_sf2_bank(128) |> set_gain(0.7),
         // piano arpeggios
-        set_gain(0.45, set_sf2("piano",
-            note_pattern("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>"))),
+        note_pattern("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>")
+            |> set_sf2("piano") |> set_gain(0.45),
         // bass
-        set_gain(0.6, set_sf2("acoustic_bass",
-            note_pattern("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>"))),
+        note_pattern("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>")
+            |> set_sf2("acoustic_bass") |> set_gain(0.6),
         // string pad
-        set_gain(0.2, set_sf2("string_ensemble",
-            note_pattern("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")))
+        note_pattern("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")
+            |> set_sf2("string_ensemble") |> set_gain(0.2)
     ])
 
     // set up scheduler
