@@ -5,6 +5,7 @@ benchdata.db
 
 *.output
 *.temp
+*.sf2
 
 # build artifacts
 build/

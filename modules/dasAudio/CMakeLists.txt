@@ -60,6 +60,8 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	ADD_MODULE_DAS(strudel strudel strudel_mini)
 	ADD_MODULE_DAS(strudel strudel strudel_samples)
 	ADD_MODULE_DAS(strudel strudel strudel_midi)
+	ADD_MODULE_DAS(strudel strudel strudel_sf2)
+	ADD_MODULE_DAS(strudel strudel strudel_sf2_voice)
 	ADD_MODULE_DAS(strudel strudel strudel_midi_player)
 	ADD_MODULE_DAS(strudel strudel strudel_player)
 	ADD_MODULE_DAS(strudel strudel strudel_live)
@@ -87,6 +89,7 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
         DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/daStrudel
         FILES_MATCHING
         PATTERN "*.das"
+        PATTERN "*.md"
     )
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/media/

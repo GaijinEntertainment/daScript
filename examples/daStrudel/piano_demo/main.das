@@ -34,14 +34,14 @@ def piano_map(e : Event) : Event {
 
 def strudel_main(var state : StrudelState?) {
     // Ode to Joy — 8 bars, 4 notes per bar (4/4 time)
-    var melody <- seq(
+    let melody <- seq(
         "e4 e4 f4 g4 | g4 f4 e4 d4 | c4 c4 d4 e4 | e4 d4 d4 ~ |
          e4 e4 f4 g4 | g4 f4 e4 d4 | c4 c4 d4 e4 | d4 c4 c4 ~"
     )
     // map note events to piano samples with pitch-shifting
     var piano <- fmap(@(e) => piano_map(e), set_gain(0.6, melody))
     var drums <- set_gain(0.5, s("bd ~ sd ~"))
-    var pat <- stack([piano, drums])
+    let pat <- stack([piano, drums])
     strudel_set_bpm(100.0lf)
     strudel_play_pattern(state, pat)
 }
@@ -49,7 +49,7 @@ def strudel_main(var state : StrudelState?) {
 [export]
 def main() {
     print("daStrudel piano demo — Ode to Joy (piano samples)\n")
-    with_audio_system() <| $() {
+    with_audio_system() {
         strudel_load_sound("{MEDIA}/drums/bd", "bd")
         strudel_load_sound("{MEDIA}/drums/sd", "sd")
         for (n in PIANO_NOTES) {

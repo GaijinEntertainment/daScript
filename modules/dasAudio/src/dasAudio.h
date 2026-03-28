@@ -1,6 +1,7 @@
 #define MA_USE_STDINT
 #include <miniaudio.h>
 #include "volume_mixer.h"
+#include "sf2_voice.h"
 #include "hrtf.h"
 #include "reverb.h"
 

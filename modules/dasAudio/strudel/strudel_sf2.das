@@ -1,0 +1,610 @@
+options gen2
+options indenting = 4
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
+
+module strudel_sf2 shared public
+
+require daslib/fio
+require strings
+require math
+
+// ─── SF2 Generator Operators ───
+
+enum SF2GenOper {
+    startAddrsOffset = 0
+    endAddrsOffset = 1
+    startloopAddrsOffset = 2
+    endloopAddrsOffset = 3
+    startAddrsCoarseOffset = 4
+    modLfoToPitch = 5
+    vibLfoToPitch = 6
+    modEnvToPitch = 7
+    initialFilterFc = 8
+    initialFilterQ = 9
+    modLfoToFilterFc = 10
+    modEnvToFilterFc = 11
+    endAddrsCoarseOffset = 12
+    modLfoToVolume = 13
+    chorusEffectsSend = 15
+    reverbEffectsSend = 16
+    pan = 17
+    delayModLFO = 21
+    freqModLFO = 22
+    delayVibLFO = 23
+    freqVibLFO = 24
+    delayModEnv = 25
+    attackModEnv = 26
+    holdModEnv = 27
+    decayModEnv = 28
+    sustainModEnv = 29
+    releaseModEnv = 30
+    keynumToModEnvHold = 31
+    keynumToModEnvDecay = 32
+    delayVolEnv = 33
+    attackVolEnv = 34
+    holdVolEnv = 35
+    decayVolEnv = 36
+    sustainVolEnv = 37
+    releaseVolEnv = 38
+    keynumToVolEnvHold = 39
+    keynumToVolEnvDecay = 40
+    instrument = 41
+    keyRange = 43
+    velRange = 44
+    startloopAddrsCoarseOffset = 45
+    keynum = 46
+    velocity = 47
+    initialAttenuation = 48
+    endloopAddrsCoarseOffset = 50
+    coarseTune = 51
+    fineTune = 52
+    sampleID = 53
+    sampleModes = 54
+    scaleTuning = 56
+    exclusiveClass = 57
+    overridingRootKey = 58
+}
+
+// ─── SF2 Data Structures ───
+
+struct SF2SampleHeader {
+    name : string
+    start : uint
+    end : uint
+    loop_start : uint
+    loop_end : uint
+    sample_rate : uint
+    original_pitch : int
+    pitch_correction : int
+    sample_link : uint
+    sample_type : uint
+}
+
+struct SF2Generator {
+    oper : int
+    amount_i16 : int        // signed 16-bit amount
+    amount_lo : int         // unsigned byte (for ranges)
+    amount_hi : int         // unsigned byte (for ranges)
+}
+
+struct SF2Zone {
+    key_lo : int = 0
+    key_hi : int = 127
+    vel_lo : int = 0
+    vel_hi : int = 127
+    generators : array<SF2Generator>
+}
+
+struct SF2InstrumentDef {
+    name : string
+    global_zone : SF2Zone?
+    zones : array<SF2Zone?>
+}
+
+struct SF2PresetDef {
+    name : string
+    preset : int
+    bank : int
+    global_zone : SF2Zone?
+    zones : array<SF2Zone?>
+}
+
+struct SF2File {
+    name : string
+    sample_data : array<int16>
+    samples : array<SF2SampleHeader>
+    instruments : array<SF2InstrumentDef?>
+    presets : array<SF2PresetDef?>
+    preset_lookup : table<int; int>     // (bank<<8 | program) -> index into presets
+}
+
+// ─── Binary Readers (Little-Endian) ───
+
+def private read_u8(data : array<uint8>; var cursor : int&) : int {
+    if (cursor >= length(data)) {
+        return 0
+    }
+    let v = int(data[cursor])
+    cursor ++
+    return v
+}
+
+def private read_u16_le(data : array<uint8>; var cursor : int&) : int {
+    if (cursor + 1 >= length(data)) {
+        cursor = length(data)
+        return 0
+    }
+    let v = int(data[cursor]) | (int(data[cursor + 1]) << 8)
+    cursor += 2
+    return v
+}
+
+def private read_i16_le(data : array<uint8>; var cursor : int&) : int {
+    let v = read_u16_le(data, cursor)
+    if (v >= int(0x8000)) {
+        return v - int(0x10000)
+    }
+    return v
+}
+
+def private read_u32_le(data : array<uint8>; var cursor : int&) : uint {
+    if (cursor + 3 >= length(data)) {
+        cursor = length(data)
+        return 0u
+    }
+    let v = uint(data[cursor]) | (uint(data[cursor + 1]) << 8u) | (uint(data[cursor + 2]) << 16u) | (uint(data[cursor + 3]) << 24u)
+    cursor += 4
+    return v
+}
+
+def private read_fourcc(data : array<uint8>; var cursor : int&) : string {
+    if (cursor + 3 >= length(data)) {
+        cursor = length(data)
+        return ""
+    }
+    let cc = "{character_at(data[cursor])}{character_at(data[cursor+1])}{character_at(data[cursor+2])}{character_at(data[cursor+3])}"
+    cursor += 4
+    return cc
+}
+
+def private character_at(b : uint8) : string {
+    return to_char(int(b))
+}
+
+def private read_fixed_string(data : array<uint8>; var cursor : int&; max_len : int) : string {
+    let end_pos = min(cursor + max_len, length(data))
+    let result = build_string() $(var writer) {
+        for (i in range(cursor, end_pos)) {
+            if (data[i] == 0u8) {
+                break
+            }
+            write(writer, character_at(data[i]))
+        }
+    }
+    cursor += max_len
+    return result
+}
+
+// ─── Timecent Conversion ───
+
+def public timecents_to_seconds(tc : int) : float {
+    if (tc <= -32768) {
+        return 0.0
+    }
+    return pow(2.0, float(tc) / 1200.0)
+}
+
+def public cents_to_hz(cents : int) : float {
+    return 8.176 * pow(2.0, float(cents) / 1200.0)
+}
+
+def public centibels_to_linear(cb : int) : float {
+    return pow(10.0, float(-cb) / 200.0)
+}
+
+// ─── SF2 Parser ───
+
+def private parse_sample_headers(data : array<uint8>; offset, size : int) : array<SF2SampleHeader> {
+    var result : array<SF2SampleHeader>
+    let record_size = 46
+    let count = size / record_size
+    if (count <= 1) {
+        return <- result    // last record is terminal
+    }
+    result |> reserve(count - 1)
+    var cursor = offset
+    for (_ in range(count - 1)) {
+        var sh = SF2SampleHeader()
+        sh.name = read_fixed_string(data, cursor, 20)   // 20 bytes
+        sh.start = read_u32_le(data, cursor)             // 4 bytes
+        sh.end = read_u32_le(data, cursor)               // 4 bytes
+        sh.loop_start = read_u32_le(data, cursor)        // 4 bytes
+        sh.loop_end = read_u32_le(data, cursor)          // 4 bytes
+        sh.sample_rate = read_u32_le(data, cursor)       // 4 bytes
+        sh.original_pitch = read_u8(data, cursor)        // 1 byte
+        let pc_byte = read_u8(data, cursor)              // 1 byte
+        sh.pitch_correction = pc_byte >= 128 ? pc_byte - 256 : pc_byte
+        sh.sample_link = uint(read_u16_le(data, cursor)) // 2 bytes
+        sh.sample_type = uint(read_u16_le(data, cursor)) // 2 bytes = 46 total
+        result |> push(sh)
+    }
+    return <- result
+}
+
+struct RawPresetHeader {
+    name : string
+    preset : int
+    bank : int
+    pbag_index : int
+}
+
+struct RawInstrumentHeader {
+    name : string
+    ibag_index : int
+}
+
+struct RawBag {
+    gen_index : int
+    mod_index : int
+}
+
+def private parse_preset_headers(data : array<uint8>; offset, size : int) : array<RawPresetHeader> {
+    var result : array<RawPresetHeader>
+    let record_size = 38
+    let count = size / record_size
+    if (count <= 1) {
+        return <- result
+    }
+    result |> reserve(count)
+    var cursor = offset
+    for (_ in range(count)) {
+        var ph = RawPresetHeader()
+        ph.name = read_fixed_string(data, cursor, 20)
+        ph.preset = read_u16_le(data, cursor)
+        ph.bank = read_u16_le(data, cursor)
+        ph.pbag_index = read_u16_le(data, cursor)
+        cursor += 4 + 4 + 4  // skip library, genre, morphology
+        result |> push(ph)
+    }
+    return <- result
+}
+
+def private parse_instrument_headers(data : array<uint8>; offset, size : int) : array<RawInstrumentHeader> {
+    var result : array<RawInstrumentHeader>
+    let record_size = 22
+    let count = size / record_size
+    if (count <= 1) {
+        return <- result
+    }
+    result |> reserve(count)
+    var cursor = offset
+    for (_ in range(count)) {
+        var ih = RawInstrumentHeader()
+        ih.name = read_fixed_string(data, cursor, 20)
+        ih.ibag_index = read_u16_le(data, cursor)
+        result |> push(ih)
+    }
+    return <- result
+}
+
+def private parse_bags(data : array<uint8>; offset, size : int) : array<RawBag> {
+    var result : array<RawBag>
+    let record_size = 4
+    let count = size / record_size
+    result |> reserve(count)
+    var cursor = offset
+    for (_ in range(count)) {
+        var bag = RawBag()
+        bag.gen_index = read_u16_le(data, cursor)
+        bag.mod_index = read_u16_le(data, cursor)
+        result |> push(bag)
+    }
+    return <- result
+}
+
+def private parse_generators(data : array<uint8>; offset, size : int) : array<SF2Generator> {
+    var result : array<SF2Generator>
+    let record_size = 4
+    let count = size / record_size
+    result |> reserve(count)
+    var cursor = offset
+    for (_ in range(count)) {
+        var gen = SF2Generator()
+        gen.oper = read_u16_le(data, cursor)
+        let lo = read_u8(data, cursor)
+        let hi = read_u8(data, cursor)
+        gen.amount_lo = lo
+        gen.amount_hi = hi
+        gen.amount_i16 = lo | (hi << 8)
+        if (gen.amount_i16 >= int(0x8000)) {
+            gen.amount_i16 -= int(0x10000)
+        }
+        result |> push(gen)
+    }
+    return <- result
+}
+
+// ─── Zone Resolution ───
+
+def private has_generator(zone : SF2Zone; oper : int) : bool {
+    for (gen in zone.generators) {
+        if (gen.oper == oper) {
+            return true
+        }
+    }
+    return false
+}
+
+def public get_generator(zone : SF2Zone; oper : int; def_val : int = 0) : int {
+    for (gen in zone.generators) {
+        if (gen.oper == oper) {
+            return gen.amount_i16
+        }
+    }
+    return def_val
+}
+
+def public get_generator_range(zone : SF2Zone; oper : int) : int2 {
+    for (gen in zone.generators) {
+        if (gen.oper == oper) {
+            return int2(gen.amount_lo, gen.amount_hi)
+        }
+    }
+    return int2(0, 127)
+}
+
+def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>;
+                          bag_start, bag_end : int; terminal_oper : int) : array<SF2Zone?> {
+    var zones : array<SF2Zone?>
+    zones |> reserve(bag_end - bag_start)
+    for (bi in range(bag_start, bag_end)) {
+        let gen_start = bags[bi].gen_index
+        let gen_end = bi + 1 < length(bags) ? bags[bi + 1].gen_index : length(all_gens)
+        var zone = new SF2Zone()
+        for (gi in range(gen_start, gen_end)) {
+            if (gi < length(all_gens)) {
+                zone.generators |> push(all_gens[gi])
+            }
+        }
+        // extract key/vel ranges
+        let kr = get_generator_range(*zone, int(SF2GenOper.keyRange))
+        zone.key_lo = kr.x
+        zone.key_hi = kr.y
+        let vr = get_generator_range(*zone, int(SF2GenOper.velRange))
+        zone.vel_lo = vr.x
+        zone.vel_hi = vr.y
+        zones |> push(zone)
+    }
+    return <- zones
+}
+
+def private split_global_zone(var zones : array<SF2Zone?>; terminal_oper : int) : SF2Zone? {
+    if (length(zones) == 0) {
+        return null
+    }
+    // first zone is global if it has NO terminal generator (instrument or sampleID)
+    if (!has_generator(*zones[0], terminal_oper)) {
+        var gz = zones[0]
+        zones |> erase(0)
+        return gz
+    }
+    return null
+}
+
+// ─── Top-Level Parse ───
+
+def public sf2_load(path : string) : SF2File? {
+    var data : array<uint8>
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            let st = fstat(f)
+            if (st.is_valid) {
+                data |> resize(int(st.size))
+                fread(f, data)
+            }
+        }
+    }
+    if (length(data) < 12) {
+        to_log(0, "SF2: file too small or not found: {path}\n")
+        return null
+    }
+    return <- sf2_parse(data)
+}
+
+def public sf2_parse(data : array<uint8>) : SF2File? {
+    var cursor = 0
+
+    // RIFF header
+    let riff = read_fourcc(data, cursor)
+    if (riff != "RIFF") {
+        to_log(0, "SF2: not a RIFF file\n")
+        return null
+    }
+    let file_size = read_u32_le(data, cursor)
+    let form = read_fourcc(data, cursor)
+    if (form != "sfbk") {
+        to_log(0, "SF2: not an SF2 file (form={form})\n")
+        return null
+    }
+
+    var result = new SF2File()
+
+    // raw pdta arrays
+    var raw_phdr : array<RawPresetHeader>
+    var raw_inst : array<RawInstrumentHeader>
+    var raw_pbag : array<RawBag>
+    var raw_ibag : array<RawBag>
+    var raw_pgen : array<SF2Generator>
+    var raw_igen : array<SF2Generator>
+
+    // parse LIST chunks
+    while (cursor < length(data) - 8) {
+        let chunk_id = read_fourcc(data, cursor)
+        let chunk_size = int(read_u32_le(data, cursor))
+        let chunk_end = cursor + chunk_size
+
+        if (chunk_id == "LIST") {
+            let list_type = read_fourcc(data, cursor)
+
+            if (list_type == "INFO") {
+                // parse INFO sub-chunks for name
+                while (cursor < chunk_end) {
+                    let sub_id = read_fourcc(data, cursor)
+                    let sub_size = int(read_u32_le(data, cursor))
+                    if (sub_id == "INAM") {
+                        result.name = read_fixed_string(data, cursor, sub_size)
+                    } else {
+                        cursor += sub_size
+                    }
+                    // pad to even
+                    if (sub_size % 2 != 0) {
+                        cursor ++
+                    }
+                }
+
+            } elif (list_type == "sdta") {
+                // sample data
+                while (cursor < chunk_end) {
+                    let sub_id = read_fourcc(data, cursor)
+                    let sub_size = int(read_u32_le(data, cursor))
+                    if (sub_id == "smpl") {
+                        let num_samples = sub_size / 2
+                        result.sample_data |> resize(num_samples)
+                        for (i in range(num_samples)) {
+                            let lo = int(data[cursor + i * 2])
+                            let hi = int(data[cursor + i * 2 + 1])
+                            var v = lo | (hi << 8)
+                            if (v >= int(0x8000)) {
+                                v -= int(0x10000)
+                            }
+                            result.sample_data[i] = int16(v)
+                        }
+                        cursor += sub_size
+                    } else {
+                        cursor += sub_size
+                    }
+                    if (sub_size % 2 != 0) {
+                        cursor ++
+                    }
+                }
+
+            } elif (list_type == "pdta") {
+                // preset data — 9 sub-chunks
+                while (cursor < chunk_end) {
+                    let sub_id = read_fourcc(data, cursor)
+                    let sub_size = int(read_u32_le(data, cursor))
+                    let sub_start = cursor
+
+                    if (sub_id == "phdr") {
+                        raw_phdr <- parse_preset_headers(data, sub_start, sub_size)
+                    } elif (sub_id == "pbag") {
+                        raw_pbag <- parse_bags(data, sub_start, sub_size)
+                    } elif (sub_id == "pmod") {
+                        // skip modulators for now
+                    } elif (sub_id == "pgen") {
+                        raw_pgen <- parse_generators(data, sub_start, sub_size)
+                    } elif (sub_id == "inst") {
+                        raw_inst <- parse_instrument_headers(data, sub_start, sub_size)
+                    } elif (sub_id == "ibag") {
+                        raw_ibag <- parse_bags(data, sub_start, sub_size)
+                    } elif (sub_id == "imod") {
+                        // skip modulators for now
+                    } elif (sub_id == "igen") {
+                        raw_igen <- parse_generators(data, sub_start, sub_size)
+                    } elif (sub_id == "shdr") {
+                        result.samples <- parse_sample_headers(data, sub_start, sub_size)
+                    }
+
+                    cursor = sub_start + sub_size
+                    if (sub_size % 2 != 0) {
+                        cursor ++
+                    }
+                }
+            } else {
+                cursor = chunk_end
+            }
+        } else {
+            cursor = chunk_end
+        }
+    }
+
+    // ─── Resolve Instruments ───
+    let num_inst = length(raw_inst) - 1  // last is terminal
+    result.instruments |> reserve(num_inst)
+    for (ii in range(num_inst)) {
+        var inst = new SF2InstrumentDef()
+        inst.name = raw_inst[ii].name
+        let bag_start = raw_inst[ii].ibag_index
+        let bag_end = raw_inst[ii + 1].ibag_index
+        var zones <- resolve_zones(raw_ibag, raw_igen, bag_start, bag_end, int(SF2GenOper.sampleID))
+        inst.global_zone = split_global_zone(zones, int(SF2GenOper.sampleID))
+        inst.zones <- zones
+        result.instruments |> push(inst)
+    }
+
+    // ─── Resolve Presets ───
+    let num_presets = length(raw_phdr) - 1  // last is terminal
+    result.presets |> reserve(num_presets)
+    for (pi in range(num_presets)) {
+        var preset = new SF2PresetDef()
+        preset.name = raw_phdr[pi].name
+        preset.preset = raw_phdr[pi].preset
+        preset.bank = raw_phdr[pi].bank
+        let bag_start = raw_phdr[pi].pbag_index
+        let bag_end = raw_phdr[pi + 1].pbag_index
+        var zones <- resolve_zones(raw_pbag, raw_pgen, bag_start, bag_end, int(SF2GenOper.instrument))
+        preset.global_zone = split_global_zone(zones, int(SF2GenOper.instrument))
+        preset.zones <- zones
+        result.presets |> push(preset)
+        // build lookup
+        let key = (preset.bank << 8) | preset.preset
+        result.preset_lookup[key] = pi
+    }
+
+    to_log(0, "SF2: loaded \"{result.name}\" — {num_presets} presets, {num_inst} instruments, {length(result.samples)} samples, {length(result.sample_data)} sample frames\n")
+    return <- result
+}
+
+// ─── Lookup ───
+
+def public sf2_find_preset(sf2 : SF2File; bank, program : int) : int {
+    let key = (bank << 8) | program
+    return sf2.preset_lookup?[key] ?? -1
+}
+
+def public sf2_find_zones(sf2 : SF2File; preset_index : int; key, velocity : int) : array<int2> {
+    // returns array of (instrument_index, instrument_zone_index) pairs
+    var result : array<int2>
+    if (preset_index < 0 || preset_index >= length(sf2.presets)) {
+        return <- result
+    }
+    let preset = sf2.presets[preset_index]
+    for (pzone in preset.zones) {
+        // check key/vel range
+        if (key < pzone.key_lo || key > pzone.key_hi) {
+            continue
+        }
+        if (velocity < pzone.vel_lo || velocity > pzone.vel_hi) {
+            continue
+        }
+        // get instrument index
+        let inst_idx = get_generator(*pzone, int(SF2GenOper.instrument), -1)
+        if (inst_idx < 0 || inst_idx >= length(sf2.instruments)) {
+            continue
+        }
+        let inst = sf2.instruments[inst_idx]
+        // find matching instrument zones
+        for (iz_idx in range(length(inst.zones))) {
+            let izone = inst.zones[iz_idx]
+            if (key < izone.key_lo || key > izone.key_hi) {
+                continue
+            }
+            if (velocity < izone.vel_lo || velocity > izone.vel_hi) {
+                continue
+            }
+            result |> push(int2(inst_idx, iz_idx))
+        }
+    }
+    return <- result
+}

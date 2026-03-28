@@ -8,6 +8,8 @@ module strudel_midi_player shared public
 require strudel/strudel_midi
 require strudel/strudel_synth
 require strudel/strudel_samples
+require strudel/strudel_sf2
+require strudel/strudel_sf2_voice
 require audio/audio_boost
 require audio
 require daslib/jobque_boost
@@ -181,7 +183,9 @@ struct MidiPlaybackState {
     events         : array<MidiEvent>   // merged, sorted by tick
     @safe_when_uninitialized channels : MidiChannelState[16]
     voices         : array<MidiVoice?>
+    csf2_voices    : array<ma_sf2_voice>   // SF2-based voices (C, for real-time rendering)
     bank           : SampleBank const?  // optional sample bank (pointer to main context)
+    sf2            : SF2File const?     // optional SF2 soundfont (pointer to main context)
     ticks_per_qn   : int = 480          // from MIDI file
     event_index    : int = 0
     current_tick   : double = 0.0lf
@@ -197,18 +201,88 @@ struct MidiPlaybackState {
     mixer_ready    : bool = false
 }
 
-def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : string; gain : float; looping : bool; bank : SampleBank const? = null) {
+def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : string; gain : float; looping : bool; bank : SampleBank const? = null; sf2 : SF2File const? = null) {
     state.name = name
     state.events <- merge_tracks(*midi)
     state.gain = gain
     state.target_gain = gain
     state.looping = looping
     state.bank = bank
+    state.sf2 = sf2
     state.ticks_per_qn = midi.ticks_per_qn
     state.tempo_usec = 500000
     state.ticks_per_sec = double(state.ticks_per_qn) * 1000000.0lf / double(state.tempo_usec)
     for (ch in state.channels) {
         ch = MidiChannelState()
+    }
+}
+
+// ─── SF2 Voice Management ───
+
+// Per-voice metadata not stored in ma_sf2_voice (C struct doesn't have these)
+struct SF2VoiceMeta {
+    channel : int = 0
+    note : int = 0
+    exclusive_class : int = 0
+    sustain_held : bool = false
+}
+
+var private g_sf2_meta : array<SF2VoiceMeta>  // parallel to state.csf2_voices
+
+def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int) {
+    let bank = ch == 9 ? 128 : 0
+    let program = state.channels[ch].program
+    let preset_idx = sf2_find_preset(*state.sf2, bank, program)
+    if (preset_idx < 0) {
+        return
+    }
+    let zones = sf2_find_zones(*state.sf2, preset_idx, note, velocity)
+    if (length(zones) == 0) {
+        return
+    }
+    // kill existing voice on same channel+note (re-trigger)
+    for (i in range(length(state.csf2_voices))) {
+        if (g_sf2_meta[i].channel == ch && g_sf2_meta[i].note == note && state.csf2_voices[i].released == 0 && state.csf2_voices[i].finished == 0) {
+            unsafe { ma_sf2_voice_end_quick(addr(state.csf2_voices[i])); }
+        }
+    }
+    let preset = state.sf2.presets[preset_idx]
+    for (z in zones) {
+        var pzone : SF2Zone const?
+        for (pz in preset.zones) {
+            let inst_gen = get_generator(*pz, int(SF2GenOper.instrument), -1)
+            if (inst_gen == z.x) {
+                pzone = pz
+                break
+            }
+        }
+        let excl = sf2_get_exclusive_class(*state.sf2, z.x, z.y, pzone, preset.global_zone)
+        var voice : ma_sf2_voice
+        if (sf2_create_c_voice(*state.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, ch, voice)) {
+            // exclusive class: quick-kill existing voices with same class
+            if (excl > 0) {
+                for (i in range(length(state.csf2_voices))) {
+                    if (g_sf2_meta[i].exclusive_class == excl && g_sf2_meta[i].channel == ch && state.csf2_voices[i].finished == 0) {
+                        unsafe { ma_sf2_voice_end_quick(addr(state.csf2_voices[i])); }
+                    }
+                }
+            }
+            state.csf2_voices |> push(voice)
+            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl))
+        }
+    }
+}
+
+def private sf2_note_off(var state : MidiPlaybackState; ch, note : int) {
+    // release ALL matching voices (stereo instruments have multiple voices per note)
+    for (i in range(length(state.csf2_voices))) {
+        if (g_sf2_meta[i].channel == ch && g_sf2_meta[i].note == note && state.csf2_voices[i].released == 0 && state.csf2_voices[i].finished == 0 && !g_sf2_meta[i].sustain_held) {
+            if (state.channels[ch].sustain) {
+                g_sf2_meta[i].sustain_held = true
+            } else {
+                unsafe { ma_sf2_voice_note_off(addr(state.csf2_voices[i])); }
+            }
+        }
     }
 }
 
@@ -223,79 +297,86 @@ def process_events(var state : MidiPlaybackState) {
         let ch = ev.channel
         if (ev.kind == MidiEventKind.midi_note_on) {
             let vel = float(ev.data2) / 127.0
-            // kill existing voice on same channel+note (re-trigger)
-            for (voice in state.voices) {
-                if (voice != null && voice.channel == ch && voice.note == ev.data1 && !voice.is_drum) {
-                    if (voice.note_off_t < 0.0) {
-                        voice.note_off_t = float(state.playback_time)
-                    }
-                }
-            }
-            if (ch == 9) {
-                // drum channel — try sample bank first, fall back to synthesis
-                var drum_stereo : array<float>
-                if (state.bank != null) {
-                    let drum_name = gm_drum_name(ev.data1)
-                    if (!empty(drum_name) && key_exists(state.bank.sounds, drum_name)) {
-                        drum_stereo <- render_sample(*state.bank, drum_name, ev.data1 % 3, 1.0)
-                    }
-                }
-                if (length(drum_stereo) == 0) {
-                    let drum_mono <- render_drum_hit(ev.data1, vel)
-                    drum_stereo <- mono_to_stereo(drum_mono)
-                }
-                state.voices |> push(new MidiVoice(
-                    channel = ch,
-                    note = ev.data1,
-                    velocity = vel,
-                    is_drum = true,
-                    samples <- drum_stereo,
-                    note_on_t = float(state.playback_time)
-                ))
+            if (state.sf2 != null) {
+                // ─── SF2 path ───
+                sf2_note_on(state, ch, ev.data1, ev.data2)
             } else {
-                // melodic channel — use piano samples for piano programs (0-7), else synthesize
-                var use_sample = false
-                if (state.bank != null && state.channels[ch].program < 8) {
-                    let pn = piano_sample_name(ev.data1)
-                    if (key_exists(state.bank.sounds, pn.name)) {
-                        var sample_stereo <- render_sample(*state.bank, pn.name, ev.data2 % 3, pn.speed)
-                        state.voices |> push(new MidiVoice(
-                            channel = ch,
-                            note = ev.data1,
-                            velocity = vel,
-                            is_drum = true,  // pre-rendered like drums
-                            samples <- sample_stereo,
-                            note_on_t = float(state.playback_time)
-                        ))
-                        use_sample = true
+                // ─── Legacy oscillator/sample path ───
+                // kill existing voice on same channel+note (re-trigger)
+                for (voice in state.voices) {
+                    if (voice != null && voice.channel == ch && voice.note == ev.data1 && !voice.is_drum) {
+                        if (voice.note_off_t < 0.0) {
+                            voice.note_off_t = float(state.playback_time)
+                        }
                     }
                 }
-                if (!use_sample) {
-                    let preset = gm_preset(state.channels[ch].program)
+                if (ch == 9) {
+                    var drum_stereo : array<float>
+                    if (state.bank != null) {
+                        let drum_name = gm_drum_name(ev.data1)
+                        if (!empty(drum_name) && key_exists(state.bank.sounds, drum_name)) {
+                            drum_stereo <- render_sample(*state.bank, drum_name, ev.data1 % 3, 1.0)
+                        }
+                    }
+                    if (length(drum_stereo) == 0) {
+                        let drum_mono <- render_drum_hit(ev.data1, vel)
+                        drum_stereo <- mono_to_stereo(drum_mono)
+                    }
                     state.voices |> push(new MidiVoice(
                         channel = ch,
                         note = ev.data1,
-                        freq = note_to_freq(float(ev.data1)),
-                        osc_type = preset.osc,
                         velocity = vel,
-                        note_on_t = float(state.playback_time),
-                        attack = preset.att,
-                        decay = preset.dec,
-                        sustain_lev = preset.sus,
-                        rel = preset.rel
+                        is_drum = true,
+                        samples <- drum_stereo,
+                        note_on_t = float(state.playback_time)
                     ))
+                } else {
+                    var use_sample = false
+                    if (state.bank != null && state.channels[ch].program < 8) {
+                        let pn = piano_sample_name(ev.data1)
+                        if (key_exists(state.bank.sounds, pn.name)) {
+                            var sample_stereo <- render_sample(*state.bank, pn.name, ev.data2 % 3, pn.speed)
+                            state.voices |> push(new MidiVoice(
+                                channel = ch,
+                                note = ev.data1,
+                                velocity = vel,
+                                is_drum = true,
+                                samples <- sample_stereo,
+                                note_on_t = float(state.playback_time)
+                            ))
+                            use_sample = true
+                        }
+                    }
+                    if (!use_sample) {
+                        let preset = gm_preset(state.channels[ch].program)
+                        state.voices |> push(new MidiVoice(
+                            channel = ch,
+                            note = ev.data1,
+                            freq = note_to_freq(float(ev.data1)),
+                            osc_type = preset.osc,
+                            velocity = vel,
+                            note_on_t = float(state.playback_time),
+                            attack = preset.att,
+                            decay = preset.dec,
+                            sustain_lev = preset.sus,
+                            rel = preset.rel
+                        ))
+                    }
                 }
             }
         } elif (ev.kind == MidiEventKind.midi_note_off) {
-            // find matching voice and trigger release (or defer if sustain pedal is on)
-            for (voice in state.voices) {
-                if (voice != null && voice.channel == ch && voice.note == ev.data1 && voice.note_off_t < 0.0 && !voice.sustain_held) {
-                    if (state.channels[ch].sustain) {
-                        voice.sustain_held = true  // defer until pedal release
-                    } else {
-                        voice.note_off_t = float(state.playback_time)
+            if (state.sf2 != null) {
+                sf2_note_off(state, ch, ev.data1)
+            } else {
+                for (voice in state.voices) {
+                    if (voice != null && voice.channel == ch && voice.note == ev.data1 && voice.note_off_t < 0.0 && !voice.sustain_held) {
+                        if (state.channels[ch].sustain) {
+                            voice.sustain_held = true
+                        } else {
+                            voice.note_off_t = float(state.playback_time)
+                        }
+                        break
                     }
-                    break
                 }
             }
         } elif (ev.kind == MidiEventKind.midi_program_change) {
@@ -316,6 +397,13 @@ def process_events(var state : MidiPlaybackState) {
                         if (voice != null && voice.channel == ch && voice.note_off_t < 0.0 && voice.sustain_held) {
                             voice.note_off_t = float(state.playback_time)
                             voice.sustain_held = false
+                        }
+                    }
+                    // C SF2 voices — release those held by sustain pedal
+                    for (i in range(length(state.csf2_voices))) {
+                        if (g_sf2_meta[i].channel == ch && g_sf2_meta[i].sustain_held && state.csf2_voices[i].released == 0 && state.csf2_voices[i].finished == 0) {
+                            unsafe { ma_sf2_voice_note_off(addr(state.csf2_voices[i])); }
+                            g_sf2_meta[i].sustain_held = false
                         }
                     }
                 }
@@ -436,11 +524,39 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         }
         i --
     }
+    // render C SF2 voices (apply channel volume + expression + track gain)
+    var si = length(state.csf2_voices) - 1
+    while (si >= 0) {
+        if (state.csf2_voices[si].finished == 0) {
+            let ch_idx = g_sf2_meta[si].channel
+            let ch_state & = unsafe(state.channels[ch_idx])
+            let mix_gain = ch_state.volume * ch_state.expression * state.gain
+            // temporarily scale attenuation for this chunk
+            let saved_atten = state.csf2_voices[si].attenuation
+            state.csf2_voices[si].attenuation = saved_atten * mix_gain
+            unsafe {
+                ma_sf2_voice_render(
+                    addr(state.csf2_voices[si]),
+                    addr(state.sf2.sample_data[0]),
+                    length(state.sf2.sample_data),
+                    addr(output[0]),
+                    0,
+                    chunkFrames
+                )
+            }
+            state.csf2_voices[si].attenuation = saved_atten
+        }
+        if (state.csf2_voices[si].finished != 0) {
+            state.csf2_voices |> erase(si)
+            g_sf2_meta |> erase(si)
+        }
+        si --
+    }
     // advance time
     state.playback_time += double(chunk_seconds)
     state.current_tick += state.ticks_per_sec * double(chunk_seconds)
     // check if done
-    if (state.event_index >= length(state.events) && length(state.voices) == 0) {
+    if (state.event_index >= length(state.events) && length(state.voices) == 0 && length(state.csf2_voices) == 0) {
         if (state.looping) {
             state.event_index = 0
             state.current_tick = 0.0lf
@@ -448,6 +564,8 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             for (ch in state.channels) {
                 ch = MidiChannelState()
             }
+            state.csf2_voices |> clear()
+            g_sf2_meta |> clear()
             state.tempo_usec = 500000
             // recalculate from original tpqn (approximate — we don't store it separately)
             // For looping, this is fine since the tempo event at tick 0 will re-set it
@@ -472,6 +590,7 @@ struct MidiTrackCmd {
     name    : string
     file    : MidiFile const?   // pointer to main context's g_midi_files entry
     bank    : SampleBank const? // pointer to main context's sample bank (optional)
+    sf2     : SF2File const?    // pointer to main context's SF2 file (optional)
     gain    : float = 1.0
     looping : bool = false
 }
@@ -483,6 +602,7 @@ var private g_midi_cmd_channel : Channel?
 var private g_midi_done_channel : Channel?
 var private g_midi_files : table<string; MidiFile>  // owns parsed data
 var private g_midi_bank : SampleBank                // module-global sample bank
+var private g_midi_sf2 : SF2File?                   // module-global SF2 soundfont
 var private g_midi_running : bool = false
 
 // ─── Audio Thread Main Loop ───
@@ -492,6 +612,9 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         set_audio_thread_command_channel(audio_channel)
     }
     let CHUNK_SEC = 0.05lf
+    var total_time = 0.lf
+    var total_samples = 0ul
+    var max_chunk_usec = 0.0lf
     let TARGET_CHUNKS = 4
     let LOW_WATERMARK = 2
     var tracks : array<MidiPlaybackState?>
@@ -502,7 +625,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     var running = true
     while (running) {
         // process commands
-        cmd_channel |> gather() <| $(cmd : MidiCommand#) {
+        cmd_channel |> gather() $(cmd : MidiCommand#) {
             if (cmd is shutdown) {
                 running = false
             } elif (cmd is add_track) {
@@ -510,10 +633,12 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                 // extract pointer via reinterpret to strip # temp lifetime
                 let file_ptr = unsafe(reinterpret<MidiFile const?>(tc.file))
                 let bank_ptr = unsafe(reinterpret<SampleBank const?>(tc.bank))
+                let sf2_ptr = unsafe(reinterpret<SF2File const?>(tc.sf2))
                 pending_adds |> emplace(MidiTrackCmd(
                     name := tc.name,
                     file = file_ptr,
                     bank = bank_ptr,
+                    sf2 = sf2_ptr,
                     gain = tc.gain,
                     looping = tc.looping
                 ))
@@ -557,7 +682,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                 k --
             }
             var ps = new MidiPlaybackState()
-            init_playback(*ps, tc.file, tc.name, tc.gain, tc.looping, tc.bank)
+            init_playback(*ps, tc.file, tc.name, tc.gain, tc.looping, tc.bank, tc.sf2)
             tracks |> push(ps)
         }
         pending_adds |> clear()
@@ -570,6 +695,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
             continue
         }
         // render all tracks
+        let t0 = ref_time_ticks()
         let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
         var output : array<float>
         output |> resize(chunkSamples)
@@ -607,9 +733,15 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
             append_to_pcm(sid, output)
         }
         delete output
+        let chunk_usec = double(get_time_usec(t0))
+        total_time += chunk_usec / 1000.lf
+        total_samples += uint64(chunkSamples / 2)
+        if (chunk_usec > max_chunk_usec) {
+            max_chunk_usec = chunk_usec
+        }
         // adaptive buffering
         var que_len = 0
-        status_box |> get() <| $(st : AudioChannelStatus#) {
+        status_box |> get() $(st : AudioChannelStatus#) {
             que_len = st.stream_que_length
         }
         if (que_len >= TARGET_CHUNKS) {
@@ -617,6 +749,14 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         } elif (que_len >= LOW_WATERMARK) {
             sleep(10u)
         }
+    }
+    if (total_samples > 0ul) {
+        let SPEED = total_time / double(total_samples)
+        let SPEED_OF_LIGHT = 1000.lf / 48000.lf
+        let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+        let chunk_budget_usec = CHUNK_SEC * 1000000.lf
+        let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
+        to_log(0, "midi {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak utilization\n")
     }
     unset_status_update(sid)
     clear_status(status_box)
@@ -670,7 +810,13 @@ def public midi_load_samples(media_path : string) {
     }
 }
 
-def public midi_play(name : string; path : string; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null) : bool {
+// Load an SF2 soundfont into the module-global slot.
+def public midi_load_sf2(path : string) : bool {
+    g_midi_sf2 = sf2_load(path)
+    return g_midi_sf2 != null
+}
+
+def public midi_play(name : string; path : string; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null; use_sf2 : bool = true) : bool {
     g_midi_files[name] <- load_midi(path)
     if (length(g_midi_files[name].tracks) == 0) {
         g_midi_files |> erase(name)
@@ -680,10 +826,12 @@ def public midi_play(name : string; path : string; gain : float = 1.0; looping :
         midi_init()
     }
     let file_ptr = unsafe(addr(g_midi_files[name]))
+    let sf2_ptr = use_sf2 && g_midi_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_midi_sf2)) : null
     var cmd = new MidiCommand(add_track = MidiTrackCmd(
         name = name,
         file = file_ptr,
         bank = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank)))),
+        sf2 = sf2_ptr,
         gain = gain,
         looping = looping
     ))
@@ -691,7 +839,7 @@ def public midi_play(name : string; path : string; gain : float = 1.0; looping :
     return true
 }
 
-def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null) : bool {
+def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null; use_sf2 : bool = true) : bool {
     g_midi_files[name] <- parse_midi(data)
     if (length(g_midi_files[name].tracks) == 0) {
         g_midi_files |> erase(name)
@@ -701,10 +849,12 @@ def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0
         midi_init()
     }
     let file_ptr = unsafe(addr(g_midi_files[name]))
+    let sf2_ptr = use_sf2 && g_midi_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_midi_sf2)) : null
     var cmd = new MidiCommand(add_track = MidiTrackCmd(
         name = name,
         file = file_ptr,
         bank = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank)))),
+        sf2 = sf2_ptr,
         gain = gain,
         looping = looping
     ))
@@ -755,7 +905,7 @@ def public midi_shutdown() {
     g_midi_cmd_channel |> push(new MidiCommand(shutdown = true))
     var got_done = false
     while (!got_done) {
-        _builtin_channel_pop(g_midi_done_channel) <| $(data) {
+        _builtin_channel_pop(g_midi_done_channel) $(data) {
             if (data != null) {
                 got_done = true
             }

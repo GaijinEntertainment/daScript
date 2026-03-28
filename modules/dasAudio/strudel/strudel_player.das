@@ -75,7 +75,7 @@ def public strudel_load_sound(path, name : string) {
 }
 
 def public strudel_load_sample_dir(root : string) {
-    dir(root) <| $(entry) {
+    dir(root) $(entry) {
         if (entry == "." || entry == "..") {
             return
         }
@@ -129,7 +129,7 @@ def public strudel_shutdown() {
     g_cmd_channel |> push(new StrudelCommand(shutdown = true))
     var got_done = false
     while (!got_done) {
-        _builtin_channel_pop(g_done_channel) <| $(data) {
+        _builtin_channel_pop(g_done_channel) $(data) {
             if (data != null) {
                 got_done = true
             }
@@ -233,7 +233,7 @@ def public strudel_fade_track(var state : StrudelState?; name : string; target_g
 
 def private strudel_process_commands_ex(var state : StrudelState?; cmd_fn : function<(var state : StrudelState?; cmd : string) : void>) : bool {
     var running = true
-    state.cmd_channel |> gather() <| $(cmd : StrudelCommand#) {
+    state.cmd_channel |> gather() $(cmd : StrudelCommand#) {
         if (cmd is shutdown) {
             running = false
         } elif (cmd is set_bpm) {
@@ -260,6 +260,8 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
     let CHUNK_SEC = 0.05lf
     let TARGET_CHUNKS = 4
     let LOW_WATERMARK = 2
+    var total_time = 0.lf
+    var total_samples = 0ul
     var sched = Scheduler()
     sched.cps = state.cps
     sched.lastQueryEnd = state.wall_time * state.cps
@@ -270,13 +272,16 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
             sched.lastQueryEnd = state.wall_time * state.cps
             sched.cps = state.cps
         }
+        let t0 = ref_time_ticks()
         var chunk <- tick(sched, pat, *state.bank, state.wall_time, float(CHUNK_SEC))
         if (length(chunk) > 0) {
+            total_time += double(get_time_usec(t0)) / 1000.lf
+            total_samples += uint64(length(chunk) / 2)
             append_to_pcm(state.sid, chunk)
         }
         state.wall_time += CHUNK_SEC
         var que_len = 0
-        status_box |> get() <| $(st : AudioChannelStatus#) {
+        status_box |> get() $(st : AudioChannelStatus#) {
             que_len = st.stream_que_length
         }
         if (que_len >= TARGET_CHUNKS) {
@@ -284,6 +289,12 @@ def public strudel_play_pattern(var state : StrudelState?; var pat : Pattern) {
         } elif (que_len >= LOW_WATERMARK) {
             sleep(10u)
         }
+    }
+    if (total_samples > 0ul) {
+        let SPEED = total_time / double(total_samples)
+        let SPEED_OF_LIGHT = 1000.lf / 48000.lf
+        let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
     }
     unset_status_update(state.sid)
     clear_status(status_box)
@@ -295,11 +306,14 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
     let CHUNK_SEC = 0.05lf
     let TARGET_CHUNKS = 4
     let LOW_WATERMARK = 2
+    var total_time = 0.lf
+    var total_samples = 0ul
     var status_box <- unsafe(lock_box_create())
     set_status_update(state.sid, status_box)
     var mixer : ma_volume_mixer
     ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
     while (strudel_process_commands_ex(state, cmd_fn)) {
+        let t0 = ref_time_ticks()
         let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
         var output : array<float>
         output |> resize(chunkSamples)
@@ -349,10 +363,12 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
         if (length(output) > 0) {
             append_to_pcm(state.sid, output)
         }
+        total_time += double(get_time_usec(t0)) / 1000.lf
+        total_samples += uint64(chunkSamples / 2)
         state.wall_time += CHUNK_SEC
         // buffer level feedback
         var que_len = 0
-        status_box |> get() <| $(st : AudioChannelStatus#) {
+        status_box |> get() $(st : AudioChannelStatus#) {
             que_len = st.stream_que_length
         }
         if (que_len >= TARGET_CHUNKS) {
@@ -360,6 +376,12 @@ def public strudel_play(var state : StrudelState?; cmd_fn : function<(var state 
         } elif (que_len >= LOW_WATERMARK) {
             sleep(10u)
         }
+    }
+    if (total_samples > 0ul) {
+        let SPEED = total_time / double(total_samples)
+        let SPEED_OF_LIGHT = 1000.lf / 48000.lf
+        let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
     }
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(state.sid)
