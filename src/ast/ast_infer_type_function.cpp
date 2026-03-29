@@ -1260,13 +1260,18 @@ namespace das {
                     // resolve tail-end types
                     for (size_t ai = types.size(), ais = clone->arguments.size(); ai != ais; ++ai) {
                         auto &arg = clone->arguments[ai];
-                        if (arg->type->isAuto()) {
+                        if (arg->type->isAutoOrAlias()) {
                             if (arg->init) {
                                 arg->init = arg->init->visit(*this);
                                 if (arg->init->type && !arg->init->type->isAutoOrAlias()) {
                                     arg->type = make_smart<TypeDecl>(*arg->init->type);
                                     continue;
                                 }
+                            }
+                            auto argT = inferPartialAliases(arg->type, arg->type, clone, &aliases);
+                            if ( !argT->isAutoOrAlias() ) {
+                                arg->type = argT;
+                                continue;
                             }
                             error("unknown type of argument " + clone->arguments[ai]->name + "; can't instance " + describeFunction(oneGeneric), "",
                                   "provide argument type explicitly",
