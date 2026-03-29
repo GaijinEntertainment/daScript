@@ -32,6 +32,7 @@ namespace das {
         virtual bool canVisitStructureFieldInit ( Structure * var ) { return true; }
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) { return true; }
         virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) { return true; }
+        virtual bool canVisitMakeStructure ( ExprMakeStruct * expr ) { return true; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) { return true; }
         virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) { return true; }
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) { return true; }

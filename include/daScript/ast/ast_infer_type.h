@@ -87,6 +87,7 @@ namespace das {
         bool   fatalAliasLoop = false;
         bool   inArgumentInit = false;
         int32_t callDepth = 0;
+        int32_t inferDepth = 0;
 
     public:
         vector<FunctionPtr> extraFunctions;
@@ -595,6 +596,7 @@ namespace das {
         // make structure
         void describeLocalType(vector<string> &results, TypeDecl *tp, const string &prefix, das_set<Structure *> &dep) const;
         string describeLocalType(TypeDecl *tp) const;
+        virtual bool canVisitMakeStructure ( ExprMakeStruct * expr );
         virtual void preVisit(ExprMakeStruct *expr) override;
         bool convertCloneSemanticsToExpression(ExprMakeStruct *expr, int index, MakeFieldDecl *decl);
         virtual MakeFieldDeclPtr visitMakeStructureField(ExprMakeStruct *expr, int index, MakeFieldDecl *decl, bool last) override;

@@ -2509,7 +2509,10 @@ namespace das
                 return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
             }
         }
-        DAS_VERIFYF(simSubE, "internal error. can't be zero");
+        if ( !simSubE ) {
+            // this is when subexpr produces no expression worth simulating (meaning its internal reported error or internal error)
+            return nullptr;
+        }
         if ( moveSemantics ) {
             if ( subexpr->type->isRef() ) {
                 return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->getR2VType(), at, simSubE);
