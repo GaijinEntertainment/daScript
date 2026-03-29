@@ -98,6 +98,9 @@
             <h2>News</h2>
             <ul  style="list-style-type:none;">
             <li>
+                <b>March 29th, 2026</b>: daStrudel gets SF2 SoundFont support, MIDI playback, and a redesigned two-mode player with real-time visualization. See the <a href="#" data-page="work">Change List</a>.
+            </li>
+            <li>
                 <b>March 25th, 2026</b>: 0.6.1 is just about ready. See the <a href="#" data-page="work">Change List</a> for what's new.
             </li>
             <li>
@@ -748,6 +751,17 @@ def fibI(n)
             <li><b>Pointer safe-at</b> &mdash; a?[index] for pointer types, returns null if pointer is null (interpreter, AOT, JIT)</li>
             <li><b>C API type introspection</b> &mdash; ~40 new C functions to query struct layouts, enum values, function signatures</li>
             <li><b>New builtins</b> &mdash; get_module_file_name, get_key (O(1) table value-to-key), first_character, with_das_string, system(), daslib/command_line</li>
+        </ul>
+
+        <h4>daStrudel: Pattern Music Engine</h4>
+        <ul>
+            <li><b>SF2 SoundFont support</b> &mdash; load General MIDI soundfonts, 128 GM presets, per-voice reverb/chorus sends, exclusive class/cut groups, note-off scheduling</li>
+            <li><b>Two-mode player</b> &mdash; main-thread mode (strudel_tick from render loop, direct pianoroll/PCM access) and threaded mode (headless audio, channel-based commands)</li>
+            <li><b>Clean API</b> &mdash; no StrudelState pointer passing, functions operate on per-context globals, strudel_add_track returns integer index</li>
+            <li><b>Visualizer combinators</b> &mdash; pianoroll(), spectrum(), scope(), vectorscope(), drums() as pass-through pattern pipes with rolling index</li>
+            <li><b>MIDI player</b> &mdash; load and play .mid files through SF2, per-channel gain/pan, looping, audio visualization channels</li>
+            <li><b>Accurate timing</b> &mdash; integer sample accumulation (no float drift), consumed_position hardware clock for visualization sync</li>
+            <li>6 demos: player, synth (100% generated), SF2 chill beat, piano (Ode to Joy), live-reload, OpenGL visualizer with 5-track pianoroll/spectrum/drums</li>
         </ul>
 
         <h4>Performance</h4>
