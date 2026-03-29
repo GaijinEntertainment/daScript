@@ -1104,6 +1104,12 @@ namespace das {
                 error("recursive call in argument initializer is not allowed", "", "", expr->at);
                 return nullptr;
             }
+            if (funcC->result->baseType == Type::autoinfer) {
+                if ( cerr != InferCallError::tryOperator ) {
+                    error("cannot infer type for function call '" + expr->name + "' with 'auto' return type", "", "", expr->at, CompilationError::invalid_type);
+                    return nullptr;
+                }
+            }
             if ( find(inInfer.begin(), inInfer.end(), funcC) != inInfer.end() ) {
                 error("recursive call in function is not allowed", "", "", expr->at);
                 return nullptr;
