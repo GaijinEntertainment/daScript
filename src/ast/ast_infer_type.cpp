@@ -3784,7 +3784,13 @@ namespace das {
                 expr->type = make_smart<TypeDecl>(Type::tBool);
             } else {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
-                TypeDecl::clone(expr->type, tupleT->argTypes[expr->fieldIndex]);
+                auto & tt = tupleT->argTypes[expr->fieldIndex];
+                if ( !tt->isRefType() && tt->ref ) {
+                    error("can't get field '" + expr->name + "', invalid field type '" + describeType(tt), "", "",
+                          expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+                TypeDecl::clone(expr->type, tt);
                 expr->type->ref = true;
                 expr->type->constant |= tupleT->constant;
             }
@@ -3881,7 +3887,13 @@ namespace das {
                 return Visitor::visit(expr);
             }
             expr->fieldIndex = index;
-            TypeDecl::clone(expr->type, valT->firstType->argTypes[expr->fieldIndex]);
+            auto & tt = valT->firstType->argTypes[expr->fieldIndex];
+            if ( !tt->isRefType() && tt->ref ) {
+                error("can't safe get field '" + expr->name + "', invalid field type '" + describeType(tt), "", "",
+                      expr->at, CompilationError::cant_get_field);
+                return Visitor::visit(expr);
+            }
+            TypeDecl::clone(expr->type, tt);
         } else {
             error("can only safe dereference a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
                   expr->at, CompilationError::cant_get_field);
