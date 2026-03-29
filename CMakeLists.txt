@@ -441,6 +441,9 @@ IF(DAS_EXAMPLES_TO_RUN)
         LIST(APPEND _run_example_commands
             COMMAND ${CMAKE_COMMAND} -E echo "Running ${_das}"
             COMMAND $<TARGET_FILE:daslang> ${_das}
+            COMMAND ${CMAKE_COMMAND} -E echo "Compiling to ${_das}"
+            COMMAND $<TARGET_FILE:daslang> -exe ${_das} -output ${CMAKE_BINARY_DIR}/${_das}
+            COMMAND ${CMAKE_BINARY_DIR}/${_das}.exe
         )
     ENDFOREACH()
     ADD_CUSTOM_TARGET(run_examples

@@ -97,14 +97,8 @@ class CollectExternVisitor : AstVisitor {
         trap_typ = LLVMFunctionType(types.t_void, [])
         trap_ptr = LLVMAddFunctionWithType(g_mod, "jit_trap", trap_typ)
 
-        reg_extern_fn_type = LLVMFunctionType(types.t_void,
-            fixed_array<LLVMTypeRef>(
-                types.LLVMVoidPtrType(),  // const char* module_name
-                types.LLVMVoidPtrType(),  // const char* mangled_name
-                types.LLVMVoidPtrType(),  // void**      ptr  (address of the function-pointer global)
-            )
-        )
-        reg_extern_fn = LLVMAddFunctionWithType(g_mod, "jit_init_extern_function", reg_extern_fn_type)
+        reg_extern_fn_type = g_fn_types[FN_JIT_INIT_EXTERN]
+        reg_extern_fn = LLVMGetNamedFunction(g_mod, FN_JIT_INIT_EXTERN)
 
         get_extern_ann_type = LLVMFunctionType(types.LLVMVoidPtrType(),
             fixed_array<LLVMTypeRef>(
@@ -545,6 +539,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             types.t_int64,         // totalVariables
             types.t_int64,         // totalFunctions
             types.t_int64,         // globalStringHeapSize
+            types.t_int64,         // globalsSize
+            types.t_int64,         // sharedSize
             types.t_int1,          // pinvoke
         )
     )
@@ -555,6 +551,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         types.ConstI64(prog.totalVariables |> uint64),
         types.ConstI64(prog.totalFunctions |> uint64),
         types.ConstI64(prog.globalStringHeapSize |> uint64),
+        types.ConstI64(get_context_globals_size(program_context)),
+        types.ConstI64(get_context_shared_size(program_context)),
         types.ConstI1(false)
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")

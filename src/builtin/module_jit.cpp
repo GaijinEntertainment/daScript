@@ -209,12 +209,14 @@ extern "C" {
     class JitContext : public Context {
     public:
         ~JitContext() = default;
-        JitContext(size_t totalVariables, size_t totalFunctions, size_t globalStringHeapSize, bool pinvoke) {
+        JitContext(size_t totalVariables, size_t totalFunctions, size_t globalStringHeapSize,
+                  size_t globSize, size_t shrSize, bool pinvoke) {
             auto &context = *this;
             CodeOfPolicies policies;
             policies.debugger = false;
             context.setup(totalVariables, globalStringHeapSize, policies, {});
-            context.globalsSize = 32000;
+            context.globalsSize = globSize;
+            context.sharedSize = shrSize;
             context.sharedOwner = true;
             for (int i = 0; i < totalVariables; i++) {
                 globalVariables[i] = GlobalVariable{};
@@ -285,9 +287,11 @@ extern "C" {
     DAS_API Context * jit_create_standalone_ctx ( uint64_t totalVariables,
                                                   uint64_t totalFunctions,
                                                   uint64_t globalStringHeapSize,
+                                                  uint64_t globalsSize,
+                                                  uint64_t sharedSize,
                                                   bool pinvoke) {
-        // return nullptr;
-        Context *context = new JitContext(totalVariables, totalFunctions, globalStringHeapSize, pinvoke);
+        Context *context = new JitContext(totalVariables, totalFunctions, globalStringHeapSize,
+                                         globalsSize, sharedSize, pinvoke);
         static_cast<JitContext *>(context)->allocFunctions(totalFunctions);
         return context;
     }
@@ -327,6 +331,21 @@ extern "C" {
             }
             return true;
         });
+        if ( !found && strcmp(moduleName, "dasbind") == 0 && strncmp(funcMangledName, "@dasbind::__dasbind__", 21) == 0 ) {
+            Module::foreach([&](Module * module) -> bool {
+                if ( module->name != "dasbind" ) return true;
+                auto resolverFn = module->findUniqueFunction("__dasbind_resolve");
+                if ( resolverFn && resolverFn->builtIn ) {
+                    auto resolver = (void * (*)(const char *))
+                        static_cast<BuiltInFunction *>(resolverFn.get())->getBuiltinAddress();
+                    if ( resolver ) {
+                        *dllGlobal = resolver(funcMangledName);
+                        found = *dllGlobal != nullptr;
+                    }
+                }
+                return false;
+            });
+        }
         if (!found) {
             DAS_FATAL_ERROR("Failed to find %s in module %s.\n", funcMangledName, moduleName);
         }
@@ -646,6 +665,14 @@ extern "C" {
         return ctx->getGlobalVariable(id).mangledNameHash;
     }
 
+    uint64_t das_get_context_globals_size( const Context * ctx ) {
+        return ctx->getGlobalSize();
+    }
+
+    uint64_t das_get_context_shared_size( const Context * ctx ) {
+        return ctx->getSharedSize();
+    }
+
     extern "C" {
         DAS_API void * get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at ) {
             return das_get_jit_table_find(baseType, context, at);
@@ -871,6 +898,10 @@ extern "C" {
                 SideEffects::none, "das_get_global_variable_offset");
             addExtern<DAS_BIND_FUN(das_get_global_variable_mnh)>(*this, lib, "get_global_variable_mnh",
                 SideEffects::none, "das_get_global_variable_mnh");
+            addExtern<DAS_BIND_FUN(das_get_context_globals_size)>(*this, lib, "get_context_globals_size",
+                SideEffects::none, "das_get_context_globals_size");
+            addExtern<DAS_BIND_FUN(das_get_context_shared_size)>(*this, lib, "get_context_shared_size",
+                SideEffects::none, "das_get_context_shared_size");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
                 SideEffects::none, "das_get_jit_str_cmp");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",

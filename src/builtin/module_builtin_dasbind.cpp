@@ -3,6 +3,7 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_handle.h"
+#include "daScript/ast/ast_interop.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/simulate/aot_builtin_dasbind.h"
@@ -289,7 +290,85 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return fastcall64_table[args];
     }
 
-#endif
+    struct SimNode_DasBindCall : SimNode_ExtFuncCallBase {
+        FastCallWrapper wrapper;
+        void * fnptr;
+        SimNode_DasBindCall ( const LineInfo & at, const char * fnName, FastCallWrapper wrp, void * fn )
+            : SimNode_ExtFuncCallBase(at,fnName), wrapper(wrp), fnptr(fn) {}
+        DAS_EVAL_ABI vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+            evalArgs(context, args);
+            return wrapper(fnptr, args);
+        }
+    };
+
+    struct SimNode_DasBindCallLate : SimNode_ExtFuncCallBase {
+        FastCallWrapper wrapper;
+        void * fnptr;
+        uint64_t code;
+        bool isOpengl;
+        SimNode_DasBindCallLate ( const LineInfo & at, const char * fnName, FastCallWrapper wrp,
+                                  uint64_t c, bool ogl )
+            : SimNode_ExtFuncCallBase(at,fnName), wrapper(wrp), fnptr(nullptr), code(c), isOpengl(ogl) {}
+        void bind ( Context & context ) {
+            string crash_and_burn;
+            withBind(code,[&](BoundFunction * bf){
+                if ( bf ) {
+                    if ( !bf->fun ) {
+                        if ( isOpengl ) fnptr = openGlGetFunctionAddress(bf->name.c_str());
+                        if ( !fnptr ) {
+                            void * libhandle = bindDynamicLibrary(bf->library);
+                            if ( !libhandle ) {
+                                crash_and_burn = "can't load library " + bf->library;
+                                return;
+                            }
+                            fnptr = getFunctionAddress(libhandle, bf->name.c_str());
+                        }
+                        if ( fnptr ) bf->fun = fnptr;
+                        else crash_and_burn = "failed to bind " + bf->name;
+                    } else {
+                        fnptr = bf->fun;
+                    }
+                } else {
+                    crash_and_burn = "internal error. missing BoundFunction";
+                }
+            });
+            if ( !crash_and_burn.empty() ) context.throw_error_at(debugInfo, "%s",crash_and_burn.c_str());
+        }
+        DAS_EVAL_ABI vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            if ( !fnptr ) bind(context);
+            vec4f * args = (vec4f *)(alloca(nArguments * sizeof(vec4f)));
+            evalArgs(context, args);
+            return wrapper(fnptr, args);
+        }
+    };
+
+    struct DasBindFunction : BuiltInFunction {
+        void * dllAddress;
+        FastCallWrapper wrapper;
+        bool isLate;
+        uint64_t bindCode;
+        bool isOpengl;
+        DasBindFunction ( const string & dasName, void * addr, FastCallWrapper wrp,
+                          bool late = false, uint64_t code = 0, bool ogl = false )
+            : BuiltInFunction(dasName.c_str(), dasName.c_str())
+            , dllAddress(addr), wrapper(wrp), isLate(late), bindCode(code), isOpengl(ogl) {
+            callBased = true;
+        }
+        void * getBuiltinAddress() const override {
+            // null for late-bound.
+            return dllAddress;
+        }
+        SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            const char * fnName = context.code->allocateName(this->name);
+            if ( isLate ) {
+                return context.code->makeNode<SimNode_DasBindCallLate>(at, fnName, wrapper, bindCode, isOpengl);
+            }
+            return context.code->makeNode<SimNode_DasBindCall>(at, fnName, wrapper, dllAddress);
+        }
+    };
 
     enum class ApiType {
         api_unknown,
@@ -298,8 +377,77 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         api_opengl
     };
 
+    struct ExternBindArgs {
+        string fn_name;
+        string library;
+        ApiType api = ApiType::api_unknown;
+        bool late = false;
+    };
+
+    ExternBindArgs parseExternArgs ( const AnnotationArgumentList & args ) {
+        ExternBindArgs result;
+        string platform_library;
+        for ( auto & arg : args ) {
+            if ( arg.name=="name" && arg.type==Type::tString ) {
+                result.fn_name = arg.sValue;
+            } else if ( arg.name=="library" && arg.type==Type::tString ) {
+                result.library = arg.sValue;
+            } else if ( arg.name=="WINAPI" || arg.name=="winapi" || arg.name=="stdcall" || arg.name=="__stdcall" || arg.name=="STDCALL" ) {
+                result.api = ApiType::api_stdcall;
+            } else if ( arg.name=="CDECL" || arg.name=="cdecl" || arg.name=="__cdecl" ) {
+                result.api = ApiType::api_cdecl;
+            } else if ( arg.name=="opengl" || arg.name=="OPENGL" ) {
+                result.api = ApiType::api_opengl;
+            } else if ( arg.name=="late" ) {
+                result.late = true;
+            }
+#ifdef _MSC_VER
+            else if ( arg.name=="windows_library" && arg.type==Type::tString ) {
+                platform_library = arg.sValue;
+            }
+#elif defined(__APPLE__)
+            else if ( arg.name=="macos_library" && arg.type==Type::tString ) {
+                platform_library = arg.sValue;
+            }
+#elif defined(__linux__) || defined __HAIKU__
+            else if ( arg.name=="linux_library" && arg.type==Type::tString ) {
+                platform_library = arg.sValue;
+            }
+#endif
+        }
+        if ( !platform_library.empty() ) {
+            result.library = platform_library;
+        }
+        return result;
+    }
+
+    FastCallWrapper computeWrapper ( Function * fun ) {
+#ifdef _MSC_VER
+        return getWrapper(fun, 4);
+#else
+        if ( fun->arguments.size()>6 ) {
+            int nargs = int(fun->arguments.size());
+            int res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
+            int perm = 0;
+            for ( size_t ai=0, ais=fun->arguments.size(); ai!=ais; ++ai ) {
+                const auto & a = fun->arguments[ai];
+                if ( a->type->isSimpleType(Type::tFloat) || a->type->isSimpleType(Type::tDouble) ) {
+                    perm |= (1<<int(ai));
+                }
+            }
+            if ( perm>=(1<<7) ) {
+                return getExtraWrapper(nargs, res, perm);
+            }
+        }
+        return getWrapper(fun, 6);
+#endif
+    }
+
+#endif
+
     struct ExternFunctionAnnotation : FunctionAnnotation {
         ExternFunctionAnnotation() : FunctionAnnotation("extern") { }
+        das_hash_map<const Function *, string> transformMap;
         virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
@@ -316,7 +464,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             return false;
         }
 #else
-        virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &, string & err )  override {
+        virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList &args, string & err )  override {
             if ( fun->arguments.size() >= MAX_WRAPPER_ARGUMENTS ) {
                 err = "function has too many arguments for the current wrapper config";
                 return false;
@@ -352,11 +500,49 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 #endif
             fun->userScenario = true;
             fun->noAot = true;         // TODO: generate custom C++ to invoke the call directly
-            fun->requestNoJit = true;  // TODO: generate custom llvm ir to invoke the call directly
+            auto ba = parseExternArgs(args);
+            // Create a BuiltInFunction so the JIT can call getBuiltinAddress()
+            if ( !is_in_completion() && !ba.fn_name.empty() && ba.api!=ApiType::api_unknown ) {
+                void * libhandle = nullptr;
+                if ( !ba.library.empty() ) {
+                    libhandle = bindDynamicLibrary(ba.library);
+                }
+                void * funptr = nullptr;
+                if ( ba.api==ApiType::api_opengl ) {
+                    funptr = openGlGetFunctionAddress(ba.fn_name.c_str());
+                }
+                if ( !funptr && libhandle ) {
+                    funptr = getFunctionAddress(libhandle, ba.fn_name.c_str());
+                }
+                auto wrp = computeWrapper(fun.get());
+                string bindName = "__dasbind__" + ba.fn_name + "@@" + ba.library;
+                bool isOpengl = ba.api==ApiType::api_opengl;
+                bool isLate = !funptr;
+                uint64_t bindCode = 0;
+                if ( isLate ) {
+                    bindCode = lateBind(ba.fn_name, ba.library, nullptr);
+                }
+                auto bif = make_smart<DasBindFunction>(bindName, funptr, wrp, isLate, bindCode, isOpengl);
+                bif->result = fun->result;
+                for ( auto & arg : fun->arguments ) {
+                    auto newArg = make_smart<Variable>();
+                    newArg->name = arg->name;
+                    newArg->type = arg->type;
+                    bif->arguments.push_back(newArg);
+                }
+                bif->noAot = true;
+                bif->userScenario = true;
+                bif->sideEffectFlags = fun->sideEffectFlags | uint32_t(SideEffects::accessExternal);
+                module->addFunction(bif, false);
+                transformMap[fun.get()] = bindName;
+            }
             return true;
         }
         virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & ) override {
             if ( !call->func ) return nullptr;
+            auto it = transformMap.find(call->func);
+            bool hasBindFunction = it != transformMap.end();
+            // check if any string args need wrapping
             auto needToTransform = false;
             for ( auto & arg : call->arguments ) {
                 if ( arg->type->isString() ) {
@@ -377,34 +563,43 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                     }
                 }
             }
-            if ( needToTransform ) {
-                auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
-                for ( auto & arg : newCall->arguments ) {
-                    bool needToWrap = false;
-                    if ( arg->type->isString() ) {
-                        if ( arg->rtti_isCallFunc() ) {
-                            auto pCall = static_pointer_cast<ExprCallFunc>(arg);
-                            if ( pCall->func->name!="safe_pass_string") {
-                                needToWrap = true;
-                            }
-                        } else if ( arg->rtti_isStringConstant() ) {
-                            auto str = static_pointer_cast<ExprConstString>(arg);
-                            if ( str->getValue().empty()) {
-                                needToWrap = true;
-                            }
-                        } else {
+            if ( !needToTransform && !hasBindFunction ) return nullptr;
+            // clone call, optionally retargeting to the DasBindFunction
+            ExpressionPtr newCallExpr;
+            if ( hasBindFunction ) {
+                newCallExpr = make_smart<ExprCall>(call->at, it->second);
+                for ( auto & arg : call->arguments ) {
+                    static_cast<ExprCall*>(newCallExpr.get())->arguments.push_back(arg->clone());
+                }
+            } else {
+                newCallExpr = call->clone();
+            }
+            // wrap string arguments with safe_pass_string
+            auto & newArgs = static_cast<ExprCallFunc*>(newCallExpr.get())->arguments;
+            for ( auto & arg : newArgs ) {
+                bool needToWrap = false;
+                if ( arg->type && arg->type->isString() ) {
+                    if ( arg->rtti_isCallFunc() ) {
+                        auto pCall = static_pointer_cast<ExprCallFunc>(arg);
+                        if ( pCall->func->name!="safe_pass_string") {
                             needToWrap = true;
                         }
-                    }
-                    if ( needToWrap ) {
-                        auto wrapCall = make_smart<ExprCall>(arg->at,"safe_pass_string");
-                        wrapCall->arguments.push_back(arg->clone());
-                        arg = wrapCall;
+                    } else if ( arg->rtti_isStringConstant() ) {
+                        auto str = static_pointer_cast<ExprConstString>(arg);
+                        if ( str->getValue().empty()) {
+                            needToWrap = true;
+                        }
+                    } else {
+                        needToWrap = true;
                     }
                 }
-                return newCall;
+                if ( needToWrap ) {
+                    auto wrapCall = make_smart<ExprCall>(arg->at,"safe_pass_string");
+                    wrapCall->arguments.push_back(arg->clone());
+                    arg = wrapCall;
+                }
             }
-            return nullptr;
+            return newCallExpr;
         }
         virtual SimNode * simulate ( Context * context, Function * fun, const AnnotationArgumentList & args, string & err ) override {
             if (is_in_completion()) {
@@ -441,85 +636,51 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 anyTypeErrors = true;
             }
             if ( anyTypeErrors ) return nullptr;
-            string fn_name;
-            string library, platform_library;
-            ApiType api = ApiType::api_unknown;
-            bool late = false;
-            for ( auto & arg : args ) {
-                if ( arg.name=="name" && arg.type==Type::tString ) {
-                    fn_name = arg.sValue;
-                } else if ( arg.name=="library" && arg.type==Type::tString ) {
-                    library = arg.sValue;
-                } else if ( arg.name=="WINAPI" || arg.name=="winapi" || arg.name=="stdcall" || arg.name=="__stdcall" || arg.name=="STDCALL" ) {
-                    api = ApiType::api_stdcall;
-                } else if ( arg.name=="CDECL" || arg.name=="cdecl" || arg.name=="__cdecl" ) {
-                    api = ApiType::api_cdecl;
-                } else if ( arg.name=="opengl" || arg.name=="OPENGL" ) {
-                    api = ApiType::api_opengl;
-                } else if ( arg.name=="late" ) {
-                    late = true;
-                }
-#ifdef _MSC_VER
-                else if ( arg.name=="windows_library" && arg.type==Type::tString ) {
-                    platform_library = arg.sValue;
-                }
-#elif defined(__APPLE__)
-                else if ( arg.name=="macos_library" && arg.type==Type::tString ) {
-                    platform_library = arg.sValue;
-                }
-#elif defined(__linux__) || defined __HAIKU__
-                else if ( arg.name=="linux_library" && arg.type==Type::tString ) {
-                    platform_library = arg.sValue;
-                }
-#endif
-            }
-            if ( !platform_library.empty() ) {
-                library = platform_library;
-            }
-            if ( fn_name.empty() ) {
+            auto ba = parseExternArgs(args);
+            if ( ba.fn_name.empty() ) {
                 err = "missing name";
                 return nullptr;
             }
-            if ( api==ApiType::api_unknown ) {
+            if ( ba.api==ApiType::api_unknown ) {
                 err = "need to specify calling convention (like stdcall (aka WINAPI),cdecl,etc)";
                 return nullptr;
             }
             void * libhandle = nullptr;
-            if ( !library.empty() ) {
-                libhandle = bindDynamicLibrary(library);
-                if ( !libhandle && !late ) {
-                    err = "can't load library " + library;
+            if ( !ba.library.empty() ) {
+                libhandle = bindDynamicLibrary(ba.library);
+                if ( !libhandle && !ba.late && ba.api!=ApiType::api_opengl ) {
+                    err = "can't load library " + ba.library;
                     return nullptr;
                 }
             }
             void * funptr = nullptr;
-            if ( !late ) {
-                if ( api==ApiType::api_opengl ) {
-                    funptr = openGlGetFunctionAddress(fn_name.c_str());
+            if ( !ba.late ) {
+                if ( ba.api==ApiType::api_opengl ) {
+                    funptr = openGlGetFunctionAddress(ba.fn_name.c_str());
                 }
                 if ( !funptr ) {
-                    funptr = getFunctionAddress(libhandle, fn_name.c_str());
+                    funptr = getFunctionAddress(libhandle, ba.fn_name.c_str());
                 }
-                if ( !funptr && !late ) {
-                    err = "can't find function " + fn_name + " in library " + library;
+                if ( !funptr && !ba.late ) {
+                    err = "can't find function " + ba.fn_name + " in library " + ba.library;
                     return nullptr;
                 }
             }
-            uint64_t code = lateBind(fn_name, library, funptr);
+            uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
 #ifdef _MSC_VER
             auto wrp = getWrapper(fun,4);
 #else
             auto wrp = nargs==-1 ? getWrapper(fun,6) : getExtraWrapper(nargs,res,perm);
 #endif
-            switch ( api ) {
+            switch ( ba.api ) {
                 case ApiType::api_stdcall:
-                    if ( late ) {
+                    if ( ba.late ) {
                         return context->code->makeNode<SimNode_ExtCallLate>(fun->at,code,wrp,funptr);
                     } else {
                         return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
                     }
                 case ApiType::api_cdecl:
-                    if ( late ) {
+                    if ( ba.late ) {
                         return context->code->makeNode<SimNode_ExtCallLate>(fun->at,code,wrp,funptr);
                     } else {
                         return context->code->makeNode<SimNode_ExtCall>(fun->at,code,wrp,funptr);
@@ -538,6 +699,29 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         return (char *)(str ? str : "");
     }
 
+    // Resolver for JIT exe mode: parses __dasbind__<symbol>@@<library> from mangled name,
+    // loads DLL and returns function address.
+    void * dasbind_resolve ( const char * mangledName ) {
+#if DAS_BIND_EXTERNAL
+        const char * prefix = "@dasbind::__dasbind__";
+        if ( strncmp(mangledName, prefix, 21) != 0 ) return nullptr;
+        const char * symbolStart = mangledName + 21;
+        const char * sep = strstr(symbolStart, "@@");
+        if ( !sep ) return nullptr;
+        string symbol(symbolStart, sep - symbolStart);
+        const char * libStart = sep + 2;
+        const char * libEnd = strchr(libStart, ' ');
+        string library = libEnd ? string(libStart, libEnd - libStart) : string(libStart);
+        void * funptr = openGlGetFunctionAddress(symbol.c_str());
+        if ( funptr ) return funptr;
+        void * libhandle = bindDynamicLibrary(library.c_str());
+        if ( !libhandle ) return nullptr;
+        return getFunctionAddress(libhandle, symbol.c_str());
+#else
+        return nullptr;
+#endif
+    }
+
     class Module_DASBIND : public Module {
     public:
         Module_DASBIND() : Module("dasbind") {
@@ -548,6 +732,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             addExtern<DAS_BIND_FUN(safe_pass_string)>(*this, lib, "safe_pass_string",
                 SideEffects::accessExternal, "safe_pass_string")
                     ->args({"string"});
+            addExtern<DAS_BIND_FUN(dasbind_resolve)>(*this, lib, "__dasbind_resolve",
+                SideEffects::accessExternal, "dasbind_resolve")
+                    ->args({"mangledName"});
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_dasbind.h\"\n";
