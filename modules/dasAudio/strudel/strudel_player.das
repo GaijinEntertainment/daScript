@@ -44,7 +44,6 @@ struct StrudelTrack {
 
 // --- Shared state (passed to thread function) ---
 
-[safe_when_uninitialized]
 struct StrudelState {
     bank          : SampleBank?   // pointer to g_bank (immutable after load)
     sf2           : SF2File const? // pointer to g_sf2 (immutable after load)
@@ -73,7 +72,7 @@ var private g_cmd_channel : Channel?
 var private g_done_channel : Channel?
 var private g_sf2 : SF2File?
 var private g_sf2_path : string   // path to loaded SF2 (for live-reload re-read)
-var private g_state : StrudelState
+var private g_state = StrudelState()
 var private g_cmd_fn : function<(var state : StrudelState?; cmd : string) : void>
 var private g_playback_box : LockBox?
 
