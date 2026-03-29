@@ -1104,6 +1104,12 @@ namespace das {
                 error("recursive call in argument initializer is not allowed", "", "", expr->at);
                 return nullptr;
             }
+            if (funcC->result->baseType == Type::autoinfer) {
+                if ( cerr != InferCallError::tryOperator ) {
+                    error("cannot infer type for function call '" + expr->name + "' with 'auto' return type", "", "", expr->at, CompilationError::invalid_type);
+                    return nullptr;
+                }
+            }
             if ( find(inInfer.begin(), inInfer.end(), funcC) != inInfer.end() ) {
                 error("recursive call in function is not allowed", "", "", expr->at);
                 return nullptr;
@@ -1432,6 +1438,8 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::inferGenericOperator(const string &opN, const LineInfo &expr_at, const ExpressionPtr &arg0, const ExpressionPtr &arg1, InferCallError err) {
+        if ( arg0->type && arg0->type->isExprType() ) return nullptr;
+        if ( arg1 && arg1->type && arg1->type->isExprType() ) return nullptr;
         auto opName = "_::" + opN;
         auto tempCall = make_smart<ExprLooksLikeCall>(expr_at, opName);
         tempCall->arguments.push_back(arg0);

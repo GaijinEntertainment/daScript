@@ -335,7 +335,9 @@ def public serialize(var arch : Archive; var value : array<auto(TT)>) {
                 arch.stream->read(unsafe(addr(value[0])), len * typeinfo sizeof(type<TT>))
             }
         } else {
-            value |> resize(len)
+            unsafe {
+                value |> resize(len)
+            }
             for (element in value) {
                 arch |> _::serialize(element)
             }
