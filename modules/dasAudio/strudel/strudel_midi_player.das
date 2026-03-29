@@ -13,6 +13,7 @@ require strudel/strudel_sf2_voice
 require audio/audio_boost
 require audio
 require daslib/jobque_boost
+require strudel/strudel_player
 require daslib/fio
 require math
 
@@ -625,6 +626,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
                 }
             }
             state.csf2_voices[si].attenuation = saved_atten
+            state.csf2_voices[si].pan = saved_pan
             state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo
             state.csf2_voices[si].pan = saved_pan
         }
@@ -710,10 +712,11 @@ var private g_midi_files : table<string; MidiFile>  // owns parsed data
 var private g_midi_bank : SampleBank                // module-global sample bank
 var private g_midi_sf2 : SF2File?                   // module-global SF2 soundfont
 var private g_midi_running : bool = false
+var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids capture lifecycle)
 
 // ─── Audio Thread Main Loop ───
 
-def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_channel : Channel?; audio_channel : void?) {
+def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_channel : Channel?; audio_channel : void?; vis_ptr : void?) {
     unsafe {
         set_audio_thread_command_channel(audio_channel)
     }
@@ -846,6 +849,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
             ii --
         }
         if (length(output) > 0) {
+            // push PCM to visualization channel
+            if (vis_ptr != null) {
+                var vis_ch = unsafe(reinterpret<Channel?>(vis_ptr))
+                vis_ch |> push_clone(AudioChunk(samples := output))
+            }
             append_to_pcm(sid, output)
         }
         delete output
@@ -895,6 +903,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
 
 // ─── Public API ───
 
+// Set a visualization channel for MIDI audio output. Call before midi_init().
+def public midi_set_audio_vis_channel(var ch : Channel?) {
+    g_midi_audio_vis_ptr = unsafe(reinterpret<void?>(ch))
+}
+
 def public midi_init() {
     if (g_midi_running) {
         return
@@ -913,8 +926,9 @@ def public midi_init() {
     var cmd_ch = g_midi_cmd_channel
     var done_ch = g_midi_done_channel
     let audio_ch = get_audio_command_channel()
-    new_thread() <| @capture(= sid, = cmd_ch, = done_ch, = audio_ch) {
-        midi_thread_main(sid, cmd_ch, done_ch, audio_ch)
+    let vis_ptr = g_midi_audio_vis_ptr
+    new_thread() <| @capture(= sid, = cmd_ch, = done_ch, = audio_ch, = vis_ptr) {
+        midi_thread_main(sid, cmd_ch, done_ch, audio_ch, vis_ptr)
         cmd_ch = null
         done_ch = null
     }

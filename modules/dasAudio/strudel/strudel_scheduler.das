@@ -29,6 +29,7 @@ struct StrudelSF2Meta {
     note_off_sample  : int = -1      // sample position to fire note-off (-1 = don't auto note-off)
     samples_elapsed  : int = 0       // how many samples rendered so far
     reverb_send      : float = 0.0   // per-voice reverb amount from SF2 generators
+    chorus_send      : float = 0.0   // per-voice chorus amount from SF2 generators
     exclusive_class  : int = 0       // SF2 exclusive class (hi-hat choke etc.)
     cut              : int = 0       // strudel cut group
     gain             : float = 1.0   // event gain * velocity (applied as attenuation scale)
@@ -51,6 +52,9 @@ struct Scheduler {
     reverb        : I3DL2Reverb?          // optional reverb processor
     reverb_send_buf : array<float>        // reverb send bus (interleaved stereo)
     reverb_out_buf  : array<float>        // reverb output buffer
+    chorus          : ma_chorus?          // optional chorus processor
+    chorus_send_buf : array<float>        // chorus send bus (interleaved stereo)
+    chorus_out_buf  : array<float>        // chorus output buffer
 }
 
 // Convert wall-clock time to cycle position.
@@ -65,6 +69,16 @@ def init_reverb(var sched : Scheduler) {
         set_sample_rate(sched.reverb, float(SAMPLE_RATE))
         let props = get_preset(I3DL2Preset.ConcertHall)
         set_properties(sched.reverb, props)
+    }
+}
+
+// Initialize chorus on the scheduler (call once before ticking).
+def init_chorus(var sched : Scheduler) {
+    if (sched.chorus == null) {
+        sched.chorus = new ma_chorus
+        chorus_init(sched.chorus, float(SAMPLE_RATE))
+        let cfg = chorus_config_default()
+        chorus_set_config(sched.chorus, cfg)
     }
 }
 
@@ -113,11 +127,13 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
                 }
             }
             let rsend = sf2_get_reverb_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
+            let csend = sf2_get_chorus_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
             sched.sf2_voices |> push(voice)
             sched.sf2_meta |> push(StrudelSF2Meta(
                 note = note,
                 note_off_sample = note_off_sample,
                 reverb_send = rsend,
+                chorus_send = csend,
                 exclusive_class = excl,
                 cut = cutGroup,
                 gain = eventGain
@@ -127,7 +143,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
 }
 
 // Render all active SF2 voices into the output buffer. Handles note-off scheduling,
-// reverb send, and voice cleanup.
+// reverb/chorus send, and voice cleanup.
 def private sf2_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
     if (length(sched.sf2_voices) == 0 || sched.sf2 == null) {
         return
@@ -144,6 +160,17 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
             sched.reverb_send_buf[s] = 0.0
         }
     }
+    // prepare chorus send bus
+    var has_chorus_send = false
+    if (sched.chorus != null) {
+        if (length(sched.chorus_send_buf) < buf_samples) {
+            sched.chorus_send_buf |> resize(buf_samples)
+            sched.chorus_out_buf |> resize(buf_samples)
+        }
+        for (s in range(buf_samples)) {
+            sched.chorus_send_buf[s] = 0.0
+        }
+    }
     var si = length(sched.sf2_voices) - 1
     while (si >= 0) {
         if (sched.sf2_voices[si].finished == 0) {
@@ -156,21 +183,26 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
             let saved_atten = sched.sf2_voices[si].attenuation
             sched.sf2_voices[si].attenuation = saved_atten * meta.gain
             let reverb_send = meta.reverb_send
-            if (reverb_send > 0.001 && sched.reverb != null) {
+            let chorus_send = meta.chorus_send
+            if ((reverb_send > 0.001 || chorus_send > 0.001) && (sched.reverb != null || sched.chorus != null)) {
+                let dry_gain = max(0.0, 1.0 - reverb_send - chorus_send)
                 unsafe {
-                    ma_sf2_voice_render_send(
+                    ma_sf2_voice_render_send2(
                         addr(sched.sf2_voices[si]),
                         addr(sched.sf2.sample_data[0]),
                         length(sched.sf2.sample_data),
                         addr(output[0]),
                         addr(sched.reverb_send_buf[0]),
+                        addr(sched.chorus_send_buf[0]),
                         0,
                         chunkFrames,
-                        1.0 - reverb_send,
-                        reverb_send
+                        dry_gain,
+                        reverb_send,
+                        chorus_send
                     )
                 }
-                has_reverb_send = true
+                if (reverb_send > 0.001) { has_reverb_send = true; }
+                if (chorus_send > 0.001) { has_chorus_send = true; }
             } else {
                 unsafe {
                     ma_sf2_voice_render(
@@ -203,6 +235,18 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
         }
         for (s in range(buf_samples)) {
             output[s] += sched.reverb_out_buf[s]
+        }
+    }
+    // process chorus send bus and mix into output
+    if (has_chorus_send && sched.chorus != null) {
+        for (s in range(buf_samples)) {
+            sched.chorus_out_buf[s] = 0.0
+        }
+        unsafe {
+            chorus_process(sched.chorus, addr(sched.chorus_send_buf[0]), addr(sched.chorus_out_buf[0]), chunkFrames)
+        }
+        for (s in range(buf_samples)) {
+            output[s] += sched.chorus_out_buf[s]
         }
     }
 }
