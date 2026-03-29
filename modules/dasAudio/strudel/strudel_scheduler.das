@@ -259,6 +259,9 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
 def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time : double; chunk_seconds : float = 0.05; lookAhead : float = 0.1) : array<float> {
     let cycleNow = current_cycle(sched, wall_time)
     let cycleEnd = current_cycle(sched, wall_time + double(lookAhead))
+    // Voice spawning cutoff: only spawn voices within one chunk of now.
+    // The full query range feeds the pianoroll combinator; we just skip spawning far-future voices.
+    let spawnEnd = current_cycle(sched, wall_time + double(chunk_seconds) + 0.01lf)
 
     // query for new events
     let queryStart = max(cycleNow, sched.lastQueryEnd)
@@ -266,7 +269,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
         var haps <- pat(TimeSpan(start = queryStart, stop = cycleEnd))
         for (h in haps) {
             // only trigger at onset
-            if (h.has_whole && abs(h.whole.start - h.part.start) < 0.0001lf) {
+            if (h.has_whole && abs(h.whole.start - h.part.start) < 0.0001lf && h.whole.start < spawnEnd) {
                 let durCycles = h.whole.stop - h.whole.start
                 let durSec = float(durCycles / sched.cps)
                 // SF2 path: spawn real-time voices
@@ -315,7 +318,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
             }
         }
         delete haps
-        sched.lastQueryEnd = cycleEnd
+        sched.lastQueryEnd = spawnEnd
     }
 
     // produce output: fixed-size stereo buffer for this tick

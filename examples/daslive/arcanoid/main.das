@@ -180,19 +180,17 @@ def play_sfx(samples : array<float>) {
 
 // --- Music (daStrudel) ---
 
-def setup_menu_music(var state : StrudelState?) {
+var g_music_tracks : table<string; int>
+
+def setup_menu_music() {
     // Title screen — mysterious, anticipatory, classic arcade title vibe
-    var drums <- s("<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>")
-    strudel_add_track(state, "drums", drums, 0.45)
-    var bass <- note_pattern("<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>", "sine")
-    strudel_add_track(state, "bass", bass, 0.35)
-    var lead <- note_pattern("<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>", "triangle")
-    strudel_add_track(state, "lead", lead, 0.2)
-    var arp <- note_pattern("<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>", "triangle")
-    strudel_add_track(state, "arp", arp, 0.1)
+    g_music_tracks["drums"] = strudel_add_track(s("<bd ~ [~ hh] ~> <bd ~ [~ hh] [hh?0.3 ~]> <bd ~ [~ hh] ~> <bd ~ [~ cp?0.4] [hh?0.3 ~]>"), 0.45)
+    g_music_tracks["bass"] = strudel_add_track(note_pattern("<[a2 a2] ~ [e2 e2] ~> <[a2 a2] ~ [f2 f2] ~> <[a2 a2] ~ [g2 g2] ~> <[a2 a2] ~ [e2 e2] [f2 e2]>", "sine"), 0.35)
+    g_music_tracks["lead"] = strudel_add_track(note_pattern("<a4 c5 e5 c5> <a4 b4 c5 e5> <f5 e5 c5 a4> <e5?0.7 d5 c5 b4>", "triangle"), 0.2)
+    g_music_tracks["arp"] = strudel_add_track(note_pattern("<[a4 c5 e5 a5]> <[a4 c5 e5 c5]> <[f4 a4 c5 f5?0.5]> <[e4 g4 b4 e5?0.5]>", "triangle"), 0.1)
 }
 
-def strudel_music_cmd(var state : StrudelState?; cmd : string) {
+def strudel_music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
     if (length(parts) < 2) {
         return
@@ -201,27 +199,35 @@ def strudel_music_cmd(var state : StrudelState?; cmd : string) {
     let name = parts[1]
     if (action == "play" && length(parts) >= 3) {
         let gain = length(parts) >= 4 ? float(to_double(parts[3])) : 1.0
-        var pat <- s(parts[2])
-        strudel_add_track(state, name, pat, gain)
+        if (key_exists(g_music_tracks, name)) {
+            strudel_remove_track(g_music_tracks[name])
+        }
+        g_music_tracks[name] = strudel_add_track(s(parts[2]), gain)
     } elif (action == "note" && length(parts) >= 4) {
         let synth = parts[3]
         let gain = length(parts) >= 5 ? float(to_double(parts[4])) : 0.4
-        var pat <- note_pattern(parts[2], synth)
-        strudel_add_track(state, name, pat, gain)
+        if (key_exists(g_music_tracks, name)) {
+            strudel_remove_track(g_music_tracks[name])
+        }
+        g_music_tracks[name] = strudel_add_track(note_pattern(parts[2], synth), gain)
     } elif (action == "stop") {
-        let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
-        strudel_fade_track(state, name, 0.0, fade_time)
+        if (key_exists(g_music_tracks, name)) {
+            let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
+            strudel_fade_track(g_music_tracks[name], 0.0, fade_time)
+        }
     } elif (action == "fade" && length(parts) >= 4) {
-        let gain = float(to_double(parts[2]))
-        let time = float(to_double(parts[3]))
-        strudel_fade_track(state, name, gain, time)
+        if (key_exists(g_music_tracks, name)) {
+            let gain = float(to_double(parts[2]))
+            let time = float(to_double(parts[3]))
+            strudel_fade_track(g_music_tracks[name], gain, time)
+        }
     }
 }
 
-def strudel_music_main(var state : StrudelState?) {
-    strudel_set_bpm(state, 118.0lf)
-    setup_menu_music(state)
-    strudel_play(state, @@strudel_music_cmd)
+def strudel_music_main() {
+    strudel_set_bpm(118.0lf)
+    setup_menu_music()
+    strudel_play(@@strudel_music_cmd)
 }
 
 def stop_all_tracks(fade : float) {
@@ -1316,7 +1322,7 @@ def init() {
         init_audio_samples()
     }
     if (!music_initialized) {
-        strudel_init(@@strudel_music_main, @@strudel_music_cmd)
+        strudel_init(@@strudel_music_main)
         strudel_set_volume(0.4, 0.0)
         music_initialized = true
     }

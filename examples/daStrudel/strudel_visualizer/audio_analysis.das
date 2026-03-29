@@ -3,15 +3,12 @@ options indenting = 4
 
 module audio_analysis shared
 
-require strudel/strudel_player
-require daslib/jobque_boost
 require math
 
 let FFT_SIZE = 512
 let FFT_BINS = FFT_SIZE / 2
 
 struct AudioAnalysis {
-    channel         : Channel?
     sample_ring     : array<float>
     ring_write      : int = 0
     sample_ring_l   : array<float>
@@ -29,7 +26,7 @@ def audio_analysis_init(var aa : AudioAnalysis) {
     aa.spectrum_smooth |> resize(FFT_BINS)
 }
 
-def audio_analysis_feed(var aa : AudioAnalysis; samples : array<float>#) {
+def audio_analysis_feed(var aa : AudioAnalysis; samples : array<float>) {
     let n = length(samples) / 2
     for (i in range(n)) {
         let l = samples[i * 2]
@@ -42,12 +39,7 @@ def audio_analysis_feed(var aa : AudioAnalysis; samples : array<float>#) {
     }
 }
 
-def audio_analysis_update(var aa : AudioAnalysis) {
-    if (aa.channel != null) {
-        aa.channel |> gather() $(chunk : AudioChunk#) {
-            audio_analysis_feed(aa, chunk.samples)
-        }
-    }
+def audio_analysis_update_spectrum(var aa : AudioAnalysis) {
     var re : array<float>
     var im : array<float>
     re |> resize(FFT_SIZE)

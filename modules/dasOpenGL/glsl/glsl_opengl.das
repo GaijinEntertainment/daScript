@@ -14,10 +14,10 @@ require glsl/glsl_common public
 
 class GlslOpenGLShader : GlslShader {
     def override generate_bind_uniform_dummy(var func : FunctionPtr) {
-        generate_bind_uniform_dummy(func)
+        glsl_opengl::generate_bind_uniform_dummy(func)
     }
     def override generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
-        generate_bind_uniform(fnMain, fn)
+        glsl_opengl::generate_bind_uniform(fnMain, fn)
     }
 }
 

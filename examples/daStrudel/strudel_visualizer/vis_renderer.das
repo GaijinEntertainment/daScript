@@ -5,10 +5,173 @@ module vis_renderer shared
 
 require opengl/opengl_boost
 require opengl/opengl_ttf
-require strudel/strudel_pianoroll
+require strudel/strudel_event
+require strudel/strudel_time
+require strudel/strudel_pattern
+require strudel/strudel_player
 require audio_analysis
-require daslib/jobque_boost
 require math
+
+// --- PianorollHap (visualization data, lightweight copy of Hap) ---
+
+struct PianorollHap {
+    whole_start : float
+    whole_stop  : float
+    part_start  : float
+    part_stop   : float
+    note        : float
+    sound       : string
+    gain        : float
+    tap_index   : int
+}
+
+// --- Pianoroll capture (populated during pattern eval on main thread) ---
+
+struct PianorollCapture {
+    name : string
+    haps : array<PianorollHap>
+}
+
+var public g_pianoroll_captures : array<PianorollCapture>
+
+// --- Visualization registration (rolling index mechanism) ---
+
+bitfield VisFlags {
+    has_spectrum,
+    has_scope,
+    has_vectorscope,
+    has_pianoroll,
+    has_drums
+}
+
+struct VisRegistration {
+    flags : VisFlags
+    name  : string
+    color : uint
+}
+
+var public g_vis_registrations : array<VisRegistration>
+
+// --- Pattern combinators (main-thread mode) ---
+
+// Pianoroll: wraps a pattern to capture haps during evaluation.
+// The captured data is available in g_pianoroll_captures[idx].haps after tick().
+def public pianoroll(var pat : Pattern; name : string = "") : Pattern {
+    let idx = g_vis_index  // read current rolling index (before strudel_add_track bumps it)
+    while (length(g_pianoroll_captures) <= idx) {
+        g_pianoroll_captures |> emplace(PianorollCapture())
+    }
+    g_pianoroll_captures[idx].name = name
+    // ensure vis registration exists
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    unsafe {
+        g_vis_registrations[idx].flags |= VisFlags.has_pianoroll
+    }
+    if (!empty(name)) {
+        g_vis_registrations[idx].name = name
+    }
+    return <- @capture(= idx, <- pat) (span : TimeSpan) : array<Hap> {
+        var haps <- pat(span)
+        g_pianoroll_captures[idx].haps |> clear()
+        for (h in haps) {
+            if (h.has_whole) {
+                g_pianoroll_captures[idx].haps |> push(PianorollHap(
+                    whole_start = float(h.whole.start),
+                    whole_stop = float(h.whole.stop),
+                    part_start = float(h.part.start),
+                    part_stop = float(h.part.stop),
+                    note = h.value.note,
+                    sound = h.value.s,
+                    gain = h.value.gain,
+                    tap_index = idx
+                ))
+            }
+        }
+        return <- haps
+    }
+}
+
+// Spectrum: pass-through, marks track for spectrum visualization.
+def public spectrum(var pat : Pattern; name : string = "") : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    unsafe {
+        g_vis_registrations[idx].flags |= VisFlags.has_spectrum
+    }
+    if (!empty(name)) {
+        g_vis_registrations[idx].name = name
+    }
+    return <- pat
+}
+
+// Scope: pass-through, marks track for oscilloscope visualization.
+def public scope(var pat : Pattern; name : string = "") : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    unsafe {
+        g_vis_registrations[idx].flags |= VisFlags.has_scope
+    }
+    if (!empty(name)) {
+        g_vis_registrations[idx].name = name
+    }
+    return <- pat
+}
+
+// Vectorscope: pass-through, marks track for vectorscope visualization.
+def public vectorscope(var pat : Pattern; name : string = "") : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    unsafe {
+        g_vis_registrations[idx].flags |= VisFlags.has_vectorscope
+    }
+    if (!empty(name)) {
+        g_vis_registrations[idx].name = name
+    }
+    return <- pat
+}
+
+// Drums panel: pass-through, marks track for drum pad visualization.
+def public drums(var pat : Pattern; name : string = "") : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    unsafe {
+        g_vis_registrations[idx].flags |= VisFlags.has_drums
+    }
+    if (!empty(name)) {
+        g_vis_registrations[idx].name = name
+    }
+    return <- pat
+}
+
+// Set display name for current track's visualizations.
+def public vis_name(var pat : Pattern; name : string) : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    g_vis_registrations[idx].name = name
+    return <- pat
+}
+
+// Set display color for current track's visualizations.
+def public vis_color(var pat : Pattern; color : uint) : Pattern {
+    let idx = g_vis_index
+    while (length(g_vis_registrations) <= idx) {
+        g_vis_registrations |> emplace(VisRegistration())
+    }
+    g_vis_registrations[idx].color = color
+    return <- pat
+}
 
 // --- Vertex ---
 
@@ -18,7 +181,7 @@ struct VisVertex {
     rgba : float4
 }
 
-// --- Pianoroll render state per tap ---
+// --- Pianoroll render state per track ---
 
 struct PianorollRenderState {
     haps          : array<PianorollHap>
@@ -28,7 +191,6 @@ struct PianorollRenderState {
     min_note      : float = 127.0
     max_note      : float = 0.0
     color         : uint = 0xFFCA28u
-    scroll        : int = -1
     name          : string
 }
 
@@ -101,23 +263,19 @@ def scope_render(var verts : array<VisVertex>; aa : AudioAnalysis; x0, y0, x1, y
 }
 
 // --- Vectorscope (M/S rotated) ---
-// M (mid = L+R) on vertical axis, S (side = L-R) on horizontal axis.
-// Mono content goes up/down, stereo spread goes left/right.
 
 def vectorscope_render(var verts : array<VisVertex>; aa : AudioAnalysis; x0, y0, x1, y1 : float; color : float4) {
     let w = x1 - x0
     let h = y1 - y0
     let cx = x0 + w * 0.5
     let cy = y0 + h * 0.5
-    let scale_x = w * 2.0 // let them spill
+    let scale_x = w * 2.0
     let scale_y = h * 2.0
     let n = min(512, FFT_SIZE)
     let dot_size = 1.5
-    // crosshair guides: vertical = mono, horizontal = stereo
     let guide_c = float4(0.3, 0.3, 0.35, 0.2)
     push_quad(verts, cx - 0.5, y0, cx + 0.5, y1, guide_c)
     push_quad(verts, x0, cy - 0.5, x1, cy + 0.5, guide_c)
-    // plot M/S: mid = (L+R)*0.5 on Y, side = (L-R)*0.5 on X
     for (i in range(n)) {
         let idx = (aa.ring_write_lr + i) % FFT_SIZE
         let l = clamp(aa.sample_ring_l[idx], -1.0, 1.0)
@@ -126,7 +284,7 @@ def vectorscope_render(var verts : array<VisVertex>; aa : AudioAnalysis; x0, y0,
         let side = (l - r) * 0.5
         let px = cx + side * scale_x
         let py = cy + mid * scale_y
-        let age = float(i) / float(n)  // 0=oldest, 1=newest
+        let age = float(i) / float(n)
         let alpha = age * age * 0.9 + 0.1
         let bright = 0.4 + 0.6 * age
         let c = float4(color.x * bright, color.y * bright, color.z * bright, alpha)
@@ -163,18 +321,13 @@ def drum_pad_key(h : PianorollHap) : string {
 
 struct DrumPanelState {
     pads    : array<DrumPad>
-    pad_map : table<string; int>   // "note:sound" -> pad index
+    pad_map : table<string; int>
 }
 
-let DRUM_FLASH_CYCLES = 0.05  // flash duration in cycles
+let DRUM_FLASH_CYCLES = 0.05
 
-def drum_panel_update(var state : DrumPanelState; render_states : array<PianorollRenderState>; tap_idx : int; current_cycle : float; dt : float) {
-    if (tap_idx < 0 || tap_idx >= length(render_states)) {
-        return
-    }
-    let rs & = unsafe(render_states[tap_idx])
-    // register pads and detect triggers
-    for (h in rs.haps) {
+def drum_panel_update(var state : DrumPanelState; haps : array<PianorollHap>; current_cycle : float; dt : float) {
+    for (h in haps) {
         let key = drum_pad_key(h)
         var pad_idx = -1
         if (!key_exists(state.pad_map, key)) {
@@ -185,13 +338,11 @@ def drum_panel_update(var state : DrumPanelState; render_states : array<Pianorol
         } else {
             pad_idx = state.pad_map[key]
         }
-        // trigger on hap start
         if (h.whole_start <= current_cycle && h.whole_start > unsafe(state.pads[pad_idx]).last_trigger_cycle) {
             unsafe(state.pads[pad_idx]).last_trigger_cycle = h.whole_start
             unsafe(state.pads[pad_idx]).brightness = 1.0
         }
     }
-    // decay all pads
     for (si in range(length(state.pads))) {
         var pad & = unsafe(state.pads[si])
         let since = current_cycle - pad.last_trigger_cycle
@@ -218,7 +369,6 @@ def drum_panel_render(var verts : array<VisVertex>; state : DrumPanelState; x0, 
         let radius = max_radius * (0.7 + 0.3 * b)
         let c = float4(color.x * b, color.y * b, color.z * b, 0.3 + 0.7 * b)
         push_circle(verts, cx, mid_y, radius, c)
-        // dim ring outline at rest
         if (b < 0.3) {
             let ring_c = float4(color.x * 0.3, color.y * 0.3, color.z * 0.3, 0.4)
             push_circle(verts, cx, mid_y, max_radius, ring_c)
@@ -228,83 +378,50 @@ def drum_panel_render(var verts : array<VisVertex>; state : DrumPanelState; x0, 
     }
 }
 
-// --- Pianoroll update ---
+// --- Pianoroll update (direct from captured haps) ---
 
-def pianoroll_update(var render_states : array<PianorollRenderState>; current_cycle : float; window_cycles : float) {
-    pianoroll_get_taps() $(taps) {
-        while (length(render_states) < length(taps)) {
-            let idx = length(render_states)
-            render_states |> emplace(PianorollRenderState(
-                color = taps[idx].color,
-                scroll = taps[idx].scroll,
-                name = taps[idx].name,
-                min_note = 127.0,
-                max_note = 0.0,
-                is_drum_mode = true
-            ))
-        }
-        for (i in range(length(taps))) {
-            let tap & = unsafe(taps[i])
-            var rs & = unsafe(render_states[i])
-            var new_haps : array<PianorollHap>
-            tap.channel |> gather() $(h : PianorollHap#) {
-                new_haps |> emplace(PianorollHap(
-                    whole_start = h.whole_start,
-                    whole_stop = h.whole_stop,
-                    part_start = h.part_start,
-                    part_stop = h.part_stop,
-                    note = h.note,
-                    sound := string(h.sound),
-                    gain = h.gain,
-                    tap_index = h.tap_index
-                ))
-            }
-            for (hap in new_haps) {
-                var found = false
-                for (existing in rs.haps) {
-                    if (abs(existing.whole_start - hap.whole_start) < 0.001 && abs(existing.note - hap.note) < 0.01 && existing.sound == hap.sound) {
-                        found = true
-                        break
-                    }
-                }
-                if (!found) {
-                    if (abs(hap.note - 60.0) > 0.01) {
-                        rs.is_drum_mode = false
-                    }
-                    if (hap.note < rs.min_note) {
-                        rs.min_note = hap.note
-                    }
-                    if (hap.note > rs.max_note) {
-                        rs.max_note = hap.note
-                    }
-                    if (!key_exists(rs.sound_to_row, hap.sound)) {
-                        let row = length(rs.sound_names)
-                        rs.sound_to_row[hap.sound] = row
-                        rs.sound_names |> push(hap.sound)
-                    }
-                    rs.haps |> push_clone(hap)
-                }
-            }
-            delete new_haps
-            let prune_before = current_cycle - window_cycles
-            var j = length(rs.haps) - 1
-            while (j >= 0) {
-                if (rs.haps[j].whole_stop < prune_before) {
-                    rs.haps |> erase(j)
-                }
-                j --
+def pianoroll_update(var rs : PianorollRenderState; new_haps : array<PianorollHap>; current_cycle : float; window_cycles : float) {
+    // merge new haps (dedup)
+    for (hap in new_haps) {
+        var found = false
+        for (existing in rs.haps) {
+            if (abs(existing.whole_start - hap.whole_start) < 0.001 && abs(existing.note - hap.note) < 0.01 && existing.sound == hap.sound) {
+                found = true
+                break
             }
         }
+        if (!found) {
+            if (abs(hap.note - 60.0) > 0.01) {
+                rs.is_drum_mode = false
+            }
+            if (hap.note < rs.min_note) {
+                rs.min_note = hap.note
+            }
+            if (hap.note > rs.max_note) {
+                rs.max_note = hap.note
+            }
+            if (!key_exists(rs.sound_to_row, hap.sound)) {
+                let row = length(rs.sound_names)
+                rs.sound_to_row[hap.sound] = row
+                rs.sound_names |> push(hap.sound)
+            }
+            rs.haps |> push_clone(hap)
+        }
+    }
+    // prune old haps
+    let prune_before = current_cycle - window_cycles
+    var j = length(rs.haps) - 1
+    while (j >= 0) {
+        if (rs.haps[j].whole_stop < prune_before) {
+            rs.haps |> erase(j)
+        }
+        j --
     }
 }
 
 // --- Pianoroll panel render ---
 
-def pianoroll_render_panel(var verts : array<VisVertex>; render_states : array<PianorollRenderState>; tap_idx : int; current_cycle : float; window_cycles : float; display_w : int; py0, py1 : float) {
-    if (tap_idx < 0 || tap_idx >= length(render_states)) {
-        return
-    }
-    let rs & = unsafe(render_states[tap_idx])
+def pianoroll_render_panel(var verts : array<VisVertex>; rs : PianorollRenderState; current_cycle : float; window_cycles : float; display_w : int; py0, py1 : float) {
     let ph = py1 - py0
     let fw = float(display_w)
     let half_window = window_cycles * 0.5
@@ -367,7 +484,6 @@ def pianoroll_render_panel(var verts : array<VisVertex>; render_states : array<P
         let half_h = row_height * 0.4
         let is_active = h.whole_start <= current_cycle && h.whole_stop > current_cycle
         if (is_active) {
-            // bright, slightly larger
             let grow = half_h * 0.15
             let c = float4(min(base_color.x * 1.3, 1.0), min(base_color.y * 1.3, 1.0), min(base_color.z * 1.3, 1.0), 1.0)
             push_quad(verts, x0, y_center - half_h - grow, x1, y_center + half_h + grow, c)

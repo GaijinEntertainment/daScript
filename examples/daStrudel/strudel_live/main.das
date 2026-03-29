@@ -17,14 +17,17 @@ require daslib/json_boost
 
 let MEDIA = "{get_das_root()}/examples/media"
 
-def strudel_main(var state : StrudelState?) {
-    let drums <- s("bd [hh hh] sd [hh cp]")
-    strudel_add_track(state, "drums", drums)
-    strudel_set_bpm(state, 120.0lf)
-    strudel_play(state, @@strudel_on_command)
+// Track name -> index mapping (maintained by user code)
+var g_track_names : table<string; int>
+
+def strudel_main() {
+    let drums = strudel_add_track(s("bd [hh hh] sd [hh cp]"))
+    g_track_names["drums"] = drums
+    strudel_set_bpm(120.0lf)
+    strudel_play(@@strudel_on_command)
 }
 
-def strudel_on_command(var state : StrudelState?; cmd : string) {
+def strudel_on_command(cmd : string) {
     // commands: "play:name:pattern", "stop:name", "stop:name:fade_time", "fade:name:gain:time"
     let parts <- split(cmd, ":")
     if (length(parts) < 2) {
@@ -33,15 +36,23 @@ def strudel_on_command(var state : StrudelState?; cmd : string) {
     let action = parts[0]
     let name = parts[1]
     if (action == "play" && length(parts) >= 3) {
-        let pat <- s(parts[2])
-        strudel_add_track(state, name, pat)
+        // remove old track with this name if it exists
+        if (key_exists(g_track_names, name)) {
+            strudel_remove_track(g_track_names[name])
+        }
+        let idx = strudel_add_track(s(parts[2]))
+        g_track_names[name] = idx
     } elif (action == "stop") {
-        let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
-        strudel_fade_track(state, name, 0.0, fade_time)
+        if (key_exists(g_track_names, name)) {
+            let fade_time = length(parts) >= 3 ? float(to_double(parts[2])) : 0.5
+            strudel_fade_track(g_track_names[name], 0.0, fade_time)
+        }
     } elif (action == "fade" && length(parts) >= 4) {
-        let gain = float(to_double(parts[2]))
-        let time = float(to_double(parts[3]))
-        strudel_fade_track(state, name, gain, time)
+        if (key_exists(g_track_names, name)) {
+            let gain = float(to_double(parts[2]))
+            let time = float(to_double(parts[3]))
+            strudel_fade_track(g_track_names[name], gain, time)
+        }
     }
 }
 

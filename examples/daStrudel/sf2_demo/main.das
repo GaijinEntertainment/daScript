@@ -29,11 +29,10 @@ def find_sf2() : string {
     return ""
 }
 
-def strudel_main(var state : StrudelState?) {
-    strudel_set_bpm(state, 120.0lf)
-    strudel_play_pattern(state, stack([
+def strudel_main() {
+    strudel_set_bpm(120.0lf)
+    strudel_add_track(stack([
         // drums — SF2 GM percussion (bank 128): c2=kick, d2=snare, eb2=clap, fs2=closed hh
-        // s("bd ~ [~ bd] ~, ~ cp ~ cp, [~ hh] [~ hh] [~ hh] [~ hh]"),
         note_pattern("c2 ~ [~ c2] ~, ~ eb2 ~ eb2, [~ fs2] [~ fs2] [~ fs2] [~ fs2]")
             |> set_sf2(0) |> set_sf2_bank(128) |> set_gain(0.7),
         // piano arpeggios — broken chords, Am-F-C-G
@@ -46,6 +45,7 @@ def strudel_main(var state : StrudelState?) {
         note_pattern("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")
             |> set_sf2("string_ensemble") |> set_gain(0.2)
     ]))
+    strudel_play()
 }
 
 [export]
