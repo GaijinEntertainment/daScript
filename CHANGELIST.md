@@ -141,13 +141,8 @@ A TidalCycles-inspired pattern music engine with SF2 SoundFont support, MIDI pla
 **Two-mode player architecture:**
 - **Main-thread mode** — `strudel_create_channel()` + `strudel_tick()` from your render loop. Direct access to per-track PCM and pianoroll hap data. No channels, no lockboxes, no `void*` casts.
 - **Threaded mode** — `strudel_init(fn)` spawns a dedicated audio thread. `strudel_play()` runs the tick loop with buffer-level sleep. Channel-based command dispatch for live pattern changes.
-- **Clean API** — removed `StrudelState?` parameter from all public functions. Functions operate on per-context module globals (each daScript context has its own state). `strudel_add_track()` returns integer index.
-- **`consumed_position`** added to `AudioChannelStatus` — tracks actual audio frames consumed by the device (excludes silence padding from PCM stream underrun). Used for accurate visualization sync.
-- **Integer sample accumulation** — `g_wall_time` derived from exact `int64` sample count, eliminating floating-point drift that caused double note triggers at cycle boundaries.
-- **Scheduler `spawnEnd` guard** — only spawns voices one chunk ahead of current time. The full look-ahead range feeds the pianoroll combinator for display, but voices aren't pre-rendered 4 seconds into the future. Prevents massive voice burst and audio starvation on startup.
 
 **Visualizer combinators:**
-- Deleted `strudel_pianoroll.das` from core — visualization is now the caller's concern, not the engine's.
 - `pianoroll("name")`, `spectrum()`, `scope()`, `vectorscope()`, `drums()` — pass-through pattern combinators using a rolling `g_vis_index`. Each registers what visualization the track wants; `strudel_add_track()` bumps the index.
 - `pianoroll()` wraps the pattern to capture haps during evaluation into a direct array (same thread, no channels). Other combinators are pure pass-throughs that mark track preferences.
 - `vis_name()`, `vis_color()` — set display metadata per track.
@@ -158,11 +153,6 @@ A TidalCycles-inspired pattern music engine with SF2 SoundFont support, MIDI pla
 - Per-channel gain, pan, looping, audio visualization channels
 - Integrates with the visualizer via the same audio analysis pipeline
 
-**Timing and synchronization:**
-- Buffer-level regulation in `strudel_tick()` — skips when audio queue has 4+ chunks, preventing visual clock from racing ahead of playback.
-- `strudel_get_playback_time()` uses `consumed_position` (hardware clock) with `g_wall_time` fallback during device startup.
-- GL warmup draw in visualizer `init()` — two frames (front + back buffer) to absorb GPU driver's first-frame shader compilation stall (~480ms).
-
 **Examples** (6 demos in `examples/daStrudel/`):
 - `player_demo` — minimal threaded playback (load samples, play pattern, shutdown)
 - `synth_demo` — 100% synthesized, no sample files needed (drums + bass + lead)
@@ -170,8 +160,6 @@ A TidalCycles-inspired pattern music engine with SF2 SoundFont support, MIDI pla
 - `piano_demo` — "Ode to Joy" with pitched piano samples via `seq()` bar notation
 - `strudel_live` / `strudel_sf2_live` — live-reload with REST commands (play/stop/fade tracks by name)
 - `strudel_visualizer` — OpenGL visualizer with 5-track pianoroll, spectrum, drums, scope, vectorscope panels. Main-thread mode with direct data access.
-
-**Also fixed:** `glsl_opengl.das` infinite recursion — method override of `generate_bind_uniform_dummy` now explicitly calls the free function via `glsl_opengl::` qualification. Broken by recent changes to infer that changed method-vs-function dispatch priority.
 
 ### Improvements
 
