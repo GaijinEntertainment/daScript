@@ -87,6 +87,7 @@ namespace das {
         bool   fatalAliasLoop = false;
         bool   inArgumentInit = false;
         int32_t callDepth = 0;
+        int32_t inferDepth = 0;
 
     public:
         vector<FunctionPtr> extraFunctions;

@@ -1071,7 +1071,20 @@ namespace das {
         }
         return true;
     }
+
+    struct InferDepthGuard {
+        InferDepthGuard(int32_t *depth) : depth(depth) { (*depth)++; }
+        ~InferDepthGuard() { (*depth)--; }
+        int32_t *depth;
+    };
+
     FunctionPtr InferTypes::inferFunctionCall(ExprLooksLikeCall *expr, InferCallError cerr, Function *lookupFunction, bool failOnMissingCtor, bool visCheck) {
+        if ( inferDepth > 1 ) {
+            error("infer expression depth exceeded maximum allowed", "", "",
+                expr->at, CompilationError::too_many_infer_passes);
+            return nullptr;
+        }
+        InferDepthGuard guard(&inferDepth);
         vector<TypeDeclPtr> types;
         if (!inferArguments(types, expr->arguments)) {
             if (func)
