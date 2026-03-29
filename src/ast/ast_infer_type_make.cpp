@@ -488,7 +488,16 @@ namespace das {
             return "";
         }
     }
+    bool InferTypes::canVisitMakeStructure ( ExprMakeStruct * expr ) {
+        if ( callDepth >= program->policies.max_call_depth ) {
+            error("call expression depth exceeded maximum allowed (" + to_string(program->policies.max_call_depth) + ")", "", "",
+                  expr->at, CompilationError::too_many_infer_passes);
+            return false;
+        }
+        return true;
+    }
     void InferTypes::preVisit(ExprMakeStruct *expr) {
+        callDepth ++;
         Visitor::preVisit(expr);
         if (expr->makeType && expr->makeType->isExprType()) {
             return;
@@ -726,6 +735,7 @@ namespace das {
         return mkt;
     }
     ExpressionPtr InferTypes::visit(ExprMakeStruct *expr) {
+        callDepth --;
         if (expr->makeType && expr->makeType->isExprType()) {
             return Visitor::visit(expr);
         }
