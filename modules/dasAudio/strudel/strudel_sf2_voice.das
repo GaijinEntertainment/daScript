@@ -464,14 +464,14 @@ def private get_gen(izone : SF2Zone; global_izone : SF2Zone const?; pzone : SF2Z
     }
     val = get_generator(izone, oper, val)
     // preset-level generators are additive (except ranges and terminal gens)
+    // SF2 spec: specific preset zone overrides global preset zone for same generator
     if (oper != int(SF2GenOper.keyRange) && oper != int(SF2GenOper.velRange) &&
         oper != int(SF2GenOper.sampleID) && oper != int(SF2GenOper.instrument)) {
         var preset_add = 0
-        if (global_pzone != null) {
-            preset_add += get_generator(*global_pzone, oper, 0)
-        }
-        if (pzone != null) {
-            preset_add += get_generator(*pzone, oper, 0)
+        if (pzone != null && has_generator(*pzone, oper)) {
+            preset_add = get_generator(*pzone, oper, 0)
+        } elif (global_pzone != null) {
+            preset_add = get_generator(*global_pzone, oper, 0)
         }
         val += preset_add
     }

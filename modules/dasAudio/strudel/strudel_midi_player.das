@@ -593,8 +593,8 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
                 state.csf2_voices[si].vib_lfo_to_pitch = saved_vib_lfo + float(ch_state.mod_wheel) / 127.0 * 50.0
             }
             if (reverb_send > 0.001 || chorus_send > 0.001) {
-                // render with dry/reverb/chorus split
-                let dry_gain = max(0.0, 1.0 - reverb_send - chorus_send)
+                // render with dry + effects sends (SF2: dry at full volume, sends are additive)
+                let dry_gain = 1.0
                 unsafe {
                     ma_sf2_voice_render_send2(
                         addr(state.csf2_voices[si]),

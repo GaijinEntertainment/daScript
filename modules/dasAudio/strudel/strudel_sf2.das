@@ -393,7 +393,7 @@ def private parse_modulators(data : array<uint8>; offset, size : int) : array<SF
 
 // ─── Zone Resolution ───
 
-def private has_generator(zone : SF2Zone; oper : int) : bool {
+def public has_generator(zone : SF2Zone; oper : int) : bool {
     for (gen in zone.generators) {
         if (gen.oper == oper) {
             return true
