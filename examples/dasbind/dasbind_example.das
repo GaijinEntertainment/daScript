@@ -30,58 +30,45 @@
 //   - Maximum ~13 arguments per function (platform-dependent)
 //   - Requires `require dasbind` module
 //
-// This example calls Win32 API functions from Kernel32.dll.
-// Run (Windows only): daslang.exe examples/dasbind/dasbind_example.das
+// This example calls standard C library functions available on all platforms.
+// Run: daslang examples/dasbind/dasbind_example.das
 
 options gen2
 require dasbind
 
-// --- Win32 API bindings ---
-// Each function declares the calling convention (stdcall for Win32),
-// the exported C name, and the DLL that contains it.
-// The function body is a stub -- it is never executed.
+// --- C library bindings ---
 
-// Returns the processor number the current thread is running on.
-[extern(stdcall, name="GetCurrentProcessorNumber", library="Kernel32")]
-def GetCurrentProcessorNumber() : int { return -1; }
+// Try `non-late`:
 
-// Sets the title of the console window.
-[extern(stdcall, name="SetConsoleTitleA", library="Kernel32")]
-def SetConsoleTitle(lpConsoleTitle : string) : bool { return false; }
+// Returns the absolute value of an integer.
+[extern(cdecl, name="abs", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
+def c_abs(x : int) : int { return 0; }
 
-// Returns the current process ID.
-[extern(stdcall, name="GetCurrentProcessId", library="Kernel32")]
-def GetCurrentProcessId() : uint { return 0u; }
+// Returns the current time as seconds since epoch.
+[extern(cdecl, name="time", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
+def c_time(timer : void?) : int64 { return int64(0); }
 
-// Retrieves the number of milliseconds since the system was started.
-[extern(stdcall, name="GetTickCount", library="Kernel32")]
-def GetTickCount() : uint { return 0u; }
+// Try `late`:
 
-// Terminates the current process immediately.
-[extern(stdcall, name="ExitProcess", library="Kernel32")]
-def ExitProcess(uExitCode : uint) {}
+// Computes the square root of a double.
+[extern(cdecl, late, name="sqrt", windows_library="msvcrt", linux_library="libm.so.6", macos_library="libSystem.B.dylib")]
+def c_sqrt(x : double) : double { return 0.0lf; }
+
+// Returns the length of a C string.
+[extern(cdecl, late, name="strlen", windows_library="msvcrt", linux_library="libc.so.6", macos_library="libSystem.B.dylib")]
+def c_strlen(s : string) : int64 { return int64(0); }
 
 // --- Main ---
 
 [export]
 def main() {
-    // Query system information
-    let proc_num = GetCurrentProcessorNumber()
-    let pid = int(GetCurrentProcessId())
-    let uptime_ms = int(GetTickCount())
-    print("processor number : {proc_num}\n")
-    print("process ID       : {pid}\n")
-    print("system uptime    : {uptime_ms} ms\n")
-
-    // Modify the console window title
-    SetConsoleTitle("daslang -- dasbind example")
-    print("(console title changed)\n")
-
-    // ExitProcess terminates immediately -- nothing after it runs.
-    // Uncomment to see: the process exits with code 42, skipping
-    // any cleanup or finally blocks.
-    // ExitProcess(42u)
-
+    let val = c_abs(-42)
+    let now = c_time(null)
+    let sq = c_sqrt(2.0lf)
+    let slen = c_strlen("hello dasbind")
+    print("abs(-42)      : {val}\n")
+    print("epoch seconds : {now}\n")
+    print("sqrt(2.0)     : {sq}\n")
+    print("strlen(...)   : {slen}\n")
     print("done\n")
 }
-
