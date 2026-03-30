@@ -229,7 +229,7 @@ jobs:
             cmake)
               cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
                 $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-              cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang --target daslang_static
+              cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang --target daslang_static --parallel
               ;;
           esac
 
