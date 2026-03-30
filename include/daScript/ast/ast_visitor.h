@@ -308,7 +308,7 @@ namespace das {
 
     class PassVisitor : public Visitor {
     public:
-        explicit PassVisitor(int round) : round(round) {}
+        explicit PassVisitor(int32_t round) : round(round) {}
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;
         virtual void reportFolding();
@@ -335,7 +335,7 @@ namespace das {
 
     class FoldingVisitor : public PassVisitor {
     public:
-        FoldingVisitor(const ProgramPtr & prog, int round = -1)
+        FoldingVisitor(const ProgramPtr & prog, int32_t round = 0)
             : PassVisitor(round), ctx(prog->getContextStackSize()), helper(ctx.debugInfo) {
             ctx.thisProgram = prog.get();
             ctx.thisHelper = &helper;

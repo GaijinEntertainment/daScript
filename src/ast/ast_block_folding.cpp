@@ -410,7 +410,7 @@ namespace das {
 
     // program
 
-    bool Program::optimizationRefFolding(int round) {
+    bool Program::optimizationRefFolding(int32_t round) {
         bool any = false, anything = false;
         do {
             RefFolding context(round);
@@ -421,13 +421,13 @@ namespace das {
         return anything;
     }
 
-    bool Program::optimizationBlockFolding(int round) {
+    bool Program::optimizationBlockFolding(int32_t round) {
         BlockFolding context(round);
         visit(context);
         return context.didAnything();
     }
 
-    bool Program::optimizationCondFolding(int round) {
+    bool Program::optimizationCondFolding(int32_t round) {
         CondFolding context(round);
         visit(context);
         return context.didAnything();

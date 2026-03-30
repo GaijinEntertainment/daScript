@@ -468,7 +468,7 @@ namespace das {
      */
     class ConstFolding : public FoldingVisitor {
     public:
-        ConstFolding( const ProgramPtr & prog, int round ) : FoldingVisitor(prog, round) {}
+        ConstFolding( const ProgramPtr & prog, int32_t round ) : FoldingVisitor(prog, round) {}
     public:
         vector<Function *> needRun;
     protected:
@@ -941,7 +941,7 @@ namespace das {
         visit(nse);
     }
 
-    bool Program::optimizationConstFolding(int round) {
+    bool Program::optimizationConstFolding(int32_t round) {
         checkSideEffects();
         ConstFolding cfe(this, round);
         visit(cfe);
