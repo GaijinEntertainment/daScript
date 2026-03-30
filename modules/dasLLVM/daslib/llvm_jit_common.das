@@ -68,6 +68,7 @@ let public FN_JIT_DEBUG_ENTER       = "jit_debug_enter"
 let public FN_JIT_DEBUG_EXIT        = "jit_debug_exit"
 let public FN_JIT_DEBUG_LINE        = "jit_debug_line"
 let public FN_JIT_AST_TYPEDECL      = "jit_ast_typedecl"
+let public FN_JIT_INIT_EXTERN       = "jit_init_extern_function"
 
 var public g_ctx : LLVMContextRef
 var public g_prim_t : PrimitiveTypes?
@@ -558,6 +559,18 @@ def public init_jit(cg_opt_level : uint) {
     LLVMAddGlobalMapping(g_engine, jit_ast_typedecl, get_jit_ast_typedecl())
     LLVMAddAttributesToFunction(jit_ast_typedecl, fixed_array(nounwind, willreturn))
     LLVMAddAttributeToFunctionArgumentRange(jit_ast_typedecl, urange(1, 3), nocapture)
+    // void jit_init_extern_function ( const char * moduleName, const char * funcMangledName, void ** dllGlobal )
+    let jit_init_extern_type = LLVMFunctionType(g_prim_t.t_void,
+        fixed_array<LLVMTypeRef>(
+            g_prim_t.LLVMVoidPtrType(),  // const char * moduleName
+            g_prim_t.LLVMVoidPtrType(),  // const char * funcMangledName
+            g_prim_t.LLVMVoidPtrType()   // void ** dllGlobal
+        ))
+    var jit_init_extern = LLVMAddFunctionWithType(g_mod, FN_JIT_INIT_EXTERN, jit_init_extern_type)
+    g_fn_types[FN_JIT_INIT_EXTERN] = jit_init_extern_type
+    LLVMAddGlobalMapping(g_engine, jit_init_extern, get_jit_init_extern_function())
+    LLVMAddAttributesToFunction(jit_init_extern, fixed_array(nounwind, willreturn))
+    LLVMAddAttributeToFunctionArgumentRange(jit_init_extern, urange(0, 3), nocapture)
 }
 
 

@@ -101,6 +101,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
 	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_jit.das)
 	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm.das)
 	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit.das)
-	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit_function.das)
+	ADD_EXAMPLE_RUN(modules/dasLLVM/examples/hello_llvm_jit_function.das FALSE)
 
 ENDIF()
