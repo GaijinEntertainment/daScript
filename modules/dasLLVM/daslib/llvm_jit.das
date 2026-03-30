@@ -244,6 +244,18 @@ def get_function_addr(var ctx : Context?; func : Function?) {
     return unsafe(reinterpret<void?>(MNH_ADDR))
 }
 
+// Check if a function is a late-bound dasbind function (null builtin address, resolvable at runtime)
+[macro_function]
+def is_dasbind_late(func : Function?) : bool {
+    if (func == null || !func.flags.builtIn) {
+        return false
+    }
+    if (string(func._module.name) != "dasbind") {
+        return false
+    }
+    return string(func.name) |> starts_with("__dasbind__")
+}
+
 
 
 bitfield public LlvmJitFlags {
@@ -1331,12 +1343,26 @@ class public LlvmJitVisitor : AstVisitor {
 
             let fn_ptr_type = LLVMPointerType(fn_type, 0u)
             let FUNC_PTR = get_builtin_function_address(expr.func)
+            if (is_dasbind_late(expr.func)) {
+                // Late-bind: create global with null init, NO invariant load
+                ofunc = LLVMAddGlobal(g_mod, fn_ptr_type, mangled_name.glob())
+                if (flags.gen_exe) {
+                    set_private_linkage(ofunc)
+                } else {
+                    set_public_linkage(ofunc)
+                }
+                LLVMSetInitializer(ofunc, LLVMConstPointerNull(fn_ptr_type))
+                return tuple(ofunc, fn_type)
+            }
             if (FUNC_PTR == null) {
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {mangled_name}")
             }
             ofunc = save_address_global(mangled_name, FUNC_PTR, fn_ptr_type)
             return tuple(ofunc, fn_type)
         } else {
+            if (is_dasbind_late(expr.func)) {
+                return tuple(ofunc, g_fn_types[mangled_name.publ()])
+            }
             ofunc = get_address_global(mangled_name, LLVMPointerType(g_fn_types[mangled_name.publ()], 0u))
             return tuple(ofunc, g_fn_types[mangled_name.publ()])
         }
@@ -1447,6 +1473,30 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMMDNodeInContext(g_ctx, array_data_ptr(values), 1u))
     }
 
+    def resolve_late_bind(var func : LLVMOpaqueValue?; expr : smart_ptr<ExprCallFunc>; typ : LLVMOpaqueType?) : LLVMOpaqueValue? {
+        let mangled_name = uid.get_dll_fn_name_ptr(expr.func)
+        let global = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
+        let fn_ptr_type = LLVMPointerType(typ, 0u)
+        func = LLVMBuildLoad2(g_builder, fn_ptr_type, global, "dasbind_fptr")
+        let init_fn = LLVMGetNamedFunction(g_mod, FN_JIT_INIT_EXTERN)
+        if (init_fn != null) {
+            let resolve_bb = LLVMAppendBasicBlockInContext(g_ctx, ffunc, "dasbind_resolve")
+            let call_bb = LLVMAppendBasicBlockInContext(g_ctx, ffunc, "dasbind_call")
+            LLVMBuildCondBr(g_builder, LLVMBuildIsNull(g_builder, func, ""), resolve_bb, call_bb)
+            LLVMPositionBuilderAtEnd(g_builder, resolve_bb)
+            LLVMBuildCall2(g_builder, g_fn_types[FN_JIT_INIT_EXTERN], init_fn,
+                fixed_array(
+                    get_string_constant_ptr(g_builder, string(expr.func._module.name)),
+                    get_string_constant_ptr(g_builder, get_mangled_name(expr.func)),
+                    LLVMBuildPointerCast(g_builder, global, types.LLVMVoidPtrType(), "")
+                ), "")
+            LLVMBuildBr(g_builder, call_bb)
+            LLVMPositionBuilderAtEnd(g_builder, call_bb)
+            func = LLVMBuildLoad2(g_builder, fn_ptr_type, global, "dasbind_fptr_resolved")
+        }
+        return func
+    }
+
     def make_call(expr : smart_ptr<ExprCallFunc>; doesNotNeedSp : bool) {
         // lookup intrinsics first
         var intrin_call = lookup_intinsic(g_ctx, g_builder, types, expr, [for (x in expr.arguments); getE(x)])
@@ -1530,6 +1580,9 @@ class public LlvmJitVisitor : AstVisitor {
             } else {
                 var params <- build_call_params(expr, expr.func)
                 var (func, typ) = register_extern_function(expr)
+                if (is_dasbind_late(expr.func)) {
+                    func = resolve_late_bind(func, expr, typ)
+                }
                 if (expr.func.moreFlags.jitContextAndLineInfo) {
                     params |> push(get_context_param())
                     params |> push(get_line_info_ptr(expr.at))
@@ -6092,7 +6145,7 @@ class public ResolveExternVisitor : AstVisitor {
 
         if (expr.func.flags.builtIn) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
-            if (FUNC_PTR == null) {
+            if (FUNC_PTR == null && find(string(expr.func.name), "__dasbind__") < 0) {
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)}")
             }
             dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), FUNC_PTR)
@@ -6381,9 +6434,6 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                     var typ = g_fn_types[glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH]
                     vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
                     vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
-                    if (glob._type.isString) {
-                        vptr = LLVMBuildLoadData2Aligned(visitor.g_builder, type_to_llvm_type(glob._type), vptr, glob._type.alignOf, "global_var_r2v_{glob.name}")
-                    }
                 } else {
                     var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
                     let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
@@ -6544,7 +6594,7 @@ class public DisableJitVisitor : AstVisitor {
 
     def disable_builtin_call(expr : smart_ptr<ExprCallFunc>) {
         if (expr.func.flags.builtIn && !expr.func.flags.interopFn && get_builtin_function_address(expr.func) == null) {
-            if (!has_intrinsic(expr)) {
+            if (!has_intrinsic(expr) && !is_dasbind_late(expr.func)) {
                 to_log(LOG_WARNING, "LLVM JIT: unsupported builtin `{expr.func._module.name}::{expr.func.name}` at {expr.at}, falling back to interpreter.\n")
                 disable = true
             }

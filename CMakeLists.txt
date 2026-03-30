@@ -389,9 +389,15 @@ ENDMACRO()
 # Modules call this from their CMakeLists.txt for examples that
 # can run without GUI, audio, or user interaction.
 MACRO(ADD_EXAMPLE_RUN das_file)
-    MESSAGE("EXAMPLE_RUN ${das_file}")
-    LIST(APPEND DAS_EXAMPLES_TO_RUN ${das_file})
+    SET(_exe TRUE)
+    IF("${ARGN}" STREQUAL "FALSE")
+        SET(_exe FALSE)
+    ENDIF()
+    MESSAGE("EXAMPLE_RUN ${das_file} (exe=${_exe})")
+    LIST(APPEND DAS_EXAMPLES_TO_RUN "${das_file}|${_exe}")
 ENDMACRO()
+
+ADD_EXAMPLE_RUN("${PROJECT_SOURCE_DIR}/examples/dasbind/dasbind_example.das")
 
 FUNCTION(ADD_MODULE_CPP cpp)
     FILE(APPEND ${DAS_MODULES_NEED_INC}.temp "NEED_MODULE(Module_${cpp});\n")
@@ -437,11 +443,28 @@ ENDFOREACH()
 # Each example is executed with `daslang <file>` and must exit cleanly.
 IF(DAS_EXAMPLES_TO_RUN)
     SET(_run_example_commands)
-    FOREACH(_das ${DAS_EXAMPLES_TO_RUN})
+    FOREACH(_entry ${DAS_EXAMPLES_TO_RUN})
+        STRING(REPLACE "|" ";" _pair "${_entry}")
+        LIST(GET _pair 0 _das)
+        LIST(GET _pair 1 _do_exe)
+        STRING(MD5 _path_hash ${_das})
+        SET(_exe_dir $<TARGET_FILE_DIR:daslang>)
+        GET_FILENAME_COMPONENT(_example_name ${_das} NAME)
+        # Examples binaries are forced to be stored here to find
+        # `libDaScript.dll` on Windows.
+        SET(_out_path "${_exe_dir}/${_path_hash}_${_example_name}")
+
         LIST(APPEND _run_example_commands
             COMMAND ${CMAKE_COMMAND} -E echo "Running ${_das}"
             COMMAND $<TARGET_FILE:daslang> ${_das}
         )
+        IF(_do_exe)
+            LIST(APPEND _run_example_commands
+                COMMAND ${CMAKE_COMMAND} -E echo "Compiling to ${_out_path}"
+                COMMAND $<TARGET_FILE:daslang> -exe ${_das} -output ${_out_path}
+                COMMAND ${_out_path}.exe
+            )
+        ENDIF()
     ENDFOREACH()
     ADD_CUSTOM_TARGET(run_examples
         ${_run_example_commands}
