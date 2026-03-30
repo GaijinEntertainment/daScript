@@ -6,7 +6,7 @@ options no_unused_function_arguments = false
 
 module audio_boost shared private
 
-require audio
+require audio public
 require math
 require daslib/rtti
 
@@ -19,7 +19,7 @@ let public MAX_SPEED_OF_OBJECT = SPEED_OF_SOUND / 2.
 let private LOG2 = log(2.0)
 
 // audio config
-let public MA_SAMPLE_RATE = 48000
+// MA_SAMPLE_RATE is defined in the C++ audio module (from HRTF_SAMPLE_RATE CMake define, default 48000)
 let public MA_CHANNELS = 2
 let public MA_HRTF = true
 

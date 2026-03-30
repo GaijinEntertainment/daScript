@@ -13,23 +13,7 @@ inline float sqr(float x)
   return x * x;
 }
 
-static das_hash_map<int, minfft_aux *> fft_complex_aux_pointers;
-static das_hash_map<int, minfft_aux *> fft_real_aux_pointers;
-
 static_assert(sizeof(minfft_real) == sizeof(float), "sizeof(minfft_real) != sizeof(float), define MINFFT_SINGLE");
-
-typedef minfft_aux * (*fft_aux_fn)(int);
-
-inline minfft_aux * allocate_fft_aux(das_hash_map<int, minfft_aux *> & container, int n, fft_aux_fn fn)
-{
-  auto it = container.find(n);
-  if (it == container.end())
-  {
-    container[n] = fn(n);
-    it = container.find(n);
-  }
-  return it->second;
-}
 
 void fft_real_forward(const TArray<float> & real_signal, TArray<float2> & complex_frequencies, Context * context, LineInfoArg * at)
 {
@@ -39,12 +23,13 @@ void fft_real_forward(const TArray<float> & real_signal, TArray<float2> & comple
     return;
   }
 
-  minfft_aux * aux = allocate_fft_aux(fft_real_aux_pointers, real_signal.size, minfft_mkaux_realdft_1d);
+  minfft_aux * aux = minfft_mkaux_realdft_1d(real_signal.size);
   auto complexOutSize = real_signal.size / 2 + 1;
   if (complex_frequencies.size != complexOutSize)
     builtin_array_resize(complex_frequencies, complexOutSize, sizeof(float2), context, at);
 
   minfft_realdft((minfft_real *)real_signal.data, (minfft_cmpl *)complex_frequencies.data, aux);
+  minfft_free_aux(aux);
 }
 
 
@@ -103,12 +88,13 @@ void fft_real_inverse(const TArray<float2> & complex_frequencies, TArray<float> 
     return;
   }
 
-  minfft_aux * aux = allocate_fft_aux(fft_real_aux_pointers, p2 * 2, minfft_mkaux_realdft_1d);
+  minfft_aux * aux = minfft_mkaux_realdft_1d(p2 * 2);
   auto realOutSize = p2 * 2;
   if (complex_frequencies.size != realOutSize)
     builtin_array_resize(real_signal, realOutSize, sizeof(float), context, at);
 
   minfft_invrealdft((minfft_cmpl *)complex_frequencies.data, (minfft_real *)real_signal.data, aux);
+  minfft_free_aux(aux);
 }
 
 
@@ -152,4 +138,3 @@ REGISTER_DYN_MODULE(Module_Minfft,Module_Minfft);
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Minfft, das);
-

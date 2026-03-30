@@ -42,6 +42,10 @@
 
 #include "dasAudio.h"
 
+#ifndef HRTF_SAMPLE_RATE
+#define HRTF_SAMPLE_RATE 48000
+#endif
+
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -608,6 +612,8 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         addBuiltinDependency(lib, Module::require("rtti_core"));
+        // audio constants
+        addConstant<int>(*this, "MA_SAMPLE_RATE", HRTF_SAMPLE_RATE);
         // reverb
         addEnumeration(make_smart<EnumerationI3DL2Preset>());
         addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));

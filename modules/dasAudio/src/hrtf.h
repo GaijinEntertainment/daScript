@@ -1,7 +1,7 @@
 #ifndef hrtf_h
 #define hrtf_h
 
-#include <mit_hrtf_lib.h>
+#include <cipic_hrtf_lib.h>
 #include "minfft.h"
 
 #define HRTF_CROSSFADE 256
@@ -227,13 +227,16 @@ void ma_hrtf_init(ma_hrtf* hrtf, ma_uint32 sampleRate) {
         //         fft_time_scratch(N) + crossfade_buf(L*2) +
         //         left_input_hist(overlap) + right_input_hist(overlap)
         size_t short_bytes = (size_t)(M * 2) * sizeof(short);
+        // Round up to float alignment
+        size_t short_bytes_aligned = (short_bytes + sizeof(float) - 1) & ~(sizeof(float) - 1);
         size_t float_count = (size_t)(freq_size * 4) + N * 3 + freq_size + L * 2 + overlap_len * 2;
-        size_t total = short_bytes + float_count * sizeof(float);
+        size_t total = short_bytes_aligned + float_count * sizeof(float);
         hrtf->arena = calloc(1, total);
         char * ptr = (char *)hrtf->arena;
         hrtf->leftfip  = (short *)ptr; ptr += M * sizeof(short);
         hrtf->rightfip = (short *)ptr; ptr += M * sizeof(short);
-        // Align to float
+        // Align to float boundary
+        ptr = (char *)hrtf->arena + short_bytes_aligned;
         float * fptr = (float *)ptr;
         hrtf->filter_left_freq       = fptr; fptr += freq_size;
         hrtf->filter_right_freq      = fptr; fptr += freq_size;

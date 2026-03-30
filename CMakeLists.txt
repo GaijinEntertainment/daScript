@@ -1413,12 +1413,7 @@ install(FILES
     DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/crash
 )
 
-# Install minfft example
-install(FILES
-    ${PROJECT_SOURCE_DIR}/examples/minfft/main.das
-    ${PROJECT_SOURCE_DIR}/examples/minfft/.das_package
-    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/minfft
-)
+# Install minfft example (install rule is in modules/dasMinfft/CMakeLists.txt)
 
 file(GLOB DAS_DEBUGAPI_EXAMPLES
     ${PROJECT_SOURCE_DIR}/examples/debugapi/*.das

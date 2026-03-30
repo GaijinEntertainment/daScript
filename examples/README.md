@@ -128,19 +128,30 @@ Start the server, open `http://localhost:9090` in a browser,
 and/or run `ws_chat_client.das` in a terminal — all clients share the
 same chat room. See `examples/hv/README.md` for details.
 
-## minfft/ — FFT Example
+## audio/ — Audio Examples
 
-FFT (Fast Fourier Transform) example using the `das-minfft` daspkg package. Requires setup:
+Audio examples using the `dasAudio` module. Requires `DAS_AUDIO_DISABLED=OFF` and
+`DAS_GLFW_DISABLED=OFF` (for OpenGL-based examples).
 
 ```
-cd examples/minfft
-daslang.exe ../../utils/daspkg/main.das -- install
-daslang.exe main.das
+daslang.exe examples/audio/hrtf/main.das
+```
+
+| Directory | Description |
+|-----------|-------------|
+| `hrtf/main.das` | Interactive 3D HRTF demo — fly camera (WASD+mouse), sound sources as spheres, XZ grid. Press N to add a single source, M to add 30 sources in a ring (for stress testing) |
+
+## minfft/ — FFT Example
+
+FFT (Fast Fourier Transform) example using the built-in `dasMinfft` module. No setup required.
+
+```
+daslang.exe examples/minfft/main.das
 ```
 
 | File | Description |
 |------|-------------|
-| `main.das` | Compute FFT of a sine wave signal |
+| `main.das` | Compute FFT of a sine wave signal and print frequency bins |
 
 ## daspkg/ — Package Manager Examples
 
