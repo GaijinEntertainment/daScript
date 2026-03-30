@@ -791,7 +791,7 @@ namespace das {
         faf.MarkSideEffects(*thisModule);
     }
 
-    bool Program::optimizationUnused(TextWriter & logs, int round) {
+    bool Program::optimizationUnused(TextWriter & logs, int32_t round) {
         buildAccessFlags(logs);
         // remove itselft
         RemoveUnusedLocalVariables context(round);

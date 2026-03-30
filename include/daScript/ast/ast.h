@@ -1662,11 +1662,11 @@ namespace das
         void inferLint(TextWriter & logs);
         void checkSideEffects();
         void foldUnsafe();
-        bool optimizationRefFolding(int round);
-        bool optimizationConstFolding(int round);
-        bool optimizationBlockFolding(int round);
-        bool optimizationCondFolding(int round);
-        bool optimizationUnused(TextWriter & logs, int round);
+        bool optimizationRefFolding(int32_t round);
+        bool optimizationConstFolding(int32_t round);
+        bool optimizationBlockFolding(int32_t round);
+        bool optimizationCondFolding(int32_t round);
+        bool optimizationUnused(TextWriter & logs, int32_t round);
         void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
