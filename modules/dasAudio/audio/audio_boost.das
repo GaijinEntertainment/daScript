@@ -504,7 +504,7 @@ var g_head_position : float3
 var g_head_direction : float3 = float3(0., 1., 0.)
 var g_head_velocity : float3
 
-def update_hrtf(dt : float) {
+def update_hrtf(dt : float; nFrames : uint64) {
     for (ch in g_channels) {
         if (ch.is3D && !ch.stop) {
             var rxy = ch.position3d.xy - g_head_position.xy
@@ -521,10 +521,10 @@ def update_hrtf(dt : float) {
                 // panning
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
             }
-            // linear volume attenuation???
+            // volume attenuation — ramp over frame to avoid clicks
             let distance = length(ch.position3d - g_head_position)
             let attn = compute_attenuation(ch.attenuation, distance)
-            ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn)
+            ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), ch.volume * attn, nFrames)
             // doppler
             let vrel = g_head_velocity - ch.velocity3d
             let r = normalize(ch.position3d - g_head_position)
@@ -838,8 +838,8 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
             memset32(addr(data[0]), 0u, length(data))
         }
     } else {
-        update_hrtf(dt)
         let output_samples = length(data) / channels
+        update_hrtf(dt, uint64(output_samples))
         let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
         let current_samples = length(g_mix_buffer) / channels
         let missing_samples = input_samples - current_samples

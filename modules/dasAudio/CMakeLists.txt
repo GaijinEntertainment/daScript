@@ -48,6 +48,14 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	SETUP_AUDIO(libDasModuleAudio)
 	SETUP_AUDIO(dasModuleAudio)
 
+	# HRTF FFT convolution via dasMinfft (required dependency)
+	TARGET_INCLUDE_DIRECTORIES(libDasModuleAudio PRIVATE ${DAS_MINFFT_INCLUDE_DIR})
+	TARGET_COMPILE_DEFINITIONS(libDasModuleAudio PRIVATE MINFFT_SINGLE)
+	TARGET_LINK_LIBRARIES(libDasModuleAudio PUBLIC libDasModuleMinfft)
+	TARGET_INCLUDE_DIRECTORIES(dasModuleAudio PRIVATE ${DAS_MINFFT_INCLUDE_DIR})
+	TARGET_COMPILE_DEFINITIONS(dasModuleAudio PRIVATE MINFFT_SINGLE)
+	TARGET_LINK_LIBRARIES(dasModuleAudio PUBLIC libDasModuleMinfft)
+
     #ADD_MODULE_DAS(medialib medialib dasbox_AUDIO_utils)
 	ADD_MODULE_DAS(audio audio audio_boost)
 	ADD_MODULE_DAS(audio audio audio_wav)
