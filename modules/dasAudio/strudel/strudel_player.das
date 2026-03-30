@@ -522,6 +522,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
             set_audio_thread_command_channel(null)
         }
         cmd_ch |> release()
+        pb_box |> release()
         done_ch |> push(new StrudelCommand(shutdown = true))
         done_ch |> release()
     }
