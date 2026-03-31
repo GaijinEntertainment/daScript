@@ -432,7 +432,14 @@ def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>; 
         var zone = new SF2Zone()
         for (gi in range(gen_start, gen_end)) {
             if (gi < length(all_gens)) {
-                zone.generators |> push(all_gens[gi])
+                var gen = all_gens[gi]
+                // EMU8000 attenuation factor: initialAttenuation is multiplied by 0.4
+                // at load time. This compensates for EMU8000 hardware gain that most SF2
+                // editors calibrate against. Without this, attenuation values are too high.
+                if (gen.oper == int(SF2GenOper.initialAttenuation)) {
+                    gen.amount_i16 = int(float(gen.amount_i16) * 0.4)
+                }
+                zone.generators |> push(gen)
             }
         }
         for (mi in range(mod_start, mod_end)) {
@@ -664,13 +671,25 @@ def public sf2_find_zones(sf2 : SF2File; preset_index : int; key, velocity : int
             continue
         }
         let inst = sf2.instruments[inst_idx]
+        // SF2 spec: instrument zones inherit key/vel ranges from global zone
+        // when they don't specify their own. Intersect ranges accordingly.
+        let gi = inst.global_zone
+        let gi_key_lo = gi != null ? gi.key_lo : 0
+        let gi_key_hi = gi != null ? gi.key_hi : 127
+        let gi_vel_lo = gi != null ? gi.vel_lo : 0
+        let gi_vel_hi = gi != null ? gi.vel_hi : 127
         // find matching instrument zones
         for (iz_idx in range(length(inst.zones))) {
             let izone = inst.zones[iz_idx]
-            if (key < izone.key_lo || key > izone.key_hi) {
+            // intersect izone range with global zone range
+            let eff_key_lo = izone.key_lo > gi_key_lo ? izone.key_lo : gi_key_lo
+            let eff_key_hi = izone.key_hi < gi_key_hi ? izone.key_hi : gi_key_hi
+            let eff_vel_lo = izone.vel_lo > gi_vel_lo ? izone.vel_lo : gi_vel_lo
+            let eff_vel_hi = izone.vel_hi < gi_vel_hi ? izone.vel_hi : gi_vel_hi
+            if (key < eff_key_lo || key > eff_key_hi) {
                 continue
             }
-            if (velocity < izone.vel_lo || velocity > izone.vel_hi) {
+            if (velocity < eff_vel_lo || velocity > eff_vel_hi) {
                 continue
             }
             result |> push(int2(inst_idx, iz_idx))

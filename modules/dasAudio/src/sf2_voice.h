@@ -79,8 +79,9 @@ struct ma_sf2_voice {
     // envelopes
     ma_sf2_envelope vol_env;
     ma_sf2_envelope mod_env;
-    // filter
+    // filter (separate state for L and R channels in stereo voices)
     ma_sf2_biquad   filter;
+    ma_sf2_biquad   filter_r;   // right channel filter (stereo-linked only)
     float   initial_filter_fc;  // in cents
     float   initial_filter_q;   // in dB
     // modulation routing amounts
@@ -166,15 +167,13 @@ static void ma_sf2_envelope_next_segment ( ma_sf2_envelope * env, float sample_r
         env->samples_until_next = env->hold_sec * sample_rate;
         break;
     case MA_SF2_ENV_HOLD: {
+        // SF2 spec: decay ramps linearly from 1.0 to sustain_level.
+        // For vol env, the linear value is converted to amplitude via
+        // cb2amp(960*(1-val)) in the render — not here.
         float decay_samples = env->decay_sec * sample_rate;
         env->stage = MA_SF2_ENV_DECAY;
-        if ( env->is_amp_env && decay_samples > 0.0f ) {
-            env->slope = expf(-9.226f / decay_samples);
-            env->is_exponential = 1;
-        } else {
-            env->is_exponential = 0;
-            env->slope = decay_samples > 0.0f ? -1.0f / decay_samples : -1.0f;
-        }
+        env->is_exponential = 0;
+        env->slope = decay_samples > 0.0f ? -1.0f / decay_samples : -1.0f;
         break;
     }
     case MA_SF2_ENV_DECAY:
@@ -184,15 +183,12 @@ static void ma_sf2_envelope_next_segment ( ma_sf2_envelope * env, float sample_r
         env->is_exponential = 0;
         break;
     case MA_SF2_ENV_SUSTAIN: {
+        // SF2 spec: release ramps linearly from current level to 0.
+        // Rate is fixed: -1/release_samples per sample.
         float release_samples = env->release_sec * sample_rate;
         env->stage = MA_SF2_ENV_RELEASE;
-        if ( env->is_amp_env && release_samples > 0.0f ) {
-            env->slope = expf(-9.226f / release_samples);
-            env->is_exponential = 1;
-        } else {
-            env->is_exponential = 0;
-            env->slope = release_samples > 0.0f ? -env->level / release_samples : -1.0f;
-        }
+        env->is_exponential = 0;
+        env->slope = release_samples > 0.0f ? -1.0f / release_samples : -1.0f;
         break;
     }
     case MA_SF2_ENV_RELEASE:
@@ -222,13 +218,8 @@ void ma_sf2_envelope_release ( ma_sf2_envelope * env, float sample_rate ) {
     env->release_level = env->level;
     float release_samples = env->release_sec * sample_rate;
     env->stage = MA_SF2_ENV_RELEASE;
-    if ( env->is_amp_env && release_samples > 0.0f ) {
-        env->slope = expf(-9.226f / release_samples);
-        env->is_exponential = 1;
-    } else {
-        env->is_exponential = 0;
-        env->slope = release_samples > 0.0f ? -env->level / release_samples : -1.0f;
-    }
+    env->is_exponential = 0;
+    env->slope = release_samples > 0.0f ? -1.0f / release_samples : -1.0f;
 }
 
 float ma_sf2_envelope_tick ( ma_sf2_envelope * env, int released, float sample_rate ) {
@@ -342,7 +333,6 @@ int ma_sf2_voice_is_finished ( const ma_sf2_voice * voice ) {
 }
 
 #define MA_SF2_BLOCK_SIZE 64
-#define MA_SF2_CROSSFADE_LEN 64
 
 void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
                            float * output, int output_offset, int frame_count ) {
@@ -351,14 +341,12 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const float sr = voice->sample_rate;
     const float iSr = 1.0f / sr;
 
-    // pan law: sqrt(0.5 ± pan) for mono; for stereo-linked, pan acts as balance
+    // pan law: sqrt(0.5 ± pan) — same for mono and stereo-linked voices.
+    // SF2 stereo pairs have two zones (L panned -500, R panned +500).
+    // Each zone creates a stereo voice; pan ensures each voice only contributes
+    // to its correct channel, preventing 2x amplitude doubling.
     float l_gain, r_gain;
-    if ( voice->stereo ) {
-        // stereo-linked: both channels play, pan acts as balance (0 = neutral)
-        // SF2 zones set pan=-500(L)/ +500(R); we take from the L zone, so override to center
-        l_gain = voice->attenuation;
-        r_gain = voice->attenuation;
-    } else {
+    {
         float pan05 = voice->pan * 0.5f;
         if ( pan05 <= -0.5f )       { l_gain = voice->attenuation; r_gain = 0.0f; }
         else if ( pan05 >= 0.5f )   { l_gain = 0.0f; r_gain = voice->attenuation; }
@@ -383,8 +371,6 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const int loop_end = voice->loop_end;
     const int loop_len = loop_end - loop_start;
     const int do_loop = (loop_mode == 1 || loop_mode == 3) && loop_len > 0;
-    const int crossfade_len = (do_loop && loop_len > MA_SF2_CROSSFADE_LEN * 2) ? MA_SF2_CROSSFADE_LEN : 0;
-    const float inv_crossfade = crossfade_len > 0 ? 1.0f / (float)crossfade_len : 0.0f;
     const double base_phase_inc = voice->phase_inc;
     const float inv_32768 = 1.0f / 32768.0f;
     // stereo-linked right channel invariants
@@ -394,8 +380,6 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
     const int loop_start_r = voice->loop_start_r;
     const int loop_end_r = voice->loop_end_r;
     const int loop_len_r = loop_end_r - loop_start_r;
-    const int crossfade_len_r = (is_stereo && do_loop && loop_len_r > MA_SF2_CROSSFADE_LEN * 2) ? MA_SF2_CROSSFADE_LEN : 0;
-    const float inv_crossfade_r = crossfade_len_r > 0 ? 1.0f / (float)crossfade_len_r : 0.0f;
 
     int f = 0;
     while ( f < frame_count ) {
@@ -445,12 +429,24 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
             if ( has_mod_lfo_fc ) fres += voice->mod_lfo_to_filter_fc * mlfo;
             float fc_norm = fres <= 13500.0f ? ma_sf2_cents_to_hz((int)fres) / sr : 1.0f;
             voice->filter.active = fc_norm < 0.499f;
-            if ( voice->filter.active ) ma_sf2_biquad_setup(&voice->filter, fc_norm);
+            if ( voice->filter.active ) {
+                ma_sf2_biquad_setup(&voice->filter, fc_norm);
+                if ( is_stereo ) ma_sf2_biquad_setup(&voice->filter_r, fc_norm);
+            }
         }
 
-        // gain for this block
-        float gain_l = vol * l_gain;
-        float gain_r = vol * r_gain;
+        // gain for this block — SF2 spec amplitude mapping:
+        // Attack: linear ramp (envelope value used directly)
+        // Post-attack: envelope is linear 1.0→0.0, mapped via cb2amp(960*(1-val))
+        //   to get the spec-mandated "linear in dB" amplitude curve.
+        float vol_amp;
+        if ( voice->vol_env.stage <= MA_SF2_ENV_ATTACK ) {
+            vol_amp = vol;
+        } else {
+            vol_amp = powf(10.0f, -4.8f * (1.0f - vol));
+        }
+        float gain_l = vol_amp * l_gain;
+        float gain_r = vol_amp * r_gain;
         if ( has_tremolo ) {
             float trem = powf(10.0f, voice->mod_lfo_to_volume * mlfo / -200.0f);
             gain_l *= trem;
@@ -465,39 +461,42 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
             int pos_i = (int)voice->position;
             float frac = (float)(voice->position - (double)pos_i);
 
+            // ── Loop-aware sample fetch: wraps indices around loop boundaries ──
+            #define SF2_FETCH(sd, idx, ls, le, ll) \
+                ( ((idx) >= (le)) ? (float)(sd)[(ls) + ((idx) - (le)) % (ll)] * inv_32768 \
+                : ((idx) < (ls))  ? (float)(sd)[(le) - 1 - ((ls) - 1 - (idx)) % (ll)] * inv_32768 \
+                : ((idx) >= 0 && (idx) < sample_data_len) ? (float)(sd)[(idx)] * inv_32768 : 0.0f )
+
+            // ── Cubic interpolation with loop-aware boundary handling ──
+            #define SF2_INTERP(sd, idx, frac, ls, le, ll, at_boundary) do { \
+                float sm1, s0, s1, s2; \
+                if ( at_boundary ) { \
+                    sm1 = SF2_FETCH(sd, (idx) - 1, ls, le, ll); \
+                    s0  = SF2_FETCH(sd, (idx),     ls, le, ll); \
+                    s1  = SF2_FETCH(sd, (idx) + 1, ls, le, ll); \
+                    s2  = SF2_FETCH(sd, (idx) + 2, ls, le, ll); \
+                } else { \
+                    sm1 = ((idx) - 1 >= 0) ? (float)(sd)[(idx) - 1] * inv_32768 : (float)(sd)[(idx)] * inv_32768; \
+                    s0  = (float)(sd)[(idx)] * inv_32768; \
+                    s1  = ((idx) + 1 < sample_data_len) ? (float)(sd)[(idx) + 1] * inv_32768 : s0; \
+                    s2  = ((idx) + 2 < sample_data_len) ? (float)(sd)[(idx) + 2] * inv_32768 : s1; \
+                } \
+                float c0  = s0; \
+                float c1  = 0.5f * (s1 - sm1); \
+                float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2; \
+                float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1); \
+                interp_result = ((c3 * (frac) + c2) * (frac) + c1) * (frac) + c0; \
+            } while(0)
+
+            float interp_result;
+
             // ── left / mono channel interpolation ──
             int idx = sample_start + pos_i;
             float sample_l = 0.0f;
-            if ( idx >= 0 && idx + 1 < sample_data_len && idx + 1 < sample_end ) {
-                float sm1 = (idx - 1 >= 0) ? (float)sample_data[idx - 1] * inv_32768 : (float)sample_data[idx] * inv_32768;
-                float s0  = (float)sample_data[idx] * inv_32768;
-                float s1  = (float)sample_data[idx + 1] * inv_32768;
-                float s2  = (idx + 2 < sample_data_len) ? (float)sample_data[idx + 2] * inv_32768 : s1;
-                float c0  = s0;
-                float c1  = 0.5f * (s1 - sm1);
-                float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2;
-                float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1);
-                sample_l = ((c3 * frac + c2) * frac + c1) * frac + c0;
-                // crossfade near loop_end
-                if ( crossfade_len > 0 && looping_now ) {
-                    int dist = loop_end - idx;
-                    if ( dist >= 0 && dist < crossfade_len ) {
-                        float fade = (float)(crossfade_len - dist) * inv_crossfade;
-                        int wi = loop_start + (idx - (loop_end - crossfade_len));
-                        if ( wi >= loop_start && wi + 1 < sample_data_len ) {
-                            float wm1 = (wi - 1 >= 0) ? (float)sample_data[wi - 1] * inv_32768 : (float)sample_data[wi] * inv_32768;
-                            float w0  = (float)sample_data[wi] * inv_32768;
-                            float w1  = (float)sample_data[wi + 1] * inv_32768;
-                            float w2  = (wi + 2 < sample_data_len) ? (float)sample_data[wi + 2] * inv_32768 : w1;
-                            float wc0 = w0;
-                            float wc1 = 0.5f * (w1 - wm1);
-                            float wc2 = wm1 - 2.5f * w0 + 2.0f * w1 - 0.5f * w2;
-                            float wc3 = 0.5f * (w2 - wm1) + 1.5f * (w0 - w1);
-                            float wsample = ((wc3 * frac + wc2) * frac + wc1) * frac + wc0;
-                            sample_l = sample_l * (1.0f - fade) + wsample * fade;
-                        }
-                    }
-                }
+            if ( idx >= 0 && idx < sample_end ) {
+                int at_boundary = looping_now && (idx >= loop_start - 1) && (idx <= loop_start || idx + 2 >= loop_end);
+                SF2_INTERP(sample_data, idx, frac, loop_start, loop_end, loop_len, at_boundary);
+                sample_l = interp_result;
             } else if ( !looping_now ) {
                 voice->finished = 1;
                 goto done;
@@ -508,44 +507,20 @@ void ma_sf2_voice_render ( ma_sf2_voice * voice, const short * sample_data, int 
             if ( is_stereo ) {
                 int idx_r = sample_start_r + pos_i;
                 sample_r = 0.0f;
-                if ( idx_r >= 0 && idx_r + 1 < sample_data_len && idx_r + 1 < sample_end_r ) {
-                    float sm1 = (idx_r - 1 >= 0) ? (float)sample_data[idx_r - 1] * inv_32768 : (float)sample_data[idx_r] * inv_32768;
-                    float s0  = (float)sample_data[idx_r] * inv_32768;
-                    float s1  = (float)sample_data[idx_r + 1] * inv_32768;
-                    float s2  = (idx_r + 2 < sample_data_len) ? (float)sample_data[idx_r + 2] * inv_32768 : s1;
-                    float c0  = s0;
-                    float c1  = 0.5f * (s1 - sm1);
-                    float c2  = sm1 - 2.5f * s0 + 2.0f * s1 - 0.5f * s2;
-                    float c3  = 0.5f * (s2 - sm1) + 1.5f * (s0 - s1);
-                    sample_r = ((c3 * frac + c2) * frac + c1) * frac + c0;
-                    // crossfade near loop_end_r
-                    if ( crossfade_len_r > 0 && looping_now ) {
-                        int dist = loop_end_r - idx_r;
-                        if ( dist >= 0 && dist < crossfade_len_r ) {
-                            float fade = (float)(crossfade_len_r - dist) * inv_crossfade_r;
-                            int wi = loop_start_r + (idx_r - (loop_end_r - crossfade_len_r));
-                            if ( wi >= loop_start_r && wi + 1 < sample_data_len ) {
-                                float wm1 = (wi - 1 >= 0) ? (float)sample_data[wi - 1] * inv_32768 : (float)sample_data[wi] * inv_32768;
-                                float w0  = (float)sample_data[wi] * inv_32768;
-                                float w1  = (float)sample_data[wi + 1] * inv_32768;
-                                float w2  = (wi + 2 < sample_data_len) ? (float)sample_data[wi + 2] * inv_32768 : w1;
-                                float wc0 = w0;
-                                float wc1 = 0.5f * (w1 - wm1);
-                                float wc2 = wm1 - 2.5f * w0 + 2.0f * w1 - 0.5f * w2;
-                                float wc3 = 0.5f * (w2 - wm1) + 1.5f * (w0 - w1);
-                                float wsample = ((wc3 * frac + wc2) * frac + wc1) * frac + wc0;
-                                sample_r = sample_r * (1.0f - fade) + wsample * fade;
-                            }
-                        }
-                    }
+                if ( idx_r >= 0 && idx_r < sample_end_r ) {
+                    int at_boundary = looping_now && (idx_r >= loop_start_r - 1) && (idx_r <= loop_start_r || idx_r + 2 >= loop_end_r);
+                    SF2_INTERP(sample_data, idx_r, frac, loop_start_r, loop_end_r, loop_len_r, at_boundary);
+                    sample_r = interp_result;
                 }
             } else {
                 sample_r = sample_l;  // mono: same sample to both channels
             }
+            #undef SF2_INTERP
+            #undef SF2_FETCH
 
             if ( use_filter ) {
                 sample_l = ma_sf2_biquad_tick(&voice->filter, sample_l);
-                if ( is_stereo ) sample_r = ma_sf2_biquad_tick(&voice->filter, sample_r);
+                if ( is_stereo ) sample_r = ma_sf2_biquad_tick(&voice->filter_r, sample_r);
             }
 
             int ofs = output_offset + (f + s) * 2;

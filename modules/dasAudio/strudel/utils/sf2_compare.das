@@ -165,6 +165,9 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
     let preset = sf2.presets[preset_idx]
     var voices : array<ma_sf2_voice>
     var excl_classes : array<int>
+    var atten_state = SF2VoiceAttenState()
+    var cc_defaults : int[128]
+    sf2_default_cc_values(cc_defaults)
     for (z in zones) {
         var pzone : SF2Zone const?
         for (pz in preset.zones) {
@@ -175,7 +178,7 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
             }
         }
         var cv : ma_sf2_voice
-        if (sf2_create_c_voice(sf2, z.x, z.y, pzone, preset.global_zone, key, velocity, 0, cv)) {
+        if (sf2_create_c_voice(sf2, z.x, z.y, pzone, preset.global_zone, key, velocity, 0, cc_defaults, cv, atten_state)) {
             let excl = sf2_get_exclusive_class(sf2, z.x, z.y, pzone, preset.global_zone)
             if (excl > 0) {
                 for (i in range(length(voices))) {

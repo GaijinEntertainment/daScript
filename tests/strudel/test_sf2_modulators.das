@@ -199,10 +199,12 @@ def test_modulators_affect_voice(t : T?) {
         }
         // create voice at high velocity
         var voice_loud : ma_sf2_voice
-        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 127, 0, voice_loud)
+        var cc_defaults_1 : int[128]; sf2_default_cc_values(cc_defaults_1); var as_1 = SF2VoiceAttenState()
+        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 127, 0, cc_defaults_1, voice_loud, as_1)
         // create voice at low velocity
         var voice_soft : ma_sf2_voice
-        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 30, 0, voice_soft)
+        var as_2 = SF2VoiceAttenState()
+        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 30, 0, cc_defaults_1, voice_soft, as_2)
         // with 2445 modulators, velocity should significantly affect attenuation
         t |> success(voice_loud.attenuation > voice_soft.attenuation)
         if (voice_loud.attenuation > 0.001 && voice_soft.attenuation > 0.001) {
@@ -233,12 +235,13 @@ def test_default_modulators(t : T?) {
                 break
             }
         }
-        var v_loud : ma_sf2_voice
-        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 127, 0, v_loud)
-        var v_mid : ma_sf2_voice
-        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 64, 0, v_mid)
-        var v_soft : ma_sf2_voice
-        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 20, 0, v_soft)
+        var cc_def : int[128]; sf2_default_cc_values(cc_def)
+        var v_loud : ma_sf2_voice; var asl = SF2VoiceAttenState()
+        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 127, 0, cc_def, v_loud, asl)
+        var v_mid : ma_sf2_voice; var asm_ = SF2VoiceAttenState()
+        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 64, 0, cc_def, v_mid, asm_)
+        var v_soft : ma_sf2_voice; var ass_ = SF2VoiceAttenState()
+        sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 60, 20, 0, cc_def, v_soft, ass_)
         // velocity 127 > 64 > 20 in attenuation
         t |> success(v_loud.attenuation > v_mid.attenuation)
         t |> success(v_mid.attenuation > v_soft.attenuation)

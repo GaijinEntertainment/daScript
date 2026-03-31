@@ -98,6 +98,9 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
     let note_off_sample = int(durSec * float(SAMPLE_RATE))
     let cutGroup = event.cut
     let eventGain = event.gain * event.velocity
+    var atten_state = SF2VoiceAttenState()
+    var cc_defaults : int[128]
+    sf2_default_cc_values(cc_defaults)
     for (z in zones) {
         var pzone : SF2Zone const?
         for (pz in preset.zones) {
@@ -109,7 +112,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
         }
         let excl = sf2_get_exclusive_class(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
         var voice : ma_sf2_voice
-        if (sf2_create_c_voice(*sched.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, 0, voice)) {
+        if (sf2_create_c_voice(*sched.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, 0, cc_defaults, voice, atten_state)) {
             // exclusive class: quick-kill existing SF2 voices with same class
             if (excl > 0) {
                 for (i in range(length(sched.sf2_voices))) {

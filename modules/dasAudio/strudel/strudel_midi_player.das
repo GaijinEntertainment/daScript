@@ -171,14 +171,20 @@ struct MidiVoice {
 
 struct MidiChannelState {
     program    : int = 0
-    volume     : float = 1.0    // CC7
+    volume     : float = 1.0    // CC7 (linear 0-1, used for non-SF2 voices)
     pan        : float = 0.0    // CC10 (-1=left, 0=center, 1=right)
-    expression : float = 1.0    // CC11
+    expression : float = 1.0    // CC11 (linear 0-1, used for non-SF2 voices)
     sustain    : bool = false   // CC64 (sustain pedal)
     mod_wheel  : int = 0        // CC1 (0-127, mod wheel → vibrato depth)
     reverb     : float = 1.0    // CC91 (0.0-1.0, reverb send depth multiplier)
     chorus     : float = 1.0    // CC93 (0.0-1.0, chorus send depth multiplier)
     pitch_bend : float = 0.0    // pitch bend in semitones (-2..+2 default range)
+    // raw CC values for SF2 modulator re-evaluation (GM defaults)
+    cc_raw     : int[128]
+}
+
+def channel_init_cc(var ch : MidiChannelState) {
+    sf2_default_cc_values(ch.cc_raw)
 }
 
 // ─── Playback State (per track) ───
@@ -219,6 +225,7 @@ def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : 
     state.ticks_per_sec = double(state.ticks_per_qn) * 1000000.0lf / double(state.tempo_usec)
     for (ch in state.channels) {
         ch = MidiChannelState()
+        channel_init_cc(ch)
     }
 }
 
@@ -232,6 +239,7 @@ struct SF2VoiceMeta {
     sustain_held : bool = false
     reverb_send : float = 0.0
     chorus_send : float = 0.0
+    @safe_when_uninitialized atten_state : SF2VoiceAttenState  // for CC-driven attenuation recalculation
 }
 
 var private g_sf2_meta : array<SF2VoiceMeta>  // parallel to state.csf2_voices
@@ -260,14 +268,8 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
         }
     }
     let preset = state.sf2.presets[preset_idx]
+    var atten_state = SF2VoiceAttenState()
     for (z in zones) {
-        // skip rightSample zones — the paired leftSample zone handles both channels
-        let inst = state.sf2.instruments[z.x]
-        let izone = inst.zones[z.y]
-        let sid = get_generator(*izone, int(SF2GenOper.sampleID), -1)
-        if (sid >= 0 && sid < length(state.sf2.samples) && state.sf2.samples[sid].sample_type == SF2_SAMPLE_RIGHT) {
-            continue
-        }
         var pzone : SF2Zone const?
         for (pz in preset.zones) {
             let inst_gen = get_generator(*pz, int(SF2GenOper.instrument), -1)
@@ -278,7 +280,7 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
         }
         let excl = sf2_get_exclusive_class(*state.sf2, z.x, z.y, pzone, preset.global_zone)
         var voice : ma_sf2_voice
-        if (sf2_create_c_voice(*state.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, ch, voice)) {
+        if (sf2_create_c_voice(*state.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, ch, state.channels[ch].cc_raw, voice, atten_state)) {
             // exclusive class: quick-kill existing voices with same class
             if (excl > 0) {
                 for (i in range(length(state.csf2_voices))) {
@@ -290,7 +292,17 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
             let rsend = sf2_get_reverb_send(*state.sf2, z.x, z.y, pzone, preset.global_zone)
             let csend = sf2_get_chorus_send(*state.sf2, z.x, z.y, pzone, preset.global_zone)
             state.csf2_voices |> push(voice)
-            g_sf2_meta |> push(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend, chorus_send = csend))
+            g_sf2_meta |> emplace(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend, chorus_send = csend, atten_state <- atten_state))
+        }
+    }
+}
+
+// Recalculate attenuation for all active SF2 voices on a channel.
+// Called when CC7 or CC11 changes — re-evaluates the stored modulators with current CC values.
+def private sf2_recalc_channel_atten(var state : MidiPlaybackState; ch : int) {
+    for (i in range(length(state.csf2_voices))) {
+        if (g_sf2_meta[i].channel == ch && state.csf2_voices[i].finished == 0) {
+            state.csf2_voices[i].attenuation = sf2_recalc_atten(g_sf2_meta[i].atten_state, state.channels[ch].cc_raw)
         }
     }
 }
@@ -404,12 +416,17 @@ def process_events(var state : MidiPlaybackState) {
         } elif (ev.kind == MidiEventKind.midi_program_change) {
             state.channels[ch].program = ev.data1
         } elif (ev.kind == MidiEventKind.midi_control_change) {
+            // always update raw CC for SF2 modulator re-evaluation
+            state.channels[ch].cc_raw[ev.data1] = ev.data2
             if (ev.data1 == 7) {
                 state.channels[ch].volume = float(ev.data2) / 127.0
+                // recalculate attenuation for all active SF2 voices on this channel
+                sf2_recalc_channel_atten(state, ch)
             } elif (ev.data1 == 10) {
                 state.channels[ch].pan = (float(ev.data2) / 63.5) - 1.0
             } elif (ev.data1 == 11) {
                 state.channels[ch].expression = float(ev.data2) / 127.0
+                sf2_recalc_channel_atten(state, ch)
             } elif (ev.data1 == 1) {
                 state.channels[ch].mod_wheel = ev.data2
             } elif (ev.data1 == 91) {
@@ -576,7 +593,9 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
         if (state.csf2_voices[si].finished == 0) {
             let ch_idx = g_sf2_meta[si].channel
             let ch_state & = unsafe(state.channels[ch_idx])
-            let mix_gain = ch_state.volume * ch_state.expression * state.gain
+            // CC7 (volume) and CC11 (expression) are handled by SF2 modulators
+            // stored per-voice and recalculated on CC changes — only state.gain here.
+            let mix_gain = state.gain
             let reverb_send = g_sf2_meta[si].reverb_send * ch_state.reverb
             let chorus_send = g_sf2_meta[si].chorus_send * ch_state.chorus
             // temporarily scale attenuation for this chunk; set pitch bend + mod wheel + pan on voice
@@ -584,8 +603,12 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             let saved_vib_lfo = state.csf2_voices[si].vib_lfo_to_pitch
             let saved_pan = state.csf2_voices[si].pan
             state.csf2_voices[si].attenuation = saved_atten * mix_gain
-            // CC10 pan: override voice pan with channel state (stereo voices ignore pan in C render)
-            state.csf2_voices[si].pan = ch_state.pan
+            // CC10 pan: apply channel pan to mono voices only.
+            // Stereo-linked voices keep their zone pan (-1/+1) which the render uses
+            // to route L/R samples to the correct output channels.
+            if (state.csf2_voices[si].stereo == 0) {
+                state.csf2_voices[si].pan = ch_state.pan
+            }
             // pitch bend: semitones → cents, applied in C inner loop per block (smooth)
             state.csf2_voices[si].pitch_bend_cents = ch_state.pitch_bend * 100.0
             // mod wheel (CC1): adds up to 50 cents of vibrato depth (SF2 default modulator #2)
