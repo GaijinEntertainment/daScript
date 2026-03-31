@@ -42,6 +42,10 @@
 
 #include "dasAudio.h"
 
+#ifndef HRTF_SAMPLE_RATE
+#define HRTF_SAMPLE_RATE 48000
+#endif
+
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -548,15 +552,12 @@ struct MAHrtfAnnotation : ManagedStructureAnnotation<ma_hrtf> {
     MAHrtfAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("ma_hrtf", mlib, "ma_hrtf") {
         addField<DAS_BIND_MANAGED_FIELD(taps)>("taps","taps");
-        addField<DAS_BIND_MANAGED_FIELD(left)>("left","left");
-        addField<DAS_BIND_MANAGED_FIELD(right)>("right","right");
         addField<DAS_BIND_MANAGED_FIELD(azimuth)>("azimuth","azimuth");
         addField<DAS_BIND_MANAGED_FIELD(elevation)>("elevation","elevation");
         addField<DAS_BIND_MANAGED_FIELD(sampleRate)>("sampleRate","sampleRate");
-        addField<DAS_BIND_MANAGED_FIELD(mixbuffer)>("mixbuffer","mixbuffer");
-        addField<DAS_BIND_MANAGED_FIELD(mixsize)>("mixsize","mixsize");
         addField<DAS_BIND_MANAGED_FIELD(leftfip)>("leftfip","leftfip");
         addField<DAS_BIND_MANAGED_FIELD(rightfip)>("rightfip","rightfip");
+        addField<DAS_BIND_MANAGED_FIELD(fft_size)>("fft_size","fft_size");
     }
 };
 
@@ -611,6 +612,8 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
         addBuiltinDependency(lib, Module::require("rtti_core"));
+        // audio constants
+        addConstant<int>(*this, "MA_SAMPLE_RATE", HRTF_SAMPLE_RATE);
         // reverb
         addEnumeration(make_smart<EnumerationI3DL2Preset>());
         addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));
