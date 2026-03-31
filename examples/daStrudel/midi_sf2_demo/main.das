@@ -58,10 +58,10 @@ def main() {
         if (midi_play("music", path, [gain = 1.0, looping = true])) {
             print("playing 60 seconds (looping)...\n")
             sleep(60000u)
-            midi_shutdown()
-            print("done\n")
         } else {
             print("failed to load MIDI file\n")
         }
+        midi_shutdown()
+        print("done\n")
     }
 }
