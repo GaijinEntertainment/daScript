@@ -915,11 +915,13 @@ namespace das {
         vector<AnnotationPtr> ptr;
         string moduleName, annName;
         splitTypeName(name, moduleName, annName);
-        foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                findAnnotation(ptr, pm, annName, inWhichModule);
-            return true;
-        }, moduleName);
+        if ( moduleName!="_" && moduleName!="__") {
+            foreach([&](Module * pm) -> bool {
+                if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                    findAnnotation(ptr, pm, annName, inWhichModule);
+                return true;
+            }, moduleName);
+        }
         return ptr;
     }
 
@@ -927,12 +929,14 @@ namespace das {
         vector<TypeInfoMacroPtr> ptr;
         string moduleName, annName;
         splitTypeName(name, moduleName, annName);
-        foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                if ( auto pp = pm->findTypeInfoMacro(annName) )
-                    ptr.push_back(pp);
-            return true;
-        }, moduleName);
+        if ( moduleName!="_" && moduleName!="__") {
+            foreach([&](Module * pm) -> bool {
+                if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                    if ( auto pp = pm->findTypeInfoMacro(annName) )
+                        ptr.push_back(pp);
+                return true;
+            }, moduleName);
+        }
         return ptr;
     }
 
