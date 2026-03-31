@@ -15,6 +15,10 @@ def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
     var st : FStat
     // prefer larger soundfonts — more samples, better quality
+    let stolen = "{dir}/Stolen Soundfont v2.08.2 (rev.3).sf2"
+    if (stat(stolen, st)) {
+        return stolen
+    }
     let musyng = "{dir}/Musyng Kite.sf2"
     if (stat(musyng, st)) {
         return musyng
@@ -33,7 +37,7 @@ def find_sf2() : string {
 [export]
 def main() {
     let media = "{get_das_root()}/examples/media"
-    var path = "{media}/midi/take_five.mid"
+    var path = "{media}/midi/Bach_Air_on_G_string_BWV1068.mid"
     let args <- get_command_line_arguments()
     for (arg in args) {
         if (ends_with(arg, ".mid") || ends_with(arg, ".MID")) {

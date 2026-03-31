@@ -165,8 +165,9 @@ def test_voice_pitch(t : T?) {
                     break
                 }
             }
-            var cv : ma_sf2_voice
-            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 100, 0, cv)) {
+            var cc_def : int[128]; sf2_default_cc_values(cc_def)
+            var cv : ma_sf2_voice; var as_ = SF2VoiceAttenState()
+            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 100, 0, cc_def, cv, as_)) {
                 t |> success(cv.phase_inc > 0.1lf)
                 t |> success(cv.phase_inc < 4.0lf)
             }
@@ -186,9 +187,10 @@ def test_voice_pitch(t : T?) {
                         break
                     }
                 }
-                var cv_lo : ma_sf2_voice
-                var cv_hi : ma_sf2_voice
-                if (sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 55, 100, 0, cv_lo) && sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 67, 100, 0, cv_hi)) {
+                var cc_def2 : int[128]; sf2_default_cc_values(cc_def2)
+                var cv_lo : ma_sf2_voice; var asl = SF2VoiceAttenState()
+                var cv_hi : ma_sf2_voice; var ash = SF2VoiceAttenState()
+                if (sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 55, 100, 0, cc_def2, cv_lo, asl) && sf2_create_c_voice(*sf2, z.x, z.y, pzone, preset.global_zone, 67, 100, 0, cc_def2, cv_hi, ash)) {
                     let ratio = cv_hi.phase_inc / cv_lo.phase_inc
                     t |> roughly_equal(2.0, float(ratio), 0.01, "octave ratio: ")
                 }
@@ -287,8 +289,9 @@ def test_c_voice_render(t : T?) {
                     break
                 }
             }
-            var cv : ma_sf2_voice
-            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 127, 0, cv)) {
+            var cc3 : int[128]; sf2_default_cc_values(cc3)
+            var cv : ma_sf2_voice; var as3 = SF2VoiceAttenState()
+            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 127, 0, cc3, cv, as3)) {
                 var output : array<float>
                 output |> resize(2000)
                 unsafe {
@@ -314,8 +317,9 @@ def test_c_voice_render(t : T?) {
                     break
                 }
             }
-            var cv : ma_sf2_voice
-            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 127, 0, cv)) {
+            var cc4 : int[128]; sf2_default_cc_values(cc4)
+            var cv : ma_sf2_voice; var as4 = SF2VoiceAttenState()
+            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 60, 127, 0, cc4, cv, as4)) {
                 var output : array<float>
                 output |> resize(192000 * 2)  // 4 seconds
                 // render 1 second, then note-off, render 3 more seconds
@@ -340,8 +344,9 @@ def test_c_voice_render(t : T?) {
                     break
                 }
             }
-            var cv : ma_sf2_voice
-            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 36, 127, 9, cv)) {
+            var cc5 : int[128]; sf2_default_cc_values(cc5)
+            var cv : ma_sf2_voice; var as5 = SF2VoiceAttenState()
+            if (sf2_create_c_voice(*sf2, zones[0].x, zones[0].y, pzone, preset.global_zone, 36, 127, 9, cc5, cv, as5)) {
                 unsafe { ma_sf2_voice_end_quick(addr(cv)); }
                 var output : array<float>
                 output |> resize(96000)  // 1 second

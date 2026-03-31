@@ -30,7 +30,7 @@ def public sf2_velocity_attenuation(velocity : int) : float {
 // ─── Modulator Transform Curves ───
 
 // SF2 concave curve: (-200*2/960) * log10((127-i)/127) for i in 0..127
-// From SF2 spec page 73. FluidSynth uses the same formula.
+// From SF2 spec page 73.
 let private PEAK_ATTEN = 960.0
 
 def private sf2_concave(val : float) : float {
@@ -171,7 +171,7 @@ let private SF2_DEFAULT_MODS = fixed_array(
     // #1: velocity → attenuation (concave, negative, unipolar) — 960 cB
     SF2Modulator(src_oper = int(0x0502), amt_src_oper = 0, dest_oper = int(SF2GenOper.initialAttenuation), amount = 960, transform = 0),
     // #2: velocity → filter cutoff (linear, negative, unipolar; switch, unipolar, positive)
-    // FluidSynth disables this (returns 0). We follow FluidSynth.
+    // Not implemented (returns 0).
     SF2Modulator(src_oper = int(0x0102), amt_src_oper = int(0x0C02), dest_oper = int(SF2GenOper.initialFilterFc), amount = 0, transform = 0),
     // #3: channel pressure → vib LFO pitch (linear, positive, unipolar) — 50 cents
     SF2Modulator(src_oper = int(0x000D), amt_src_oper = 0, dest_oper = int(SF2GenOper.vibLfoToPitch), amount = 50, transform = 0),
@@ -478,11 +478,105 @@ def private get_gen(izone : SF2Zone; global_izone : SF2Zone const?; pzone : SF2Z
     return val
 }
 
+// Initialize CC values to GM defaults. Used by MidiChannelState and standalone voice creation.
+// CC7=100 (GM volume), CC10=64 (pan center), CC11=127 (expression max),
+// CC[127]=8192 (pitch wheel center — stored in last CC slot as placeholder for SF2 modulators).
+def public sf2_default_cc_values(var cc : int[128]) {
+    cc[7] = 100
+    cc[10] = 64
+    cc[11] = 127
+    cc[127] = 8192
+}
+
+// ─── Per-voice attenuation state for CC re-evaluation ───
+
+// Stores everything needed to recalculate attenuation when CC values change.
+// All modulators targeting initialAttenuation are
+// stored per voice and re-evaluated when CC7/CC11/etc. change.
+struct SF2VoiceAttenState {
+    base_atten_cb : int = 0           // generator initialAttenuation (centibels)
+    velocity : int = 127
+    key : int = 60
+    atten_mods : array<SF2Modulator>  // all modulators targeting initialAttenuation
+}
+
+// Collect all modulators that target initialAttenuation from all zone layers,
+// plus defaults that aren't overridden. This is called once at voice creation.
+def public sf2_collect_atten_modulators(izone : SF2Zone; global_izone : SF2Zone const?;
+                                        pzone : SF2Zone const?; global_pzone : SF2Zone const?) : array<SF2Modulator> {
+    var result : array<SF2Modulator>
+    let target = int(SF2GenOper.initialAttenuation)
+    // zone modulators
+    for (m in izone.modulators) {
+        if (m.dest_oper == target) {
+            result |> push(m)
+        }
+    }
+    if (global_izone != null) {
+        for (m in (*global_izone).modulators) {
+            if (m.dest_oper == target) {
+                result |> push(m)
+            }
+        }
+    }
+    if (pzone != null) {
+        for (m in (*pzone).modulators) {
+            if (m.dest_oper == target) {
+                result |> push(m)
+            }
+        }
+    }
+    if (global_pzone != null) {
+        for (m in (*global_pzone).modulators) {
+            if (m.dest_oper == target) {
+                result |> push(m)
+            }
+        }
+    }
+    // default modulators targeting attenuation (#1=velocity, #5=CC7, #7=CC11)
+    for (dm in SF2_DEFAULT_MODS) {
+        if (dm.amount == 0 || dm.dest_oper != target) {
+            continue
+        }
+        var overridden = sf2_zone_overrides(izone, dm)
+        if (!overridden && global_izone != null) {
+            overridden = sf2_zone_overrides(*global_izone, dm)
+        }
+        if (!overridden && pzone != null) {
+            overridden = sf2_zone_overrides(*pzone, dm)
+        }
+        if (!overridden && global_pzone != null) {
+            overridden = sf2_zone_overrides(*global_pzone, dm)
+        }
+        if (!overridden) {
+            result |> push(dm)
+        }
+    }
+    return <- result
+}
+
+// Recalculate voice attenuation from stored modulators + current CC values.
+// Called at voice creation and whenever CC7/CC11 change.
+def public sf2_recalc_atten(atten_state : SF2VoiceAttenState; cc_values : int[128]) : float {
+    var mod_sum = 0.0
+    for (m in atten_state.atten_mods) {
+        mod_sum += sf2_mod_get_value(m, atten_state.velocity, atten_state.key, cc_values)
+    }
+    var atten = centibels_to_linear(atten_state.base_atten_cb)
+    if (abs(mod_sum) > 0.01) {
+        atten *= centibels_to_linear(int(mod_sum))
+    }
+    return atten
+}
+
 // ─── C Voice Creation (populates ma_sf2_voice from SF2 generators) ───
 
 def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
                               pzone : SF2Zone const?; global_pzone : SF2Zone const?;
-                              note, velocity, channel : int; var out_voice : ma_sf2_voice) : bool {
+                              note, velocity, channel : int;
+                              cc_values : int[128];
+                              var out_voice : ma_sf2_voice;
+                              var out_atten_state : SF2VoiceAttenState) : bool {
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let global_izone = inst.global_zone
@@ -557,14 +651,19 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     let scale_tuning = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.scaleTuning), 100)
     let pitch_cents = float(note - root_key) * float(scale_tuning) + float(coarse_tune) * 100.0 + float(fine_tune)
     out_voice.phase_inc = double(float(shdr.sample_rate) / sr) * double(pow(2.0, pitch_cents / 1200.0))
+    // pitch correction from sample header (SF2 spec)
+    // (currently not used — pitch_correction is typically 0)
 
     // volume envelope
     out_voice.vol_env.delay_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.delayVolEnv), -12000))
     out_voice.vol_env.attack_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.attackVolEnv), -12000))
     out_voice.vol_env.hold_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.holdVolEnv), -12000))
     out_voice.vol_env.decay_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.decayVolEnv), -12000))
+    // SF2 spec: sustainVolEnv is centibels of attenuation below peak (0=full, 1000=silence).
+    // Store as linear fraction: 1.0 - cB/1000 (1.0=full, 0.0=silence).
+    // The render converts this via cb2amp(960*(1-val)) for the spec-mandated dB curve.
     let sustain_cb = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.sustainVolEnv), 0)
-    out_voice.vol_env.sustain_level = sustain_cb >= 1000 ? 0.0 : centibels_to_linear(sustain_cb)
+    out_voice.vol_env.sustain_level = clamp(1.0 - float(sustain_cb) / 1000.0, 0.0, 1.0)
     out_voice.vol_env.release_sec = timecents_to_seconds(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.releaseVolEnv), -12000))
     let key_to_hold = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.keynumToVolEnvHold), 0)
     let key_to_decay = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.keynumToVolEnvDecay), 0)
@@ -608,28 +707,29 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     out_voice.initial_filter_fc = filter_fc_cents
     out_voice.initial_filter_q = float(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.initialFilterQ), 0)) / 10.0
     out_voice.filter.q_inv = 1.0lf / pow(10.0lf, double(out_voice.initial_filter_q) / 20.0lf)
+    out_voice.filter_r.q_inv = out_voice.filter.q_inv
     let fc_hz = filter_fc_cents <= 13500.0 ? cents_to_hz(int(filter_fc_cents)) : sr * 0.5
     let fc_norm = fc_hz / sr
     out_voice.filter.active = fc_norm < 0.499 ? 1 : 0
     if (out_voice.filter.active != 0) {
         unsafe { ma_sf2_biquad_setup(addr(out_voice.filter), fc_norm); }
+        unsafe { ma_sf2_biquad_setup(addr(out_voice.filter_r), fc_norm); }
     }
 
     // volume — SF2 spec centibels + concave velocity curve
     let atten_raw = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.initialAttenuation), 0)
-    // velocity→attenuation is now handled by default modulator #1 (concave curve, 960 cB)
-    out_voice.attenuation = centibels_to_linear(atten_raw)
     out_voice.pan = clamp(float(get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.pan), 0)) / 500.0, -1.0, 1.0)
+    // Populate atten state for CC re-evaluation
+    out_atten_state.base_atten_cb = atten_raw
+    out_atten_state.velocity = velocity
+    out_atten_state.key = note
+    out_atten_state.atten_mods <- sf2_collect_atten_modulators(*izone, global_izone, pzone, global_pzone)
 
     // ─── Apply modulators ───
     // Compute modulator offsets from instrument zone, global instrument zone,
     // preset zone, and global preset zone. All offsets are additive to the
     // generator values already set above.
-    var cc_values : int[128]
-    // default CC values: CC7 (volume)=127, CC10 (pan)=64, CC11 (expression)=127
-    cc_values[7] = 127
-    cc_values[10] = 64
-    cc_values[11] = 127
+    // cc_values is passed by the caller (channel's current CC state).
     var gen_offsets : float[64]
     sf2_apply_modulators(*izone, velocity, note, cc_values, gen_offsets)
     if (global_izone != null) {
@@ -659,6 +759,7 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
         out_voice.filter.active = new_fc_norm < 0.499 ? 1 : 0
         if (out_voice.filter.active != 0) {
             unsafe { ma_sf2_biquad_setup(addr(out_voice.filter), new_fc_norm); }
+            unsafe { ma_sf2_biquad_setup(addr(out_voice.filter_r), new_fc_norm); }
         }
     }
     // Filter Q (centibels)
@@ -666,12 +767,12 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     if (abs(mod_q) > 0.01) {
         out_voice.initial_filter_q += mod_q / 10.0
         out_voice.filter.q_inv = 1.0lf / pow(10.0lf, double(out_voice.initial_filter_q) / 20.0lf)
+        out_voice.filter_r.q_inv = out_voice.filter.q_inv
     }
-    // Attenuation (centibels) — additive to existing
-    let mod_atten = gen_offsets[int(SF2GenOper.initialAttenuation)]
-    if (abs(mod_atten) > 0.01) {
-        out_voice.attenuation *= centibels_to_linear(int(mod_atten))
-    }
+    // Attenuation: use sf2_recalc_atten which evaluates all atten modulators
+    // (velocity, CC7, CC11, zone modulators) via the stored atten_mods.
+    // Non-attenuation modulators are still applied via gen_offsets above.
+    out_voice.attenuation = sf2_recalc_atten(out_atten_state, cc_values)
     // Pan (0.1% units, ±500 = ±full)
     let mod_pan = gen_offsets[int(SF2GenOper.pan)]
     if (abs(mod_pan) > 0.01) {

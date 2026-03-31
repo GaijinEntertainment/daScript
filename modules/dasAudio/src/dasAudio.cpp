@@ -463,6 +463,7 @@ struct MASF2VoiceAnnotation : ManagedStructureAnnotation<ma_sf2_voice> {
         addField<DAS_BIND_MANAGED_FIELD(vol_env)>("vol_env","vol_env");
         addField<DAS_BIND_MANAGED_FIELD(mod_env)>("mod_env","mod_env");
         addField<DAS_BIND_MANAGED_FIELD(filter)>("filter","filter");
+        addField<DAS_BIND_MANAGED_FIELD(filter_r)>("filter_r","filter_r");
         addField<DAS_BIND_MANAGED_FIELD(initial_filter_fc)>("initial_filter_fc","initial_filter_fc");
         addField<DAS_BIND_MANAGED_FIELD(initial_filter_q)>("initial_filter_q","initial_filter_q");
         addField<DAS_BIND_MANAGED_FIELD(mod_env_to_pitch)>("mod_env_to_pitch","mod_env_to_pitch");
