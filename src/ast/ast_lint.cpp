@@ -1000,6 +1000,22 @@ namespace das {
             tableLookupCollision.pop_back();
             return Visitor::visitBlockExpression(block,expr);
         }
+
+        virtual void preVisitBlockFinalExpression ( ExprBlock * block, Expression * expr ) override {
+            Visitor::preVisitBlockFinalExpression(block, expr);
+            tableLookupCollision.push_back(das_hash_set<uint64_t>());
+            if ( expr->rtti_isOp2() ) {
+                auto op2 = static_cast<ExprOp2 *>(expr);
+                if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
+                    program->error("top level no side effect operation " + op2->op, "", "",
+                        expr->at, CompilationError::top_level_no_sideeffect_operation);
+                }
+            }
+        }
+        virtual ExpressionPtr visitBlockFinalExpression (  ExprBlock * block, Expression * expr ) override {
+            tableLookupCollision.pop_back();
+            return Visitor::visitBlockFinalExpression(block,expr);
+        }
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
             // we look for table at, and check 'subexpr' of it, which is the table.

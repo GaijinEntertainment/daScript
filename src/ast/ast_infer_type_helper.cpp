@@ -1106,7 +1106,10 @@ namespace das {
                             }
                         }
                         auto vecType = swz->type->getVectorType(baseType, int(fields.size()));
-                        return program->makeConst(expr->at, make_smart<TypeDecl>(vecType), resData);
+                        auto constValue = program->makeConst(expr->at, make_smart<TypeDecl>(vecType), resData);
+                        constValue->type = make_smart<TypeDecl>(vecType);
+                        constValue->type->at = expr->at;
+                        return constValue;
                     }
                 }
             }

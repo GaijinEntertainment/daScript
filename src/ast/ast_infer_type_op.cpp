@@ -30,6 +30,11 @@ namespace das {
                     pop = "i_das_ptr_dec";
                 }
                 if (!pop.empty()) {
+                    if ( expr->subexpr->type->firstType->isAuto() ) {
+                        error("type is not fully inferred, fixed array dimension is unknown", "", "",
+                              expr->at, CompilationError::invalid_type);
+                        return Visitor::visit(expr);
+                    }
                     reportAstChanged();
                     auto popc = make_smart<ExprCall>(expr->at, pop);
                     auto stride = expr->subexpr->type->firstType->getSizeOf();
