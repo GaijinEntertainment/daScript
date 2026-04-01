@@ -157,9 +157,9 @@ from the compiled output, and do not need to be valid for the given types:
 .. code-block:: das
 
     def describe(a) {
-        static_if ( typeinfo(is_pointer type<a>) ) {
+        static_if ( typeinfo is_pointer(type<a>) ) {
             print("pointer\n")
-        } static_elif ( typeinfo(is_ref_type type<a>) ) {
+        } static_elif ( typeinfo is_ref_type(type<a>) ) {
             print("reference type\n")
         } else {
             print("value type\n")

@@ -1,1 +1,1 @@
-The ``[typeinfo_macro]`` structure annotation — registers an ``AstTypeInfoMacro`` subclass as a named macro that extends the ``typeinfo(name ...)`` built-in.
+The ``[typeinfo_macro]`` structure annotation — registers an ``AstTypeInfoMacro`` subclass as a named macro that extends the ``typeinfo name(...)`` built-in.

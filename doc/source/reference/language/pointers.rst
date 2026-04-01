@@ -306,10 +306,10 @@ Several ``typeinfo`` queries test pointer properties at compile time:
 
 .. code-block:: das
 
-    typeinfo(is_pointer p)       // true if p is a pointer type
-    typeinfo(is_smart_ptr p)     // true if p is a smart_ptr<T>
-    typeinfo(is_void_pointer p)  // true if p is void?
-    typeinfo(can_delete_ptr p)   // true if delete is valid for p
+    typeinfo is_pointer(p)       // true if p is a pointer type
+    typeinfo is_smart_ptr(p)     // true if p is a smart_ptr<T>
+    typeinfo is_void_pointer(p)  // true if p is void?
+    typeinfo can_delete_ptr(p)   // true if delete is valid for p
 
 .. _pointer_summary:
 
