@@ -201,8 +201,7 @@ jobs:
                 linux64)
                   cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
                     -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
-                  cd build
-                  ninja daslang daslang_static daslang-live
+                  cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                   ;;
                 *)
                   export CXXFLAGS="-Wno-elaborated-enum-base" # glfw module fails due to mac-os includes
@@ -211,8 +210,7 @@ jobs:
                     -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -DCMAKE_CXX_FLAGS="$CXXFLAGS" \
                     -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
 
-                  cd build
-                  ninja daslang daslang_static daslang-live
+                  cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                   ;;
               esac
               ;;
@@ -229,7 +227,7 @@ jobs:
             cmake)
               cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=${{ matrix.architecture == 32 && 'x86' || 'x64' }} -A ${{ matrix.architecture_string }} \
                 $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
-              cmake --build ./build --config ${{ matrix.cmake_preset }} --target daslang --target daslang_static --target daslang-live --parallel
+              cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
               ;;
           esac
 
