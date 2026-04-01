@@ -523,6 +523,7 @@ namespace das {
             pVar->type->ref = true;
             pVar->name = "_pod_inscope_temp_" + to_string(pVar->at.line) + "_" + to_string(pVar->at.column);
             pVar->init = expr->left->clone();
+            pVar->generated = true;
             pLet->variables.push_back(pVar);
             auto pCall = make_smart<ExprCall>(expr->at, "_::builtin_collect_local_and_zero");
             pCall->alwaysSafe = true;
