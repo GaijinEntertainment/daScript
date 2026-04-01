@@ -96,12 +96,6 @@ jobs:
 
           - target: windows
             release_target: windows
-            release_arch: x86
-            architecture: 32
-            architecture_string: Win32
-
-          - target: windows
-            release_target: windows
             release_arch: x86_64
             architecture: 64
             architecture_string: x64
@@ -133,6 +127,9 @@ jobs:
 
           - target: windows
             architecture: arm64
+
+          - target: windows
+            architecture: 32
 
     steps:
       - name: "SCM Checkout"
