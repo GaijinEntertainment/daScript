@@ -107,7 +107,7 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
 
 [typeinfo_macro(name="enum_length")]
 class TypeInfoGetEnumLength : AstTypeInfoMacro {
-    //! Implements typeinfo(enum_length EnumOrEnumType) which returns total number of elements in enumeration.
+    //! Implements typeinfo enum_length(EnumOrEnumType) which returns total number of elements in enumeration.
     def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
         //! returns number of enum values
         if (expr.typeexpr != null) {
@@ -125,7 +125,7 @@ class TypeInfoGetEnumLength : AstTypeInfoMacro {
 
 [typeinfo_macro(name="enum_names")]
 class TypeInfoGetEnumNames : AstTypeInfoMacro {
-    //! Implements typeinfo(enum_names EnumOrEnumType) which returns array of strings with enumValue names.
+    //! Implements typeinfo enum_names(EnumOrEnumType) which returns array of strings with enumValue names.
     def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
         //! returns array of enum value names
         if (expr.typeexpr == null) {

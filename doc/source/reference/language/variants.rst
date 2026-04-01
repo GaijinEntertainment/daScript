@@ -74,13 +74,13 @@ The index value for a specific case can be determined via the ``variant_index`` 
 
 .. code-block:: das
 
-    assert(typeinfo(variant_index<i_value> t)==0)
-    assert(typeinfo(variant_index<f_value> t)==1)
-    assert(typeinfo(variant_index<unknown_value> t)==-1) // compilation error
+    assert(typeinfo variant_index<i_value>(t)==0)
+    assert(typeinfo variant_index<f_value>(t)==1)
+    assert(typeinfo variant_index<unknown_value>(t)==-1) // compilation error
 
-    assert(typeinfo(safe_variant_index<i_value> t)==0)
-    assert(typeinfo(safe_variant_index<f_value> t)==1)
-    assert(typeinfo(safe_variant_index<unknown_value> t)==-1)
+    assert(typeinfo safe_variant_index<i_value>(t)==0)
+    assert(typeinfo safe_variant_index<f_value>(t)==1)
+    assert(typeinfo safe_variant_index<unknown_value>(t)==-1)
 
 Current case selection can be modified with the unsafe operation ``safe_variant_index``:
 

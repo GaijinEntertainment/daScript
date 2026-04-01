@@ -61,7 +61,7 @@ static_assert and concept_assert
 
 ``static_assert`` checks conditions at compile time::
 
-  static_assert(typeinfo(sizeof type<int>) == 4, "expected 4-byte int")
+  static_assert(typeinfo sizeof(type<int>) == 4, "expected 4-byte int")
 
 ``concept_assert`` works like ``static_assert`` but reports the error
 at the **caller's** line — useful inside generic functions::

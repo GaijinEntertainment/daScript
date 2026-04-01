@@ -291,7 +291,7 @@ From daslang code, mangled names can be obtained with ``typeinfo``:
    [export]
    def main() {
        // Function mangled name via @@
-       print("mangled: {typeinfo(mangled_name @@my_function)}\n")
+       print("mangled: {typeinfo mangled_name(@@my_function)}\n")
    }
 
 This is useful for debugging type signatures and verifying that C-side

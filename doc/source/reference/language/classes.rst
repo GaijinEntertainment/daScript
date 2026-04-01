@@ -637,7 +637,7 @@ Additionally, a function pointer is added for each member function:
 .. code-block:: das
 
     class Foo {
-        __rtti : void? = typeinfo(rtti_classinfo type<Foo>)
+        __rtti : void? = typeinfo rtti_classinfo(type<Foo>)
         __finalize : function<(self:Foo):void> = @@_::Foo'__finalize
         x : int = 0
         y : int = 0

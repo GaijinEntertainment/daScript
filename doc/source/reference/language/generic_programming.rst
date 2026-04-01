@@ -50,98 +50,98 @@ All ``typeinfo`` traits can operate on either an expression or a ``type<T>`` arg
 
 .. code-block:: das
 
-    typeinfo(sizeof type<float3>)       // 12
-    typeinfo(typename my_variable)      // type name of the variable
+    typeinfo sizeof(type<float3>)       // 12
+    typeinfo typename(my_variable)      // type name of the variable
 
 **Name and String Traits**
 
-* ``typeinfo(typename expr)`` — human-readable type name
-* ``typeinfo(fulltypename expr)`` — full type name with contracts (``const``, ``&``, etc.)
-* ``typeinfo(stripped_typename expr)`` — type name without ``const``/``temp``/``ref`` decorators
-* ``typeinfo(undecorated_typename expr)`` — type name without module prefix
-* ``typeinfo(modulename expr)`` — module name of the type
-* ``typeinfo(struct_name expr)`` — structure name (for struct/class types)
-* ``typeinfo(struct_modulename expr)`` — module name of the structure
+* ``typeinfo typename(expr)`` — human-readable type name
+* ``typeinfo fulltypename(expr)`` — full type name with contracts (``const``, ``&``, etc.)
+* ``typeinfo stripped_typename(expr)`` — type name without ``const``/``temp``/``ref`` decorators
+* ``typeinfo undecorated_typename(expr)`` — type name without module prefix
+* ``typeinfo modulename(expr)`` — module name of the type
+* ``typeinfo struct_name(expr)`` — structure name (for struct/class types)
+* ``typeinfo struct_modulename(expr)`` — module name of the structure
 
 **Size and Layout Traits**
 
-* ``typeinfo(sizeof expr)`` — size of the type in bytes
-* ``typeinfo(alignof expr)`` — alignment of the type
-* ``typeinfo(dim expr)`` — size of the first dimension (fixed-size arrays)
-* ``typeinfo(offsetof<field> expr)`` — byte offset of a field in a struct
-* ``typeinfo(vector_dim expr)`` — dimension of a vector type (e.g. 3 for ``float3``)
+* ``typeinfo sizeof(expr)`` — size of the type in bytes
+* ``typeinfo alignof(expr)`` — alignment of the type
+* ``typeinfo dim(expr)`` — size of the first dimension (fixed-size arrays)
+* ``typeinfo offsetof<field>(expr)`` — byte offset of a field in a struct
+* ``typeinfo vector_dim(expr)`` — dimension of a vector type (e.g. 3 for ``float3``)
 
 **Boolean Type-Query Traits**
 
-* ``typeinfo(is_pod expr)`` — true if plain-old-data
-* ``typeinfo(is_raw expr)`` — true if raw data (can be memcpy'd)
-* ``typeinfo(is_struct expr)`` — true if structure type
-* ``typeinfo(is_class expr)`` — true if class
-* ``typeinfo(is_handle expr)`` — true if handled (native-bound) type
-* ``typeinfo(is_ref expr)`` — true if passed/stored by reference
-* ``typeinfo(is_ref_type expr)`` — true if reference type by nature (array, table, etc.)
-* ``typeinfo(is_ref_value expr)`` — true if has explicit ``ref`` qualifier
-* ``typeinfo(is_const expr)`` — true if const-qualified
-* ``typeinfo(is_temp expr)`` — true if temporary-qualified
-* ``typeinfo(is_temp_type expr)`` — true if temporary type
-* ``typeinfo(is_pointer expr)`` — true if pointer type
-* ``typeinfo(is_smart_ptr expr)`` — true if smart pointer
-* ``typeinfo(is_void expr)`` — true if void
-* ``typeinfo(is_void_pointer expr)`` — true if void pointer
-* ``typeinfo(is_string expr)`` — true if string type
-* ``typeinfo(is_numeric expr)`` — true if numeric type
-* ``typeinfo(is_numeric_comparable expr)`` — true if numeric-comparable
-* ``typeinfo(is_vector expr)`` — true if vector type (``float2``/``int3``/etc.)
-* ``typeinfo(is_any_vector expr)`` — true if handled vector-template type
-* ``typeinfo(is_array expr)`` — true if ``array<T>``
-* ``typeinfo(is_table expr)`` — true if ``table<K;V>``
-* ``typeinfo(is_dim expr)`` — true if has any dimension (fixed-size array)
-* ``typeinfo(is_enum expr)`` — true if enumeration
-* ``typeinfo(is_bitfield expr)`` — true if bitfield
-* ``typeinfo(is_tuple expr)`` — true if tuple
-* ``typeinfo(is_variant expr)`` — true if variant
-* ``typeinfo(is_function expr)`` — true if function type
-* ``typeinfo(is_lambda expr)`` — true if lambda type
-* ``typeinfo(is_iterator expr)`` — true if iterator type
-* ``typeinfo(is_iterable expr)`` — true if can be iterated with ``for``
-* ``typeinfo(is_local expr)`` — true if local type
-* ``typeinfo(is_workhorse expr)`` — true if workhorse type
+* ``typeinfo is_pod(expr)`` — true if plain-old-data
+* ``typeinfo is_raw(expr)`` — true if raw data (can be memcpy'd)
+* ``typeinfo is_struct(expr)`` — true if structure type
+* ``typeinfo is_class(expr)`` — true if class
+* ``typeinfo is_handle(expr)`` — true if handled (native-bound) type
+* ``typeinfo is_ref(expr)`` — true if passed/stored by reference
+* ``typeinfo is_ref_type(expr)`` — true if reference type by nature (array, table, etc.)
+* ``typeinfo is_ref_value(expr)`` — true if has explicit ``ref`` qualifier
+* ``typeinfo is_const(expr)`` — true if const-qualified
+* ``typeinfo is_temp(expr)`` — true if temporary-qualified
+* ``typeinfo is_temp_type(expr)`` — true if temporary type
+* ``typeinfo is_pointer(expr)`` — true if pointer type
+* ``typeinfo is_smart_ptr(expr)`` — true if smart pointer
+* ``typeinfo is_void(expr)`` — true if void
+* ``typeinfo is_void_pointer(expr)`` — true if void pointer
+* ``typeinfo is_string(expr)`` — true if string type
+* ``typeinfo is_numeric(expr)`` — true if numeric type
+* ``typeinfo is_numeric_comparable(expr)`` — true if numeric-comparable
+* ``typeinfo is_vector(expr)`` — true if vector type (``float2``/``int3``/etc.)
+* ``typeinfo is_any_vector(expr)`` — true if handled vector-template type
+* ``typeinfo is_array(expr)`` — true if ``array<T>``
+* ``typeinfo is_table(expr)`` — true if ``table<K;V>``
+* ``typeinfo is_dim(expr)`` — true if has any dimension (fixed-size array)
+* ``typeinfo is_enum(expr)`` — true if enumeration
+* ``typeinfo is_bitfield(expr)`` — true if bitfield
+* ``typeinfo is_tuple(expr)`` — true if tuple
+* ``typeinfo is_variant(expr)`` — true if variant
+* ``typeinfo is_function(expr)`` — true if function type
+* ``typeinfo is_lambda(expr)`` — true if lambda type
+* ``typeinfo is_iterator(expr)`` — true if iterator type
+* ``typeinfo is_iterable(expr)`` — true if can be iterated with ``for``
+* ``typeinfo is_local(expr)`` — true if local type
+* ``typeinfo is_workhorse(expr)`` — true if workhorse type
 
 **Capability Traits**
 
-* ``typeinfo(can_copy expr)`` — true if the type can be copied
-* ``typeinfo(can_move expr)`` — true if the type can be moved
-* ``typeinfo(can_clone expr)`` — true if the type can be cloned
-* ``typeinfo(can_clone_from_const expr)`` — true if can be cloned from a const source
-* ``typeinfo(can_new expr)`` — true if can be heap-allocated with ``new``
-* ``typeinfo(can_delete expr)`` — true if can be deleted
-* ``typeinfo(can_delete_ptr expr)`` — true if pointer can be deleted
-* ``typeinfo(can_be_placed_in_container expr)`` — true if valid for arrays/tables
-* ``typeinfo(need_delete expr)`` — true if requires explicit deletion
-* ``typeinfo(need_inscope expr)`` — true if needs ``inscope`` lifetime management
-* ``typeinfo(has_nontrivial_ctor expr)`` — true if has non-trivial constructor
-* ``typeinfo(has_nontrivial_dtor expr)`` — true if has non-trivial destructor
-* ``typeinfo(has_nontrivial_copy expr)`` — true if has non-trivial copy semantics
-* ``typeinfo(is_unsafe_when_uninitialized expr)`` — true if unsafe when uninitialized
+* ``typeinfo can_copy(expr)`` — true if the type can be copied
+* ``typeinfo can_move(expr)`` — true if the type can be moved
+* ``typeinfo can_clone(expr)`` — true if the type can be cloned
+* ``typeinfo can_clone_from_const(expr)`` — true if can be cloned from a const source
+* ``typeinfo can_new(expr)`` — true if can be heap-allocated with ``new``
+* ``typeinfo can_delete(expr)`` — true if can be deleted
+* ``typeinfo can_delete_ptr(expr)`` — true if pointer can be deleted
+* ``typeinfo can_be_placed_in_container(expr)`` — true if valid for arrays/tables
+* ``typeinfo need_delete(expr)`` — true if requires explicit deletion
+* ``typeinfo need_inscope(expr)`` — true if needs ``inscope`` lifetime management
+* ``typeinfo has_nontrivial_ctor(expr)`` — true if has non-trivial constructor
+* ``typeinfo has_nontrivial_dtor(expr)`` — true if has non-trivial destructor
+* ``typeinfo has_nontrivial_copy(expr)`` — true if has non-trivial copy semantics
+* ``typeinfo is_unsafe_when_uninitialized(expr)`` — true if unsafe when uninitialized
 
 **Field and Annotation Traits** (see also :ref:`Annotations <annotations>`)
 
-* ``typeinfo(has_field<name> expr)`` — true if the struct/handle has a field named ``name``
-* ``typeinfo(safe_has_field<name> expr)`` — same as above, but returns false instead of error
-* ``typeinfo(has_annotation<name> expr)`` — true if the struct has annotation ``name``
-* ``typeinfo(has_annotation_argument<name> expr)`` — true if annotation has argument ``name``
-* ``typeinfo(safe_has_annotation_argument<name> expr)`` — returns false instead of error
-* ``typeinfo(annotation_argument<name> expr)`` — returns the value of an annotation argument
-* ``typeinfo(variant_index<name> expr)`` — returns the index of a variant field
-* ``typeinfo(safe_variant_index<name> expr)`` — returns -1 instead of error
+* ``typeinfo has_field<name>(expr)`` — true if the struct/handle has a field named ``name``
+* ``typeinfo safe_has_field<name>(expr)`` — same as above, but returns false instead of error
+* ``typeinfo has_annotation<name>(expr)`` — true if the struct has annotation ``name``
+* ``typeinfo has_annotation_argument<name>(expr)`` — true if annotation has argument ``name``
+* ``typeinfo safe_has_annotation_argument<name>(expr)`` — returns false instead of error
+* ``typeinfo annotation_argument<name>(expr)`` — returns the value of an annotation argument
+* ``typeinfo variant_index<name>(expr)`` — returns the index of a variant field
+* ``typeinfo safe_variant_index<name>(expr)`` — returns -1 instead of error
 
 **Existence Checks**
 
-* ``typeinfo(builtin_function_exists expr)`` — true if a ``@@function`` exists
-* ``typeinfo(builtin_annotation_exists expr)`` — true if an annotation type exists
-* ``typeinfo(builtin_module_exists expr)`` — true if a module is loaded
-* ``typeinfo(is_argument expr)`` — true if the expression is a function argument
-* ``typeinfo(mangled_name expr)`` — returns the mangled name of a ``@@function``
+* ``typeinfo builtin_function_exists(expr)`` — true if a ``@@function`` exists
+* ``typeinfo builtin_annotation_exists(expr)`` — true if an annotation type exists
+* ``typeinfo builtin_module_exists(expr)`` — true if a module is loaded
+* ``typeinfo is_argument(expr)`` — true if the expression is a function argument
+* ``typeinfo mangled_name(expr)`` — returns the mangled name of a ``@@function``
 
 **User-Defined Traits**
 

@@ -80,7 +80,7 @@ Assertions
 
     .. code-block:: das
 
-        static_assert(typeinfo(is_pod type<Foo>), "Foo must be POD")
+        static_assert(typeinfo is_pod(type<Foo>), "Foo must be POD")
 
 .. das:function:: concept_assert(x, str)
 
@@ -91,7 +91,7 @@ Assertions
     .. code-block:: das
 
         def sort_array(var a : auto(TT)[]) {
-            concept_assert(typeinfo(is_numeric type<TT>), "sort_array requires numeric type")
+            concept_assert(typeinfo is_numeric(type<TT>), "sort_array requires numeric type")
             sort(a)
         }
 
@@ -162,17 +162,17 @@ Memory & Type Utilities
 
         let address = intptr(some_ptr)
 
-.. das:function:: typeinfo(trait expression)
+.. das:function:: typeinfo trait(expression)
 
     Provides compile-time type information about an expression or a ``type<T>`` argument.
     Used extensively in generic programming:
 
     .. code-block:: das
 
-        typeinfo(sizeof type<float3>)       // 12
-        typeinfo(typename type<int>)        // "int"
-        typeinfo(is_pod type<int>)          // true
-        typeinfo(has_field<x> myStruct)     // true if myStruct has field x
+        typeinfo sizeof(type<float3>)       // 12
+        typeinfo typename(type<int>)        // "int"
+        typeinfo is_pod(type<int>)          // true
+        typeinfo has_field<x>(myStruct)     // true if myStruct has field x
 
     (see :ref:`Generic Programming <generic_programming>` for a full list of typeinfo traits).
 

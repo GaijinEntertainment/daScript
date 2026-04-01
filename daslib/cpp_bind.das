@@ -73,7 +73,7 @@ def log_cpp_class_adapter(cpp_file : file; name : string; cinfo : TypeDeclPtr) {
     //! Generates C++ class adapter for the Daslang class.
     //! Intended use::
     //!
-    //!     log_cpp_class_adapter(cppFileNameDotInc, "daslangClassName", typeinfo(ast_typedecl type<daslangClassName>))
+    //!     log_cpp_class_adapter(cppFileNameDotInc, "daslangClassName", typeinfo ast_typedecl(type<daslangClassName>))
     assert(cinfo.isClass, "can only make adapter out of a class")
     var methods : array<tuple<name : string; index : int>>
     var inscope types : array<TypeDeclPtr>

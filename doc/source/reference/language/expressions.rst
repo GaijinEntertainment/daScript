@@ -728,10 +728,10 @@ used in generic functions to inspect argument types:
 
 .. code-block:: das
 
-    typeinfo(typename type<int>)        // returns "int" at compile time
-    typeinfo(sizeof type<float3>)       // returns 12
-    typeinfo(is_pod type<int>)          // returns true
-    typeinfo(has_field<x> myStruct)     // returns true if myStruct has field x
+    typeinfo typename(type<int>)        // returns "int" at compile time
+    typeinfo sizeof(type<float3>)       // returns 12
+    typeinfo is_pod(type<int>)          // returns true
+    typeinfo has_field<x>(myStruct)     // returns true if myStruct has field x
 
 (see :ref:`Generic Programming <generic_programming>` for a complete list of typeinfo traits).
 
