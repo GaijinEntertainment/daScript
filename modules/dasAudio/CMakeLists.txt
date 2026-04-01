@@ -92,11 +92,11 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
         PATTERN "*.das"
     )
 
-    file(GLOB DAS_AUDIO_EXAMPLES
-        ${PROJECT_SOURCE_DIR}/modules/dasAudio/examples/*.*
+    file(GLOB DAS_AUDIO_MEDIA
+        ${PROJECT_SOURCE_DIR}/examples/media/audio/*.*
     )
-    install(FILES ${DAS_AUDIO_EXAMPLES}
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/audio
+    install(FILES ${DAS_AUDIO_MEDIA}
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media/audio
     )
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/audio/

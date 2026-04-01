@@ -113,6 +113,27 @@ SET(AOT_LIVE_HOST_MODULE_FILES
     modules/dasLiveHost/live/live_vars.das
 )
 
+# AOT for strudel/audio module library files (required by strudel tests)
+SET(AOT_STRUDEL_MODULE_FILES)
+IF(NOT DAS_AUDIO_DISABLED)
+    SET(AOT_STRUDEL_MODULE_FILES
+        modules/dasAudio/audio/audio_boost.das
+        modules/dasAudio/audio/audio_wav.das
+        modules/dasAudio/strudel/strudel_event.das
+        modules/dasAudio/strudel/strudel_time.das
+        modules/dasAudio/strudel/strudel_pattern.das
+        modules/dasAudio/strudel/strudel_mini.das
+        modules/dasAudio/strudel/strudel_synth.das
+        modules/dasAudio/strudel/strudel_samples.das
+        modules/dasAudio/strudel/strudel_scheduler.das
+        modules/dasAudio/strudel/strudel_sf2.das
+        modules/dasAudio/strudel/strudel_sf2_voice.das
+        modules/dasAudio/strudel/strudel_midi.das
+        modules/dasAudio/strudel/strudel_midi_player.das
+        modules/dasAudio/strudel/strudel_player.das
+    )
+ENDIF()
+
 # AOT for strudel test files (audio-independent only; audio-dependent tests
 # require dasAudio which may be disabled in CI)
 SET(AOT_STRUDEL_FILES
@@ -123,9 +144,44 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_mini.das
         tests/strudel/test_pattern.das
         tests/strudel/test_midi_player.das
+        tests/strudel/test_midi_extended.das
         tests/strudel/test_samples.das
         tests/strudel/test_sequencer.das
+        tests/strudel/test_sf2.das
+        tests/strudel/test_sf2_voice.das
+        tests/strudel/test_sf2_modulators.das
     )
+ENDIF()
+
+# AOT for dasPUGIXML module library files
+SET(AOT_PUGIXML_MODULE_FILES)
+IF(NOT DAS_PUGIXML_DISABLED)
+    SET(AOT_PUGIXML_MODULE_FILES
+        modules/dasPUGIXML/daslib/PUGIXML_boost.das
+    )
+ENDIF()
+
+# AOT for dasPUGIXML test files
+SET(AOT_PUGIXML_FILES)
+IF(NOT DAS_PUGIXML_DISABLED)
+    FILE(GLOB AOT_PUGIXML_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasPUGIXML/*.das")
+ENDIF()
+
+# AOT for dasHV module library files
+SET(AOT_DASHV_MODULE_FILES)
+IF(NOT DAS_HV_DISABLED)
+    SET(AOT_DASHV_MODULE_FILES
+        modules/dasHV/dashv/dashv_boost.das
+        tests/dasHV/_dashv_test_common.das
+    )
+ENDIF()
+
+# AOT for dasHV test files
+SET(AOT_DASHV_FILES)
+IF(NOT DAS_HV_DISABLED)
+    FILE(GLOB AOT_DASHV_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasHV/*.das")
+    # Exclude module files (compiled via DAS_AOT_LIB)
+    list(FILTER AOT_DASHV_FILES EXCLUDE REGEX "/_")
 ENDIF()
 
 # AOT for dynamic_cast_rtti test files
@@ -309,9 +365,41 @@ add_custom_target(test_aot_live_host_modules)
 SET(LIVE_HOST_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LIVE_HOST_MODULE_FILES}" LIVE_HOST_MODULES_AOT_GENERATED_SRC test_aot_live_host_modules daslang)
 
+add_custom_target(test_aot_strudel_modules)
+SET(STRUDEL_MODULES_AOT_GENERATED_SRC)
+IF(NOT DAS_AUDIO_DISABLED)
+    DAS_AOT_LIB("${AOT_STRUDEL_MODULE_FILES}" STRUDEL_MODULES_AOT_GENERATED_SRC test_aot_strudel_modules daslang)
+ENDIF()
+
 add_custom_target(test_aot_strudel)
 SET(STRUDEL_AOT_GENERATED_SRC)
-DAS_AOT("${AOT_STRUDEL_FILES}" STRUDEL_AOT_GENERATED_SRC test_aot_strudel daslang)
+IF(NOT DAS_AUDIO_DISABLED)
+    DAS_AOT("${AOT_STRUDEL_FILES}" STRUDEL_AOT_GENERATED_SRC test_aot_strudel daslang)
+ENDIF()
+
+add_custom_target(test_aot_pugixml_modules)
+SET(PUGIXML_MODULES_AOT_GENERATED_SRC)
+IF(NOT DAS_PUGIXML_DISABLED)
+    DAS_AOT_LIB("${AOT_PUGIXML_MODULE_FILES}" PUGIXML_MODULES_AOT_GENERATED_SRC test_aot_pugixml_modules daslang)
+ENDIF()
+
+add_custom_target(test_aot_pugixml)
+SET(PUGIXML_AOT_GENERATED_SRC)
+IF(NOT DAS_PUGIXML_DISABLED)
+    DAS_AOT("${AOT_PUGIXML_FILES}" PUGIXML_AOT_GENERATED_SRC test_aot_pugixml daslang)
+ENDIF()
+
+add_custom_target(test_aot_dashv_modules)
+SET(DASHV_MODULES_AOT_GENERATED_SRC)
+IF(NOT DAS_HV_DISABLED)
+    DAS_AOT_LIB("${AOT_DASHV_MODULE_FILES}" DASHV_MODULES_AOT_GENERATED_SRC test_aot_dashv_modules daslang)
+ENDIF()
+
+add_custom_target(test_aot_dashv)
+SET(DASHV_AOT_GENERATED_SRC)
+IF(NOT DAS_HV_DISABLED)
+    DAS_AOT("${AOT_DASHV_FILES}" DASHV_AOT_GENERATED_SRC test_aot_dashv daslang)
+ENDIF()
 
 add_custom_target(test_aot_dynamic_cast_rtti)
 SET(DYNAMIC_CAST_RTTI_AOT_GENERATED_SRC)
@@ -482,6 +570,11 @@ SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" STRUDEL_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" PUGIXML_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" PUGIXML_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DASHV_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DASHV_AOT_GENERATED_SRC)
 
 # Build the test_aot executable using the same main.cpp as daslang
 add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
@@ -534,7 +627,12 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DECS_MODULES_AOT_GENERATED_SRC}
     ${STBIMAGE_AOT_GENERATED_SRC}
     ${STBIMAGE_MODULES_AOT_GENERATED_SRC}
+    ${STRUDEL_MODULES_AOT_GENERATED_SRC}
     ${STRUDEL_AOT_GENERATED_SRC}
+    ${PUGIXML_MODULES_AOT_GENERATED_SRC}
+    ${PUGIXML_AOT_GENERATED_SRC}
+    ${DASHV_MODULES_AOT_GENERATED_SRC}
+    ${DASHV_AOT_GENERATED_SRC}
 )
 TARGET_LINK_LIBRARIES(test_aot libDaScriptAot ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(test_aot libDaScriptAot
@@ -560,8 +658,10 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_daslib_modules test_aot_decs_modules
     test_aot_stbimage test_aot_stbimage_modules
     test_aot_strudel
+    test_aot_pugixml test_aot_pugixml_modules
+    test_aot_dashv test_aot_dashv_modules
 )
-target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${CIPIC_HRTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft)
+target_include_directories(test_aot PRIVATE ${NEED_MODULES_PATH} ${PROJECT_SOURCE_DIR}/modules/dasUnitTest ${PROJECT_SOURCE_DIR}/modules/dasLiveHost/src ${AUDIO_INCLUDE_DIR} ${CIPIC_HRTF_INCLUDE_DIR} ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft ${PROJECT_SOURCE_DIR}/modules/dasPUGIXML/pugixml ${PROJECT_SOURCE_DIR}/modules/dasHV/hv/include)
 target_compile_definitions(test_aot PRIVATE DAS_TEST_AOT MINFFT_SINGLE HRTF_SAMPLE_RATE=${DAS_AUDIO_SAMPLE_RATE})
 SETUP_CPP11(test_aot)
 SETUP_LTO(test_aot)

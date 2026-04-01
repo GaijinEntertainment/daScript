@@ -2,12 +2,14 @@ options gen2
 options indenting = 4
 
 module audio_wav shared private
+//! WAV file reading and writing (16-bit PCM format).
 
 require daslib/fio
 require math
 require strings
 
 def public read_wav(fname : string; var samples : array<float>&; var sample_rate : int&; var channels : int&) : bool {
+    //! Read a WAV file into float samples. Returns true on success. Sets sample_rate and channels.
     var raw : array<uint8>
     fopen(fname, "rb") $(f) {
         if (f != null) {
@@ -99,6 +101,7 @@ def read_wav_u32(data : array<uint8>; var cursor : int&) : uint {
 }
 
 def public write_wav(fname : string; samples : array<float>; sample_rate : uint = 44100u; channels : int = 2) {
+    //! Write float samples as a 16-bit PCM WAV file.
     fopen(fname, "wb") $(f) {
         if (f == null) {
             return

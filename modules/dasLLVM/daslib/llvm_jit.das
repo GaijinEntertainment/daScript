@@ -5420,7 +5420,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprConstBitfield
     def override visitExprConstBitfield(expr : smart_ptr<ExprConstBitfield>) : ExpressionPtr {
-        setE(expr, LLVMConstInt(base_type_to_llvm_type(expr._type.baseType), expr.getValue, 0))
+        setE(expr, LLVMConstInt(base_type_to_llvm_type(expr._type.baseType), uint64(expr.value), 0))
         return expr
     }
 
@@ -5799,7 +5799,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var tibit = LLVMBuildZExtOrBitCast(g_builder, tsrc, types.t_int32, "int_bit")
                 var tbit = LLVMBuildBitCast(g_builder, tibit, types.t_float, "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, types.ConstI32(0ul), "return_result")
-            } elif (bt == Type.tInt64 || bt == Type.tUInt64 || bt == Type.tEnumeration64 || bt == Type.tBitfield64) {
+            } elif (bt == Type.tInt64 || bt == Type.tUInt64) {
                 var vvec = LLVMGetUndef(LLVMVectorType(types.t_int64, 2u))
                 var vsrc = LLVMBuildInsertElement(g_builder, vvec, tsrc, types.ConstI32(0ul), "int64_vec")
                 tres = LLVMBuildBitCast(g_builder, vsrc, types.LLVMFloat4Type(), "return_result")

@@ -103,6 +103,14 @@ namespace das {
     bool pugiTextSetDouble ( pugi::xml_text & text, double value );
     bool pugiTextSetFloat ( pugi::xml_text & text, float value );
     bool pugiTextSetBool ( pugi::xml_text & text, bool value );
+    bool pugiTextSetInt8 ( pugi::xml_text & text, int8_t value );
+    bool pugiTextSetUint8 ( pugi::xml_text & text, uint8_t value );
+    bool pugiTextSetInt16 ( pugi::xml_text & text, int16_t value );
+    bool pugiTextSetUint16 ( pugi::xml_text & text, uint16_t value );
+    bool pugiTextSetInt64 ( pugi::xml_text & text, int64_t value );
+    bool pugiTextSetUint64 ( pugi::xml_text & text, uint64_t value );
+    int64_t pugiText_as_int64 ( const pugi::xml_text & text, int64_t def );
+    uint64_t pugiText_as_uint64 ( const pugi::xml_text & text, uint64_t def );
     pugi::xml_node pugiTextData ( const pugi::xml_text & text );
 
     // xpath

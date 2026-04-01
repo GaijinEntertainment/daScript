@@ -315,6 +315,10 @@ MA_API ma_uint64 dasAudio_ma_resampler_get_expected_output_frame_count(const ma_
     return outputFrameCount;
 }
 
+MA_API ma_result dasAudio_ma_decoder_init_memory(const void* pData, ma_uint64 dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder) {
+    return ma_decoder_init_memory(pData, (size_t)dataSize, pConfig, pDecoder);
+}
+
 MA_API ma_uint64 dasAudio_ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder) {
     ma_uint64 frameCount = 0;
     ma_decoder_get_length_in_pcm_frames(pDecoder, &frameCount);
@@ -736,8 +740,8 @@ public:
             SideEffects::none, "ma_decoder_config_init")->args({"outputFormat", "outputChannels", "outputSampleRate"});
         addExtern<DAS_BIND_FUN(ma_decoder_config_init_default),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_decoder_config_init_default",
             SideEffects::none, "ma_decoder_config_init_default");
-        addExtern<DAS_BIND_FUN(ma_decoder_init_memory)>(*this, lib, "ma_decoder_init_memory",
-            SideEffects::modifyArgumentAndExternal, "ma_decoder_init_memory")->args({"pData", "dataSize", "config", "decoder"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_decoder_init_memory)>(*this, lib, "ma_decoder_init_memory",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_ma_decoder_init_memory")->args({"pData", "dataSize", "config", "decoder"});
         addExtern<DAS_BIND_FUN(ma_decoder_init_file)>(*this, lib, "ma_decoder_init_file",
             SideEffects::modifyArgumentAndExternal, "ma_decoder_init_file")->args({"pFilePath", "config", "decoder"});
         addExtern<DAS_BIND_FUN(ma_decoder_uninit)>(*this, lib, "ma_decoder_uninit",

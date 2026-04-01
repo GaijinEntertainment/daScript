@@ -207,6 +207,7 @@ struct MidiPlaybackState {
     gain           : float = 1.0
     target_gain    : float = 1.0
     fade_speed     : float = 0.0
+    remove_when_silent : bool = false
     done           : bool = false
     mixer          : ma_volume_mixer
     mixer_ready    : bool = false
@@ -791,6 +792,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                     if (tracks[k].name == name) {
                         tracks[k].target_gain = 0.0
                         tracks[k].fade_speed = 2.0  // fade out over 0.5s
+                        tracks[k].remove_when_silent = true
                     }
                     k --
                 }
@@ -865,7 +867,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                 }
             }
             // remove done or faded-out tracks
-            if (track.done || (track.gain <= 0.001 && track.target_gain <= 0.001 && track.fade_speed == 0.0)) {
+            if (track.done || (track.remove_when_silent && track.gain <= 0.001 && track.target_gain <= 0.001 && track.fade_speed == 0.0)) {
                 unsafe { delete tracks[ii]; }
                 tracks |> erase(ii)
             }

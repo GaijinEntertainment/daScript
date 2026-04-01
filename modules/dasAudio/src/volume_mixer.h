@@ -11,6 +11,8 @@ struct ma_volume_mixer {
     float dvolume;
     float tvolume;
     float pan;
+    float dpan;
+    float tpan;
     uint32_t nChannels;
 };
 
@@ -47,6 +49,8 @@ void ma_volume_mixer_init ( ma_volume_mixer * mixer, uint32_t nChannels ) {
     mixer->dvolume = 0.0f;
     mixer->tvolume = 1.0f;
     mixer->pan = 0.0f;
+    mixer->dpan = 0.0f;
+    mixer->tpan = 0.0f;
     mixer->nChannels = nChannels;
 }
 
@@ -65,12 +69,37 @@ void ma_volume_mixer_set_volume ( ma_volume_mixer * mixer, float volume ) {
 }
 
 void ma_volume_mixer_set_pan ( ma_volume_mixer * mixer, float pan ) {
-    mixer->pan = pan;
+    // smooth over ~2ms (96 samples at 48kHz) to avoid clicks
+    float dp = pan - mixer->pan;
+    if ( dp == 0.0f ) {
+        mixer->dpan = 0.0f;
+        mixer->tpan = pan;
+    } else {
+        mixer->dpan = dp / 96.0f;
+        mixer->tpan = pan;
+    }
 }
 
 void ma_volume_mixer_set_volume_over_time ( ma_volume_mixer * mixer, float volume, uint64_t nFrames ) {
     mixer->dvolume = (volume - mixer->volume) / float(nFrames);
     mixer->tvolume = volume;
+}
+
+static inline void ma_volume_mixer_advance_pan ( ma_volume_mixer * mixer ) {
+    if ( mixer->dpan > 0.0f ) {
+        mixer->pan = ma_min(mixer->pan + mixer->dpan, mixer->tpan);
+        if ( mixer->pan >= mixer->tpan ) { mixer->pan = mixer->tpan; mixer->dpan = 0.0f; }
+    } else if ( mixer->dpan < 0.0f ) {
+        mixer->pan = ma_max(mixer->pan + mixer->dpan, mixer->tpan);
+        if ( mixer->pan <= mixer->tpan ) { mixer->pan = mixer->tpan; mixer->dpan = 0.0f; }
+    }
+}
+
+static inline void ma_volume_mixer_pan_lr ( float pan, float volume, float & volumeL, float & volumeR ) {
+    pan = ma_max(ma_min(pan,1.0f),-1.0f);
+    float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+    volumeL = volume * cosf(angle);
+    volumeR = volume * sinf(angle);
 }
 
 void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float * InFrames, float * OutFrames, uint64_t nFrames ) {
@@ -81,13 +110,21 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
             OutFrames[i] += InFrames[i] * volume;
         }
     } else if ( nChannels==2 ) {
-        float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
-        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
-        float volumeL = volume * cosf(angle);
-        float volumeR = volume * sinf(angle);
-        for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
+        if ( mixer->dpan == 0.0f ) {
+            float volumeL, volumeR;
+            ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
+            }
+        } else {
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                float volumeL, volumeR;
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
+                ma_volume_mixer_advance_pan(mixer);
+            }
         }
     } else if ( nChannels==4 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
@@ -110,20 +147,29 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
-    float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
             volume = ma_max(volume+dvolume,tvolume);
         }
     } else if ( nChannels==2 ) {
-        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
-        float panL = cosf(angle);
-        float panR = sinf(angle);
-        for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volume * panL;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volume * panR;
-            volume = ma_max(volume+dvolume,tvolume);
+        if ( mixer->dpan == 0.0f ) {
+            float volumeL, volumeR;
+            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR);
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                OutFrames[i*2+0] += InFrames[i*2+0] * volume * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volume * volumeR;
+                volume = ma_max(volume+dvolume,tvolume);
+            }
+        } else {
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                float volumeL, volumeR;
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
+                volume = ma_max(volume+dvolume,tvolume);
+                ma_volume_mixer_advance_pan(mixer);
+            }
         }
     } else if ( nChannels==4 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
@@ -150,20 +196,29 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
-    float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
             volume = ma_min(volume+dvolume,tvolume);
         }
     } else if ( nChannels==2 ) {
-        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
-        float panL = cosf(angle);
-        float panR = sinf(angle);
-        for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volume * panL;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volume * panR;
-            volume = ma_min(volume+dvolume,tvolume);
+        if ( mixer->dpan == 0.0f ) {
+            float volumeL, volumeR;
+            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR);
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                OutFrames[i*2+0] += InFrames[i*2+0] * volume * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volume * volumeR;
+                volume = ma_min(volume+dvolume,tvolume);
+            }
+        } else {
+            for ( uint64_t i=0; i!=nFrames; ++i ) {
+                float volumeL, volumeR;
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
+                OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
+                volume = ma_min(volume+dvolume,tvolume);
+                ma_volume_mixer_advance_pan(mixer);
+            }
         }
     } else if ( nChannels==4 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {

@@ -2,6 +2,9 @@ options gen2
 options indenting = 4
 
 module strudel_midi shared public
+//! MIDI Standard File (.mid) parser.
+//! Reads format 0 and format 1 MIDI files, extracts note events, control changes,
+//! program changes, pitch bend, and tempo information.
 
 require daslib/fio
 require daslib/algorithm
@@ -9,40 +12,63 @@ require math
 
 // ─── Data Structures ───
 
+//! MIDI event type discriminator.
 enum MidiEventKind {
     midi_note_off
+        //! Note released.
     midi_note_on
+        //! Note pressed (velocity > 0) or released (velocity == 0).
     midi_control_change
+        //! Controller value change (CC). data1 = controller number, data2 = value.
     midi_program_change
+        //! Instrument/program change. data1 = program number.
     midi_pitch_bend
+        //! Pitch bend. data1 = LSB, data2 = MSB (14-bit value, 8192 = center).
     midi_tempo
+        //! Tempo change (meta event). tempo field = microseconds per quarter note.
     midi_end_of_track
+        //! End of track marker.
     midi_other
+        //! Unrecognized or unsupported MIDI event.
 }
 
+//! A single MIDI event with absolute tick position.
 struct MidiEvent {
     tick    : int           // absolute tick position
+        //! Absolute tick position within the track.
     kind    : MidiEventKind
+        //! Event type.
     channel : int           // 0-15
+        //! MIDI channel (0-15).
     data1   : int           // note number / controller number
+        //! First data byte (note number, controller number, or program number).
     data2   : int           // velocity / controller value / program number
+        //! Second data byte (velocity, controller value, or pitch bend MSB).
     tempo   : int           // microseconds per quarter note (for tempo events)
+        //! Microseconds per quarter note (only valid for midi_tempo events).
     seq     : int           // original order within track (for stable sort tiebreaking)
+        //! Sequence number for stable sort ordering.
 }
 
+//! A sequence of MIDI events forming one track.
 struct MidiTrack {
     events : array<MidiEvent>
 }
 
+//! Parsed MIDI file containing header info and tracks.
 struct MidiFile {
     format       : int      // 0, 1, or 2
+        //! MIDI format (0 = single track, 1 = multi-track synchronous, 2 = multi-track asynchronous).
     ticks_per_qn : int      // ticks per quarter note (division)
+        //! Ticks per quarter note (time resolution).
     tracks       : array<MidiTrack>
+        //! Array of tracks.
 }
 
 // ─── Binary Readers ───
 
 def read_byte(data : array<uint8>; var cursor : int&) : int {
+    //! Read a single byte from data at cursor, advancing cursor. Returns -1 on EOF.
     if (cursor >= length(data)) {
         return -1
     }
@@ -52,6 +78,7 @@ def read_byte(data : array<uint8>; var cursor : int&) : int {
 }
 
 def read_u16(data : array<uint8>; var cursor : int&) : int {
+    //! Read a big-endian 16-bit unsigned integer. Returns -1 on EOF.
     let hi = read_byte(data, cursor)
     let lo = read_byte(data, cursor)
     if (hi < 0 || lo < 0) {
@@ -61,6 +88,7 @@ def read_u16(data : array<uint8>; var cursor : int&) : int {
 }
 
 def read_u32(data : array<uint8>; var cursor : int&) : int {
+    //! Read a big-endian 32-bit unsigned integer. Returns -1 on EOF.
     let b0 = read_byte(data, cursor)
     let b1 = read_byte(data, cursor)
     let b2 = read_byte(data, cursor)
@@ -74,6 +102,7 @@ def read_u32(data : array<uint8>; var cursor : int&) : int {
 // ─── Variable-Length Quantity ───
 
 def read_vlq(data : array<uint8>; var cursor : int&) : int {
+    //! Read a MIDI variable-length quantity (up to 4 bytes). Returns -1 on EOF.
     var result = 0
     for (_ in range(4)) {
         let b = read_byte(data, cursor)
@@ -91,6 +120,7 @@ def read_vlq(data : array<uint8>; var cursor : int&) : int {
 // ─── Track Parser ───
 
 def parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
+    //! Parse a single MTrk chunk starting at cursor, returning the track with all events.
     var track : MidiTrack
     // expect "MTrk"
     if (cursor + 4 > length(data)) {
@@ -251,6 +281,7 @@ def parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
 // ─── File Parser ───
 
 def parse_midi(data : array<uint8>) : MidiFile {
+    //! Parse MIDI data from a byte array into a MidiFile structure.
     var result : MidiFile
     if (length(data) < 14) {
         return <- result
@@ -284,6 +315,7 @@ def parse_midi(data : array<uint8>) : MidiFile {
 // ─── File Loading ───
 
 def load_midi(path : string) : MidiFile {
+    //! Load and parse a MIDI file from disk.
     var data : array<uint8>
     fopen(path, "rb") $(f) {
         if (f != null) {
@@ -300,6 +332,7 @@ def load_midi(path : string) : MidiFile {
 // ─── Track Merging ───
 
 def merge_tracks(midi : MidiFile) : array<MidiEvent> {
+    //! Merge all tracks into a single sorted event list for sequential playback.
     var merged : array<MidiEvent>
     var total = 0
     for (track in midi.tracks) {

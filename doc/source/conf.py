@@ -60,7 +60,7 @@ author = u'Boris Batkin @* Anton Yudintsev'
 # built documents.
 #
 # The short X.Y version.
-version = u'0.6'
+version = u'0.6.1'
 # The full version, including alpha/beta/rc tags.
 release = u'0.6.1'
 

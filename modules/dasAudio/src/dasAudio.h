@@ -4,6 +4,7 @@
 #include "sf2_voice.h"
 #include "hrtf.h"
 #include "reverb.h"
+#include "chorus.h"
 
 namespace das {
     bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context );
@@ -15,6 +16,7 @@ namespace das {
     MA_API ma_uint64 dasAudio_ma_resampler_get_required_input_frame_count(const ma_resampler* pResampler, ma_uint64 outputFrameCount);
     MA_API ma_uint64 dasAudio_ma_resampler_get_expected_output_frame_count(const ma_resampler* pResampler, ma_uint64 inputFrameCount);
     void dasAudio_disableLinearResamplerFiltering ( ma_resampler_config * config );
+    MA_API ma_result dasAudio_ma_decoder_init_memory(const void* pData, ma_uint64 dataSize, const ma_decoder_config* pConfig, ma_decoder* pDecoder);
     MA_API ma_uint64 dasAudio_ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder);
     MA_API ma_uint64 dasAudio_ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount);
 
@@ -23,4 +25,11 @@ namespace das {
     void dasAudio_process ( I3DL2Reverb * reverb, float * buffer, float * outBuffer, int nSamples, Context * context, LineInfoArg * at );
     void dasAudio_processMono ( I3DL2Reverb * reverb, float * buffer, float * outBuffer, int nSamples, Context * context, LineInfoArg * at );
     I3DL2ReverbProperties & dasAudio_getReverbPreset ( I3DL2Preset preset, Context * context, LineInfoArg * at );
+
+    Context & dasAudio_mixerContext ( Context * context, LineInfoArg * at );
+
+    void dasAudio_chorusInit ( ma_chorus * chorus, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_chorusProcess ( ma_chorus * chorus, float * input, float * output, int nSamples, Context * context, LineInfoArg * at );
+    void dasAudio_chorusSetConfig ( ma_chorus * chorus, const ma_chorus_config & config, Context * context, LineInfoArg * at );
+    ma_chorus_config dasAudio_chorusConfigDefault ( );
 }
