@@ -332,3 +332,5 @@ Run it with::
    :ref:`stdlib_soa` — SOA module reference.
 
    Previous tutorial: :ref:`tutorial_async`
+
+   Next tutorial: :ref:`tutorial_delegate`

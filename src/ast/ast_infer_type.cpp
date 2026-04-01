@@ -5353,6 +5353,15 @@ namespace das {
                     mks->useInitializer = true;
                     mks->alwaysUseInitializer = true;
                     return mks;
+                } else if (aliasT->isStructure() && aliasT->structType) {
+                    // this is Blah(args...) where Blah is a typedef for a struct — promote to StructName(args...)
+                    auto structName = aliasT->structType->name;
+                    if (structName != expr->name) {
+                        reportAstChanged();
+                        auto newCall = expr->clone();
+                        static_cast<ExprCall *>(newCall.get())->name = structName;
+                        return newCall;
+                    }
                 }
             }
         }

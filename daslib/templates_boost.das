@@ -777,6 +777,42 @@ class private QRulesVisitor : AstVisitor {
             arg.name := new_tag_name
         }
     }
+    def override preVisitFunctionArgument(fun : FunctionPtr; var arg : VariablePtr; lastArg : bool) : void {
+        //! Visits function argument and processes variable/argument-list tags (mirrors preVisitExprBlockArgument).
+        if (arg.flags.tag) {
+            if (arg.source == null) {
+                compiling_program() |> macro_error(arg.at, "argument '{arg.name}' of function must have tag source")
+                failed = true
+                return
+            }
+            let new_tag_name = "temp`var`{tag_index++}`{arg.at.line}`{arg.at.column}"
+            rblock.list |> emplace_new <| new ExprCall(at = arg.at,
+                name := "renameVariable",
+                arguments := array<ExpressionPtr>(
+                    new ExprVar(at = arg.at, name := "rules"),
+                    new ExprConstString(at = arg.at, value := new_tag_name) |> generatedExpr(),
+                    clone_expression(arg.source) |> generatedExpr()
+                ))
+            arg.name := new_tag_name
+            arg.flags ^= VariableFlags.tag
+            arg.source := null
+        } elif (arg._type.flags.isTag && arg._type.baseType == Type.none) {
+            if (arg.init == null) {
+                compiling_program() |> macro_error(arg.at, "argument '{arg.name}' of function must have initializer")
+                failed = true
+                return
+            }
+            let new_tag_name = "temp`var`{tag_index++}`{arg.at.line}`{arg.at.column}"
+            rblock.list |> emplace_new <| new ExprCall(at = arg.at,
+                name := "replaceArgumentWithList",
+                arguments := array<ExpressionPtr>(
+                    new ExprVar(at = arg.at, name := "rules"),
+                    new ExprConstString(at = arg.at, value := new_tag_name) |> generatedExpr(),
+                    clone_expression(arg.init) |> generatedExpr()
+                ))
+            arg.name := new_tag_name
+        }
+    }
     def override preVisitExprFor(var expr : smart_ptr<ExprFor>) : void {
         //! Visits for-loop expression and processes iterator tags.
         for (itn, tag in expr.iterators, expr.iteratorsTags) {
@@ -1289,15 +1325,19 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     var method_renames : table<string, string>
     var template_module = template_structure._module
     for_each_function(template_module, "", $(func){
-        if (func.flags.isClassMethod && func.classParent == template_structure) {
+        if (func.classParent == template_structure) {
             // we rename methods
             let func_name = string(func.name)
             var method_name_parts = split(func_name, "`")
             if (method_name_parts[0] == template_name) {
                 method_name_parts[0] = instance_name
             }
-            if (length(method_name_parts) == 2 &&  method_name_parts[1] == template_name) {
-                method_name_parts[1] = instance_name
+            if (length(method_name_parts) == 2) {
+                if (method_name_parts[1] == template_name) { // ctor
+                    method_name_parts[1] = instance_name
+                } elif (method_name_parts[1] == "clone" || method_name_parts[1] == "finalize" || method_name_parts[1] == "each") {
+                    method_name_parts.erase(0)
+                }
             }
             let func_clone_name = join(method_name_parts, "`")
             method_renames.insert(func_name, func_clone_name)
@@ -1318,13 +1358,52 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     }
     // now, lets clone all methods in the module
     for_each_function(template_module, "", $(func){
-        if (func.flags.isClassMethod && func.classParent == template_structure) {
+        if (func.classParent == template_structure) {
             let func_clone_name = method_renames[string(func.name)]
             var inscope func_clone <- clone_function(func)
             func_clone.name := func_clone_name
             func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
             func_clone.classParent = get_ptr(instance_structure)
             func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
+            // expand $a() argument lists in function parameters (blkArg rules)
+            // preVisitFunctionArgument collects $a tags from function arguments.
+            if (length(rules.blkArg) > 0) {
+                let nfargs = func_clone.arguments |> length
+                for (ai in range(nfargs)) {
+                    let rai = nfargs - ai - 1
+                    assume farg = func_clone.arguments[rai]
+                    let vname = string(farg.name)
+                    if (key_exists(rules.blkArg, vname)) {
+                        var inscope new_args : array<VariablePtr>
+                        for (a in rules.blkArg[vname]) {
+                            new_args |> emplace_new <| new Variable(
+                                at = farg.at,
+                                name := a.name,
+                                _type <- clone_type(a._type),
+                                init <- clone_expression(a.init)
+                            )
+                        }
+                        new_args |> reverse
+                        func_clone.arguments |> erase(rai)
+                        for (na in new_args) {
+                            func_clone.arguments |> emplace(na, rai)
+                        }
+                    }
+                }
+                // sync body block arguments from expanded function arguments
+                var body_block = func_clone.body as ExprBlock
+                if (body_block != null) {
+                    body_block.arguments |> clear
+                    for (farg in func_clone.arguments) {
+                        body_block.arguments |> emplace_new <| new Variable(
+                            at = farg.at,
+                            name := farg.name,
+                            _type <- clone_type(farg._type),
+                            init <- clone_expression(farg.init)
+                        )
+                    }
+                }
+            }
             for (arg in func_clone.arguments) {
                 arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
             }
