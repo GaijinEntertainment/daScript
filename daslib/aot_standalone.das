@@ -442,7 +442,7 @@ def public runStandaloneVisitor(var program : ProgramPtr, modules : array<string
 }
 
 [export]
-def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) : string {
+def public standalone_aot(input : string; output_dir : string; cross_platform : bool, paranoid_validation : bool; cop : CodeOfPolicies) {
     //! Compiles a daslang file and generates standalone AOT C++ code in the given output directory.
     let file_name = input |> split_by_chars("/\\") |> back()
     let ctx_name = (file_name |> split("."))[0]
@@ -450,22 +450,19 @@ def public standalone_aot(input : string; output_dir : string; cross_platform : 
                                    class_name = "Standalone",
                                    cpp_output_dir = output_dir,
                                    cross_platform = cross_platform)
-    var result = "";
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
         compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(var program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            result = build_string() $(writer) {
-                // lets comment on required modules
-                let (modules_str, noAotModule) = getRequiredModulesFor(program)
-                if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
-                    panic("Standalone context called on non aot module {input}")
-                } elif (noAotModule) {
-                    panic("Standalone context called on non aot module {input}")
-                } else {
-                    runStandaloneVisitor(program, modules_str, pctx, cfg)
-                }
+            // lets comment on required modules
+            let (modules_str, noAotModule) = getRequiredModulesFor(program)
+            if (program._options |> find_arg("no_aot") ?as tBool ?? false) {
+                panic("Standalone context called on non aot module {input}")
+            } elif (noAotModule) {
+                panic("Standalone context called on non aot module {input}")
+            } else {
+                runStandaloneVisitor(program, modules_str, pctx, cfg)
             }
         }
     }
-    return result
+    return true
 }
