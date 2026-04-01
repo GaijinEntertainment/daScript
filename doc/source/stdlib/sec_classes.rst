@@ -12,5 +12,6 @@ constructor/method helpers.
    generated/class_boost.rst
    generated/instance_function.rst
    generated/interfaces.rst
+   generated/delegate.rst
    generated/dynamic_cast_rtti.rst
    generated/generic_return.rst

@@ -3282,6 +3282,14 @@ namespace das
                 case Type::tString:         ss << "s"; break;
                 case Type::tVoid:           ss << "v"; break;
                 case Type::tBool:           ss << "b"; break;
+                case Type::none:
+                    if ( isTag ) {
+                        ss << "``TAG``";
+                    } else {
+                        LOG(LogLevel::error) << "unexpected type none in mangled name\n";
+                        DAS_ASSERT(0 && "we should not be here");
+                    }
+                    break;
                 default:
                     LOG(LogLevel::error) << das_to_string(baseType) << "\n";
                     DAS_ASSERT(0 && "we should not be here");

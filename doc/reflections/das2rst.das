@@ -24,6 +24,7 @@ require daslib/jobque_boost
 require daslib/apply_in_context
 require daslib/contracts
 require daslib/defer
+require daslib/delegate
 require daslib/if_not_null
 require daslib/templates
 require daslib/templates_boost
@@ -497,6 +498,14 @@ def document_module_contracts(root : string) {
         group_by_regex("Type queries", mod, %regex~(isYetAnotherVectorTemplate)$%%)
     )
     document("Miscellaneous contract annotations", mod, "contracts.rst", groups)
+}
+
+def document_module_delegate(root : string) {
+    var mod = find_module("delegate")
+    var groups <- array<DocGroup>(
+        group_by_regex("Delegate type macro", mod, %regex~(delegate)$%%)
+    )
+    document("C#-like multicast delegate type macro", mod, "delegate.rst", groups)
 }
 
 def document_module_defer(root : string) {
@@ -1382,6 +1391,7 @@ def main {
     document_module_decs_boost(root)
     document_module_decs_state(root)
     document_module_defer(root)
+    document_module_delegate(root)
     document_module_dynamic_cast_rtti(root)
     document_module_enum_trait(root)
     document_module_faker(root)

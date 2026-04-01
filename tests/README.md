@@ -253,6 +253,12 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | all_hash_table.das | flat_hash_table and cuckoo_hash_table — dispatch, generics | |
 
+## delegate/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_delegate.das | C#-like delegate system — assign, append, invoke, void/non-void, multi-arg, zero-arg, utilities | |
+
 ## interfaces/
 
 | File | Description | Expects errors |
