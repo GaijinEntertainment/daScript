@@ -140,6 +140,7 @@ def main() {
     let gen1 = find_bool(args, "-gen1");
     let gen2_make = find_bool(args, "-gen2-make");
     let force_overwrite = find_bool(args, "-force-overwrite");
+    let quiet = find_bool(args, "-quiet");
 
     var aot_files = array<tuple<string; string>>()
     var aotlib_files = array<tuple<string; string>>()
@@ -161,20 +162,32 @@ def main() {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
             let res = aot(aot_in, false, cross_platform, cop)
-            let written = write_result(res, aot_out, "Aot", force_overwrite)
-            result = result && written
+            if (res |> empty()) {
+                to_log(LOG_INFO, "Failed to compile `{aot_in}` in standalone.\n")
+                result = false
+            } else {
+                let written = write_result(res, aot_out, "Aot", force_overwrite)
+                result = written && result
+            }
         }
         updateCOP(cop, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
             let res = aot(aot_in, false, cross_platform, cop)
-            let written = write_result(res, aot_out, "Aot library", force_overwrite)
-            result = result && written
+            if (res |> empty()) {
+                to_log(LOG_INFO, "Failed to compile `{aot_in}` in aotlib.\n")
+                result = false
+            } else {
+                let written = write_result(res, aot_out, "Aot library", force_overwrite)
+                result = written && result
+            }
         }
         updateCOP(cop, !gen1, gen2_make, false)
         for ((ctx_in, ctx_out) in ctx_files) {
-            let res = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
-            let written = write_result(res, ctx_out, "Standalone ctx", force_overwrite)
-            result = result && written
+            let is_ok = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
+            if (!is_ok && !quiet) {
+                to_log(LOG_INFO, "Failed to compile `{ctx_in}` in standalone.\n")
+            }
+            result = is_ok && result
         }
     }
     unsafe {
