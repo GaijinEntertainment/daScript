@@ -35,10 +35,10 @@ taskkill /F /IM daslang.exe 2>/dev/null
 taskkill /F /IM mcp.exe 2>/dev/null
 
 # Build test_aot
-cmake --build build --config Release --target test_aot
+cmake --build build --config Release --target test_aot -j 64 -- /nodeReuse:false
 
-# Run AOT tests
-bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot -use-aot
+# Run AOT tests (must match CI: -use-aot before --, --use-aot after --)
+bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test tests
 ```
 
 Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
@@ -118,8 +118,8 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 |---|---|---|
 | Lint | MCP `lint` | Fix significant issues in changed files |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
-| AOT build | `cmake --build build --config Release --target test_aot` | Kill daslang first. Register new test dirs |
-| AOT tests | `test_aot.exe dastest -- --test tests/aot -use-aot` | Same as regular tests |
+| AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
+| AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
 | Docs | `das2rst.das` + stubs + Sphinx | Only if daslib/C++ bindings/RST changed |
 | Format | MCP `format_file` on each changed `.das` | Only changed files |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |

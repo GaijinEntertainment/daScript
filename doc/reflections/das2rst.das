@@ -97,6 +97,10 @@ require dashv/dashv_boost
 require pugixml/PUGIXML_boost
 require stbimage/stbimage_boost
 require stbimage/stbimage_ttf
+require audio/audio_boost
+require audio/audio_wav
+require strudel/strudel_midi
+require strudel/strudel_sf2
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -1246,6 +1250,74 @@ def document_module_stbimage_ttf(root : string) {
     document("TrueType font API (stbimage_ttf)", mod, "stbimage_ttf.rst", groups)
 }
 
+def document_module_audio(root : string) {
+    var mod = get_module("audio")
+    var groups <- array<DocGroup>(
+        group_by_regex("Audio device", mod, %regex~(sound_initalize|sound_finalize|mixer_context)$%%),
+        group_by_regex("Decoder", mod, %regex~ma_decoder%%),
+        group_by_regex("Resampler", mod, %regex~ma_resampler%%),
+        group_by_regex("Channel converter", mod, %regex~ma_channel_converter%%),
+        group_by_regex("Volume mixer", mod, %regex~ma_volume_mixer%%),
+        group_by_regex("Limiter", mod, %regex~ma_limiter%%),
+        group_by_regex("HRTF", mod, %regex~ma_hrtf%%),
+        group_by_regex("Reverb", mod, %regex~(set_sample_rate|set_properties|process_stereo|process_mono|get_preset)$%%),
+        group_by_regex("Chorus", mod, %regex~chorus%%),
+        group_by_regex("SF2 voice", mod, %regex~ma_sf2%%),
+        group_by_regex("Enumerations and constants", mod, %regex~MA_SAMPLE_RATE$%%)
+    )
+    document("Low-level audio bindings (miniaudio)", mod, "audio.rst", groups)
+}
+
+def document_module_audio_boost(root : string) {
+    var mod = find_module("audio_boost")
+    var groups <- array<DocGroup>(
+        group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|with_collected_audio_system|audio_system_create|audio_system_finalize|audio_system_collect|audio_system_release_context)$%%),
+        group_by_regex("Sound playback", mod, %regex~(play_sound|play_3d_sound)%%),
+        group_by_regex("Sound control", mod, %regex~(set_volume|set_pan|set_pitch|set_pause|set_global_pitch|set_global_pause|stop|set_playback_position)$%%),
+        group_by_regex("3D audio", mod, %regex~(set_head_position|set_position)$%%),
+        group_by_regex("Reverb", mod, %regex~(set_reverb|set_reverb_preset)$%%),
+        group_by_regex("Chorus", mod, %regex~(set_chorus|set_chorus_default)$%%),
+        group_by_regex("Attenuation", mod, %regex~(compute_attenuation|default_attenuation|inverse_distance_attenuation|linear_attenuation|quadratic_attenuation|inverse_square_attenuation)$%%),
+        group_by_regex("Status monitoring", mod, %regex~(set_status_update|clear_status|unset_status_update)$%%),
+        group_by_regex("Command batching", mod, %regex~(begin_batch|end_batch|batch)$%%),
+        group_by_regex("PCM stream", mod, %regex~(append_to_pcm)$%%),
+        group_by_regex("Decoding", mod, %regex~(decode_audio)$%%),
+        group_by_regex("Sound ID", mod, %regex~(generate_sound_sid)$%%),
+        group_by_regex("Internal channel management", mod, %regex~(get_audio_command_channel|set_audio_thread_command_channel|get_collect_command_channel|set_collect_thread_command_channel|get_sound_sid|set_sound_sid)$%%)
+    )
+    document("Audio playback, mixing, 3D spatial audio, and effects", mod, "audio_boost.rst", groups)
+}
+
+def document_module_audio_wav(root : string) {
+    var mod = find_module("audio_wav")
+    var groups <- array<DocGroup>(
+        group_by_regex("WAV I/O", mod, %regex~(read_wav|write_wav)$%%)
+    )
+    document("WAV file reading and writing", mod, "audio_wav.rst", groups)
+}
+
+def document_module_strudel_midi(root : string) {
+    var mod = find_module("strudel_midi")
+    var groups <- array<DocGroup>(
+        group_by_regex("Parsing", mod, %regex~(parse_midi|load_midi|parse_midi_track)$%%),
+        group_by_regex("Track operations", mod, %regex~(merge_tracks)$%%),
+        group_by_regex("Binary readers", mod, %regex~(read_byte|read_u16|read_u32|read_vlq)$%%)
+    )
+    document("MIDI file parser", mod, "strudel_midi.rst", groups)
+}
+
+def document_module_strudel_sf2(root : string) {
+    var mod = find_module("strudel_sf2")
+    var groups <- array<DocGroup>(
+        group_by_regex("Loading", mod, %regex~(sf2_load|sf2_parse)$%%),
+        group_by_regex("Preset and zone lookup", mod, %regex~(sf2_find_preset|sf2_find_zones)$%%),
+        group_by_regex("Generator access", mod, %regex~(has_generator|get_generator|get_generator_range)$%%),
+        group_by_regex("Unit conversion", mod, %regex~(timecents_to_seconds|cents_to_hz|centibels_to_linear)$%%),
+        group_by_regex("Modulator source helpers", mod, %regex~(sf2_mod_src)%%)
+    )
+    document("SoundFont 2 file parser", mod, "strudel_sf2.rst", groups)
+}
+
 [export]
 def main {
     disable_profiler(this_context())
@@ -1262,6 +1334,12 @@ def main {
     document_module_stbtruetype(root)
     document_module_uriparser(root)
     document_module_pugixml(root)
+    document_module_audio(root)
+    // document dasAudio daScript modules
+    document_module_audio_boost(root)
+    document_module_audio_wav(root)
+    document_module_strudel_midi(root)
+    document_module_strudel_sf2(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)

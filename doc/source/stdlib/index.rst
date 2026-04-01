@@ -1,7 +1,7 @@
 .. _stdlib:
 
 #################################
-  Daslang Standard Library 0.6
+  Daslang Standard Library 0.6.1
 #################################
 
 Copyright (c) 2018-2026 Gaijin Entertainment
@@ -38,5 +38,6 @@ THE SOFTWARE.
    sec_testing.rst
    sec_code_quality.rst
    sec_media.rst
+   sec_audio.rst
 
 

@@ -122,6 +122,8 @@ namespace das {
             else
                 result += c;
         }
+        // Escape names that clash with Windows SDK macros (e.g. DELETE from winnt.h)
+        if ( result == "DELETE" ) result = "_f_" + result;
         return result;
     }
 
@@ -1056,6 +1058,16 @@ namespace das {
                 localTemps[block].push_back(expr);
             }
         }
+    // invoke with CMRES
+        virtual void preVisit ( ExprLooksLikeCall * expr ) override {
+            if ( expr->rtti_isInvoke() ) {
+                auto inv = static_cast<ExprInvoke *>(expr);
+                if ( !inv->doesNotNeedSp && inv->stackTop ) {
+                    auto block = getCurrentBlock();
+                    localTemps[block].push_back(expr);
+                }
+            }
+        }
     public:
         vector<ExprBlock *>                     stack;
         das_map<ExprBlock *,vector<Variable *>>     variables;
@@ -1381,6 +1393,7 @@ namespace das {
             }
             if ( expr->rtti_isMakeLocal() ) {
             } else if ( expr->rtti_isCall() ) {
+            } else if ( expr->rtti_isInvoke() ) {
             } else {
                 DAS_ASSERT(0 && "we should not be here. we need stacktop for the name");
             }
@@ -3310,6 +3323,9 @@ namespace das {
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
+            if ( isInvokeWithTemp(call) ) {
+                ss << "(" << makeLocalTempName(call) << " = (";
+            }
             if (call->name == "debug" ) {
                 auto argType = call->arguments[0]->type;
                 TypeInfo * info = helper.makeTypeInfo(nullptr, argType);
@@ -3456,6 +3472,9 @@ namespace das {
             } else {
                 ss << ")";
             }
+            if ( isInvokeWithTemp(call) ) {
+                ss << "))";
+            }
             return Visitor::visit(call);
         }
     // call
@@ -3534,6 +3553,13 @@ namespace das {
             if ( call->rtti_isCall() ) {
                 auto expr = (ExprCall *) call;
                 return !expr->doesNotNeedSp && expr->stackTop;
+            }
+            return false;
+        }
+        bool isInvokeWithTemp ( ExprLooksLikeCall * call ) {
+            if ( call->rtti_isInvoke() ) {
+                auto inv = static_cast<ExprInvoke *>(call);
+                return !inv->doesNotNeedSp && inv->stackTop;
             }
             return false;
         }

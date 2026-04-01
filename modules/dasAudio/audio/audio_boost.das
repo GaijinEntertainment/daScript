@@ -6,6 +6,15 @@ options no_unused_function_arguments = false
 
 module audio_boost shared private
 
+//! Audio playback, mixing, 3D spatial audio, and effects.
+//!
+//! Provides a high-level API for playing sounds from files, PCM arrays, and PCM streams.
+//! Supports volume, pan, pitch, 3D positioning with HRTF, distance attenuation,
+//! Doppler effect, I3DL2 reverb presets, and look-ahead limiting.
+//!
+//! All audio commands are sent to a dedicated audio thread via a lock-free channel.
+//! Use `with_audio_system` to initialize and finalize the audio system.
+
 require audio public
 require math
 require daslib/rtti
@@ -15,38 +24,57 @@ require daslib/jobque_boost
 require daslib/apply_in_context
 
 let public SPEED_OF_SOUND = 343.3f
+//! Speed of sound in m/s, used for Doppler calculations.
 let public MAX_SPEED_OF_OBJECT = SPEED_OF_SOUND / 2.
+//! Maximum object velocity for Doppler effect (half speed of sound).
 let private LOG2 = log(2.0)
 
 // audio config
 // MA_SAMPLE_RATE is defined in the C++ audio module (from HRTF_SAMPLE_RATE CMake define, default 48000)
 let public MA_CHANNELS = 2
+//! Number of output audio channels (always 2, stereo).
 let public MA_HRTF = true
+//! Whether HRTF spatial audio is enabled.
 
 // limiter config
 let MA_LIMITER_THRESHOLD = 0.95
 let MA_LIMITER_ATTACK_TIME = 0.0001
 let MA_LIMITER_RELEASE_TIME = .01
 
-typedef SID = uint64
+//! Sound ID — a unique handle for every playing sound. Returned by all play functions.
+typedef public SID = uint64
 
 let public INVALID_SID : SID = 0ul
+//! Sentinel value meaning "no sound" or "invalid sound ID".
 
+//! Playback state of an audio channel.
 enum public AudioChannelState {
     stopped
+    //! Channel has finished playing.
     stopping
+    //! Channel is fading out and will stop.
     playing
+    //! Channel is actively playing audio.
     paused
+    //! Channel is paused.
     starting
+    //! Channel has been created but has not started playing yet.
 }
 
+//! Concurrent status snapshot for a playing sound, readable via LockBox.
 struct public AudioChannelStatus {
     state : AudioChannelState
+    //! Current playback state.
     playback_position : uint64
-    consumed_position : uint64  // frames of actual audio consumed (excludes silence padding)
+    //! Current playback position in PCM frames.
+    consumed_position : uint64
+    //! Frames of actual audio consumed (excludes silence padding).
     stream_que_length : int
+    //! Number of pending PCM chunks in the stream queue.
 }
 
+//! Distance attenuation coefficients for 3D audio.
+//! Use the helper functions (inverse_distance_attenuation, linear_attenuation, etc.) to create instances.
 [safe_when_uninitialized]
 struct public Attenuation {
     A, B, C, D : float
@@ -115,6 +143,8 @@ class AudioSource {
 class AudioChannel {
     sid    : SID = INVALID_SID
     paused : bool = false
+    pause_fade : float = 1.0        // current fade level (0=silent, 1=full)
+    pause_fade_target : float = 1.0 // 0=fading to pause, 1=fading to play
     stop   : bool = false
     pitch  : float = 1.
     volume : float = 1.
@@ -130,6 +160,7 @@ class AudioChannel {
     is3D : bool = false
     @do_not_delete status : LockBox? = null
     @do_not_delete reverb : I3DL2Reverb?
+    @do_not_delete chorus : ma_chorus?
     hrtf : ma_hrtf
     def AudioChannel(var src : AudioSource?) {
         source = src
@@ -186,6 +217,11 @@ class AudioChannel {
         if (reverb != null) {
             unsafe {
                 delete reverb
+            }
+        }
+        if (chorus != null) {
+            unsafe {
+                delete chorus
             }
         }
         if (MA_HRTF && is3D) {
@@ -268,6 +304,14 @@ class AudioChannel {
             delete samples
             samples <- temp
         }
+        // chorus
+        if (chorus != null && nSoundChannels == 2) {
+            var temp : array<float>
+            temp |> resize(int(outputFrames) * 2)
+            chorus_process(chorus, unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+            delete samples
+            samples <- temp
+        }
         // convert channels
         var channel_data : array<float>
         channel_data |> resize(data |> length)
@@ -286,6 +330,27 @@ class AudioChannel {
             unsafe(addr(data[0])),
             outputFrames)
         delete channel_data
+        // apply pause fade (2ms ramp to avoid clicks)
+        if (pause_fade != pause_fade_target) {
+            let fade_step = 1.0 / 96.0  // ~2ms at 48kHz
+            for (f in range(int(outputFrames))) {
+                let fade = pause_fade
+                for (c in range(channels)) {
+                    data[f * channels + c] *= fade
+                }
+                if (pause_fade_target < pause_fade) {
+                    pause_fade = max(pause_fade - fade_step, 0.0)
+                } else {
+                    pause_fade = min(pause_fade + fade_step, 1.0)
+                }
+            }
+            if (pause_fade <= 0.001 && pause_fade_target == 0.0) {
+                paused = true
+                pause_fade = 0.0
+            } elif (pause_fade >= 0.999 && pause_fade_target == 1.0) {
+                pause_fade = 1.0
+            }
+        }
         // update position
         playback_position += inputFrames
         // update status
@@ -608,6 +673,7 @@ variant AudioCommand {
     sound_position          : AudioCommandSoundPosition3D
     status                  : AudioCommandStatus
     reverb                  : tuple<sid : SID; properties : I3DL2ReverbProperties>
+    chorus_cmd              : tuple<sid : SID; config : ma_chorus_config>
     set_playback_position   : tuple<sid : SID; position : uint64>
     global_pause            : bool
 }
@@ -650,14 +716,14 @@ def collect_channel(channel : Channel?) {
 }
 
 def public audio_system_collect {
-    //! delete collected audio commands
+    //! Process deferred audio cleanup. Call periodically when using with_collected_audio_system.
     if (g_collect_channel != null) {
         g_collect_channel |> collect_channel()
     }
 }
 
 def public audio_system_release_context {
-    //! release collected audio commands related to the context
+    //! Release the mixer context reference.
     if (g_command_channel != null) {
         unsafe(invoke_in_context(mixer_context(), "command_processor"))
     }
@@ -735,7 +801,12 @@ def command_processor {
         } elif (cmd is pause) {
             let pcmd = cmd as pause
             g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
-                ch.paused = pcmd.paused
+                if (pcmd.paused) {
+                    ch.pause_fade_target = 0.0  // fade out to pause
+                } else {
+                    ch.paused = false
+                    ch.pause_fade_target = 1.0  // fade in from pause
+                }
             }
         } elif (cmd is volume) {
             let vcmd = cmd as volume
@@ -812,6 +883,15 @@ def command_processor {
                 }
                 ch.reverb |> set_sample_rate(float(MA_SAMPLE_RATE))
                 ch.reverb |> set_properties(rcmd.properties)
+            }
+        } elif (cmd is chorus_cmd) {
+            assume ccmd = cmd as chorus_cmd
+            g_sid_2_channel |> get(ccmd.sid) <| $(var ch : AudioChannel?&) {
+                if (ch.chorus == null) {
+                    ch.chorus = new ma_chorus
+                    chorus_init(ch.chorus, float(MA_SAMPLE_RATE))
+                }
+                chorus_set_config(ch.chorus, ccmd.config)
             }
         } elif (cmd is set_playback_position) {
             assume scmd = cmd as set_playback_position
@@ -898,6 +978,7 @@ def finalize_mixer {
 }
 
 def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?; next_sid : Atomic64?> {
+    //! Low-level: creates the audio system. Prefer with_audio_system.
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
     channel |> add_ref()
@@ -915,6 +996,7 @@ def public audio_system_create(collect : bool = false) : tuple<command : Channel
 }
 
 def public audio_system_finalize(var channel, collectChannel : Channel?&; var next_sid : Atomic64?) {
+    //! Low-level: shuts down the audio system.
     channel |> push <| new AudioCommand(shutdown = true)
     unsafe(invoke_in_context(mixer_context(), "command_processor"))
     sound_finalize()
@@ -933,12 +1015,14 @@ def public audio_system_finalize(var channel, collectChannel : Channel?&; var ne
 }
 
 def public with_audio_system(blk : block) {
+    //! Initializes the audio system, runs the block, then shuts down. All audio API calls must happen inside this block.
     var channels = audio_system_create()
     invoke(blk)
     audio_system_finalize(channels.command, channels.collect, channels.next_sid)
 }
 
 def public with_collected_audio_system(blk : block) {
+    //! Initializes the audio system with garbage collection, runs the block, then shuts down. Use audio_system_collect to process deferred cleanup.
     var channels = audio_system_create(true)
     invoke(blk)
     audio_system_finalize(channels.command, channels.collect, channels.next_sid)
@@ -964,6 +1048,7 @@ def make_decoder(filename : string; rate, channels : int) : ma_decoder? {
 var global_batch : array<AudioCommand?>?
 
 def public begin_batch() {
+    //! Begin batching audio commands. All commands until end_batch are sent atomically.
     if (global_batch != null) {
         panic("nested batch")
     }
@@ -973,6 +1058,7 @@ def public begin_batch() {
 }
 
 def public end_batch() {
+    //! End batching and send all batched commands atomically.
     if (global_batch == null) {
         panic("no batch")
     }
@@ -985,6 +1071,7 @@ def public end_batch() {
 }
 
 def public batch(cb : block) {
+    //! Execute a block of audio commands as a single atomic batch.
     if (global_batch != null) {
         panic("nested batch")
     }
@@ -1035,14 +1122,14 @@ def public play_3d_sound_from_file(filename : string; position : float3; attenua
 }
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid()) {
-    //! plays sound from PCM data
+    //! Create a PCM streaming channel. Feed it samples with append_to_pcm.
     push_cmd <| new AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = sid, rate = rate, channels = channels))
     return sid
 }
 
 def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int) {
-    //! plays sound from PCM data
-    var sid = generate_sound_sid()
+    //! Create a 3D PCM streaming channel. Feed it samples with append_to_pcm.
+    let sid = generate_sound_sid()
     push_cmd <| new AudioCommand(add_pcm_stream_3d <-
         AudioCommandAddPCMStream3D(sid = sid, rate = rate, channels = channels, position = position, attenuation = attenuation))
     return sid
@@ -1050,21 +1137,21 @@ def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenu
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>) {
     //! plays sound from PCM data
-    var sid = generate_sound_sid()
+    let sid = generate_sound_sid()
     push_cmd <| new AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false))
     return sid
 }
 
 def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>) {
     //! plays looping sound from PCM data
-    var sid = generate_sound_sid()
+    let sid = generate_sound_sid()
     push_cmd <| new AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true))
     return sid
 }
 
 def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>) {
     //! plays 3D sound from PCM data
-    var sid = generate_sound_sid()
+    let sid = generate_sound_sid()
     push_cmd <| new AudioCommand(add_pcm_3d <-
         AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false, position = position, attenuation = attenuation))
     return sid
@@ -1072,7 +1159,7 @@ def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; 
 
 def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>) {
     //! plays 3D looping sound from PCM data
-    var sid = generate_sound_sid()
+    let sid = generate_sound_sid()
     push_cmd <| new AudioCommand(add_pcm_3d <-
         AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true, position = position, attenuation = attenuation))
     return sid
@@ -1090,7 +1177,7 @@ def public set_pause(sid : SID; paused : bool) {
     return sid
 }
 
-def public set_volume(sid : SID; volume : float; time : float = 0.0f) {
+def public set_volume(sid : SID; volume : float; time : float = 0.002f) {
     //! set volume of sound
     push_cmd <| new AudioCommand(volume = (sid, volume, time))
     return sid
@@ -1161,7 +1248,8 @@ def public set_reverb(sid : SID; reverb : I3DL2ReverbProperties) {
     return sid
 }
 
-enum public ReverbPreset {// so that we don't expose internals
+//! I3DL2 reverb preset names.
+enum public ReverbPreset {
     Generic
     PaddedCell
     Room
@@ -1192,6 +1280,17 @@ def public set_reverb_preset(sid : SID; preset : ReverbPreset) {
     return set_reverb(sid, get_preset(unsafe(reinterpret<I3DL2Preset> preset)))
 }
 
+def public set_chorus(sid : SID; config : ma_chorus_config) {
+    //! set chorus effect for sound
+    push_cmd <| new AudioCommand(chorus_cmd = (sid, config))
+    return sid
+}
+
+def public set_chorus_default(sid : SID) {
+    //! set chorus effect with default settings for sound
+    return set_chorus(sid, chorus_config_default())
+}
+
 def public set_playback_position(sid : SID; position : uint64) {
     //! set playback position for sound (in frames)
     push_cmd <| new AudioCommand(set_playback_position = (sid, position))
@@ -1199,6 +1298,7 @@ def public set_playback_position(sid : SID; position : uint64) {
 }
 
 def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : array<float> {
+    //! Decode an audio file (MP3, WAV, FLAC, Vorbis) from raw bytes to PCM float samples. Returns interleaved sample data; sets channels and rate.
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 0u, 0u)
     let result = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)

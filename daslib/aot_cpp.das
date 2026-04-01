@@ -19,7 +19,12 @@ options strict_smart_pointers = false
 options unsafe_table_lookup = false
 
 def aotFieldName(name : string) : string {
-    return replace(name, "`", "__");
+    var result = replace(name, "`", "__");
+    // Escape names that clash with Windows SDK macros (e.g. DELETE from winnt.h)
+    if (result == "DELETE") {
+        result = "_f_" + result;
+    }
+    return result;
 }
 
 def aotModuleName(pm : Module?) {
@@ -1026,6 +1031,17 @@ class public BlockVariableCollector : AstVisitor {
             localTemps[blk] |> push(expr.get_ptr());
         }
     }
+// invoke with CMRES
+    def override preVisitExprLooksLikeCall(var expr : smart_ptr<ExprLooksLikeCall>) {
+        if (expr is ExprInvoke) {
+            let inv = expr as ExprInvoke;
+            let need_insert = !inv.doesNotNeedSp && inv.stackTop != 0u;
+            if (need_insert) {
+                let blk = getCurrentBlock();
+                localTemps[blk] |> push(expr.get_ptr());
+            }
+        }
+    }
 
     @do_not_delete stack :      array<ExprBlock?>
     @do_not_delete variables :  table<ExprBlock?, array<Variable?>>
@@ -1372,7 +1388,8 @@ class public CppAot : AstVisitor {
             expr is ExprMakeVariant ||
             expr is ExprMakeArray ||
             expr is ExprMakeTuple ||
-            expr is ExprCall) {
+            expr is ExprCall ||
+            expr is ExprInvoke) {
         } else {
             panic("we should not be here. we need stacktop for the name");
         }
@@ -3159,6 +3176,9 @@ class public CppAot : AstVisitor {
 
 // looks like call
     def override preVisitExprLooksLikeCall(var call : smart_ptr<ExprLooksLikeCall>) {
+        if (isInvokeWithTemp(call)) {
+            write(*ss, "({makeLocalTempName(call)} = (");
+        }
         if (call.name == "debug") {
             assume argType = call.arguments[0]._type;
             let info = helper.helper |> make_type_info(unsafe(reinterpret<TypeInfo?>(null)), argType);
@@ -3306,6 +3326,9 @@ class public CppAot : AstVisitor {
         } else {
             write(*ss, ")");
         }
+        if (isInvokeWithTemp(call)) {
+            write(*ss, "))");
+        }
         return call;
     }
 // call
@@ -3388,6 +3411,13 @@ class public CppAot : AstVisitor {
         if (call is ExprCall) {
             let expr = call as ExprCall;
             return !expr.doesNotNeedSp && expr.stackTop != 0u;
+        }
+        return false;
+    }
+    def isInvokeWithTemp(call : smart_ptr<ExprLooksLikeCall>) {
+        if (call is ExprInvoke) {
+            let inv = call as ExprInvoke;
+            return !inv.doesNotNeedSp && inv.stackTop != 0u;
         }
         return false;
     }

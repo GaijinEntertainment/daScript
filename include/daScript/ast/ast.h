@@ -1549,8 +1549,7 @@ namespace das
         /*option*/ bool no_writing_to_nameless = true;             // if true, then writing to nameless variables (intermediate on the stack) is not allowed
         /*option*/ bool always_call_super = false;                  // if true, then super() needs to be called from every class constructor
     // environment
-        /*option*/ bool no_optimizations = false;                  // disable optimizations, regardless of settings
-        /*option*/ bool no_infer_time_folding = false;             // disable infer-time constant folding
+        /*options*/ bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
         /*option*/ bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
