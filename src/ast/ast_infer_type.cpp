@@ -40,7 +40,7 @@ namespace das {
 
     InferTypes::InferTypes(const ProgramPtr &prog, TextWriter *logs_) : FoldingVisitor(prog), logs(logs_) {
         debugInferFlag = prog->options.getBoolOption("debug_infer_flag", prog->policies.debug_infer_flag);
-        enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding", true);
+        enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding", !prog->policies.no_infer_time_folding);
         disableAot = prog->options.getBoolOption("no_aot", false);
         multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
         standaloneContext = prog->options.getBoolOption("standalone_context", prog->policies.standalone_context);

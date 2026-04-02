@@ -62,7 +62,7 @@ modules/.daspkg_tmp/
 modules/.daspkg_backup/
 modules/.daspkg_cache/
 modules/.daspkg.log
-examples/*/modules/
+examples/**/modules/
 
 # Claude Code (local settings)
 .claude/settings.json
