@@ -475,7 +475,8 @@ typedef enum das_bool_policy {
     DAS_POLICY_MULTIPLE_CONTEXTS,                // Enable context-safe code generation
     DAS_POLICY_STRICT_SMART_POINTERS,            // Strict smart pointer rules (var inscope, etc.)
     DAS_POLICY_RTTI,                             // Generate extended RTTI
-    DAS_POLICY_NO_OPTIMIZATIONS                  // Disable all optimizations
+    DAS_POLICY_NO_OPTIMIZATIONS,                 // Disable all optimizations
+    DAS_POLICY_NO_INFER_TIME_FOLDING             // Disable infer-time constant folding
 } das_bool_policy;
 
 // Integer policy fields (stack size, heap limits).

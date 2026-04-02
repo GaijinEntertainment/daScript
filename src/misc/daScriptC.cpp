@@ -579,6 +579,7 @@ int das_policies_set_bool ( das_policies * policies, das_bool_policy flag, int v
         case DAS_POLICY_STRICT_SMART_POINTERS:  p->strict_smart_pointers = v; break;
         case DAS_POLICY_RTTI:                   p->rtti = v; break;
         case DAS_POLICY_NO_OPTIMIZATIONS:       p->no_optimizations = v; break;
+        case DAS_POLICY_NO_INFER_TIME_FOLDING:  p->no_infer_time_folding = v; break;
         default: return 0;
     }
     return 1;
