@@ -1,0 +1,1 @@
+Takes as argument a BuiltInFunction, and returns its address.
