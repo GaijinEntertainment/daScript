@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
 #include "daScript/misc/gc_node.h"
+#include "daScript/misc/platform.h"
 
 namespace das
 {
