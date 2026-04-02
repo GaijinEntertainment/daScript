@@ -144,6 +144,9 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; is_global 
         write_lock_file(root, lf)
     }
     log("Installed '{pkg_name}' (local{is_global ? ", global" : ""})\n")
+    if (!is_global) {
+        gitignore_add(root, "modules/{pkg_name}")
+    }
     try_build_package(target, pkg_name, is_global)
 }
 
@@ -353,11 +356,16 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     }
     log("Installed '{pkg_name}'{is_global ? " (global)" : ""}\n")
 
-    // step 5: install dependencies
+    // step 5: add to .gitignore (local installs only)
+    if (!is_global) {
+        gitignore_add(root, "modules/{pkg_name}")
+    }
+
+    // step 6: install dependencies
     log_debug("checking dependencies for '{pkg_name}'")
     install_dependencies(root, pkg_name, lf, visiting, is_global)
 
-    // step 6: build
+    // step 7: build
     log_debug("checking build for '{pkg_name}'")
     try_build_package(target_dir, pkg_name, is_global)
 }
@@ -543,6 +551,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
 
     remove_package(lf, name)
     write_lock_file(root, lf)
+    gitignore_remove(root, "modules/{name}")
     log("Removed '{name}'\n")
 }
 
