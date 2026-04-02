@@ -57,6 +57,7 @@ Report invisible functions.
 Report private functions.
 Enables strict property checks.
 Disables all optimizations.
+Disables infer-time constant folding.
 Fails compilation if AOT is not available.
 Fails compilation if AOT export is not available.
 Log compile time.
