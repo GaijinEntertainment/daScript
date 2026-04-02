@@ -37,6 +37,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(FileAccess,FileAccess)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(Context,Context)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(ModuleGroup,ModuleGroup)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
@@ -295,8 +296,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(last_exception)>("last_exception");
             addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
             addField<DAS_BIND_MANAGED_FIELD(contextMutex)>("contextMutex");
-            addProperty<DAS_BIND_MANAGED_PROP(getInitSemanticHash)>("getInitSemanticHash",
-                                                                  "getInitSemanticHash");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
                 "getTotalFunctions");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",
