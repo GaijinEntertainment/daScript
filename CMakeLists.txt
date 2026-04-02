@@ -704,6 +704,7 @@ include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
 include/daScript/misc/job_que.h
 include/daScript/misc/uric.h
+src/misc/das_common.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp

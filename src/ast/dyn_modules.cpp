@@ -1,6 +1,6 @@
 #include <daScript/ast/dyn_modules.h>
 
-#include <daScript/das_common.h>               // SimulateWithErrReport
+#include <daScript/misc/das_common.h>          // SimulateWithErrReport
 #include <daScript/ast/ast.h>                  // ModuleGroup, CompileDaScript
 #include <daScript/simulate/aot_builtin_fio.h> // dirent, DIR, readdir
 #include <daScript/misc/sysos.h>

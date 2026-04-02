@@ -1771,13 +1771,6 @@ namespace das
         das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
     };
 
-    // module parsing routines
-    string getModuleName ( const string & nameWithDots );
-    string getModuleFileName ( const string & nameWithDots );
-
-    // template name parsing routines
-    bool starts_with ( const string & name, const char * template_name );
-
     // access function from class adapter
     DAS_API int adapt_field_offset ( const char * fName, const StructInfo * info );
     DAS_API int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i );
