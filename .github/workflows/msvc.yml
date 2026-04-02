@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ windows-latest ]
+        target: [ windows-latest-fat ]
         cmake_configuration: [ Debug, Release ]
 
     steps:
