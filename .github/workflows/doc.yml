@@ -93,24 +93,8 @@ jobs:
     - name: Check pdf file
       run: |
         find . -name "*.pdf"
-    - name: "Create release"
+    - name: "Upload release PDFs"
       if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
-      uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: build/latex/daslang.pdf
-        asset_name: daslang.pdf
-        asset_content_type: application/pdf
-
-    - name: "Create release"
-      if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: build/latex/daslangstdlib.pdf
-        asset_name: daslangstdlib.pdf
-        asset_content_type: application/pdf
+      run: gh release upload "${{ github.event.release.tag_name }}" build/latex/daslang.pdf build/latex/daslangstdlib.pdf --clobber

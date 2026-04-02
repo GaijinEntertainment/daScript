@@ -250,13 +250,8 @@ jobs:
           mkdir artifacts
           cmake --install ./build --prefix ./daslang_bundle --config ${{ matrix.cmake_preset }} --strip
           7z a artifacts/daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip ./daslang_bundle
-      - name: "Create release"
+      - name: "Upload release asset"
         if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased') && matrix.cmake_preset == 'Release'
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: artifacts/daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
-          asset_name: daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip
-          asset_content_type: application/zip
+        run: gh release upload "${{ github.event.release.tag_name }}" artifacts/daslang-bundle-${{ matrix.release_target }}-${{ matrix.release_arch }}.zip --clobber
