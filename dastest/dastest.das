@@ -330,13 +330,16 @@ def main() {
                         for (err in isoRes.err) {
                             log::error(err)
                         }
-                        for (l in isoRes.log) {
-                            log::info_raw(l)
-                        }
                         if (timingOutliers > 0) {
                             fileTimings |> push(FileTiming(uri = clone_string(isoRes.uri), dt = isoRes.fileDt))
                         }
-                        if (isoRes.exitCode == 0 && isoRes.parsedResult && isoRes.status.failed + isoRes.status.errors == 0) {
+                        let isoPassed = isoRes.exitCode == 0 && isoRes.parsedResult && isoRes.status.failed + isoRes.status.errors == 0
+                        if (!log::failuresOnly || !isoPassed) {
+                            for (l in isoRes.log) {
+                                log::info_raw(l)
+                            }
+                        }
+                        if (isoPassed) {
                             log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         } else {
                             log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")

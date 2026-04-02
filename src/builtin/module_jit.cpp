@@ -746,7 +746,7 @@ extern "C" {
     }
 
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared ) {
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, Context *context ) {
         char cmd[1024];
         const auto [linker, dasLibrary] = get_real_lib_linker_paths(dasLib, customLinker);
 
@@ -807,15 +807,19 @@ extern "C" {
             }
         }
 
+        auto li = LineInfo();
         if ( int status = pclose(fp); status != 0 ) {
-            LOG(LogLevel::error) << "Failed to make shared library " << libraryName << ", command '" << cmd << "'\n";
-            printf("Output:\n%s", output);
+            string msg = string("Failed to make shared library ") + libraryName + ", command '" + cmd + "'\n";
+            context->to_out(&li, LogLevel::error, msg.c_str());
+            string err = string("Output:\n") + output;
+            context->to_out(&li, LogLevel::error, err.c_str());
         } else {
-            LOG(LogLevel::debug) << "Library " << libraryName << " made - ok\n";
+            string msg = string("Library ") + libraryName + " made - ok\n";
+            context->to_out(&li, LogLevel::info, msg.c_str());
         }
     }
 #else
-    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared ) { }
+    void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, Context *context ) { }
 #endif
 
     void jit_set_jit_state(Context & context, void *shared_lib, void *llvm_ee, void *llvm_context) {
@@ -962,7 +966,7 @@ extern "C" {
                     ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
-                    ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared"});
+                    ->args({"objFilePath","libraryName","dasLib","customLinker", "isShared", "context"});
             addExtern<DAS_BIND_FUN(jit_set_jit_state)>(*this, lib,  "set_jit_state",
                 SideEffects::worstDefault, "jit_set_jit_state")
                     ->args({"context","shared_lib","llvm_ee","llvm_ctx"});
