@@ -1,3 +1,4 @@
+#include "daScript/misc/das_common.h"
 #include "daScript/misc/platform.h"
 #include "daScript/misc/performance_time.h"
 

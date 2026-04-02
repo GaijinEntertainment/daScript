@@ -3,7 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_expressions.h"
-#include "daScript/das_common.h"
+#include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/simulate/aot_builtin_uriparser.h"
 
@@ -232,25 +232,6 @@ namespace das {
         vector<RequireRecord> req;
         getAllRequireReq(fi, access, modName, req, chain, collected);
         return req;
-    }
-
-    bool starts_with ( const string & name, const char * template_name ) {
-        auto len = strlen(template_name);
-        if ( name.size() < len ) return false;
-        return name.compare(0,len,template_name) == 0;
-    }
-
-    string getModuleName ( const string & nameWithDots ) {
-        auto idx = nameWithDots.find_last_of("./");
-        if ( idx==string::npos ) return nameWithDots;
-        return nameWithDots.substr(idx+1);
-    }
-
-    string getModuleFileName ( const string & nameWithDots ) {
-        auto fname = nameWithDots;
-        // TODO: should we?
-        replace ( fname.begin(), fname.end(), '.', '/' );
-        return fname;
     }
 
     bool addRequirements(const string & fileName, ModuleGroup & libGroup, Module * mod, int32_t line, const FileAccessPtr & access,
