@@ -1172,6 +1172,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_t")
                 ->args({"type","context","line"});
+        addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
+            SideEffects::none, "das_get_builtin_function_address")
+                ->args({"fn","context","at"});
         addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_v")
                 ->args({"variable","context","line"});
