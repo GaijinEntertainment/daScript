@@ -933,9 +933,6 @@ extern "C" {
                 SideEffects::none, "das_get_jit_iterator_close");
             addExtern<DAS_BIND_FUN(das_get_jit_ast_typedecl)>(*this, lib, "get_jit_ast_typedecl",
                 SideEffects::none, "das_get_jit_ast_typedecl");
-            addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
-                SideEffects::none, "das_get_builtin_function_address")
-                    ->args({"fn","context","at"});
             addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
                 SideEffects::none, "das_get_jit_new")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
