@@ -263,6 +263,11 @@ ENDIF()
 MACRO(SETUP_DAS_SHARED_LIBRARY lib)
     ADD_LIBRARY(${lib} SHARED ${ARGN})
     SETUP_LIB_DEFINITIONS(${lib})
+    SET_TARGET_PROPERTIES(${lib} PROPERTIES
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON
+    )
+    SETUP_LTO(${lib})
     if(WIN32)
         # We export a lot of structures, some of them has not exported internals.
         # Instead of marking everything as exported let's disable
@@ -271,6 +276,7 @@ MACRO(SETUP_DAS_SHARED_LIBRARY lib)
     else()
         SET_TARGET_PROPERTIES(${lib} PROPERTIES POSITION_INDEPENDENT_CODE ON)
     endif()
+    TARGET_COMPILE_DEFINITIONS(${lib} PUBLIC DAS_ENABLE_DLL=1)
 ENDMACRO()
 
 MACRO(ADD_DAS_STATIC_LIBRARY lib)
@@ -338,7 +344,7 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
             DESTINATION ${DAS_INSTALL_MODULESDIR}/${FOLDER_NAME}
         )
     ENDIF()
-    TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
+    TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS)
     TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn)
     ADD_DEPENDENCIES(${module_name} libDaScriptDyn)
     LIST(APPEND DAS_DYN_MODULES_LIBS ${module_name})
@@ -378,6 +384,9 @@ ENDMACRO()
 MACRO(ADD_MODULE_PUB_LIB lib module_name)
     ADD_MODULE_LIB(${lib} ${module_name} ${ARGN})
     SET_TARGET_PROPERTIES(${module_name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+    IF(WIN32)
+        set_property(TARGET ${module_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
+    ENDIF()
 ENDMACRO()
 
 MACRO(ADD_EXAMPLE tgt)
@@ -890,7 +899,6 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
                 ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
                 ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
         TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1)
-        TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DLL=1)
         # Set DAS_EXPORTS to export all MOD symbols from libDaScript
     ELSE()
         ADD_DAS_STATIC_LIBRARY(${library} ${PARSER_GENERATED_SRC}

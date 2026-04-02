@@ -4,17 +4,13 @@ MACRO(SOURCE_GROUP_FILES _groupName _fileNames )
 	SET_SOURCE_FILES_PROPERTIES( ${${_fileNames}} PROPERTIES "MY_GROUP_NAME" ${_groupNameP} )
 ENDMACRO(SOURCE_GROUP_FILES)
 
+include(CheckIPOSupported)
+check_ipo_supported(RESULT supported OUTPUT error)
+
 MACRO(SETUP_LTO _targetName)
-    IF(APPLE)
-        IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-            # set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-        ELSE()
-            set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-        ENDIF()
-    ELSEIF(UNIX)
-        IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-            set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-        ENDIF()
+	# Disable Win32 LTO due to compiler bug (most likely `v_ldu_ptr` inlining).
+    IF(supported AND NOT (MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4))
+        set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     ENDIF()
 ENDMACRO()
 
