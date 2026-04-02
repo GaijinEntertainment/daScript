@@ -259,6 +259,107 @@ def satisfies_constraint(version_str, constraint : string) : bool {
     return true
 }
 
+// ── .gitignore management ───────────────────────────────────────────
+
+def gitignore_add(root, pattern : string) {
+    // skip if not a git repository
+    if (!fexist("{root}/.git")) {
+        return
+    }
+    let gitignore_path = "{root}/.gitignore"
+    // read existing content and check for duplicates
+    var content = ""
+    fopen(gitignore_path, "rb") <| $(f) {
+        if (f != null) {
+            content = fread(f)
+        }
+    }
+    // check if pattern already present (exact line match)
+    var found = false
+    var rest = content
+    while (!empty(rest)) {
+        let nl = find(rest, "\n")
+        var line : string
+        if (nl >= 0) {
+            line = slice(rest, 0, nl)
+            rest = slice(rest, nl + 1)
+        } else {
+            line = rest
+            rest = ""
+        }
+        // strip trailing \r
+        if (!empty(line) && ends_with(line, "\r")) {
+            line = slice(line, 0, length(line) - 1)
+        }
+        if (line == pattern) {
+            found = true
+            break
+        }
+    }
+    if (found) {
+        return
+    }
+    // append pattern
+    fopen(gitignore_path, "ab") <| $(f) {
+        if (f != null) {
+            // ensure we start on a new line
+            if (!empty(content) && !ends_with(content, "\n")) {
+                fprint(f, "\n")
+            }
+            fprint(f, "{pattern}\n")
+        }
+    }
+    log_debug("added '{pattern}' to {gitignore_path}")
+}
+
+def gitignore_remove(root, pattern : string) {
+    if (!fexist("{root}/.git")) {
+        return
+    }
+    let gitignore_path = "{root}/.gitignore"
+    var content = ""
+    fopen(gitignore_path, "rb") <| $(f) {
+        if (f != null) {
+            content = fread(f)
+        }
+    }
+    if (empty(content)) {
+        return
+    }
+    // rebuild without the matching line
+    var result = ""
+    var removed = false
+    var rest = content
+    while (!empty(rest)) {
+        let nl = find(rest, "\n")
+        var line : string
+        if (nl >= 0) {
+            line = slice(rest, 0, nl)
+            rest = slice(rest, nl + 1)
+        } else {
+            line = rest
+            rest = ""
+        }
+        var trimmed = line
+        if (!empty(trimmed) && ends_with(trimmed, "\r")) {
+            trimmed = slice(trimmed, 0, length(trimmed) - 1)
+        }
+        if (trimmed == pattern) {
+            removed = true
+            continue
+        }
+        result = nl >= 0 ? "{result}{line}\n" : "{result}{line}"
+    }
+    if (removed) {
+        fopen(gitignore_path, "wb") <| $(f) {
+            if (f != null) {
+                fprint(f, result)
+            }
+        }
+        log_debug("removed '{pattern}' from {gitignore_path}")
+    }
+}
+
 def copy_dir_rec(src, dst : string) : bool {
     mkdir(dst)
     var ok = true

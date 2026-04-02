@@ -1106,3 +1106,111 @@ def test_cmd_remove_global_entry(t : T?) {
     }
 }
 
+[test]
+def test_gitignore_add(t : T?) {
+    let tmp_root = "{get_das_root()}/_daspkg_test_gitignore"
+    mkdir(tmp_root)
+    // create a fake .git dir so gitignore_add doesn't skip
+    mkdir("{tmp_root}/.git")
+    let gitignore = "{tmp_root}/.gitignore"
+
+    t |> run("creates .gitignore if missing") @(t : T?) {
+        remove(gitignore)
+        gitignore_add(tmp_root, "modules/foo")
+        var content = ""
+        fopen(gitignore, "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "modules/foo\n")
+    }
+    t |> run("appends without duplicating") @(t : T?) {
+        remove(gitignore)
+        gitignore_add(tmp_root, "modules/foo")
+        gitignore_add(tmp_root, "modules/bar")
+        gitignore_add(tmp_root, "modules/foo")  // duplicate
+        var content = ""
+        fopen(gitignore, "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "modules/foo\nmodules/bar\n")
+    }
+    t |> run("appends newline if file doesn't end with one") @(t : T?) {
+        fopen(gitignore, "wb") <| $(f) {
+            if (f != null) {
+                fprint(f, "existing")
+            }
+        }
+        gitignore_add(tmp_root, "modules/baz")
+        var content = ""
+        fopen(gitignore, "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "existing\nmodules/baz\n")
+    }
+    t |> run("skips if no .git directory") @(t : T?) {
+        let no_git = "{get_das_root()}/_daspkg_test_nogit"
+        mkdir(no_git)
+        gitignore_add(no_git, "modules/foo")
+        t |> success(!fexist("{no_git}/.gitignore"))
+        rmdir(no_git)
+    }
+    // cleanup
+    remove(gitignore)
+    force_rmdir("{tmp_root}/.git")
+    rmdir(tmp_root)
+}
+
+[test]
+def test_gitignore_remove(t : T?) {
+    let tmp_root = "{get_das_root()}/_daspkg_test_gitignore_rm"
+    mkdir(tmp_root)
+    mkdir("{tmp_root}/.git")
+    let gitignore = "{tmp_root}/.gitignore"
+
+    t |> run("removes matching line") @(t : T?) {
+        fopen(gitignore, "wb") <| $(f) {
+            if (f != null) {
+                fprint(f, "modules/foo\nmodules/bar\nmodules/baz\n")
+            }
+        }
+        gitignore_remove(tmp_root, "modules/bar")
+        var content = ""
+        fopen(gitignore, "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "modules/foo\nmodules/baz\n")
+    }
+    t |> run("no-op if pattern not found") @(t : T?) {
+        fopen(gitignore, "wb") <| $(f) {
+            if (f != null) {
+                fprint(f, "modules/foo\n")
+            }
+        }
+        gitignore_remove(tmp_root, "modules/nope")
+        var content = ""
+        fopen(gitignore, "rb") <| $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "modules/foo\n")
+    }
+    t |> run("no-op if no .gitignore") @(t : T?) {
+        remove(gitignore)
+        gitignore_remove(tmp_root, "modules/foo")
+        t |> success(!fexist(gitignore))
+    }
+    // cleanup
+    remove(gitignore)
+    force_rmdir("{tmp_root}/.git")
+    rmdir(tmp_root)
+}
+
