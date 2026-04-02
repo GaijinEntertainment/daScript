@@ -1,0 +1,101 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Only one Pages deployment at a time
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest-fat
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v4
+
+    - name: "Install Python dependencies"
+      run: pip install -r doc/requirements.txt
+
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Build: Daslang (for das2rst)"
+      run: |
+        set -eux
+        mkdir build
+        cmake --no-warn-unused-cli -B./build \
+          -DCMAKE_BUILD_TYPE:STRING=Release \
+          -DDAS_HV_DISABLED=OFF \
+          -DDAS_PUGIXML_DISABLED=OFF \
+          -DDAS_LLVM_DISABLED=ON \
+          -DDAS_GLFW_DISABLED=ON \
+          -G Ninja
+        cmake --build ./build --target daslang
+
+    - name: "Run das2rst"
+      run: |
+        set -eux
+        ./bin/daslang doc/reflections/das2rst.das
+
+    - name: "Build Sphinx HTML"
+      run: |
+        sphinx-build -W --keep-going -b html -d doc/sphinx-build doc/source build/site
+
+    - name: "Build Sphinx LaTeX"
+      run: |
+        sphinx-build -W --keep-going -b latex -d doc/sphinx-build doc/source build/latex
+
+    - name: "Compile PDF: daslangstdlib.tex"
+      uses: xu-cheng/latex-action@v4
+      with:
+        root_file: daslangstdlib.tex
+        working_directory: build/latex
+        continue_on_error: true
+
+    - name: "Compile PDF: daslang.tex"
+      uses: xu-cheng/latex-action@v4
+      with:
+        root_file: daslang.tex
+        working_directory: build/latex
+        continue_on_error: true
+
+    - name: "Stage site for deployment"
+      run: |
+        set -eux
+        mkdir -p _site
+
+        # Static landing page and assets
+        cp site/index.html _site/
+        cp site/robots.txt _site/
+        cp -r site/files _site/files
+
+        # Freshly-built Sphinx HTML docs
+        cp -r build/site _site/doc
+
+        # PDFs (referenced by index.html)
+        cp build/latex/daslang.pdf _site/doc/daslang.pdf || echo "WARNING: daslang.pdf not found"
+        cp build/latex/daslangstdlib.pdf _site/doc/daslangstdlib.pdf || echo "WARNING: daslangstdlib.pdf not found"
+
+        # GitHub Pages control files
+        touch _site/.nojekyll
+
+    - name: "Upload Pages artifact"
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: _site
+
+    - name: "Deploy to GitHub Pages"
+      id: deployment
+      uses: actions/deploy-pages@v4
