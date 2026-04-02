@@ -3,7 +3,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
-#include "daScript/das_common.h"
+#include "daScript/misc/das_common.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/aot_templates.h"
 #include "daScript/ast/ast_aot_cpp.h"

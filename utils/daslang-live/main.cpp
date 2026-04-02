@@ -9,7 +9,7 @@
 
 #include "daScript/daScript.h"
 #include "daScript/daScriptModule.h"
-#include "daScript/das_common.h"
+#include "daScript/misc/das_common.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/misc/crash_handler.h"

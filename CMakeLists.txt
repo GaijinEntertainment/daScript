@@ -738,6 +738,7 @@ include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/uric.h
 src/misc/gc_node.cpp
+src/misc/das_common.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
