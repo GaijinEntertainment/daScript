@@ -495,6 +495,7 @@ SET(SIMULATE_SRC
 ../src/simulate/hash.cpp
 ../src/simulate/debug_info.cpp
 ../src/simulate/runtime_string.cpp
+../src/simulate/runtime_iterator.cpp
 ../src/simulate/runtime_array.cpp
 ../src/simulate/runtime_table.cpp
 ../src/simulate/runtime_profile.cpp

@@ -9,6 +9,7 @@
 #include "daScript/simulate/aot_builtin.h"
 #include "daScript/simulate/aot_builtin_matrix.h"
 #include "daScript/simulate/aot_builtin_time.h"
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/simulate/interop.h"
 #include "daScript/simulate/jit_abi.h" // CallJitFn

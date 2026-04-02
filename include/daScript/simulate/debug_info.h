@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
+#include "daScript/misc/platform.h"
+
 namespace das
 {
 

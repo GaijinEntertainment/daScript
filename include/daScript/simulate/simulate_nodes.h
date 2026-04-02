@@ -2,6 +2,7 @@
 
 #include "simulate.h"
 
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/simulate_visit_op.h"
 
 namespace das {

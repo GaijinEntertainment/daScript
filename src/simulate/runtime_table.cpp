@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/runtime_table_nodes.h"
 
 namespace das

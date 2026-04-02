@@ -26,34 +26,6 @@ namespace das
         }
     }
 
-    bool PointerDimIterator::first ( Context &, char * _value ) {
-        char ** value = (char **) _value;
-        if ( data != data_end ) {
-            *value = *data;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    bool PointerDimIterator::next  ( Context &, char * _value ) {
-        char ** value = (char **) _value;
-        if ( ++data != data_end ) {
-            *value = *data;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    void PointerDimIterator::close ( Context & context, char * _value ) {
-        if ( _value ) {
-            char ** value = (char **) _value;
-            *value = nullptr;
-        }
-        context.freeIterator((char *)this, debugInfo);
-    }
-
     // this is here to occasionally investigate untyped evaluation paths
     #define WARN_SLOW_CAST(TYPE)
     // #define WARN_SLOW_CAST(TYPE)    DAS_ASSERTF(0, "internal perofrmance issue, casting eval to eval##TYPE" );
