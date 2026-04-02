@@ -15,7 +15,7 @@ jobs:
   pre_job:
     ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-fat
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -47,31 +47,31 @@ jobs:
           - target: linux
             release_target: linux
             release_arch: x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-latest-fat
             archive_ext: tar.gz
 
           - target: linux_arm
             release_target: linux
             release_arch: arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04-arm-fat
             archive_ext: tar.gz
 
           - target: darwin26
             release_target: darwin26
             release_arch: arm64
-            runner: macos-26 # arm64
+            runner: macos-26-xlarge # Apple Silicon arm64
             architecture_string: arm64
             archive_ext: tar.gz
 
           - target: darwin15
             release_target: darwin15
             release_arch: x86_64
-            runner: macos-15-intel # x64
+            runner: macos-15-large # Intel x86_64
             architecture_string: x86_64
             archive_ext: tar.gz
 
           - target: windows
-            runner: windows-latest
+            runner: windows-latest-fat
             archive_ext: zip
 
           - target: windows
