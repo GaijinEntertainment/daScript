@@ -530,6 +530,7 @@ SET(SIMULATE_SRC
 ../src/simulate/data_walker.cpp
 ../include/daScript/simulate/data_walker.h
 ../src/simulate/debug_print.cpp
+../src/runtime/context.cpp
 ../src/simulate/json_print.cpp
 ../src/simulate/json_scan.cpp
 ../include/daScript/simulate/debug_print.h
