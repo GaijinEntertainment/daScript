@@ -190,7 +190,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 }
                 var failed = !ok
                 if (ok) {
-                    if (!empty(output)) {
+                    if (!empty(output) && !log::failuresOnly) {
                         log::info("{output}")
                     }
                 } elif (program != null) {
