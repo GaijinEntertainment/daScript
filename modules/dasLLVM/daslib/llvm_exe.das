@@ -142,9 +142,33 @@ class CollectExternVisitor : AstVisitor {
                 types.t_int1,             // bool cmres
                 types.t_int1,             // bool fastcall
                 types.t_int1,             // bool pinvoke
+                types.t_int32,            // uint32_t nArguments
             )
         )
         reg_standalone_fn = LLVMAddFunctionWithType(g_mod, "jit_register_standalone_function", reg_standalone_fn_type)
+    }
+
+    def register_function(fn : Function?) : LLVMOpaqueValue? {
+        let fnmna = uid.get_dll_fn_name_ptr(fn)
+        let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
+        if (fn_publ == null) {
+            return null
+        }
+        let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
+        var reg_args = fixed_array<LLVMOpaqueValue?>(
+            standalone_ctx,
+            types.ConstI64(fn.index |> uint64),
+            get_string_constant_ptr(builder, string(fn.name)),
+            get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
+            types.ConstI64(fn.getMangledNameHash),
+            types.ConstI32(fn.totalStackSize |> uint64),
+            fn_ptr_cast,
+            types.ConstI1(isCMRES(fn)),
+            types.ConstI1(fn.flags.fastCall),
+            types.ConstI1(fn.moreFlags.pinvoke),
+            types.ConstI32(fn.arguments |> length |> uint64),
+        )
+        return LLVMBuildCall2(builder, reg_standalone_fn_type, reg_standalone_fn, reg_args, "")
     }
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
@@ -306,25 +330,10 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
-        let fn = expr.func
-
-        let fnmna = uid.get_dll_fn_name_ptr(expr.func)
-        let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
-        let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
-        var reg_args = fixed_array<LLVMOpaqueValue?>(
-            standalone_ctx,
-            types.ConstI64(fn.index |> uint64),
-            get_string_constant_ptr(builder, string(fn.name)),
-            get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
-            types.ConstI64(fn.getMangledNameHash),
-            types.ConstI32(fn.totalStackSize |> uint64),
-            fn_ptr_cast,
-            types.ConstI1(isCMRES(fn)),
-            types.ConstI1(fn.flags.fastCall),
-            types.ConstI1(fn.moreFlags.pinvoke),
-        )
-        let fn_ptr = LLVMBuildCall2(builder, reg_standalone_fn_type, reg_standalone_fn, reg_args, "")
-
+        let fn_ptr = register_function(expr.func)
+        if (fn_ptr == null) {
+            return
+        }
         let name = uid.get_addr(expr)
         let global_var = LLVMGetNamedGlobal(mod, name.glob())
         if (global_var == null) {
@@ -336,23 +345,7 @@ class CollectExternVisitor : AstVisitor {
 
     def override preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
-            let fn = expr.constructor
-            let fnmna = uid.get_dll_fn_name_ptr(fn)
-            let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
-            let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
-            var reg_args = fixed_array<LLVMOpaqueValue?>(
-                standalone_ctx,
-                types.ConstI64(fn.index |> uint64),
-                get_string_constant_ptr(builder, string(fn.name)),
-                get_string_constant_ptr(builder, string(fn |> get_mangled_name())),
-                types.ConstI64(fn.getMangledNameHash),
-                types.ConstI32(fn.totalStackSize |> uint64),
-                fn_ptr_cast,
-                types.ConstI1(isCMRES(fn)),
-                types.ConstI1(fn.flags.fastCall),
-                types.ConstI1(fn.moreFlags.pinvoke),
-            )
-            LLVMBuildCall2(builder, reg_standalone_fn_type, reg_standalone_fn, reg_args, "")
+            register_function(expr.constructor)
         }
     }
 
@@ -437,11 +430,20 @@ class CollectExternVisitor : AstVisitor {
 
 def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVMContextRef; builder : LLVMBuilderRef,
                                mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
-                               funcs : array<FunctionPtr>; var uids : UidNodes?) {
+                               var funcs : array<FunctionPtr>; var uids : UidNodes?) {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids)
     var inscope adapter_resolve = make_visitor(*extern_resolver)
     for (fn in funcs) {
         visit(fn, adapter_resolve)
+    }
+    // Register [pinvoke] and [export] functions in tabMnLookup so they can be
+    // found by name at runtime (e.g. via invoke_in_context).
+    for (fn in funcs) {
+        if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
+            extern_resolver.uid.reset(get_ptr(fn))
+            extern_resolver.register_function(get_ptr(fn))
+            extern_resolver.uid.reset(null)
+        }
     }
     var result = extern_resolver.any_unimplemented
     extern_resolver.uid = null
@@ -465,6 +467,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     // will crash.
     var funcs : array<FunctionPtr>
     var has_no_jit = false
+    var any_pinvoke = false
     prog |> for_each_module <| $(m) {
         if (m.name == "llvm_func" || m.name == "llvm_macro") {
             return
@@ -474,6 +477,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
                     has_no_jit = true
                     to_log(LOG_ERROR, "LLVM EXE: function '{fun.name}' is marked no_jit but standalone exe requires all functions to be JIT-compiled\n")
+                }
+                if (fun.moreFlags.pinvoke) {
+                    any_pinvoke = true
                 }
                 funcs |> emplace(fun)
             }
@@ -557,7 +563,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         types.ConstI64(prog.globalStringHeapSize |> uint64),
         types.ConstI64(get_context_globals_size(program_context)),
         types.ConstI64(get_context_shared_size(program_context)),
-        types.ConstI1(false)
+        types.ConstI1(any_pinvoke || prog.policies.threadlock_context || prog.policies.debugger)
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")
 

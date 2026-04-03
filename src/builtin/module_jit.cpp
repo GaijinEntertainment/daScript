@@ -224,10 +224,9 @@ extern "C" {
             context.allocateGlobalsAndShared();
             memset(context.globals, 0, context.globalsSize);
             memset(context.shared, 0, context.sharedSize);
-
-            // Instead of copying everything like in standalone contexts
-            // Let's add only things we really need.
-            // And apparently now we need nothing.
+            if ( pinvoke ) {
+                context.contextMutex = new recursive_mutex;
+            }
         }
 
         void allocFunctions ( uint64_t count ) {
@@ -249,7 +248,7 @@ extern "C" {
 
         void *registerJitFunction ( uint64_t index, const char * name, const char * mangledName,
                                    uint64_t mnh, uint32_t stackSize, void * fnPtr,
-                                   bool cmres, bool fastcall, bool pinvoke ) {
+                                   bool cmres, bool fastcall, bool pinvoke, uint32_t nArguments ) {
             DAS_ASSERT(index < (uint64_t) totalFunctions);
             auto & fn = functions[index];
             fn.name = code->allocateName(name);
@@ -265,6 +264,7 @@ extern "C" {
             memset(finfo, 0, sizeof(FuncInfo));
             finfo->name = fn.name;
             finfo->stackSize = stackSize;
+            finfo->count = nArguments;
             fn.debugInfo = finfo;
             auto node = code->makeNode<SimNode_Jit>(LineInfo{}, (JitFunction) fnPtr);
             fn.code = node;
@@ -300,9 +300,10 @@ extern "C" {
                                              const char * name, const char * mangledName,
                                              uint64_t mnh, uint32_t stackSize,
                                              void * fnPtr,
-                                             bool cmres, bool fastcall, bool pinvoke ) {
+                                             bool cmres, bool fastcall, bool pinvoke,
+                                             uint32_t nArguments ) {
         return static_cast<JitContext *>(ctx)->registerJitFunction(index, name, mangledName, mnh, stackSize,
-                                                            fnPtr, cmres, fastcall, pinvoke);
+                                                            fnPtr, cmres, fastcall, pinvoke, nArguments);
     }
 
     DAS_API void jit_register_standalone_variable ( Context * ctx, uint64_t mangledNameHash, uint64_t offset ) {
