@@ -93,7 +93,7 @@ class ClangGen : CppGenBind {
 def main {
     // generate
     var cgb = new ClangGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

@@ -669,7 +669,7 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
 // @path_to_linker - path to clang-cl on Windows. By default we'll use clang-cl from LLVM package
 // on Windows, default otherwise.
 def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string) {
-    with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
+    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
@@ -679,7 +679,7 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
 }
 
 def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string) {
-    with_default_target_machine <| $(targetMachine : LLVMTargetMachineRef) {
+    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile

@@ -198,7 +198,7 @@ def report_float4(var ctx : Context; what : uint; category, name : string) {
 def report_enum(var ctx : Context; what : uint; category, name : string; en : table<uint; string>) {
     var d32 : int;
     glGetIntegerv(what, safe_addr(d32));
-    let found = en |> get(uint(d32)) <| $(pname) {
+    let found = en |> get(uint(d32)) $(pname) {
         report_to_debugger(ctx, category, name, pname);
     }
     if (!found) {
@@ -262,7 +262,7 @@ class ContextStateAgent : DapiDebugAgent {
         }
         // error
         let err = glGetError();
-        let found = opengl_last_error |> get(err) <| $(pname) {
+        let found = opengl_last_error |> get(err) $(pname) {
             report_to_debugger(ctx, "OPENGL", "last error", pname);
         }
         if (!found) {

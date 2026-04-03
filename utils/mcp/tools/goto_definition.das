@@ -47,7 +47,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
     }
     let first = max(0, line - 1 - context_lines)
     let last = min(length(lines) - 1, line - 1 + context_lines)
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         for (idx in range(first, last + 1)) {
             write(w, "{idx + 1}: {lines[idx]}\n")
         }
@@ -92,7 +92,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
                     found = true,
                     kind = "builtin",
                     name = string(c.func.name),
-                    snippet = build_string() <| $(var w) {
+                    snippet = build_string() $(var w) {
                         write(w, "builtin def {c.func.name}")
                         write_func_signature(w, *c.func)
                     }
@@ -223,7 +223,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
 }
 
 def format_result(defn : DefinitionResult; hit : CursorHit) : string {
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         write(w, "Symbol: {defn.name}\n")
         write(w, "Kind: {defn.kind}\n")
         if (!empty(defn.file)) {
@@ -247,7 +247,7 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         return make_tool_result("Invalid line or column (must be >= 1)", true)
     }
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt, project) <| $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) {
             return "No expression found at {file}:{line}:{col}"
@@ -260,7 +260,7 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
             }
         }
         // nothing resolved — show what we found at cursor
-        return build_string() <| $(var w) {
+        return build_string() $(var w) {
             write(w, "Found expression at cursor but could not resolve definition:\n")
             for (hit in hits) {
                 write(w, "  {describe(hit)}\n")

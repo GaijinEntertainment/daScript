@@ -21,7 +21,7 @@ struct NumberRange {
 }
 
 def each(r : NumberRange) : iterator<int> {
-    return <- generator<int>() <| $ {
+    return <- generator<int> {
         for (i in r.low .. r.high) {
             yield i
         }
@@ -59,11 +59,11 @@ def main {
     // === Generators ===
 
     // A generator creates an iterator using yield.
-    // generator<ElementType>() <| $ { ... yield value ... return false }
+    // generator<ElementType> { ... yield value ... return false }
     // Note: generators use either $ { } or $() { } (both are valid).
 
     // --- Simple generator: count up ---
-    var counter <- generator<int>() <| $ {
+    var counter <- generator<int> {
         for (i in range(5)) {
             yield i
         }
@@ -77,7 +77,7 @@ def main {
 
     // --- Generator with filtering ---
     // Yield only even numbers from 0..9
-    var evens <- generator<int>() <| $ {
+    var evens <- generator<int> {
         for (i in range(10)) {
             if (i % 2 == 0) {
                 yield i
@@ -92,7 +92,7 @@ def main {
     print("\n")
 
     // --- Fibonacci generator ---
-    var fibs <- generator<int>() <| $ {
+    var fibs <- generator<int> {
         var a = 0
         var b = 1
         while (a < 100) {
@@ -111,7 +111,7 @@ def main {
 
     // --- Generator with state ---
     // Each generator maintains its own state between yields.
-    var powers <- generator<int>() <| $ {
+    var powers <- generator<int> {
         var val = 1
         for (_ in range(8)) {
             yield val

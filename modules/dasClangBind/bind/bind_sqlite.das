@@ -105,7 +105,7 @@ class SqliteGen : CppGenBind {
 def main {
     // generate
     var cgb = new SqliteGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

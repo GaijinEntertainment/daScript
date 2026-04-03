@@ -64,12 +64,12 @@ def private normalize_line_endings(text : string) : string {
 
 def private is_content_same(content : string; filename : string) : bool {
     var is_same = false
-    fopen(filename, "rb") <| $(fr) {
+    fopen(filename, "rb") $(fr) {
         if (fr == null) {
             is_same = false
             return
         }
-        fread(fr) <| $(data) {
+        fread(fr) $(data) {
             is_same = content == data
         }
     }
@@ -81,11 +81,11 @@ def parse_input_file(filename : string) {
     var aot_files = array<tuple<string; string>>()
     var aot_lib_files = array<tuple<string; string>>()
     var ctx_files = array<tuple<string; string>>()
-    fopen(filename, "rb") <| $(fr) {
+    fopen(filename, "rb") $(fr) {
         if (fr == null) {
             print("Couldn't open input file {filename}\n")
         }
-        fread(fr) <| $(data) {
+        fread(fr) $(data) {
             for (line in normalize_line_endings(string(data)) |> split("\n")) {
                 if (line.empty()) {
                     continue
@@ -117,7 +117,7 @@ def write_result(content : string; output_filename : string;
                  mode : string; force_overwrite : bool) {
     var result : bool = true
     if (content |> length() > 0 && (force_overwrite || !is_content_same(content, output_filename))) {
-        fopen(output_filename, "wb") <| $(fw) {
+        fopen(output_filename, "wb") $(fw) {
             if (fw != null) {
                 to_log(LOG_INFO, "{mode} to {output_filename}\n")
                 fwrite(fw, content)
@@ -158,7 +158,7 @@ def main() {
         ctx_files = get_list_of_files(args, "-ctx")
     }
     var result = true
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
             let res = aot(aot_in, false, cross_platform, cop)

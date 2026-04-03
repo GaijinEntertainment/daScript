@@ -203,7 +203,7 @@ def main() {
         if (length(files) == 1) {
             jsonTestFile = files[0]
         } else {
-            jsonTestFile = build_string() <| $(var w) {
+            jsonTestFile = build_string() $(var w) {
                 for (p, pi in inputPaths, range(length(inputPaths))) {
                     if (pi > 0) {
                         write(w, ",")
@@ -400,7 +400,7 @@ def private print_timing_outliers() {
     }
     let stddev = sqrt(variance / double(n))
     // sort descending by time
-    sort(fileTimings) <| $(a, b) {
+    sort(fileTimings) $(a, b) {
         return a.dt > b.dt
     }
     let count = min(timingOutliers, n)
@@ -456,7 +456,7 @@ def finish_tests(res : SuiteResult; start_time : int64) {
             time_usec = totalDt,
             tests <- suite::test_results
         )
-        fopen(jsonFilePath, "wb") <| $(f) {
+        fopen(jsonFilePath, "wb") $(f) {
             if (f != null) {
                 fwrite(f, sprint_json(report, false))
             }

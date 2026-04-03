@@ -9,12 +9,12 @@ def do_format_file(file : string) : string {
     var unformatted = ""
     var formatted = ""
     var read_ok = false
-    fopen(file, "rb") <| $(fr) {
+    fopen(file, "rb") $(fr) {
         if (fr == null) {
             return
         }
         read_ok = true
-        fmap(fr) <| $(data) {
+        fmap(fr) $(data) {
             unformatted = string(data)
             formatted = format_source(data)
         }
@@ -29,7 +29,7 @@ def do_format_file(file : string) : string {
         return make_tool_result("File already formatted: {file}")
     }
     var write_ok = false
-    fopen(file, "wb") <| $(fw) {
+    fopen(file, "wb") $(fw) {
         if (fw == null) {
             return
         }

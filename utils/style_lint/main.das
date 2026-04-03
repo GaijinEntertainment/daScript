@@ -60,7 +60,7 @@ def main() {
                 using() $(var cop : CodeOfPolicies) {
                     cop.ignore_shared_modules = true
                     cop.export_all = true
-                    cop.completion = true
+                    cop.lint_check = true
                     cop.no_optimizations = true
                     cop.no_infer_time_folding = true
                     compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {

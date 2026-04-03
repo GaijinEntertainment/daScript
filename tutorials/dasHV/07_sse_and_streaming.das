@@ -122,13 +122,13 @@ def with_server(port : int; blk : block<(base_url : string) : void>) {
 // The raw overload is useful for binary data or when you need exact sizes.
 
 def example_string_streaming(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/events"
         var chunks : array<string>
         request_cb(req, $(data : string) {
             chunks |> push(clone_string(data))
-        }) <| $(var resp) {
+        }) $(var resp) {
             print("  status: {int(resp.status_code)}\n")
         }
         print("  received {length(chunks)} chunk(s)\n")
@@ -146,13 +146,13 @@ def example_string_streaming(base_url : string) {
 // binary protocols or when you need to track exact byte counts.
 
 def example_raw_streaming(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/events"
         var total_bytes = 0
         request_cb(req, $(data; var size : int) {
             total_bytes += size
-        }) <| $(var resp : HttpResponse?) {
+        }) $(var resp : HttpResponse?) {
             print("  status: {int(resp.status_code)}\n")
         }
         print("  received {total_bytes} total bytes\n")
@@ -167,7 +167,7 @@ def example_raw_streaming(base_url : string) {
 // the SSE response.
 
 def example_post_streaming(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.POST
         req.url := "{base_url}/stream-echo"
         req.body := "hello from POST"
@@ -175,7 +175,7 @@ def example_post_streaming(base_url : string) {
         var chunks : array<string>
         request_cb(req, $(data : string) {
             chunks |> push(clone_string(data))
-        }) <| $(var resp) {
+        }) $(var resp) {
             print("  status: {int(resp.status_code)}\n")
         }
         var full = ""
@@ -194,13 +194,13 @@ def example_post_streaming(base_url : string) {
 // The callback fires for every body chunk regardless of Content-Type.
 
 def example_plain_streaming(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/plain"
         var chunks : array<string>
         request_cb(req, $(data : string) {
             chunks |> push(clone_string(data))
-        }) <| $(var resp) {
+        }) $(var resp) {
             print("  status: {int(resp.status_code)}\n")
         }
         var full = ""
@@ -260,13 +260,13 @@ def parse_sse_events(body : string) : array<SseEvent> {
 }
 
 def example_parse_sse(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/events"
         var chunks : array<string>
         request_cb(req, $(data : string) {
             chunks |> push(clone_string(data))
-        }) <| $(var resp) {
+        }) $(var resp) {
             assert(resp.status_code == http_status.OK)
         }
         // Concatenate all chunks
@@ -293,7 +293,7 @@ def example_parse_sse(base_url : string) {
 //    resp |> TEXT_PLAIN(body)            Set body + return 200
 //
 //  Client-side:
-//    request_cb(req, on_chunk) <| $(resp) { ... }
+//    request_cb(req, on_chunk) $(resp) { ... }
 //      on_chunk overloads:
 //        $(data : string)               String chunk callback
 //        $(data; var size : int)         Raw bytes callback (uint8? + size)
@@ -305,7 +305,7 @@ def example_parse_sse(base_url : string) {
 
 [export]
 def main() {
-    with_server(SERVER_PORT) <| $(base_url) {
+    with_server(SERVER_PORT) $(base_url) {
         print("=== Section 1 & 2: SSE endpoint + string streaming ===\n")
         example_string_streaming(base_url)
 

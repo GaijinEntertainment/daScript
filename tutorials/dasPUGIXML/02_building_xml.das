@@ -26,7 +26,7 @@ require pugixml/PUGIXML_boost
 def creating_document() {
     print("=== Creating a document ===\n")
 
-    with_doc() <| $(doc) {
+    with_doc() $(doc) {
         // Add a root element using the low-level pugixml API
         var dnode = doc as xml_node
         var root = append_child(dnode, "greeting")
@@ -52,15 +52,15 @@ def creating_document() {
 def tag_builder() {
     print("\n=== Tag builder EDSL ===\n")
 
-    with_doc() <| $(doc) {
+    with_doc() $(doc) {
         // Build nested XML with pipe + block
-        doc |> tag("library") <| $(var library) {
-            library |> tag("book") <| $(var book) {
+        doc |> tag("library") $(var library) {
+            library |> tag("book") $(var book) {
                 book |> tag("title", "The C Programming Language")
                 book |> tag("author", "Brian W. Kernighan")
                 book |> tag("year", "1988")
             }
-            library |> tag("book") <| $(var book) {
+            library |> tag("book") $(var book) {
                 book |> tag("title", "Structure and Interpretation")
                 book |> tag("author", "Harold Abelson")
                 book |> tag("year", "1996")
@@ -93,8 +93,8 @@ def tag_builder() {
 def attribute_chaining() {
     print("\n=== Attribute chaining ===\n")
 
-    with_doc() <| $(doc) {
-        doc |> tag("config") <| $(var config) {
+    with_doc() $(doc) {
+        doc |> tag("config") $(var config) {
             // Chain multiple attributes on one element
             var res = config |> tag("display")
             res |> attr("width", 1920) |> attr("height", 1080) |> attr("fullscreen", true)
@@ -120,14 +120,14 @@ def attribute_chaining() {
 def combined_building() {
     print("\n=== Combined tag + attr ===\n")
 
-    with_doc() <| $(doc) {
-        doc |> tag("catalog") <| $(var catalog) {
-            catalog |> tag("product") <| $(var p) {
+    with_doc() $(doc) {
+        doc |> tag("catalog") $(var catalog) {
+            catalog |> tag("product") $(var p) {
                 p |> attr("id", "A001") |> attr("category", "electronics")
                 p |> tag("name", "Wireless Mouse")
                 p |> tag("price", "29.99")
             }
-            catalog |> tag("product") <| $(var p) {
+            catalog |> tag("product") $(var p) {
                 p |> attr("id", "B002") |> attr("category", "books")
                 p |> tag("name", "daslang Handbook")
                 p |> tag("price", "49.99")
@@ -147,7 +147,7 @@ def combined_building() {
 def builder_helpers() {
     print("\n=== Builder helpers ===\n")
 
-    with_doc() <| $(doc) {
+    with_doc() $(doc) {
         var dnode = doc as xml_node
         var root = append_child(dnode, "record")
 
@@ -184,8 +184,8 @@ def builder_helpers() {
 def serializing() {
     print("\n=== Serializing to string ===\n")
 
-    with_doc() <| $(doc) {
-        doc |> tag("root") <| $(var root) {
+    with_doc() $(doc) {
+        doc |> tag("root") $(var root) {
             root |> tag("child", "hello")
         }
 
@@ -214,10 +214,10 @@ def dynamic_building() {
     let names = fixed_array("Alice", "Bob", "Charlie")
     let scores = fixed_array(95, 87, 92)
 
-    with_doc() <| $(doc) {
-        doc |> tag("leaderboard") <| $(var board) {
+    with_doc() $(doc) {
+        doc |> tag("leaderboard") $(var board) {
             for (i in range(3)) {
-                board |> tag("player") <| $(var p) {
+                board |> tag("player") $(var p) {
                     p |> attr("rank", i + 1)
                     p |> tag("name", names[i])
                     p |> tag("score", "{scores[i]}")

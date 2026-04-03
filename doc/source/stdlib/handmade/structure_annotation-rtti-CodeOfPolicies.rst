@@ -8,6 +8,7 @@ Whether paranoid validation is enabled (extra checks, no optimizations).
 Whether cross-platform AOT is enabled (if not, we generate code for the current platform).
 File name for AOT output (if not set, we generate a temporary file).
 If we are in code completion mode.
+Whether we are in lint-check mode (standalone linters set this so modules can adapt behavior).
 Export all functions and global variables.
 If not set, we recompile main module each time.
 Keep context alive after main function.

@@ -9,7 +9,7 @@ require daslib/style_lint
 require strings
 
 def do_lint_single(file : string; project : string = "") : string {
-    return compile_only(file, true, true, project) $(program; issues) {
+    return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
         if (!empty(issues)) {
             compile_warnings = "Compilation warnings:\n{issues}\n"
@@ -54,7 +54,7 @@ def do_lint_file(file : string; project : string = "") : LintFileResult {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             cop.export_all = true
-            cop.completion = true
+            cop.lint_check = true
             cop.no_optimizations = true
             cop.no_infer_time_folding = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {

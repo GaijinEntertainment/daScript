@@ -13,12 +13,12 @@ def public do_type_of(file : string; line_str, col_str : string; no_opt_str : st
         return make_tool_result("Invalid line or column (must be >= 1)", true)
     }
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt, project) <| $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) {
             return "No expression found at {file}:{line}:{col}"
         }
-        return build_string() <| $(var w) {
+        return build_string() $(var w) {
             for (hit in hits) {
                 write(w, "{hit.rtti}")
                 if (!empty(hit.name)) {

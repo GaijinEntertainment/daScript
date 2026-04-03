@@ -13,7 +13,7 @@ var system_prompt : string
 
 def load_system_prompt() {
     let prompt_file = "examples/daslang_helper/system_prompt.md"
-    fopen(prompt_file, "rb") <| $(f) {
+    fopen(prompt_file, "rb") $(f) {
         if (f != null) {
             system_prompt = fread(f)
         }
@@ -41,11 +41,11 @@ def compile_check(code : string) : string {
     var inscope access <- make_file_access("sandbox.das_project")
     set_file_source(access, file_name, code)
     var result : string
-    using() <| $(var mg : ModuleGroup) {
-        using() <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
-            compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+            compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation FAILED:\n{issues}"
                 } else {
@@ -256,7 +256,7 @@ def main() {
         token = get_env_variable("TELEGRAM_BOT_TOKEN")
     }
     if (empty(token)) {
-        fopen(".bot_token", "rb") <| $(f) {
+        fopen(".bot_token", "rb") $(f) {
             if (f != null) {
                 token = fread(f)
                 token = strip(token)

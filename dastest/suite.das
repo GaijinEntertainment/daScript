@@ -260,7 +260,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                             unsafe(invoke_in_context(*context, "fill_coverage_report", unsafe(addr(report)), ""))
                             // Clone to current context.
                             report := report
-                            fopen(ctx.cov_path, "ab") <| $(fw) {
+                            fopen(ctx.cov_path, "ab") $(fw) {
                                 if (fw != null) {
                                     to_log(LOG_INFO, "Coverage to {ctx.cov_path}\n")
                                     fwrite(fw, report)
@@ -434,7 +434,7 @@ def private test_any(name : string; func; args_num : int; var context : FileCtx;
     var testLocation : string
     let t0 = ref_time_ticks()
     var testing : T?
-    defer <| $ {
+    defer() {
         unsafe {
             delete testing
         }

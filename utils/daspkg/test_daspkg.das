@@ -329,7 +329,7 @@ def test_cmd_check(t : T?) {
     mkdir(test_root)
     mkdir(modules_dir)
     mkdir(pkg_dir)
-    fopen("{pkg_dir}/.das_module", "wb") <| $(f) {
+    fopen("{pkg_dir}/.das_module", "wb") $(f) {
         fwrite(f, "options gen2\n")
     }
 
@@ -648,7 +648,7 @@ def test_log_writes_to_file(t : T?) {
         log("hello from test\n")
         // read the log file and check content
         var content : string
-        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+        fopen("{test_root}/modules/.daspkg.log", "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -662,7 +662,7 @@ def test_log_writes_to_file(t : T?) {
         log_init(test_root)
         log_debug("debug message here")
         var content : string
-        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+        fopen("{test_root}/modules/.daspkg.log", "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -675,7 +675,7 @@ def test_log_writes_to_file(t : T?) {
         var output : string
         run_cmd("git --version", output)
         var content : string
-        fopen("{test_root}/modules/.daspkg.log", "rb") <| $(f) {
+        fopen("{test_root}/modules/.daspkg.log", "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -1118,7 +1118,7 @@ def test_gitignore_add(t : T?) {
         remove(gitignore)
         gitignore_add(tmp_root, "modules/foo")
         var content = ""
-        fopen(gitignore, "rb") <| $(f) {
+        fopen(gitignore, "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -1131,7 +1131,7 @@ def test_gitignore_add(t : T?) {
         gitignore_add(tmp_root, "modules/bar")
         gitignore_add(tmp_root, "modules/foo")  // duplicate
         var content = ""
-        fopen(gitignore, "rb") <| $(f) {
+        fopen(gitignore, "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -1139,14 +1139,14 @@ def test_gitignore_add(t : T?) {
         t |> equal(content, "modules/foo\nmodules/bar\n")
     }
     t |> run("appends newline if file doesn't end with one") @(t : T?) {
-        fopen(gitignore, "wb") <| $(f) {
+        fopen(gitignore, "wb") $(f) {
             if (f != null) {
                 fprint(f, "existing")
             }
         }
         gitignore_add(tmp_root, "modules/baz")
         var content = ""
-        fopen(gitignore, "rb") <| $(f) {
+        fopen(gitignore, "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -1174,14 +1174,14 @@ def test_gitignore_remove(t : T?) {
     let gitignore = "{tmp_root}/.gitignore"
 
     t |> run("removes matching line") @(t : T?) {
-        fopen(gitignore, "wb") <| $(f) {
+        fopen(gitignore, "wb") $(f) {
             if (f != null) {
                 fprint(f, "modules/foo\nmodules/bar\nmodules/baz\n")
             }
         }
         gitignore_remove(tmp_root, "modules/bar")
         var content = ""
-        fopen(gitignore, "rb") <| $(f) {
+        fopen(gitignore, "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }
@@ -1189,14 +1189,14 @@ def test_gitignore_remove(t : T?) {
         t |> equal(content, "modules/foo\nmodules/baz\n")
     }
     t |> run("no-op if pattern not found") @(t : T?) {
-        fopen(gitignore, "wb") <| $(f) {
+        fopen(gitignore, "wb") $(f) {
             if (f != null) {
                 fprint(f, "modules/foo\n")
             }
         }
         gitignore_remove(tmp_root, "modules/nope")
         var content = ""
-        fopen(gitignore, "rb") <| $(f) {
+        fopen(gitignore, "rb") $(f) {
             if (f != null) {
                 content = fread(f)
             }

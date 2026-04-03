@@ -105,7 +105,7 @@ class QuirrelGen : CppGenBind {
 def main {
     // generate
     var cgb = new QuirrelGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

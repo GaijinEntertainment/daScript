@@ -14,8 +14,8 @@
 //
 //   [export]
 //   def main() {
-//       with_tutorial_server(18080) <| $(base_url) {
-//           GET("{base_url}/ping") <| $(resp) {
+//       with_tutorial_server(18080) $(base_url) {
+//           GET("{base_url}/ping") $(resp) {
 //               print("{resp.body}\n")
 //           }
 //       }

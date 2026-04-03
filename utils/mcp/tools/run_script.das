@@ -16,7 +16,7 @@ def do_run_script(file, code : string; timeout_str : string = "") : string {
         script_path = make_temp_das_file()
         is_temp = true
         var write_ok = false
-        fopen(script_path, "wb") <| $(fw) {
+        fopen(script_path, "wb") $(fw) {
             if (fw == null) {
                 return
             }

@@ -21,7 +21,7 @@ require stbimage/stbimage_boost
 
 def make_test_image() : Image {
     var img = make_image(8, 8, 4)
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         for (i in range(8 * 8)) {
             let x = i % 8
             let y = i / 8
@@ -49,13 +49,13 @@ def make_test_image() : Image {
 def example_read_pixels() {
     var inscope img <- make_test_image()
     // Read uint8 pixels
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         let idx = (3 * 8 + 5) * 4  // pixel at (5, 3)
         print("  Pixel (5,3): R={int(pixels[idx])} G={int(pixels[idx+1])} B={int(pixels[idx+2])} A={int(pixels[idx+3])}\n")
     }
     // Read as float — requires converting to bpc=4 first
     var inscope hdr <- img.to_bpc(4)
-    hdr |> with_pixels_f() <| $(var pixels : array<float>#) {
+    hdr |> with_pixels_f() $(var pixels : array<float>#) {
         let idx = (3 * 8 + 5) * 4
         print("  Pixel (5,3) as float: R={pixels[idx]} G={pixels[idx+1]} B={pixels[idx+2]} A={pixels[idx+3]}\n")
     }
@@ -71,7 +71,7 @@ def example_read_pixels() {
 def example_row_access() {
     var inscope img <- make_test_image()
     // Access row 4
-    img |> with_row(4) <| $(var row : array<uint8>#) {
+    img |> with_row(4) $(var row : array<uint8>#) {
         let bytes_per_row = length(row)
         print("  Row 4: {bytes_per_row} bytes ({bytes_per_row / 4} pixels)\n")
         // First pixel of row 4
@@ -79,7 +79,7 @@ def example_row_access() {
     }
     // Access row as floats — requires bpc=4
     var inscope hdr <- img.to_bpc(4)
-    hdr |> with_row_f(4) <| $(var row : array<float>#) {
+    hdr |> with_row_f(4) $(var row : array<float>#) {
         print("  Row 4, pixel 0 as float: R={row[0]} G={row[1]} B={row[2]} A={row[3]}\n")
     }
 }
@@ -94,7 +94,7 @@ def example_row_access() {
 def example_modify_pixels() {
     var inscope img <- make_test_image()
     // Invert all pixels
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         for (i in range(8 * 8)) {
             pixels[i * 4 + 0] = uint8(255 - int(pixels[i * 4 + 0]))  // R
             pixels[i * 4 + 1] = uint8(255 - int(pixels[i * 4 + 1]))  // G
@@ -103,11 +103,11 @@ def example_modify_pixels() {
         }
     }
     // Verify: pixel (0,0) was R=0 G=0 B=128, now R=255 G=255 B=127
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         print("  After invert, pixel (0,0): R={int(pixels[0])} G={int(pixels[1])} B={int(pixels[2])}\n")
     }
     // Modify a single row — draw a red line on row 4
-    img |> with_row(4) <| $(var row : array<uint8>#) {
+    img |> with_row(4) $(var row : array<uint8>#) {
         for (x in range(8)) {
             row[x * 4 + 0] = uint8(255)
             row[x * 4 + 1] = uint8(0)
@@ -115,7 +115,7 @@ def example_modify_pixels() {
             row[x * 4 + 3] = uint8(255)
         }
     }
-    img |> with_row(4) <| $(var row : array<uint8>#) {
+    img |> with_row(4) $(var row : array<uint8>#) {
         print("  Row 4 after red line: R={int(row[0])} G={int(row[1])} B={int(row[2])}\n")
     }
 }
@@ -170,7 +170,7 @@ def example_to_bpc() {
     var inscope hdr <- img.to_bpc(4)
     print("  to_bpc(4): bpc={hdr.bpc}, data_size={hdr.data_size()}\n")
     // Verify: pixel (0,0) B=128 → float ~0.502
-    hdr |> with_pixels() <| $(var pixels : array<float>#) {
+    hdr |> with_pixels() $(var pixels : array<float>#) {
         print("  Float pixel (0,0): R={pixels[0]} G={pixels[1]} B={pixels[2]} A={pixels[3]}\n")
     }
     // float → uint16
@@ -181,8 +181,8 @@ def example_to_bpc() {
     print("  to_bpc(1): bpc={back.bpc}, data_size={back.data_size()}\n")
     // Verify round-trip preserves values
     var match = true
-    img |> with_pixels() <| $(var orig : array<uint8>#) {
-        back |> with_pixels() <| $(var rt : array<uint8>#) {
+    img |> with_pixels() $(var orig : array<uint8>#) {
+        back |> with_pixels() $(var rt : array<uint8>#) {
             for (i in range(length(orig))) {
                 if (orig[i] != rt[i]) {
                     match = false

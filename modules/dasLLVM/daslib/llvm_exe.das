@@ -459,7 +459,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : LLVMOpaqueValue? {
 
     let builder = LLVMCreateBuilder()
-    defer <| ${
+    defer() {
         LLVMDisposeBuilder(builder)
     }
     // Collect ALL used functions from the program (not just JIT-compiled ones from `funcs`).
@@ -468,11 +468,11 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     var funcs : array<FunctionPtr>
     var has_no_jit = false
     var any_pinvoke = false
-    prog |> for_each_module <| $(m) {
+    prog |> for_each_module() $(m) {
         if (m.name == "llvm_func" || m.name == "llvm_macro") {
             return
         }
-        m |> for_each_function("") <| $(fun) {
+        m |> for_each_function("") $(fun) {
             if (fun.flags.used) {
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
                     has_no_jit = true

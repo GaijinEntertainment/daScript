@@ -41,7 +41,7 @@ class TypeInfoGetStructInfo : AstTypeInfoMacro {
             return <- default<ExpressionPtr>
         }
         // Build "Name(f1:t1, f2:t2, ...)" string.
-        var result = build_string() <| $(var w) {
+        var result = build_string() $(var w) {
             w |> write("{expr.typeexpr.structType.name}(")
             var first = true
             for (i in iter_range(expr.typeexpr.structType.fields)) {

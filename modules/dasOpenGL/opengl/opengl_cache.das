@@ -52,7 +52,7 @@ def public cache_shader_program(vtx, frag : string# implicit) : uint {
 def public cache_image(_filename : string# implicit) : uint {
     var value = 0u
     let filename = clone_string(_filename)
-    images |> get(filename) <| $(pimg) {
+    images |> get(filename) $(pimg) {
         value = pimg
     }
     if (value == 0u) {

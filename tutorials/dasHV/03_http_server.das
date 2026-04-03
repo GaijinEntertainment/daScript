@@ -85,7 +85,7 @@ class TutorialHttpServer : HvWebServer {
         // get_param(req, key).  Use each_param to iterate all of them.
         GET("/search") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var result = "query:"
-            each_param(req) <| $(key, value : string) {
+            each_param(req) $(key, value : string) {
                 result = "{result} {key}={value}"
             }
             return resp |> TEXT_PLAIN(result)
@@ -164,73 +164,73 @@ def with_server(port : int; blk : block<(base_url : string) : void>) {
 
 [export]
 def main() {
-    with_server(SERVER_PORT) <| $(base_url) {
+    with_server(SERVER_PORT) $(base_url) {
 
         print("=== Section 1: Minimal GET route ===\n")
-        GET("{base_url}/hello") <| $(resp) {
+        GET("{base_url}/hello") $(resp) {
             print("GET /hello -> {resp.status_code}: {resp.body}\n")
         }
 
         print("\n=== Section 2: POST route ===\n")
-        POST("{base_url}/echo", "Hello from client!") <| $(resp) {
+        POST("{base_url}/echo", "Hello from client!") $(resp) {
             print("POST /echo -> {resp.status_code}: {resp.body}\n")
         }
 
         print("\n=== Section 3: All HTTP methods ===\n")
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.PUT
             req.url := "{base_url}/resource"
             req.body := "updated data"
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("PUT /resource -> {resp.status_code}: {resp.body}\n")
             }
         }
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.PATCH
             req.url := "{base_url}/resource"
             req.body := "partial update"
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("PATCH /resource -> {resp.status_code}: {resp.body}\n")
             }
         }
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.DELETE
             req.url := "{base_url}/resource"
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("DELETE /resource -> {resp.status_code}: {resp.body}\n")
             }
         }
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.HEAD
             req.url := "{base_url}/resource"
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 let exists = get_header(resp, "X-Resource-Exists")
                 print("HEAD /resource -> {resp.status_code}, X-Resource-Exists: {exists}\n")
             }
         }
 
         print("\n=== Section 4: Path parameters ===\n")
-        GET("{base_url}/users/42") <| $(resp) {
+        GET("{base_url}/users/42") $(resp) {
             print("GET /users/42 -> {resp.body}\n")
         }
-        GET("{base_url}/users/7/posts/99") <| $(resp) {
+        GET("{base_url}/users/7/posts/99") $(resp) {
             print("GET /users/7/posts/99 -> {resp.body}\n")
         }
 
         print("\n=== Section 5: Query parameters ===\n")
-        GET("{base_url}/search?q=daslang&page=1&limit=10") <| $(resp) {
+        GET("{base_url}/search?q=daslang&page=1&limit=10") $(resp) {
             print("GET /search?... -> {resp.body}\n")
         }
 
         print("\n=== Section 6: Response headers ===\n")
-        GET("{base_url}/headers") <| $(resp) {
+        GET("{base_url}/headers") $(resp) {
             let custom = get_header(resp, "X-Custom")
             let req_id = get_header(resp, "X-Request-Id")
             print("GET /headers -> X-Custom: {custom}, X-Request-Id: {req_id}\n")
         }
 
         print("\n=== Section 7: JSON response ===\n")
-        GET("{base_url}/api/status") <| $(resp) {
+        GET("{base_url}/api/status") $(resp) {
             print("GET /api/status -> {resp.body}\n")
             // Parse the JSON response
             var err : string
@@ -239,15 +239,15 @@ def main() {
                 print("  parsed OK\n")
             }
         }
-        POST("{base_url}/api/echo", "\{\"msg\":\"hello\"\}") <| $(resp) {
+        POST("{base_url}/api/echo", "\{\"msg\":\"hello\"\}") $(resp) {
             print("POST /api/echo -> {resp.body}\n")
         }
 
         print("\n=== Section 8: ANY route ===\n")
-        GET("{base_url}/any-method") <| $(resp) {
+        GET("{base_url}/any-method") $(resp) {
             print("GET /any-method -> {resp.body}\n")
         }
-        POST("{base_url}/any-method", "") <| $(resp) {
+        POST("{base_url}/any-method", "") $(resp) {
             print("POST /any-method -> {resp.body}\n")
         }
     }

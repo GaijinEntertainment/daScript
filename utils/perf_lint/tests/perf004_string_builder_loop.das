@@ -13,7 +13,7 @@ options gen2
 //   }
 //
 // Good pattern:
-//   let result = build_string() <| $(var writer) {
+//   let result = build_string() $(var writer) {
 //       for (i in range(100)) {
 //           write(writer, "x")
 //       }
@@ -42,7 +42,7 @@ def bad_string_builder_while() : string {
 // --- Good patterns (no warnings) ---
 
 def good_build_string() : string {
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         for (i in range(100)) {
             write(writer, "x")
         }

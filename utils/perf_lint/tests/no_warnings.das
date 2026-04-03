@@ -7,7 +7,7 @@ options gen2
 require strings
 
 def good_build_string() : string {
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         for (i in range(100)) {
             write(writer, "item {i}\n")
         }
@@ -16,7 +16,7 @@ def good_build_string() : string {
 
 def good_peek_data_iteration(s : string) : int {
     var count = 0
-    peek_data(s) <| $(arr) {
+    peek_data(s) $(arr) {
         for (i in range(length(arr))) {
             if (int(arr[i]) == 'o') {
                 count ++
@@ -27,7 +27,7 @@ def good_peek_data_iteration(s : string) : int {
 }
 
 def good_modify_data(s : string) : string {
-    return modify_data(s) <| $(var arr) {
+    return modify_data(s) $(var arr) {
         for (i in range(length(arr))) {
             arr[i] = uint8(int(arr[i]) - 32)
         }
