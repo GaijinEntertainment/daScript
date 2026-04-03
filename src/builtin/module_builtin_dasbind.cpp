@@ -482,7 +482,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
             return true;
         }
-        
+
         static bool needWrapArg(ExpressionPtr arg) {
             if ( arg->type->isString() ) {
                 if ( arg->rtti_isCallFunc() ) {

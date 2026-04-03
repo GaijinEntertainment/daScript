@@ -2455,6 +2455,7 @@ def private start_debug_agent(var ctx : Context) {
 
 def private start_agent(force : bool = false) {
     if (force || !has_debug_agent_context("~debug")) {
+        this_context().name := "debugger"
         fork_debug_agent_context(@@start_debug_agent)
         print(use_instruments() ? "dap: install debug agent (with instruments)\n" : "dap: install debug agent\n")
     } else {

@@ -309,6 +309,8 @@ namespace das {
     class PassVisitor : public Visitor {
     public:
         explicit PassVisitor(int32_t round) : round(round) {}
+        using Visitor::preVisit;
+        using Visitor::visit;
         virtual void preVisitProgram ( Program * prog ) override;
         virtual void visitProgram ( Program * prog ) override;
         virtual void reportFolding();
