@@ -241,7 +241,7 @@ struct BoolArray {
 def each(self : BoolArray) : iterator<bool> {
     //! Returns an iterator over all boolean values in the BoolArray.
     let pself = unsafe(addr(self))
-    return <- generator<bool>() <| $ {
+    return <- generator<bool> {
         let len = (*pself).length()
         return false if (len == 0)
         let full_uints = uint(len) >> 5u

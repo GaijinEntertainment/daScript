@@ -181,6 +181,44 @@ class StyleLintVisitor : AstVisitor {
         self->check_block_pipe(expr.at, expr.arguments)
     }
 
+    // --- STYLE001/002 for desugared generators ---
+
+    def override preVisitExprMakeStruct(var expr : smart_ptr<ExprMakeStruct>) : void {
+        // generator<T>() <| $ { ... } is lowered before lint runs — ExprMakeGenerator
+        // is replaced by ExprMakeStruct. Detect via source line inspection.
+        if (expr.at.fileInfo == null || expr.at.line == 0u) {
+            return
+        }
+        var src = ""
+        get_file_source_line(expr.at.fileInfo, expr.at.line) $(line) {
+            src := line
+        }
+        let col = int(expr.at.column)
+        if (col >= length(src) || !starts_with(slice(src, col), "generator<")) {
+            return
+        }
+        let pipe_pos = find(src, "<|", col + 10)
+        if (pipe_pos < 0) {
+            return
+        }
+        let after_pipe = strip_left(slice(src, pipe_pos + 2))
+        let pipes_block = starts_with(after_pipe, "$(") || starts_with(after_pipe, "$ ") || starts_with(after_pipe, "$\{") || starts_with(after_pipe, "@") || starts_with(after_pipe, "\{")
+        if (!pipes_block) {
+            return
+        }
+        let arrow_pos = find(after_pipe, "=>")
+        let brace_pos = find(after_pipe, "\{")
+        let is_lambda_shorthand = arrow_pos >= 0 && (brace_pos < 0 || arrow_pos < brace_pos)
+        if (is_lambda_shorthand) {
+            return
+        }
+        if (starts_with(after_pipe, "$()")) {
+            self->style_warning("STYLE002: remove <| pipe and $() for parameterless block; use direct trailing block", expr.at)
+        } else {
+            self->style_warning("STYLE001: remove <| pipe before block argument; use direct trailing block syntax", expr.at)
+        }
+    }
+
     // --- STYLE003: redundant $() on parameterless blocks (all contexts) ---
 
     def override preVisitExprMakeBlock(var expr : smart_ptr<ExprMakeBlock>) : void {

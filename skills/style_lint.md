@@ -31,6 +31,8 @@ Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_
 
 The `<|` pipe and `$()` are desugared during parsing — in the compiled AST, `foo() <| $(a) { body }` and `foo() $(a) { body }` produce identical `ExprCall` nodes. The visitor uses `get_file_source_line()` to read the original source text and check for `<|` or `$` between the call and the block argument.
 
+**Generators:** `generator<T>() <| $ { ... }` is fully lowered before the lint pass — `ExprMakeGenerator` becomes `ExprMakeStruct` + builtin `each` call. Detection uses `preVisitExprMakeStruct` with column-precise source line check: verifies the `ExprMakeStruct` at position starts with `generator<` in the source, then checks for `<|` pipe after it.
+
 ### Pure AST (STYLE005-006)
 
 - **STYLE005:** `ExprIfThenElse` with no `if_false`, single-statement body that is `ExprReturn`/`ExprBreak`/`ExprContinue`. Skips already-postfix forms by checking `ifte.at.line != stmt.at.line`.

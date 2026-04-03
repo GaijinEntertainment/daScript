@@ -173,9 +173,9 @@ def document_module_fio(root : string) {
     var groups <- array<DocGroup>(
         hide_group(group_by_regex("Internal builtin functions", mod, %regex~builtin%%)),
         group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove|rename|copy_file|file_size|equivalent|is_symlink|set_mtime)%%),
-        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|is_absolute|relative|parent)$%%),
-        group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|rmdir|rmdir_rec|chdir|getcwd)$%%),
-        group_by_regex("Filesystem queries", mod, %regex~(temp_directory|create_temp_file|create_temp_directory|disk_space)$%%),
+        group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|is_absolute|relative|relative_result|parent)$%%),
+        group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
+        group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
         group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_timed_out|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
@@ -265,7 +265,7 @@ def document_module_rtti(root : string) {
         group_by_regex("Module access", mod, %regex~(module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation|module_for_each_dependency)$%%),
         group_by_regex("Annotation access", mod, %regex~(get_annotation_argument_value|add_annotation_argument)$%%),
         group_by_regex("Compilation and simulation", mod, %regex~(compile|compile_file|for_each_expected_error|for_each_require_declaration|simulate)$%%),
-        group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root)$%%),
+        group_by_regex("File access", mod, %regex~(make_file_access|set_file_source|add_file_access_root|add_extra_module)$%%),
         group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%),
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%),
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%),
@@ -294,7 +294,7 @@ def document_module_ast(root : string) {
         group_by_regex("Size and offset", mod, %regex~.*_(size|offset)%%),
         group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr|StructurePtr)%%),
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%),
-        group_by_regex("Error reporting", mod, %regex~(macro_error|macro_performance_warning)%%),
+        group_by_regex("Error reporting", mod, %regex~(macro_error|macro_performance_warning|macro_style_warning)%%),
         group_by_regex("Location and context", mod, %regex~(force_at|collect_dependencies|get_ast_context)%%),
         group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%),
         group_by_regex("Log", mod, %regex~(to_compilation_log)%%),
@@ -681,7 +681,8 @@ def document_module_ast_match(root : string) {
         group_by_regex("Name and type extraction", mod, %regex~.*(qm_extract_name|qm_extract_call_name|qm_extract_field_name|qm_extract_type|qm_rtti|qm_call_name_matches)$%%),
         group_by_regex("Argument filtering", mod, %regex~.*(qm_count_real_args|qm_real_arg_index|qm_extract_remaining_args|qm_is_fake_arg|qm_count_real_call_args|qm_real_call_arg_index)$%%),
         group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%),
-        group_by_regex("Constant construction", mod, %regex~.*(qm_make_zero_const)$%%)
+        group_by_regex("Constant construction", mod, %regex~.*(qm_make_zero_const)$%%),
+        group_by_regex("AST reconstruction", mod, %regex~.*(qm_convert_local_function|qm_resolve_local_function|qm_convert_comprehension|qm_resolve_comprehension)$%%)
     )
     document("AST pattern matching", mod, "ast_match.rst", groups)
 }
@@ -1059,7 +1060,7 @@ def document_module_heartbeat(root : string) {
 def document_module_lint(root : string) {
     var mod = find_module("lint")
     var groups <- array<DocGroup>(
-        group_by_regex("Lint operations", mod, %regex~(paranoid)$%%)
+        group_by_regex("Lint operations", mod, %regex~(paranoid|paranoid_collect)$%%)
     )
     document("Paranoid lint pass", mod, "lint.rst", groups)
 }
