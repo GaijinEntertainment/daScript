@@ -389,7 +389,7 @@ namespace das {
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
             if ( fn->arguments.size() ) ss << ")";
-            if ( fn->result && !fn->result->isVoid() ) ss << " : " << fn->result->describe();
+            if ( fn->result ) ss << " : " << fn->result->describe();
             if ( !gen2 ) ss << "\n";
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & arg, bool last ) override {
