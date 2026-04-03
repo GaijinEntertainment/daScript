@@ -1543,11 +1543,11 @@ def sort(var a : auto(TT)[] | #) {
     } else {
         unsafe {
             static_if (typeinfo is_ref_type(type<TT>)) {
-                __builtin_sort_dim_any_cblock(a, typeinfo sizeof(a[0]), length(a)) <| $(x, y  : TT) : bool {
+                __builtin_sort_dim_any_cblock(a, typeinfo sizeof(a[0]), length(a)) $(x, y  : TT) : bool {
                     return x < y
                 }
             } else {
-                __builtin_sort_dim_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a)) <| $(x, y  : TT) : bool {
+                __builtin_sort_dim_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a)) $(x, y  : TT) : bool {
                     return x < y
                 }
             }
@@ -1576,11 +1576,11 @@ def sort(var a : array<auto(TT)> | #) {
     } else {
         unsafe {
             static_if (typeinfo is_ref_type(type<TT>)) {
-                __builtin_sort_array_any_cblock(a, typeinfo sizeof(a[0]), length(a)) <| $(x, y  : TT) : bool {
+                __builtin_sort_array_any_cblock(a, typeinfo sizeof(a[0]), length(a)) $(x, y  : TT) : bool {
                     return x < y
                 }
             } else {
-                __builtin_sort_array_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a)) <| $(x, y  : TT) : bool {
+                __builtin_sort_array_any_ref_cblock(a, typeinfo sizeof(a[0]), length(a)) $(x, y  : TT) : bool {
                     return x < y
                 }
             }

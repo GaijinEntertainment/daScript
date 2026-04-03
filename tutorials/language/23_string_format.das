@@ -87,7 +87,7 @@ def main {
     // More efficient than concatenating strings in a loop.
 
     print("build_string:\n")
-    var csv = build_string() $(var writer : StringBuilderWriter) {
+    let csv = build_string() $(var writer : StringBuilderWriter) {
         writer |> write("name,score\n")
         writer |> write("Alice,")
         writer |> write(95)
@@ -99,7 +99,7 @@ def main {
     print(csv)
 
     // build_string with loop — efficient string construction
-    var list = build_string() $(var writer : StringBuilderWriter) {
+    let list = build_string() $(var writer : StringBuilderWriter) {
         for (i in range(5)) {
             if (i > 0) {
                 writer |> write(", ")
@@ -110,7 +110,7 @@ def main {
     print("  squares: {list}\n")
 
     // === write_char and write_chars ===
-    var decorated = build_string() $(var writer : StringBuilderWriter) {
+    let decorated = build_string() $(var writer : StringBuilderWriter) {
         writer |> write_chars(' ', 2)
         writer |> write("hello")
         writer |> write_char('!')
@@ -118,14 +118,14 @@ def main {
     print("  decorated: [{decorated}]\n")
 
     // === write_escape_string ===
-    var escaped = build_string() $(var writer : StringBuilderWriter) {
+    let escaped = build_string() $(var writer : StringBuilderWriter) {
         writer |> write_escape_string("line1\nline2\ttab")
     }
     print("  escaped: {escaped}\n")
 
     // === Practical example: table formatting ===
     print("table:\n")
-    var tbl = build_string() $(var writer : StringBuilderWriter) {
+    let tbl = build_string() $(var writer : StringBuilderWriter) {
         writer |> write("  ")
         writer |> write("Name")
         writer |> write("  ")

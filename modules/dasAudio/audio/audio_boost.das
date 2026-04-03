@@ -230,7 +230,7 @@ class AudioChannel {
     }
     def report_eos {
         if (status != null) {
-            status |> update <| $(var data : AudioChannelStatus#) {
+            status |> update() $(var data : AudioChannelStatus#) {
                 data = AudioChannelStatus(state = AudioChannelState.stopped)
             }
         }
@@ -241,7 +241,7 @@ class AudioChannel {
         }
         if (paused) {
             if (status != null) {
-                status |> update <| $(var status_channel : AudioChannelStatus#) {
+                status |> update() $(var status_channel : AudioChannelStatus#) {
                     status_channel.state = AudioChannelState.paused
                     status_channel.playback_position = playback_position
                     source->update_status(status_channel)
@@ -355,7 +355,7 @@ class AudioChannel {
         playback_position += inputFrames
         // update status
         if (status != null) {
-            status |> update <| $(var status_channel : AudioChannelStatus#) {
+            status |> update() $(var status_channel : AudioChannelStatus#) {
                 status_channel.state = paused ? AudioChannelState.paused : (stop ? AudioChannelState.stopping : AudioChannelState.playing)
                 status_channel.playback_position = playback_position
                 source->update_status(status_channel)
@@ -707,7 +707,7 @@ def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var 
 }
 
 def collect_channel(channel : Channel?) {
-    channel |> gather_ex <| $(cmd : AudioCommand#; info : TypeInfo const?; var ctx : Context) {
+    channel |> gather_ex() $(cmd : AudioCommand#; info : TypeInfo const?; var ctx : Context) {
         unsafe {
             var pCmd = reinterpret<AudioCommand?> addr(cmd)
             delete pCmd
@@ -739,11 +739,11 @@ def command_processor {
     return if (g_command_channel == null)
     var commands : array<AudioCommand>
     if (g_collect_channel != null) {
-        g_command_channel |> gather_and_forward(g_collect_channel) <| $(cmd : AudioCommand#) {
+        g_command_channel |> gather_and_forward(g_collect_channel) $(cmd : AudioCommand#) {
             commands |> push_clone(cmd)
         }
     } else {
-        g_command_channel |> gather <| $(cmd : AudioCommand#) {
+        g_command_channel |> gather() $(cmd : AudioCommand#) {
             commands |> push_clone(cmd)
         }
     }
@@ -795,12 +795,12 @@ def command_processor {
             add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
         } elif (cmd is append_pcm) {
             assume pcmd = cmd as append_pcm
-            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
                 ch.source->append(pcmd.samples)
             }
         } elif (cmd is pause) {
             let pcmd = cmd as pause
-            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
                 if (pcmd.paused) {
                     ch.pause_fade_target = 0.0  // fade out to pause
                 } else {
@@ -810,7 +810,7 @@ def command_processor {
             }
         } elif (cmd is volume) {
             let vcmd = cmd as volume
-            g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(vcmd.sid) $(var ch : AudioChannel?&) {
                 ch.volume = vcmd.volume
                 if (vcmd.time > 0.) {
                     let nFrames = uint64(vcmd.time * float(MA_SAMPLE_RATE))
@@ -821,12 +821,12 @@ def command_processor {
             }
         } elif (cmd is pan) {
             let vcmd = cmd as pan
-            g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(vcmd.sid) $(var ch : AudioChannel?&) {
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), vcmd.pan)
             }
         } elif (cmd is pitch) {
             let pcmd = cmd as pitch
-            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
                 ch.pitch = pcmd.pitch
             }
         } elif (cmd is global_pitch) {
@@ -835,7 +835,7 @@ def command_processor {
             g_pause = cmd as global_pause // todo: envelope?
         } elif (cmd is stop) {
             let scmd = cmd as stop
-            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
                 if (scmd.time > 0.) {
                     let nFrames = uint64(scmd.time * float(MA_SAMPLE_RATE))
                     ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), 0., nFrames)
@@ -852,13 +852,13 @@ def command_processor {
             g_head_velocity = hcmd.velocity
         } elif (cmd is sound_position) {
             assume scmd = cmd as sound_position
-            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
                 ch.position3d = scmd.position
                 ch.velocity3d = scmd.velocity
             }
         } elif (cmd is status) {
             assume scmd = cmd as status
-            let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&) {
+            let found = g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
                 if (ch.status != null) {
                     if (scmd.status != null) {
                         panic("audio: status already set for {scmd.sid}")
@@ -869,7 +869,7 @@ def command_processor {
             }
             if (!found) {
                 if (scmd.status != null) {
-                    scmd.status |> update <| $(var data : AudioChannelStatus#) {
+                    scmd.status |> update() $(var data : AudioChannelStatus#) {
                         data = AudioChannelStatus(state = AudioChannelState.stopped)
                     }
                     scmd.status |> notify_and_release
@@ -877,7 +877,7 @@ def command_processor {
             }
         } elif (cmd is reverb) {
             assume rcmd = cmd as reverb
-            g_sid_2_channel |> get(rcmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(rcmd.sid) $(var ch : AudioChannel?&) {
                 if (ch.reverb == null) {
                     ch.reverb = new I3DL2Reverb
                 }
@@ -886,7 +886,7 @@ def command_processor {
             }
         } elif (cmd is chorus_cmd) {
             assume ccmd = cmd as chorus_cmd
-            g_sid_2_channel |> get(ccmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(ccmd.sid) $(var ch : AudioChannel?&) {
                 if (ch.chorus == null) {
                     ch.chorus = new ma_chorus
                     chorus_init(ch.chorus, float(MA_SAMPLE_RATE))
@@ -895,7 +895,7 @@ def command_processor {
             }
         } elif (cmd is set_playback_position) {
             assume scmd = cmd as set_playback_position
-            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&) {
+            g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
                 ch.playback_position = ch.source->set_position(scmd.position)
             }
         } else {
@@ -927,7 +927,7 @@ def mixer(var data : array<float>#; channels, rate : int; dt : float) {
             panic("{input_samples} - {current_samples}, need {output_samples}; mixer: missing_samples < 0")
         }
         g_mix_buffer |> resize(input_samples * channels)
-        array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) <| $(mix_data) {
+        array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) $(mix_data) {
             let srct = g_channels |> length
             for (i in range(srct)) {
                 let srci = srct - i - 1

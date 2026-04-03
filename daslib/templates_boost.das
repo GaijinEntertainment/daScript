@@ -511,7 +511,7 @@ def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : L
 
 def add_global_var(mod : Module?; vname : string; var typ : TypeDeclPtr; vat : LineInfo; priv : bool) {
     //! Add global variable to the module, given name and type.
-    return add_global_var(mod, vname, typ, vat, priv) <| $ [unused_argument(v)] (var v) {
+    return add_global_var(mod, vname, typ, vat, priv) $ [unused_argument(v)] (var v) {
         pass
     }
 }

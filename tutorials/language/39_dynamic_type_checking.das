@@ -69,6 +69,7 @@ def instance_of_demo() {
     // Check exact type
     print("circle is Circle:    {is_instance_of(s_c, type<Circle>)}\n")
     print("circle is Rectangle: {is_instance_of(s_c, type<Rectangle>)}\n")
+    print("rect is Rectangle:   {is_instance_of(s_r, type<Rectangle>)}\n")
 
     // Check derived type
     print("square is Rectangle: {is_instance_of(s_sq, type<Rectangle>)}\n")
@@ -266,6 +267,7 @@ def main() {
 // === is_instance_of ===
 // circle is Circle:    true
 // circle is Rectangle: false
+// rect is Rectangle:   true
 // square is Rectangle: true
 // square is Shape:     true
 // null is Shape:       false

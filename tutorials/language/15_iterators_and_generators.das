@@ -51,7 +51,7 @@ def main {
     print("\n")
 
     // keys() and values() iterate over tables
-    var scores <- { "math" => 95, "art" => 87 }
+    let scores <- { "math" => 95, "art" => 87 }
     for (k, v in keys(scores), values(scores)) {
         print("  {k}: {v}\n")
     }
@@ -129,7 +129,7 @@ def main {
     // The NumberRange struct has an each() function defined above.
     // This means we can iterate over it directly.
 
-    var r = NumberRange(low = 3, high = 8)
+    let r = NumberRange(low = 3, high = 8)
     print("NumberRange(3,8): ")
     for (i in r) {
         print("{i} ")

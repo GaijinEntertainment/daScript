@@ -22,6 +22,8 @@ module perf_lint shared private
 //!   PERF007 — unnecessary string(das_string) in comparison
 //!   PERF008 — unnecessary get_ptr() for is/as type checks
 //!   PERF009 — redundant move-init variable immediately returned
+//!   PERF010 — unnecessary get_ptr() for null comparison
+//!   PERF011 — unnecessary get_ptr() for field access
 
 require daslib/ast_boost
 require strings
@@ -93,7 +95,7 @@ class PerfLintVisitor : AstVisitor {
         }
         let code = slice(text, 0, colon)
         var found = false
-        get_file_source_line(at.fileInfo, at.line) <| $(line) {
+        get_file_source_line(at.fileInfo, at.line) $(line) {
             // look for "// nolint:PERFxxx" or "// nolint(PERFxxx)" in a comment
             let nolint_pos = find(line, "nolint")
             if (nolint_pos >= 0) {
@@ -117,7 +119,7 @@ class PerfLintVisitor : AstVisitor {
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && length(current_function.inferStack) > 0) {
-            msg = build_string() <| $(var w) {
+            msg = build_string() $(var w) {
                 w |> write(text)
                 w |> write("\n  while compiling {current_function.name}")
                 for (ih in current_function.inferStack) {
@@ -296,6 +298,19 @@ class PerfLintVisitor : AstVisitor {
             return false
         }
         return call.func.fromGeneric.name == "get_ptr"
+    }
+
+    def is_get_ptr_vs_null(maybe_get_ptr : Expression?; maybe_null : Expression?) : bool {
+        //! Returns true if maybe_get_ptr is get_ptr() and maybe_null is null.
+        if (!self->is_get_ptr_of_smart_ptr(maybe_get_ptr)) {
+            return false
+        }
+        return false if (maybe_null == null)
+        if (maybe_null is ExprConstPtr) {
+            var cptr = maybe_null as ExprConstPtr
+            return cptr.value == null
+        }
+        return false
     }
 
     // --- function tracking ---
@@ -544,6 +559,30 @@ class PerfLintVisitor : AstVisitor {
                     self->perf_warning("PERF008: get_ptr() is unnecessary for is/as; smart_ptr supports type checks directly", expr.at)
                 }
             }
+        }
+        // PERF010: get_ptr(x) == null or get_ptr(x) != null
+        if (self->is_get_ptr_vs_null(get_ptr(expr.left), get_ptr(expr.right)) || self->is_get_ptr_vs_null(get_ptr(expr.right), get_ptr(expr.left))) {
+            self->perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at)
+        }
+    }
+
+    // --- PERF011: unnecessary get_ptr() for field access ---
+
+    def override preVisitExprField(expr : smart_ptr<ExprField>) : void {
+        if (in_closure > 0) {
+            return
+        }
+        if (self->is_get_ptr_of_smart_ptr(get_ptr(expr.value))) {
+            self->perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
+        }
+    }
+
+    def override preVisitExprSafeField(expr : smart_ptr<ExprSafeField>) : void {
+        if (in_closure > 0) {
+            return
+        }
+        if (self->is_get_ptr_of_smart_ptr(get_ptr(expr.value))) {
+            self->perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
         }
     }
 

@@ -100,7 +100,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
             return <- default<ExpressionPtr>
         }
         var inscope func_copy <- clone_function(expr.func)
-        var func_name = build_string() <| $(var w) {
+        var func_name = build_string() $(var w) {
             w |> write("{func_copy.name}`constant_expression")
             for (i in argi) {
                 let fhash = hash(describe(expr.arguments[i]))

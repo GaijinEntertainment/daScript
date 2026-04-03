@@ -29,7 +29,7 @@ variant Token {
 }
 
 def each_token(st : string) {
-    return <- generator<Token>() <| $() {
+    return <- generator<Token> {
         var tst := st
         var chars <- unsafe(each(tst))
         var ahead = ' '

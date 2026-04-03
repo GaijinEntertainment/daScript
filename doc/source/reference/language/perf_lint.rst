@@ -248,6 +248,34 @@ The value is moved in and then immediately moved out. Simplify to
     // Good — direct return
     return <- make_thing()
 
+PERF010 — unnecessary ``get_ptr()`` for null comparison
+=========================================================
+
+``smart_ptr`` supports ``==`` and ``!=`` against ``null`` directly.
+Calling ``get_ptr()`` first is unnecessary overhead.
+
+.. code-block:: das
+
+    // Bad — get_ptr is redundant
+    if (get_ptr(expr) == null) { ... }      // PERF010
+
+    // Good — direct comparison
+    if (expr == null) { ... }
+
+PERF011 — unnecessary ``get_ptr()`` for field access
+======================================================
+
+``smart_ptr`` auto-dereferences for field access. Calling ``get_ptr()``
+first to access a field is unnecessary.
+
+.. code-block:: das
+
+    // Bad — get_ptr is redundant
+    let name = get_ptr(expr).__rtti         // PERF011
+
+    // Good — direct field access
+    let name = expr.__rtti
+
 ------------------------------
 Suppressing specific warnings
 ------------------------------

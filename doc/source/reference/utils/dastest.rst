@@ -222,14 +222,14 @@ Annotate functions with ``[benchmark]``.  Each benchmark receives a
    def dyn_array(b : B?) {
        let size = 100
 
-       b |> run("fill_vec") <| $() {
+       b |> run("fill_vec") {
            var vec : array<int>
            for (i in range(size)) {
                vec |> push(i)
            }
        }
 
-       b |> run("fill_vec_reserve") <| $() {
+       b |> run("fill_vec_reserve") {
            var vec : array<int>
            vec |> reserve(size)
            for (i in range(size)) {

@@ -65,7 +65,7 @@ def main {
     // Use keys() and values() iterators with parallel for
     // NOTE: iteration order is not guaranteed for tables.
     var total = 0
-    for (subject, score in keys(scores), values(scores)) {
+    for (_subject, score in keys(scores), values(scores)) {
         total += score
     }
     print("total of all scores: {total}\n")
@@ -79,7 +79,7 @@ def main {
 
     // === Table comprehension ===
     // { for (var in source); key => expr } builds a table
-    var squareMap <- { for (x in 1..6); x => x * x }
+    let squareMap <- { for (x in 1..6); x => x * x }
     print("square of 3: {squareMap?[3] ?? -1}\n")
     print("square of 5: {squareMap?[5] ?? -1}\n")
 

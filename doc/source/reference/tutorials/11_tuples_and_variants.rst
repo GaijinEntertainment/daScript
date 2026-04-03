@@ -24,7 +24,7 @@ Access fields by index::
 
 Use ``tuple()`` for explicit construction::
 
-  var t = tuple(1, 2.0, "three")
+  let t = tuple(1, 2.0, "three")
 
 The ``=>`` operator
 ===================
@@ -32,7 +32,7 @@ The ``=>`` operator
 The ``=>`` operator creates a 2-element tuple from its left and right operands.
 It works in any expression context, not just table literals::
 
-  var kv = "age" => 25       // tuple<string; int>
+  let kv = "age" => 25       // tuple<string; int>
   print("{kv._0}: {kv._1}\n")  // age: 25
 
 This is useful for building arrays of key-value pairs::
@@ -55,7 +55,7 @@ Give a tuple named fields for readability::
       y : float
   }
 
-  var p = Point2D(x=3.0, y=4.0)
+  let p = Point2D(x=3.0, y=4.0)
   print("{p.x}, {p.y}\n")
 
 Destructuring
@@ -63,7 +63,7 @@ Destructuring
 
 Unpack a tuple into individual variables::
 
-  var (a, b, c) = tuple(10, 20.0, "thirty")
+  let (a, b, c) = tuple(10, 20.0, "thirty")
 
 This also works in ``for`` loops::
 
@@ -83,7 +83,7 @@ A variant holds exactly one of several typed alternatives — a tagged union::
       s : string
   }
 
-  var v : Value = Value(i = 42)
+  let v : Value = Value(i = 42)
 
 Checking the active case
 =========================

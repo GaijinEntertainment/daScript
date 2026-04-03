@@ -99,7 +99,7 @@ def generateApplyVisitStruct(stype : TypeDeclPtr; frange : range; fnname : strin
             func_args |> emplace_new <| new Variable(name := "__arg_{fld.name}", _type <- argT)
         }
     }
-    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
+    var inscope fn <- qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
     fn.flags |= FunctionFlags.privateFunction
@@ -152,7 +152,7 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
             func_args |> emplace_new <| new Variable(name := "__arg_{fldname}", _type <- argT)
         }
     }
-    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
+    var inscope fn <- qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
     fn.flags |= FunctionFlags.privateFunction
@@ -215,7 +215,7 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
             func_args |> emplace_new <| new Variable(name := "__arg_{fldname}", _type <- argT)
         }
     }
-    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
+    var inscope fn <- qmacro_function(fnname) $ [unused_argument(_`_self)] (_`_self : $t(selfT); $a(func_args)) {
         $b(blkList)
     }
     fn.flags |= FunctionFlags.privateFunction

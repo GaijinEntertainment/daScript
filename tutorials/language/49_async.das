@@ -41,7 +41,7 @@ def demo_void_async() {
     var it <- greet("world")
     // Step through manually
     var step = 1
-    for (running in it) {
+    for (_running in it) {
         print("  -- step {step} --\n")
         step ++
     }

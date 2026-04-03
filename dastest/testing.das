@@ -424,7 +424,7 @@ def private run_impl(b : B?, name : string; chunk_size : int64; op : block) {
         // once, unroll the body to minimize the noise.
         let start = ref_time_ticks()
         for (i in range(loop_runs)) {
-            unroll <| $() {
+            unroll() $ {
                 for (_ in range(unroll_count)) {
                     op()
                 }

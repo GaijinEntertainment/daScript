@@ -54,12 +54,12 @@ def main {
     // === Copy (=) ===
 
     // For simple types, = does a bitwise copy. Both sides remain valid.
-    var a = 42
-    var b = a
+    let a = 42
+    let b = a
     print("copy int: a={a}, b={b}\n")
 
-    var name = "Alice"
-    var greeting = "Hello, {name}"
+    let name = "Alice"
+    let greeting = "Hello, {name}"
     print("copy string: {greeting}\n")
 
     // Structs with only POD fields can be copied too:
@@ -74,7 +74,7 @@ def main {
     print("moved array: {nums}\n")
 
     // Move between variables
-    var other <- nums
+    let other <- nums
     print("after move: other={other}\n")
     print("nums is now empty: length={length(nums)}\n")
 
@@ -94,13 +94,13 @@ def main {
     print("clone:    {copy}\n")
 
     // Clone initialization at declaration
-    var another := original
+    let another := original
     print("clone-init: {another}\n")
 
     // === Structs with containers ===
 
     // Structs containing arrays/tables must be moved or cloned, not copied.
-    var inv <- make_inventory()
+    let inv <- make_inventory()
     print("inventory: {inv.items}, weight={inv.weight}\n")
 
     // Clone the entire struct (deep copies the array field)
@@ -117,7 +117,7 @@ def main {
     weapons |> push("arrow")
 
     // Move the array into the struct field with <-
-    var loadout = Inventory(items <- weapons, weight = 5)
+    let loadout = Inventory(items <- weapons, weight = 5)
     print("loadout: {loadout.items}\n")
     print("weapons after move: length={length(weapons)}\n")
 
@@ -141,7 +141,7 @@ def main {
     //   - the right side is temporary (literal, function return)
     //   - the type can't be copied but can be moved
     // So this works:
-    var data = make_numbers()   // auto-promoted to: var data <- make_numbers()
+    let data = make_numbers()   // auto-promoted to: var data <- make_numbers()
     print("relaxed: {data}\n")
 
     // To disable this: options relaxed_assign = false
@@ -156,7 +156,7 @@ def main {
     game.scores |> push(100)
     game.scores |> push(200)
 
-    var save := game    // uses our custom clone below
+    let save := game    // uses our custom clone below
     print("game:  level={game.level}, scores={game.scores}\n")
     print("save:  level={save.level}, scores={save.scores}\n")
     // save.level is 5 + 1000 = 1005 (our custom clone marks copies)

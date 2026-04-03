@@ -229,7 +229,7 @@ def chip_color_to_float4(color : ChipColor) : float4 {
 def build_double_deck() : array<Card> {
     var deck : array<Card>
     deck |> reserve(2 * SUIT_COUNT * RANK_COUNT)
-    for (copy in range(2)) {
+    for (_copy in range(2)) {
         for (s in range(SUIT_COUNT)) {
             for (r in range(RANK_COUNT)) {
                 deck |> push(make_card(s, r))
@@ -356,7 +356,7 @@ def make_game(var game : GameState; num_players : int; seed : int = 42) {
     clear_all_chips(game)
     game.sequences |> clear()
     let hs = hand_size_for_players(game.num_players)
-    for (c in range(hs)) {
+    for (_c in range(hs)) {
         for (p in range(game.num_players)) {
             if (length(game.draw_pile) > 0) {
                 game.hands[p][game.hand_sizes[p]] = game.draw_pile[length(game.draw_pile) - 1]

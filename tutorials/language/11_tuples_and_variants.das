@@ -60,20 +60,20 @@ def main {
 
     // --- Named tuples ---
     // Use the tuple alias declared above.
-    var p = Point2D(x = 3.0, y = 4.0)
+    let p = Point2D(x = 3.0, y = 4.0)
     print("point = ({p.x}, {p.y})\n")
 
     // Named fields are also accessible via _0, _1
     print("point._0 = {p._0}\n")
 
     // --- Tuple with tuple() constructor ---
-    var triple = tuple(1, 2.0, "three")
+    let triple = tuple(1, 2.0, "three")
     print("triple = ({triple._0}, {triple._1}, {triple._2})\n")
 
     // --- The => operator ---
     // The => operator creates a 2-element tuple from its operands.
     // It works in any expression, not just table literals.
-    var kv = "age" => 25
+    let kv = "age" => 25
     print("kv = ({kv._0}, {kv._1})\n")
 
     // This is handy for building arrays of key-value pairs.
@@ -84,11 +84,11 @@ def main {
 
     // --- Destructuring ---
     // Unpack a tuple into individual variables.
-    var (a, b, c) = tuple(10, 20.0, "hello")
+    let (a, b, c) = tuple(10, 20.0, "hello")
     print("destructured: a={a}, b={b}, c=\"{c}\"\n")
 
     // Destructuring works with named tuples too
-    var (px, py) = Point2D(x = 5.0, y = 6.0)
+    let (px, py) = Point2D(x = 5.0, y = 6.0)
     print("destructured point: px={px}, py={py}\n")
 
     // --- Destructuring in for loops ---
@@ -101,16 +101,16 @@ def main {
     // --- Tuples as return values ---
     // (Already covered in tutorial 05 with divmod.)
     // Tuples are great for returning multiple values.
-    var (q, r) = divmod_tuple(17, 5)
+    let (q, r) = divmod_tuple(17, 5)
     print("17 / 5 = {q} remainder {r}\n")
 
     // === Part 2: Variants ===
 
     // --- Creating variants ---
     // Construct by specifying which alternative is active.
-    var v1 = Value(i = 42)
-    var v2 = Value(f = 3.14)
-    var v3 = Value(s = "hello")
+    let v1 = Value(i = 42)
+    let v2 = Value(f = 3.14)
+    let v3 = Value(s = "hello")
 
     // --- Checking the active case with 'is' ---
     print("v1 is i: {v1 is i}\n")
@@ -143,8 +143,8 @@ def main {
 
     // --- variant_index ---
     // Get the current case index (0-based).
-    var vi = Value(i = 1)
-    var vf = Value(f = 2.0)
+    let vi = Value(i = 1)
+    let vf = Value(f = 2.0)
     print("index of i case: {variant_index(vi)}\n")
     print("index of f case: {variant_index(vf)}\n")
 

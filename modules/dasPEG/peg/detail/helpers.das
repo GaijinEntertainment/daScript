@@ -27,7 +27,10 @@ def iota {
         var i : int = 0
         while (true) {
             i += 1
-            return false if (i == 0) else yield i
+            if (i == 0) {
+                return false // integer overflow guard; reachable after ~4B iterations
+            }
+            yield i
         }
     }
 }

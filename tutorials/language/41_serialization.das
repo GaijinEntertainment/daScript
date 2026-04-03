@@ -241,7 +241,7 @@ def demo_manual_archive() {
     warch |> serialize(name)
     warch |> serialize(score)
     warch |> serialize(tags)
-    var data <- writer->extractData()
+    let data <- writer->extractData()
     print("  wrote {length(data)} bytes\n")
 
     // Reading phase
@@ -317,7 +317,7 @@ def demo_custom_serialize() {
     var writer = new MemSerializer()
     var warch = Archive(reading = false, stream = writer)
     warch |> serialize(c)
-    var data <- writer->extractData()
+    let data <- writer->extractData()
     print("  serialized size: {length(data)} bytes (3 instead of 12)\n")
 
     // Load — uses our custom deserializer
@@ -338,7 +338,7 @@ def demo_custom_serialize() {
     var writer2 = new MemSerializer()
     var warch2 = Archive(reading = false, stream = writer2)
     warch2 |> serialize(colors)
-    var adata <- writer2->extractData()
+    let adata <- writer2->extractData()
     print("  3 colors data size: {length(adata)} bytes (4 len + 3*3 = 13)\n")
 
     var reader2 = new MemSerializer(adata)

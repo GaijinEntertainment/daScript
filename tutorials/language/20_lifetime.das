@@ -101,7 +101,7 @@ def main {
 
     print("=== finally ===\n")
     var counter = 0
-    for (i in range(3)) {
+    for (_i in range(3)) {
         counter += 1
     } finally {
         print("  loop done, counter={counter}\n")

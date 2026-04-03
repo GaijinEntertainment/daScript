@@ -202,7 +202,7 @@ def find_int_arg(args : array<string>; name : string; default_val : int) : int {
 
 [export]
 def main() {
-    var args <- get_command_line_arguments()
+    let args <- get_command_line_arguments()
     let bot_type = find_arg(args, "--bot", "greedy")
     let depth = find_int_arg(args, "--depth", 2)
     let jack_lookahead = find_int_arg(args, "--jack", 8)
@@ -230,7 +230,7 @@ def main() {
         for (gen in range(ES_GENERATIONS)) {
             // Generate λ children (sequential — fast, needs shared seed)
             var children : array<array<float>>
-            for (i in range(ES_LAMBDA)) {
+            for (_i in range(ES_LAMBDA)) {
                 children |> emplace(mutate_weights(parent, sigma, seed, num_greedy))
             }
 

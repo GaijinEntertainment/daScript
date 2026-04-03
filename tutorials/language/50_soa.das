@@ -169,7 +169,7 @@ def demo_swap_and_sort() {
 
     // Bubble sort using swap
     let n = length(soa)
-    for (pass_idx in range(n)) {
+    for (_pass_idx in range(n)) {
         for (k in range(n - 1)) {
             if (soa[k].key > soa[k + 1].key) {
                 soa |> swap(k, k + 1)
@@ -210,7 +210,7 @@ def demo_conversion() {
     print("  soa[1].x={soa[1].x}, soa[1].y={soa[1].y}\n")
 
     // Convert SOA → AOS
-    var result <- to_array(soa)
+    let result <- to_array(soa)
     print("  AOS result length: {length(result)}\n")
     for (idx in range(length(result))) {
         print("    [{idx}] x={result[idx].x} y={result[idx].y}\n")
@@ -292,7 +292,7 @@ def demo_entity_table() {
     }
 
     // Print status
-    for (idx, it in count(), entities) {
+    for (_idx, it in count(), entities) {
         print("  [{it.id}] {it.name}: health={it.health} alive={it.alive}\n")
     }
 
@@ -306,7 +306,7 @@ def demo_entity_table() {
     print("  alive: {alive_count}/{length(entities)}\n")
 
     // Convert to AOS for serialization
-    var snapshot <- to_array(entities)
+    let snapshot <- to_array(entities)
     print("  snapshot has {length(snapshot)} entities\n")
 }
 

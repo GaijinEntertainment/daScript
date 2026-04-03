@@ -46,14 +46,14 @@ def hello() \{
     print(\"  hello from compiled code!\\n\")
 \}
 "
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("inline", src, cop) <| $(ok, program, issues) {
+        compile("inline", src, cop) $(ok, program, issues) {
             if (!ok) {
                 print("compile error: {issues}\n")
                 return
             }
-            simulate(program) <| $(sok; context; serrors) {
+            simulate(program) $(sok; context; serrors) {
                 if (!sok) {
                     print("simulate error: {serrors}\n")
                     return
@@ -78,15 +78,15 @@ def hello() \{
 def compile_from_file() {
     print("\n=== compile from file ===\n")
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -121,15 +121,15 @@ def greet(name : string) \{
 "
     var inscope access <- make_file_access("")
     access |> set_file_source("__generated.das", generated_code)
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("__generated.das", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("__generated.das", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -161,14 +161,14 @@ def sum3(a, b, c : int) \{
     print(\"  sum3 = \{a + b + c\}\\n\")
 \}
 "
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("inline", src, cop) <| $(ok, program, issues) {
+        compile("inline", src, cop) $(ok, program, issues) {
             if (!ok) {
                 print("compile error: {issues}\n")
                 return
             }
-            simulate(program) <| $(sok; context; serrors) {
+            simulate(program) $(sok; context; serrors) {
                 if (!sok) {
                     print("simulate error: {serrors}\n")
                     return
@@ -205,15 +205,15 @@ def sum3(a, b, c : int) \{
 def read_global_variable() {
     print("\n=== read global variable ===\n")
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -247,15 +247,15 @@ def read_global_variable() {
 def result_via_pointer() {
     print("\n=== result via pointer ===\n")
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("tutorials/language/44_helper.das", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -319,15 +319,15 @@ def produce(var ch : Channel?) \{
     // Use make_file_access("") so the child can resolve daslib imports
     var inscope access <- make_file_access("")
     access |> set_file_source("__channel_child.das", child_src)
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
-            compile_file("__channel_child.das", access, unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+            compile_file("__channel_child.das", access, unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -366,9 +366,9 @@ def broken( \{
     this is not valid
 \}
 "
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("bad", bad_src, cop) <| $(ok, program, issues) {
+        compile("bad", bad_src, cop) $(ok, program, issues) {
             if (!ok) {
                 print("  compile error caught (expected)\n")
             }
@@ -383,14 +383,14 @@ def crash() \{
     panic(\"intentional crash\")
 \}
 "
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("panic_mod", panic_src, cop) <| $(ok, program, issues) {
+        compile("panic_mod", panic_src, cop) $(ok, program, issues) {
             if (!ok) {
                 print("compile error: {issues}\n")
                 return
             }
-            simulate(program) <| $(sok; context; serrors) {
+            simulate(program) $(sok; context; serrors) {
                 if (!sok) {
                     print("simulate error: {serrors}\n")
                     return

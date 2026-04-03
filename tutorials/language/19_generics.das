@@ -34,8 +34,8 @@ def add(a, b : auto(T)) : T {
 // Use the named type T in local variable declarations.
 
 def make_pair(a, b : auto(T)) {
-    var first : T = a
-    var second : T = b
+    let first : T = a
+    let second : T = b
     print("  pair: {first}, {second}\n")
 }
 
@@ -150,10 +150,10 @@ def main {
     print("specialization:\n")
     process(42)                       // → anything (plain int)
 
-    var strs <- ["a", "b", "c"]
+    let strs <- ["a", "b", "c"]
     process(strs)                     // → any array (array<string>)
 
-    var ints <- [1, 2, 3]
+    let ints <- [1, 2, 3]
     process(ints)                     // → array<int> (exact match)
 
     // === typeinfo ===
@@ -177,14 +177,14 @@ def main {
 
     // === Array generics ===
     print("sum_array:\n")
-    var int_arr <- [1, 2, 3, 4, 5]
-    var float_arr <- [1.0, 2.0, 3.0]
+    let int_arr <- [1, 2, 3, 4, 5]
+    let float_arr <- [1.0, 2.0, 3.0]
     print("  ints: {sum_array(int_arr)}\n")
     print("  floats: {sum_array(float_arr)}\n")
 
     print("first_or_default:\n")
-    var names <- ["Alice", "Bob"]
-    var empty : array<string>
+    let names <- ["Alice", "Bob"]
+    let empty : array<string>
     print("  names: {first_or_default(names, "nobody")}\n")
     print("  empty: {first_or_default(empty, "nobody")}\n")
 

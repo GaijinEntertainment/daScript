@@ -112,3 +112,8 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF004 | `str = "{str}..."` in loop | High | O(n^2) string interpolation; use `build_string()` |
 | PERF005 | `length(str)` in while condition | Medium | strlen recomputed each iteration; cache it |
 | PERF006 | `push`/`emplace` in loop without `reserve()` | Medium | repeated reallocations; `reserve()` before loop |
+| PERF007 | `string(das_string)` in comparison | Medium | unnecessary allocation; das_string supports == directly |
+| PERF008 | `get_ptr(x)` for `is`/`as` type checks | Low | unnecessary; smart_ptr supports type checks directly |
+| PERF009 | `var x <- expr; return <- x` | Low | redundant move-init; use `return <- expr` directly |
+| PERF010 | `get_ptr(x) == null` | Low | unnecessary; smart_ptr supports == null directly |
+| PERF011 | `get_ptr(x).field` | Low | unnecessary; smart_ptr auto-dereferences for field access |

@@ -115,7 +115,7 @@ class DecsTemplate : AstStructureAnnotation {
             var cmp : decs::ComponentMap
             apply_decs_template(cmp, defval)
             var cache : array<int>
-            decs::create_entities_from_cmp(count, cmp) <| $(var arch : decs::Archetype; eidx : int; eid : decs::EntityId; i : int) {
+            decs::create_entities_from_cmp(count, cmp) $(var arch : decs::Archetype; eidx : int; eid : decs::EntityId; i : int) {
                 var entity := default<$t(st)>
                 invoke(user_blk, eid, i, entity)
                 apply_decs_template_arch(arch, eidx, eid, entity, cache)
@@ -408,7 +408,7 @@ class DecsQueryMacro : AstCallMacro {
         var vreq = verify_request(req)
         macro_verify(vreq.ok, compiling_program(), expr.at, "incorrect query, {vreq.error}")
         // @@ => [[EcsQuery ...]]
-        var inscope erq_fun <- qmacro <| @@ {
+        var inscope erq_fun <- qmacro() @@ {
             return <- $v(req)
         }
         var kaboom : array<tuple<string; string; string>>

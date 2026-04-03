@@ -326,11 +326,11 @@ def main {
 
     // Guards
     print("guards:\n")
-    var s1 = classify_shape(Shape(kind = "circle", size = 200))
+    let s1 = classify_shape(Shape(kind = "circle", size = 200))
     print("  circle 200 -> {s1}\n")
-    var s2 = classify_shape(Shape(kind = "circle", size = 50))
+    let s2 = classify_shape(Shape(kind = "circle", size = 50))
     print("  circle 50 -> {s2}\n")
-    var s3 = classify_shape(Shape(kind = "square", size = 30))
+    let s3 = classify_shape(Shape(kind = "square", size = 30))
     print("  square 30 -> {s3}\n")
 
     // OR patterns

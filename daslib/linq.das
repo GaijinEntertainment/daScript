@@ -116,7 +116,7 @@ def to_sequence(var a : array<auto(TT)> ==const) : iterator<TT -const -&> {
 
 def to_sequence_move(var a : array<auto(TT)>) : iterator<TT -const -&> {
     //! Converts an array to an iterator, captures input
-    return generator<TT -const -&> capture(<- a) () <| $ {
+    return generator<TT -const -&> capture(<- a) {
         for (it in a) {
             yield <- it
         }
@@ -183,7 +183,7 @@ def concat_to_array(var a, b : iterator<auto(TT)>) : array<TT -const -&> {
 
 def concat(var a, b : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Concatenates two iterators
-    return generator<TT -const -&> capture(<- a, <- b) () <| $ {
+    return generator<TT -const -&> capture(<- a, <- b) {
         for (itA in a) {
             static_if (typeinfo can_copy(itA)) {
                 yield itA
@@ -231,7 +231,7 @@ def reverse(a : array<auto(TT)>) : array<TT -const -&> {
 
 def reverse(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Reverses an iterator
-    return generator<TT -const -&> capture(<- a) () <| $ {
+    return generator<TT -const -&> capture(<- a) {
         var inscope buffer : array<TT -const -&>
         for (it in a) {
             buffer.push_clone(it)
@@ -504,7 +504,7 @@ def distinct_inplace(var a : array<auto(TT)>) {
 
 def distinct(var a : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns distinct elements from an iterator
-    return generator<TT -const -&> capture(<- a) () <| $ {
+    return generator<TT -const -&> capture(<- a) {
         var inscope seen : table<typedecl(_::unique_key(type<TT>))>
         for (it in a) {
             let k = _::unique_key(it)
@@ -648,7 +648,7 @@ def unique_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>
 def count(var a : iterator<auto(TT)>) : int {
     //! Counts elements in an iterator
     var count = 0
-    for (it in a) {
+    for (_it in a) {
         count ++
     }
     return count
@@ -755,7 +755,7 @@ def skip_inplace(var arr : array<auto(TT)>; var total : int) {
 [unused_argument(tt)]
 def private skip_impl(var src; tt : auto(TT); var total : int) : iterator<TT -& -const> {
     //! Yields all but the first `total` elements
-    return <- generator<TT -& -const> capture(<- src) () <| $() {
+    return <- generator<TT -& -const> capture(<- src) {
         for (x in src) {
             if (total > 0) {
                 total --
@@ -845,7 +845,7 @@ def take_inplace(var arr : array<auto(TT)>; var total : int) {
 [unused_argument(tt)]
 def private take_impl(var src; tt : auto(TT); var total : int) : iterator<TT -& -const> {
     //! Yields only the first `total` elements
-    return <- generator<TT -& -const> capture(<- src) () <| $() {
+    return <- generator<TT -& -const> capture(<- src) {
         for (x in src) {
             if (total <= 0) {
                 break
@@ -881,7 +881,7 @@ def take_to_array(var src : iterator<auto(TT)>; var total : int) : array<TT -& -
 
 def take(var src : iterator<auto(TT)>; from : range) : iterator<TT -& -const> {
     //! Yields a range of elements from an iterator
-    return <- generator<TT -& -const> capture(<- src) () <| $() {
+    return <- generator<TT -& -const> capture(<- src) {
         var index = 0
         for (x in src) {
             if (index >= from.x) {
@@ -1937,14 +1937,14 @@ def contains(src : array<auto(TT)>; element : TT -&) : bool {
 [unused_argument(typ)]
 def empty(var typ : auto(TT)) : iterator<TT -const -&> {
     //! Returns an empty iterator of the specified type
-    return <- generator<TT -const -&>() <| $ {
+    return <- generator<TT -const -&> {
         return false
     }
 }
 
 def default_empty(var src : iterator<auto(TT)>) : iterator<TT -const -&> {
     //! Returns the elements of the iterator, or a default value if the iterator is empty
-    return generator<TT -const -&> capture(<- src) () <| $ {
+    return generator<TT -const -&> capture(<- src) {
         var found = false
         for (it in src) {
             found = true
@@ -1973,7 +1973,7 @@ def range_sequence(start : int; count : int) : iterator<int> {
 
 def repeat(element : auto(TT); count : int) : iterator<TT -const -&> {
     //! Generates a sequence that contains one repeated value
-    return generator<TT -const -&> capture(:= element) () <| $ {
+    return generator<TT -const -&> capture(:= element) {
         for (i in 0..count) {
             static_if (typeinfo can_copy(element)) {
                 yield element
@@ -2389,7 +2389,7 @@ def prepend_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -con
 
 def prepend(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
     //! Prepends a value to the beginning of an iterator
-    return generator<TT -const -&> capture(<- it, := value) () <| $ {
+    return generator<TT -const -&> capture(<- it, := value) {
         static_if (typeinfo can_copy(value)) {
             yield value
         } else {
@@ -2442,7 +2442,7 @@ def append_to_array(var it : iterator<auto(TT)>; value : TT -&) : array<TT -cons
 
 def append(var it : iterator<auto(TT)>; value : TT -&) : iterator<TT -const -&> {
     //! Appends a value to the end of an iterator
-    return generator<TT -const -&> capture(<- it, := value) () <| $ {
+    return generator<TT -const -&> capture(<- it, := value) {
         for (x in it) {
             static_if (typeinfo can_copy(x)) {
                 yield x

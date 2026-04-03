@@ -182,7 +182,7 @@ def job_status_demo() {
 
     with_job_que() {
         with_job_status(3) $(status) {
-            for (i in range(3)) {
+            for (_i in range(3)) {
                 new_job() @() {
                     // each job completes
                     status |> notify_and_release

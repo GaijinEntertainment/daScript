@@ -328,7 +328,7 @@ def search_split_matchall() {
 
     // regex_match_all returns array<range>
     var re_word <- regex_compile("\\w+")
-    var matches <- regex_match_all(re_word, "foo bar baz")
+    let matches <- regex_match_all(re_word, "foo bar baz")
     print("match_all count: {length(matches)}\n")
     // output: match_all count: 3
 }

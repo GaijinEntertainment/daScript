@@ -282,7 +282,7 @@ def operator :=(var dst : Resource&; src : Resource) {
 def clone_and_finalize() {
     print("\n=== Clone and finalize ===\n")
 
-    var orig = Resource(name = "texture", refcount = 1)
+    let orig = Resource(name = "texture", refcount = 1)
     var copy : Resource
     copy := orig
     print("orig refcount: {orig.refcount}\n")

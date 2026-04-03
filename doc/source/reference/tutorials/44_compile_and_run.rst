@@ -41,14 +41,14 @@ Always set ``cop.threadlock_context = true`` — this is required for
 
 .. code-block:: das
 
-    using <| $(var cop : CodeOfPolicies) {
+    using() $(var cop : CodeOfPolicies) {
         cop.threadlock_context = true
-        compile("inline", src, cop) <| $(ok, program, issues) {
+        compile("inline", src, cop) $(ok, program, issues) {
             if (!ok) {
                 print("compile error: {issues}\n")
                 return
             }
-            simulate(program) <| $(sok; context; serrors) {
+            simulate(program) $(sok; context; serrors) {
                 if (!sok) {
                     print("simulate error: {serrors}\n")
                     return
@@ -73,16 +73,16 @@ resolution).  Both must stay alive during compile + simulate:
 .. code-block:: das
 
     var inscope access <- make_file_access("")
-    using <| $(var mg : ModuleGroup) {
-        using <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             compile_file("tutorials/language/44_helper.das", access,
-                         unsafe(addr(mg)), cop) <| $(ok, program, issues) {
+                         unsafe(addr(mg)), cop) $(ok, program, issues) {
                 if (!ok) {
                     print("compile error: {issues}\n")
                     return
                 }
-                simulate(program) <| $(sok; context; serrors) {
+                simulate(program) $(sok; context; serrors) {
                     if (!sok) {
                         print("simulate error: {serrors}\n")
                         return
@@ -232,7 +232,7 @@ flags.  Runtime errors in the child context can be caught with
 .. code-block:: das
 
     // 1) Compilation error
-    compile("bad", bad_src, cop) <| $(ok, program, issues) {
+    compile("bad", bad_src, cop) $(ok, program, issues) {
         if (!ok) {
             print("compile error: {issues}\n")
             return
@@ -253,9 +253,9 @@ Quick reference
 ===============
 
 ==========================================  ================================================
-``compile(name, src, cop) <| ...``          Compile from source string
+``compile(name, src, cop) $(...)``          Compile from source string
 ``compile_file(name, access, mg, cop)``     Compile from file via FileAccess + ModuleGroup
-``simulate(program) <| ...``                Simulate a program into a Context
+``simulate(program) $(...)``                Simulate a program into a Context
 ``invoke_in_context(ctx, name, ...)``       Call an [export] function (returns void)
 ``has_function(*ctx, name)``                Check if function exists in context
 ``get_context_global_variable(ctx, n)``     Read global variable pointer from context

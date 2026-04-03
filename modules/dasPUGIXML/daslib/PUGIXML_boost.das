@@ -27,7 +27,7 @@ def for_each_child(node : xml_node; blk : block<(child : xml_node) : void>) {
     //! Iterates over all child elements of *node*.
     var ch = node.first_child
     while (ch.ok) {
-        var next = ch.next_sibling   // capture before block may mutate
+        let next = ch.next_sibling   // capture before block may mutate
         invoke(blk, ch)
         ch = next
     }
@@ -37,7 +37,7 @@ def for_each_child(node : xml_node; name : string; blk : block<(child : xml_node
     //! Iterates over child elements of *node* whose tag matches *name*.
     var ch = child(node, name)
     while (ch.ok) {
-        var next = next_sibling(ch, name)   // capture before block may mutate
+        let next = next_sibling(ch, name)   // capture before block may mutate
         invoke(blk, ch)
         ch = next
     }
@@ -47,7 +47,7 @@ def for_each_attribute(node : xml_node; blk : block<(attr : xml_attribute) : voi
     //! Iterates over all attributes of *node*.
     var a = node.first_attribute
     while (a.ok) {
-        var next = a.next_attribute   // capture before block may mutate
+        let next = a.next_attribute   // capture before block may mutate
         invoke(blk, a)
         a = next
     }
@@ -214,7 +214,7 @@ def node_attr_bool(node : xml_node; attr_name : string; default_value : bool = f
 def add_child(var node : xml_node; name : string; text_content : string) : xml_node {
     //! Appends a child element with *name* and sets its text content.
     //! Returns the new child node.
-    var ch = append_child(node, name)
+    let ch = append_child(node, name)
     set(ch.text, text_content)
     return ch
 }
@@ -273,7 +273,7 @@ def tag(var node : xml_node; name : string; text_content : string) : xml_node {
     //! the new child. Use for leaf elements:
     //!
     //!   ``node |> tag("title", "The C Programming Language")``
-    var ch = append_child(node, name)
+    let ch = append_child(node, name)
     set(ch.text, text_content)
     return ch
 }
@@ -296,7 +296,7 @@ def tag(doc : xml_document?; name : string; blk : block<(var child : xml_node) :
 def tag(doc : xml_document?; name : string; text_content : string) : xml_node {
     //! Appends a child element with text to a document.
     var dnode = doc as xml_node
-    var ch = append_child(dnode, name)
+    let ch = append_child(dnode, name)
     set(ch.text, text_content)
     return ch
 }

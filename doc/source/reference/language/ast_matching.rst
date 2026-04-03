@@ -63,7 +63,7 @@ Optionally matches block arguments and return type:
 
 .. code-block:: das
 
-    var inscope blk <- qmacro_block() <| $ {
+    var inscope blk <- qmacro_block() {
         var x = 1
         print("{x}\n")
         return x

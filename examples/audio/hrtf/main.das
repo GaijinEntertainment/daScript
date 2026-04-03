@@ -110,6 +110,7 @@ var grid_vertex_count : int
 def create_grid(half_extent : int; spacing : float) {
     var verts : array<float3>
     let fext = float(half_extent) * spacing
+    verts |> reserve((2 * half_extent + 1) * 4)
     for (i in range(-half_extent, half_extent + 1)) {
         let p = float(i) * spacing
         verts |> push(float3(p, 0.0, -fext))
@@ -151,7 +152,7 @@ def load_sound_data() {
         sound_rate = MA_SAMPLE_RATE
         return
     }
-    fmap(f) <| $(data) {
+    fmap(f) $(data) {
         sound_data <- decode_audio(data, sound_channels, sound_rate)
     }
     fclose(f)
@@ -197,11 +198,11 @@ def main {
     glfwMakeContextCurrent(window)
 
     // Shaders
-    var solid_program = create_shader_program(@@vs_solid, @@fs_solid)
-    var line_program = create_shader_program(@@vs_line, @@fs_line)
+    let solid_program = create_shader_program(@@vs_solid, @@fs_solid)
+    let line_program = create_shader_program(@@vs_line, @@fs_line)
 
     // Geometry
-    var sphere <- gen_sphere(16, 12, false) |> create_geometry_fragment
+    let sphere <- gen_sphere(16, 12, false) |> create_geometry_fragment
     create_grid(20, 1.0)
 
     // Mouse callbacks
@@ -239,7 +240,7 @@ def main {
     load_sound_data()
 
     // Audio system
-    with_audio_system <| $() {
+    with_audio_system() {
         // Start with one source in front
         add_sound_source(float3(0.0, 0.0, -3.0))
 
@@ -252,7 +253,7 @@ def main {
         var n_was_pressed = false
         var m_was_pressed = false
 
-        eval_main_loop <| $() {
+        eval_main_loop() {
             if (glfwWindowShouldClose(window) != 0) {
                 return false
             }

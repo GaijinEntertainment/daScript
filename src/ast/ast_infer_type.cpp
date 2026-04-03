@@ -4224,6 +4224,17 @@ namespace das {
         Visitor::preVisit(expr);
         if (expr->cond)
             markNoDiscard(expr->cond.get());
+        // static_if needs infer-time folding for its condition (e.g. typeinfo && typeinfo),
+        // even when no_infer_time_folding is set
+        if (expr->isStatic && !enableInferTimeFolding) {
+            enableInferTimeFolding = true;
+        }
+    }
+    void InferTypes::preVisitIfBlock(ExprIfThenElse *expr, Expression *) {
+        // restore folding state after visiting the static_if condition
+        if (expr->isStatic && program->policies.no_infer_time_folding) {
+            enableInferTimeFolding = false;
+        }
     }
     ExpressionPtr InferTypes::visit(ExprIfThenElse *expr) {
         if (!expr->cond->type) {

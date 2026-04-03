@@ -168,7 +168,7 @@ generator, not just coroutines:
 .. code-block:: das
 
     def numbers_gen() : iterator<int> {
-        return <- generator<int>() <| $() {
+        return <- generator<int>{
             yield 10
             yield 20
             yield 30
@@ -177,7 +177,7 @@ generator, not just coroutines:
     }
 
     def combined_gen() : iterator<int> {
-        return <- generator<int>() <| $() {
+        return <- generator<int>{
             yield 1
             yeild_from <| numbers_gen()
             yield 2

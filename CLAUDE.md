@@ -100,6 +100,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/visitor_gen_bind.md` | Adding or modifying `Visitor` virtual methods, `canVisit*` gates, running `gen_bind.das`, updating adapter bindings in `ast_gen.inc` |
 | `skills/daslang_live.md` | Working with `daslang-live.exe`, live-reload lifecycle, REST API, `[live_command]`, `[before_reload]`/`[after_reload]`, persistent store, `live/glfw_live`, `live/live_api` |
 | `skills/perf_lint.md` | Adding new performance lint rules to `daslib/perf_lint.das` |
+| `skills/style_lint.md` | Adding new style lint rules to `daslib/style_lint.das` |
 | `skills/version_update.md` | Bumping the daslang version number (all files that need updating) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
 
@@ -308,7 +309,7 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `grep_usage` | Using built-in Grep tool to search for symbol names in `.das` files (parse-aware via ast-grep + tree-sitter — no false positives from comments/strings) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
-| `lint` | Running lint/perf_lint manually or requiring the modules for code quality and performance checks |
+| `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
 | `live_launch` | Manually starting `daslang-live.exe` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

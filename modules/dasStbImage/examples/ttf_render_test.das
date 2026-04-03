@@ -18,7 +18,7 @@ def get_script_dir() : string {
 [export]
 def main() {
     let font_file = "{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf"
-    var font <- load_ttf(font_file, [pixel_height = 32.0f])
+    let font <- load_ttf(font_file, [pixel_height = 32.0f])
     if (!font.bitmap.valid()) {
         print("ERROR: failed to load font\n")
         return

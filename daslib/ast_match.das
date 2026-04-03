@@ -1085,7 +1085,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope wrapped_clone <- clone_expression(tag.value)
                         var wrapped_clone_let = wrapped_clone as ExprLet
                         if (length(wrapped_clone_let.variables) > 0) {
-                            get_ptr(wrapped_clone_let.variables[0]).name := ""
+                            wrapped_clone_let.variables[0].name := ""
                         }
                         // Generate ExprLet matching for the cloned expression
                         generate_match(get_ptr(wrapped_clone), actual_var, body, index, at)

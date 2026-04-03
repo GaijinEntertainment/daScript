@@ -39,7 +39,7 @@ Each ``yield`` pauses execution and passes a value to the host:
 
    [export]
    def test {
-       return <- generator<int>() <| $() {
+       return <- generator<int>{
            for (i in range(5)) {
                print("  [das] yielding {i}\n")
                yield i
@@ -49,7 +49,7 @@ Each ``yield`` pauses execution and passes a value to the host:
        }
    }
 
-The function creates the generator with ``generator<int>() <| $()``,
+The function creates the generator with ``generator<int> { ... }``,
 fills it with a loop, and transfers ownership to the caller with
 ``return <-``.
 

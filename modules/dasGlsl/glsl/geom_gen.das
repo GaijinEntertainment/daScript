@@ -85,12 +85,11 @@ def gen_sphere(sectorCount, stackCount : int; cubeUV : bool) {
             )
         }
     }
-    var indices : array<int>
     var k1, k2 : int
     for (i in range(stackCount)) {
         k1 = i * (sectorCount + 1)
         k2 = k1 + sectorCount + 1
-        for (j in range(sectorCount)) {
+        for (_j in range(sectorCount)) {
             if (i != 0) {
                 frag.indices |> push(k1)
                 frag.indices |> push(k2)
@@ -204,7 +203,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     let tbOfs = (sectorCount + 2) * 2
     let kc1 = sectorCount + 1 + tbOfs
     for (i in range(sectorCount)) {
-        var k = i + tbOfs
+        let k = i + tbOfs
         frag.indices |> push(kc1)
         frag.indices |> push(k)
         frag.indices |> push(k + 1)
@@ -212,7 +211,7 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     // bottom
     let kc2 = ((sectorCount + 2) + sectorCount + 1) + tbOfs
     for (i in range(sectorCount)) {
-        var k = (sectorCount + 2) + i + tbOfs
+        let k = (sectorCount + 2) + i + tbOfs
         frag.indices |> push(kc2)
         frag.indices |> push(k + 1)
         frag.indices |> push(k)
@@ -302,7 +301,7 @@ def private s_to_int(s : string) {
 }
 
 def private split_sptn(sptn : string) : tuple<p : int; t : int; n : int> {
-    var ptn <- split(sptn, "/")
+    let ptn <- split(sptn, "/")
 
     if (length(ptn) == 1) {
         return (s_to_int(ptn[0]), -1, -1)
@@ -331,7 +330,7 @@ def load_obj_mesh(fname : string; canfail : bool = true) {
     var vt : array<float2>
     var vn : array<float3>
     var uvtx : table<string; int>
-    fopen(fname, "rb") <| $(f) {
+    fopen(fname, "rb") $(f) {
         if (f == null) {
             if (canfail) {
                 panic("failed to open file: " + fname)

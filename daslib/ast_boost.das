@@ -1256,7 +1256,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         if (e.at.fileInfo != null) {
             writer |> write(" file=\"{e.at.fileInfo.name}\"")
         }
-        if (string(e.__rtti) == "ExprCall" || string(e.__rtti) == "ExprInvoke") {
+        if (string(e.__rtti) == "ExprCall" || string(e.__rtti) == "ExprInvoke") { // nolint:STYLE006
             let enc = unsafe(reinterpret<ExprLooksLikeCall?> e)
             if (int(enc.atEnclosure.line) != 0 || int(enc.atEnclosure.last_line) != 0) {
                 writer |> write(" atEnclosure={int(enc.atEnclosure.line)}:{int(enc.atEnclosure.column)}-{int(enc.atEnclosure.last_line)}:{int(enc.atEnclosure.last_column)}")
