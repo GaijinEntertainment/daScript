@@ -1,0 +1,1 @@
+Returns true if the program is being compiled in lint-check mode (i.e. `CodeOfPolicies.lint_check` is set). Modules can use this to skip side effects like debug agent installation during lint-only compilation.

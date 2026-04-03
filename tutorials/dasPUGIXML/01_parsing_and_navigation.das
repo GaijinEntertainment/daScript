@@ -29,7 +29,7 @@ def parsing_from_string() {
 
     let xml_str = "<greeting lang=\"en\">Hello, XML!</greeting>"
 
-    parse_xml(xml_str) <| $(doc, ok) {
+    parse_xml(xml_str) $(doc, ok) {
         if (!ok) {
             print("parse error!\n")
             return
@@ -55,7 +55,7 @@ def parsing_from_string() {
 def loading_from_file() {
     print("\n=== Loading from file ===\n")
 
-    open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
+    open_xml("tutorials/dasPUGIXML/books.xml") $(doc, ok) {
         if (!ok) {
             print("could not open books.xml\n")
             return
@@ -89,13 +89,13 @@ def iterating() {
 
     let xml_str = "<config><setting name=\"width\" value=\"1920\"/><setting name=\"height\" value=\"1080\"/><setting name=\"fullscreen\" value=\"true\"/></config>"
 
-    parse_xml(xml_str) <| $(doc, ok) {
+    parse_xml(xml_str) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
         // Block-based — for_each_child with a callback
         print("All children (for_each_child):\n")
-        root |> for_each_child() <| $(ch) {
+        root |> for_each_child() $(ch) {
             print("  <{ch.name}>\n")
         }
         // output: All children (for_each_child):
@@ -116,7 +116,7 @@ def iterating() {
         // Block-based — for_each_attribute
         let first = root.first_child
         print("Attributes (for_each_attribute):\n")
-        first |> for_each_attribute() <| $(a) {
+        first |> for_each_attribute() $(a) {
             print("  {a.name} = {a as string}\n")
         }
         // output: Attributes (for_each_attribute):
@@ -135,12 +135,12 @@ def iterating() {
 
     // Named child iteration — both styles
     let xml2 = "<root><a>1</a><b>2</b><a>3</a><b>4</b></root>"
-    parse_xml(xml2) <| $(doc, ok) {
+    parse_xml(xml2) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
         print("Only <a> (for_each_child):\n")
-        root |> for_each_child("a") <| $(ch) {
+        root |> for_each_child("a") $(ch) {
             print("  {ch.text as string}\n")
         }
         // output: Only <a> (for_each_child):
@@ -171,7 +171,7 @@ def quick_accessors() {
 
     let xml_str = "<item id=\"42\" price=\"9.99\" active=\"true\"><name>Widget</name><desc>A useful widget</desc></item>"
 
-    parse_xml(xml_str) <| $(doc, ok) {
+    parse_xml(xml_str) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -226,7 +226,7 @@ def typed_access() {
 
     let xml_str = "<point x=\"10\" y=\"20\" label=\"origin\" visible=\"true\"/>"
 
-    parse_xml(xml_str) <| $(doc, ok) {
+    parse_xml(xml_str) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -257,7 +257,7 @@ def typed_access() {
 
     // Text content is/as
     let xml2 = "<values><count>42</count><ratio>3.14</ratio><flag>true</flag></values>"
-    parse_xml(xml2) <| $(doc, ok) {
+    parse_xml(xml2) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -284,14 +284,14 @@ def typed_access() {
 def reading_books() {
     print("\n=== Reading books catalog ===\n")
 
-    open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
+    open_xml("tutorials/dasPUGIXML/books.xml") $(doc, ok) {
         if (!ok) {
             print("could not open books.xml\n")
             return
         }
         let library = doc.document_element
 
-        library |> for_each_child("book") <| $(book) {
+        library |> for_each_child("book") $(book) {
             let title = node_text(book, "title")
             let year = node_text(book, "year")
             let isbn = book["isbn"] as string
@@ -299,7 +299,7 @@ def reading_books() {
 
             // Count authors
             var author_count = 0
-            book |> for_each_child("author") <| $(a) {
+            book |> for_each_child("author") $(a) {
                 author_count++
             }
 

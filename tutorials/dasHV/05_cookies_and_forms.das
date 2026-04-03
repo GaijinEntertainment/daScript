@@ -47,7 +47,7 @@ let SERVER_PORT = 18084
 // When the client sends multipart/form-data, the server can:
 //   get_form_data(req, "field")    – read a text field value
 //   save_form_file(req, "f", dir)  – save an uploaded file to disk
-//   each_form_field(req) <| $(n, content, filename) – iterate all fields
+//   each_form_field(req) $(n, content, filename) – iterate all fields
 
 // ──────────────────────────────────────────────────────────────────────────
 // Section 3 — URL-encoded form data
@@ -87,7 +87,7 @@ class CookieFormServer : HvWebServer {
         // --- Section 1c: Iterate all cookies ---
         GET("/list-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             var result = ""
-            each_cookie(req) <| $(name, value) {
+            each_cookie(req) $(name, value) {
                 if (!empty(result)) {
                     result = "{result}, "
                 }
@@ -103,7 +103,7 @@ class CookieFormServer : HvWebServer {
 
             // List all form fields (including file fields)
             var fields : array<string>
-            each_form_field(req) <| $(name, content, filename) {
+            each_form_field(req) $(name, content, filename) {
                 if (!empty(filename)) {
                     let sz = length(content)
                     fields |> push_clone("{name}: file={filename} ({sz} bytes)")
@@ -146,7 +146,7 @@ def create_upload_dir(dir : string) {
 }
 
 def create_test_upload_file(path : string) {
-    fopen(path, "w") <| $(f) {
+    fopen(path, "w") $(f) {
         if (f != null) {
             fwrite(f, "this is test file content for upload")
         }
@@ -203,12 +203,12 @@ def with_cookie_form_server(port : int; upload_dir : string; blk : block<(base_u
 //  add_cookie(msg, name, value, domain, path,           Extended cookie
 //             max_age, secure, httponly)
 //  get_cookie(msg, name)                                Get cookie value (string or null)
-//  each_cookie(msg) <| $(name, value) { ... }           Iterate all cookies
+//  each_cookie(msg) $(name, value) { ... }               Iterate all cookies
 //  set_form_data(req, name, value)                      Set form field (client)
 //  set_form_file(req, name, filepath)                   Set file upload field (client)
 //  get_form_data(msg, name)                             Get form field value (server)
 //  save_form_file(msg, name, dir)                       Save uploaded file (server)
-//  each_form_field(msg) <| $(name, content, filename)   Iterate all form fields
+//  each_form_field(msg) $(name, content, filename)       Iterate all form fields
 //  set_url_encoded(req, key, value)                     Set URL-encoded field (client)
 //  get_url_encoded(msg, key)                            Get URL-encoded field (server)
 
@@ -219,14 +219,14 @@ def main() {
     create_upload_dir(upload_dir)
     create_test_upload_file(test_file)
 
-    with_cookie_form_server(SERVER_PORT, upload_dir) <| $(base_url) {
+    with_cookie_form_server(SERVER_PORT, upload_dir) $(base_url) {
 
         // ── Section 1a: Set cookies ──
         print("=== Section 1a: Set cookies ===\n")
-        GET("{base_url}/set-cookies") <| $(resp) {
+        GET("{base_url}/set-cookies") $(resp) {
             print("GET /set-cookies -> {resp.status_code}: {resp.body}\n")
             // The response should have Set-Cookie headers
-            each_header(resp) <| $(key, value) {
+            each_header(resp) $(key, value) {
                 if (key == "Set-Cookie" || key == "set-cookie") {
                     print("  {key}: {value}\n")
                 }
@@ -235,33 +235,33 @@ def main() {
 
         // ── Section 1b: Send cookies back to the server ──
         print("\n=== Section 1b: Read cookies ===\n")
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.GET
             req.url := "{base_url}/read-cookies"
             // Add cookies to the request
             add_cookie(req, "session", "abc123")
             add_cookie(req, "prefs", "dark-mode")
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("GET /read-cookies -> {resp.body}\n")
             }
         }
 
         // ── Section 1c: List all cookies ──
         print("\n=== Section 1c: List all cookies ===\n")
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.GET
             req.url := "{base_url}/list-cookies"
             add_cookie(req, "token", "xyz789")
             add_cookie(req, "lang", "en")
             add_cookie(req, "theme", "dark")
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("GET /list-cookies -> {resp.body}\n")
             }
         }
 
         // ── Section 2: Multipart form upload ──
         print("\n=== Section 2: Multipart form upload ===\n")
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.POST
             req.url := "{base_url}/upload"
             // Set text form fields
@@ -269,7 +269,7 @@ def main() {
             set_form_data(req, "description", "A test upload")
             // Attach a file
             set_form_file(req, "attachment", test_file)
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("POST /upload -> {resp.status_code}: {resp.body}\n")
             }
         }
@@ -277,7 +277,7 @@ def main() {
         // Verify the file was saved
         let saved_path = "{upload_dir}/_testfile.txt"
         if (stat(saved_path).is_valid) {
-            fopen(saved_path, "r") <| $(f) {
+            fopen(saved_path, "r") $(f) {
                 if (f != null) {
                     let content = fread(f)
                     print("  Saved file content: {content}\n")
@@ -289,12 +289,12 @@ def main() {
 
         // ── Section 3: URL-encoded form ──
         print("\n=== Section 3: URL-encoded form ===\n")
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.POST
             req.url := "{base_url}/login"
             set_url_encoded(req, "username", "admin")
             set_url_encoded(req, "password", "secret123")
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 print("POST /login -> {resp.status_code}: {resp.body}\n")
             }
         }

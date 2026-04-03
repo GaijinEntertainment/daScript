@@ -21,7 +21,7 @@ require stbimage/stbimage_boost
 
 def make_test_image() : Image {
     var img = make_image(32, 32, 3)
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         for (i in range(32 * 32)) {
             let x = i % 32
             let y = i / 32
@@ -158,8 +158,8 @@ def example_round_trip() {
     print("  Decoded:   {decoded.width}x{decoded.height}, {decoded.channels} ch\n")
     // Verify pixels match (lossless round-trip)
     var pixels_match = true
-    original |> with_pixels() <| $(var orig_px : array<uint8>#) {
-        decoded |> with_pixels() <| $(var dec_px : array<uint8>#) {
+    original |> with_pixels() $(var orig_px : array<uint8>#) {
+        decoded |> with_pixels() $(var dec_px : array<uint8>#) {
             for (i in range(length(orig_px))) {
                 if (orig_px[i] != dec_px[i]) {
                     pixels_match = false

@@ -148,17 +148,17 @@ class AdvancedServer : HvWebServer {
 
 def create_test_files(dir : string) {
     mkdir_rec(dir)
-    fopen("{dir}/index.html", "w") <| $(f) {
+    fopen("{dir}/index.html", "w") $(f) {
         if (f != null) {
             fwrite(f, "<h1>Welcome</h1>")
         }
     }
-    fopen("{dir}/style.css", "w") <| $(f) {
+    fopen("{dir}/style.css", "w") $(f) {
         if (f != null) {
             fwrite(f, "body \{ color: red; \}")
         }
     }
-    fopen("{dir}/data.json", "w") <| $(f) {
+    fopen("{dir}/data.json", "w") $(f) {
         if (f != null) {
             fwrite(f, "\{\"hello\":\"world\"\}")
         }
@@ -231,29 +231,29 @@ def main() {
     let static_root = "{get_das_root()}/tutorials/dasHV/_static_test"
     create_test_files(static_root)
 
-    with_advanced_server(SERVER_PORT, static_root) <| $(base_url) {
+    with_advanced_server(SERVER_PORT, static_root) $(base_url) {
 
         print("=== Section 1: Static file serving ===\n")
-        GET("{base_url}/static/index.html") <| $(resp) {
+        GET("{base_url}/static/index.html") $(resp) {
             print("GET /static/index.html -> {resp.status_code}: {resp.body}\n")
         }
-        GET("{base_url}/static/style.css") <| $(resp) {
+        GET("{base_url}/static/style.css") $(resp) {
             let ct = get_header(resp, "Content-Type")
             print("GET /static/style.css -> {resp.status_code} (Content-Type: {ct})\n")
         }
-        GET("{base_url}/static/data.json") <| $(resp) {
+        GET("{base_url}/static/data.json") $(resp) {
             let ct = get_header(resp, "Content-Type")
             print("GET /static/data.json -> {resp.status_code}: {resp.body} (Content-Type: {ct})\n")
         }
 
         print("\n=== Section 2: CORS ===\n")
         // Send an OPTIONS preflight request to check CORS headers
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.OPTIONS
             req.url := "{base_url}/cached"
             set_header(req, "Origin", "http://example.com")
             set_header(req, "Access-Control-Request-Method", "GET")
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 let cors_origin = get_header(resp, "Access-Control-Allow-Origin")
                 let cors_methods = get_header(resp, "Access-Control-Allow-Methods")
                 print("OPTIONS /cached -> {resp.status_code}\n")
@@ -264,17 +264,17 @@ def main() {
 
         print("\n=== Section 3: Redirect ===\n")
         // Note: libhv client follows redirects by default
-        with_http_request() <| $(var req) {
+        with_http_request() $(var req) {
             req.method = http_method.GET
             req.url := "{base_url}/old-path"
             allow_redirect(req, false)  // don't follow, so we see the 301
-            request(req) <| $(resp) {
+            request(req) $(resp) {
                 let location = get_header(resp, "Location")
                 print("GET /old-path (no follow) -> {resp.status_code}, Location: {location}\n")
             }
         }
         // Now with redirect following
-        GET("{base_url}/old-path") <| $(resp) {
+        GET("{base_url}/old-path") $(resp) {
             print("GET /old-path (follow) -> {resp.status_code}: {resp.body}\n")
         }
 
@@ -282,12 +282,12 @@ def main() {
         // We reuse the static file endpoint to test SERVE_FILE indirectly
         // (SERVE_FILE was demonstrated in the server route itself)
         // The static serving uses SERVE_FILE internally for each file
-        GET("{base_url}/static/data.json") <| $(resp) {
+        GET("{base_url}/static/data.json") $(resp) {
             print("File served -> {resp.status_code}: {resp.body}\n")
         }
 
         print("\n=== Section 5: Custom headers and caching ===\n")
-        GET("{base_url}/cached") <| $(resp) {
+        GET("{base_url}/cached") $(resp) {
             let cache_control = get_header(resp, "Cache-Control")
             let etag = get_header(resp, "ETag")
             let x_server = get_header(resp, "X-Server")
@@ -299,31 +299,31 @@ def main() {
         }
 
         print("\n=== Section 6: Binary response ===\n")
-        GET("{base_url}/binary") <| $(resp) {
+        GET("{base_url}/binary") $(resp) {
             let ct = get_header(resp, "Content-Type")
             print("GET /binary -> {resp.status_code} ({resp.content_length} bytes, {ct})\n")
         }
 
         print("\n=== Section 7: Content-Type and status codes ===\n")
         // HTML response
-        GET("{base_url}/html") <| $(resp) {
+        GET("{base_url}/html") $(resp) {
             let ct = get_header(resp, "Content-Type")
             print("GET /html -> {resp.status_code} ({ct}): {resp.body}\n")
         }
         // 404 JSON error
-        GET("{base_url}/not-found") <| $(resp) {
+        GET("{base_url}/not-found") $(resp) {
             let ct = get_header(resp, "Content-Type")
             print("GET /not-found -> {resp.status_code} ({ct})\n")
             print("  {resp.body}\n")
         }
         // 201 Created
-        POST("{base_url}/items", "new item") <| $(resp) {
+        POST("{base_url}/items", "new item") $(resp) {
             let location = get_header(resp, "Location")
             print("POST /items -> {resp.status_code}, Location: {location}\n")
             print("  {resp.body}\n")
         }
         // 204 No Content
-        POST("{base_url}/ack", "done") <| $(resp) {
+        POST("{base_url}/ack", "done") $(resp) {
             print("POST /ack -> {resp.status_code} (body length: {resp.content_length})\n")
         }
     }

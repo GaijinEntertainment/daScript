@@ -17,11 +17,11 @@
 // Both mechanisms require a debug agent to receive callbacks.
 //
 // Key API:
-//   instrument_node(ctx, enable) <| $(at) { return should_instrument }
+//   instrument_node(ctx, enable) $(at) { return should_instrument }
 //     — filter which lines to instrument; return true to mark a line
 //   set_single_step(ctx, enable)
 //     — enable/disable single-stepping after a breakpoint/instrument hit
-//   instrument_all_functions(ctx) <| $(fn, sfn) { return userData }
+//   instrument_all_functions(ctx) $(fn, sfn) { return userData }
 //     — instrument all functions; return per-function userData
 //   onInstrument(ctx, at)
 //     — called when execution reaches an instrumented line

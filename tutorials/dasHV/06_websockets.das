@@ -184,7 +184,7 @@ def wait_for_messages(var client : ChatClient?; count : int; max_ms : int = 2000
 
 [export]
 def main() {
-    with_ws_server(SERVER_PORT) <| $(base_url) {
+    with_ws_server(SERVER_PORT) $(base_url) {
 
         // ── Section 2a: Single client connection ──
         print("=== Section 2a: Single client ===\n")
@@ -247,13 +247,13 @@ def main() {
         // ── Section 2e: HTTP still works alongside WebSocket ──
         print("\n=== Section 2e: HTTP alongside WebSocket ===\n")
 
-        GET("http://127.0.0.1:{SERVER_PORT}/clients") <| $(resp) {
+        GET("http://127.0.0.1:{SERVER_PORT}/clients") $(resp) {
             if (resp != null) {
                 print("  connected clients: {resp.body}\n")
             }
         }
 
-        GET("http://127.0.0.1:{SERVER_PORT}/ping") <| $(resp) {
+        GET("http://127.0.0.1:{SERVER_PORT}/ping") $(resp) {
             if (resp != null) {
                 print("  ping: {resp.body}\n")
             }

@@ -79,7 +79,7 @@ class GlfwGen : CppGenBind {
 def main {
     // generate
     var cgb = new GlfwGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

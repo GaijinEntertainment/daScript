@@ -12,7 +12,7 @@ options gen2
 //   }
 //
 // Good pattern:
-//   peek_data(s) <| $(arr) {
+//   peek_data(s) $(arr) {
 //       for (i in range(length(arr))) {
 //           let ch = int(arr[i])       // O(1) per access
 //       }
@@ -58,7 +58,7 @@ def bad_character_at_mul(s : string) : int {
 
 def good_peek_data(s : string) : int {
     var total = 0
-    peek_data(s) <| $(arr) {
+    peek_data(s) $(arr) {
         for (i in range(length(arr))) {
             total += int(arr[i])        // O(1)
         }

@@ -725,6 +725,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aot_macros)>("aot_macros");
             addField<DAS_BIND_MANAGED_FIELD(aot_result)>("aot_result");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
+            addField<DAS_BIND_MANAGED_FIELD(lint_check)>("lint_check");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
             addField<DAS_BIND_MANAGED_FIELD(serialize_main_module)>("serialize_main_module");
             addField<DAS_BIND_MANAGED_FIELD(keep_alive)>("keep_alive");

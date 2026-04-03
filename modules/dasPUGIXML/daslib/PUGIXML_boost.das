@@ -68,7 +68,7 @@ def each(node_set : xpath_node_set?) : iterator<xpath_node> {
     //! Because the iterator is named ``each``, the call can be omitted:
     //!
     //!   ``for (xn in node_set) { ... }``
-    return <- generator<xpath_node>() <| $ {
+    return <- generator<xpath_node> {
         let n = node_set.size
         for (i in range(n)) {
             yield at(node_set, i)
@@ -83,7 +83,7 @@ def each_child(node : xml_node) : iterator<xml_node> {
     //! Intended for use in ``for`` loops:
     //!
     //!   ``for (ch in each_child(node)) { ... }``
-    return <- generator<xml_node>() <| $ {
+    return <- generator<xml_node> {
         var ch = node.first_child
         while (ch.ok) {
             var next = ch.next_sibling   // capture before yield (user may mutate)
@@ -100,7 +100,7 @@ def each_child(node : xml_node; name : string) : iterator<xml_node> {
     //! matches *name*. Intended for use in ``for`` loops:
     //!
     //!   ``for (ch in each_child(node, "item")) { ... }``
-    return <- generator<xml_node>() <| $ {
+    return <- generator<xml_node> {
         var ch = child(node, name)
         while (ch.ok) {
             var next = next_sibling(ch, name)   // capture before yield
@@ -117,7 +117,7 @@ def each_attribute(node : xml_node) : iterator<xml_attribute> {
     //! Intended for use in ``for`` loops:
     //!
     //!   ``for (a in each_attribute(node)) { ... }``
-    return <- generator<xml_attribute>() <| $ {
+    return <- generator<xml_attribute> {
         var a = node.first_attribute
         while (a.ok) {
             var next = a.next_attribute   // capture before yield
@@ -262,7 +262,7 @@ def tag(var node : xml_node; name : string; blk : block<(var child : xml_node) :
     //! Appends a child element with *name*, invokes *blk* with it, and
     //! returns the new child. Use with pipe+block for nested XML:
     //!
-    //!   ``node |> tag("book") <| $(var book) { book |> tag("title", "...") }``
+    //!   ``node |> tag("book") $(var book) { book |> tag("title", "...") }``
     var ch = append_child(node, name)
     invoke(blk, ch)
     return ch
@@ -285,7 +285,7 @@ def tag(var node : xml_node; name : string) : xml_node {
 
 def tag(doc : xml_document?; name : string; blk : block<(var child : xml_node) : void>) : xml_node {
     //! Appends a child element to a document, invokes *blk*, returns it.
-    //! Allows ``doc |> tag("root") <| $(var root) { ... }`` without manual
+    //! Allows ``doc |> tag("root") $(var root) { ... }`` without manual
     //! ``doc as xml_node``.
     var dnode = doc as xml_node
     var ch = append_child(dnode, name)

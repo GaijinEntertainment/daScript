@@ -119,7 +119,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
 def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; jit_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
-    defer <| ${
+    defer() {
         LLVMDisposeBuilder(ctor_builder)
         LLVMDisposeBuilder(dtor_builder)
     }
@@ -190,7 +190,7 @@ def generate_fileinfo_ctor_dtor(types : PrimitiveTypes; names : table<string>; j
 def generate_annotations_ctor_dtor(types : PrimitiveTypes; var entries : array<AnnotationVarInfoEntry>; jit_mode : bool) {
     var ctor_builder = LLVMCreateBuilderInContext(g_ctx)
     var dtor_builder = LLVMCreateBuilderInContext(g_ctx)
-    defer <| ${
+    defer() {
         LLVMDisposeBuilder(ctor_builder)
         LLVMDisposeBuilder(dtor_builder)
     }
@@ -515,7 +515,7 @@ class public LlvmJitVisitor : AstVisitor {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
         }
         if (length(blk) > 0) {
-            at_function_entry <| $() {
+            at_function_entry() {
                 callBlock = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "call_block")
                 LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
             }
@@ -532,7 +532,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (k, v in keys(labels), values(labels)) {
             sortedLabels |> push(SLabel(index = k, blk = v))
         }
-        sort(sortedLabels) <| $(a, b) {
+        sort(sortedLabels) $(a, b) {
             return a.index < b.index
         }
     }
@@ -925,7 +925,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def jump_to_next_finally(blk : ExprBlock?) {
-        afterFinallyBlocks  |> get(blk) <| $(AfterFinallyBlocks) {
+        afterFinallyBlocks  |> get(blk) $(AfterFinallyBlocks) {
             if (length(AfterFinallyBlocks) > 0) {
                 var cc = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), callBlock, "")
                 var needCond = thisFunc.body != blk && thisBlock != blk
@@ -1003,7 +1003,7 @@ class public LlvmJitVisitor : AstVisitor {
             v_ptr = get_cmres_param()
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "variable_cmres_{arg.name}")
         } else {
-            at_function_entry <| $() {
+            at_function_entry() {
                 v_ptr = LLVMBuildAlloca(g_builder, vtype, "variable_{arg.name}")
                 LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), uint(valign))
                 LLVMSetAlignment(v_ptr, 16u)
@@ -1203,10 +1203,10 @@ class public LlvmJitVisitor : AstVisitor {
             if (expr.typeexpr.dim |> length > 0) {
                 let count = expr.typeexpr.countOf
                 var arr : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     arr = LLVMBuildAlloca(g_builder, type_to_llvm_type(expr._type), "new_arr")
                 }
-                build_fixed_loop(count) <| $(var index : LLVMOpaqueValue?) {
+                build_fixed_loop(count) $(var index : LLVMOpaqueValue?) {
                     var elem_type = dim_element_type_to_llvm_type(expr._type)
                     var elem = LLVMBuildGEP2(g_builder, elem_type, arr, index, "")
                     var new_ptr : LLVMOpaqueValue?;
@@ -1244,7 +1244,7 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var args : LLVMOpaqueValue?
         if (nargs != 0) {
-            at_function_entry <| $() {
+            at_function_entry() {
                 args = LLVMBuildAlloca(g_builder, LLVMArrayType(types.LLVMFloat4Type(), uint(nargs)), "args")
                 LLVMSetAlignment(args, 16u)
                 args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(types.LLVMFloat4Type(), 0u), "call_args_ptr")
@@ -1512,7 +1512,7 @@ class public LlvmJitVisitor : AstVisitor {
             } elif (!doesNotNeedSp && expr.stackTop != 0u) {
                 var vtype = type_to_llvm_type(expr._type)
                 var v_ptr_type = get_type_pointer(expr._type)
-                at_function_entry <| $() {
+                at_function_entry() {
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "cmres_eval_{expr.name}")
                     LLVMSetAlignment(cmresEval, 16u)
                     cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, v_ptr_type, "")
@@ -1547,7 +1547,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var jit_simnode_interop = LLVMGetNamedFunction(g_mod, "jit_simnode_interop")
                 var simnode_interop_type = g_fn_types["jit_simnode_interop"]
                 var typeinfo_memory : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     typeinfo_memory = LLVMBuildAlloca(g_builder,
                         LLVMArrayType(types.t_int8, SIZE_OF_SIMNODE_INTEROP), "SimNode")
                 }
@@ -1877,46 +1877,46 @@ class public LlvmJitVisitor : AstVisitor {
             vec |> resize(vec |> length - 1)
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             var if_not_null = subExprT.dim |> length == 0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
-            res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) {
                 var maxIdx = types.ConstI32(uint64(maxIndex))
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, maxIdx, "dim_range")
-                var subRes = build_select(if_range, resType) <| $() {
+                var subRes = build_select(if_range, resType) {
                     return build_array_index(tsrc, tidx, etype, "dim_at")
                 }
-                lpipe <| $() {
+                lpipe() {
                     return LLVMConstNull(resType)
                 }
                 return subRes
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
         } elif (subExprT.isGoodArrayType || (subExprT.isPointer && subExprT.firstType.isGoodArrayType)) {
             var if_not_null = !subExprT.isGoodArrayType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) {
                 var inscope arr_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var arr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(arr_ty), tsrc, arr_ty.alignOf, "arr")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.SIZE), "array.size")
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, size, "array_range")
-                var subRes = build_select(if_range, resType) <| $() {
+                var subRes = build_select(if_range, resType) {
                     var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY.DATA), "array.data")
                     return build_array_index(data, tidx, etype, "array_at")
                 }
-                lpipe <| $() {
+                lpipe() {
                     return LLVMConstNull(resType)
                 }
                 return subRes
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
         } elif (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var if_not_null = !subExprT.isGoodTableType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype.secondType), 0u)
-            res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) {
                 var inscope tab_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var tab = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(tab_ty), tsrc, tab_ty.alignOf, "tab")
                 var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, types.LLVMVoidPtrType(), "tab_ptr")
@@ -1929,25 +1929,25 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 var at_tab = build_table_find(keyType, tab_ptr, tidx, etype.secondType.sizeOf)
                 var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, at_tab, types.ConstI32(uint64(-1)), "table_found")
-                var subRes = build_select(if_found, resType) <| $() {
+                var subRes = build_select(if_found, resType) {
                     var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE.DATA), "table.data")
                     return LLVMBuildGEP2(g_builder, type_to_llvm_type(etype.secondType), data, at_tab, "table_at")
                 }
-                lpipe <| $() {
+                lpipe() {
                     return LLVMConstNull(resType)
                 }
                 return subRes
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
         } elif (subExprT.isVectorType || (subExprT.isPointer && subExprT.firstType.isVectorType)) {
             var if_not_null = !subExprT.isVectorType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) {
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, types.ConstI32(uint64(etype.vectorDim)), "dim_range")
-                var subRes = build_select(if_range, resType) <| $() {
+                var subRes = build_select(if_range, resType) {
                     if (expr.atFlags.r2v) {
                         var lvec = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type),
                             tsrc, subExprT.alignOf, "vector_at")
@@ -1958,12 +1958,12 @@ class public LlvmJitVisitor : AstVisitor {
                         return build_vector_index(tsrc, tidx, etype, "vector_at")
                     }
                 }
-                lpipe <| $() {
+                lpipe() {
                     return LLVMConstNull(resType)
                 }
                 return subRes
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
         } elif (subExprT.isPointer) {
@@ -1971,10 +1971,10 @@ class public LlvmJitVisitor : AstVisitor {
             var inscope etype := subExprT.firstType
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
             var if_not_null = LLVMBuildIsNotNull(g_builder, tsrc, "ptr_not_null")
-            res = build_select(if_not_null, resType) <| $() {
+            res = build_select(if_not_null, resType) {
                 return build_array_index(tsrc, tidx, etype, "ptr_safe_at")
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
         } else {
@@ -2426,7 +2426,7 @@ class public LlvmJitVisitor : AstVisitor {
             var monad_false = append_basic_block("monad_true_at_{int(expr.at.line)}_")
             var monad_result, monad_cond : LLVMOpaqueValue?
             if (expr.op == "&&" || expr.op == "||") {
-                at_function_entry <| $() {
+                at_function_entry() {
                     monad_result = LLVMBuildAlloca(g_builder, types.t_int1, "{expr.op}_at_{int(expr.at.line)}_")
                 }
                 monad_cond = getE(expr.left)
@@ -2866,7 +2866,7 @@ class public LlvmJitVisitor : AstVisitor {
             loop_continue = append_basic_block("for_continue"),
             loop_end = append_basic_block("for_end")
         )
-        at_function_entry <| $() {
+        at_function_entry() {
             lblk.need_loop = LLVMBuildAlloca(g_builder, types.t_int1, "need_loop")
         }
         loop_stack |> push(lblk)
@@ -2887,7 +2887,7 @@ class public LlvmJitVisitor : AstVisitor {
             vptrtype = LLVMPointerType(vptrtype, 0u)
         }
         var v_ptr : LLVMOpaqueValue?
-        at_function_entry <| $() {
+        at_function_entry() {
             v_ptr = LLVMBuildAlloca(g_builder, vtype, "for_loop_variable_{svar.name}")
             LLVMSetAlignment(v_ptr, 16u)
             v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, vptrtype, "for_loop_variable_{svar.name}")
@@ -2981,7 +2981,7 @@ class public LlvmJitVisitor : AstVisitor {
                     LLVMPositionBuilderAtEnd(g_builder, okay)
                 }
             } elif (ssrc._type.isString) {
-                at_function_entry <| $() {
+                at_function_entry() {
                     // Let's reuse range for string iterator.
                     range2[get_ptr(ssrc)] = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "loop_iter")
                 }
@@ -3144,10 +3144,10 @@ class public LlvmJitVisitor : AstVisitor {
                 mkv_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mkv_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
             }
         } else {
-            mkv_ptr = tryE(expr) <| $() {
+            mkv_ptr = tryE(expr) {
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mkv_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(types.t_int8, 0u), "mkv_local_sp_{expr.stackTop}")
@@ -3263,10 +3263,10 @@ class public LlvmJitVisitor : AstVisitor {
                 mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
             }
         } else {
-            mks_ptr = tryE(expr) <| $() {
+            mks_ptr = tryE(expr) {
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
                 }
@@ -3313,7 +3313,7 @@ class public LlvmJitVisitor : AstVisitor {
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(types.t_int8, 0u), "")
 
             var args : LLVMOpaqueValue?
-            at_function_entry <| $() {
+            at_function_entry() {
                 args = LLVMBuildAlloca(g_builder, LLVMArrayType(types.LLVMFloat4Type(), 1u), "args")
                 LLVMSetAlignment(args, 16u)
                 args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(types.LLVMFloat4Type(), 0u), "call_args_ptr")
@@ -3416,10 +3416,10 @@ class public LlvmJitVisitor : AstVisitor {
                 mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "ema_{expr.at.line}")
             }
         } else {
-            mks_ptr = tryE(expr) <| $() {
+            mks_ptr = tryE(expr) {
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mka_local_sp_{expr.stackTop}_at_{int(expr.at.line)}_")
                     LLVMSetAlignment(s_ptr, 16u)
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(types.t_int8, 0u), "mka_local_sp_{expr.stackTop}_at_{int(expr.at.line)}_")
@@ -3493,10 +3493,10 @@ class public LlvmJitVisitor : AstVisitor {
                 mks_ptr = LLVMBuildGEP2(g_builder, types.t_int8, mks_ptr, types.ConstI32(uint64(expr.extraOffset)), "")
             }
         } else {
-            mks_ptr = tryE(expr) <| $() {
+            mks_ptr = tryE(expr) {
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mkt_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(types.t_int8, 0u), "mkt_local_sp_{expr.stackTop}")
@@ -4099,7 +4099,7 @@ class public LlvmJitVisitor : AstVisitor {
                 cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
             } else {
                 var vtype = type_to_llvm_type(expr._type)
-                at_function_entry <| $() {
+                at_function_entry() {
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "invoke_cmres_eval_{int(expr.at.line)}_var")
                     LLVMSetAlignment(cmresEval, 16u)
                     cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
@@ -4298,13 +4298,13 @@ class public LlvmJitVisitor : AstVisitor {
         var at_tab = build_table_find(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, at_tab, types.ConstI32(uint64(-1)), "")
         var resType = LLVMPointerType(type_to_llvm_type(subExprT.secondType), 0u)
-        var res = build_select(cond, resType) <| $() {
+        var res = build_select(cond, resType) {
             var inscope tab_ty := expr.arguments[0]._type.isPointer ? expr.arguments[0]._type.firstType : expr.arguments[0]._type
             var tab = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(tab_ty), tsrc, tab_ty.alignOf, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE.DATA), "table.data")
             return LLVMBuildGEP2(g_builder, type_to_llvm_type(subExprT.secondType), data, at_tab, "table_at")
         }
-        lpipe <| $() {
+        lpipe() {
             return LLVMConstPointerNull(resType)
         }
         setE(expr, res)
@@ -4409,7 +4409,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprDelete
     def build_lambda_delete(lmb : LLVMOpaqueValue?; at : LineInfo) {
         var args : LLVMOpaqueValue?
-        at_function_entry <| $() {
+        at_function_entry() {
             args = LLVMBuildAlloca(g_builder, LLVMArrayType(types.LLVMFloat4Type(), 1u), "args")
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(types.LLVMFloat4Type(), 0u), "delete lambda args ptr")
@@ -4685,7 +4685,7 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             var tryV = tryGetV(expr.variable)
             if (tryV == null) {
-                at_function_entry <| $() {
+                at_function_entry() {
                     let isSolidContext = expr.variable._module.moduleFlags.isSolidContext
                     var vptr : LLVMOpaqueValue?
                     if (!isSolidContext) {
@@ -4743,10 +4743,10 @@ class public LlvmJitVisitor : AstVisitor {
             let mand = LLVMBuildAnd(g_builder, getE(expr.value), llvm_mask, "")
             let if_not_zero = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntNE, mand, llvm_zero, "")
             var res_type = type_to_llvm_type(expr._type)
-            var res = build_select(if_not_zero, res_type) <| $() {
+            var res = build_select(if_not_zero, res_type) {
                 return LLVMConstInt(types.t_int1, uint64(1), 0)
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstInt(types.t_int1, uint64(0), 0)
             }
             field_ptr = res
@@ -4829,14 +4829,14 @@ class public LlvmJitVisitor : AstVisitor {
             var val_ptr = getE(expr.value)
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
             var res_type = type_to_llvm_type(expr._type)
-            var res = build_select(cond, res_type) <| $() {
+            var res = build_select(cond, res_type) {
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(types.t_int8, 0u), "")
                 var field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, val_ptr, types.ConstI32(uint64(fieldOffset)), "")
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type, 0u), ".{expr.name}")
                 field_ptr = LLVMBuildLoadData2Aligned(g_builder, res_type, field_ptr, expr._type.alignOf, "")
                 return field_ptr
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstPointerNull(res_type)
             }
             setE(expr, res)
@@ -4956,22 +4956,22 @@ class public LlvmJitVisitor : AstVisitor {
         }
         var if_not_null = valueT.isPointer ? LLVMBuildIsNotNull(g_builder, vptr, "") : LLVMConstInt(types.t_int1, 1ul, 0)
         var resType = type_to_llvm_type(expr._type)
-        var res = build_select(if_not_null, resType) <| $() {
+        var res = build_select(if_not_null, resType) {
             var vint = LLVMBuildLoad2(g_builder, types.t_int32, vptr, "variant_index")
             var fidx = types.ConstI32(uint64(field_index))
             var if_index = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, vint, fidx, "index_check")
-            var subRes = build_select(if_index, resType) <| $() {
+            var subRes = build_select(if_index, resType) {
                 let field_offset = get_variant_field_offset(valueT.isPointer ? valueT.firstType : valueT, field_index)
                 var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(types.t_int8, 0u), "")
                 fptr = LLVMBuildGEP2(g_builder, types.t_int8, fptr, types.ConstI32(uint64(field_offset)), "")
                 return LLVMBuildPointerCast(g_builder, fptr, resType, "variant_field_ptr")
             }
-            lpipe <| $() {
+            lpipe() {
                 return LLVMConstNull(resType)
             }
             return subRes
         }
-        lpipe <| $() {
+        lpipe() {
             return LLVMConstNull(resType)
         }
         setE(expr, res)
@@ -5136,7 +5136,7 @@ class public LlvmJitVisitor : AstVisitor {
         if (isCmres && any_afb) {
             var temp_res : LLVMOpaqueValue?
             var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
-            at_function_entry <| $() {
+            at_function_entry() {
                 temp_res = LLVMBuildAlloca(g_builder, subPtrType, "return_cmres_temp_")
                 LLVMBuildStore(g_builder, LLVMConstNull(subPtrType), temp_res)
             }
@@ -5149,7 +5149,7 @@ class public LlvmJitVisitor : AstVisitor {
             has_afb = any_afb
             if (has_afb) {
                 var temp_res : LLVMOpaqueValue?
-                at_function_entry <| $() {
+                at_function_entry() {
                     temp_res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(returnType), "return_temp_")
                 }
                 LLVMBuildStore(g_builder, expr_res, temp_res)
@@ -5307,7 +5307,7 @@ class public LlvmJitVisitor : AstVisitor {
         var this_block_type = StructType(types, blk_fields)
         // allocate block, set captured fields
         var blk : LLVMOpaqueValue?
-        at_function_entry <| $() {
+        at_function_entry() {
             blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}_")
         }
         var blkv = LLVMGetUndef(this_block_type)
@@ -5956,7 +5956,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def getE_ptr(e : Expression?; canFail : bool = true) {
         var res : LLVMOpaqueValue?
-        e2v |> get(e) <| $(val) {
+        e2v |> get(e) $(val) {
             res = val
         }
         if (res == null && canFail) {
@@ -5968,7 +5968,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def getE(e : ExpressionPtr) {
         var res : LLVMOpaqueValue?
-        e2v |> get(get_ptr(e)) <| $(val) {
+        e2v |> get(get_ptr(e)) $(val) {
             res = val
         }
         if (res == null) {
@@ -5980,7 +5980,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def tryE(e : ExpressionPtr; blk : block<LLVMOpaqueValue?>) {
         var res : LLVMOpaqueValue?
-        e2v |> get(get_ptr(e)) <| $(val) {
+        e2v |> get(get_ptr(e)) $(val) {
             res = val
         }
         if (res == null) {
@@ -5999,7 +5999,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def getV_ptr(e : Variable?; canFail : bool = true) {
         var res : LLVMOpaqueValue?
-        v2v |> get(e) <| $(val) {
+        v2v |> get(e) $(val) {
             res = val
         }
         if (res == null && canFail) {
@@ -6011,7 +6011,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def getV(e : VariablePtr) {
         var res : LLVMOpaqueValue?
-        v2v |> get(get_ptr(e)) <| $(val) {
+        v2v |> get(get_ptr(e)) $(val) {
             res = val
         }
         if (res == null) {
@@ -6023,7 +6023,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def tryGetV(e : VariablePtr) {
         var res : LLVMOpaqueValue?
-        v2v |> get(get_ptr(e)) <| $(val) {
+        v2v |> get(get_ptr(e)) $(val) {
             res = val
         }
         return res
@@ -6418,8 +6418,8 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     visitor.function_entry = entry
     LLVMPositionBuilderAtEnd(visitor.g_builder, body)
     let ctx_param = LLVMGetParam(globals_fn, 0u)
-    prog |> for_each_module <| $(mod) {
-        mod |> for_each_global() <| $(glob) {
+    prog |> for_each_module() $(mod) {
+        mod |> for_each_global() $(glob) {
             if (glob.init != null && glob.flags.used) {
                 // compute global variable destination pointer before visiting init expression
                 let isSolidContext = glob._module.moduleFlags.isSolidContext

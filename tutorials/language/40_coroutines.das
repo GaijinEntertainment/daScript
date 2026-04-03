@@ -165,7 +165,7 @@ def demo_co_await() {
 // It works with any generator, not just coroutines.
 
 def numbers_gen() : iterator<int> {
-    return <- generator<int>() <| $() {
+    return <- generator<int> {
         yield 10
         yield 20
         yield 30
@@ -174,7 +174,7 @@ def numbers_gen() : iterator<int> {
 }
 
 def letters_gen() : iterator<int> {
-    return <- generator<int>() <| $() {
+    return <- generator<int> {
         yield 100
         yield 200
         return false
@@ -182,7 +182,7 @@ def letters_gen() : iterator<int> {
 }
 
 def combined_gen() : iterator<int> {
-    return <- generator<int>() <| $() {
+    return <- generator<int> {
         yield 1
         yeild_from <| numbers_gen()
         yield 2

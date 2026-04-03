@@ -7,11 +7,11 @@ options gen2
 //   this is acceptable, but in hot paths consider peek_data.
 //
 // Alternatives:
-//   peek_data(s) <| $(arr) {
+//   peek_data(s) $(arr) {
 //       let ch = int(arr[i])           // O(1) per access, one strlen total
 //   }
 //
-//   modify_data(s) <| $(var arr) {
+//   modify_data(s) $(var arr) {
 //       arr[i] = uint8('X')            // O(1) mutation, returns new string
 //   }
 
@@ -32,7 +32,7 @@ def info_character_at_if(s : string) : bool {
 
 def good_peek_data_single(s : string) : int {
     var ch = 0
-    peek_data(s) <| $(arr) {
+    peek_data(s) $(arr) {
         ch = int(arr[0])
     }
     return ch

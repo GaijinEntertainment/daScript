@@ -1489,6 +1489,7 @@ namespace das
         string      aot_result;                         // Path where to store cpp-result of aot
     // End aot config
         bool        completion = false;                 // this code is being compiled for 'completion' mode
+        bool        lint_check = false;                 // this code is being compiled for lint/style checking
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
         bool        keep_alive = false;                 // produce keep-alive noodes

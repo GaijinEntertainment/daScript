@@ -145,7 +145,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%),
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%),
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
-        group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_reporting_compilation_errors)%%),
+        group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_in_lint_check|is_reporting_compilation_errors)%%),
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%),
         group_by_regex("System infrastructure", mod, %regex~(panic|print|feint|sprint|sprint_json|sscan_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|get_das_version|is_in_aot|aot_enabled|is_intern_strings|eval_main_loop)$%%),
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%),

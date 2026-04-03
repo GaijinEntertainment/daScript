@@ -136,7 +136,7 @@ def public has_intrinsic(expr : smart_ptr<ExprCallFunc>) {
         // int64(clock)
         return false
     }
-    g_intrin_lookup |> get(call_name) <| $(pfun) {
+    g_intrin_lookup |> get(call_name) $(pfun) {
         result = true
     }
     return result
@@ -145,7 +145,7 @@ def public has_intrinsic(expr : smart_ptr<ExprCallFunc>) {
 def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; expr : smart_ptr<ExprCallFunc>; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     var result :  LLVMOpaqueValue?
     let call_name = "{expr.func._module.name}::{expr.func.name}"
-    g_intrin_lookup |> get(call_name) <| $(pfun) {
+    g_intrin_lookup |> get(call_name) $(pfun) {
         result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
     }
     // Check initrinsic consistency
@@ -380,7 +380,7 @@ def build_op_name(op_name : string; opType : TypeDeclPtr) : string {
 def intrinsic_bit_nzp_op1(var ctx : JitCtx; expr : smart_ptr<ExprCallFunc>; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> get(string(expr.name)) <| $(pname) {
+    bit_op1_name |> get(string(expr.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -407,7 +407,7 @@ def intrinsic_bit_nzp_op1(var ctx : JitCtx; expr : smart_ptr<ExprCallFunc>; argu
 def intrinsic_bit_op1(var ctx : JitCtx; expr : smart_ptr<ExprCallFunc>; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> get(string(expr.name)) <| $(pname) {
+    bit_op1_name |> get(string(expr.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -440,7 +440,7 @@ let private op2_name <- {
 def intrinsic_op2(var ctx : JitCtx; expr : smart_ptr<ExprCallFunc>; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume opType = expr.arguments[0]._type
     var op_name : string
-    op2_name |> get(string(expr.name)) <| $(pname) {
+    op2_name |> get(string(expr.name)) $(pname) {
         op_name = pname
     }
     if (op_name == "") {
@@ -884,19 +884,19 @@ def build_memset_128(var ctx : JitCtx; _ptr, value, _size : LLVMOpaqueValue?) : 
 // if ( size & 1 ) write 1 value
     var ival = LLVMBuildLoad2(ctx.builder, ctx.types.t_int64, isize, "")
     var size_and_1 = LLVMBuildAnd(ctx.builder, ival, LLVMConstInt(ctx.types.t_int64, 1ul, 0), "")
-    build_cmove_nz(ctx, size_and_1) <| $() {
+    build_cmove_nz(ctx, size_and_1) {
         build_write_n_values(ctx, iptr, value, ival, isize, 1)
     }
 // if ( size & 3 ) write 2 values
     ival = LLVMBuildLoad2(ctx.builder, ctx.types.t_int64, isize, "")
     var size_and_3 = LLVMBuildAnd(ctx.builder, ival, LLVMConstInt(ctx.types.t_int64, 3ul, 0), "")
-    build_cmove_nz(ctx, size_and_3) <| $() {
+    build_cmove_nz(ctx, size_and_3) {
         build_write_n_values(ctx, iptr, value, ival, isize, 2)
     }
 // if ( size & 7 ) write 4 values
     ival = LLVMBuildLoad2(ctx.builder, ctx.types.t_int64, isize, "")
     var size_and_7 = LLVMBuildAnd(ctx.builder, ival, LLVMConstInt(ctx.types.t_int64, 7ul, 0), "")
-    build_cmove_nz(ctx, size_and_7) <| $() {
+    build_cmove_nz(ctx, size_and_7) {
         build_write_n_values(ctx, iptr, value, ival, isize, 4)
     }
 // loop body

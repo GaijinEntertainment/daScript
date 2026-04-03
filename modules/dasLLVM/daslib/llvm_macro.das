@@ -28,7 +28,7 @@ struct JitState {
 def public free_jit_context {
     // Free everything only if it's the last one context.
     if (get_context_share_counter() == 1ul) {
-        get_jit_state() <| $(dll, ee, ctx : void?) {
+        get_jit_state() $(dll, ee, ctx : void?) {
             if (dll != null) {
                 close_dynamic_library(dll)
             } elif (ee != null || ctx != null) {
@@ -112,8 +112,8 @@ class JIT_LLVM : AstSimulateMacro {
         // Set global options
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
 
-        prog |> for_each_module <| $(mod) {
-            mod |> for_each_function("") <| $(fun) {
+        prog |> for_each_module() $(mod) {
+            mod |> for_each_function("") $(fun) {
                 var rqj = fun.moreFlags.requestJit
                 fun.moreFlags &= ~MoreFunctionFlags.requestJit
                 if (fun.flags.used && (jit_all_functions || rqj)) {

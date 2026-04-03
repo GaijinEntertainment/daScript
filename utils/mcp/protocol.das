@@ -48,7 +48,7 @@ var ast_grep_available : bool = false
 
 def log_open() {
     log_start_clock = get_clock()
-    fopen(log_path, "ab") <| $(f) {
+    fopen(log_path, "ab") $(f) {
         if (f != null) {
             fprint(f, "\n--- server start ---\n")
         }
@@ -61,7 +61,7 @@ def log_timestamp() : string {
     let h = total_sec / 3600
     let m = (total_sec % 3600) / 60
     let s = total_sec % 60
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         if (h > 0) {
             write(w, "{h}h")
         }
@@ -77,7 +77,7 @@ def log_write(msg : string) {
     } else {
         print(line)
     }
-    fopen(log_path, "ab") <| $(f) {
+    fopen(log_path, "ab") $(f) {
         if (f != null) {
             fprint(f, line)
         }
@@ -585,13 +585,13 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string
     if (starts_with(tool_name, "live_")) {
         result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
     } else {
-        with_channel(1) <| $(ch) {
+        with_channel(1) $(ch) {
             new_thread() <| @() {
                 let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
                 ch |> push_clone(ToolMessage(text = tool_result))
                 ch |> notify_and_release()
             }
-            for_each_clone(ch) <| $(msg : ToolMessage#) {
+            for_each_clone(ch) $(msg : ToolMessage#) {
                 result = clone_string(msg.text)
             }
         }

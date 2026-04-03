@@ -1546,6 +1546,13 @@ namespace das
         return false;
     }
 
+    bool is_in_lint_check ( ) {
+        if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
+            return daScriptEnvironment::getBound()->g_Program->policies.lint_check;
+        }
+        return false;
+    }
+
     bool is_folding ( ) {
         if ( daScriptEnvironment::getBound() && daScriptEnvironment::getBound()->g_Program ) {
             return daScriptEnvironment::getBound()->g_Program->folding;
@@ -2172,6 +2179,9 @@ namespace das
         // completion
         addExtern<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
             SideEffects::worstDefault, "is_in_completion");
+        // lint
+        addExtern<DAS_BIND_FUN(is_in_lint_check)>(*this, lib, "is_in_lint_check",
+            SideEffects::worstDefault, "is_in_lint_check");
         // folding
         addExtern<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
             SideEffects::worstDefault, "is_folding");

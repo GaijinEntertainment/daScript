@@ -48,7 +48,7 @@ let CATALOG_XML = "<catalog>
 def select_text_demo() {
     print("=== select_text ===\n")
 
-    parse_xml(CATALOG_XML) <| $(doc, ok) {
+    parse_xml(CATALOG_XML) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -80,7 +80,7 @@ def select_text_demo() {
 def select_value_demo() {
     print("\n=== select_value ===\n")
 
-    parse_xml(CATALOG_XML) <| $(doc, ok) {
+    parse_xml(CATALOG_XML) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -115,13 +115,13 @@ def select_value_demo() {
 def for_each_select_demo() {
     print("\n=== for_each_select ===\n")
 
-    parse_xml(CATALOG_XML) <| $(doc, ok) {
+    parse_xml(CATALOG_XML) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
         // All product names
         print("All products:\n")
-        root |> for_each_select("product/name") <| $(xn) {
+        root |> for_each_select("product/name") $(xn) {
             let n = xn.node
             print("  {n.text as string}\n")
         }
@@ -133,7 +133,7 @@ def for_each_select_demo() {
 
         // Filter: only electronics
         print("Electronics:\n")
-        root |> for_each_select("product[@category='electronics']/name") <| $(xn) {
+        root |> for_each_select("product[@category='electronics']/name") $(xn) {
             let n = xn.node
             print("  {n.text as string}\n")
         }
@@ -143,7 +143,7 @@ def for_each_select_demo() {
 
         // Select attributes
         print("All IDs:\n")
-        root |> for_each_select("product/@id") <| $(xn) {
+        root |> for_each_select("product/@id") $(xn) {
             let a = xn.attribute
             print("  {a as string}\n")
         }
@@ -166,18 +166,18 @@ def for_each_select_demo() {
 def compiled_xpath_demo() {
     print("\n=== Compiled XPath ===\n")
 
-    parse_xml(CATALOG_XML) <| $(doc, ok) {
+    parse_xml(CATALOG_XML) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
-        with_xpath("product/name") <| $(query) {
+        with_xpath("product/name") $(query) {
             // Evaluate on the root
             var ns = evaluate_node_set(query, root)
             print("Product count: {ns.size}\n")
             // output: Product count: 4
 
             // Iterate the result set
-            ns |> for_each() <| $(xn) {
+            ns |> for_each() $(xn) {
                 let n = xn.node
                 print("  {n.text as string}\n")
             }
@@ -197,7 +197,7 @@ def compiled_xpath_demo() {
 def low_level_xpath() {
     print("\n=== Low-level XPath ===\n")
 
-    parse_xml(CATALOG_XML) <| $(doc, ok) {
+    parse_xml(CATALOG_XML) $(doc, ok) {
         if (!ok) { return ; }
         let root = doc.document_element
 
@@ -230,7 +230,7 @@ def low_level_xpath() {
 def querying_books() {
     print("\n=== Querying books.xml ===\n")
 
-    open_xml("tutorials/dasPUGIXML/books.xml") <| $(doc, ok) {
+    open_xml("tutorials/dasPUGIXML/books.xml") $(doc, ok) {
         if (!ok) {
             print("could not open books.xml\n")
             return
@@ -249,7 +249,7 @@ def querying_books() {
 
         // All authors (may contain duplicates)
         print("All authors:\n")
-        root |> for_each_select("book/author") <| $(xn) {
+        root |> for_each_select("book/author") $(xn) {
             let n = xn.node
             print("  {n.text as string}\n")
         }

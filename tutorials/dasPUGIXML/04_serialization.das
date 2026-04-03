@@ -353,16 +353,16 @@ def annotations_demo() {
 def low_level_api() {
     print("\n=== Low-level XML() and from_XML(node) ===\n")
 
-    with_doc() <| $(doc) {
+    with_doc() $(doc) {
         // Build a document with multiple records
-        doc |> tag("records") <| $(var records) {
+        doc |> tag("records") $(var records) {
             let p1 = Player(name = "Alice", hp = 100, speed = 5.0, alive = true)
             let p2 = Player(name = "Bob", hp = 80, speed = 3.5, alive = false)
 
-            records |> tag("player") <| $(var node) {
+            records |> tag("player") $(var node) {
                 XML(node, p1)
             }
-            records |> tag("player") <| $(var node) {
+            records |> tag("player") $(var node) {
                 XML(node, p2)
             }
         }
@@ -370,7 +370,7 @@ def low_level_api() {
 
         // Read them back
         let records = doc.document_element
-        records |> for_each_child("player") <| $(node) {
+        records |> for_each_child("player") $(node) {
             var p = from_XML(node, type<Player>)
             print("  {p.name}: hp={p.hp}, alive={p.alive}\n")
         }

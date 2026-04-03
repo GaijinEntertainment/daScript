@@ -155,7 +155,7 @@ def editCoefficientsWindow(p_open : bool? implicit) {
 [export]
 def main {
     var f = 0.0
-    imgui_app("Vectors & Circles") <| $() {
+    imgui_app("Vectors & Circles") {
         NewFrame()
         editCoefficientsWindow(null)
         Render()

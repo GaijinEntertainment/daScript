@@ -97,7 +97,7 @@ class SFMLGen : CppGenBind {
 def main {
     // generate
     var cgb = new SFMLGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

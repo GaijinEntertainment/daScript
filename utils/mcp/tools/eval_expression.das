@@ -15,7 +15,7 @@ def do_eval_expression(expression, req_modules : string) : string {
     }
     let stub_path = make_temp_das_file()
     // build script source
-    let script = build_string() <| $(var w) {
+    let script = build_string() $(var w) {
         write(w, "options gen2\n")
         if (!empty(req_modules)) {
             var req_list <- split(req_modules, ",")
@@ -33,7 +33,7 @@ def do_eval_expression(expression, req_modules : string) : string {
         write(w, "\}\n")
     }
     var write_ok = false
-    fopen(stub_path, "wb") <| $(fw) {
+    fopen(stub_path, "wb") $(fw) {
         if (fw == null) {
             return
         }

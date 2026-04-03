@@ -39,7 +39,7 @@ class CodeStatsLint : AstPassMacro {
         // this macro (pass_macro_mod).
         let cm = compiling_module()
         let WARN_THRESHOLD = 4
-        cm |> for_each_function("") <| $(var func : FunctionPtr) {
+        cm |> for_each_function("") $(var func : FunctionPtr) {
             if (func.body == null || !(func.body is ExprBlock)) {
                 return
             }

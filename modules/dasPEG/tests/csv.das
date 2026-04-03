@@ -22,27 +22,27 @@ def get_parser_with(csv : string; blk : block<(email : array<string>; err : arra
     parse(csv) {
         var Row : array<string>
 
-        rule(*CommarSeparatedCell as cells, Cell as c, EOL) <| $() {
+        rule(*CommarSeparatedCell as cells, Cell as c, EOL) {
             cells |> push <| c
             return <- cells
         }
 
         var CommarSeparatedCell : string
 
-        rule(Cell as c, ",") <| $() {
+        rule(Cell as c, ",") {
             return <- c
         }
 
         var Cell : string
 
         rule(PEEK("\""), commit, // Now we can not turn back
-             QuotedCell as qc) <| $() {
+             QuotedCell as qc) {
             return <- qc;
         }
-        rule(NonQuotedCell as nqc) <| $() {
+        rule(NonQuotedCell as nqc) {
             return <- nqc;
         }
-        rule(PEEK(",")) <| $() {
+        rule(PEEK(",")) {
             // allows empty cells
             return "";
         }
@@ -54,22 +54,22 @@ def get_parser_with(csv : string; blk : block<(email : array<string>; err : arra
 
         var QuotedCell : string;
 
-        rule("\"", "{EscapedChars}" as chars, "\"") <| $() {
+        rule("\"", "{EscapedChars}" as chars, "\"") {
             return chars;
         }
 
         var EscapedChars : void?;
 
-        rule(*EscapedChar) <| $() {
+        rule(*EscapedChar) {
             return null;
         }
 
         var EscapedChar : void?;
 
-        rule("\"\"") <| $() {
+        rule("\"\"") {
             return null;
         }
-        rule(!"\"", any) <| $() {
+        rule(!"\"", any) {
             return null;
         }
 
@@ -78,42 +78,42 @@ def get_parser_with(csv : string; blk : block<(email : array<string>; err : arra
 
         var NonQuotedCell : string;
 
-        rule("{CellContents}" as contents) <| $() {
+        rule("{CellContents}" as contents) {
             return contents;
         }
 
         var CellContents : void?;
 
-        rule(*CellSymbol) <| $() {
+        rule(*CellSymbol) {
             return null;
         }
 
         var CellSymbol : void?;
 
         // Cell symbol is any symbol that is not NotCellContents
-        rule(!NotCellContents, any) <| $() {
+        rule(!NotCellContents, any) {
             return null;
         }
 
         var NotCellContents : void?;
 
-        rule(EOL) <| $() {
+        rule(EOL) {
             return null;
         }
-        rule(",") <| $() {
+        rule(",") {
             return null;
         }
 
 
         var EOL : void?;
 
-        rule("\r\n") <| $() {
+        rule("\r\n") {
             return null;
         }
-        rule("\n") <| $() {
+        rule("\n") {
             return null;
         }
-        rule(EOF) <| $() {
+        rule(EOF) {
             return null;
         }
     }
@@ -125,7 +125,7 @@ def test_basic_csv(t : T?) {
     var input = "John,Doe,30\n";
     var inscope expected_res <-  array<string>("John", "Doe", "30");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
         }
@@ -143,7 +143,7 @@ def test_quoted_fields(t : T?) {
     %%;
     var inscope expected_res <-  array<string>("John Doe", "123, Main Street, NY", "123-456-7890");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
             return ;
@@ -161,7 +161,7 @@ def test_special_chars(t : T?) {
     var input = "John Doe,john.doe@example.com\n";
     var inscope expected_res <-  array<string>("John Doe", "john.doe@example.com");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
             return ;
@@ -179,7 +179,7 @@ def test_escaped_quotes(t : T?) {
     %%;
     var inscope expected_res <-  array<string>("1", "She said, \"\"Hello, world!\"\"");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
             return ;
@@ -196,7 +196,7 @@ def test_leading_trailing_spaces(t : T?) {
     var input = " John Doe , 123 Main Street, NY , 123-456-7890 \n";
     var inscope expected_res <-  array<string>(" John Doe ", " 123 Main Street", " NY ", " 123-456-7890 ");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
             return ;
@@ -213,7 +213,7 @@ def test_all_empty_fields(t : T?) {
     var input = ",,\n";
     var inscope expected_res <-  array<string>("", "", "");
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (!errors |> empty) {
             t |> failure("Parsing failed");
             return ;
@@ -232,7 +232,7 @@ def test_all_empty_fields(t : T?) {
 def test_no_eol(t : T?) {
     let input = %stringify~1,True%%;
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (errors |> empty) {
             t |> failure("Parsing did not fail");
             return ;
@@ -245,7 +245,7 @@ def test_missing_quote(t : T?) {
     let input = %stringify~1,"True
     %%;
 
-    get_parser_with(input) <| $(email; errors) {
+    get_parser_with(input) $(email; errors) {
         if (errors |> empty) {
             t |> failure("Parsing did not fail");
             return;

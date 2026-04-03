@@ -66,7 +66,7 @@ class XbyakGen : CppGenBind {
 def main {
     // generate
     var cgb = new XbyakGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

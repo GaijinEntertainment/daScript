@@ -23,7 +23,7 @@ def abort(message : string) {
 }
 
 def iota {
-    return <- generator<int>() <| $() {
+    return <- generator<int> {
         var i : int = 0
         while (true) {
             i += 1

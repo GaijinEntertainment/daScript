@@ -211,7 +211,7 @@ def main {
     } else {
         // generate
         var cgb = new LlvmGen(args)
-        defer <| $() {
+        defer() {
             unsafe {
                 delete cgb
             }

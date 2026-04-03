@@ -133,7 +133,7 @@ class ImguiSubmoduleGen : ImguiGen {
 def main {
     {
         var cgb = new ImguiGen("dasIMGUI", "imgui", "imgui.h", "{get_das_root()}/modules/dasImgui/imgui/")
-        defer <| $() {
+        defer() {
             unsafe {
                 delete cgb
             }
@@ -143,7 +143,7 @@ def main {
     }
     {
         var cgb = new ImguiSubmoduleGen("dasIMNODES", "imnodes", "imnodes.h", "{get_das_root()}/modules/dasImgui/imnodes/")
-        defer <| $() {
+        defer() {
             unsafe {
                 delete cgb
             }
@@ -159,7 +159,7 @@ def main {
     }
     {
         var cgb = new ImguiSubmoduleGen("dasIMGUI_NODE_EDITOR", "imgui_node_editor", "imgui_node_editor.h", "{get_das_root()}/modules/dasImgui/imgui-node-editor/")
-        defer <| $() {
+        defer() {
             unsafe {
                 delete cgb
             }

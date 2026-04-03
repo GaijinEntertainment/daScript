@@ -303,7 +303,7 @@ def cmd_search(root, query : string; json : bool = false) {
         }
     }
     // sort by score (lower = better)
-    sort(results) <| $(a, b : SearchResult) : bool {
+    sort(results) $(a, b : SearchResult) : bool {
         if (a.score != b.score) {
             return a.score < b.score
         }
@@ -346,7 +346,7 @@ def cmd_search_all(root : string; json : bool = false) {
     for (name in keys(index)) {
         names |> push_clone(name)
     }
-    sort(names) <| $(a, b : string) : bool {
+    sort(names) $(a, b : string) : bool {
         return a < b
     }
     if (json) {
@@ -536,7 +536,7 @@ def serialize_index(index : table<string; IndexEntry>) : string {
         var jv <- entry_to_jv(name, entry)
         name_to_jv |> emplace(name => jv)
     }
-    sort(name_to_jv) <| $(a, b : tuple<string; JsonValue?>) : bool {
+    sort(name_to_jv) $(a, b : tuple<string; JsonValue?>) : bool {
         return a._0 < b._0
     }
     var arr : array<JsonValue?>
@@ -574,7 +574,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
     for (i in range(length(sorted_names))) {
         order |> push(i)
     }
-    sort(order) <| $(a, b : int) : bool {
+    sort(order) $(a, b : int) : bool {
         return sorted_names[a] < sorted_names[b]
     }
     var names : array<string>
@@ -607,7 +607,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         for (t in keys(all_tags)) {
             tag_names |> push_clone(t)
         }
-        sort(tag_names) <| $(a, b : string) : bool {
+        sort(tag_names) $(a, b : string) : bool {
             return a < b
         }
         for (t in tag_names) {
@@ -619,7 +619,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
         }
     }
 
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         writer |> write("# daspkg package index\n\n")
         writer |> write("Package registry for [daspkg](https://github.com/GaijinEntertainment/daScript), the daslang package manager.\n\n")
 

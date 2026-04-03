@@ -41,11 +41,11 @@ def example_basic_request(base_url : string) {
     // The temporary pointer prevents storing or deleting the request
     // inside the block — safe RAII lifetime.
     // String fields (url, body) use := (clone) since they are std::string.
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
         set_timeout(req, 10)
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("request(GET /ping) -> {resp.status_code}: {resp.body}\n")
         }
     }
@@ -59,13 +59,13 @@ def example_basic_request(base_url : string) {
 // custom headers.
 
 def example_request_with_body(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.POST
         req.url := "{base_url}/echo"
         req.body := "Hello from request builder!"
         set_header(req, "X-Custom", "tutorial-02")
         set_content_type(req, "text/plain")
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("request(POST /echo) -> {resp.status_code}: {resp.body}\n")
         }
     }
@@ -83,7 +83,7 @@ def example_request_with_body(base_url : string) {
 // functions set_timeout() and set_connect_timeout().
 
 def example_timeouts(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
 
@@ -91,7 +91,7 @@ def example_timeouts(base_url : string) {
         set_timeout(req, 30)
         set_connect_timeout(req, 5)
 
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("request with timeout -> {resp.status_code}: {resp.body}\n")
         }
     }
@@ -112,21 +112,21 @@ def example_timeouts(base_url : string) {
 
 def example_auth(base_url : string) {
     // Basic Auth
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
         set_basic_auth(req, "user", "secret")
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("Basic auth request -> {resp.status_code}\n")
         }
     }
 
     // Bearer Token
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
         set_bearer_token_auth(req, "eyJhbGciOiJIUzI1NiJ9.example")
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("Bearer token request -> {resp.status_code}\n")
         }
     }
@@ -142,7 +142,7 @@ def example_auth(base_url : string) {
 // Multiple parameters are joined with &.
 
 def example_params(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
         set_param(req, "page", "1")
@@ -153,7 +153,7 @@ def example_params(base_url : string) {
         let limit = get_param(req, "limit")
         print("Parameters: page={page}, limit={limit}\n")
 
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("request with params -> {resp.status_code}\n")
         }
     }
@@ -167,11 +167,11 @@ def example_params(base_url : string) {
 // automatically follows 3xx redirects.
 
 def example_redirect(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.GET
         req.url := "{base_url}/ping"
         allow_redirect(req, true)  // follow redirects (default behavior)
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("redirect enabled -> {resp.status_code}\n")
         }
     }
@@ -185,12 +185,12 @@ def example_redirect(base_url : string) {
 // This is a convenience wrapper for set_header(req, "Content-Type", ...).
 
 def example_content_type(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.POST
         req.url := "{base_url}/echo"
         req.body := "\{\"key\":\"value\"\}"
         set_content_type(req, "application/json")
-        request(req) <| $(resp) {
+        request(req) $(resp) {
             print("JSON POST -> {resp.status_code}: {resp.body}\n")
         }
     }
@@ -205,7 +205,7 @@ def example_content_type(base_url : string) {
 //   method, url, scheme, host, port, path, timeout, connect_timeout, body
 
 def example_inspect_request(base_url : string) {
-    with_http_request() <| $(var req) {
+    with_http_request() $(var req) {
         req.method = http_method.POST
         req.url := "{base_url}/echo"
         req.body := "inspect me"
@@ -225,7 +225,7 @@ def example_inspect_request(base_url : string) {
 //
 //  Function / field                          Description
 //  ──────────────────────────────────────────  ──────────────────────────────────
-//  with_http_request() <| $(var req) { ... }  RAII request — auto new + delete
+//  with_http_request() $(var req) { ... }     RAII request — auto new + delete
 //  req.method = http_method.GET               Set the HTTP method
 //  req.url := "..."                           Set the target URL (clone!)
 //  req.body := "..."                          Set the request body (clone!)
@@ -238,11 +238,11 @@ def example_inspect_request(base_url : string) {
 //  set_param(req, key, value)                 Add a query parameter
 //  get_param(req, key)                        Read a query parameter
 //  allow_redirect(req, true/false)            Enable/disable auto-redirect
-//  request(req) <| $(resp) { ... }            Send the request, get response
+//  request(req) $(resp) { ... }               Send the request, get response
 
 [export]
 def main() {
-    with_tutorial_server(18081) <| $(base_url) {
+    with_tutorial_server(18081) $(base_url) {
         print("=== Basic request builder ===\n")
         example_basic_request(base_url)
 

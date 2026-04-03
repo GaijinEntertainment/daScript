@@ -13,7 +13,7 @@ options gen2
 //   }
 //
 // Good pattern:
-//   let result = build_string() <| $(var writer) {
+//   let result = build_string() $(var writer) {
 //       for (i in range(100)) {
 //           write(writer, "x")  // O(n) — appends to a single buffer
 //       }
@@ -52,7 +52,7 @@ def bad_nested_loop() : string {
 // --- Good patterns (no warnings) ---
 
 def good_build_string() : string {
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         for (i in range(100)) {
             write(writer, "x")
         }

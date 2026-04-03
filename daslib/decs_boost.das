@@ -26,12 +26,15 @@ require daslib/macro_boost
 
 /*
 from:
-    query ( ) <| $ ( pos:float3&; vel:float3; col:uint=0x12345678 )
+    query ( ) $ ( pos:float3&; vel:float3; col:uint=0x12345678 ) {
         pos += vel
+    }
 to:
-    for_each_archetype ( ERQ_HASH, @@ => [[EcsRequest req <- [[string "pos"; "vel"]] ]] ) <| $ ( arch )
-        for pos, vel in get(arch,"pos",type<float3>), get_ro(arch,"vel",type<float3>), get_default_ro(arch,"col",0x12345678)
+    for_each_archetype ( ERQ_HASH, @@ => [[EcsRequest req <- [[string "pos"; "vel"]] ]] ) $ ( arch ) {
+        for ( pos, vel in get(arch,"pos",type<float3>), get_ro(arch,"vel",type<float3>), get_default_ro(arch,"col",0x12345678) ) {
             tag
+        }
+    }
 */
 
 [block_macro(name="REQUIRE")]
@@ -326,14 +329,16 @@ class DecsQueryMacro : AstCallMacro {
     //!
     //! For example::
     //!
-    //!     query() <| $ ( eid:EntityId; pos, vel : float3 )
+    //!     query() $ ( eid:EntityId; pos, vel : float3 ) {
     //!         print("[{eid}] pos={pos} vel={vel}\n")
+    //!     }
     //!
     //! The query above will print all entities with position and velocity.
     //! Here is another example::
     //!
-    //!     query(kaboom) <| $ ( var pos:float3&; vel:float3; col:uint=13u )
+    //!     query(kaboom) $ ( var pos:float3&; vel:float3; col:uint=13u ) {
     //!         pos += vel
+    //!     }
     //!
     //! The query above will add the velocity to the position of an entity with eid kaboom.
     //!
@@ -351,8 +356,9 @@ class DecsQueryMacro : AstCallMacro {
     //!     struct Particle
     //!         pos, vel : float3
     //!     ...
-    //!     query <| $ ( var q : Particle )
+    //!     query $ ( var q : Particle ) {
     //!         q.pos += q.vel                  // this is actually particlepos += particlevel
+    //!     }
     //!
     //!
     //! In the example above structure q : Particle does not exist as a variable. Instead it is expanded into accessing individual components of the entity.
@@ -540,12 +546,16 @@ class DecsFindQueryMacro : DecsQueryMacro {
     //!
     //! For example::
     //!
-    //!     let found = find_query <| $ ( pos,dim:float3; obstacle:Obstacle )
-    //!     if !obstacle.wall
+    //!     let found = find_query()  $ ( pos,dim:float3; obstacle:Obstacle ) {
+    //!         if (!obstacle.wall) {
+    //!             return false
+    //!         }
+    //!         let aabb = [[AABB min=pos-dim*0.5, max=pos+dim*0.5 ]]
+    //!         if (is_intersecting(ray, aabb, 0.1, dist)) {
+    //!             return true
+    //!         }
     //!         return false
-    //!     let aabb = [[AABB min=pos-dim*0.5, max=pos+dim*0.5 ]]
-    //!     if is_intersecting(ray, aabb, 0.1, dist)
-    //!         return true
+    //!     }
     //!
     //! In the example above the find_query will return `true` once the first intersection is found.
     //! Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.

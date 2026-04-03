@@ -18,7 +18,7 @@ def log_init(root : string) {
     let modules_dir = "{root}/modules"
     mkdir(modules_dir)
     log_file_path = "{modules_dir}/.daspkg.log"
-    fopen(log_file_path, "ab") <| $(f) {
+    fopen(log_file_path, "ab") $(f) {
         if (f != null) {
             fprint(f, "\n--- daspkg ---\n")
         }
@@ -29,7 +29,7 @@ def private log_to_file(msg : string) {
     if (empty(log_file_path)) {
         return
     }
-    fopen(log_file_path, "ab") <| $(f) {
+    fopen(log_file_path, "ab") $(f) {
         if (f != null) {
             fprint(f, msg)
         }
@@ -57,13 +57,13 @@ def run_cmd(cmd : string; var output : string&) : int {
     let full_cmd = "{cmd} > \"{tmp_out}\" 2>&1"
     var exit_code = -1
     unsafe {
-        exit_code = popen(full_cmd) <| $(f) {
+        exit_code = popen(full_cmd) $(f) {
             if (f != null) {
                 fread(f)
             }
         }
     }
-    fopen(tmp_out, "rb") <| $(f) {
+    fopen(tmp_out, "rb") $(f) {
         if (f != null) {
             output = fread(f)
         }
@@ -269,7 +269,7 @@ def gitignore_add(root, pattern : string) {
     let gitignore_path = "{root}/.gitignore"
     // read existing content and check for duplicates
     var content = ""
-    fopen(gitignore_path, "rb") <| $(f) {
+    fopen(gitignore_path, "rb") $(f) {
         if (f != null) {
             content = fread(f)
         }
@@ -300,7 +300,7 @@ def gitignore_add(root, pattern : string) {
         return
     }
     // append pattern
-    fopen(gitignore_path, "ab") <| $(f) {
+    fopen(gitignore_path, "ab") $(f) {
         if (f != null) {
             // ensure we start on a new line
             if (!empty(content) && !ends_with(content, "\n")) {
@@ -318,7 +318,7 @@ def gitignore_remove(root, pattern : string) {
     }
     let gitignore_path = "{root}/.gitignore"
     var content = ""
-    fopen(gitignore_path, "rb") <| $(f) {
+    fopen(gitignore_path, "rb") $(f) {
         if (f != null) {
             content = fread(f)
         }
@@ -351,7 +351,7 @@ def gitignore_remove(root, pattern : string) {
         result = nl >= 0 ? "{result}{line}\n" : "{result}{line}"
     }
     if (removed) {
-        fopen(gitignore_path, "wb") <| $(f) {
+        fopen(gitignore_path, "wb") $(f) {
             if (f != null) {
                 fprint(f, result)
             }
@@ -363,7 +363,7 @@ def gitignore_remove(root, pattern : string) {
 def copy_dir_rec(src, dst : string) : bool {
     mkdir(dst)
     var ok = true
-    dir(src) <| $(name) {
+    dir(src) $(name) {
         if (name == "." || name == "..") {
             return
         }
@@ -375,13 +375,13 @@ def copy_dir_rec(src, dst : string) : bool {
                 ok = false
             }
         } elif (st.is_reg) {
-            fopen(src_child, "rb") <| $(fin) {
+            fopen(src_child, "rb") $(fin) {
                 if (fin != null) {
                     let fs = fstat(fin)
                     let sz = int(fs.size)
                     if (sz == 0) {
                         // empty file — just create it
-                        fopen(dst_child, "wb") <| $(fout) {
+                        fopen(dst_child, "wb") $(fout) {
                             if (fout == null) {
                                 ok = false
                             }
@@ -390,7 +390,7 @@ def copy_dir_rec(src, dst : string) : bool {
                         var buf : array<uint8>
                         buf |> resize(sz)
                         fread(fin, buf)
-                        fopen(dst_child, "wb") <| $(fout) {
+                        fopen(dst_child, "wb") $(fout) {
                             if (fout != null) {
                                 fwrite(fout, buf)
                             } else {

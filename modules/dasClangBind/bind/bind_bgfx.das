@@ -91,7 +91,7 @@ class BgfxGen : CppGenBind {
 def main {
     // generate
     var cgb = new BgfxGen()
-    defer <| $() {
+    defer() {
         unsafe {
             delete cgb
         }

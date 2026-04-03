@@ -9,7 +9,7 @@ def main {
     if (glfwInit() == 0) {
         panic("can't init glfw")
     }
-    defer <| $() {
+    defer() {
         glfwTerminate()
     }
 
@@ -17,7 +17,7 @@ def main {
     if (window == null) {
         panic("can't create window")
     }
-    defer <| $() {
+    defer() {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)

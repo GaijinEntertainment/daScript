@@ -22,7 +22,7 @@ require stbimage/stbimage_boost
 
 def make_test_gradient() : Image {
     var img = make_image(64, 64, 4)
-    img |> with_pixels() <| $(var pixels : array<uint8>#) {
+    img |> with_pixels() $(var pixels : array<uint8>#) {
         for (i in range(64 * 64)) {
             let x = i % 64
             let y = i / 64

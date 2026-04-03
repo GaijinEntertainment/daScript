@@ -30,7 +30,7 @@ def do_run_test(file : string; project : string = ""; timeout_str : string = "";
         }
         // Read the JSON file written by dastest
         var json_content = ""
-        fopen(json_path, "rb") <| $(f) {
+        fopen(json_path, "rb") $(f) {
             if (f != null) {
                 json_content = fread(f)
             }

@@ -6,7 +6,7 @@ options gen2
 
 [export]
 def test {
-    return <- generator<int>() <| $() {
+    return <- generator<int> {
         for (i in range(5)) {
             print("  [das] yielding {i}\n")
             yield i

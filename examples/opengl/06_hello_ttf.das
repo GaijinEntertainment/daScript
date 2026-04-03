@@ -13,7 +13,7 @@ def main {
     if (glfwInit() == 0) {
         panic("can't init glfw")
     }
-    defer <| $() {
+    defer() {
         glfwTerminate()
     }
     glfwInitOpenGL(3, 3)
@@ -21,7 +21,7 @@ def main {
     if (window == null) {
         panic("can't create window")
     }
-    defer <| $() {
+    defer() {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
@@ -40,7 +40,7 @@ def main {
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide
     let dim = quads_dim(hw_text)
     let model = quads_view(hw_text, float2(3. / (dim.vmax.x - dim.vmin.x)))
-    eval_main_loop <| $() {
+    eval_main_loop() {
         if (glfwWindowShouldClose(window) != 0) {
             return false
         }

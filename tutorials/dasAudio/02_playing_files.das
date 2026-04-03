@@ -49,12 +49,12 @@ def example_decode_and_play() {
     var channels : int
     var rate : int
     var inscope samples : array<float>
-    fopen(path, "rb") <| $(f) {
+    fopen(path, "rb") $(f) {
         if (f == null) {
             print("  ERROR: Could not open file\n")
             return
         }
-        fmap(f) <| $(data) {
+        fmap(f) $(data) {
             samples <- decode_audio(data, channels, rate)
         }
     }

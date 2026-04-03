@@ -837,7 +837,7 @@ def cmd_build(root : string; is_global : bool = false) {
     }
     var built = 0
     var failed = 0
-    dir(modules_dir) <| $(name) {
+    dir(modules_dir) $(name) {
         if (name == "." || name == ".." || starts_with(name, ".")) {
             return
         }
@@ -939,7 +939,7 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) {
     }
     // mark standalone-build modules so main CMake skips them
     if (is_global && did_build) {
-        fopen("{pkg_dir}/.daspkg_standalone", "wb") <| $(f) {
+        fopen("{pkg_dir}/.daspkg_standalone", "wb") $(f) {
             if (f != null) {
                 fwrite(f, "")
             }

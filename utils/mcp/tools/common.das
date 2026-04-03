@@ -68,16 +68,16 @@ def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
-    using() <| $(var mg : ModuleGroup) {
-        using() <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
-            compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"
                     had_error = true
                 } else {
-                    simulate(program) <| $(sok; var ctx; serrors) {
+                    simulate(program) $(sok; var ctx; serrors) {
                         if (!sok) {
                             result = "Simulation failed:\n{serrors}"
                             had_error = true
@@ -100,8 +100,8 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
-    using() <| $(var mg : ModuleGroup) {
-        using() <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             if (_export_all) {
@@ -111,12 +111,12 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
                 cop.no_optimizations = true
                 cop.no_infer_time_folding = true
             }
-            compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"
                     had_error = true
                 } else {
-                    simulate(program) <| $(sok; ctx; serrors) {
+                    simulate(program) $(sok; ctx; serrors) {
                         if (!sok) {
                             result = "Simulation failed:\n{serrors}"
                             had_error = true
@@ -132,15 +132,15 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
 }
 
 def compile_only(file : string; _export_all : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
-    return compile_only(file, _export_all, false, project) <| blk
+    return compile_only(file, _export_all, false, project, false) <| blk
 }
 
-def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; _lint : bool = false; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
-    using() <| $(var mg : ModuleGroup) {
-        using() <| $(var cop : CodeOfPolicies) {
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
             cop.threadlock_context = true
             cop.ignore_shared_modules = true
             if (_export_all) {
@@ -150,7 +150,10 @@ def compile_only(file : string; _export_all : bool; _no_opt : bool; project : st
                 cop.no_optimizations = true
                 cop.no_infer_time_folding = true
             }
-            compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+            if (_lint) {
+                cop.lint_check = true
+            }
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     result = "Compilation failed:\n{issues}"
                     had_error = true
@@ -195,14 +198,14 @@ def write_func_signature(var w : StringBuilderWriter; func) {
 def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
     write(w, "  handled {value.name}")
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
-    basic_struct_for_each_parent(*ann) <| $(parent) {
+    basic_struct_for_each_parent(*ann) $(parent) {
         write(w, " : {parent.name}")
     }
     if (!empty(value.cppName)) {
         write(w, "  // C++ {value.cppName}")
     }
     write(w, "\n")
-    for_each_field(*ann) <| $(name, cppName, xtype, offset) {
+    for_each_field(*ann) $(name, cppName, xtype, offset) {
         if (!empty(cppName) && cppName != name) {
             write(w, "    {name} : {describe(xtype)}  // C++ {cppName}\n")
         } else {
@@ -216,7 +219,7 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
     var user_funcs : array<string>
     var generic_instances : array<string>
     var class_methods : array<string>
-    for_each_function(thisMod, "") <| $(func) {
+    for_each_function(thisMod, "") $(func) {
         if (func.flags.builtIn) {
             return
         }
@@ -225,7 +228,7 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
             return
         }
         if (func.fromGeneric != null) {
-            line = build_string() <| $(var w) {
+            line = build_string() $(var w) {
                 write(w, "  def {func.fromGeneric.name}")
                 write_func_signature(w, func)
             }
@@ -233,13 +236,13 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
         } elif (func.flags.generated) {
             return
         } elif (func.flags.isClassMethod) {
-            line = build_string() <| $(var w) {
+            line = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 write_func_signature(w, func)
             }
             class_methods |> push(line)
         } else {
-            line = build_string() <| $(var w) {
+            line = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 write_func_signature(w, func)
             }
@@ -283,20 +286,20 @@ def run_and_capture(cmd_line : string; var output : string&; timeout_sec : float
     var exit_code = -1
     unsafe {
         if (timeout_sec > 0.0) {
-            exit_code = popen_timeout(full_cmd, timeout_sec) <| $(f) {
+            exit_code = popen_timeout(full_cmd, timeout_sec) $(f) {
                 if (f != null) {
                     fread(f)
                 }
             }
         } else {
-            exit_code = popen(full_cmd) <| $(f) {
+            exit_code = popen(full_cmd) $(f) {
                 if (f != null) {
                     fread(f)
                 }
             }
         }
     }
-    fopen(tmp_out, "rb") <| $(f) {
+    fopen(tmp_out, "rb") $(f) {
         if (f != null) {
             output = fread(f)
         }
@@ -341,7 +344,7 @@ def expand_glob(pattern : string; var result : array<string>) {
         dir_part = slice(pattern, 0, last_slash)
         file_pattern = slice(pattern, last_slash + 1)
     }
-    dir(dir_part) <| $(fname) {
+    dir(dir_part) $(fname) {
         if (fname == "." || fname == "..") {
             return
         }

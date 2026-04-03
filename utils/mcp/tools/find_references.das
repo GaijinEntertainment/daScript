@@ -317,7 +317,7 @@ class RefVisitor : AstVisitor {
 }
 
 def format_references(refs : array<Reference>; target : RefTarget) : string {
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         write(w, "Found {length(refs)} reference(s) to {target.kind} '{target.name}':\n")
         for (r in refs) {
             write(w, "  {r.file}:{r.line}:{r.column}")
@@ -335,7 +335,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
     let thisMod = get_this_module(program)
     var result : RefTarget
     // check function declarations
-    ast::for_each_function(thisMod, "") <| $(var func : FunctionPtr) {
+    ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
         if (result.kind != RefTargetKind.none) {
             return
         }
@@ -350,7 +350,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         return result
     }
     // check structure declarations
-    ast::for_each_structure(thisMod) <| $(var st : StructurePtr) {
+    ast::for_each_structure(thisMod) $(var st : StructurePtr) {
         if (result.kind != RefTargetKind.none) {
             return
         }
@@ -365,7 +365,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         return result
     }
     // check enumeration declarations
-    ast::for_each_enumeration(thisMod) <| $(var en : EnumerationPtr) {
+    ast::for_each_enumeration(thisMod) $(var en : EnumerationPtr) {
         if (result.kind != RefTargetKind.none) {
             return
         }
@@ -380,7 +380,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         return result
     }
     // check typedef declarations (typedef, bitfield, variant, tuple)
-    ast::for_each_typedef(thisMod) <| $(name : string#; var value : TypeDeclPtr) {
+    ast::for_each_typedef(thisMod) $(name : string#; var value : TypeDeclPtr) {
         if (result.kind != RefTargetKind.none) {
             return
         }
@@ -395,7 +395,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         return result
     }
     // check global variable declarations
-    ast::for_each_global(thisMod) <| $(var value : VariablePtr) {
+    ast::for_each_global(thisMod) $(var value : VariablePtr) {
         if (result.kind != RefTargetKind.none) {
             return
         }
@@ -421,7 +421,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
     }
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
-    return compile_program(file, true, no_opt, project) <| $(program; issues) {
+    return compile_program(file, true, no_opt, project) $(program; issues) {
         // Step 1: identify the target from cursor (expression-based)
         var target : RefTarget
         var hits <- find_at_cursor(program, file, line, col)
@@ -441,7 +441,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
             if (empty(hits)) {
                 return "No expression or declaration found at {file}:{line}:{col}"
             }
-            return build_string() <| $(var w) {
+            return build_string() $(var w) {
                 write(w, "Could not identify a referenceable symbol at {file}:{line}:{col}\n")
                 write(w, "Found expressions:\n")
                 for (hit in hits) {

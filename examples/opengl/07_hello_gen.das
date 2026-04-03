@@ -48,7 +48,7 @@ def main {
     if (glfwInit() == 0) {
         panic("can't init glfw")
     }
-    defer <| $() {
+    defer() {
         glfwTerminate()
     }
     glfwInitOpenGL(3, 3)
@@ -56,7 +56,7 @@ def main {
     if (window == null) {
         panic("can't create window")
     }
-    defer <| $() {
+    defer() {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
@@ -69,7 +69,7 @@ def main {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
     glBindTexture(GL_TEXTURE_2D, 0u)
-    eval_main_loop <| $() {
+    eval_main_loop() {
         if (glfwWindowShouldClose(window) != 0) {
             return false
         }

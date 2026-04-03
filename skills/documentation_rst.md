@@ -102,11 +102,11 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
 
 2. **Clean Sphinx build** — MUST delete cache; cached builds hide errors:
    ```
-   cd doc
+   cd d:/Work/daScript/doc
    rm -rf sphinx-build ../site/doc
-   sphinx-build -b html -d sphinx-build source ../site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
+   d:/Work/daScript/.venv/Scripts/sphinx-build.exe -b html -d sphinx-build source ../site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
    ```
-   Sphinx is installed in the project venv (`.venv/Scripts/sphinx-build`).
+   Sphinx is installed in the project venv (`d:/Work/daScript/.venv/Scripts/sphinx-build.exe`).
 
 3. **Verify no new errors or warnings**: Strip ANSI codes and check the build output:
    ```

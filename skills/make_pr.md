@@ -58,45 +58,73 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 **Run this step if ANY of the following changed:**
 - Public functions in `daslib/*.das` (added, removed, renamed, or signature changed)
 - `//!` doc-comments in `daslib/*.das` files
-- C++ bindings in `modules/*/src/*.cpp` that add new public functions or types
+- C++ bindings in `modules/*/src/*.cpp` or `src/builtin/*.cpp` that add new public functions, types, or struct fields
 - RST files in `doc/source/`
 - `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
 
-**Steps:**
+**Steps (run ALL in order):**
 
-1. **Add new functions to groups** in `das2rst.das` (prevents "Uncategorized" section):
-   - Find the module's `document_module_*` function in `doc/reflections/das2rst.das`
-   - Add the function name to the appropriate `group_by_regex` call
+### 4a. Add new functions to groups in `das2rst.das`
 
-2. **Regenerate stdlib docs:**
-   ```bash
-   bin/Release/daslang.exe doc/reflections/das2rst.das
-   ```
+Every public function must belong to a named group — otherwise it lands in an "Uncategorized" section which **fails CI**.
 
-3. **Check for stubs** — fill in descriptions for any new stub files:
-   ```bash
-   grep -rl "// stub" doc/source/stdlib/handmade/
-   ```
-   Replace stub content with 1-2 sentence descriptions.
+1. Find the module's `document_module_*` function in `doc/reflections/das2rst.das`
+2. Add the function name to the appropriate `group_by_regex` call
+3. For builtin functions: look at groups like "Macro infrastructure", "System infrastructure", etc.
 
-4. **Regenerate again** (picks up filled stubs):
-   ```bash
-   bin/Release/daslang.exe doc/reflections/das2rst.das
-   ```
+### 4b. First doc generation pass
 
-5. **Verify no "Uncategorized":**
-   ```bash
-   grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'
-   ```
+```bash
+bin/Release/daslang.exe doc/reflections/das2rst.das
+```
 
-6. **Clean Sphinx build** — MUST delete cache (cached builds hide errors):
-   ```bash
-   cd doc
-   rm -rf sphinx-build ../site/doc
-   sphinx-build -b html -d sphinx-build source ../site/doc 2>&1 | tee /tmp/sphinx_out.txt
-   grep -iE "warning:|error:" /tmp/sphinx_out.txt
-   ```
-   Must introduce **no new** Sphinx warnings or errors.
+If this **panics** with "has less documentation than values", a handmade doc file needs updating. The error message lists the expected field names — find the missing one and add a description line in the correct position in the handmade file (e.g., `doc/source/stdlib/handmade/structure_annotation-rtti-CodeOfPolicies.rst`). Field descriptions are positional — line 1 is the struct description, line 2 is the first field, etc.
+
+### 4c. Check for stubs and fill them
+
+```bash
+grep -rl "// stub" doc/source/stdlib/handmade/
+```
+
+Each stub file contains `// stub` on line 1 and the function signature on line 2. Replace the **entire file content** with a 1-2 sentence plain-text description (no RST directives). If no stubs are found, skip to step 4d.
+
+### 4d. Second doc generation pass (picks up filled stubs)
+
+```bash
+bin/Release/daslang.exe doc/reflections/das2rst.das
+```
+
+### 4e. Verify no "Uncategorized"
+
+```bash
+grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'
+```
+
+Must return empty. If not, go back to step 4a and add the missing function to a group.
+
+### 4f. Clean Sphinx build
+
+MUST delete cache — cached builds hide errors:
+
+```bash
+cd d:/Work/daScript/doc
+rm -rf sphinx-build ../site/doc
+d:/Work/daScript/.venv/Scripts/sphinx-build.exe -b html -d sphinx-build source ../site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
+tail -3 /tmp/sphinx_out.txt
+grep -iE "warning:|error:" /tmp/sphinx_out.txt
+```
+
+Must say `build succeeded.` with **zero** warnings and errors. The `grep` must return empty.
+
+Common Sphinx issues:
+- **Duplicate label**: Two RST files define the same `.. _label:` — rename one
+- **Unknown target**: `:ref:` points to nonexistent label — check spelling
+- **Malformed table**: Grid/simple table column widths don't align
+- **Unexpected indentation**: Content after directive must be indented consistently
+
+### 4g. Stage doc changes
+
+Add all changed/new files in `doc/` and `doc/reflections/` to the commit. For squashed branches, amend the existing commit.
 
 See `skills/documentation_rst.md` for full details on doc conventions, tutorial RST, and cross-references.
 
