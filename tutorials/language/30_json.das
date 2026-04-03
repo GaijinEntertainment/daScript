@@ -180,12 +180,12 @@ def struct_serialization() {
     // JSON → struct
     var error : string
     var parsed = read_json("\{ \"name\": \"Mage\", \"hp\": 80, \"speed\": 3.2 \}", error)
-    var p2 = from_JV(parsed, type<Player>)
+    let p2 = from_JV(parsed, type<Player>)
     print("name: {p2.name}, hp: {p2.hp}\n")
     // output: name: Mage, hp: 80
 
     // Roundtrip
-    var rt = from_JV(JV(p), type<Player>)
+    let rt = from_JV(JV(p), type<Player>)
     print("roundtrip name: {rt.name}\n")
     // output: roundtrip name: Hero
 }
@@ -206,7 +206,7 @@ def enum_serialization() {
     print("weapon json: {write_json(js)}\n")
     // output: weapon json: "bow"
 
-    var w = from_JV(JV("staff"), type<Weapon>)
+    let w = from_JV(JV("staff"), type<Weapon>)
     print("weapon: {w}\n")
     // output: weapon: staff
 }
@@ -284,18 +284,18 @@ def collections_demo() {
     print("\n=== Collections ===\n")
 
     // array roundtrip
-    var arr <- array<int>(10, 20, 30)
+    let arr <- array<int>(10, 20, 30)
     var js_arr = JV(arr)
     print("array: {write_json(js_arr)}\n")
     // output: array: [10,20,30]
 
-    var back = from_JV(js_arr, type<array<int>>)
+    let back = from_JV(js_arr, type<array<int>>)
     print("back[1]: {back[1]}\n")
     // output: back[1]: 20
 
     // table roundtrip
-    var tab <- { "x" => 1, "y" => 2 }
-    var js_tab = JV(tab)
+    let tab <- { "x" => 1, "y" => 2 }
+    let js_tab = JV(tab)
     print("table: {write_json(js_tab)}\n")
 }
 
@@ -354,7 +354,7 @@ def vectors_demo() {
     print("float3: {write_json(js)}\n")
     // output: float3: {"x":1,"y":2,"z":3}
 
-    var v = from_JV(js, type<float3>)
+    let v = from_JV(js, type<float3>)
     print("back: {v}\n")
     // output: back: (1, 2, 3)
 }
@@ -386,7 +386,7 @@ def sprint_json_demo() {
 
     // sprint_json serializes any value to JSON
     // Second argument controls human-readable formatting
-    var r <- Record(uninitialized
+    let r <- Record(uninitialized
         id = 1,
         tag = "test",
         data = Payload(uninitialized code = 42),
@@ -439,7 +439,7 @@ def annotations_demo() {
     print("\n=== Field annotations ===\n")
 
     // Field annotations are recognized by sprint_json
-    var c <- AnnotatedConfig(uninitialized
+    let c <- AnnotatedConfig(uninitialized
         name = "app",
         debug = false,
         raw_data = "[1,2,3]",
@@ -477,7 +477,7 @@ def rename_demo() {
     print("\n=== @rename annotation ===\n")
 
     // sprint_json uses the renamed key
-    var resp = ApiResponse(_type = "widget", _class = 3, value = 1.5)
+    let resp = ApiResponse(_type = "widget", _class = 3, value = 1.5)
     let json_str = sprint_json(resp, false)
     print("sprint_json: {json_str}\n")
     // output: sprint_json: \{"type":"widget","class":3,"value":1.500000\}
@@ -489,7 +489,7 @@ def rename_demo() {
     // from_JV maps the renamed keys back to struct fields
     var error : string
     var parsed = read_json("\{ \"type\": \"button\", \"class\": 5, \"value\": 2.0 \}", error)
-    var result = from_JV(parsed, type<ApiResponse>)
+    let result = from_JV(parsed, type<ApiResponse>)
     print("from_JV: _type={result._type}, _class={result._class}\n")
     // output: from_JV: _type=button, _class=5
 }
@@ -525,7 +525,7 @@ def sscan_json_demo() {
     // output: tags: prod, v2
 
     // Round-trip: sprint_json -> sscan_json
-    var src = Player(name = "Hero", hp = 100, speed = 5.5)
+    let src = Player(name = "Hero", hp = 100, speed = 5.5)
     let json = sprint_json(src, false)
     var dst : Player
     sscan_json(json, dst)

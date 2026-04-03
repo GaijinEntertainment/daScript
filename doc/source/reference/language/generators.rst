@@ -12,13 +12,13 @@ Generator syntax is similar to lambda syntax.  A generator expression starts wit
 
 .. code-block:: das
 
-    // generator<ElementType>() <| $ { ... }
+    // generator<ElementType>{ ... }
 
 Generator lambdas must have no arguments. The generator body always returns a boolean:
 
 .. code-block:: das
 
-    let gen <- generator<int>() <| $ {  // gen is iterator<int>
+    let gen <- generator<int>{  // gen is iterator<int>
         for ( t in range(0,10) ) {
             yield t
         }
@@ -32,7 +32,7 @@ Similar to the return statement, move semantic ``yield <-`` is allowed:
 
 .. code-block:: das
 
-    return <- generator<TT> () <| $ {
+    return <- generator<TT> {
         for ( w in src ) {
             yield <- invoke(blk,w)  // move invoke result
         }
@@ -45,7 +45,7 @@ Generators can output ref types. They can have a capture section:
 
     unsafe {                                                // unsafe due to capture of src by reference
         var src = [1,2,3,4]
-        var gen <- generator<int&> capture(ref(src)) () <| $ {      // capturing src by ref
+        var gen <- generator<int&> capture(ref(src)) {      // capturing src by ref
             for ( w in src ) {
                 yield w                                     // yield of int&
             }
@@ -61,7 +61,7 @@ Generators can have loops and other control structures:
 
 .. code-block:: das
 
-    let gen <- generator<int>() <| $ {
+    let gen <- generator<int>{
         var t = 0
         while ( t < 100 ) {
             if ( t == 10 ) {
@@ -72,7 +72,7 @@ Generators can have loops and other control structures:
         return false
     }
 
-    let gen <- generator<int>() <| $ {
+    let gen <- generator<int>{
         for ( t in range(0,100) ) {
             if ( t >= 10 ) {
                 continue
@@ -86,7 +86,7 @@ Generators can have a ``finally`` expression on its blocks, with the exception o
 
 .. code-block:: das
 
-    let gen <- generator<int>() <| $ {
+    let gen <- generator<int>{
         for ( t in range(0,9) ) {
             yield t
         } finally {
@@ -103,7 +103,7 @@ In the following example:
 
 .. code-block:: das
 
-    var gen <- generator<int> () <| $ {
+    var gen <- generator<int> {
         for ( x in range(0,10) ) {
             if ( (x & 1)==0 ) {
                 yield x

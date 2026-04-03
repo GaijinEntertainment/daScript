@@ -27,7 +27,7 @@ def main {
         return
     }
     let bytes = sqlite3_column_bytes(res, 0)
-    fopen("test.png", "wb") <| $(f) {
+    fopen("test.png", "wb") $(f) {
         if (f != null) {
             f |> _builtin_write(sqlite3_column_blob(res, 0), bytes)
         } else {

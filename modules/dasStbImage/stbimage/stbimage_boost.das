@@ -246,23 +246,23 @@ struct public Image {
         let fmt = to_lower(format)
         var encoded = false
         if (fmt == "png") {
-            stbi_write_png_to_memory(width, height, channels, unsafe(addr(bytes[0])), self |> stride()) <| $(data : array<uint8>#) {
+            stbi_write_png_to_memory(width, height, channels, unsafe(addr(bytes[0])), self |> stride()) $(data : array<uint8>#) {
                 out_data := data
                 encoded = true
             }
         } elif (fmt == "bmp") {
-            stbi_write_bmp_to_memory(width, height, channels, unsafe(addr(bytes[0]))) <| $(data : array<uint8>#) {
+            stbi_write_bmp_to_memory(width, height, channels, unsafe(addr(bytes[0]))) $(data : array<uint8>#) {
                 out_data := data
                 encoded = true
             }
         } elif (fmt == "tga") {
-            stbi_write_tga_to_memory(width, height, channels, unsafe(addr(bytes[0]))) <| $(data : array<uint8>#) {
+            stbi_write_tga_to_memory(width, height, channels, unsafe(addr(bytes[0]))) $(data : array<uint8>#) {
                 out_data := data
                 encoded = true
             }
         } elif (fmt == "jpg" || fmt == "jpeg") {
             let q = quality != 0 ? quality : 90
-            stbi_write_jpg_to_memory(width, height, channels, unsafe(addr(bytes[0])), q) <| $(data : array<uint8>#) {
+            stbi_write_jpg_to_memory(width, height, channels, unsafe(addr(bytes[0])), q) $(data : array<uint8>#) {
                 out_data := data
                 encoded = true
             }

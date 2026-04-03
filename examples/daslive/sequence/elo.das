@@ -149,10 +149,10 @@ def run_tournament_quiet(var bots : array<BotEntry>; num_games : int; gen_seed :
                 let b_wins = result.y
                 let draws = result.z
                 // ELO updates are sequential (order-dependent)
-                for (g in range(a_wins)) {
+                for (_g in range(a_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, true)
                 }
-                for (g in range(b_wins)) {
+                for (_g in range(b_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, false)
                 }
                 bots[a].wins += a_wins
@@ -180,10 +180,10 @@ def run_tournament(var bots : array<BotEntry>; num_games : int) {
                 let b_wins = result.y
                 let draws = result.z
                 // ELO updates are sequential (order-dependent)
-                for (g in range(a_wins)) {
+                for (_g in range(a_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, true)
                 }
-                for (g in range(b_wins)) {
+                for (_g in range(b_wins)) {
                     elo_update(bots[a].elo, bots[b].elo, false)
                 }
                 bots[a].wins += a_wins

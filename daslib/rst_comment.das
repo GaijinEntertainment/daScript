@@ -476,7 +476,7 @@ class RstComment : AstCommentReader {
         }
         let fname = "{output}/{name}.rst"
         mkdir_rec(output)
-        fopen(fname,"wb") <| $ ( f ) {
+        fopen(fname,"wb") $(f) {
             if (f==null) {
                 panic_rst("can't open {fname}")
             } else {

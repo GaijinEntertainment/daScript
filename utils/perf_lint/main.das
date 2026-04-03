@@ -24,6 +24,8 @@ def main() {
         print("  PERF007  unnecessary string(das_string) in comparison\n")
         print("  PERF008  unnecessary get_ptr() for is/as type checks\n")
         print("  PERF009  redundant move-init variable immediately returned\n")
+        print("  PERF010  unnecessary get_ptr() for null comparison\n")
+        print("  PERF011  unnecessary get_ptr() for field access\n")
         unsafe {
             fio::exit(1)
         }
@@ -56,12 +58,14 @@ def main() {
         total_files++
         {
             var inscope access <- make_file_access("")
-            using() <| $(var mg : ModuleGroup) {
-                using() <| $(var cop : CodeOfPolicies) {
+            using() $(var mg : ModuleGroup) {
+                using() $(var cop : CodeOfPolicies) {
                     cop.ignore_shared_modules = true
                     cop.export_all = true
+                    cop.completion = true
                     cop.no_optimizations = true
-                    compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
+                    cop.no_infer_time_folding = true
+                    compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                         if (!ok) {
                             let issues_str = string(issues)
                             print("  COMPILE ERROR:\n{issues_str}\n")

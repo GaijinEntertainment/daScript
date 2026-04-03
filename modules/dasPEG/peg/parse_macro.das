@@ -37,7 +37,7 @@ struct MacroRule {
 
 [macro_function]
 def add_alternative(var rules : array<MacroRule>; var expr : ExprCall?; prog : ProgramPtr) {
-    var call_name = expr.name |> string()
+    let call_name = expr.name |> string()
 
     if (call_name == "rule") {
         (rules |> back).alternatives |> emplace <| expr
@@ -83,8 +83,8 @@ def into_terminal(var expr : ExpressionPtr) : tuple<int; int> {
             transfrom_error(expr.at, "Range ends should be integer constants")
         }
 
-        var left <- (left_exp as ExprConstInt).value
-        var right <- (right_exp as ExprConstInt).value
+        let left <- (left_exp as ExprConstInt).value
+        let right <- (right_exp as ExprConstInt).value
 
         return <-  (left, right)
     }
@@ -137,8 +137,8 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         // Bound terminal
 
         var as_expr <- expr as ExprAsVariant
-        var bound_name = as_expr.name |> string()
-        var bound_rule = (as_expr.value as ExprVar).name |> string()
+        let bound_name = as_expr.name |> string()
+        let bound_rule = (as_expr.value as ExprVar).name |> string()
 
         if (bound_rule == "number") {
             return <- new Rule_(rule <- Rule(terminal <- Terminal(number = bound_name)))
@@ -267,7 +267,7 @@ var private failed_to_transform = false
 [macro_function]
 def transform(var rule : MacroRule) : Definition {
     failed_to_transform = false
-    var name = rule.rule.variables[0].name |> string()
+    let name = rule.rule.variables[0].name |> string()
     var inscope type_ <- rule.rule.variables[0]._type
 
     // Transform array<ExprCall?> into an array of Rules
@@ -397,10 +397,10 @@ class ParseMacro : AstCallMacro {
         }
 
         // Emit wrapper code
-        var first_method_name = gram[0].name
+        let first_method_name = gram[0].name
         let parse_main_func = "parse_{first_method_name}`id_{gen.id}"
 
-        return <- qmacro_block <| $() {
+        return <- qmacro_block() {
             var inscope parser : $t(gen.parser_type)
 
             parser.suppress_errors |> push <| false
@@ -409,7 +409,7 @@ class ParseMacro : AstCallMacro {
                 parser.color_output = true
             }
 
-            peek_data($i(name)) <| $(inp) {
+            peek_data($i(name)) $(inp) {
                 parser.input := inp
             }
 
@@ -426,7 +426,7 @@ class ParseMacro : AstCallMacro {
             var inscope error_reporting_parser : $t(gen.parser_type)
             error_reporting_parser.suppress_errors |> push <| false
 
-            peek_data($i(name)) <| $(inp) {
+            peek_data($i(name)) $(inp) {
                 error_reporting_parser.input := inp
             }
 

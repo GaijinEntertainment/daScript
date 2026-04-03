@@ -85,7 +85,7 @@ class LiveCommandMacro : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let commandName = "{func.name}"
         var description = ""
-        var p = args |> find_arg("description")
+        let p = args |> find_arg("description")
         if (p is tString) {
             description = p as tString
         }

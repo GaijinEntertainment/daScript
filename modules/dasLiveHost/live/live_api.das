@@ -81,8 +81,8 @@ def live_api_help_json() : string {
     endpoints |> push(JV({ "method" => "POST", "path" => "/pause", "description" => "Pause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/pause" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/unpause", "description" => "Unpause the host", "curl" => "curl -X POST http://localhost:{live_api_port}/unpause" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/shutdown", "description" => "Graceful shutdown", "curl" => "curl -X POST http://localhost:{live_api_port}/shutdown" }))
-    var cmd_desc = "Dispatch a [live_command] (JSON body: \{\"name\":\"cmd\",\"args\":\{...\}\})"
-    var cmd_curl = "curl -X POST -H \"Content-Type: application/json\" -d '\{\"name\":\"help\"\}' http://localhost:{live_api_port}/command"
+    let cmd_desc = "Dispatch a [live_command] (JSON body: \{\"name\":\"cmd\",\"args\":\{...\}\})"
+    let cmd_curl = "curl -X POST -H \"Content-Type: application/json\" -d '\{\"name\":\"help\"\}' http://localhost:{live_api_port}/command"
     endpoints |> push(JV({ "method" => "POST", "path" => "/command", "description" => cmd_desc, "curl" => cmd_curl }))
     var result : table<string; JsonValue?>
     result |> insert("endpoints", JV(endpoints))

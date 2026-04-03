@@ -10,9 +10,9 @@ require daslib/fio
 def main {
     let image_file = "{get_das_root()}/examples/pathTracer/path_tracer.png"
     var image_data : array<uint8>
-    fopen(image_file, "rb") <| $(f) {
+    fopen(image_file, "rb") $(f) {
         if (f != null) {
-            fmap(f) <| $(data) {
+            fmap(f) $(data) {
                 image_data := data
             }
         } else {

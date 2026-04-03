@@ -64,7 +64,7 @@ def sum_numbers(a, b : auto(T)) : T {
 
 def process_with_cleanup() {
     var counter = 0
-    for (i in range(3)) {
+    for (_i in range(3)) {
         counter += 1
     } finally {
         print("  loop cleanup, counter={counter}\n")
@@ -120,7 +120,7 @@ def main {
 
     // Catching out-of-bounds access
     try {
-        var arr <- [1, 2, 3]
+        let arr <- [1, 2, 3]
         print("  {arr[100]}\n")
     } recover {
         print("  caught out-of-bounds access\n")

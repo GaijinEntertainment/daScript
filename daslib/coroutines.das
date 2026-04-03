@@ -120,7 +120,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
             move_new(retT) <| clone_type(func.result)
         }
         var inscope blk <- qmacro_block() {
-            return <- generator<$t(retT)>() <| $() {
+            return <- generator<$t(retT)> {
                 $e(func.body)
                 return false
             }

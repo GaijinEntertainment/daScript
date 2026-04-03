@@ -28,7 +28,7 @@ def binary_search_demo() {
     // binary_search: returns true if value exists
     // equal_range: [lower_bound, upper_bound) as int2
 
-    var a <- [1, 2, 2, 2, 3, 5, 8, 13]
+    let a <- [1, 2, 2, 2, 3, 5, 8, 13]
 
     let lb = lower_bound(a, 2)
     let ub = upper_bound(a, 2)
@@ -44,7 +44,7 @@ def binary_search_demo() {
     print("lower_bound(2, range 0..4) = {lower_bound(a, 0, 4, 2)}\n")
 
     // Custom comparator — descending order
-    var desc <- [9, 7, 5, 3, 1]
+    let desc <- [9, 7, 5, 3, 1]
     let idx = lower_bound(desc, 5) $(lhs, rhs : int const) {
         return lhs > rhs
     }
@@ -63,11 +63,11 @@ def sort_unique_demo() {
     // unique only removes ADJACENT duplicates (like C++ std::unique).
     // That means the array should be sorted first for full dedup.
     var b <- [3, 1, 3, 1]
-    var c <- unique(b)
+    let c <- unique(b)
     print("unique([3,1,3,1]) = {c}\n") // [3,1,3,1] — no adjacent dups!
 
     var d <- [1, 1, 2, 2, 3, 3]
-    var e <- unique(d)
+    let e <- unique(d)
     print("unique([1,1,2,2,3,3]) = {e}\n") // [1,2,3]
 }
 
@@ -82,9 +82,9 @@ def array_manipulation_demo() {
     print("reverse: {a}\n")  // [5, 4, 3, 2, 1]
 
     // combine — concatenate two arrays into a new one
-    var left <- [1, 2, 3]
-    var right <- [4, 5, 6]
-    var both <- combine(left, right)
+    let left <- [1, 2, 3]
+    let right <- [4, 5, 6]
+    let both <- combine(left, right)
     print("combine: {both}\n")  // [1, 2, 3, 4, 5, 6]
 
     // fill — set all elements to a value
@@ -114,10 +114,10 @@ def erase_all_demo() {
 def query_demo() {
     print("\n=== is_sorted / min_element / max_element ===\n")
 
-    var a <- [1, 2, 3, 4, 5]
+    let a <- [1, 2, 3, 4, 5]
     print("is_sorted([1..5]) = {is_sorted(a)}\n")  // true
 
-    var b <- [3, 1, 4, 1, 5, 9, 2, 6]
+    let b <- [3, 1, 4, 1, 5, 9, 2, 6]
     print("is_sorted([3,1,4..]) = {is_sorted(b)}\n") // false
 
     let mi = min_element(b)
@@ -126,7 +126,7 @@ def query_demo() {
     print("max_element = index {ma}, value {b[ma]}\n")  // 5, value 9
 
     // Custom comparator: find the element closest to zero
-    var c <- [-10, 3, -7, 2]
+    let c <- [-10, 3, -7, 2]
     let idx = min_element(c) $(lhs, rhs : int const) {
         return lhs * lhs < rhs * rhs
     }
@@ -139,13 +139,13 @@ def set_operations_demo() {
     print("\n=== Set operations ===\n")
 
     // Tables used as sets (table<KeyType> with no value type)
-    var a <- { 1, 2, 3, 4 }
-    var b <- { 3, 4, 5, 6 }
+    let a <- { 1, 2, 3, 4 }
+    let b <- { 3, 4, 5, 6 }
 
-    var inter <- intersection(a, b)
-    var uni   <- union(a, b)
-    var diff  <- difference(a, b)
-    var sdiff <- symmetric_difference(a, b)
+    let inter <- intersection(a, b)
+    let uni   <- union(a, b)
+    let diff  <- difference(a, b)
+    let sdiff <- symmetric_difference(a, b)
 
     // We can't print tables in a deterministic order, so check membership
     print("intersection has 3: {inter |> key_exists(3)}\n")  // true
@@ -167,7 +167,7 @@ def set_operations_demo() {
     print("identical(a, b): {identical(a, b)}\n")  // false
 
     // is_subset
-    var sub <- { 2, 3 }
+    let sub <- { 2, 3 }
     print("is_subset(\{2,3}, a): {is_subset(sub, a)}\n")  // true
     print("is_subset(a, sub):    {is_subset(a, sub)}\n")   // false
 }
@@ -187,7 +187,7 @@ def topological_sort_demo() {
     //   test depends on compile
     //
     //   0=compile, 1=link, 2=run, 3=test
-    var nodes <- [TsNode(
+    let nodes <- [TsNode(
         id=2, before <- {1}),    // run depends on link
         TsNode(
         id=1, before <- {0}),    // link depends on compile

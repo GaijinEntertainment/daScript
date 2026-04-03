@@ -74,7 +74,7 @@ class HvWebServer {
     def init_wss(port, httpsPort : int; pathToCert : string = "") {
         //! Initializes an HTTPS/WSS server with TLS. Uses the default ``modules/dasHV/cert``
         //! directory if ``pathToCert`` is empty.
-        var certPath = !empty(pathToCert) ? pathToCert : get_das_root() + "/modules/dasHV/cert"
+        let certPath = !empty(pathToCert) ? pathToCert : get_das_root() + "/modules/dasHV/cert"
         server = make_web_socket_server(port, httpsPort, certPath, unsafe(addr(self)), class_info(self))
         onInit()
     }
@@ -178,7 +178,7 @@ def get_body_bytes(resp : HttpResponse?) : array<uint8> {
         return <- bytes
     }
     bytes |> resize(resp.content_length)
-    peek(resp.body) <| $(bodybytes) {
+    peek(resp.body) $(bodybytes) {
         unsafe {
             memcpy(addr(bytes[0]), reinterpret<void?> bodybytes, resp.content_length)
         }

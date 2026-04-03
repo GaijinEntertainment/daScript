@@ -556,6 +556,10 @@ namespace das {
     // Call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
+            // finalize calls are desugared from ExprDelete — always propagate write
+            if ( expr->func && expr->func->name == "finalize" && expr->arguments.size()==1 ) {
+                propagateWrite(expr->arguments[0].get());
+            }
             // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {

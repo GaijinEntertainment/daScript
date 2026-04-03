@@ -74,7 +74,7 @@ def main {
     // --- reduce ---
     print("reduce:\n")
     var r1 <- [iterator for(x in range(1, 6)); x]
-    var total = reduce(r1) $(a, b : int) : int {
+    let total = reduce(r1) $(a, b : int) : int {
         return a + b
     }
     print("  sum 1..5 = {total}\n")
@@ -86,20 +86,20 @@ def main {
     // --- reduce_or_default ---
     print("reduce_or_default:\n")
     var empty_it <- [iterator for(x in range(0)); x]
-    var safe_sum = reduce_or_default(empty_it, @(a, b : int) : int { return a + b; }, -1)
+    let safe_sum = reduce_or_default(empty_it, @(a, b : int) : int { return a + b; }, -1)
     print("  empty → {safe_sum}\n") // -1, no panic
 
     // --- fold ---
     print("fold:\n")
     var f1 <- [iterator for(x in range(1, 5)); x]
-    var product = fold(f1, 1) $(acc, x : int) : int {
+    let product = fold(f1, 1) $(acc, x : int) : int {
         return acc * x
     }
     print("  product 1..4 = {product}\n")
 
     // fold with different accumulator type
     var f2 <- [iterator for(x in range(1, 4)); x]
-    var csv = fold(f2, "items:") $(acc : string; x : int) : string {
+    let csv = fold(f2, "items:") $(acc : string; x : int) : string {
         return "{acc} {x}"
     }
     print("  string fold: {csv}\n")
@@ -208,17 +208,17 @@ def main {
     // --- find ---
     print("find:\n")
     var fd <- [iterator for(x in range(10)); x]
-    var found = find(fd, @(x : int) : bool { return x > 5; }, -1)
+    let found = find(fd, @(x : int) : bool { return x > 5; }, -1)
     print("  first > 5: {found}\n")
 
     var fd2 <- [iterator for(x in range(3)); x]
-    var notfound = find(fd2, @(x : int) : bool { return x > 100; }, -1)
+    let notfound = find(fd2, @(x : int) : bool { return x > 100; }, -1)
     print("  first > 100: {notfound}\n")
 
     // --- find_index ---
     print("find_index:\n")
     var fi <- [iterator for(x in range(10, 20)); x]
-    var idx = find_index(fi, @(x : int) : bool { return x == 15; })
+    let idx = find_index(fi, @(x : int) : bool { return x == 15; })
     print("  15 in 10..19: index {idx}\n")
 
     // --- partition ---
@@ -256,7 +256,7 @@ def main {
 
     // --- echo ---
     print("echo:\n")
-    var val = echo(42, "")
+    let val = echo(42, "")
     print("  → returned {val}\n")
 
     // --- flatten ---
@@ -273,7 +273,7 @@ def main {
     var pipe <- [iterator for(x in range(10)); x]
     var big <- filter(pipe, @(x : int) : bool { return x >= 5; })
     var doubled <- map(big, @(x : int) : int { return x * 2; })
-    var result = fold(doubled, 0) $(acc, x : int) : int {
+    let result = fold(doubled, 0) $(acc, x : int) : int {
         return acc + x
     }
     print("  sum of doubled >=5: {result}\n") // (5+6+7+8+9)*2 = 70

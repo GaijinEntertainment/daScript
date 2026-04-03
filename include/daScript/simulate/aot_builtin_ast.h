@@ -444,6 +444,7 @@ namespace das {
     DAS_API Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     DAS_API smart_ptr_raw<Program> thisProgram ( Context * context );
     DAS_API void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void astVisitGenerics ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
     DAS_API void astVisitModule ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter,
                       Module* module, Context * context, LineInfoArg * line_info );
     DAS_API void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
@@ -488,6 +489,8 @@ namespace das {
     DAS_API bool addModuleStructure ( Module * module, StructurePtr & stru );
     DAS_API bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr );
     DAS_API void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
+    DAS_API void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
+    DAS_API void ast_style_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
     DAS_API void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context, LineInfoArg * lineInfo );
     DAS_API ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     DAS_API CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context );

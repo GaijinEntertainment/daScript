@@ -617,7 +617,7 @@ def activate_bonus(btype : int) {
         // Spawn 2 extra balls from existing ball positions
         var positions : array<float3>
         var velocities : array<float3>
-        query <| $(b : Ball) {
+        query() $(b : Ball) {
             positions |> push(b.pos)
             velocities |> push(b.vel)
         }
@@ -682,7 +682,7 @@ def update_powerup_timers(dt : float) {
     if (sticky_timer > 0.0) { sticky_timer -= dt; }
     // Auto-launch stuck balls when sticky expires
     if (was_sticky && sticky_timer <= 0.0) {
-        query <| $(var b : Ball) {
+        query() $(var b : Ball) {
             if (b.stuck != 0) {
                 let offset = b.stuck_offset / (current_paddle_w() * 0.5)
                 let angle = clamp(offset, -1.0, 1.0) * 0.7
@@ -774,13 +774,13 @@ def spawn_ball_on_paddle() {
 
 def has_stuck_balls() : bool {
     var found = false
-    query <| $(b : Ball) { if (b.stuck != 0) { found = true; } }
+    query() $(b : Ball) { if (b.stuck != 0) { found = true; } }
     return found
 }
 
 def has_balls() : bool {
     var found = false
-    query <| $(b : Ball) {
+    query() $(b : Ball) {
         found = true
     }
     return found
@@ -877,7 +877,7 @@ def spawn_bricks() {
     let total_w = float(BRICK_COLS) * (BRICK_W + BRICK_GAP) - BRICK_GAP
     let x_offset = -total_w * 0.5 + BRICK_W * 0.5
     let total = BRICK_ROWS * BRICK_COLS
-    create_entities`Brick(total) <| $(eid : EntityId; i : int; var b : Brick) {
+    create_entities`Brick(total) $(eid : EntityId; i : int; var b : Brick) {
         let row = i / BRICK_COLS
         let col = i % BRICK_COLS
         b.pos = float3(x_offset + float(col) * (BRICK_W + BRICK_GAP), BRICK_H * 0.5, BRICK_START_Z + float(row) * (BRICK_D + BRICK_GAP))
@@ -888,7 +888,7 @@ def spawn_bricks() {
 
 def has_bricks() : bool {
     var found = false
-    query <| $(br : Brick) {
+    query() $(br : Brick) {
         found = true
     }
     return found
@@ -1025,11 +1025,11 @@ def spawn_trail_dots() {
     if (trail_timer > 0.0) { return ; }
     trail_timer = TRAIL_INTERVAL
     var ball_positions : array<float3>
-    query <| $(b : Ball) {
+    query() $(b : Ball) {
         ball_positions |> push(b.pos)
     }
     if (length(ball_positions) > 0) {
-        create_entities`Trail(length(ball_positions)) <| $(eid : EntityId; i : int; var tr : Trail) {
+        create_entities`Trail(length(ball_positions)) $(eid : EntityId; i : int; var tr : Trail) {
             tr.pos = ball_positions[i]
             tr.lifetime = 0.15
         }
@@ -1068,16 +1068,16 @@ def draw_shadow_scene() {
     draw_box(float3(0.0, WALL_HEIGHT * 0.5, FIELD_H + WALL_THICKNESS * 0.5),
         float3(FIELD_W + WALL_THICKNESS * 2.0, WALL_HEIGHT, WALL_THICKNESS), SHADOW_COLOR)
     // Balls
-    query <| $(b : Ball) {
+    query() $(b : Ball) {
         draw_sphere(b.pos, BALL_RADIUS, SHADOW_COLOR)
     }
     // Bricks
-    query <| $(br : Brick) {
+    query() $(br : Brick) {
         draw_box(br.pos, float3(BRICK_W, BRICK_H, BRICK_D), SHADOW_COLOR)
     }
     // Bonuses (with rotation matching the main draw)
     let angle = float(get_uptime()) * 3.0
-    query <| $(bn : Bonus) {
+    query() $(bn : Bonus) {
         v_model = compose(bn.pos, float4(0.0, sin(angle * 0.5), 0.0, cos(angle * 0.5)), float3(BONUS_SIZE * 0.5))
         f_Color = float4(SHADOW_COLOR, 0.5)
         vs_arcanoid_bind_uniform(active_program)
@@ -1135,8 +1135,8 @@ struct GameStatusResult {
 [live_command(description="Show score, lives, ball/brick counts")]
 def cmd_game_status(input : JsonValue?) : JsonValue? {
     var result = GameStatusResult()
-    query <| $(b : Ball) { result.balls++; }
-    query <| $(br : Brick) { result.bricks++; }
+    query() $(b : Ball) { result.balls++; }
+    query() $(br : Brick) { result.bricks++; }
     result.score = score
     result.lives = lives
     result.state = "{game_state}"
@@ -1389,7 +1389,7 @@ def update() {
         update_powerup_timers(tick_dt)
         // Sticky release — launch all stuck balls
         if (space_just) {
-            query <| $(var b : Ball) {
+            query() $(var b : Ball) {
                 if (b.stuck != 0) {
                     var offset = b.stuck_offset / (current_paddle_w() * 0.5)
                     if (abs(offset) < 0.1) { offset = 0.3; }  // avoid straight-up launch
@@ -1401,7 +1401,7 @@ def update() {
             }
         }
         var any_stuck = false
-        query <| $(b : Ball) { if (b.stuck != 0) { any_stuck = true; } }
+        query() $(b : Ball) { if (b.stuck != 0) { any_stuck = true; } }
         if (!has_balls() && !any_stuck) {
             spawn_ball_on_paddle()
             commit()
@@ -1428,9 +1428,9 @@ def update() {
         var hit_row = 0
         var ball_idx = 0
         let is_fireball = fireball_timer > 0.0
-        query <| $(var b : Ball) {
+        query() $(var b : Ball) {
             if (hit_ball_idx < 0 || is_fireball) {
-                find_query <| $(eid : EntityId; br : Brick) {
+                find_query() $(eid : EntityId; br : Brick) {
                     let dx = abs(b.pos.x - br.pos.x) - (BRICK_W * 0.5 + BALL_RADIUS)
                     let dz = abs(b.pos.z - br.pos.z) - (BRICK_D * 0.5 + BALL_RADIUS)
                     if (dx < 0.0 && dz < 0.0) {

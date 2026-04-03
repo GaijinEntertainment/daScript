@@ -35,7 +35,7 @@ class LiveVarsLint : AstPassMacro {
         if (mod.name == "live_vars") {
             return false
         }
-        mod |> for_each_global() <| $(g) {
+        mod |> for_each_global() $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
                 if (g._type.flags.constant) {
                     macro_error(prog, g.at, "@live cannot be used on constant (let) variables — they never change: {g.name}")
@@ -56,7 +56,7 @@ class LiveVarsPass : AstPassMacro {
         }
         // Idempotency: skip if already generated
         var found = false
-        mod |> for_each_function("__before_reload_live_vars") <| $(fn) {
+        mod |> for_each_function("__before_reload_live_vars") $(fn) {
             found = true
         }
         if (found) {
@@ -66,7 +66,7 @@ class LiveVarsPass : AstPassMacro {
         var live_var_names : array<string>
         var live_var_keys : array<string>
         var live_var_hashes : array<int64>
-        mod |> for_each_global() <| $(g) {
+        mod |> for_each_global() $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
                 if (!g._type.flags.constant) {
                     live_var_names |> push(string(g.name))
@@ -81,7 +81,7 @@ class LiveVarsPass : AstPassMacro {
         }
         // Ensure archive module is available
         var archiveModule : Module?
-        program_for_each_module(prog) <| $(m) {
+        program_for_each_module(prog) $(m) {
             if (m.name == "archive") {
                 archiveModule = m
             }
@@ -104,7 +104,7 @@ class LiveVarsPass : AstPassMacro {
             }
         }
         // Generate __before_reload_live_vars (save)
-        var inscope saveFn <- qmacro_function("__before_reload_live_vars") <| $() {
+        var inscope saveFn <- qmacro_function("__before_reload_live_vars") $() {
             $b(saveBlocks)
         }
         saveFn.flags |= FunctionFlags.exports | FunctionFlags.generated
@@ -127,7 +127,7 @@ class LiveVarsPass : AstPassMacro {
             }
         }
         // Generate __after_reload_live_vars (load)
-        var inscope loadFn <- qmacro_function("__after_reload_live_vars") <| $() {
+        var inscope loadFn <- qmacro_function("__after_reload_live_vars") $() {
             $b(loadBlocks)
         }
         loadFn.flags |= FunctionFlags.exports | FunctionFlags.generated

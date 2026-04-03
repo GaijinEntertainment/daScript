@@ -152,9 +152,9 @@ def main {
 
     // OR (||)
     print("OR contract:\n")
-    var t = (1, 2.0)
+    let t = (1, 2.0)
     print("  tuple is compound? {is_compound(t)}\n")
-    var v = IntOrFloat(i = 5)
+    let v = IntOrFloat(i = 5)
     print("  variant is compound? {is_compound(v)}\n")
     print("  int is compound? {is_compound(42)}\n")
 

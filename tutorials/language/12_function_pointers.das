@@ -44,7 +44,7 @@ def apply(f : function<(x : int) : int>; value : int) : int {
 }
 
 def transform_array(arr : array<int>; f : function<(x : int) : int>) {
-    for (i, v in count(), arr) {
+    for (_i, v in count(), arr) {
         print("  {v} -> {f(v)}\n")
     }
 }
@@ -73,7 +73,7 @@ def main {
     print("apply(negate, 7) = {apply(@@negate, 7)}\n")   // inline @@
 
     // === Transform an array ===
-    var nums <- [10, 20, 30]
+    let nums <- [10, 20, 30]
     print("double:\n")
     transform_array(nums, @@double_it)
     print("negate:\n")

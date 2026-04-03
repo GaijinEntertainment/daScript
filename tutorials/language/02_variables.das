@@ -29,20 +29,20 @@ def main {
     // === Type inference ===
 
     // The compiler infers the type from the value on the right.
-    var i = 42          // int
-    var f = 3.14        // float (not double!)
-    var b = true        // bool
-    var s = "hello"     // string
+    let i = 42          // int
+    let f = 3.14        // float (not double!)
+    let b = true        // bool
+    let s = "hello"     // string
     print("i={i}  f={f}  b={b}  s={s}\n")
 
     // === Explicit type annotations ===
 
     // You can specify the type explicitly with : Type
-    var x : int = 10
-    var y : float = 2.5
-    var z : double = 1.0lf         // 'lf' suffix for double literals
-    var flag : bool = false
-    var greeting : string = "hi"
+    let x : int = 10
+    let y : float = 2.5
+    let z : double = 1.0lf         // 'lf' suffix for double literals
+    let flag : bool = false
+    let greeting : string = "hi"
     print("x={x}  y={y}  z={z}  flag={flag}  greeting={greeting}\n")
 
     // === No implicit type conversions ===
@@ -76,15 +76,15 @@ def main {
     // === Zero values ===
     // When you declare a variable with type but no initializer,
     // it is zero-initialized.
-    var zeroInt : int
-    var zeroFloat : float
-    var zeroBool : bool
-    var zeroString : string
+    let zeroInt : int
+    let zeroFloat : float
+    let zeroBool : bool
+    let zeroString : string
     print("zeros: int={zeroInt}  float={zeroFloat}  bool={zeroBool}  string=\"{zeroString}\"\n")
 
     // === 64-bit and unsigned types ===
-    var bigInt : int64 = 9_000_000_000l   // 'l' suffix for int64
-    var bigUint : uint64 = 18_000_000_000ul
+    let bigInt : int64 = 9_000_000_000l   // 'l' suffix for int64
+    let bigUint : uint64 = 18_000_000_000ul
     print("int64={bigInt}  uint64={bigUint}\n")
 }
 

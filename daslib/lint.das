@@ -147,6 +147,9 @@ class LintVisitor : AstVisitor {
             }
             return
         }
+        if (can_make_const && v.flags.inScope) {
+            return // inscope variables can't be const — delete/finalize at scope exit requires mutability
+        }
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
             self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return

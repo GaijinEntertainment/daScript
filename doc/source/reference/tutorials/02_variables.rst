@@ -28,17 +28,17 @@ Type inference
 
 The compiler infers the type from the right-hand side::
 
-  var i = 42          // int
-  var f = 3.14        // float
-  var b = true        // bool
-  var s = "hello"     // string
+  let i = 42          // int
+  let f = 3.14        // float
+  let b = true        // bool
+  let s = "hello"     // string
 
 You can also state the type explicitly with ``: Type``::
 
-  var x : int = 10
-  var y : float = 2.5
-  var z : double = 1.0lf     // 'lf' suffix for double literals
-  var flag : bool = false
+  let x : int = 10
+  let y : float = 2.5
+  let z : double = 1.0lf     // 'lf' suffix for double literals
+  let flag : bool = false
 
 No implicit conversions
 =======================
@@ -46,8 +46,8 @@ No implicit conversions
 daslang is strict — you cannot mix ``int`` and ``float`` in arithmetic.
 Both sides must match::
 
-  var i = 42
-  var f = 3.14
+  let i = 42
+  let f = 3.14
   // let bad = i + f       // ERROR: int + float
   let result = float(i) + f    // OK — explicit cast
 
@@ -64,18 +64,18 @@ an ``int``.  64-bit literals use the ``l`` and ``ul`` suffixes::
 
   let h = 0xFF                  // uint
   let hi = int(0xFF)            // int
-  var bigInt : int64 = 9_000_000_000l
-  var bigUint : uint64 = 18_000_000_000ul
+  let bigInt : int64 = 9_000_000_000l
+  let bigUint : uint64 = 18_000_000_000ul
 
 Zero initialization
 ===================
 
 Variables declared with a type but no initializer are zero-initialized::
 
-  var zeroInt : int        // 0
-  var zeroFloat : float    // 0.0
-  var zeroBool : bool      // false
-  var zeroString : string  // ""
+  let zeroInt : int        // 0
+  let zeroFloat : float    // 0.0
+  let zeroBool : bool      // false
+  let zeroString : string  // ""
 
 Running the tutorial
 ====================

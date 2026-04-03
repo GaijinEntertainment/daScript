@@ -228,9 +228,9 @@ def public load_font(fname : string) : Font {
     //! Returns a Font with ``pixel_height = 0`` and empty atlas fields.
     //! Use ``scale_for_pixel_height`` to compute a scale factor for a desired size.
     var font : Font
-    fopen(fname, "rb") <| $(f) {
+    fopen(fname, "rb") $(f) {
         if (f != null) {
-            fmap(f) <| $(mapped) {
+            fmap(f) $(mapped) {
                 font.font_data := mapped
             }
         }

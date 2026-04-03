@@ -276,7 +276,7 @@ class ImplementsMacro : AstStructureAnnotation {
             return true  // apply already reported this error
         }
         // Check each interface method
-        var missing = build_string() <| $(var w) {
+        var missing = build_string() $(var w) {
             for (ifld in iface.fields) {
                 let ifld_name = string(ifld.name)
                 // Skip compiler-generated fields

@@ -59,12 +59,12 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
     var inscope blk <- new ExprBlock(at = fn.at)
-    collect_dependencies(fnMain) <| $(vfun, vvar) {
+    collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
             if (vv.annotation |> find_arg("uniform") is tBool) {
                 if (is_glsl_structure(vv, "sampler2D")) {
                     // bind_sampler_2d(binding, varName.texture2D)
-                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
+                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var inscope vtex <- new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := "texture2D"
@@ -83,7 +83,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     blk.list |> emplace(cll_uni)
                 } elif (is_glsl_structure(vv, "sampler3D")) {
                     // bind_sampler_2d(binding, varName.texture2D)
-                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
+                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var inscope vtex <- new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := "texture3D"
@@ -103,7 +103,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                 } elif (is_glsl_structure(vv, "image2D") || is_glsl_structure(vv, "image3D")) {
                     // bind_sampler_any(binding, varName.texture?D, format, access)
                     let is2D = is_glsl_structure(vv, "image2D")
-                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
+                    let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var inscope vtex <- new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := is2D ? "texture2D" : "texture3D"

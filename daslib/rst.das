@@ -126,7 +126,7 @@ def public safe_function_name(name : string) : string {
 
 def public function_label_file(value : FunctionPtr | Function?; drop_args : int = 0) {
     //! Generates a unique RST label for a function based on its name and argument types.
-    var mn = build_string() <| $(var w) {
+    var mn = build_string() $(var w) {
         w |> write(value.name)
         var drop = drop_args
         for (arg in value.arguments) {
@@ -176,7 +176,7 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
 
 def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : int = 0) {
     //! Generates a unique RST label for a function type based on its name and argument types.
-    var mn = build_string() <| $(var w) {
+    var mn = build_string() $(var w) {
         w |> write(name)
         var drop = drop_args
         for (arg in value.argTypes) {
@@ -191,7 +191,7 @@ def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : i
 }
 
 def function_short_mangled_name(value : FunctionPtr | Function?) {
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         if (value._module != null) {
             w |> write(module_name(value._module))
             w |> write("_")
@@ -301,7 +301,7 @@ def describe_type_short(td : TypeDeclPtr) {
             res = "table<{describe_type_short(td.firstType)}, {describe_type_short(td.secondType)}>"
         }
     } elif (td.baseType == Type.tFunction || td.baseType == Type.tBlock || td.baseType == Type.tLambda) {
-        res = build_string() <| $(var w) {
+        res = build_string() $(var w) {
             w |> write(td.baseType == Type.tBlock ? "block<" : td.baseType == Type.tFunction ? "function<" : "lambda<")
             if (td.argTypes |> length != 0) {
                 w |> write("(")
@@ -1263,7 +1263,7 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     //   non-static methods (isStaticClassMethod=false): self NOT in args (added during inference) → skip 1 for hash
     //   static methods (isStaticClassMethod=true): self IS in args (explicit) → skip 0 for hash
     let hash_drop = is_static ? 0 : 1
-    var mn = build_string() <| $(var w) {
+    var mn = build_string() $(var w) {
         w |> write(fname)
         var drop = hash_drop
         for (arg in func.arguments) {

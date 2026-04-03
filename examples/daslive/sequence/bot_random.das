@@ -15,7 +15,7 @@ def bot_random_move(game : GameState; player_idx : int; seed : int) : Move {
         return Move()
     }
     // Simple LCG random from seed
-    var rng = seed * 1103515245 + 12345
+    let rng = seed * 1103515245 + 12345
     let idx = abs(rng) % n
     let m = moves[idx]
     delete moves

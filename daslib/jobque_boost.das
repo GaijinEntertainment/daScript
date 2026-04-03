@@ -340,7 +340,7 @@ def each(var channel : Channel?; tinfo : auto(TT)) {
     //! iterator stops once channel is depleted (internal entry counter is 0)
     //! iteration can happen on multiple threads or jobs at the same time.
     unsafe {
-        return <- generator<TT&#>() <| $() {
+        return <- generator<TT&#> {
             while (true) {
                 var void_data : void?
                 _builtin_channel_pop(channel) $(vd) {
@@ -366,7 +366,7 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
     //! iterator stops once channel is depleted (internal entry counter is 0)
     //! iteration can happen on multiple threads or jobs at the same time.
     unsafe {
-        return <- generator<TT&#>() <| $() {
+        return <- generator<TT&#> {
             while (true) {
                 var temp : TT -# -& -const
                 var any = false

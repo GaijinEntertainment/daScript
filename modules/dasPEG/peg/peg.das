@@ -32,7 +32,7 @@ def public operator <(a, b : ParsingError) : bool {
 }
 
 def public matches(var parser; template_ : string; strlen : int) : bool {
-    var mark = parser.index
+    let mark = parser.index
 
     // Not sufficient supply of charachters in the input
     return false if (parser.input |> length < mark + strlen)

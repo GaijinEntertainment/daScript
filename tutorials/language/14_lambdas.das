@@ -25,7 +25,7 @@ def main {
     // Lambdas capture variables by COPY by default.
 
     var multiplier = 10
-    var mul_lambda <- @(x : int) : int {
+    let mul_lambda <- @(x : int) : int {
         return x * multiplier
     }
     print("mul_lambda(5) = {mul_lambda(5)}\n")   // 50
@@ -36,7 +36,7 @@ def main {
 
     // === Simplified => syntax ===
     // For single-expression lambdas.
-    var doubler <- @(x : int) : int => x * 2
+    let doubler <- @(x : int) : int => x * 2
     print("doubler(7) = {doubler(7)}\n")
 
     // === Call syntax ===
@@ -88,7 +88,7 @@ def main {
     // The original variable becomes empty/zeroed after the move.
     var data <- [10, 20, 30]
     unsafe {
-        var summer <- @capture(move(data)) () : int {
+        let summer <- @capture(move(data)) () : int {
             var s = 0
             for (v in data) {
                 s += v
@@ -103,7 +103,7 @@ def main {
     // Use capture(clone(var)) to deep-copy a container into the lambda.
     // The original remains intact.
     var items <- [1, 2, 3]
-    var count_items <- @capture(clone(items)) () : int {
+    let count_items <- @capture(clone(items)) () : int {
         return length(items)
     }
     print("cloned items count = {count_items()}\n")  // 3
@@ -133,11 +133,11 @@ def main {
     //   block<(x:int):int>     — accepts all three (most flexible)
 
     // === Practical example: stateful counter factory ===
-    var make_counter <- @() : lambda<() : int> {
+    let make_counter <- @() : lambda<() : int> {
         var n = 0
         return <- @() : int => ++n
     }
-    var c1 <- invoke(make_counter)
+    let c1 <- invoke(make_counter)
     print("c1: {c1()}, {c1()}, {c1()}\n")   // 1, 2, 3
 
     // === Lambda lifecycle ===
@@ -164,7 +164,7 @@ def main {
     // the cloned copy inside the lambda is cleaned up on destruction.
     print("\n--- captured field cleanup ---\n")
     var nums <- [100, 200, 300]
-    var sum_nums <- @capture(clone(nums)) () : int {
+    let sum_nums <- @capture(clone(nums)) () : int {
         var s = 0
         for (v in nums) {
             s += v

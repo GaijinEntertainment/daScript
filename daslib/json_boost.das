@@ -251,7 +251,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
     if (v.value is _string) {
         let name = v.value as _string
         var res : auto(EnumTT) = default<EnumT>
-        var ti = typeinfo rtti_typeinfo(type<EnumT>)
+        let ti = typeinfo rtti_typeinfo(type<EnumT>)
         for (ef in *ti.enumType) {
             if (name == ef.name) {
                 unsafe {
@@ -395,14 +395,13 @@ def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT(
     if (v == null) {
         return defV
     }
-    let VecV : auto(VecTT) = VecT()
     assume vo = v
-    static_if (typeinfo vector_dim(VecV) == 2) {
-        return VecTT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y)
-    } static_elif (typeinfo vector_dim(VecV) == 3) {
-        return VecTT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y, vo?["z"] ?? defV.z)
-    } static_elif (typeinfo vector_dim(VecV) == 4) {
-        return VecTT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y, vo?["z"] ?? defV.z, vo?["w"] ?? defV.w)
+    static_if (typeinfo vector_dim(defV) == 2) {
+        return VecT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y)
+    } static_elif (typeinfo vector_dim(defV) == 3) {
+        return VecT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y, vo?["z"] ?? defV.z)
+    } static_elif (typeinfo vector_dim(defV) == 4) {
+        return VecT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y, vo?["z"] ?? defV.z, vo?["w"] ?? defV.w)
     }
 }
 

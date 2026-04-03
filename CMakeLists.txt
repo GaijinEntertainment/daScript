@@ -1385,6 +1385,9 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/b
 # Install perf_lint (performance linter)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/perf_lint/main.das DESTINATION utils/perf_lint)
 
+# Install style_lint (style linter)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/style_lint/main.das DESTINATION utils/style_lint)
+
 # Install daspkg (package manager)
 file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)

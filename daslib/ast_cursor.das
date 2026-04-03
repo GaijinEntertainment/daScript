@@ -174,7 +174,7 @@ def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, c
 
 //! Pretty-print a CursorHit for debugging. Includes RTTI type, name, resolved type, source location, and enclosing function.
 def public describe(hit : CursorHit) : string {
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         write(w, hit.rtti)
         if (!empty(hit.name)) {
             write(w, "({hit.name})")

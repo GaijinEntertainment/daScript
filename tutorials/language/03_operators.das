@@ -86,7 +86,7 @@ def main {
     // === Copy (=) vs Move (<-) — introduction ===
 
     // = is copy assignment — works for simple types and copyable values.
-    var p = 10
+    let p = 10
     var q = p       // q is a copy of p
     q = 99
     print("p={p}  q={q}\n")    // p is unchanged
@@ -96,7 +96,7 @@ def main {
     // We'll see move in action in the Arrays tutorial (06).
     // For simple types like int, move works the same as copy.
     var s = 42
-    var r <- s      // r gets 42, s is zeroed
+    let r <- s      // r gets 42, s is zeroed
     print("r={r}  s={s}\n")
 }
 

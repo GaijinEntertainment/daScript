@@ -109,6 +109,7 @@ def compile_program(file : string; _export_all : bool; _no_opt : bool; project :
             }
             if (_no_opt) {
                 cop.no_optimizations = true
+                cop.no_infer_time_folding = true
             }
             compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                 if (!ok) {
@@ -147,6 +148,7 @@ def compile_only(file : string; _export_all : bool; _no_opt : bool; project : st
             }
             if (_no_opt) {
                 cop.no_optimizations = true
+                cop.no_infer_time_folding = true
             }
             compile_file(file, access, unsafe(addr(mg)), cop) <| $(ok; program; issues) {
                 if (!ok) {

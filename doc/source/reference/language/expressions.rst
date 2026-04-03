@@ -168,7 +168,7 @@ Left pipe is commonly used to pass blocks and lambdas to functions:
         invoke(blk)
     }
 
-    doSomething() <| $ {
+    doSomething{
         print("hello\n")
     }
 
@@ -178,7 +178,7 @@ Parameterless blocks also do not need the ``$`` prefix:
 
 .. code-block:: das
 
-    doSomething() {                      // same as doSomething() <| $ { ... }
+    doSomething() {                      // same as doSomething{ ... }
         print("hello\n")
     }
 
@@ -215,7 +215,7 @@ This shorthand — called **assumed pipe** — works with all three call forms:
 
 It also works with lambdas (``@``) and no-capture lambdas (``@@``).
 The explicit ``<|`` is still needed when a block is passed to an expression
-(e.g. ``<| new ...``) or for generator bodies (``generator<T>() <| $() { ... }``).
+(e.g. ``<| new ...``) or for the ``=>`` lambda shorthand (``<| $(a,b) => a < b``).
 
 The ``lpipe`` macro from ``daslib/lpipe`` allows piping to the expression on the previous line:
 

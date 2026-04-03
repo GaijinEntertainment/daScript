@@ -114,7 +114,7 @@ class TemplateMacro : AstFunctionAnnotation {
         }
         fclone.annotations |> erase(taidx)
         // name it — build extra from collected hashes
-        var extra = build_string() <| $(var w) {
+        var extra = build_string() $(var w) {
             for (h in hashes) {
                 w |> write("`{h}")
             }

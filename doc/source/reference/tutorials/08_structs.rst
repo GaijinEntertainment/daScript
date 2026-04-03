@@ -33,8 +33,8 @@ Construction
 
 In gen2 syntax, construct structs with ``StructName(field=value, ...)``::
 
-  var p1 = Point()                // all defaults
-  var p2 = Point(x=3.0, y=4.0)   // named fields
+  let p1 = Point()                // all defaults
+  let p2 = Point(x=3.0, y=4.0)   // named fields
 
 Partial initialization fills unspecified fields with their defaults::
 
@@ -45,7 +45,7 @@ Partial initialization fills unspecified fields with their defaults::
       fullscreen : bool = false
   }
 
-  var cfg = Config(title="Tutorial")
+  let cfg = Config(title="Tutorial")
   // width=800, height=600, fullscreen=false
 
 Structs are pure data

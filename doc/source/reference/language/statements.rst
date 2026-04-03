@@ -362,7 +362,7 @@ Output a value from a generator and suspend its execution until the next iterati
 
 .. code-block:: das
 
-    var gen <- generator<int>() <| $ {
+    var gen <- generator<int>{
         yield 0
         yield 1
         return false    // end of generation

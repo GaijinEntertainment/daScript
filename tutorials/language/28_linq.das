@@ -51,12 +51,12 @@ def main {
     var numbers = [3, 1, 4, 1, 5, 9, 2, 6, 5]
 
     // Using where_ with a predicate block
-    var evens = where_to_array(numbers.to_sequence(), $(x) => x % 2 == 0)
+    let evens = where_to_array(numbers.to_sequence(), $(x) => x % 2 == 0)
     print("evens: {evens}\n")
     // output: evens: [[ 4; 2; 6]]
 
     // Shorthand: _where uses _ as the element placeholder
-    var big = _where_to_array(numbers.to_sequence(), _ > 4)
+    let big = _where_to_array(numbers.to_sequence(), _ > 4)
     print("big (>4): {big}\n")
     // output: big (>4): [[ 5; 9; 6; 5]]
 
@@ -65,7 +65,7 @@ def main {
 
     print("\n--- 2. Projection ---\n")
 
-    var doubled = _select_to_array(numbers.to_sequence(), _ * 2)
+    let doubled = _select_to_array(numbers.to_sequence(), _ * 2)
     print("doubled: {doubled}\n")
     // output: doubled: [[ 6; 2; 8; 2; 10; 18; 4; 12; 10]]
 
@@ -74,7 +74,7 @@ def main {
         ["a", "b", "c"].to_sequence(),
         ["d", "e", "f"].to_sequence()
     ]
-    var flat = select_many_to_array(
+    let flat = select_many_to_array(
         nested.to_sequence(),
         $(s : string) => "{s}!"
     )
@@ -88,15 +88,15 @@ def main {
 
     print("\n--- 3. Sorting ---\n")
 
-    var unsorted = [5, 3, 8, 1, 4]
+    let unsorted = [5, 3, 8, 1, 4]
 
     // Default ascending sort (uses built-in unique_key)
-    var asc = order(unsorted)
+    let asc = order(unsorted)
     print("ascending: {asc}\n")
     // output: ascending: [[ 1; 3; 4; 5; 8]]
 
     // Default descending sort
-    var desc = order_descending(unsorted)
+    let desc = order_descending(unsorted)
     print("descending: {desc}\n")
     // output: descending: [[ 8; 5; 4; 3; 1]]
 
@@ -122,27 +122,27 @@ def main {
 
     print("\n--- 4. Partitioning ---\n")
 
-    var seq = [for (x in 0..8); x]
+    let seq = [for (x in 0..8); x]
 
-    var skipped = skip(seq, 3)
+    let skipped = skip(seq, 3)
     print("skip 3: {skipped}\n")
     // output: skip 3: [[ 3; 4; 5; 6; 7]]
 
-    var taken = take(seq, 3)
+    let taken = take(seq, 3)
     print("take 3: {taken}\n")
     // output: take 3: [[ 0; 1; 2]]
 
-    var tail = take_last(seq, 3)
+    let tail = take_last(seq, 3)
     print("take last 3: {tail}\n")
     // output: take last 3: [[ 5; 6; 7]]
 
-    var head = skip_last(seq, 3)
+    let head = skip_last(seq, 3)
     print("skip last 3: {head}\n")
     // output: skip last 3: [[ 0; 1; 2; 3; 4]]
 
     // take_while / skip_while with shorthand
     var tw = _take_while(numbers.to_sequence(), _ < 5)
-    var tw_arr = to_array(tw)
+    let tw_arr = to_array(tw)
     print("take while <5: {tw_arr}\n")
     // output: take while <5: [[ 3; 1; 4; 1]]
 
@@ -173,7 +173,7 @@ def main {
     // output: count >25: 3
 
     // _count shorthand
-    var cnt = _count(vals.to_sequence(), _ >= 30)
+    let cnt = _count(vals.to_sequence(), _ >= 30)
     print("count >=30: {cnt}\n")
     // output: count >=30: 3
 
@@ -190,7 +190,7 @@ def main {
     // output: max: 50
 
     // aggregate — custom fold with a seed value
-    var product = aggregate(vals.to_sequence(), 1, $(acc, v) => acc * v)
+    let product = aggregate(vals.to_sequence(), 1, $(acc, v) => acc * v)
     print("product: {product}\n")
     // output: product: 12000000
 
@@ -233,19 +233,19 @@ def main {
     var a = [1, 2, 2, 3, 3, 3]
     var b = [2, 3, 4, 5]
 
-    var dist = distinct(a)
+    let dist = distinct(a)
     print("distinct: {dist}\n")
     // output: distinct: [[ 1; 2; 3]]
 
-    var uni = union(a, b)
+    let uni = union(a, b)
     print("union: {uni}\n")
     // output: union: [[ 1; 2; 3; 4; 5]]
 
-    var exc = except(a, b)
+    let exc = except(a, b)
     print("except: {exc}\n")
     // output: except: [[ 1]]
 
-    var inter = intersect(a, b)
+    let inter = intersect(a, b)
     print("intersect: {inter}\n")
     // output: intersect: [[ 2; 3]]
 
@@ -254,8 +254,8 @@ def main {
 
     print("\n--- 9. Zip ---\n")
 
-    var names = ["Alice", "Bob", "Charlie"]
-    var ages  = [25, 35, 30]
+    let names = ["Alice", "Bob", "Charlie"]
+    let ages  = [25, 35, 30]
 
     var zipped = zip(names, ages)
     for (z in zipped) {
@@ -266,7 +266,7 @@ def main {
     // output:   Charlie: 30
 
     // Three-source zip
-    var scores = [95, 87, 91]
+    let scores = [95, 87, 91]
     var zipped3 = zip(names, ages, scores)
     for (z in zipped3) {
         print("  {z._0} (age {z._1}): score {z._2}\n")
@@ -307,7 +307,7 @@ def main {
     print("\n--- 11. _fold pipeline ---\n")
 
     // Find the sum of squares of even numbers
-    var sum_of_even_squares = (
+    let sum_of_even_squares = (
         [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         ._where(_ % 2 == 0)
         ._select(_ * _)
@@ -318,7 +318,7 @@ def main {
     // output: sum of even squares: 220
 
     // Get the 3 largest values, deduplicated
-    var top3 = (
+    let top3 = (
         [5, 3, 8, 1, 4, 8, 3, 9, 2, 9]
         .order_descending()
         .distinct()
@@ -329,7 +329,7 @@ def main {
     // output: top 3: [[ 9; 8; 5]]
 
     // Complex pipeline: filter → transform → sort → take
-    var result = (
+    let result = (
         [
             Person(name="Alice", age=25),
             Person(name="Bob", age=17),

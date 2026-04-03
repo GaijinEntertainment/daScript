@@ -79,7 +79,7 @@ def cmd_watch_touch(input : JsonValue?) : JsonValue? {
         return JV("first watched file is empty")
     }
     var ok = false
-    fopen(f, "ab") <| $(fh) {
+    fopen(f, "ab") $(fh) {
         if (fh != null) {
             ok = true
         }

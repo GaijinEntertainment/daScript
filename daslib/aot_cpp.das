@@ -799,7 +799,7 @@ class public AotDebugInfoHelper {
     }
     def describeCppTypeInfo(info : TypeInfo?; suffix : string = "") {
         return build_string() $(writer) {
-            let write_sep = $() { write(writer, ", "); };
+            let write_sep = $ { write(writer, ", "); };
             write(writer, "Type::{das_to_cppCTypeString(info._type)}");
             write_sep()
             if (info._type == Type.tStructure) {
@@ -1424,7 +1424,7 @@ class public CppAot : AstVisitor {
             }
         }
         // pre-declare locals
-        collector.localTemps.get(blk.get_ptr()) <| $(temps) {
+        collector.localTemps.get(blk.get_ptr()) $(temps) {
             for (tmp in temps) {
                 write(*ss, tabs());
                 describeVarLocalCppType(ss, tmp._type, cross_platform);

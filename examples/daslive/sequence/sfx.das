@@ -59,7 +59,7 @@ def gen_arpeggio(notes : array<float>; note_dur : float; volume : float = 0.25) 
     var samples : array<float>
     samples |> resize(total_samples)
     for (ni in range(length(notes))) {
-        var note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, volume)
+        let note <- gen_sine_sweep(notes[ni], notes[ni], note_dur, volume)
         let offset = ni * int(float(AUDIO_RATE) * note_dur)
         for (i in range(length(note))) {
             if (offset + i < total_samples) {
@@ -93,19 +93,19 @@ def init_audio() {
     snd_card_play <- gen_sine_sweep(1200.0, 600.0, 0.03, 0.2)
     // Chip place: soft tap
     snd_chip_place <- gen_noise_burst(0.03, 0.05)
-    var thud <- gen_sine_sweep(150.0, 80.0, 0.04, 0.08)
+    let thud <- gen_sine_sweep(150.0, 80.0, 0.04, 0.08)
     mix_into(snd_chip_place, thud)
     // Chip remove (black jack): descending tone
     snd_chip_remove <- gen_sine_sweep(600.0, 150.0, 0.15, 0.2)
     // Card draw: swish (noise burst, short)
     snd_card_draw <- gen_noise_burst(0.04, 0.05)
-    var swish <- gen_sine_sweep(800.0, 2000.0, 0.04, 0.04)
+    let swish <- gen_sine_sweep(800.0, 2000.0, 0.04, 0.04)
     mix_into(snd_card_draw, swish)
     // Sequence complete: ascending arpeggio C5-E5-G5-C6
-    var seq_notes <- [523.0, 659.0, 784.0, 1047.0]
+    let seq_notes <- [523.0, 659.0, 784.0, 1047.0]
     snd_sequence <- gen_arpeggio(seq_notes, 0.1, 0.25)
     // Game win: longer fanfare C5-E5-G5-C6-E6
-    var win_notes <- [523.0, 659.0, 784.0, 1047.0, 1319.0]
+    let win_notes <- [523.0, 659.0, 784.0, 1047.0, 1319.0]
     snd_game_win <- gen_arpeggio(win_notes, 0.15, 0.3)
     // Turn chime: gentle single note
     snd_turn_chime <- gen_sine_sweep(880.0, 880.0, 0.06, 0.1)

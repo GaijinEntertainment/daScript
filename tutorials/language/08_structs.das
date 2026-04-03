@@ -69,15 +69,15 @@ def main {
     // === Construction ===
 
     // Default initialization — creates with field defaults
-    var p1 = Point()     // x=0.0, y=0.0
+    let p1 = Point()     // x=0.0, y=0.0
     print("p1 = {describe(p1)}\n")
 
     // Named field construction
-    var p2 = Point(x = 3.0, y = 4.0)
+    let p2 = Point(x = 3.0, y = 4.0)
     print("p2 = {describe(p2)}\n")
 
     // Partial initialization — unspecified fields get their defaults
-    var cfg = Config(title = "Tutorial")  // width=800, height=600, fullscreen=false
+    let cfg = Config(title = "Tutorial")  // width=800, height=600, fullscreen=false
     print("config: {cfg.width}x{cfg.height} \"{cfg.title}\" fullscreen={cfg.fullscreen}\n")
 
     // === Field access and modification ===
@@ -87,7 +87,7 @@ def main {
     print("after translate = {describe(player)}\n")
 
     // === Nested structs ===
-    var rect = Rect(
+    let rect = Rect(
         topLeft = Point(x = 0.0, y = 0.0),
         bottomRight = Point(x = 10.0, y = 5.0)
     )

@@ -75,7 +75,7 @@ def main {
     // === Blocks capture local variables by REFERENCE ===
     // No copy is made — the block sees the original variables.
     var total = 0
-    var data <- [10, 20, 30, 40, 50]
+    let data <- [10, 20, 30, 40, 50]
     each_indexed(data) $(idx, val) {
         total += val
         print("  [{idx}] = {val}\n")
@@ -83,7 +83,7 @@ def main {
     print("total = {total}\n")
 
     // === Filtering with blocks ===
-    var numbers <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    let numbers <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     print("even: ")
     filter_array(numbers) <| $(x) => x % 2 == 0
     print("greater than 5: ")
@@ -105,7 +105,7 @@ def main {
     // invoke() is the explicit form, useful for local block variables.
 
     // === Practical example: find_if ===
-    var names <- ["Alice", "Bob", "Carol", "Dave"]
+    let names <- ["Alice", "Bob", "Carol", "Dave"]
     var found = ""
     find_first(names) $(name) {
         if (name == "Carol") {

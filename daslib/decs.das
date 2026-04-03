@@ -456,7 +456,7 @@ def public after_gc {
 
 def public debug_dump_string : string {
     //! Returns state of the ECS system as a string.
-    return build_string() <| $(var writer) {
+    return build_string() $(var writer) {
         debug_dump_writer(writer)
     }
 }
@@ -961,7 +961,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
     //!
     //! Example::
     //!
-    //!     create_entities(100) <| $(eid : EntityId; i : int; var cmp : ComponentMap)
+    //!     create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap)
     //!         apply_decs_template(cmp, Particle(pos = origin, vel = compute_vel(i)))
     //!
     if (count <= 0) {
@@ -977,7 +977,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
     invoke(blk, first_eid, 0, cmp)
     cmp |> set("eid", first_eid)
     var ahash = cmp_archetype_hash(cmp)
-    with_archetype(ahash) <| $(var arch; arch_idx; isNew) {
+    with_archetype(ahash) $(var arch; arch_idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)
         }
@@ -1032,7 +1032,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
     // Ensure eid component is present for archetype hash computation
     cmp |> set("eid", INVALID_ENTITY_ID)
     var ahash = cmp_archetype_hash(cmp)
-    with_archetype(ahash) <| $(var arch; arch_idx; isNew) {
+    with_archetype(ahash) $(var arch; arch_idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)
         }
@@ -1101,7 +1101,7 @@ def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT 
     if (!is_alive(eid)) {
         return defval
     }
-    var lookup = decsState.entityLookup[eid.id]
+    let lookup = decsState.entityLookup[eid.id]
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
     var arch & = unsafe(decsState.allArchetypes[arch_index])
     let cidx = arch.components |> lower_bound(Component(name = name)) <| $(x, y) => x.name < y.name

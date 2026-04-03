@@ -105,7 +105,7 @@ class AsyncMacro : AstFunctionAnnotation {
         }
 
         var inscope blk <- qmacro_expr() {
-            return <- generator<$t(retT)>() <| $() {
+            return <- generator<$t(retT)> {
                 $e(func.body)
                 return false
             }
@@ -355,7 +355,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
 
 def public async_run(var a : iterator<auto>) {
     //! This function runs async function until it is finished.
-    for (t in a) {
+    for (_t in a) {
         pass
     }
 }
@@ -386,7 +386,7 @@ def public async_timeout(var a : iterator<auto>; max_frames : int) : bool {
     //! Returns ``true`` if the async function completed within the limit,
     //! ``false`` if it was terminated due to timeout.
     var frames = 0
-    for (t in a) {
+    for (_t in a) {
         frames ++
         if (frames >= max_frames) {
             return false

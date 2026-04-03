@@ -126,7 +126,7 @@ def install_stack_agent(ctx : Context) {
 // ============================================================
 
 def inner_function(x : int; y : float) : float {
-    var result = float(x) + y
+    let result = float(x) + y
     breakpoint()  // stack walker triggers here
     return result
 }

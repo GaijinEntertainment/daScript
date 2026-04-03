@@ -152,7 +152,6 @@ def demo_fuzz_basic() {
     var fake <- Faker()
 
     // Run 100 iterations with random data
-    var errors = 0
     fuzz(100) {
         let a = fake |> random_int
         let b = fake |> random_int
@@ -235,7 +234,7 @@ def demo_property_testing() {
 // ============================================================
 
 def reverse_string(s : string) : string {
-    return build_string() <| $(var w) {
+    return build_string() $(var w) {
         var i = length(s) - 1
         while (i >= 0) {
             w |> write(slice(s, i, i + 1))

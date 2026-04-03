@@ -160,7 +160,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
     if (arch.reading) {
         delete value
     }
-    apply(value) <| $ [unused_argument(name)] (name : string; field) {
+    apply(value) $ [unused_argument(name)] (name : string; field) {
         arch |> _::serialize(field)
     }
 }
@@ -171,7 +171,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
     if (arch.reading) {
         delete value
     }
-    apply(value) <| $ [unused_argument(name)] (name : string; field) {
+    apply(value) $ [unused_argument(name)] (name : string; field) {
         arch |> _::serialize(field)
     }
 }
@@ -190,7 +190,7 @@ def public serialize(var arch : Archive; var value : auto(TT)&) {
         var index = variant_index(value)
         arch |> write_raw(index)
     }
-    apply(value) <| $ [unused_argument(name)] (name : string; field) {
+    apply(value) $ [unused_argument(name)] (name : string; field) {
         arch |> _::serialize(field)
     }
 }

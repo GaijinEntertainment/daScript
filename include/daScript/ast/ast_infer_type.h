@@ -473,6 +473,7 @@ namespace das {
         ExpressionPtr getConstExpr(Expression *expr);
         virtual bool canVisitIfSubexpr(ExprIfThenElse *expr) override;
         virtual void preVisit(ExprIfThenElse *expr) override;
+        virtual void preVisitIfBlock(ExprIfThenElse *expr, Expression *) override;
         virtual ExpressionPtr visit(ExprIfThenElse *expr) override;
         // ExprAssume
         virtual void preVisit(ExprAssume *expr) override;

@@ -10,7 +10,7 @@ Blocks
     single: Tutorial; Higher-Order Functions
 
 This tutorial covers block declarations, passing blocks to functions,
-the pipe ``<|`` operator, simplified ``=>`` syntax, call syntax, and
+trailing block syntax, simplified ``=>`` syntax, call syntax, and
 ``invoke()`` for local block variables.
 
 Declaring a block
@@ -38,10 +38,10 @@ With typed parameters and return::
       return transform(value)    // call syntax, not invoke
   }
 
-The pipe operator
-=================
+Trailing block syntax
+=====================
 
-Use ``<|`` to pass a trailing block argument::
+Pass a block as the last argument by placing it after the call::
 
   do_twice() {
       print("hello!\n")

@@ -134,7 +134,7 @@ def main {
 
     // [safe_when_uninitialized]
     print("safe_when_uninitialized:\n")
-    var raw : RawData
+    let raw : RawData
     print("  RawData: a={raw.a}, b={raw.b}, c={raw.c}\n")
 
     // Combined annotations

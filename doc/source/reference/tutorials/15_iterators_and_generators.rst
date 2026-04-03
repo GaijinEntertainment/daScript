@@ -28,7 +28,7 @@ Generators
 A generator lazily produces values one at a time using ``yield``.
 Generators use ``$`` (either ``$ { }`` or ``$() { }``)::
 
-  var counter <- generator<int>() <| $ {
+  var counter <- generator<int>{
       for (i in range(5)) {
           yield i
       }
@@ -47,7 +47,7 @@ Generator patterns
 
 **Filtering** — yield only matching values::
 
-  var evens <- generator<int>() <| $ {
+  var evens <- generator<int>{
       for (i in range(10)) {
           if (i % 2 == 0) { yield i }
       }
@@ -56,7 +56,7 @@ Generator patterns
 
 **Stateful** — maintain running computations::
 
-  var fibs <- generator<int>() <| $ {
+  var fibs <- generator<int>{
       var a = 0
       var b = 1
       while (a < 100) {
@@ -79,7 +79,7 @@ Define an ``each()`` function to make any struct iterable::
   }
 
   def each(r : NumberRange) : iterator<int> {
-      return <- generator<int>() <| $ {
+      return <- generator<int>{
           for (i in r.low .. r.high) {
               yield i
           }

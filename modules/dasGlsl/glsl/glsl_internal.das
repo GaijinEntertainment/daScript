@@ -91,7 +91,7 @@ class GlslShader : AstFunctionAnnotation {
         return true
     }
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
-        for_each_function(compiling_module(), bind_uniform_function_name(func)) <| $(bfun) {
+        for_each_function(compiling_module(), bind_uniform_function_name(func)) $(bfun) {
             if (bfun.flags.exports) {
                 bfun.flags &= ~FunctionFlags.exports
                 self->generate_bind_uniform(func, bfun)
@@ -151,7 +151,7 @@ class GlslShader : AstFunctionAnnotation {
     }
     def override fixup(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
-        var version = args |> find_arg("version") ?as tInt ?? (shaderType == ShaderType.compute ? 430 : 330)
+        let version = args |> find_arg("version") ?as tInt ?? (shaderType == ShaderType.compute ? 430 : 330)
         var compute_local_size : int3
         if (shaderType == ShaderType.compute) {
             let arg_local_size_x = args |> find_arg("local_size_x")
@@ -169,7 +169,7 @@ class GlslShader : AstFunctionAnnotation {
         var glob <- find_variable(compiling_module(), argName)
         if (glob != null && glob.init == null) {
             if (glob.name == argName) {
-                var caps = self->buildCaps()
+                let caps = self->buildCaps()
                 let gres = generate_glsl(func, err, shaderType, version, compute_local_size, caps)
                 let shader_text = "{gres.inout_stub}{self->get_glsl_prefix()}{gres.body}"
                 glob.init <- new ExprConstString(at = func.at,
@@ -320,7 +320,7 @@ class GlslExport : AstVisitor {
     }
 // TODO: fixme (egyptian braces)
     def newLine(count : int) {
-        for (t in range(count)) {
+        for (_t in range(count)) {
             *writer |> write("\n")
         }
         trackLine += count
@@ -334,7 +334,7 @@ class GlslExport : AstVisitor {
             return
         }
         if (at.fileInfo != null) {
-            peek(at.fileInfo.name) <| $(atname) {
+            peek(at.fileInfo.name) $(atname) {
                 if (trackLine != int(at.line) || trackFile != atname) {
                     trackLine = int(at.line)
                     trackFile := atname
@@ -346,13 +346,13 @@ class GlslExport : AstVisitor {
     }
 // GLSL TYPE
     def describe_glsl_type_ex(t : TypeDeclPtr; write_dim : bool) {
-        let st = build_string() <| $(var tw) {
+        let st = build_string() $(var tw) {
             // if t.flags.ref
             //    tw |> write("& ") // inout?
             if (t.baseType == Type.tStructure) {
                 tw |> write("{t.structType.name}")
             } elif (t.baseType == Type.tHandle) {
-                peek(t.annotation.name) <| $(aname) {
+                peek(t.annotation.name) $(aname) {
                     tw |> write(glsl_handle_types?[aname] ?? "error")
                 }
             } elif (glsl_types |> key_exists(t.baseType)) {
@@ -373,7 +373,7 @@ class GlslExport : AstVisitor {
         return self->describe_glsl_type_ex(t, true)
     }
     def glsl_function_name(fun : FunctionPtr) {
-        var funname = build_string <| $(var tw) {
+        var funname = build_string() $(var tw) {
             for (Ch in string(fun.name)) {
                 if (Ch == '`') {
                     tw |> write("_")
@@ -399,9 +399,9 @@ class GlslExport : AstVisitor {
         return funname
     }
     def describe_glsl_function(fun : FunctionPtr) {
-        let st = build_string() <| $(var tw) {
+        let st = build_string() $(var tw) {
             tw |> write <| self->describe_glsl_type(fun.result)
-            var funname = self->glsl_function_name(fun)
+            let funname = self->glsl_function_name(fun)
             tw |> write(" {funname} ( ")
             for (arg, i in fun.arguments, count()) {
                 if (i != 0) {
@@ -494,7 +494,7 @@ class GlslExport : AstVisitor {
 // any subexpression to string in current context
     def describe_subexpression(expr : ExpressionPtr) {
         let oldWriter = writer
-        var st = build_string() <| $(var newWriter) {
+        let st = build_string() $(var newWriter) {
             unsafe {
                 writer = addr(newWriter)
             }
@@ -507,7 +507,7 @@ class GlslExport : AstVisitor {
     def isMainFunction(fun : FunctionPtr) {
         var isMain = false
         for (ann in fun.annotations) {
-            peek(ann.annotation.name) <| $(aname) {
+            peek(ann.annotation.name) $(aname) {
                 if (aname |> find("vertex_program") != -1 || aname |> find("fragment_program") != -1 || aname |> find("compute_program") != -1) {
                     isMain = true
                 }
@@ -518,7 +518,7 @@ class GlslExport : AstVisitor {
 // program
     def override preVisitProgramBody(prog : ProgramPtr; mod : Module?) : void {
         var any = false
-        for_each_function(mod, "") <| $(fun) {
+        for_each_function(mod, "") $(fun) {
             if (depFun |> key_exists(intptr(get_ptr(fun)))) {
                 if (!self->isMainFunction(fun)) {
                     if (fun._module.name != "glsl_common") {
@@ -787,7 +787,7 @@ class GlslExport : AstVisitor {
         }
         self->line(fun.at)
         *writer |> write("{self->describe_glsl_type(fun.result)} ")
-        var fnName = isMain ? "main" : self->glsl_function_name(fun)
+        let fnName = isMain ? "main" : self->glsl_function_name(fun)
         *writer |> write("{fnName}(")
     }
     def override preVisitFunctionBody(fun : FunctionPtr; expr : ExpressionPtr) {
@@ -986,7 +986,7 @@ class GlslExport : AstVisitor {
             }
         }
         if (arg.annotation |> find_arg("ssbo") is tBool) {
-            var binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
+            let binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
             *writer |> write("layout(std430, binding={binding}) buffer {arg.name}_ssbo")
             self->newLine(1)
             *writer |> write("\{")
@@ -1209,11 +1209,11 @@ class GlslExport : AstVisitor {
             fnName = self->glsl_function_name(reinterpret<FunctionPtr> expr.func)
         }
         if (caps.output_compatibility_constructors) {
-            glsl_compatibility_constructors |> get(fnName) <| $(newName) {
+            glsl_compatibility_constructors |> get(fnName) $(newName) {
                 fnName = newName
             }
         }
-        glsl_functions |> get(fnName) <| $(newName) {
+        glsl_functions |> get(fnName) $(newName) {
             fnName = newName
         }
         *writer |> write("{fnName}(")
@@ -1376,7 +1376,7 @@ class GlslExport : AstVisitor {
         }
     }
     def override visitExprForSource(expr : smart_ptr<ExprFor>; source : ExpressionPtr; last : bool) : ExpressionPtr {
-        var index = get_for_source_index(expr, source)
+        let index = get_for_source_index(expr, source)
         if (self->isDimFor(source)) {
             pass
         } elif (self->isRangeFor(source)) {
@@ -1431,7 +1431,7 @@ class GlslExport : AstVisitor {
 // make structure
     def outputMakeStruct(expr : smart_ptr<ExprMakeStruct>; index : int) {
         var prev = -1
-        for (st, j in *(expr.structs[index]), count()) {
+        for (st, _j in *(expr.structs[index]), count()) {
             for (sf, i in expr._type.structType.fields, count()) {
                 if (sf.name == st.name) {
                     if (prev > i) {
@@ -1448,7 +1448,7 @@ class GlslExport : AstVisitor {
                 *writer |> write(",")
             }
             var has = false
-            for (st, j in *(expr.structs[index]), count()) {
+            for (st, _j in *(expr.structs[index]), count()) {
                 if (sf.name == st.name) {
                     has = true
                     visit(st.value, astVisitorAdapter)
@@ -1875,19 +1875,19 @@ class GlslExport : AstVisitor {
 def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType : ShaderType; version : int; comp_loc_size : int3; caps : ShaderExportCaps) : tuple<body : string; inout_stub : string; inout_decl : string> {
     var inout_stub = ""
     var inout_decl = ""
-    var st = build_string() <| $(var writer) {
+    let st = build_string() $(var writer) {
         var astVisitor = new GlslExport(writer, shaderType, version, comp_loc_size, caps)
         unsafe {
             astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
         }
-        collect_dependencies(fnMain) <| $(vfun, vvar) {
+        collect_dependencies(fnMain) $(vfun, vvar) {
             for (f in vfun) {
                 astVisitor.depFun[intptr(f)] = true
             }
             for (v in vvar) {
                 astVisitor.depVar[intptr(v)] = true
             }
-            collect_used_types(vfun, vvar) <| $(onlyUsed) : void {
+            collect_used_types(vfun, vvar) $(onlyUsed) : void {
                 for (st in keys(onlyUsed.st)) {
                     astVisitor.depStruct[intptr(st)] = true
                     astVisitor.stnames["{st.name}"] = true

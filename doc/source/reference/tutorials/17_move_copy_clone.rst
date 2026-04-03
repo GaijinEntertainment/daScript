@@ -20,8 +20,8 @@ Copy (=)
 Bitwise copy. Source unchanged. Works for POD types (int, float, string)
 and POD-only structs::
 
-  var a = 42
-  var b = a         // b is 42, a is still 42
+  let a = 42
+  let b = a         // b is 42, a is still 42
 
 Move (<-)
 =========
@@ -30,7 +30,7 @@ Transfers ownership. Source is zeroed. Use for containers (array, table),
 lambdas, and iterators::
 
   var nums <- [1, 2, 3]
-  var other <- nums       // other owns the array, nums is empty
+  let other <- nums       // other owns the array, nums is empty
 
 Functions returning containers must use ``return <-``::
 
@@ -55,7 +55,7 @@ Deep copy. Both sides remain valid and independent::
 
 Clone initialization::
 
-  var another := original
+  let another := original
 
 Type compatibility
 ==================
@@ -108,7 +108,7 @@ Each field can use a different mode::
   var weapons : array<string>
   weapons |> push("bow")
 
-  var loadout = Inventory(items <- weapons, weight = 5)
+  let loadout = Inventory(items <- weapons, weight = 5)
   // weapons is now empty after the move
 
 Custom clone functions
@@ -127,7 +127,7 @@ Override clone behavior by defining a ``clone`` function for your type::
   }
 
   var original = GameState(level=5, score=100)
-  var copy := original    // invokes custom clone
+  let copy := original    // invokes custom clone
   // copy.level is 1005, not 5
 
 .. seealso::

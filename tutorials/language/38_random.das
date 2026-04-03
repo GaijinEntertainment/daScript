@@ -26,7 +26,7 @@ require math
 def seeding_demo() {
     print("\n=== seeding ===\n")
 
-    var seed = random_seed(42)
+    let seed = random_seed(42)
     print("seed: {seed}\n")
 
     // Same seed → same sequence
@@ -146,7 +146,7 @@ def random_pick(arr : array<string>; var seed : int4&) : string {
 
 def pick_demo() {
     print("\n=== random pick ===\n")
-    var colors <- ["red", "green", "blue", "yellow", "purple"]
+    let colors <- ["red", "green", "blue", "yellow", "purple"]
     var seed = random_seed(5)
     for (_ in range(5)) {
         print("picked: {random_pick(colors, seed)}\n")

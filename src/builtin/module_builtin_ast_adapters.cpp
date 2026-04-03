@@ -2486,6 +2486,14 @@ namespace das {
         program->visit(*adapter);
     }
 
+    void astVisitGenerics ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+        if (!adapter)
+            context->throw_error_at(line_info, "adapter is required");
+        if (!program)
+            context->throw_error_at(line_info, "program is required");
+        program->visit(*adapter, true);
+    }
+
     void astVisitWithSort ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, bool sortStructures, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2571,6 +2579,9 @@ namespace das {
                 ->args({"class","info","context"});
         addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisit")
+                ->args({"program","adapter","context","line"});
+        addExtern<DAS_BIND_FUN(astVisitGenerics)>(*this, lib,  "visit_with_generics",
+            SideEffects::accessExternal, "astVisitGenerics")
                 ->args({"program","adapter","context","line"});
         addExtern<DAS_BIND_FUN(astVisitWithSort)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisitWithSort")
