@@ -327,6 +327,10 @@ class CollectExternVisitor : AstVisitor {
 
         let name = uid.get_addr(expr)
         let global_var = LLVMGetNamedGlobal(mod, name.glob())
+        if (global_var == null) {
+            // Can be unvisited, e.g. default function argument.
+            return
+        }
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
