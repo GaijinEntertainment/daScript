@@ -3447,10 +3447,14 @@ namespace das {
             return substitute;
         }
         // generic operator
-        if (auto opE = inferGenericOperator("?as`" + expr->name, expr->at, expr->value, nullptr))
+        if (auto opE = inferGenericOperator("?as`" + expr->name, expr->at, expr->value, nullptr)) {
+            reportAstChanged();
             return opE;
-        if (auto opE = inferGenericOperatorWithName("?as", expr->at, expr->value, expr->name))
+        }
+        if (auto opE = inferGenericOperatorWithName("?as", expr->at, expr->value, expr->name)) {
+            reportAstChanged();
             return opE;
+        }
         // regular infer
         if (!expr->value->type->isPointer() && !safeExpression(expr)) {
             error("variant ?as on non-pointer requires unsafe", "", "",

@@ -954,6 +954,11 @@ namespace das {
         return result;
     }
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
+        if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
+            error("returning void value", "", "",
+                  expr->at, CompilationError::invalid_return_type);
+            return false;
+        }
         if (resType->isAuto()) {
             if (expr->subexpr) {
                 if (!expr->subexpr->type) {

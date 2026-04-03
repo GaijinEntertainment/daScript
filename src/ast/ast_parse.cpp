@@ -1097,7 +1097,7 @@ namespace das {
         uint64_t preqT = 0;
         string modName;
         auto builtinModule = Module::require("$");
-        DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.")
+        DAS_ASSERTF(builtinModule, "Somehow `builtin` module is missing.");
         auto builtin_path = getDasRoot() + "/daslib/builtin.das";
         bool allGood = addExtraDependency("builtin", builtin_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
         if ( !allGood ) {

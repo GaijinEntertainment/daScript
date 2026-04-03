@@ -1090,13 +1090,13 @@ namespace das {
     }
     ExpressionPtr InferTypes::visitMakeTupleIndex(ExprMakeTuple *expr, int index, Expression *init, bool lastField) {
         if (!init->type) {
-            return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+            return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
         }
         if (expr->recordType && expr->recordType->baseType == Type::tTuple) {
             if (expr->recordType->argTypes.size() <= index) {
                 error("tuple element _" + to_string(index) + " out of element range", "", "",
                       init->at, CompilationError::invalid_type);
-                return Visitor::visitMakeArrayIndex(expr, index, init, lastField);
+                return Visitor::visitMakeTupleIndex(expr, index, init, lastField);
             }
             if (!canCopyOrMoveType(expr->recordType->argTypes[index], init->type, TemporaryMatters::no, init,
                                    "can't initialize tuple element " + to_string(index), CompilationError::cant_copy, init->at)) {
@@ -1154,13 +1154,18 @@ namespace das {
             }
             expr->makeType = mkt;
         } else {
-            expr->makeType = make_smart<TypeDecl>(Type::tTuple);
-            expr->makeType->at = expr->at;
+            auto mkt = make_smart<TypeDecl>(Type::tTuple);
+            mkt->at = expr->at;
             for (auto &val : expr->values) {
                 auto valT = make_smart<TypeDecl>(*val->type);
+                if (valT->isVoid()) {
+                    error("tuple element type can't be void", "", "",
+                          val->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
                 valT->ref = false;
                 valT->constant = false;
-                expr->makeType->argTypes.push_back(valT);
+                mkt->argTypes.push_back(valT);
             }
             if (expr->recordNames.size()) {
                 if (expr->recordNames.size() != expr->values.size()) {
@@ -1168,10 +1173,11 @@ namespace das {
                           expr->at, CompilationError::invalid_type);
                 } else {
                     for (size_t ri = 0, rsize = expr->recordNames.size(); ri != rsize; ++ri) {
-                        expr->makeType->argNames.push_back(expr->recordNames[ri]);
+                        mkt->argNames.push_back(expr->recordNames[ri]);
                     }
                 }
             }
+            expr->makeType = mkt;
         }
         TypeDecl::clone(expr->type, expr->makeType);
         verifyType(expr->type);
@@ -1256,6 +1262,11 @@ namespace das {
                         mkt->ref = false;
                         mkt->constant = false;
                         TypeDecl::applyAutoContracts(mkt, init->type);
+                        if (mkt->isVoid()) {
+                            error("array element type can't be void", "", "",
+                                  init->at, CompilationError::invalid_array_type);
+                            return Visitor::visitMakeArrayIndex(expr, index, init, last);
+                        }
                         expr->makeType = mkt;
                         reportAstChanged();
                         return Visitor::visitMakeArrayIndex(expr, index, init, last);
