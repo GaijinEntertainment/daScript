@@ -225,7 +225,7 @@ Integer matching:
 
 .. code-block:: das
 
-   var x = 2
+   let x = 2
    let result = when(x) {
        1 => "one"
        2 => "two"

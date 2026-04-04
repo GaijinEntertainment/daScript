@@ -137,8 +137,15 @@ class StyleLintVisitor : AstVisitor {
             if (defer_pos < 0 || (comment_pos >= 0 && comment_pos < defer_pos)) {
                 continue
             }
-            if (defer_pos > 0 && character_at(src, defer_pos - 1) != ' ' && character_at(src, defer_pos - 1) != '\t') {
-                continue
+            if (defer_pos > 0) {
+                var preceding_ok = false
+                peek_data(src) $(data) {
+                    let ch = int(data[defer_pos - 1])
+                    preceding_ok = ch == ' ' || ch == '\t'
+                }
+                if (!preceding_ok) {
+                    continue
+                }
             }
             let pipe_pos = find(src, "<|", defer_pos + 5)
             if (pipe_pos < 0) {

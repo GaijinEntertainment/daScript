@@ -135,8 +135,8 @@ def two(prog : string; blk : block<(a : bool; err : array<ParsingError>) : void>
 
 [export]
 def main {
-    var input1 = "def main(argc, argv) \{"
-    var input2 = "def main(argv) \{"
+    let input1 = "def main(argc, argv) \{"
+    let input2 = "def main(argv) \{"
 
     two(input1) $(val; err) {
         print("Success: {val}\n")

@@ -61,7 +61,7 @@ def main() {
     print("get_second: {get_second(p)}\n")
 
     // Generic return type: swap_pair.
-    var swapped = swap_pair(p)
+    let swapped = swap_pair(p)
     print("swapped: first={swapped.first} second={swapped.second}\n")
 }
 

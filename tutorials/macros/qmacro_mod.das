@@ -172,7 +172,7 @@ class BuildDemoMacro : AstCallMacro {
         //      pair.$f("first") → pair.first
         let field_name = "first"
         fn_body |> emplace_new <| qmacro_expr(${
-            var pair = DemoIntFloat(first = 42, second = 3.14);
+            let pair = DemoIntFloat(first = 42, second = 3.14);
         })
         fn_body |> emplace_new <| qmacro(print("pair.$f first = {pair.$f(field_name)}\n"))
 

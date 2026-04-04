@@ -130,7 +130,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         if (Ch == SPOOF_SPEFICAL) {
             var ident : string
             if (next_ident(it, Ch, ident)) {
-                var index = args |> find_index_if() $(k) {
+                let index = args |> find_index_if() $(k) {
                     return k.argName == ident
                 }
                 if (index != -1) {
@@ -299,7 +299,7 @@ class SpoofInstanceReader : AstReaderMacro {
         // now, lets spoof the instance
         outLine = int(vptr.init.at.line) + 1
         outFile = vptr.init.at.fileInfo
-        var result <- instance_spoof(string(vstr), iargs.args)
+        let result <- instance_spoof(string(vstr), iargs.args)
         if (!result.ok) {
             prog |> macro_error(info, "spoof instance error {result.result}")
             return ""

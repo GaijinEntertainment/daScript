@@ -78,8 +78,8 @@ class CookieFormServer : HvWebServer {
         GET("/read-cookies") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let session = get_cookie(req, "session")
             let prefs = get_cookie(req, "prefs")
-            var s = !empty(session) ? string(session) : "not found"
-            var p = !empty(prefs) ? string(prefs) : "not found"
+            let s = !empty(session) ? string(session) : "not found"
+            let p = !empty(prefs) ? string(prefs) : "not found"
             let payload : tuple<session : string; prefs : string> = (s, p)
             return resp |> JSON(write_json(JV(payload)))
         }
@@ -116,8 +116,8 @@ class CookieFormServer : HvWebServer {
             var save_status = 0
             save_status = save_form_file(req, "attachment", upload_dir)
 
-            var t = !empty(title) ? string(title) : ""
-            var d = !empty(description) ? string(description) : ""
+            let t = !empty(title) ? string(title) : ""
+            let d = !empty(description) ? string(description) : ""
             let payload : tuple<title : string; description : string; save_status : int; field_count : int> = (t, d, save_status, length(fields))
             return resp |> JSON(write_json(JV(payload)))
         }
@@ -126,8 +126,8 @@ class CookieFormServer : HvWebServer {
         POST("/login") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let username = get_url_encoded(req, "username")
             let password = get_url_encoded(req, "password")
-            var u = !empty(username) ? string(username) : ""
-            var pw = !empty(password) ? string(password) : ""
+            let u = !empty(username) ? string(username) : ""
+            let pw = !empty(password) ? string(password) : ""
             // Build JSON manually to avoid named-tuple collision with Section 1b
             // (both would be tuple<string;string>, so JV would reuse field names)
             resp.body := "\{\"username\":\"{u}\",\"password\":\"{pw}\"\}"

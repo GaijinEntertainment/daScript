@@ -44,8 +44,8 @@ def section1() {
     print("--- Section 1: basic capture auditing ---\n")
     // Only the [audited] Resource triggers logging; Plain is silent.
     // Variables are captured implicitly (by copy) when referenced in the lambda.
-    var res = Resource(name = "texture.png", id = 1)
-    var pl = Plain(x = 42)
+    let res = Resource(name = "texture.png", id = 1)
+    let pl = Plain(x = 42)
     var fn <- @() {
         print("  body: res.name={res.name}, pl.x={pl.x}\n")
     }
@@ -63,8 +63,8 @@ def section1() {
 def section2() {
     print("\n--- Section 2: multiple [audited] fields ---\n")
     // Each [audited] field produces its own capture and per-call messages.
-    var a = Resource(name = "mesh.obj", id = 2)
-    var b = Resource(name = "shader.hlsl", id = 3)
+    let a = Resource(name = "mesh.obj", id = 2)
+    let b = Resource(name = "shader.hlsl", id = 3)
     var fn <- @() {
         print("  body: a.id={a.id}, b.id={b.id}\n")
     }
@@ -81,8 +81,8 @@ def section2() {
 
 def section3() {
     print("\n--- Section 3: non-audited types are silent ---\n")
-    var x = 10
-    var y = 20
+    let x = 10
+    let y = 20
     var fn <- @() {
         print("  body: x + y = {x + y}\n")
     }

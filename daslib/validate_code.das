@@ -23,7 +23,7 @@ def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<F
         return
     }
     if (call_graph |> find_index(fun) >= 0) {
-        var sb = build_string() $(writer) {
+        let sb = build_string() $(writer) {
             writer |> write("recursive calls are not allowed")
             for (v in call_graph) {
                 writer |> write(" -> ")

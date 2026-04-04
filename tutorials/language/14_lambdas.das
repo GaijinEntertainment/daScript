@@ -74,8 +74,8 @@ def main {
 
     // === Capture by copy (default) ===
     // Each lambda gets its own copy of captured variables.
-    var counter = 0
-    var inc <- @() : int {
+    var counter = 0 // nolint:LINT003
+    let inc <- @() : int {
         return ++counter    // this is the lambda's OWN copy of counter
     }
     print("inc() = {inc()}\n")    // 1
@@ -134,7 +134,7 @@ def main {
 
     // === Practical example: stateful counter factory ===
     let make_counter <- @() : lambda<() : int> {
-        var n = 0
+        var n = 0 // nolint:LINT003
         return <- @() : int => ++n
     }
     let c1 <- invoke(make_counter)

@@ -104,7 +104,7 @@ class TracedBlockMacro : AstBlockAnnotation {
         // Count original user statements (subtract 1 for the injected
         // enter-print that apply() prepended)
         var numStmts = 0
-        for (s in blk.list) {
+        for (_s in blk.list) {
             numStmts++
         }
         if (numStmts > 0) {
@@ -117,7 +117,7 @@ class TracedBlockMacro : AstBlockAnnotation {
         // Show typed arguments — types are fully resolved after inference,
         // so describe() returns proper type names like "int", "string", etc.
         var numArgs = 0
-        for (a in blk.arguments) {
+        for (_a in blk.arguments) {
             numArgs++
         }
         if (numArgs > 0) {

@@ -72,12 +72,12 @@ struct Player {
 
 [export]
 def main() {
-    var c = Color(r = 0.2, g = 0.7, b = 1.0)
+    let c = Color(r = 0.2, g = 0.7, b = 1.0)
     print("--- describe_Color ---\n")
     describe_Color(c)
 
     print("\n--- describe_Player ---\n")
-    var p = Player(name = "Alice", health = 100, score = 42.5)
+    let p = Player(name = "Alice", health = 100, score = 42.5)
     describe_Player(p)
 
     // The _version field is a regular field — accessible at runtime

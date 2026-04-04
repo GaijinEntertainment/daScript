@@ -4,12 +4,17 @@ Before creating a pull request, complete ALL of the following steps in order. Do
 
 ## 1. Lint all changed `.das` files
 
-Find all `.das` files changed relative to `master`:
+Run the unified lint utility on changed directories:
 ```bash
-git diff --name-only master -- '*.das'
+bin/Release/daslang.exe utils/lint/main.das -- daslib/ modules/ tutorials/
 ```
 
-Run the MCP `lint` tool on each changed file (or batch them comma-separated). Fix significant issues (unused variables that indicate bugs, performance warnings in hot paths). Minor lint warnings in unchanged code can be ignored unless trivial to fix.
+Or lint only the files changed relative to `master`:
+```bash
+git diff --name-only master -- '*.das' | xargs bin/Release/daslang.exe utils/lint/main.das --
+```
+
+Fix significant issues (unused variables that indicate bugs, performance warnings in hot paths). Use `// nolint:CODE` comments to suppress false positives (LINT001-004, PERF001-011, STYLE001-010). Minor lint warnings in unchanged code can be ignored unless trivial to fix.
 
 ## 2. Run all tests
 
@@ -19,11 +24,15 @@ bin/Release/daslang.exe dastest/dastest.das -- --test tests/
 
 Or use the MCP `run_test` tool with the `tests/` directory.
 
-**If tests fail:**
-- If the failure is in code you changed — fix it
-- If the failure is pre-existing (exists on master too) and the fix is obvious — fix it
-- If the failure is pre-existing and non-obvious — **ask the user**, do not ignore it
+**If tests fail or error:**
+- Both **failures** (assertion errors) and **errors** (compilation errors) count — check both numbers in the summary
+- If the failure/error is in code you changed — fix it
+- If the failure/error is pre-existing (exists on master too) and the fix is obvious — fix it
+- If the failure/error is pre-existing and non-obvious — **ask the user**, do not ignore it
+- **Do not assume errors are pre-existing.** If you changed files under `modules/X/`, verify that `tests/dasX/` (or equivalent) produces the same error count as master. A "pre-existing" error in the same test file might have a different root cause after your changes.
 - Tests MUST pass for the PR to merge
+
+**Module-specific testing:** CI enables ALL modules via `ci/release_modules.txt` (PUGIXML, LLVM, Audio, SQLite, GLFW, HV). If you changed files under `modules/X/daslib/`, explicitly run that module's tests even if your local build has the module disabled. Handled types (C++ interop like `xml_node`, `sqlite3_stmt`) often require `var` — lint's `var`→`let` suggestion is wrong for them because the C++ binding expects non-const.
 
 ## 3. Build and run AOT tests
 
@@ -144,7 +153,7 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 
 | Step | Tool/Command | Fix policy |
 |---|---|---|
-| Lint | MCP `lint` | Fix significant issues in changed files |
+| Lint | `utils/lint/main.das` | Fix significant issues in changed files |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |

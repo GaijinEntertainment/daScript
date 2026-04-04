@@ -90,7 +90,7 @@ class HeartbeatPass : AstPassMacro {
         var astVisitor = new AddHeartbeat()
         var inscope astVisitorAdapter <- make_visitor(*astVisitor)
         visit(prog, astVisitorAdapter)
-        var result = astVisitor.astChanged
+        let result = astVisitor.astChanged
         unsafe {
             delete astVisitor
         }

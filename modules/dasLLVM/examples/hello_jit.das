@@ -10,7 +10,7 @@ def add(a, b : int) {
 [export]
 def main {
     verify(is_jit_function(@@add))
-    var c = add(11, 12)
+    let c = add(11, 12)
     print("result = {c}\n")
 }
 

@@ -530,6 +530,36 @@ namespace das {
         }
     }
 
+    bool Module::replaceFunction ( const FunctionPtr & fn ) {
+        fn->module = this;
+        auto mangledName = fn->getMangledName();
+        auto mangledHash = hash64z(mangledName.c_str());
+        auto nameHash = hash64z(fn->name.c_str());
+        // get old function pointer before replacing (avoid touching stale types)
+        auto oldFn = functions.find(mangledHash);
+        if ( !oldFn ) return false;
+        auto oldFnPtr = oldFn.get();
+        // replace in safebox objects map
+        functions.replace(mangledHash, fn);
+        // replace in objectsInOrder (compare by pointer, not by mangled name)
+        functions.foreach([&](auto & ofn){
+            if ( ofn.get() == oldFnPtr ) {
+                ofn = fn;
+            }
+        });
+        // replace in functionsByName
+        auto kv = functionsByName.find(nameHash);
+        if ( kv ) {
+            for ( auto & fp : kv->second ) {
+                if ( fp == oldFnPtr ) {
+                    fp = fn.get();
+                    break;
+                }
+            }
+        }
+        return true;
+    }
+
     bool Module::addGeneric ( const FunctionPtr & fn, bool canFail ) {
         fn->module = this;
         auto mangledName = fn->getMangledName();
@@ -843,7 +873,10 @@ namespace das {
                     }
                 }
                 modules.push_back(module);
-                DAS_VERIFYF(moduleLookupByHash.find(module->nameHash)==moduleLookupByHash.end(), "duplicate module hash %s", module->name.c_str());
+                if ( moduleLookupByHash.find(module->nameHash)!=moduleLookupByHash.end() ) {
+                    modules.pop_back();
+                    return false;
+                }
                 moduleLookupByHash[module->nameHash] = module;
                 module->addPrerequisits(*this);
                 return true;

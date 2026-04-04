@@ -26,7 +26,7 @@ def main {
     defer() {
         fclose(file)
     }
-    var input = file |> fread
+    let input = file |> fread
 
     profile(10, "PEG json") {
         get_parser_with(input) $(res_json; err) {

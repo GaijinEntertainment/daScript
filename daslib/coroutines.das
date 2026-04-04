@@ -133,7 +133,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
 
 def public cr_run(var a : Coroutine) {
     //! This function runs coroutine until it is finished.
-    for (t in a) {
+    for (_t in a) {
         pass
     }
 }

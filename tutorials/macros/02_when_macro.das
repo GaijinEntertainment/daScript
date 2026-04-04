@@ -34,7 +34,7 @@ require when_macro_mod
 def main() {
 
     // Section 1: Integer matching with default
-    var x = 2
+    let x = 2
     let result = when(x) {
         1 => "one"
         2 => "two"

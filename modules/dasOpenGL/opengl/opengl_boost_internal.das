@@ -90,7 +90,7 @@ class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation {
             return default<ExpressionPtr>
         }
         let func <- (call.arguments[0] as ExprAddr).func
-        let target = func._module.name != "" ? "{func._module.name}::{func.name}" : "{func.name}"
+        let _target = func._module.name != "" ? "{func._module.name}::{func.name}" : "{func.name}"
         var cll <- new ExprCall(at = call.at, name := "create_compute_shader_program")
         cll.arguments |> emplace_new <| new ExprVar(at = call.at, name := cs_name)
         return <- cll
@@ -135,7 +135,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
             var cll_evaa <- new ExprCall(at = fld.at, name := "glEnableVertexAttribArray")
             cll_evaa.arguments |> emplace_new() <| clone_expression(vattr_i)
             blk.list |> emplace(cll_evaa)
-            var dinfo = get_decl_info(fld._type, fld.annotation)
+            let dinfo = get_decl_info(fld._type, fld.annotation)
             if (!dinfo.ok) {
                 errors := "field {fld.name} is missing type information"
                 return false

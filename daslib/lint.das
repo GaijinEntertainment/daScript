@@ -27,6 +27,12 @@ class LintEverything : AstPassMacro {
 
 class LintVisitor : AstVisitor {
     //! AST visitor that performs lint checks.
+    //!
+    //! Rule codes (for ``// nolint:LINTxxx`` suppression):
+    //!   - LINT001: unreachable code
+    //!   - LINT002: unused variable
+    //!   - LINT003: variable can be made const (var→let)
+    //!   - LINT004: underscore-prefixed variable is actually used
     astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -37,8 +43,29 @@ class LintVisitor : AstVisitor {
     def LintVisitor() {
         pass
     }
+    def is_suppressed(text : string; at : LineInfo) : bool {
+        if (at.fileInfo == null || at.line == 0u) {
+            return false
+        }
+        let colon = find(text, ":")
+        if (colon < 0) {
+            return false
+        }
+        let code = slice(text, 0, colon)
+        var found = false
+        get_file_source_line(at.fileInfo, at.line) $(line) {
+            let nolint_pos = find(line, "nolint")
+            if (nolint_pos >= 0) {
+                found = find(line, code, nolint_pos) >= 0
+            }
+        }
+        return found
+    }
     def lint_error(text : string; at : LineInfo) : void {
         if (noLint) {
+            return
+        }
+        if (self->is_suppressed(text, at)) {
             return
         }
         if (compile_time_errors) {
@@ -51,6 +78,10 @@ class LintVisitor : AstVisitor {
     }
     def override preVisitFunction(fun : FunctionPtr) : void {
         noLint = false
+        if (fun.moreFlags.isTemplate) {
+            noLint = true
+            return
+        }
         for (ann in fun.annotations) {
             if (ann.annotation.name == "no_lint") {
                 noLint = true
@@ -76,7 +107,7 @@ class LintVisitor : AstVisitor {
         if (lb != 0ul) {
             let eb = intptr(get_ptr(expr))
             if (lb != eb) {
-                self->lint_error("unreachable code", expr.at)
+                self->lint_error("LINT001: unreachable code", expr.at)
             }
         }
         return <- expr
@@ -94,6 +125,9 @@ class LintVisitor : AstVisitor {
         exprForTerminator |> push(intptr(get_ptr(expr)))
     }
     def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
+        if (expr.func == null) {
+            return
+        }
         if (expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "builtin") {
             if (length(exprForTerminator) > 0) {
                 exprForTerminator |> pop()
@@ -116,34 +150,37 @@ class LintVisitor : AstVisitor {
         if (name |> starts_with("__")) {// system variables
             return
         }
+        if (find(name, "`") >= 0) {// compiler-generated internal name (e.g. tuple destructuring)
+            return
+        }
         if (name |> starts_with("_")) {
             if (name |> ends_with("_")) {// _foo_ - ignore too
                 return
             }
-            if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.init != null) {
-                self->lint_error("variable '{v.name}' is used and should be named without underscode prefix", v.at)
+            if (v.access_flags.access_ref || v.access_flags.access_pass || v.access_flags.access_get || v.access_flags.access_fold) {
+                self->lint_error("LINT004: variable '{v.name}' is used and should be named without underscore prefix", v.at)
                 return
             }
             return
         }
         if (v.isAccessUnused) {
-            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && v.init != null && v.init |> is_expr_const() && !v.access_flags.access_fold) {
-            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
+            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it) {v.access_flags}", v.at)
             return
         }
         if (!v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects) && !v.access_flags.access_fold) {
-            self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
+            self->lint_error("LINT002: unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
         }
         if (!v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null)) {
             let sideEffects = (v.init != null && !v.init.flags.noSideEffects)
             if (!sideEffects) {
-                self->lint_error("variable {v.name}: {describe(v._type)} is never used", v.at)
+                self->lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used", v.at)
             } else {
-                self->lint_error("variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
+                self->lint_error("LINT002: variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
             }
             return
         }
@@ -151,11 +188,11 @@ class LintVisitor : AstVisitor {
             return // inscope variables can't be const — delete/finalize at scope exit requires mutability
         }
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
-            self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            self->lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
         if (can_make_const && v._type.baseType == Type.tPointer && !v._type.flags.constant && !(v.access_flags.access_ref || v.access_flags.access_pass) && v._type.canCloneFromConst) {
-            self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            self->lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
         }
     }

@@ -160,7 +160,7 @@ class ExpectRangeMacro : AstFunctionAnnotation {
 
         // Step 2: Find the matching call-site expression
         for (ca, ce in call.func.arguments, call.arguments) {
-            if (string(ca.name) == arg_name) {
+            if (ca.name == arg_name) {
                 // Step 3: If it is a constant integer, check the range
                 var val = 0
                 if (getConstantInt(ce, val)) {

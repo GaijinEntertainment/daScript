@@ -144,9 +144,9 @@ class BasicReader : AstReaderMacro {
                     stmts |> push("print(\"\{{arg}\}\\n\")")
                 }
             } elif (starts_with(after_num, "LET ")) {
-                // LET x = 42 → var x = 42
+                // LET x = 42 → let x = 42
                 let assignment = strip(slice(after_num, 4))
-                stmts |> push("var {assignment}")
+                stmts |> push("let {assignment}")
             }
         }
         // Build the daScript function definition (gen2 syntax — braces required).

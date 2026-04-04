@@ -95,7 +95,7 @@ def main() {
     set_channel("red", 128)
     set_channel("green", 0)
     set_channel("blue", 255)
-    var alpha = 200           // runtime value — passes through unchecked
+    let alpha = 200           // runtime value — passes through unchecked
     set_channel("alpha", alpha)
 
     // Uncomment the line below to see a compile-time error:

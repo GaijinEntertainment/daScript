@@ -173,7 +173,8 @@ tiny BASIC dialect and returns the equivalent daslang source code:
                    stmts |> push("print(\"\{{arg}\}\\n\")")
                }
            } elif (starts_with(after_num, "LET ")) {
-               stmts |> push("var {strip(slice(after_num, 4))}")
+               let assignment = strip(slice(after_num, 4))
+               stmts |> push("let {assignment}")
            }
        }
        return build_string() <| $(var w) {

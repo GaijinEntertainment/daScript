@@ -184,7 +184,6 @@ class TypeMacroMacro : AstFunctionAnnotation {
         var inscope retCall <- qmacro($c(func.name)(td, passT))
         // allowed are basic types (int, float, string, @@function etc) and TypeDeclPtr
         for (ai in range(2, length(func.arguments))) {
-            let argIndex = ai - 2
             let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
             assume argDefaultValue = func.arguments[ai].init
@@ -468,7 +467,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 return <- infer_template_types(passArgument, template_arguments)
             } else {
                 return <- TypeDeclPtr() if (!verify_arguments(template_arguments))
-                var struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
+                let struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
                 var existing_struct = compiling_program().find_unique_structure(struct_name)
                 return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = template_type.at) if (existing_struct != null)
                 var inscope resType <- qmacro_template_class(struct_name, type<$t(aliasT)>)

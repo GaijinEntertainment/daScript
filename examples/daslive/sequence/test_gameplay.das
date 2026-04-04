@@ -63,7 +63,7 @@ def test_each_card_appears_twice(t : T?) {
         }
     }
     t |> equal(length(counts), 48)
-    for (k, count in keys(counts), values(counts)) {
+    for (_k, count in keys(counts), values(counts)) {
         t |> equal(count, 2)
     }
 }
@@ -209,7 +209,7 @@ def test_double_deck(t : T?) {
         }
     }
     t |> equal(length(counts), 52)
-    for (k, count in keys(counts), values(counts)) {
+    for (_k, count in keys(counts), values(counts)) {
         t |> equal(count, 2)
     }
 }
@@ -599,7 +599,7 @@ def test_apply_move_triggers_win(t : T?) {
     var cards : array<Card>
     cards |> reserve(6)
     cards |> push(target_card)
-    for (i in range(1, 6)) {
+    for (_i in range(1, 6)) {
         cards |> push(Card.club_1)
     }
     set_hand(game, 0, cards)

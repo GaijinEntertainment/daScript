@@ -122,7 +122,7 @@ def get_parser_with(csv : string; blk : block<(email : array<string>; err : arra
 
 [test]
 def test_basic_csv(t : T?) {
-    var input = "John,Doe,30\n";
+    let input = "John,Doe,30\n";
     var inscope expected_res <-  array<string>("John", "Doe", "30");
 
     get_parser_with(input) $(email; errors) {
@@ -158,7 +158,7 @@ def test_quoted_fields(t : T?) {
 
 [test]
 def test_special_chars(t : T?) {
-    var input = "John Doe,john.doe@example.com\n";
+    let input = "John Doe,john.doe@example.com\n";
     var inscope expected_res <-  array<string>("John Doe", "john.doe@example.com");
 
     get_parser_with(input) $(email; errors) {
@@ -193,7 +193,7 @@ def test_escaped_quotes(t : T?) {
 
 [test]
 def test_leading_trailing_spaces(t : T?) {
-    var input = " John Doe , 123 Main Street, NY , 123-456-7890 \n";
+    let input = " John Doe , 123 Main Street, NY , 123-456-7890 \n";
     var inscope expected_res <-  array<string>(" John Doe ", " 123 Main Street", " NY ", " 123-456-7890 ");
 
     get_parser_with(input) $(email; errors) {
@@ -210,7 +210,7 @@ def test_leading_trailing_spaces(t : T?) {
 
 [test]
 def test_all_empty_fields(t : T?) {
-    var input = ",,\n";
+    let input = ",,\n";
     var inscope expected_res <-  array<string>("", "", "");
 
     get_parser_with(input) $(email; errors) {

@@ -477,7 +477,9 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             bif->noAot = true;
             bif->userScenario = true;
             bif->sideEffectFlags = fun->sideEffectFlags | uint32_t(SideEffects::accessExternal);
-            module->addFunction(bif, false);
+            if ( !module->addFunction(bif, true) ) {
+                module->replaceFunction(bif);
+            }
             transformMap[fun.get()] = bindName;
 
             return true;

@@ -60,10 +60,10 @@ def main {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
-    var program = create_shader_program(@@vs_preview, @@fs_preview)
-    var sphere <- gen_sphere(32, 16, false) |> create_geometry_fragment
-    var cube <- gen_cube() |> create_geometry_fragment
-    var cylinder <- gen_cylinder(GenDirection.xz, 32) |> create_geometry_fragment
+    let program = create_shader_program(@@vs_preview, @@fs_preview)
+    let sphere <- gen_sphere(32, 16, false) |> create_geometry_fragment
+    let cube <- gen_cube() |> create_geometry_fragment
+    let cylinder <- gen_cylinder(GenDirection.xz, 32) |> create_geometry_fragment
     let checkerboard_texture = gen_image_checkerboard(16, 16, 0xff404040, 0xff808080) |> create_texture
     glBindTexture(GL_TEXTURE_2D, checkerboard_texture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)

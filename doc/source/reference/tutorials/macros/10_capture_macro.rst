@@ -249,8 +249,8 @@ struct, then creates lambdas that capture them:
 
 .. code-block:: das
 
-   var res = Resource(name = "texture.png", id = 1)
-   var pl = Plain(x = 42)
+   let res = Resource(name = "texture.png", id = 1)
+   let pl = Plain(x = 42)
    var fn <- @() {
        print("  body: res.name={res.name}, pl.x={pl.x}\n")
    }
@@ -274,8 +274,8 @@ Output::
 
 .. code-block:: das
 
-   var a = Resource(name = "mesh.obj", id = 2)
-   var b = Resource(name = "shader.hlsl", id = 3)
+   let a = Resource(name = "mesh.obj", id = 2)
+   let b = Resource(name = "shader.hlsl", id = 3)
    var fn <- @() {
        print("  body: a.id={a.id}, b.id={b.id}\n")
    }

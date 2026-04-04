@@ -37,7 +37,7 @@ def main() {
     // Section 3: printf(fmt, args...) — format string macro
     // (N) in the format string refers to the N-th argument (1-based).
     // The macro builds a string interpolation expression at compile time.
-    var score = 42
+    let score = 42
     printf("player (1) scored (2) points\n", "Alice", score)
 
     // Arguments can be reordered — (2) before (1)

@@ -230,8 +230,8 @@ def main {
 
     print("\n--- 8. Set operations ---\n")
 
-    var a = [1, 2, 2, 3, 3, 3]
-    var b = [2, 3, 4, 5]
+    var a = [1, 2, 2, 3, 3, 3] // nolint:LINT003
+    var b = [2, 3, 4, 5] // nolint:LINT003
 
     let dist = distinct(a)
     print("distinct: {dist}\n")

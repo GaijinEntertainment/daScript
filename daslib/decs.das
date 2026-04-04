@@ -96,7 +96,7 @@ def private normalize_file_name(name : string) : string {
     //! Strips directory path, keeping only filename and extension.
     //! This ensures the same canonical name regardless of working directory,
     //! which is critical for AOT hash stability.
-    var s = replace(name, "\\", "/")
+    let s = replace(name, "\\", "/")
     var lastSlash = -1
     var pos = 0
     while (true) {
@@ -187,7 +187,7 @@ def public operator .(var cmp : ComponentMap; name : string) : ComponentValue& {
 
 def public set(var cv : ComponentValue; val : auto) {
     //! Sets individual component value. Verifies that the value is of the correct type.
-    var cval = make_component(cv.name, val)
+    let cval = make_component(cv.name, val)
     assert(cv.info.hash == 0ul || cv.info.hash == cval.info.hash)
     cv = cval
 }
@@ -560,7 +560,7 @@ def private remove_entity(var arch : Archetype; di : int) {
     //! Removes entity at specified index from the archetype.
     arch.size --
     if (di != arch.size) {// copy last one in the hole
-        var eid_last_id = get_eid(arch, arch.size).id
+        let eid_last_id = get_eid(arch, arch.size).id
         decsState.entityLookup[eid_last_id].index = di
         for (c in arch.components) {
             unsafe {
@@ -668,7 +668,7 @@ def public for_each_archetype(var erq : EcsRequest; blk : block<(arch : Archetyp
 def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var erq : function<() : EcsRequest>; blk : block<(arch : Archetype; index : int) : void>) {
     //! Invokes block for the specific entity id, given request.
     //! Request is returned by a specified function.
-    var lookup = decsState.entityLookup[eid.id]
+    let lookup = decsState.entityLookup[eid.id]
     if (lookup.generation != eid.generation) {
         return false
     }
@@ -864,7 +864,7 @@ def public get_optional(arch : Archetype; name : string; value : auto(TT)?) : it
 }
 
 def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var cmp : ComponentMap) : void>) {
-    var lookup = decsState.entityLookup[eid.id]
+    let lookup = decsState.entityLookup[eid.id]
     if (lookup.generation != eid.generation) {
         return
     }
@@ -886,7 +886,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     }
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)  // necessary?
-    var new_ahash = cmp_archetype_hash(cmp)
+    let new_ahash = cmp_archetype_hash(cmp)
     if (old_ahash == new_ahash) {
         for (c, comp in decsState.allArchetypes[arch_index].components, cmp) {
             unsafe {
@@ -911,7 +911,7 @@ def private create_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
     cmp |> push <| make_component("eid", eid)
     invoke(blk, eid, cmp)
     cmp |> set("eid", eid)       // necessary?
-    var ahash = cmp_archetype_hash(cmp)
+    let ahash = cmp_archetype_hash(cmp)
     with_archetype(ahash) $(var arch; idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, idx)
@@ -923,7 +923,7 @@ def private create_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
 }
 
 def private delete_entity_imm(eid : EntityId) {
-    var lookup = decsState.entityLookup[eid.id]
+    let lookup = decsState.entityLookup[eid.id]
     if (lookup.generation == eid.generation) {
         let di = decsState.entityLookup[eid.id].index
         decsState.entityLookup[eid.id].generation = 0
@@ -945,7 +945,7 @@ def public create_entity(var blk : lambda<(eid : EntityId; var cmp : ComponentMa
     var deval <- @  capture(<- blk) (var act : DeferAction) {
         create_entity_imm(act.eid, blk)
     }
-    var eid = new_entity_id()
+    let eid = new_entity_id()
     deferActions |> emplace(DeferAction(action <- deval, eid = eid))
     return eid
 }
@@ -976,7 +976,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
     cmp |> push <| make_component("eid", first_eid)
     invoke(blk, first_eid, 0, cmp)
     cmp |> set("eid", first_eid)
-    var ahash = cmp_archetype_hash(cmp)
+    let ahash = cmp_archetype_hash(cmp)
     with_archetype(ahash) $(var arch; arch_idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)
@@ -1031,7 +1031,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
     }
     // Ensure eid component is present for archetype hash computation
     cmp |> set("eid", INVALID_ENTITY_ID)
-    var ahash = cmp_archetype_hash(cmp)
+    let ahash = cmp_archetype_hash(cmp)
     with_archetype(ahash) $(var arch; arch_idx; isNew) {
         if (isNew) {
             arch |> create_archetype(cmp, arch_idx)

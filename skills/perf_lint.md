@@ -10,8 +10,8 @@ The `perf_lint` module detects common performance anti-patterns in daslang code 
 - **Entry point:** `[lint_macro] class PerfLintMacro : AstPassMacro` calls `perf_lint(prog, true)`
 - **Visitor:** `class PerfLintVisitor : AstVisitor` — walks the AST with loop depth tracking
 - **Error reporting:** `macro_performance_warning(compiling_program(), at, message)` — reports as error code 40217
-- **Utility:** `utils/perf_lint/main.das` — standalone batch checker (compile-only, no simulation)
-- **Tests:** `utils/perf_lint/tests/` — one file per rule with `expect 40217:N`
+- **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
+- **Tests:** `utils/lint/tests/` — one file per rule with `expect 40217:N`
 
 ## How to Add a New Rule
 
@@ -44,7 +44,7 @@ The `perf_warning` method handles both compile-time (`macro_performance_warning`
 
 ### 4. Write the test file
 
-Create `utils/perf_lint/tests/perfXXX_rule_name.das`:
+Create `utils/lint/tests/perfXXX_rule_name.das`:
 
 ```das
 options gen2

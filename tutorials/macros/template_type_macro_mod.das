@@ -97,7 +97,7 @@ def pair(macroArgument, passArgument : TypeDeclPtr; T1, T2 : TypeDeclPtr) : Type
     }
 
     // Build a mangled name like "Pair<int,float>" for deduplication.
-    var struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
+    let struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
 
     // If this exact instantiation already exists, reuse it.
     var existing_struct = compiling_program().find_unique_structure(struct_name)
