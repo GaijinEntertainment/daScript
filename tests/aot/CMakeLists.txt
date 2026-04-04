@@ -93,6 +93,9 @@ FILE(GLOB AOT_DEBUG_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/debug/*.das")
 # AOT for debug_agent test files
 FILE(GLOB AOT_DEBUG_AGENT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/debug_agent/*.das")
 
+# AOT for dasPEG test files
+FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasPEG/*.das")
+
 # AOT for decs test files
 FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)
@@ -352,6 +355,10 @@ add_custom_target(test_aot_debug_agent)
 SET(DEBUG_AGENT_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DEBUG_AGENT_FILES}" DEBUG_AGENT_AOT_GENERATED_SRC test_aot_debug_agent daslang)
 
+add_custom_target(test_aot_daspeg)
+SET(DASPEG_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_DASPEG_FILES}" DASPEG_AOT_GENERATED_SRC test_aot_daspeg daslang)
+
 add_custom_target(test_aot_decs)
 SET(DECS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DECS_FILES}" DECS_AOT_GENERATED_SRC test_aot_decs daslang)
@@ -543,6 +550,7 @@ SOURCE_GROUP_FILES("aot generated" BOOL_ARRAY_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DATA_WALKER_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AGENT_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DASPEG_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LIVE_HOST_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LIVE_HOST_MODULES_AOT_GENERATED_SRC)
@@ -601,6 +609,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${DATA_WALKER_AOT_GENERATED_SRC}
     ${DEBUG_AOT_GENERATED_SRC}
     ${DEBUG_AGENT_AOT_GENERATED_SRC}
+    ${DASPEG_AOT_GENERATED_SRC}
     ${DECS_AOT_GENERATED_SRC}
     ${LIVE_HOST_AOT_GENERATED_SRC}
     ${LIVE_HOST_MODULES_AOT_GENERATED_SRC}
@@ -650,7 +659,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_assert_once test_aot_async test_aot_bare_block test_aot_base64
     test_aot_bitfields test_aot_bool_array
     test_aot_data_walker test_aot_debug
-    test_aot_debug_agent test_aot_decs test_aot_live_host test_aot_live_host_modules test_aot_dynamic_cast_rtti
+    test_aot_debug_agent test_aot_daspeg test_aot_decs test_aot_live_host test_aot_live_host_modules test_aot_dynamic_cast_rtti
     test_aot_fio test_aot_fs test_aot_functional
     test_aot_handle_types test_aot_hash_map
     test_aot_interfaces

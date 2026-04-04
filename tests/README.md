@@ -182,6 +182,24 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_state_collection.das | State collection via onCollect and onVariable | |
 | test_threadlock.das | threadlock_context option propagation | |
 
+## dasPEG/
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_alternatives.das | Ordered choice, fallthrough, many alternatives, prefix ordering | |
+| test_binding.das | Rule binding (as name), text extraction, nonterminal binding, multiple bindings | |
+| test_builtins.das | Built-in terminals: number, double_, string_, WS, TS, EOF, EOL, any | |
+| test_character_sets.das | set() ranges, multiple ranges, single chars, not_set(), vowels | |
+| test_commit.das | commit cut operator, error generation, error position, commit in expressions | |
+| test_edge_cases.das | Empty input, single char, long input, whitespace-only, WS vs TS, large numbers | |
+| test_error_reporting.das | ParsingError fields, error position, commit vs no-commit errors | |
+| test_literals.das | Literal matching, multi-word, escaped braces, case sensitivity, partial match | |
+| test_lookahead.das | PEEK positive lookahead, ! negative lookahead, keyword rejection, no-consume | |
+| test_optional.das | MB() optional present/absent, optional suffix, default values | |
+| test_recursion.das | Direct recursion, mutual recursion, deep nesting stress test | |
+| test_repetition.das | * zero-or-more, + one-or-more, comma-separated lists, lines of text | |
+| test_return_types.das | Return int, double, string, bool, struct, tuple, void? pattern rules | |
+
 ## decs/
 
 | File | Description | Expects errors |

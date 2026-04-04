@@ -676,6 +676,9 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
 
 def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<ExpressionPtr> {
     var inscope return_type <- gen.return_types |> get_value_and_clone_type(gen.current_context)
+    let not_id = gen.rule_counter["not"]++
+    let mark_name = "__not_mark_{not_id}"
+    let success_name = "__not_success_{not_id}"
 
     var inscope rule_code <- gen |> with_context("__PEEK__") {
         return <- gen |> generate(rule_.rule)
@@ -686,23 +689,23 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     })
 
     var inscope t <- qmacro_block() {
-        let mark = parser.index
+        let $i(mark_name) = parser.index
 
         if ($v(gen.debug)) {
-            parser |> log_plain <| "Saved the state for negative assertion: [{mark}, {current}]"
+            parser |> log_plain <| "Saved the state for negative assertion"
         }
 
-        var success = invoke() { // nolint:LINT003
+        var $i(success_name) = invoke() { // nolint:LINT003
             $b(rule_code)
         }
 
         if ($v(gen.debug)) {
-            parser |> log_plain <| "Resetting the state: [{parser.index}, {parser.current}] -> [{mark}, {current}]"
+            parser |> log_plain <| "Resetting the state for negative assertion"
         }
 
-        parser.index = mark
+        parser.index = $i(mark_name)
 
-        if (success.success) {
+        if ($i(success_name).success) {
             if ($v(gen.tracing)) {
                 parser |> log_fail <| "Assertion successful; failing"
             }
@@ -722,6 +725,9 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
 
 def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<ExpressionPtr> {
     var inscope return_type <- gen.return_types |> get_value_and_clone_type(gen.current_context)
+    let and_id = gen.rule_counter["and"]++
+    let mark_name = "__and_mark_{and_id}"
+    let success_name = "__and_success_{and_id}"
 
     var inscope rule_code <- gen |> with_context("__PEEK__") {
         return <- gen |> generate(rule_.rule)
@@ -732,15 +738,15 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     })
 
     var inscope t <- qmacro_block() {
-        let mark = parser.index
+        let $i(mark_name) = parser.index
 
-        var success = invoke() { // nolint:LINT003
+        var $i(success_name) = invoke() { // nolint:LINT003
             $b(rule_code)
         }
 
-        parser.index = mark
+        parser.index = $i(mark_name)
 
-        if (!success.success) {
+        if (!$i(success_name).success) {
             if ($v(gen.tracing)) {
                 parser |> log_fail <| "Assertion failed; failing"
             }
@@ -825,17 +831,18 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
         if (!$i(first_result_name).success) {
             if (parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix) {
-                var error = "Error: Expected a `" |> red_str($v(gen.color_output))
-                var terminal = "{$v(rule_ |> describe_rule)}" |> bold
-                var rest = "` rule at {parser.index}" |> red_str($v(gen.color_output))
-                var complete_message = "{error}{terminal}{rest}"
+                let error = "Error: Expected a `" |> red_str($v(gen.color_output))
+                let terminal = "{$v(rule_ |> describe_rule)}" |> bold
+                let rest = "` rule at {parser.index}" |> red_str($v(gen.color_output))
+                let complete_message = "{error}{terminal}{rest}"
                 parser.errors |> push <| ParsingError(text = complete_message, index = parser.index)
             }
 
             return <- default<$t(return_type)>
         }
 
-        $i(result_handle) |> emplace <| ($i(first_result_name).value)
+        // Note: first match value is already emplaced into the array
+        // inside the invoke via rule_code (emplace + temp_name pattern)
 
         parser.suppress_errors |> push <| true
         while (true) {

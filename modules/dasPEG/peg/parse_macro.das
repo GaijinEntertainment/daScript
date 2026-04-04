@@ -168,9 +168,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         subrule.name := as_expr.name
         return <- new Rule_(rule <- Rule(text_extraction <- subrule))
     } elif (expr is ExprAsVariant) {
-        // This way goes *<rule> as <name>,
-        //               <rule>? as <name>,
-        //               +<rule> as <name>, etc...
+        // This way goes <rule>? as <name>, etc...
 
         var as_expr <- expr as ExprAsVariant
 
@@ -245,8 +243,15 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         return <- new Rule_(rule <- Rule(terminal <- Terminal(log_msg <- message)))
     } elif (expr is ExprOp1 && (expr as ExprOp1).op == "+") {
         // Several (+) -- one or more
-
-        var subrule = (expr as ExprOp1).subexpr |> into_rule_
+        var op1 <- expr as ExprOp1
+        if (op1.subexpr is ExprAsVariant) {
+            // +<rule> as <name>: propagate binding name to inner Rule_?
+            var as_expr <- op1.subexpr as ExprAsVariant
+            var subrule = as_expr.value |> into_rule_
+            subrule.name := as_expr.name
+            return <- new Rule_(rule <- Rule(repeat <- subrule))
+        }
+        var subrule = op1.subexpr |> into_rule_
         return <- new Rule_(rule <- Rule(repeat <- subrule))
     } elif (expr is ExprConstInt) {
         transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")

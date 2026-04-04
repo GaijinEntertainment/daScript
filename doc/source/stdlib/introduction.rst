@@ -36,11 +36,12 @@ Strings
 * :doc:`stringify <generated/stringify>` — ``%stringify~`` reader macro for embedding long strings at compile time
 * :doc:`base64 <generated/base64>` — Base64 encoding and decoding
 
-Regular expressions
--------------------
+Regular expressions and parsing
+-------------------------------
 
 * :doc:`regex <generated/regex>` — regular expression matching and searching
 * :doc:`regex_boost <generated/regex_boost>` — ``%regex~`` reader macro for compile-time regex construction
+* :doc:`peg <generated/peg>` — PEG parser generator: define grammars with the ``parse`` macro, compiled to packrat parsers
 
 Reflection and AST
 ------------------
@@ -49,12 +50,14 @@ Reflection and AST
 * :doc:`ast <generated/ast>` — compile-time AST access: expression/function/structure creation, visitor pattern, macro infrastructure
 * :doc:`ast_boost <generated/ast_boost>` — AST convenience helpers: queries, annotation manipulation, expression generation, visitor utilities
 * :doc:`ast_block_to_loop <generated/ast_block_to_loop>` — AST transform that converts block-based iteration to explicit loops (used by DECS)
+* :doc:`ast_cursor <generated/ast_cursor>` — AST cursor navigation for walking expression trees
 * :doc:`ast_used <generated/ast_used>` — collect all types used by a set of functions (for code generation)
 * :doc:`ast_match <generated/ast_match>` — AST pattern matching via reverse reification: match expressions against structural patterns
 * :doc:`quote <generated/quote>` — AST quasiquotation for constructing syntax trees from inline code
 * :doc:`type_traits <generated/type_traits>` — compile-time type introspection and manipulation macros
 * :doc:`typemacro_boost <generated/typemacro_boost>` — type macro and template structure support infrastructure
 * :doc:`dynamic_cast_rtti <generated/dynamic_cast_rtti>` — runtime dynamic casting between class hierarchies
+* :doc:`debugapi <generated/debugapi>` — debug agent API: breakpoints, stepping, variable inspection, data walkers
 
 Functional and algorithms
 -------------------------
@@ -109,6 +112,7 @@ Control flow macros
 -------------------
 
 * :doc:`defer <generated/defer>` — ``defer`` and ``defer_delete`` — execute code at scope exit
+* :doc:`delegate <generated/delegate>` — ``[delegate]`` annotation for forwarding method calls
 * :doc:`if_not_null <generated/if_not_null>` — ``if_not_null`` safe-access macro
 * :doc:`safe_addr <generated/safe_addr>` — ``safe_addr`` and ``temp_ptr`` — safe temporary pointer macros
 * :doc:`static_let <generated/static_let>` — ``static_let`` — variables initialized once and persisted across calls
@@ -158,6 +162,38 @@ Code quality and tooling
 Developer tools
 ---------------
 
+* :doc:`ansi_colors <generated/ansi_colors>` — ANSI terminal color escape sequences
+* :doc:`command_line <generated/command_line>` — command-line argument parsing helpers
 * :doc:`das_source_formatter <generated/das_source_formatter>` — daslang source code formatter
 * :doc:`das_source_formatter_fio <generated/das_source_formatter_fio>` — file-based source code formatting
 * :doc:`rst <generated/rst>` — RST documentation generator used to produce this reference
+
+HTTP and WebSocket
+------------------
+
+* :doc:`dashv <generated/dashv>` — HTTP client/server and WebSocket bindings (C++ module, based on libhv)
+* :doc:`dashv_boost <generated/dashv_boost>` — dasHV convenience helpers: GET/POST/PUT/PATCH/DELETE, response iteration
+
+XML
+---
+
+* :doc:`pugixml <generated/pugixml>` — XML parsing, building, and XPath queries (C++ module, based on pugixml)
+* :doc:`PUGIXML_boost <generated/PUGIXML_boost>` — XML convenience helpers: node iteration, automatic struct serialization
+
+Image
+-----
+
+* :doc:`stbimage <generated/stbimage>` — image loading, saving, and pixel access (C++ module, based on stb_image)
+* :doc:`stbimage_boost <generated/stbimage_boost>` — image convenience helpers: drawing, blending, transforms
+* :doc:`stbtruetype <generated/stbtruetype>` — TrueType font rasterization (C++ module, based on stb_truetype)
+* :doc:`stbimage_ttf <generated/stbimage_ttf>` — font rendering helpers for stbimage surfaces
+* :doc:`raster <generated/raster>` — software rasterizer: triangles, lines, circles, polygons
+
+Audio
+-----
+
+* :doc:`audio <generated/audio>` — audio playback, mixing, 3D spatial audio, effects (C++ module, based on miniaudio)
+* :doc:`audio_boost <generated/audio_boost>` — audio convenience helpers: sound loading, bus routing, effect chains
+* :doc:`audio_wav <generated/audio_wav>` — WAV file reading and writing
+* :doc:`strudel_midi <generated/strudel_midi>` — MIDI file parsing and playback
+* :doc:`strudel_sf2 <generated/strudel_sf2>` — SoundFont 2 file parser for sample-based synthesis

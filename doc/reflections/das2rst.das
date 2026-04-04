@@ -90,6 +90,7 @@ require daslib/refactor
 require daslib/remove_call_args
 // require daslib/spoof                           // depends on peg module
 require daslib/stringify
+require peg/peg
 require daslib/temp_strings
 require daslib/type_traits
 require daslib/typemacro_boost
@@ -1328,6 +1329,19 @@ def document_module_strudel_sf2(root : string) {
     document("SoundFont 2 file parser", mod, "strudel_sf2.rst", groups)
 }
 
+def document_module_peg(root : string) {
+    var mod = find_module("peg")
+    var groups <- array<DocGroup>(
+        group_by_regex("Matching primitives", mod, %regex~.*(matches|move|reached_EOF|reached_EOL|get_current_char)$%%),
+        group_by_regex("Whitespace", mod, %regex~.*(skip_whitespace|skip_taborspace)$%%),
+        group_by_regex("Literal matching", mod, %regex~.*(match_decimal_literal|match_string_literal|match_double_literal)$%%),
+        group_by_regex("Tracing and logging", mod, %regex~.*(tabulate|log_plain|log_fail|log_success|log_info)$%%),
+        hide_group(group_by_regex("ParsingError operators", mod, %regex~^(!=|<)$%%)),
+        hide_group(group_by_regex("Internal", mod, %regex~.*(at_around)$%%))
+    )
+    document("PEG parser generator", mod, "peg.rst", groups)
+}
+
 [export]
 def main {
     disable_profiler(this_context())
@@ -1350,6 +1364,8 @@ def main {
     document_module_audio_wav(root)
     document_module_strudel_midi(root)
     document_module_strudel_sf2(root)
+    // document dasPEG module
+    document_module_peg(root)
     document_module_debugapi(root)
     document_module_rtti(root)
     document_module_ast(root)
