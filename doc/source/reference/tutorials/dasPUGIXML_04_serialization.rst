@@ -31,7 +31,7 @@ parses an XML string back into a struct:
 
    let p = Player(name = "Hero", hp = 100, speed = 5.5, alive = true)
    let xml_str = to_XML(p)
-   var restored = from_XML(xml_str, type<Player>)
+   let restored = from_XML(xml_str, type<Player>)
    print("name: {restored.name}, hp: {restored.hp}\n")
    // name: Hero, hp: 100
 
@@ -70,7 +70,7 @@ Nested structs serialize as child elements and round-trip correctly:
        address = Address(street = "123 Main St", city = "Springfield", zip = "62704")
    )
    let xml_str = to_XML(p, "person")
-   var restored = from_XML(xml_str, type<Person>)
+   let restored = from_XML(xml_str, type<Person>)
    print("restored: {restored.name}, {restored.address.city}\n")
    // restored: Alice, Springfield
 
@@ -96,7 +96,7 @@ field to serialize as the integer value instead:
 
    let w = Warrior(name = "Knight", weapon = Weapon.sword, backup = Weapon.bow)
    let xml_str = to_XML(w, "warrior")
-   var restored = from_XML(xml_str, type<Warrior>)
+   let restored = from_XML(xml_str, type<Warrior>)
    print("weapon: {restored.weapon}, backup: {restored.backup}\n")
    // weapon: sword, backup: bow
 
@@ -115,7 +115,7 @@ Bitfields serialize as their unsigned integer value:
 
    let perms = Permissions.read | Permissions.execute
    let xml_str = to_XML(perms, "permissions")
-   var restored = from_XML(xml_str, type<Permissions>)
+   let restored = from_XML(xml_str, type<Permissions>)
    let has_read = uint(restored & Permissions.read) != 0u
    print("read: {has_read}\n")
    // read: true
@@ -133,7 +133,7 @@ entries become ``<entry>`` children with ``<_key>`` and ``<_val>``:
        counts : table<string; int>
    }
 
-   var inv <- Inventory(
+   let inv <- Inventory(
        items <- ["sword", "shield", "potion"],
        counts <- { "sword" => 1, "shield" => 2, "potion" => 5 }
    )
@@ -158,14 +158,14 @@ the active index in a ``_variant`` attribute:
    // Tuple roundtrip
    let t = (42, "hello", 3.14)
    let t_xml = to_XML(t, "tuple")
-   var t_back = from_XML(t_xml, type<tuple<int; string; float>>)
+   let t_back = from_XML(t_xml, type<tuple<int; string; float>>)
    print("restored: ({t_back._0}, {t_back._1}, {t_back._2})\n")
    // restored: (42, hello, 3.14)
 
    // Variant roundtrip
    let s = Shape(circle = 5.0)
    let s_xml = to_XML(s, "shape")
-   var s_back = from_XML(s_xml, type<Shape>)
+   let s_back = from_XML(s_xml, type<Shape>)
    print("restored circle: {s_back as circle}\n")
    // restored circle: 5
 
@@ -180,9 +180,9 @@ Fixed-size arrays serialize as sequential ``<item>`` children:
        data : int[4]
    }
 
-   var m = Matrix2x2(data = fixed_array(1, 0, 0, 1))
+   let m = Matrix2x2(data = fixed_array(1, 0, 0, 1))
    let xml_str = to_XML(m, "matrix")
-   var restored = from_XML(xml_str, type<Matrix2x2>)
+   let restored = from_XML(xml_str, type<Matrix2x2>)
    print("restored: [{restored.data[0]}, {restored.data[1]}, {restored.data[2]}, {restored.data[3]}]\n")
    // restored: [1, 0, 0, 1]
 
@@ -196,7 +196,7 @@ Vector types
 
    let pos = float3(1.0, 2.5, -3.0)
    let xml_str = to_XML(pos, "position")
-   var restored = from_XML(xml_str, type<float3>)
+   let restored = from_XML(xml_str, type<float3>)
    print("restored: ({restored.x}, {restored.y}, {restored.z})\n")
    // restored: (1, 2.5, -3)
 
@@ -239,7 +239,7 @@ control over the document structure — e.g. embedding multiple records:
        // Read them back
        let records = doc.document_element
        records |> for_each_child("player") <| $(node) {
-           var p = from_XML(node, type<Player>)
+           let p = from_XML(node, type<Player>)
            print("  {p.name}: hp={p.hp}\n")
        }
    }
@@ -259,7 +259,7 @@ A full game-state roundtrip with nested struct, array, and vector:
        position : float3
    }
 
-   var state <- GameState(
+   let state <- GameState(
        level = 3, score = 42000,
        player = Player(name = "Hero", hp = 95, speed = 6.0, alive = true),
        weapons <- ["sword", "bow", "fireball"],

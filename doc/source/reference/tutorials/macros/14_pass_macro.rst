@@ -144,7 +144,7 @@ The visitor walks the AST and modifies function bodies:
         }
         def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
             // Skip our own helper to avoid infinite recursion at runtime.
-            if (string(fun.name) == "_trace_enter") {
+            if (fun.name == "_trace_enter") {
                 func = null
                 return <- fun
             }
@@ -204,7 +204,7 @@ The pass macro creates the visitor and walks the full program:
             var astVisitor = new TraceCallsVisitor()
             var inscope astVisitorAdapter <- make_visitor(*astVisitor)
             visit(prog, astVisitorAdapter)
-            var result = astVisitor.astChanged
+            let result = astVisitor.astChanged
             unsafe {
                 delete astVisitor
             }

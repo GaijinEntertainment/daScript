@@ -412,7 +412,7 @@ returns ``false`` and the call is allowed:
 
 .. code-block:: das
 
-   var alpha = 200
+   let alpha = 200
    set_channel("alpha", alpha)   // runtime value — compiles fine
 
 This is intentional.  ``verifyCall`` is a **best-effort compile-time
@@ -631,7 +631,7 @@ Runtime variables are allowed through:
 
 .. code-block:: das
 
-   var alpha = 200
+   let alpha = 200
    set_channel("alpha", alpha)   // runtime value — passes through
 
 [no_print] — lint-time structural validation:

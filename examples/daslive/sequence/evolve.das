@@ -118,6 +118,7 @@ def random_gaussian(var seed : int4&) : float {
 
 def mutate_weights(parent : array<float>; sigma : float; var seed : int4&; num_greedy : int) : array<float> {
     var child : array<float>
+    child |> reserve(length(parent))
     for (i in range(length(parent))) {
         let v = parent[i]
         let noise = random_gaussian(seed)

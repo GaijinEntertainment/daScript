@@ -58,7 +58,6 @@ def uri_compose_query_in_order(query : table<string; string>) {
         } else {
             return a.key < b.key
         }
-        var first = true
     }
     let res = build_string() $(var tw) {
         var first = true

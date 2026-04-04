@@ -95,8 +95,8 @@ struct template DelegateReturn {
                 return <- _delegate_default
             }
         }
-        let _delegate_n = length(invocation_list)
-        for (_delegate_i in 0.._delegate_n - 1) {
+        let delegate_n = length(invocation_list)
+        for (delegate_i in 0..delegate_n - 1) {
             $e(discardCall)
         }
         return <- $e(lastCall)
@@ -282,9 +282,9 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     } else {
         // non-void-specific reification variables
         var inscope discardCall <- build_invoke_call(macroArgument.at,
-            qmacro(invocation_list[_delegate_i]), FuncType)
+            qmacro(invocation_list[delegate_i]), FuncType)
         var inscope lastCall <- build_invoke_call(macroArgument.at,
-            qmacro(invocation_list[_delegate_n - 1]), FuncType)
+            qmacro(invocation_list[delegate_n - 1]), FuncType)
         var inscope retType <- clone_type(FuncType.firstType)
         var inscope wrapperLambda <- qmacro(@($a(lambdaArgs)) : $t(retType) {
             return invoke(fn, $a(lambdaFwd))

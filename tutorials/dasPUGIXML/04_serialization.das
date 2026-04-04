@@ -54,7 +54,7 @@ def basic_serialization() {
     // output: </root>
 
     // Deserialize back
-    var restored = from_XML(xml_str, type<Player>)
+    let restored = from_XML(xml_str, type<Player>)
     print("name: {restored.name}, hp: {restored.hp}, speed: {restored.speed}\n")
     // output: name: Hero, hp: 100, speed: 5.5
 }
@@ -108,7 +108,7 @@ def nested_structs() {
     let xml_str = to_XML(p, "person")
     print(xml_str)
 
-    var restored = from_XML(xml_str, type<Person>)
+    let restored = from_XML(xml_str, type<Person>)
     print("restored: {restored.name}, {restored.address.city}\n")
     // output: restored: Alice, Springfield
 }
@@ -140,7 +140,7 @@ def enum_serialization() {
     print(xml_str)
     // weapon serializes as "sword" (name), backup as "1" (int)
 
-    var restored = from_XML(xml_str, type<Warrior>)
+    let restored = from_XML(xml_str, type<Warrior>)
     print("weapon: {restored.weapon}, backup: {restored.backup}\n")
     // output: weapon: sword, backup: bow
 }
@@ -164,7 +164,7 @@ def bitfield_serialization() {
     let xml_str = to_XML(perms, "permissions")
     print(xml_str)
 
-    var restored = from_XML(xml_str, type<Permissions>)
+    let restored = from_XML(xml_str, type<Permissions>)
     let has_read = uint(restored & Permissions.read) != 0u
     print("read: {has_read}\n")
     // output: read: true
@@ -192,7 +192,7 @@ struct Inventory {
 def arrays_and_tables() {
     print("\n=== Arrays and tables ===\n")
 
-    var inv <- Inventory(
+    let inv <- Inventory(
         items <- ["sword", "shield", "potion"],
         counts <- { "sword" => 1, "shield" => 2, "potion" => 5 }
     )
@@ -228,7 +228,7 @@ def tuples_and_variants() {
     let t_xml = to_XML(t, "tuple")
     print("Tuple:\n{t_xml}")
 
-    var t_back = from_XML(t_xml, type<tuple<int; string; float>>)
+    let t_back = from_XML(t_xml, type<tuple<int; string; float>>)
     print("restored: ({t_back._0}, {t_back._1}, {t_back._2})\n")
     // output: restored: (42, hello, 3.14)
 
@@ -237,7 +237,7 @@ def tuples_and_variants() {
     let s1_xml = to_XML(s1, "shape")
     print("Circle:\n{s1_xml}")
 
-    var s1_back = from_XML(s1_xml, type<Shape>)
+    let s1_back = from_XML(s1_xml, type<Shape>)
     print("restored circle: {s1_back as circle}\n")
     // output: restored circle: 5
 
@@ -246,7 +246,7 @@ def tuples_and_variants() {
     let s2_xml = to_XML(s2, "shape")
     print("Rectangle:\n{s2_xml}")
 
-    var s2_back = from_XML(s2_xml, type<Shape>)
+    let s2_back = from_XML(s2_xml, type<Shape>)
     let rect = s2_back as rectangle
     print("restored rectangle: {rect.x} x {rect.y}\n")
     // output: restored rectangle: 10 x 20
@@ -266,11 +266,11 @@ struct Matrix2x2 {
 def dim_serialization() {
     print("\n=== Fixed-size arrays (dim) ===\n")
 
-    var m = Matrix2x2(data = fixed_array(1, 0, 0, 1))
+    let m = Matrix2x2(data = fixed_array(1, 0, 0, 1))
     let xml_str = to_XML(m, "matrix")
     print(xml_str)
 
-    var restored = from_XML(xml_str, type<Matrix2x2>)
+    let restored = from_XML(xml_str, type<Matrix2x2>)
     print("restored: [{restored.data[0]}, {restored.data[1]}, {restored.data[2]}, {restored.data[3]}]\n")
     // output: restored: [1, 0, 0, 1]
 }
@@ -288,14 +288,14 @@ def vector_serialization() {
     let xml_str = to_XML(pos, "position")
     print(xml_str)
 
-    var restored = from_XML(xml_str, type<float3>)
+    let restored = from_XML(xml_str, type<float3>)
     print("restored: ({restored.x}, {restored.y}, {restored.z})\n")
     // output: restored: (1, 2.5, -3)
 
     // int2
     let size = int2(1920, 1080)
     let xml2 = to_XML(size, "resolution")
-    var restored2 = from_XML(xml2, type<int2>)
+    let restored2 = from_XML(xml2, type<int2>)
     print("resolution: {restored2.x} x {restored2.y}\n")
     // output: resolution: 1920 x 1080
 }
@@ -333,7 +333,7 @@ def annotations_demo() {
     // _type field appears as <type>, not <_type>
     // level appears as integer 2, not "high"
 
-    var restored = from_XML(xml_str, type<Config>)
+    let restored = from_XML(xml_str, type<Config>)
     print("type: {restored._type}\n")
     // output: type: widget
     print("level: {restored.level}\n")
@@ -371,7 +371,7 @@ def low_level_api() {
         // Read them back
         let records = doc.document_element
         records |> for_each_child("player") $(node) {
-            var p = from_XML(node, type<Player>)
+            let p = from_XML(node, type<Player>)
             print("  {p.name}: hp={p.hp}, alive={p.alive}\n")
         }
         // output:   Alice: hp=100, alive=true
@@ -394,7 +394,7 @@ struct GameState {
 def roundtrip_example() {
     print("\n=== Complete roundtrip ===\n")
 
-    var state <- GameState(
+    let state <- GameState(
         level = 3,
         score = 42000,
         player = Player(name = "Hero", hp = 95, speed = 6.0, alive = true),

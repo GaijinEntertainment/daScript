@@ -36,7 +36,7 @@ def main {
     }
     upload_font_texture(font)
     // create vertex arrays with quads, which render particular text
-    var hw_text <- font |> create_quads("Hello, world")
+    let hw_text <- font |> create_quads("Hello, world")
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide
     let dim = quads_dim(hw_text)
     let model = quads_view(hw_text, float2(3. / (dim.vmax.x - dim.vmin.x)))

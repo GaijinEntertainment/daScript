@@ -467,7 +467,7 @@ class RstComment : AstCommentReader {
             return
         }
         var output : string
-        var args = get_command_line_arguments()
+        let args = get_command_line_arguments()
         let outputIds = args |> find_index("--docs_output")
         if (outputIds >= 0) {
             output = args[outputIds+1] + "/index/detail/"

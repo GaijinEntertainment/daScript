@@ -64,7 +64,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
         }
         var captured <- capture_block(call.arguments[1])
         sort(captured) <| $(a, b) => string(a.variable.name) < string(b.variable.name)
-        var call_name = string((call.arguments[0] as ExprConstString).value)
+        let call_name = string((call.arguments[0] as ExprConstString).value)
         let function_declaration = build_string() $(writer) {
             writer |> write("def ")
             writer |> write(call_name)
@@ -191,7 +191,7 @@ class ExtractVariableFunction : AstFunctionAnnotation {
             return false
         }
         assume varType = call.arguments[1]._type
-        var variable_name = string((call.arguments[0] as ExprConstString).value)
+        let variable_name = string((call.arguments[0] as ExprConstString).value)
         assume atCall = call.atEnclosure
         assume atBlock = call.arguments[1].at
         var jv <- JV(ExtractVariableDesc(

@@ -18,6 +18,7 @@ require strudel/strudel_player
 require daslib/fio
 require daslib/json
 require daslib/json_boost
+require strings
 require audio_analysis
 require vis_renderer
 
@@ -113,13 +114,17 @@ def find_sf2() : string {
 // --- Build panels from vis registrations ---
 
 def build_panels() {
-    for (i in range(length(g_vis_registrations))) {
+    let num_regs = length(g_vis_registrations)
+    render_states |> reserve(num_regs)
+    audio_analyses |> reserve(num_regs)
+    panels |> reserve(num_regs * 3) // up to 3 panels per registration (pianoroll/drums + scope/spectrum/vectorscope)
+    for (i in range(num_regs)) {
         let reg & = unsafe(g_vis_registrations[i])
         let name = reg.name
         let color = reg.color
         if (reg.flags.has_pianoroll) {
             while (length(render_states) <= i) {
-                render_states |> emplace(PianorollRenderState())
+                render_states |> emplace(PianorollRenderState()) // nolint PERF006
             }
             render_states[i].color = color
             render_states[i].name = name
@@ -127,7 +132,7 @@ def build_panels() {
         }
         if (reg.flags.has_drums) {
             while (length(render_states) <= i) {
-                render_states |> emplace(PianorollRenderState())
+                render_states |> emplace(PianorollRenderState()) // nolint PERF006
             }
             render_states[i].color = color
             render_states[i].name = name
@@ -139,7 +144,7 @@ def build_panels() {
             while (length(audio_analyses) <= i) {
                 var aa = AudioAnalysis()
                 audio_analysis_init(aa)
-                audio_analyses |> emplace(aa)
+                audio_analyses |> emplace(aa) // nolint PERF006
             }
         }
         if (reg.flags.has_scope) {
@@ -158,17 +163,19 @@ def build_panels() {
 
 [live_command(description="Dump debug info")]
 def cmd_debug(input : JsonValue?) : JsonValue? {
-    var info = "tracks: {length(g_vis_registrations)}, panels: {length(panels)}\n"
-    for (i in range(length(render_states))) {
-        var rs & = unsafe(render_states[i])
-        info += "  pianoroll[{i}] \"{rs.name}\": {length(rs.haps)} haps, drum={rs.is_drum_mode}\n"
+    let info = build_string() $(var writer) {
+        writer |> write("tracks: {length(g_vis_registrations)}, panels: {length(panels)}\n")
+        for (i in range(length(render_states))) {
+            let rs & = unsafe(render_states[i])
+            writer |> write("  pianoroll[{i}] \"{rs.name}\": {length(rs.haps)} haps, drum={rs.is_drum_mode}\n")
+        }
+        for (i in range(length(audio_analyses))) {
+            let aa & = unsafe(audio_analyses[i])
+            writer |> write("  audio[{i}]: ring_write={aa.ring_write}\n")
+        }
+        let dbg_pt = strudel_get_playback_time()
+        writer |> write("playback: wall_time={dbg_pt._0}, cps={dbg_pt._1}\n")
     }
-    for (i in range(length(audio_analyses))) {
-        var aa & = unsafe(audio_analyses[i])
-        info += "  audio[{i}]: ring_write={aa.ring_write}\n"
-    }
-    let dbg_pt = strudel_get_playback_time()
-    info += "playback: wall_time={dbg_pt._0}, cps={dbg_pt._1}\n"
     return JV(info)
 }
 

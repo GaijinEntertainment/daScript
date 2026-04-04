@@ -296,6 +296,7 @@ def vectorscope_render(var verts : array<VisVertex>; aa : AudioAnalysis; x0, y0,
 
 def push_circle(var verts : array<VisVertex>; cx, cy, radius : float; color : float4; segments : int = 48) {
     let step = 2.0 * PI / float(segments)
+    verts |> reserve(length(verts) + segments * 3)
     for (i in range(segments)) {
         let a0 = float(i) * step
         let a1 = float(i + 1) * step

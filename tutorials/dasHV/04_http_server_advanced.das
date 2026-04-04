@@ -106,7 +106,7 @@ class AdvancedServer : HvWebServer {
         // Section 6: binary data
         GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             // Create a simple 16-byte binary payload
-            var payload = "BINARY\x00DATA1234"
+            let payload = "BINARY\x00DATA1234"
             return resp |> DATA(payload, 16)
         }
 

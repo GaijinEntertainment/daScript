@@ -92,7 +92,7 @@ time:
                 errors := "expecting structure type"
                 return <- default<ExpressionPtr>
             }
-            var result = build_string() <| $(var w) {
+            let result = build_string() $(var w) {
                 w |> write("{expr.typeexpr.structType.name}(")
                 var first = true
                 for (i in iter_range(expr.typeexpr.structType.fields)) {

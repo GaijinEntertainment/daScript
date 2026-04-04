@@ -148,16 +148,16 @@ def example_blit() {
 
 def example_make_image() {
     // Standard 8-bit RGBA
-    var rgba = make_image(100, 100, 4)
+    let rgba = make_image(100, 100, 4)
     print_img("RGBA uint8", rgba)
     // HDR float image
-    var hdr = make_image(100, 100, 3, 4)
+    let hdr = make_image(100, 100, 3, 4)
     print_img("RGB float", hdr)
     // Single-channel grayscale
-    var grey = make_image(100, 100, 1)
+    let grey = make_image(100, 100, 1)
     print_img("Greyscale", grey)
     // 16-bit image
-    var img16 = make_image(100, 100, 4, 2)
+    let img16 = make_image(100, 100, 4, 2)
     print_img("RGBA uint16", img16)
 }
 

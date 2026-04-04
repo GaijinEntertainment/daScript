@@ -34,7 +34,7 @@ class CheckConsumeArguments : AstFunctionAnnotation {
     //! For example [consume(a,b)] ensures that both a and b are passed as moved values.
     def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         //! check if all specified arguments are passed as moved values
-        var check_args <- {for (aa in args); string(aa.name)}
+        let check_args <- {for (aa in args); string(aa.name)}
         for (ca, ce in call.func.arguments, call.arguments) {
             if (check_args.key_exists(string(ca.name))) {
                 if (!isConsumeArgument(ce)) {

@@ -23,7 +23,7 @@ frees it automatically:
 
    with_doc() <| $(doc) {
        var dnode = doc as xml_node
-       var root = append_child(dnode, "greeting")
+       let root = append_child(dnode, "greeting")
        set(root.text, "Hello!")
        print(to_string(doc))
    }

@@ -26,12 +26,7 @@ def bot_greedy_move(game : GameState; player_idx : int; seed : int; w : GreedyWe
     for (i in range(n)) {
         let m = moves[i]
         let card = get_hand_card(game, player_idx, m.card_idx)
-        var score = 0.0
-        if (is_black_jack(card)) {
-            score = score_removal(game, m.row, m.col, player_idx, w)
-        } else {
-            score = score_placement(game, m.row, m.col, player_idx, w)
-        }
+        let score = is_black_jack(card) ? score_removal(game, m.row, m.col, player_idx, w) : score_placement(game, m.row, m.col, player_idx, w)
         if (score > best_score) {
             best_score = score
             best_idx = i

@@ -114,7 +114,7 @@ class JIT_LLVM : AstSimulateMacro {
 
         prog |> for_each_module() $(mod) {
             mod |> for_each_function("") $(fun) {
-                var rqj = fun.moreFlags.requestJit
+                let rqj = fun.moreFlags.requestJit
                 fun.moreFlags &= ~MoreFunctionFlags.requestJit
                 if (fun.flags.used && (jit_all_functions || rqj)) {
                     if (!fun.moreFlags.requestNoJit) {
@@ -193,7 +193,7 @@ class JIT_LLVM : AstSimulateMacro {
                     g_failed = true
                 }
                 if (g_failed) {
-                    var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
+                    let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
@@ -213,7 +213,7 @@ class JIT_LLVM : AstSimulateMacro {
                     g_failed = true
                 }
                 if (g_failed) {
-                    var fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
+                    let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 if (gen_exe) {
@@ -240,9 +240,9 @@ class JIT_LLVM : AstSimulateMacro {
             }
             if (!gen_exe) {
                 for (fun in funcs) {
-                    var mangled_name = get_mangled_name(fun)
+                    let mangled_name = get_mangled_name(fun)
                     let MNH = hash(mangled_name)
-                    var simfun = get_function_by_mangled_name_hash(MNH, *ctx)
+                    let simfun = get_function_by_mangled_name_hash(MNH, *ctx)
                     var gen = generate_llvm_code(g_dynamic_lib_handle, uids.get_dll_fn_name(fun), use_dll)
                     if (gen != null) {
                         gen |> unsafe(instrument_jit(simfun, fun.at, *ctx))

@@ -18,17 +18,17 @@ def main {
     LLVMBuildRet(builder, tmp)
     LLVMVerifyModule(mod, LLVMVerifierFailureAction.LLVMAbortProcessAction)
     var engine : LLVMExecutionEngineRef
-    var error : string
+    var _error : string
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
     LLVMCreateExecutionEngineForModule(engine, mod)
-    var x = 10ul
+    let x = 10ul
     var arg1 = LLVMCreateGenericValueOfInt(types.t_int32, x, 0)
     var args <- fixed_array<LLVMGenericValueRef>(
         arg1,
     )
     var llvm_res = LLVMRunFunction(engine, sum, 1u, safe_addr(args[0]))
-    var res = (llvm_res
+    let res = (llvm_res
             |> LLVMGenericValueToInt(0)
             |> int())
     assert(res == 20)

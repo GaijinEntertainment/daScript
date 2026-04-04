@@ -94,7 +94,7 @@ Binary Response
 .. code-block:: text
 
    GET("/binary") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-       var payload = "BINARY\x00DATA1234"
+       let payload = "BINARY\x00DATA1234"
        return resp |> DATA(payload, 16)
    }
 

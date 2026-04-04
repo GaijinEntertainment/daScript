@@ -62,6 +62,7 @@ class PerfLintVisitor : AstVisitor {
     if_depth_stack : array<int>
     // current function being visited (for inferStack reporting)
     @do_not_delete current_function : Function?
+    in_template : bool = false
     // PERF006: known-length loop tracking
     known_length_loop_depth : int = 0
     current_for_known_length : bool = true
@@ -106,6 +107,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
+        if (in_template) {
+            return
+        }
         // Deduplicate warnings — same source location reported once, regardless of generic instantiations
         let key = self->location_key(at)
         if (reported_locations |> has_value(key)) {
@@ -181,7 +185,7 @@ class PerfLintVisitor : AstVisitor {
     def is_array_func(expr : smart_ptr<ExprCall>; fname : string) : bool {
         // Builtin generics (push, reserve, etc.) have fromGeneric set.
         // Verify first argument is an array type.
-        if (expr.func.fromGeneric == null || expr.func.fromGeneric.name != fname) {
+        if (expr.func == null || expr.func.fromGeneric == null || expr.func.fromGeneric.name != fname) {
             return false
         }
         if (length(expr.arguments) < 1) {
@@ -317,10 +321,12 @@ class PerfLintVisitor : AstVisitor {
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = get_ptr(fn)
+        in_template = fn.moreFlags.isTemplate
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
         current_function = null
+        in_template = false
         return <- fn
     }
 
@@ -589,7 +595,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF002 + PERF003: character_at (counter-based) ---
 
     def override preVisitExprCall(var expr : smart_ptr<ExprCall>) : void {
-        if (in_closure > 0) {
+        if (in_closure > 0 || expr.func == null) {
             return
         }
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
@@ -607,6 +613,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override visitExprCall(var expr : smart_ptr<ExprCall>) : ExpressionPtr {
+        if (expr.func == null) {
+            return <- expr
+        }
         // PERF003: character_at anywhere — fires even inside closures
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
             var ecall = get_ptr(expr)

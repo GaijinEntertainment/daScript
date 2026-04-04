@@ -115,7 +115,7 @@ class PrintfMacro : AstCallMacro {
         let format_len = length(format)
         while (pos < format_len) {
             // Find the next (N) placeholder
-            var open = find(format, '(', pos)
+            let open = find(format, '(', pos)
             if (open == -1) {
                 // No more placeholders — add remaining text
                 let tail = format.chop(pos, format_len - pos)
@@ -128,12 +128,12 @@ class PrintfMacro : AstCallMacro {
                 sbuilder.elements |> emplace_new <| new ExprConstString(value := text, at = expr.at)
             }
             // Find matching closing paren
-            var close = find(format, ')', open + 1)
+            let close = find(format, ')', open + 1)
             macro_verify(close != -1, prog, expr.at,
                 "unmatched '(' in format string")
             // Parse the argument number
-            var argNumStr = format.chop(open + 1, close - open - 1)
-            var argNum = to_int(argNumStr)
+            let argNumStr = format.chop(open + 1, close - open - 1)
+            let argNum = to_int(argNumStr)
             macro_verify(argNum >= 1, prog, expr.at,
                 "argument number must be >= 1, got '({argNumStr})'")
             macro_verify(argNum < totalArgs, prog, expr.at,

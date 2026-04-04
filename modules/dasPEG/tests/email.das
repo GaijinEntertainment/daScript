@@ -66,7 +66,7 @@ def get_parser_with(email : string; blk : block<(email : Email; err : array<Pars
 
 [test]
 def test_email_1(t : T?) {
-    var input = "abc@mail.example.com"
+    let input = "abc@mail.example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("abc", email.username)
@@ -76,7 +76,7 @@ def test_email_1(t : T?) {
 
 [test]
 def test_email_2(t : T?) {
-    var input = "john.doe@example.com"
+    let input = "john.doe@example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("john.doe", email.username)
@@ -86,7 +86,7 @@ def test_email_2(t : T?) {
 
 [test]
 def test_email_3(t : T?) {
-    var input = "this_is_a_very_long_username@example.com"
+    let input = "this_is_a_very_long_username@example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("this_is_a_very_long_username", email.username)
@@ -96,7 +96,7 @@ def test_email_3(t : T?) {
 
 [test]
 def test_email_4(t : T?) {
-    var input = "12345@example.com"
+    let input = "12345@example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("12345", email.username)
@@ -106,7 +106,7 @@ def test_email_4(t : T?) {
 
 [test]
 def test_email_5(t : T?) {
-    var input = "jane-doe@mail-example.com"
+    let input = "jane-doe@mail-example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("jane-doe", email.username)
@@ -116,7 +116,7 @@ def test_email_5(t : T?) {
 
 [test]
 def test_email_6(t : T?) {
-    var input = "user_name@example.com"
+    let input = "user_name@example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("user_name", email.username)
@@ -126,7 +126,7 @@ def test_email_6(t : T?) {
 
 [test]
 def test_email_7(t : T?) {
-    var input = "user@subdomain1.subdomain2.example.com"
+    let input = "user@subdomain1.subdomain2.example.com"
 
     get_parser_with(input) $(email; err) {
         t |> equal("user", email.username)
@@ -138,7 +138,7 @@ def test_email_7(t : T?) {
 
 [test]
 def test_email_error_1(t : T?) {
-    var input = "@"
+    let input = "@"
 
     get_parser_with(input) $(email; err) {
         if (err |> empty) {
@@ -149,7 +149,7 @@ def test_email_error_1(t : T?) {
 
 [test]
 def test_email_error_2(t : T?) {
-    var input = "john.gmail.com"
+    let input = "john.gmail.com"
 
     get_parser_with(input) $(email; err) {
         if (err |> empty) {

@@ -197,7 +197,7 @@ Inside ``finish()``
 
        // Count original statements (subtract injected enter-print)
        var numStmts = 0
-       for (s in blk.list) {
+       for (_s in blk.list) {
            numStmts++
        }
        if (numStmts > 0) {
@@ -208,7 +208,7 @@ Inside ``finish()``
 
        // Iterate typed arguments — types are now resolved
        var numArgs = 0
-       for (a in blk.arguments) {
+       for (_a in blk.arguments) {
            numArgs++
        }
        if (numArgs > 0) {

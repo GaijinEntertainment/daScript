@@ -618,8 +618,6 @@ def private append_comprehension(argIndex : int; var topValue : ExpressionPtr; v
 [macro_function]
 def private fold_order_distinct(argIndex : int; var topValue : ExpressionPtr; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : ExpressionPtr {
     //! replaces order + distinct into a single order + unique
-    var eOrder = calls[0]._0
-    var eDistinct = calls[1]._0
     if (argIndex == 0) {
         var inscope comprehension <- qmacro(order_unique_folded($e(topValue)))
         return <- append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
@@ -728,7 +726,6 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
     var inscope topExpr <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
     var inscope topExprType <- clone_type(top._type)
     var inscope topValue = qmacro(source)
-    let lastCallIndex = calls |> length - 1
     var argIndex = 0
     let argMax = length(calls)
     while (argIndex < argMax) {

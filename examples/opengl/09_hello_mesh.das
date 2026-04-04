@@ -60,9 +60,9 @@ def main {
         glfwDestroyWindow(window)
     }
     glfwMakeContextCurrent(window)
-    var program = create_shader_program(@@vs_preview, @@fs_preview)
+    let program = create_shader_program(@@vs_preview, @@fs_preview)
     // var mesh <- gen_sphere(32,16,false) |> create_geometry_fragment
-    var mesh <- load_obj_mesh("orb.obj",
+    let mesh <- load_obj_mesh("orb.obj",
             "{get_das_root()}/examples/opengl",
             "{get_das_root()}/examples/opengl/media"
         ) |> create_geometry_fragment

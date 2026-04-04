@@ -74,10 +74,10 @@ Creating Blank Canvases
 
 .. code-block:: das
 
-   var rgba = make_image(100, 100, 4)       // uint8 RGBA
-   var hdr = make_image(100, 100, 3, 4)     // float RGB
-   var grey = make_image(100, 100, 1)       // uint8 greyscale
-   var img16 = make_image(100, 100, 4, 2)   // uint16 RGBA
+   let rgba = make_image(100, 100, 4)       // uint8 RGBA
+   let hdr = make_image(100, 100, 3, 4)     // float RGB
+   let grey = make_image(100, 100, 1)       // uint8 greyscale
+   let img16 = make_image(100, 100, 4, 2)   // uint16 RGBA
 
 .. seealso::
 

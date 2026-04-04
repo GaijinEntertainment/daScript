@@ -70,7 +70,7 @@ add_dependencies(all_utils_exe dastest_exe)
 SET(DAS_UTILS_TO_TEST
     dascov
     mcp
-    perf_lint
+    lint
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

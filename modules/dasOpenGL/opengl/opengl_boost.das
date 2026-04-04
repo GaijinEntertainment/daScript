@@ -176,7 +176,7 @@ def create_shader(src : string implicit; shaderType : uint; canfail : bool = fal
             unsafe {
                 var log : array<uint>
                 resize(log, 16384)
-                var slog = reinterpret<string> addr(log[0])
+                let slog = reinterpret<string> addr(log[0])
                 glGetShaderInfoLog(s, 16384, null, slog)
                 panic("{slog}\n\nFAILED TO CREATE SHADER ({status}):\n{src}\n")
                 delete log
@@ -209,7 +209,7 @@ def link_shader(program : uint; canfail : bool = false) {
         if (!canfail) {
             unsafe {
                 var log : uint8[512]
-                var slog = reinterpret<string> addr(log[0])
+                let slog = reinterpret<string> addr(log[0])
                 glGetProgramInfoLog(program, 512, null, slog)
                 panic("FAILED TO LINK SHADER PROGRAM ({status}):\n{slog}\n")
             }

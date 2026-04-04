@@ -41,8 +41,7 @@
    language/reification.rst
    language/ast_matching.rst
    language/builtin_functions.rst
-   language/perf_lint.rst
-   language/style_lint.rst
+   language/lint.rst
 
 *****************************
 The Runtime

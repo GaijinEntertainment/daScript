@@ -140,7 +140,7 @@ variant ItCheck {
 
 [macro_function]
 def private decs_prefix(arg : AnnotationArgumentList) {
-    var p = arg |> find_arg("prefix")
+    let p = arg |> find_arg("prefix")
     if (p is tString) {
         return ItCheck(yes = p as tString)
     } elif (p is tBool) {
@@ -250,7 +250,7 @@ def private append_iterator(arch_name : string; var qloop : smart_ptr<ExprFor>; 
     }
     qloop.iteratorsAt |> push(a.at)
     qloop.iteratorsTags |> resize(qli + 1)
-    var getter = getter_name(a, const_parent, can_be_optional)
+    let getter = getter_name(a, const_parent, can_be_optional)
     if (empty(getter)) {
         return false
     }
@@ -269,7 +269,7 @@ def private append_iterator(arch_name : string; var qloop : smart_ptr<ExprFor>; 
 
 [macro_function]
 def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprBlock>; a; prefix, suffix : string; const_parent : bool = false; can_be_optional : bool = true) {
-    var getter = getter_name(a, const_parent, can_be_optional)
+    let getter = getter_name(a, const_parent, can_be_optional)
     if (empty(getter)) {
         return false
     }
@@ -377,7 +377,6 @@ class DecsQueryMacro : AstCallMacro {
         if (totalArgs != 1 && totalArgs != 2) {
             return
         }
-        let qt = totalArgs == 2 ? DecsQueryType.eid_query : DecsQueryType.query
         let block_arg_index = totalArgs - 1
         if (!(expr.arguments[block_arg_index] is ExprMakeBlock)) {
             return
@@ -411,7 +410,7 @@ class DecsQueryMacro : AstCallMacro {
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
         req.at = EcsRequestPos(expr.at)
-        var vreq = verify_request(req)
+        let vreq = verify_request(req)
         macro_verify(vreq.ok, compiling_program(), expr.at, "incorrect query, {vreq.error}")
         // @@ => [[EcsQuery ...]]
         var inscope erq_fun <- qmacro() @@ {

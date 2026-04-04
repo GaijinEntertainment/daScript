@@ -603,7 +603,7 @@ def current_ball_speed() : float {
 def spawn_bonus(pos : float3) {
     if (game_random() > BONUS_DROP_CHANCE) { return ; }
     let btype = int(game_random() * float(NUM_BONUS_TYPES)) % NUM_BONUS_TYPES
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
             pos = float3(pos.x, pos.y, pos.z),
             bonus_type = btype,
@@ -626,10 +626,10 @@ def activate_bonus(btype : int) {
             let speed = length(velocities[i])
             let vel1 = normalize(float3(velocities[i].x + sin(0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
             let vel2 = normalize(float3(velocities[i].x + sin(-0.5) * speed * 0.3, 0.0, velocities[i].z)) * speed
-            create_entity <| @(eid, cmp) {
+            create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel1))
             }
-            create_entity <| @(eid, cmp) {
+            create_entity() @(eid, cmp) {
                 apply_decs_template(cmp, Ball(pos = p, vel = vel2))
             }
         }
@@ -753,7 +753,7 @@ struct Ball {
 }
 
 def spawn_ball(px, vx : float) {
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Ball(
             pos = float3(px, BALL_RADIUS, BALL_START_Z),
             vel = normalize(float3(vx, 0.0, 1.0)) * BALL_SPEED
@@ -762,7 +762,7 @@ def spawn_ball(px, vx : float) {
 }
 
 def spawn_ball_on_paddle() {
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Ball(
             pos = float3(paddle_x, BALL_RADIUS, PADDLE_Z + PADDLE_D * 0.5 + BALL_RADIUS),
             vel = float3(0.0),
@@ -963,7 +963,7 @@ def spawn_particles(origin : float3; color : float3; count : int = 8) {
         let vel = float3(cos(angle) * speed, elevation * speed, sin(angle) * speed)
         let lt = 0.3 + game_random() * 0.4
         let r = 0.05 + game_random() * 0.08
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             apply_decs_template(cmp, Particle(pos = origin, vel = vel, color = color,
                 lifetime = lt, max_life = lt, radius = r))
         }
@@ -983,7 +983,7 @@ def spawn_pickup_vfx(origin : float3; color : float3) {
         let c = lerp(color, float3(1.0), game_random() * 0.3)
         let lt = 0.25 + game_random() * 0.2
         let r = 0.03 + game_random() * 0.03
-        create_entity <| @(eid, cmp) {
+        create_entity() @(eid, cmp) {
             apply_decs_template(cmp, Particle(pos = origin, vel = vel, color = c,
                 lifetime = lt, max_life = lt, radius = r))
         }
@@ -1160,7 +1160,7 @@ struct CmdBonusTypeArgs {
 def cmd_spawn_bonus(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdBonusTypeArgs>)
     let btype = int(args._type)
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
             pos = float3(paddle_x, 0.3, 5.0),
             bonus_type = btype,
@@ -1179,7 +1179,7 @@ def cmd_decs_dump(input : JsonValue?) : JsonValue? {
 def cmd_drop_powerup(input : JsonValue?) : JsonValue? {
     let args = from_JV(input, type<CmdBonusTypeArgs>)
     let btype = int(args._type)
-    create_entity <| @(eid, cmp) {
+    create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bonus(
             pos = float3(paddle_x, 0.3, PADDLE_Z + 3.0),
             bonus_type = btype,

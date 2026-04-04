@@ -480,7 +480,7 @@ class CoveragePass : AstPassMacro {
         var astVisitor = new CoverageMacro()
         var inscope astVisitorAdapter <- make_visitor(*astVisitor)
         visit_module(prog, astVisitorAdapter, mod)
-        var result = astVisitor.astChanged
+        let result = astVisitor.astChanged
         if (result) {
             // generate [init] function that registers all instrumented lines with 0 hits
             var inscope initFn <- qmacro_function("__coverage_init") $() {

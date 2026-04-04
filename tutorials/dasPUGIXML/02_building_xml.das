@@ -29,7 +29,7 @@ def creating_document() {
     with_doc() $(doc) {
         // Add a root element using the low-level pugixml API
         var dnode = doc as xml_node
-        var root = append_child(dnode, "greeting")
+        let root = append_child(dnode, "greeting")
         set(root.text, "Hello, World!")
         print(to_string(doc))
     }
