@@ -716,9 +716,15 @@ extern "C" {
         }
     }
 
-    static pair<string, string> get_real_lib_linker_paths(const char * dasLib, const char * customLinker) {
+    static pair<string, string> get_real_lib_linker_paths(const char * dasLib, const char * customLinker, bool isShared) {
         string linker = customLinker != nullptr ? customLinker : "";
         string dasLibrary = dasLib != nullptr ? dasLib : "";
+        // Link standalone executables against runtime library
+
+        // // todo(aleksisch): uncomment when dynamic modules loading supported
+        // // in JIT standalone exe.
+        // string libName = isShared ? "DaScriptDyn" : "DaScriptDyn_runtime";
+        string libName = "DaScriptDyn";
         if (linker.empty() || dasLibrary.empty()) {
             #if defined(_WIN32) || defined(_WIN64)
                 if (linker.empty()) {
@@ -728,7 +734,7 @@ extern "C" {
                     const auto path = get_prefix(getExecutableFileName());
                     const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
                     const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
-                    dasLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
+                    dasLibrary = getDasRoot() + "/lib/" + windowsConfig + "lib" + libName + ".lib";
                 }
             #else
                 if (linker.empty()) {
@@ -736,9 +742,9 @@ extern "C" {
                 }
                 if (dasLibrary.empty()) {
                 #if defined(__APPLE__)
-                    dasLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.dylib";
+                    dasLibrary = getDasRoot() + "/lib/liblib" + libName + ".dylib";
                 #else
-                    dasLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.so";
+                    dasLibrary = getDasRoot() + "/lib/liblib" + libName + ".so";
                 #endif
                 }
             #endif
@@ -749,7 +755,7 @@ extern "C" {
 #if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     void create_shared_library ( const char * objFilePath, const char * libraryName, [[maybe_unused]] const char * dasLib, const char * customLinker, bool isShared, Context *context ) {
         char cmd[1024];
-        const auto [linker, dasLibrary] = get_real_lib_linker_paths(dasLib, customLinker);
+        const auto [linker, dasLibrary] = get_real_lib_linker_paths(dasLib, customLinker, isShared);
 
         #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
         if (!check_file_present(dasLibrary.c_str())) {
@@ -844,7 +850,6 @@ extern "C" {
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
             addBuiltinDependency(lib, Module::require("rtti_core"));
-            addBuiltinDependency(lib, Module::require("ast_core"));
             addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;
@@ -931,9 +936,6 @@ extern "C" {
                 SideEffects::none, "das_get_jit_iterator_close");
             addExtern<DAS_BIND_FUN(das_get_jit_ast_typedecl)>(*this, lib, "get_jit_ast_typedecl",
                 SideEffects::none, "das_get_jit_ast_typedecl");
-            addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
-                SideEffects::none, "das_get_builtin_function_address")
-                    ->args({"fn","context","at"});
             addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
                 SideEffects::none, "das_get_jit_new")->args({"ann"});
             addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",

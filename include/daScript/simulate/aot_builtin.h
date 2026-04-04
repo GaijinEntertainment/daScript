@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/simulate/runtime_iterator.h"
+
 namespace das {
     DAS_API bool das_is_dll_build();
     DAS_API bool is_in_aot();

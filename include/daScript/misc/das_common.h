@@ -45,6 +45,9 @@ namespace das {
         return sorted_vector;
     }
 
+
+    bool starts_with ( const string & name, const char * template_name );
+
 }
 
 #endif //DAS_DAS_COMMON_H

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/runtime_table.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/simulate/hash.h"

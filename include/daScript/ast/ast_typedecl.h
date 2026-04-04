@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast_typefactory.h"
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/jit_abi.h"
 #include "daScript/misc/free_list.h"
 #include <limits.h> // ULONG_MAX
