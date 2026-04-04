@@ -237,6 +237,11 @@ namespace das {
             } else if ( expr->rtti_isR2V() ) {
                 auto rr = (ExprRef2Value *)expr;
                 propagateWrite(rr->subexpr.get());
+            } else if ( expr->rtti_isCallFunc() ) {
+                auto call = (ExprCallFunc *) expr;
+                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty) ) {
+                    propagateWrite(call->arguments[0].get());
+                }
             }
         }
         void propagateWriteViaCopyOrMove ( Expression * expr ) {
@@ -288,6 +293,9 @@ namespace das {
             } else if ( expr->rtti_isCallFunc() ) {
                 auto call = (ExprCallFunc *) expr;
                 call->write = true;
+                if ( call->func && (call->func->propertyFunction || call->func->isCustomProperty) ) {
+                    propagateWriteViaCopyOrMove(call->arguments[0].get());
+                }
             }
         }
         uint32_t getSideEffects ( const FunctionPtr & fnc ) {

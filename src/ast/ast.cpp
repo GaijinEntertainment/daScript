@@ -901,6 +901,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setCustomProperty() {
+        isCustomProperty = true;
+        return this;
+    }
+
     FunctionPtr Function::setAotTemplate() {
         aotTemplate = true;
         return this;

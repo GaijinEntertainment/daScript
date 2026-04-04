@@ -855,6 +855,7 @@ namespace das
         string getAotName(ExprCallFunc * call) const;
         string getAotArgumentPrefix(ExprCallFunc * call, int index) const;
         string getAotArgumentSuffix(ExprCallFunc * call, int index) const;
+        FunctionPtr setCustomProperty();
         FunctionPtr setAotTemplate();
         FunctionPtr setAnyTemplate();
         FunctionPtr setTempResult();
@@ -981,6 +982,7 @@ namespace das
                 bool    hasTryRecover : 1;           // has try { } recover { }
                 bool    hasUnsafe : 1;               // has unsafe { }
                 bool    isConstClassMethod : 1;      // method is const
+                bool    isCustomProperty : 1;        // this is a user function which looks like a property ("`name")
             };
             uint32_t moreFlags = 0;
         };
