@@ -771,7 +771,7 @@ public:
                 ->args({"doc","content","result","options"});
         addExtern<DAS_BIND_FUN(pugiDocumentElement),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`document_element",
             SideEffects::none, "pugiDocumentElement")
-                ->args({"document"});
+                ->args({"document"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiSaveDocumentToFile)> (*this, lib, "save_file",
             SideEffects::modifyExternal, "pugiSaveDocumentToFile")
                 ->args({"document","filename","indent","flags","encoding"});
@@ -794,37 +794,37 @@ public:
                 ->args({"node","name"});
         addExtern<DAS_BIND_FUN(pugiNodeFirstChild),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`first_child",
             SideEffects::none, "pugiNodeFirstChild")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeLastChild),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`last_child",
             SideEffects::none, "pugiNodeLastChild")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeNextSibling),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`next_sibling",
             SideEffects::none, "pugiNodeNextSibling")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeNextSiblingByName),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, "next_sibling",
             SideEffects::none, "pugiNodeNextSiblingByName")
                 ->args({"node","name"});
         addExtern<DAS_BIND_FUN(pugiNodePreviousSibling),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`previous_sibling",
             SideEffects::none, "pugiNodePreviousSibling")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodePreviousSiblingByName),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, "previous_sibling",
             SideEffects::none, "pugiNodePreviousSiblingByName")
                 ->args({"node","name"});
         addExtern<DAS_BIND_FUN(pugiNodeParent),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`parent",
             SideEffects::none, "pugiNodeParent")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeRoot),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`root",
             SideEffects::none, "pugiNodeRoot")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeFirstAttribute),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`first_attribute",
             SideEffects::none, "pugiNodeFirstAttribute")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeLastAttribute),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`last_attribute",
             SideEffects::none, "pugiNodeLastAttribute")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeText),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`text",
             SideEffects::none, "pugiNodeText")
-                ->args({"node"});
+                ->args({"node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiNodeChildValue)> (*this, lib, ".`child_value",
             SideEffects::none, "pugiNodeChildValue")
                 ->args({"node"});
@@ -957,10 +957,10 @@ public:
                 ->args({"attribute","default_value"});
         addExtern<DAS_BIND_FUN(pugiAttributeNextAttribute),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`next_attribute",
             SideEffects::none, "pugiAttributeNextAttribute")
-                ->args({"attribute"});
+                ->args({"attribute"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiAttributePreviousAttribute),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`previous_attribute",
             SideEffects::none, "pugiAttributePreviousAttribute")
-                ->args({"attribute"});
+                ->args({"attribute"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiAttributeHashValue)> (*this, lib, ".`hash_value",
             SideEffects::none, "pugiAttributeHashValue")
                 ->args({"attribute"});
@@ -1109,13 +1109,13 @@ public:
         // xpath_node accessors
         addExtern<DAS_BIND_FUN(pugiXPathNodeNode),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`node",
             SideEffects::none, "pugiXPathNodeNode")
-                ->args({"xpath_node"});
+                ->args({"xpath_node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiXPathNodeAttribute),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`attribute",
             SideEffects::none, "pugiXPathNodeAttribute")
-                ->args({"xpath_node"});
+                ->args({"xpath_node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiXPathNodeParent),SimNode_ExtFuncCallAndCopyOrMove> (*this, lib, ".`parent",
             SideEffects::none, "pugiXPathNodeParent")
-                ->args({"xpath_node"});
+                ->args({"xpath_node"})->setCustomProperty();
         addExtern<DAS_BIND_FUN(pugiXPathNodeOk)> (*this, lib, ".`ok",
             SideEffects::none, "pugiXPathNodeOk")
                 ->args({"xpath_node"});
