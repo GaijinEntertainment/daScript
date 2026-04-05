@@ -16,11 +16,12 @@ IF(NOT DAS_PEG_INCLUDED)
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasPEG
     )
 
-    # Note: tutorials 01, 02, 06 print PEG error messages that MSBuild
-    # misinterprets as build errors (": error :" pattern in stdout).
+    ADD_EXAMPLE_RUN(tutorials/dasPEG/01_hello_parser.das)
+    ADD_EXAMPLE_RUN(tutorials/dasPEG/02_calculator.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/03_csv_parser.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/04_email_validator.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/05_json_parser.das)
+    ADD_EXAMPLE_RUN(tutorials/dasPEG/06_debugging.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/07_basic.das)
 
 ENDIF()
