@@ -210,7 +210,8 @@ extern "C" {
     public:
         ~JitContext() = default;
         JitContext(size_t totalVariables, size_t totalFunctions, size_t globalStringHeapSize,
-                  size_t globSize, size_t shrSize, bool pinvoke) {
+                  size_t globSize, size_t shrSize, bool pinvoke, uint32_t stackSize = 16*1024)
+            : Context(stackSize) {
             auto &context = *this;
             CodeOfPolicies policies;
             policies.debugger = false;
@@ -289,9 +290,11 @@ extern "C" {
                                                   uint64_t globalStringHeapSize,
                                                   uint64_t globalsSize,
                                                   uint64_t sharedSize,
-                                                  bool pinvoke) {
+                                                  bool pinvoke,
+                                                  uint64_t stackSize) {
         Context *context = new JitContext(totalVariables, totalFunctions, globalStringHeapSize,
-                                         globalsSize, sharedSize, pinvoke);
+                                         globalsSize, sharedSize, pinvoke,
+                                         stackSize ? (uint32_t)stackSize : 16*1024);
         static_cast<JitContext *>(context)->allocFunctions(totalFunctions);
         return context;
     }
