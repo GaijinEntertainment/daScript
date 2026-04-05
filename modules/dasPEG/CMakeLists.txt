@@ -17,10 +17,10 @@ IF(NOT DAS_PEG_INCLUDED)
     )
 
     # Note: tutorials 01, 02, 06 print PEG error messages that MSBuild
-    # misinterprets as build errors (": error :" pattern); tutorials 02, 05
-    # crash as standalone LLVM exe (pre-existing PEG macro codegen issue).
+    # misinterprets as build errors (": error :" pattern in stdout).
     ADD_EXAMPLE_RUN(tutorials/dasPEG/03_csv_parser.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/04_email_validator.das)
+    ADD_EXAMPLE_RUN(tutorials/dasPEG/05_json_parser.das)
     ADD_EXAMPLE_RUN(tutorials/dasPEG/07_basic.das)
 
 ENDIF()

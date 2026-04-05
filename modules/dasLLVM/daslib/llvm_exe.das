@@ -543,6 +543,15 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         jit_set_cmd_args, fixed_array(argc, argv), "")
 
 
+    // Determine the context stack size from options (mirrors Program::getContextStackSize)
+    var context_stack_size = uint64(prog.policies.stack)
+    let stack_opt = find_arg(prog._options, "stack")
+    if (stack_opt is tInt) {
+        context_stack_size = uint64(stack_opt as tInt)
+    } elif (stack_opt is tUInt) {
+        context_stack_size = uint64(stack_opt as tUInt)
+    }
+
     // Declare jit_create_standalone_ctx
     let create_ctx_type = LLVMFunctionType(types.LLVMVoidPtrType(),
         fixed_array<LLVMTypeRef>(
@@ -552,6 +561,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             types.t_int64,         // globalsSize
             types.t_int64,         // sharedSize
             types.t_int1,          // pinvoke
+            types.t_int64,         // stackSize
         )
     )
     var jit_create_context = LLVMAddFunctionWithType(
@@ -563,7 +573,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         types.ConstI64(prog.globalStringHeapSize |> uint64),
         types.ConstI64(get_context_globals_size(program_context)),
         types.ConstI64(get_context_shared_size(program_context)),
-        types.ConstI1(any_pinvoke || prog.policies.threadlock_context || prog.policies.debugger)
+        types.ConstI1(any_pinvoke || prog.policies.threadlock_context || prog.policies.debugger),
+        types.ConstI64(context_stack_size)
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")
 
