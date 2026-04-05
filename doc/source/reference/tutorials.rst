@@ -4,12 +4,13 @@
   Tutorials
 *****************************
 
-This section provides hands-on tutorials organized into four groups:
+This section provides hands-on tutorials organized by topic:
 
 * **Language Tutorials** — learn daslang syntax and standard library features
 * **C Integration Tutorials** — embed daslang in a C host using the ``daScriptC.h`` API
 * **C++ Integration Tutorials** — embed daslang in a C++ host using the native ``daScript.h`` API
 * **Macro Tutorials** — write compile-time code transformations using the daslang macro system
+* **Module Tutorials** — dasHV (HTTP), dasPUGIXML (XML), dasStbImage, dasAudio, dasPEG (parser generator)
 
 .. _tutorials_language:
 
@@ -290,3 +291,30 @@ Run any tutorial from the project root::
    tutorials/dasAudio_06_streaming.rst
    tutorials/dasAudio_07_wav_io.rst
    tutorials/dasAudio_08_midi.rst
+
+.. _tutorials_daspeg:
+
+dasPEG (Parser Generator) Tutorials
+====================================
+
+These tutorials cover the ``peg`` module --- daslang's built-in PEG
+(Parsing Expression Grammar) parser generator.  Define grammars
+directly in daslang using the ``parse`` macro; the compiler generates
+a packrat parser at compile time.
+
+The companion ``.das`` files are in ``tutorials/dasPEG/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/dasPEG/01_hello_parser.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/dasPEG_01_hello_parser.rst
+   tutorials/dasPEG_02_calculator.rst
+   tutorials/dasPEG_03_csv_parser.rst
+   tutorials/dasPEG_04_email_validator.rst
+   tutorials/dasPEG_05_json_parser.rst
+   tutorials/dasPEG_06_debugging.rst
+   tutorials/dasPEG_07_basic_interpreter.rst
