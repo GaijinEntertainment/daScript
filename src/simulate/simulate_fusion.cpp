@@ -249,3 +249,7 @@ namespace das {
     }
 }
 
+extern "C" DAS_CC_API void jit_register_fusion () {
+    register_fusion();
+}
+

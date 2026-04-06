@@ -581,6 +581,7 @@ namespace das {
             // libs
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
+            addBuiltinDependency(lib, Module::require("rtti_core"));
             // types
             addAnnotation(new JobStatusAnnotation(lib));
             auto cha = new ChannelAnnotation(lib);
