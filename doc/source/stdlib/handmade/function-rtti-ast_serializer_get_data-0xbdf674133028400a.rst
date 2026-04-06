@@ -1,0 +1,1 @@
+Returns content of serializer.

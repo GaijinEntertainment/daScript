@@ -7,8 +7,10 @@ require strings
 require uriparser
 require daslib/debugger
 require daslib/ast
+require daslib/ast_boost
 require daslib/json_boost
 require daslib/jobque_boost
+require daslib/rtti
 
 require fs
 require suite
@@ -145,6 +147,113 @@ struct IsolatedResult {
     log : array<string>
 }
 
+def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
+    var res : SuiteResult
+    fopen(out_file, "wb") $(f) {
+        if (f == null) {
+            log::error("Failed to open {out_file} for writing")
+            res.errors++
+            return
+        }
+        var ser = create_ast_serializer()
+        var inscope access <- make_file_access(ctx.projectPath)
+        access |> add_file_access_root("dastest", ctx.dastestRoot)
+        for (file in files) {
+            using() $(var mg : ModuleGroup) {
+                using() $(var cop : CodeOfPolicies) {
+                    cop.aot_module = true
+                    cop.aot = ctx.use_aot
+                    cop.fail_on_no_aot = ctx.use_aot
+                    cop.threadlock_context = true
+                    cop.jit_enabled = jit_enabled()
+                    compile_file(file, access, unsafe(addr(mg)), cop) $(ok, program, output) {
+                        if (!ok) {
+                            log::error("Failed to compile {file}\n{output}")
+                            res.errors++
+                            return
+                        }
+                        if (serialize_program(ser, program)) {
+                            res.total++
+                        } else {
+                            log::error("Failed to serialize {file}")
+                            res.errors++
+                        }
+                    }
+                }
+            }
+        }
+        fwrite(f, res.total)
+        ast_serializer_get_data(ser) $(data) {
+            var sz = uint64(length(data))
+            fwrite(f, sz)
+            fwrite(f, data)
+        }
+        delete_ast_serializer(ser)
+    }
+    log::info("Serialized {res.total:d} programs to {out_file}")
+    if (res.errors > 0) {
+        log::error("{res.errors} error(s)")
+    }
+    unsafe {
+        fio::exit(res.errors > 0 ? 1 : 0)
+    }
+    return res
+}
+
+def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string) : SuiteResult {
+    var res : SuiteResult
+    fopen(in_file, "rb") $(f) {
+        if (f == null) {
+            log::error("Failed to open {in_file}")
+            res.errors++
+            res.total++
+            return
+        }
+        var count = 0
+        unsafe {
+            _builtin_read(f, addr(count), typeinfo sizeof(count))
+        }
+        var sz = 0 |> uint64()
+        unsafe {
+            _builtin_read(f, addr(sz), typeinfo sizeof(sz))
+        }
+        var data : array<uint8>
+        data |> resize(int(sz))
+        fread(f, data)
+        log::info("Deserializing {count:d} programs from {in_file}")
+        var ser = create_ast_deserializer(data)
+        using() $(var mg : ModuleGroup) {
+            for (i in range(int(count))) {
+                deserialize_program(ser) <| $(ok, program, error) {
+                    if (!ok) {
+                        log::error("Deserialization failed at program {i}: {error}")
+                        res.errors++
+                        res.total++
+                        return
+                    }
+                    if (program._options |> find_arg("rtti") ?as tBool ?? false) {
+                        return
+                    }
+                    simulate(program) $(sok, context, serrors) {
+                        if (!sok) {
+                            log::error("Failed to simulate program {i}\n{serrors}")
+                            res.errors++
+                            res.total++
+                            return
+                        }
+                        var mod = program |> get_this_module()
+                        if (mod != null && context != null) {
+                            res += suite::test_module(*mod, *context, ctx)
+                        }
+                    }
+                }
+            }
+        }
+        delete_ast_serializer(ser)
+    }
+    return res
+}
+
 [export]
 def main() {
     var args <- get_command_line_arguments()
@@ -219,7 +328,14 @@ def main() {
     if (!ctx.cov_path |> empty()) {
         remove(ctx.cov_path)
     }
-    if (!isolatedMode) {
+
+    let ser_file = args |> get_str_arg("--ser", "")
+    let deser_file = args |> get_str_arg("--deser", "")
+    if (!empty(ser_file)) {
+        res = serialize_path(ctx, files, ser_file)
+    } elif (!empty(deser_file)) {
+        res = deserialize_path(ctx, files, deser_file)
+    } elif (!isolatedMode) {
         for (file in files) {
             let uri = ctx.uriPaths ? file_name_to_uri(file) : file
             let fileTime = ref_time_ticks()

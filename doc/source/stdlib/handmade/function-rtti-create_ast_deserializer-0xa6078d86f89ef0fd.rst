@@ -1,0 +1,1 @@
+Creates deserializer. As an input expects output of ast_serializer_get_data.
