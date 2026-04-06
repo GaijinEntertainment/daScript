@@ -1,0 +1,1 @@
+Creates serializer object.

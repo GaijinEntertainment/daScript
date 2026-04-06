@@ -1,0 +1,1 @@
+Deserializes all programs from file and calls block on each of them.

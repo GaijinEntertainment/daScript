@@ -9,6 +9,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 
 #include "daScript/misc/performance_time.h"
+#include "daScript/ast/ast_serializer.h"
 
 using namespace das;
 
@@ -38,6 +39,7 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Context,Context)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(SimFunction,SimFunction)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(CodeOfPolicies,CodeOfPolicies)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(recursive_mutex,das::recursive_mutex)
+IMPLEMENT_EXTERNAL_TYPE_FACTORY(AstSerializer,das::AstSerializerState)
 
 DAS_BASE_BIND_ENUM(das::CompilationError, CompilationError,
         unspecified
@@ -241,6 +243,12 @@ namespace das {
     struct AstModuleGroupAnnotation : ManagedStructureAnnotation<ModuleGroup, true, true> {
         AstModuleGroupAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ModuleGroup", ml) {
+        }
+    };
+
+    struct AstSerializerAnnotation : ManagedStructureAnnotation<AstSerializerState, false, false> {
+        AstSerializerAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("AstSerializer", ml) {
         }
     };
 
@@ -1489,6 +1497,7 @@ namespace das {
             addAnnotation(make_smart<FileAccessAnnotation>(lib));
             addAnnotation(make_smart<ModuleAnnotation>(lib));
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
+            addAnnotation(make_smart<AstSerializerAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
             addVectorAnnotation<AnnotationArguments>(this,lib,"AnnotationArguments");
@@ -1574,6 +1583,23 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_simulate)>(*this, lib, "simulate",
                 SideEffects::modifyExternal, "rtti_builtin_simulate")
                     ->args({"program","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_create_ast_serializer)>(*this, lib, "create_ast_serializer",
+                SideEffects::modifyExternal, "rtti_create_ast_serializer");
+            addExtern<DAS_BIND_FUN(rtti_create_ast_deserializer)>(*this, lib, "create_ast_deserializer",
+                SideEffects::modifyExternal, "rtti_create_ast_deserializer")
+                    ->args({"data"});
+            addExtern<DAS_BIND_FUN(rtti_delete_ast_serializer)>(*this, lib, "delete_ast_serializer",
+                SideEffects::modifyExternal, "rtti_delete_ast_serializer")
+                    ->args({"serializer"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_serialize_program)>(*this, lib, "serialize_program",
+                SideEffects::modifyExternal, "rtti_ast_serializer_serialize_program")
+                    ->args({"serializer","program"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_deserialize_program)>(*this, lib, "deserialize_program",
+                SideEffects::modifyExternal, "rtti_ast_serializer_deserialize_program")
+                    ->args({"serializer","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_ast_serializer_get_data)>(*this, lib, "ast_serializer_get_data",
+                SideEffects::modifyExternal, "rtti_ast_serializer_get_data")
+                    ->args({"serializer","block","context","line"});
             addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
                 SideEffects::modifyExternal, "makeFileAccess")
                     ->args({"project","context","at"});

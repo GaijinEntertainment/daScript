@@ -2470,4 +2470,62 @@ namespace das {
         allocateStack(logs,true,false);
     }
 
+    AstSerializerState * rtti_create_ast_serializer () {
+        auto state = new AstSerializerState();
+        state->storage = make_unique<SerializationStorageVector>();
+        state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
+        return state;
+    }
+
+    AstSerializerState * rtti_create_ast_deserializer ( const TArray<uint8_t> & data ) {
+        auto state = new AstSerializerState();
+        state->storage = make_unique<SerializationStorageVector>();
+        state->storage->buffer.assign(data.data, data.data + data.size);
+        state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
+        return state;
+    }
+
+    void rtti_delete_ast_serializer ( AstSerializerState * state ) {
+        if ( state ) {
+            state->serializer->moduleLibrary = nullptr;
+            delete state;
+        }
+    }
+
+    bool rtti_ast_serializer_serialize_program (
+            AstSerializerState * state,
+            const smart_ptr<Program> & program ) {
+        auto & prog = const_cast<smart_ptr<Program> &>(program);
+        prog->serialize(*state->serializer);
+        return !prog->failToCompile;
+    }
+
+    void rtti_ast_serializer_deserialize_program (
+            AstSerializerState * state,
+            const TBlock<void,bool,smart_ptr<Program>,const string> & block,
+            Context * context, LineInfoArg * at ) {
+        auto prog = make_smart<Program>();
+        prog->serialize(*state->serializer);
+        if ( prog->failToCompile ) {
+            string err = "deserialization failed";
+            das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
+                context, at, block, false, ProgramPtr(), err);
+            return;
+        }
+        string okStr;
+        das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
+            context, at, block, true, prog, okStr);
+    }
+
+    void rtti_ast_serializer_get_data (
+            AstSerializerState * state,
+            const TBlock<void,TTemporary<TArray<uint8_t> const>> & block,
+            Context * context, LineInfoArg * at ) {
+        Array arr;
+        array_mark_locked(arr, state->storage->buffer.data(),
+            uint32_t(state->storage->buffer.size()), uint32_t(state->storage->buffer.size()));
+        vec4f args[1] = { cast<Array *>::from(&arr) };
+        context->invoke(block, args, nullptr, at);
+    }
+
 }

@@ -1,0 +1,1 @@
+Frees memory for ast_serializer.
