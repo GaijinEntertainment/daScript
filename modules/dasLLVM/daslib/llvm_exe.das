@@ -522,13 +522,47 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
 
-    // Init modules. Right now we init only builtin modules.
-    // Custom modules is not implemented yet.
+    // Init builtin modules
     let das_initialize_type = LLVMFunctionType(types.t_void,
         array<LLVMTypeRef>()
     )
     var das_initialize = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules", das_initialize_type)
     LLVMBuildCall2(builder, das_initialize_type, das_initialize, array<LLVMValueRef>(), "")
+
+    // Register dynamic modules that were loaded during compilation
+    let reg_dyn_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(),
+        fixed_array<LLVMTypeRef>(
+            types.LLVMVoidPtrType(), // const char * path
+            types.LLVMVoidPtrType()  // const char * mod_name
+        )
+    )
+    var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module", reg_dyn_mod_type)
+    for_each_registered_dynamic_module() <| $(path, mod_name) {
+        let path_str = get_string_constant_ptr(builder, path)
+        let name_str = get_string_constant_ptr(builder, mod_name)
+        LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(path_str, name_str), "")
+    }
+
+    // Register native paths (das include paths) that were loaded during compilation
+    let reg_native_path_type = LLVMFunctionType(types.t_void,
+        fixed_array<LLVMTypeRef>(
+            types.LLVMVoidPtrType(), // const char * mod_name
+            types.LLVMVoidPtrType(), // const char * src_path
+            types.LLVMVoidPtrType()  // const char * dst_path
+        )
+    )
+    var jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path", reg_native_path_type)
+    for_each_registered_native_path() <| $(mod_name, src_path, dst_path) {
+        let mod_str = get_string_constant_ptr(builder, mod_name)
+        let src_str = get_string_constant_ptr(builder, src_path)
+        let dst_str = get_string_constant_ptr(builder, dst_path)
+        LLVMBuildCall2(builder, reg_native_path_type, jit_reg_native_path, fixed_array(mod_str, src_str, dst_str), "")
+    }
+
+    // Finalize module initialization after all dynamic modules are registered
+    let init_done_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
+    var jit_init_done = LLVMAddFunctionWithType(g_mod, "jit_initialize_modules_done", init_done_type)
+    LLVMBuildCall2(builder, init_done_type, jit_init_done, array<LLVMValueRef>(), "")
 
     // Init argc, argv
     let set_cmd_args_type = LLVMFunctionType(types.t_void,

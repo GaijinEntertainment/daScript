@@ -35,6 +35,10 @@
 #include <inttypes.h>
 
 namespace das {
+    // forward declarations from module_builtin_fio.cpp
+    void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
+    void register_native_path(const char *, const char *, const char *, Context *, LineInfoArg *);
+
     typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
 
     struct SimNode_Jit : SimNode {
@@ -992,20 +996,32 @@ extern "C" {
 REGISTER_MODULE_IN_NAMESPACE(Module_Jit,das);
 
 static void init() {
-    NEED_ALL_DEFAULT_MODULES;
+    NEED_MODULE(Module_BuiltIn);
+    NEED_MODULE(Module_Math);
+    NEED_MODULE(Module_Strings);
+    NEED_MODULE(Module_Rtti);
+    NEED_MODULE(Module_Debugger);
+    NEED_MODULE(Module_FIO);
+    NEED_MODULE(Module_DASBIND);
     NEED_MODULE(Module_UriParser);
     NEED_MODULE(Module_JobQue);
 }
 
 extern "C" {
 DAS_API void jit_initialize_modules () {
-    init();
-#ifdef DAS_ENABLE_DYN_INCLUDES
     das::daScriptEnvironment::ensure();
-    auto access = das::make_smart<das::FsFileAccess>();
-    das::TextPrinter tout;
-    das::require_dynamic_modules(access, das::getDasRoot(), "", tout);
-#endif
+    init();
+}
+
+DAS_API void jit_initialize_modules_done () {
     das::Module::Initialize();
+}
+
+DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
+    return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
+}
+
+DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {
+    das::register_native_path(mod_name, src_path, dst_path, nullptr, nullptr);
 }
 }
