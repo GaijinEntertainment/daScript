@@ -2140,6 +2140,15 @@ namespace das {
         void visit( Module * mod ) {
             if ( visited[mod] != NOT_SEEN ) return;
             visited[mod] = IN_PROGRESS;
+            // visibleEverywhere modules (!inscope)
+            // are implicit dependencies of every other module
+            if ( !mod->visibleEverywhere ) {
+                for ( const auto dep : input ) {
+                    if ( dep != mod && dep->visibleEverywhere ) {
+                        visit(dep);
+                    }
+                }
+            }
             for ( auto [module, required] : mod->requireModule ) {
                 if ( module != mod ) {
                     visit(module);
