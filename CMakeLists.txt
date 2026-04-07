@@ -627,13 +627,13 @@ SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 SET(AST_SRC
 src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp
-src/ast/ast_aot_cpp.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_infer_type_report.cpp
 src/ast/ast_infer_type_function.cpp
 src/ast/ast_infer_type_helper.cpp
 src/ast/ast_infer_type_op.cpp
 src/ast/ast_infer_type_make.cpp
+src/ast/ast_lint.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
@@ -660,7 +660,6 @@ SET(RUNTIME_DEFAULT_MODULES
     src/builtin/module_builtin_runtime.cpp
     src/builtin/module_builtin_runtime_lockcheck.cpp
     src/builtin/module_builtin_runtime_sort.cpp
-    src/builtin/module_builtin_rtti.cpp
     src/builtin/module_builtin_string.cpp
     src/builtin/module_builtin_uriparser.cpp
     src/builtin/module_builtin_vector.cpp
@@ -676,7 +675,7 @@ include/daScript/builtin/debugapi_gen.inc
 
 src/builtin/modules.cpp
 src/builtin/module_builtin.h
-src/builtin/module_builtin_rtti.h
+src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_ast_flags.cpp
 src/builtin/module_builtin_ast_annotations.cpp
@@ -703,6 +702,7 @@ src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_profile.cpp
 
+src/simulate/simulate_fn_hash.cpp
 src/simulate/simulate_gc.cpp
 src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_instrument.cpp
@@ -723,6 +723,7 @@ src/simulate/debug_print.cpp
 
 SET(RUNTIME_EXTRA_SRC
     src/ast/ast.cpp
+    src/ast/ast_aot_cpp.cpp
     src/ast/ast_interop.cpp
     src/ast/ast_tls.cpp
     src/ast/ast_visitor.cpp
@@ -734,12 +735,10 @@ SET(RUNTIME_EXTRA_SRC
     src/ast/ast_derive_alias.cpp
     src/ast/ast_inscope_pod.cpp
     src/ast/ast_annotations.cpp
-    src/ast/ast_lint.cpp
     src/ast/ast_export.cpp
     src/ast/ast_debug_info_helper.cpp
     src/ast/ast_handle.cpp
     src/ast/ast_program.cpp
-    src/ast/ast_module.cpp
 
     src/misc/gc_node.cpp
     src/misc/das_common.cpp
@@ -803,7 +802,6 @@ src/simulate/simulate.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
-src/simulate/simulate_fn_hash.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
 include/daScript/simulate/debug_info.h
