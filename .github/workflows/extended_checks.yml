@@ -136,6 +136,17 @@ jobs:
     - name: "Install ast-grep"
       run: npm install -g @ast-grep/cli
 
+    - name: "Run dasgen and check generated files are up to date"
+      run: |
+        set -eux
+        case "${{ matrix.target }}" in
+          windows) BIN=./bin/Release/ ;;
+          *)       BIN=./bin/ ;;
+        esac
+        $BIN/daslang dasgen/gen_bind.das
+        git diff --exit-code -- include/daScript/builtin/ \
+          || (echo "ERROR: Generated .inc files are out of date. Run './bin/daslang dasgen/gen_bind.das' locally and commit the result." && exit 1)
+
     - name: "Run examples from modules"
       run: cmake --build ./build --config Release --target run_examples
 
