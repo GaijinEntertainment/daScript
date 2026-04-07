@@ -35,7 +35,7 @@ namespace das
 
 // we declare Dapi version of each structure in debugger.das
 // to fake the API we need C++ version, which we now make locally
-namespace debugapi {
+namespace debugger {
     typedef Array DapiArray;
     typedef Table DapiTable;
     typedef Lambda DapiLambda;
