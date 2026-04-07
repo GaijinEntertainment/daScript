@@ -871,7 +871,7 @@ namespace das {
         Fail,           // error message is displayed and exception is thrown
     };
 
-    static vector<pair<string,string>> g_registered_dynamic_modules;
+    static vector<tuple<string,string,string>> g_registered_dynamic_modules; // path, cpp_class_name, daslang_name
     static vector<tuple<string,string,string>> g_registered_native_paths;
 
     // Returns DLL handle.
@@ -919,7 +919,7 @@ namespace das {
             return nullptr;
         }
         *ModuleKarma += unsigned(intptr_t(mod));
-        g_registered_dynamic_modules.emplace_back(path, mod_name);
+        g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
@@ -951,9 +951,9 @@ namespace das {
         }
     }
 
-    void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
-        for ( const auto & [path, mod_name] : g_registered_dynamic_modules ) {
-            das_invoke<void>::invoke<const char *,const char *>(context, at, block, path.c_str(), mod_name.c_str());
+    void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
+        for ( const auto & [path, mod_name, das_name] : g_registered_dynamic_modules ) {
+            das_invoke<void>::invoke<const char *,const char *,const char *>(context, at, block, path.c_str(), mod_name.c_str(), das_name.c_str());
         }
     }
 

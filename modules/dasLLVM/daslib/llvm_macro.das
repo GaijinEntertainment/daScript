@@ -17,6 +17,7 @@ require jit
 
 module llvm_macro shared private
 
+var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole library; when false, only against runtime
 
 struct JitState {
     dll : void?
@@ -185,8 +186,9 @@ class JIT_LLVM : AstSimulateMacro {
                     }
                 }
                 if (gen_exe) {
-                    let fn = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
-                    if (fn == null) {
+                    let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
+                    LINK_WHOLE_LIB = res.link_whole_lib
+                    if (res.fn == null) {
                         finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
                         // JIT failed. Couldn't create executable.
                         // Still return true, macro worked correctly.
@@ -222,10 +224,10 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 if (gen_exe) {
                     mkdir_rec(dir_name(output_path))
-                    write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker)
+                    write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, LINK_WHOLE_LIB)
                 } elif (use_dll) {
                     mkdir_rec(dir_name(output_path))
-                    write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker)
+                    write_dll(g_mod, output_path, path_to_shared_lib, path_to_linker, LINK_WHOLE_LIB)
 
                     // Open just stored DLL, so we can keep working.
                     g_dynamic_lib_handle.reset()

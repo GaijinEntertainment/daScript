@@ -1315,4 +1315,93 @@ namespace das {
             return res;
         }
     }
+
+    struct SubstituteModuleRefs : Visitor {
+        SubstituteModuleRefs ( Module * from, Module * to ) : to(to), from(from) {}
+        virtual void preVisit ( TypeDecl * td ) {
+            if ( td->module == from ) td->module = to;
+        }
+        Module * const to;
+        Module * const from;
+    };
+
+    //! Builtin modules are sometimes compiled from both native code and das code.
+    //! In that case das code is parsed via parseDaScript function producing ProgramPtr
+    //! It internally references itself, whereas it should actually reference the builtin module
+    //! This visitor walks the program and substitutes references from parsed to builtin module.
+    static void SubstituteBuiltinModuleRefs ( ProgramPtr program, Module * from, Module * to ) {
+        SubstituteModuleRefs subs ( from, to );
+        program->visit(subs,/*visitGenerics =*/true);
+    }
+
+    static bool appendBuiltinModuleContent ( Module * target, ProgramPtr program, const string & modName ) {
+        if ( !program ) {
+            DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
+            return false;
+        }
+        if (program->failed()) {
+            TextWriter issues;
+            for (auto & err : program->errors) {
+                issues << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            }
+            DAS_FATAL_ERROR("%s\nbuiltin module did not compile %s\n", issues.str().c_str(), modName.c_str());
+            return false;
+        }
+        // append content into target module
+        program->thisModule->aliasTypes.foreach([&](auto aliasTypePtr){
+            target->addAlias(aliasTypePtr);
+        });
+        program->thisModule->enumerations.foreach([&](auto penum){
+            target->addEnumeration(penum);
+        });
+        program->thisModule->structures.foreach([&](auto pst){
+            target->addStructure(pst);
+        });
+        program->thisModule->generics.foreach([&](auto fn){
+            target->addGeneric(fn);
+        });
+        program->thisModule->globals.foreach([&](auto gvar){
+            target->addVariable(gvar);
+        });
+        program->thisModule->functions.foreach([&](auto fn){
+            target->addFunction(fn);
+        });
+        for (auto & rqm : program->thisModule->requireModule) {
+            if ( rqm.first != target ) {
+                target->requireModule[rqm.first] |= rqm.second;
+            }
+        }
+        // macros
+        auto ptm = program->thisModule.get();
+        if ( ptm->macroContext ) {
+            swap ( target->macroContext, ptm->macroContext );
+            for ( auto & [key, fna] : ptm->handleTypes ) {
+                target->addAnnotation(fna);
+            }
+        }
+        for (auto & m : ptm->simulateMacros) target->simulateMacros.push_back(std::move(m));
+        for (auto & m : ptm->captureMacros) target->captureMacros.push_back(std::move(m));
+        for (auto & m : ptm->forLoopMacros) target->forLoopMacros.push_back(std::move(m));
+        for (auto & m : ptm->variantMacros) target->variantMacros.push_back(std::move(m));
+        for (auto & m : ptm->macros) target->macros.push_back(std::move(m));
+        for (auto & m : ptm->inferMacros) target->inferMacros.push_back(std::move(m));
+        for (auto & m : ptm->optimizationMacros) target->optimizationMacros.push_back(std::move(m));
+        for (auto & m : ptm->lintMacros) target->lintMacros.push_back(std::move(m));
+        for (auto & m : ptm->globalLintMacros) target->globalLintMacros.push_back(std::move(m));
+        for ( auto & rm : ptm->readMacros ) {
+            rm.second->seal(target);
+            target->readMacros[rm.first] = std::move(rm.second);
+        }
+        for ( auto & tm : ptm->typeMacros ) {
+            target->typeMacros[tm.first] = std::move(tm.second);
+        }
+        target->commentReader = std::move(ptm->commentReader);
+        for ( auto & op : ptm->options) {
+            DAS_ASSERTF(target->options.find(op.first)==target->options.end(),"duplicate option %s", op.first.c_str());
+            target->options[op.first] = op.second;
+        }
+        SubstituteBuiltinModuleRefs( program, program->thisModule.get(), target );
+        return true;
+    }
+
 }

@@ -1,4 +1,5 @@
 #include "daScript/misc/platform.h"
+#include "daScript/daScriptModule.h"
 
 #include <future>
 
@@ -14,6 +15,12 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpRequest,HttpRequest)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponse,HttpResponse)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpContext,hv::HttpContext)
 IMPLEMENT_EXTERNAL_TYPE_FACTORY(HttpResponseWriter,hv::HttpResponseWriter)
+
+void addDependencies() {
+    if (!das::Module::require("rtti_core")) {
+        NEED_MODULE(Module_Rtti);
+    }
+}
 
 namespace das {
 
@@ -1125,6 +1132,7 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        addDependencies();
         lib.addModule(Module::require("rtti_core"));
         addEnumeration(new Enumeration_ws_opcode());
         addEnumeration(new Enumeration_ws_session_type());

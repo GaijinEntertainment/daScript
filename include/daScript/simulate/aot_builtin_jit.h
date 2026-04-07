@@ -3,8 +3,42 @@
 #include "daScript/misc/vectypes.h"
 #include "daScript/misc/arraytype.h"
 #include "daScript/misc/smart_ptr.h"
+#include "daScript/simulate/simulate.h"
 
 namespace das {
+
+
+    typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
+
+    struct SimNode_Jit : SimNode {
+        SimNode_Jit ( const LineInfo & at, JitFunction eval )
+            : SimNode(at), func(eval) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        virtual bool rtti_node_isJit() const override { return true; }
+        JitFunction func = nullptr;
+        // saved original node
+        SimNode * saved_code = nullptr;
+        bool saved_aot = false;
+        void * saved_aot_function = nullptr;
+    };
+
+    struct SimNode_JitBlock;
+
+    struct JitBlock : Block {
+        vec4f   node[10];
+    };
+
+    struct SimNode_JitBlock : SimNode_ClosureBlock {
+        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval, Block * bptr, uint64_t ad )
+            : SimNode_ClosureBlock(at,false,false,ad), func(eval), blockPtr(bptr) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        JitBlockFunction func = nullptr;
+        Block * blockPtr = nullptr;
+    };
+    static_assert(sizeof(SimNode_JitBlock)<=sizeof(JitBlock().node),"jit block node must fit under node size");
+
 
     class Context;
     struct LineInfo;

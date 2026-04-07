@@ -1260,6 +1260,7 @@ namespace das
         gc_root                                     module_gc_root;     // gc_node root for this module's gc-managed AST nodes
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
+        string                                      cppClassName;       // C++ class name (e.g. "Module_Math"), set by REGISTER_MODULE
         uint64_t                                    nameHash = 0;
         string                                      fileName;           // where the module was found, if not built-in
         union {
@@ -1279,15 +1280,21 @@ namespace das
         };
     private:
         Module * next = nullptr;
+        friend bool appendBuiltinModuleContent ( Module* mod, const string & modName, const unsigned char * const str, unsigned int str_len );
         unique_ptr<FileInfo>    ownFileInfo;
         FileAccessPtr           promotedAccess;
     };
+    bool appendBuiltinModuleContent ( Module* mod, const string & modName, const unsigned char * const str, unsigned int str_len );
 
     #define REGISTER_MODULE(ClassName) \
         DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             ClassName * module_##ClassName = new ClassName(); \
+            module_##ClassName->cppClassName = #ClassName; \
             return module_##ClassName; \
+        } \
+        extern "C" DAS_EXPORT_DLL das::Module * jit_register_##ClassName () { \
+            return register_##ClassName(); \
         }
 
     #if DAS_ENABLE_DLL
@@ -1297,6 +1304,7 @@ namespace das
                 if ( buildId != DAS_BUILD_ID ) return nullptr; \
                 das::daScriptEnvironment::ensure(); \
                 ClassName * module_##ClassName = new ClassName(); \
+                module_##ClassName->cppClassName = #ClassName; \
                 return module_##ClassName; \
             } \
         }
@@ -1312,7 +1320,11 @@ namespace das
         DAS_EXPORT_DLL das::Module * register_##ClassName () { \
             das::daScriptEnvironment::ensure(); \
             Namespace::ClassName * module_##ClassName = new Namespace::ClassName(); \
+            module_##ClassName->cppClassName = #ClassName; \
             return module_##ClassName; \
+        } \
+        extern "C" DAS_EXPORT_DLL das::Module * jit_register_##ClassName () { \
+            return register_##ClassName(); \
         }
 
     using module_pull_t = das::Module*(*)();

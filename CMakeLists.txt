@@ -652,9 +652,7 @@ SET(RUNTIME_DEFAULT_MODULES
     src/builtin/module_builtin_array.cpp
     src/builtin/module_builtin_ast_serialize.cpp
     src/builtin/module_builtin_dasbind.cpp
-    src/builtin/module_builtin_debugger.cpp
     src/builtin/module_builtin_fio.cpp
-    src/builtin/module_builtin_jobque.cpp
     src/builtin/module_builtin_math.cpp
     src/builtin/module_builtin_misc_types.cpp
     src/builtin/module_builtin_runtime.cpp
@@ -665,7 +663,6 @@ SET(RUNTIME_DEFAULT_MODULES
     src/builtin/module_builtin_vector.cpp
     src/builtin/module_builtin_vector_ctor.cpp
     src/builtin/module_file_access.cpp
-    src/builtin/module_jit.cpp
 )
 LIST(APPEND RUNTIME_MODULES ${RUNTIME_DEFAULT_MODULES})
 
@@ -684,8 +681,11 @@ src/builtin/module_builtin_ast_annotations_2.cpp
 src/builtin/module_builtin_ast_annotations_3.cpp
 src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
+src/builtin/module_builtin_debugger.cpp
+src/builtin/module_builtin_jobque.cpp
 src/builtin/module_builtin_uriparser.h
 src/builtin/module_builtin_network.cpp
+src/builtin/module_jit.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
@@ -708,6 +708,7 @@ src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_instrument.cpp
 
 src/runtime/context.cpp
+src/runtime/jit_runtime.cpp
 src/simulate/json_scan.cpp
 src/simulate/json_print.cpp
 
