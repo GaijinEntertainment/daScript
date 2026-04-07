@@ -1112,16 +1112,18 @@ namespace das {
         "skip_lock_checks",             Type::tBool,
     };
 
-    void verifyOptions() {
-        bool failed = false;
-        for ( const auto & opt : g_allOptions ) {
-            if ( !isValidBuiltinName(opt.name) ) {
-                DAS_FATAL_ERROR("%s - invalid option. expecting snake_case\n", opt.name);
-                failed = true;
+    static struct VerifyOptionsOnStartup {
+        VerifyOptionsOnStartup() {
+            bool failed = false;
+            for ( const auto & opt : g_allOptions ) {
+                if ( !isValidBuiltinName(opt.name) ) {
+                    DAS_FATAL_ERROR("%s - invalid option. expecting snake_case\n", opt.name);
+                    failed = true;
+                }
             }
+            DAS_VERIFYF(!failed, "verifyOptions failed");
         }
-        DAS_VERIFYF(!failed, "verifyOptions failed");
-    }
+    } g_verifyOptionsOnStartup;
 
     vector<pair<string,Type>> getCodeOfPolicyOptions();
 
