@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 // "Ode to Joy" (Beethoven) — piano samples pitched via seq() bar notation.
 

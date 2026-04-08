@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 // 100% synthesized — no sample files needed.
 // Drums (bd/sd/hh/cp) + bass (sine) + lead (sawtooth)

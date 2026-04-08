@@ -354,7 +354,7 @@ def process_events(var state : MidiPlaybackState) {
                         }
                     }
                     if (length(drum_stereo) == 0) {
-                        let drum_mono <- render_drum_hit(ev.data1, vel)
+                        var drum_mono <- render_drum_hit(ev.data1, vel)
                         drum_stereo <- mono_to_stereo(drum_mono)
                     }
                     state.voices |> push(new MidiVoice(
@@ -753,6 +753,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     var tracks : array<MidiPlaybackState?>
     var status_box <- unsafe(lock_box_create())
     set_status_update(sid, status_box)
+    var pcm_box <- unsafe(lock_box_create())
     // initialize reverb
     g_reverb = new I3DL2Reverb
     set_sample_rate(g_reverb, float(SAMPLE_RATE))
@@ -765,6 +766,9 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     chorus_set_config(g_chorus, chorus_cfg)
     // pending add-track commands (extracted from gather to avoid # lifetime issues)
     var pending_adds : array<MidiTrackCmd>
+    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    var output : array<float>
+    output |> resize(chunkSamples)
     var running = true
     while (running) {
         // process commands
@@ -833,16 +837,16 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         if (!running) {
             break
         }
-        // wait for tracks before producing audio
-        if (length(tracks) == 0) {
-            sleep(10u)
+        // wait for tracks before producing audio, or for audio to consume
+        if (length(tracks) == 0 || !pcm_box.isReady) {
+            sleep(length(tracks) == 0 ? 10u : 1u)
             continue
         }
         // render all tracks
         let t0 = ref_time_ticks()
-        let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
-        var output : array<float>
-        output |> resize(chunkSamples)
+        unsafe {
+            memset32(reinterpret<uint?>(addr(output[0])), 0u, length(output))
+        }
         var ii = length(tracks) - 1
         while (ii >= 0) {
             var track = tracks[ii]
@@ -879,9 +883,8 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                 var vis_ch = unsafe(reinterpret<Channel?>(vis_ptr))
                 vis_ch |> push_clone(AudioChunk(samples := output))
             }
-            append_to_pcm(sid, output)
+            append_box_to_pcm(sid, pcm_box, output)
         }
-        delete output
         let chunk_usec = double(get_time_usec(t0))
         total_time += chunk_usec / 1000.lf
         total_samples += uint64(chunkSamples / 2)
@@ -907,6 +910,8 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
         to_log(0, "midi {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak utilization\n")
     }
+    pcm_box |> join()
+    pcm_box |> release()
     unset_status_update(sid)
     clear_status(status_box)
     status_box |> release()

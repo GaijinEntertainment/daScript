@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 // SF2 SoundFont lo-fi chill beat — all sounds from SF2, including drums.
 // Am - F - C - G chord progression with arpeggiated piano, walking bass, and pad.

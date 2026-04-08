@@ -460,7 +460,7 @@ def document_module_jobque_boost(root : string) {
         group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone)$%%),
         group_by_regex("Synchronization", mod, %regex~(with_wait_group|done)$%%),
         group_by_regex("Parallel execution", mod, %regex~(_parallel_for|parallel_for|_parallel_for_each|parallel_for_each|_parallel_map|parallel_map)$%%),
-        group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear)$%%),
+        group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear|fill|grab)$%%),
         group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status|capture_jobque_lock_box|release_capture_jobque_lock_box)$%%)
     )
     document("Boost package for jobs and threads", mod, "jobque_boost.rst", groups)
@@ -1291,7 +1291,7 @@ def document_module_audio_boost(root : string) {
         group_by_regex("Attenuation", mod, %regex~(compute_attenuation|default_attenuation|inverse_distance_attenuation|linear_attenuation|quadratic_attenuation|inverse_square_attenuation)$%%),
         group_by_regex("Status monitoring", mod, %regex~(set_status_update|clear_status|unset_status_update)$%%),
         group_by_regex("Command batching", mod, %regex~(begin_batch|end_batch|batch)$%%),
-        group_by_regex("PCM stream", mod, %regex~(append_to_pcm)$%%),
+        group_by_regex("PCM stream", mod, %regex~(append_to_pcm|append_box_to_pcm)$%%),
         group_by_regex("Decoding", mod, %regex~(decode_audio)$%%),
         group_by_regex("Sound ID", mod, %regex~(generate_sound_sid)$%%),
         group_by_regex("Internal channel management", mod, %regex~(get_audio_command_channel|set_audio_thread_command_channel|get_collect_command_channel|set_collect_thread_command_channel|get_sound_sid|set_sound_sid)$%%)

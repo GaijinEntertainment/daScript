@@ -17,7 +17,8 @@ typedef Pattern = lambda<(span : TimeSpan) : array<Hap>>
 def pure(value : Event) : Pattern {
     return @capture(= value) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
-        for (sub in splitSpans(span)) {
+        var inscope split = splitSpans(span)
+        for (sub in split) {
             let cyc = sameCycle(sub.start)
             let whole = TimeSpan(start = cyc, stop = cyc + 1.0lf)
             result |> push(Hap(whole = whole, part = sub, value = value)) // nolint:PERF006
@@ -114,7 +115,8 @@ def cat(var pats : array<Pattern>) : Pattern {
     let cn = length(pats)
     return @capture(= cn, <- pats) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
-        for (sub in splitSpans(span)) {
+        var inscope split = splitSpans(span)
+        for (sub in split) {
             let cycle = sameCycle(sub.start)
             var idx = int(cycle) % cn
             if (idx < 0) {
@@ -132,6 +134,7 @@ def cat(var pats : array<Pattern>) : Pattern {
                     value = h.value
                 ))
             }
+            delete haps
         }
         return <- result
     }
@@ -191,18 +194,21 @@ def every(n : int; var pat_on : Pattern; var pat_off : Pattern) : Pattern {
     var cn = n
     return @capture(<- cn, <- pat_on, <- pat_off) (span : TimeSpan) : array<Hap> {
         var result : array<Hap>
-        for (sub in splitSpans(span)) {
+        var inscope split = splitSpans(span)
+        for (sub in split) {
             let cycle = int(sameCycle(sub.start))
             var idx = cycle % cn
             if (idx < 0) {
                 idx += cn
             }
             if (idx == 0) {
-                for (h in pat_on(sub)) {
+                var inscope patOn = pat_on(sub)
+                for (h in patOn) {
                     result |> push(h) // nolint:PERF006
                 }
             } else {
-                for (h in pat_off(sub)) {
+                var inscope patOff = pat_off(sub)
+                for (h in patOff) {
                     result |> push(h) // nolint:PERF006
                 }
             }

@@ -380,13 +380,19 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     var total_samples = 0ul
     var status_box <- unsafe(lock_box_create())
     set_status_update(g_sid, status_box)
+    var pcm_box <- unsafe(lock_box_create())
     var mixer : ma_volume_mixer
     ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
+    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    var output : array<float>
+    output |> resize(chunkSamples)
     while (strudel_process_commands(cmd_fn)) {
+        if (!pcm_box.isReady) {
+            sleep(1u)
+            continue
+        }
         let t0 = ref_time_ticks()
-        let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
-        var output : array<float>
-        output |> resize(chunkSamples)
+        for (v in output) { v = 0.0; }
         // tick all active tracks
         var i = length(g_tracks) - 1
         while (i >= 0) {
@@ -435,7 +441,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             i --
         }
         if (length(output) > 0) {
-            append_to_pcm(g_sid, output)
+            append_box_to_pcm(g_sid, pcm_box, output)
         }
         total_time += double(get_time_usec(t0)) / 1000.lf
         total_samples += uint64(chunkSamples / 2)
@@ -463,6 +469,8 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
         to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
     }
+    pcm_box |> join()
+    pcm_box |> release()
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(g_sid)
     clear_status(status_box)

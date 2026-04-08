@@ -230,7 +230,7 @@ def render_event_stereo(event : Event; duration_sec : float; bank : SampleBank) 
 }
 
 // Convert mono buffer to interleaved stereo (duplicate to both channels).
-def mono_to_stereo(mono : array<float>) : array<float> {
+def mono_to_stereo(var mono : array<float>) : array<float> {
     var stereo : array<float>
     let n = length(mono)
     stereo |> resize(n * 2)
@@ -238,5 +238,6 @@ def mono_to_stereo(mono : array<float>) : array<float> {
         stereo[i * 2] = mono[i]
         stereo[i * 2 + 1] = mono[i]
     }
+    delete mono
     return <- stereo
 }
