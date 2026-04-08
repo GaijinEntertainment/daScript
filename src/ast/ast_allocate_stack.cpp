@@ -1074,7 +1074,7 @@ namespace das {
                             if ( var->type->constant ) {
                                 auto exprOp2 = (ExprOp2 *)(assign.get());
                                 auto pLeft = exprOp2->left->clone();
-                                auto pLeftType = make_smart<TypeDecl>(*var->type);
+                                auto pLeftType = new TypeDecl(*var->type);
                                 pLeftType->constant = false;
                                 auto pLeftCast = make_smart<ExprCast>(exprOp2->left->at, pLeft, pLeftType);
                                 pLeftCast->reinterpret = true;

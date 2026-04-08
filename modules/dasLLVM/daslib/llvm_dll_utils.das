@@ -53,21 +53,21 @@ class UidGen : AstVisitor {
 
     def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
         add(get_ptr(expr))
-        add(get_ptr(expr.typeexpr))
+        add(expr.typeexpr)
     }
 
     def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) {
         add(get_ptr(expr))
-        add(get_ptr(expr.subexpr._type))
+        add(expr.subexpr._type)
     }
 
     def override preVisitExprDelete(expr : smart_ptr<ExprDelete>) {
         add(get_ptr(expr))
-        add(get_ptr(expr.subexpr._type.firstType))
+        add(expr.subexpr._type.firstType)
     }
 
     def override preVisitExprClone(expr : smart_ptr<ExprClone>) {
-        add(get_ptr(expr.left._type))
+        add(expr.left._type)
     }
 
     def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
@@ -133,7 +133,7 @@ class public UidNodes {
     }
 
     def get_new(expr : TypeDeclPtr) : DllName {
-        return get_base(get_ptr(expr), "new`handle`{get_mangled_name(expr)}")
+        return get_base(expr, "new`handle`{get_mangled_name(expr)}")
     }
 
     def get_ascend_new(expr : smart_ptr<ExprAscend>) {
@@ -141,11 +141,11 @@ class public UidNodes {
     }
 
     def get_delete_type(t : TypeDeclPtr) : DllName {
-        return get_base(get_ptr(t), "delete`handle`{get_mangled_name(t)}")
+        return get_base(t, "delete`handle`{get_mangled_name(t)}")
     }
 
     def get_clone_type(t : TypeDeclPtr) : DllName {
-        return get_base(get_ptr(t), "clone`handle`{get_mangled_name(t)}")
+        return get_base(t, "clone`handle`{get_mangled_name(t)}")
     }
 
     def get_tinfo(expr : smart_ptr<ExprTypeInfo>) {

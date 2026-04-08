@@ -13,8 +13,8 @@ require strings
 
 typedef ExpressionPtr = smart_ptr<Expression>
 typedef ProgramPtr = smart_ptr<Program>
-typedef TypeDeclPtr = smart_ptr<TypeDecl>
-typedef VectorTypeDeclPtr = dasvector`smart_ptr`TypeDecl
+typedef TypeDeclPtr = TypeDecl?
+typedef VectorTypeDeclPtr = dasvector`ptr`TypeDecl
 typedef EnumerationPtr = smart_ptr<Enumeration>
 typedef StructurePtr = smart_ptr<Structure>
 typedef FunctionPtr = smart_ptr<Function>
@@ -63,12 +63,12 @@ def for_each_global(mod : Module?; blk : block<(var value : VariablePtr) : void>
 
 
 [generic]
-def describe(decl : smart_ptr<TypeDecl>; extra, contracts, modules : bool = true) {
+def describe(decl : TypeDecl?; extra, contracts, modules : bool = true) {
     return describe_typedecl(decl, extra, contracts, modules)
 }
 
 [generic]
-def describe_cpp(decl : smart_ptr<TypeDecl>; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) {
+def describe_cpp(decl : TypeDecl?; substitureRef, skipRef, skipConst : bool = false; redundantConst : bool = true; chooseSmartPtr : bool = true) {
     return describe_typedecl_cpp(decl, substitureRef, skipRef, skipConst, redundantConst, chooseSmartPtr)
 }
 
@@ -95,11 +95,6 @@ def clone_function(fn : Function?) : FunctionPtr {
 [generic]
 def get_mangled_name(fn : Function?) {
     return get_mangled_name(unsafe(reinterpret<FunctionPtr> fn))
-}
-
-[generic]
-def get_mangled_name(decl : TypeDecl?) {
-    return get_mangled_name(unsafe(reinterpret<TypeDeclPtr> decl))
 }
 
 [generic]

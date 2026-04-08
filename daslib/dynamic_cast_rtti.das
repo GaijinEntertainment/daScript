@@ -97,7 +97,7 @@ class ClassAsIs : AstVariantMacro {
         if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>
         }
-        var inscope atype <- new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
+        var atype = new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
         return <- qmacro(is_instance_of($e(expr.value), type<$t(atype)>))
     }
     def override visitExprAsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprAsVariant>) : ExpressionPtr {
@@ -105,7 +105,7 @@ class ClassAsIs : AstVariantMacro {
         if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>
         }
-        var inscope atype <- new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
+        var atype = new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
         return <- qmacro(force_dynamic_type_cast($e(expr.value), type<$t(atype)>))
     }
     def override visitExprSafeAsVariant(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
@@ -113,7 +113,7 @@ class ClassAsIs : AstVariantMacro {
         if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)) {
             return <- default<ExpressionPtr>
         }
-        var inscope atype <- new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
+        var atype = new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
         return <- qmacro(dynamic_type_cast($e(expr.value), type<$t(atype)>))
     }
 }

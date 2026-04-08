@@ -22,7 +22,7 @@ namespace das {
         }
     };
 
-    struct AstTypeDeclAnnnotation : ManagedStructureAnnotation <TypeDecl> {
+    struct AstTypeDeclAnnnotation : ManagedStructureAnnotation <TypeDecl, true, false> {
         AstTypeDeclAnnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("TypeDecl", ml) {
         }

@@ -106,16 +106,16 @@ prints:
 qmacro_type
 ^^^^^^^^^^^
 
-``qmacro_type`` takes a type expression (type<...>) as an input and returns the subtype as a TypeDeclPtr, after resolving the escape sequences.
+``qmacro_type`` takes a type expression (type<...>) as an input and returns the subtype as a ``TypeDecl?``, after resolving the escape sequences.
 Consider the following example:
 
 .. code-block:: das
 
-    var foo <- typeinfo ast_typedecl(type<int>)
-    var typ <- qmacro_type <| type<$t(foo)?>
+    var foo = typeinfo ast_typedecl(type<int>)
+    var typ = qmacro_type <| type<$t(foo)?>
     print(describe(typ))
 
-TypeDeclPtr foo is passed as a reification sequence to ``qmacro_type``, and a new pointer type is generated.
+``foo`` is passed as a reification sequence to ``qmacro_type``, and a new pointer type is generated.
 The output is:
 
 .. code-block:: text
@@ -301,12 +301,12 @@ prints:
 $t(type)
 ^^^^^^^^
 
-``$t`` takes a ``TypeDeclPtr`` as an input and substitutes it with the type expression.
+``$t`` takes a ``TypeDecl?`` as an input and substitutes it with the type expression.
 In the following example:
 
 .. code-block:: das
 
-    var subtype <- typeinfo ast_typedecl(type<int>)
+    var subtype = typeinfo ast_typedecl(type<int>)
     var blk <- qmacro_block() {
         var a : $t(subtype)?
     }

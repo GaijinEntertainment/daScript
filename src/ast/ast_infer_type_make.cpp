@@ -84,14 +84,14 @@ namespace das {
                         if (!expr->iterType->isVoid()) {
                             auto yva = make_smart<Variable>();
                             if (expr->iterType->ref) {
-                                yva->type = make_smart<TypeDecl>(Type::tPointer);
-                                yva->type->firstType = make_smart<TypeDecl>(*expr->iterType);
+                                yva->type = new TypeDecl(Type::tPointer);
+                                yva->type->firstType = new TypeDecl(*expr->iterType);
                                 yva->type->firstType->ref = false;
                                 yva->type->constant = false;
                                 yva->type->ref = true;
                                 makeRef = true;
                             } else {
-                                yva->type = make_smart<TypeDecl>(*expr->iterType);
+                                yva->type = new TypeDecl(*expr->iterType);
                                 yva->type->constant = false;
                                 yva->type->ref = !expr->iterType->isRefType();
                             }
@@ -407,7 +407,7 @@ namespace das {
             return Visitor::visit(expr);
         }
         // result type
-        auto resT = make_smart<TypeDecl>(*expr->makeType);
+        auto resT = new TypeDecl(*expr->makeType);
         if ( resT->isAlias() ) {
             auto aT = inferAlias(resT);
             if (aT) {
@@ -452,25 +452,25 @@ namespace das {
                     return;
                 dep.insert(tp->structType);
                 for (auto &field : tp->structType->fields) {
-                    describeLocalType(results, field.type.get(), prefix + "." + field.name, dep);
+                    describeLocalType(results, field.type, prefix + "." + field.name, dep);
                 }
             }
         } else if (tp->baseType == Type::tTuple || tp->baseType == Type::tVariant || tp->baseType == Type::option) {
             int argIndex = 0;
             for (const auto &arg : tp->argTypes) {
                 if (tp->argNames.size()) {
-                    describeLocalType(results, arg.get(), prefix + "." + tp->argNames[argIndex], dep);
+                    describeLocalType(results, arg, prefix + "." + tp->argNames[argIndex], dep);
                 } else {
-                    describeLocalType(results, arg.get(), prefix + "." + to_string(argIndex), dep);
+                    describeLocalType(results, arg, prefix + "." + to_string(argIndex), dep);
                 }
                 argIndex++;
             }
         } else if (tp->baseType == Type::tArray || tp->baseType == Type::tTable) {
             if (tp->firstType) {
-                describeLocalType(results, tp->firstType.get(), prefix + "[]", dep);
+                describeLocalType(results, tp->firstType, prefix + "[]", dep);
             }
             if (tp->secondType) {
-                describeLocalType(results, tp->secondType.get(), prefix + "[]", dep);
+                describeLocalType(results, tp->secondType, prefix + "[]", dep);
             }
         }
     }
@@ -525,13 +525,13 @@ namespace das {
             if (expr->makeType->isClass()) {
                 error("Class '" + expr->makeType->structType->name + "' has fields, which can't be allocated locally, which is not allowed. "
                                                                      "It contains Handled type, where isLocal() returned false.",
-                      describeLocalType(expr->makeType.get()), "",
+                      describeLocalType(expr->makeType), "",
                       expr->at, CompilationError::invalid_type);
             } else {
                 error(describeType(expr->makeType) + "() can`t be allocated locally (on the stack or as part of other data structure), which is not allowed. "
                                                      "It contains Handled type, where isLocal() returned false. "
                                                      "Allocate it on the heap (new [[...]]) or modify your C++ bindings.",
-                      describeLocalType(expr->makeType.get()), "",
+                      describeLocalType(expr->makeType), "",
                       expr->at, CompilationError::invalid_type);
             }
         } else if (expr->makeType->baseType == Type::tHandle && expr->isNewHandle && !expr->useInitializer) {
@@ -593,7 +593,7 @@ namespace das {
             if (auto field = expr->makeType->structType->findField(decl->name)) {
                 auto copyFieldType = field->type;
                 if (field->capturedConstant) {
-                    copyFieldType = make_smart<TypeDecl>(*field->type);
+                    copyFieldType = new TypeDecl(*field->type);
                     copyFieldType->constant = true;
                 }
                 if (!canCopyOrMoveType(copyFieldType, decl->value->type, TemporaryMatters::yes, decl->value.get(),
@@ -709,7 +709,7 @@ namespace das {
             return nullptr;
         }
         auto mkt = make_smart<ExprMakeTuple>(at);
-        mkt->recordType = make_smart<TypeDecl>(*makeType);
+        mkt->recordType = new TypeDecl(*makeType);
         mkt->values.resize(makeType->argTypes.size());
         for (auto &fld : *st) {
             auto idx = makeType->findArgumentIndex(fld->name);
@@ -728,7 +728,7 @@ namespace das {
         for (size_t i = 0, s = mkt->values.size(); i != s; ++i) {
             if (!mkt->values[i]) {
                 auto mks = make_smart<ExprMakeStruct>(at);
-                mks->makeType = make_smart<TypeDecl>(*makeType->argTypes[i]);
+                mks->makeType = new TypeDecl(*makeType->argTypes[i]);
                 mkt->values[i] = mks;
             }
         }
@@ -801,7 +801,7 @@ namespace das {
                     int32_t rec = 0;
                     if (expr->structs.size() > 1)
                         rec = int32_t(expr->structs.size());
-                    auto passT = make_smart<TypeDecl>(*expr->makeType);
+                    auto passT = new TypeDecl(*expr->makeType);
                     passT->dim.clear();
                     if (rec)
                         passT->dim.push_back(rec);
@@ -850,7 +850,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto mkv = make_smart<ExprMakeVariant>(expr->at);
-            mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
+            mkv->makeType = new TypeDecl(*expr->makeType);
             auto allGood = true;
             for (auto &st : expr->structs) {
                 if (st->size() != 1) {
@@ -894,7 +894,7 @@ namespace das {
                 }
             } else {
                 auto mka = make_smart<ExprMakeArray>(expr->at);
-                mka->makeType = make_smart<TypeDecl>(*expr->makeType);
+                mka->makeType = new TypeDecl(*expr->makeType);
                 mka->values.resize(expr->structs.size());
                 for (size_t i = 0; i != expr->structs.size(); ++i) {
                     mka->values[i] = structToTuple(expr->makeType, expr->structs[i], expr->at);
@@ -996,7 +996,7 @@ namespace das {
         // if unresolved - but we still return.  cause sometimes we pass [], and then we want it resolved
         bool isAutoOrAlias = expr->makeType->isAutoOrAlias();
         // result type
-        auto resT = make_smart<TypeDecl>(*expr->makeType);
+        auto resT = new TypeDecl(*expr->makeType);
         uint32_t resDim = uint32_t(expr->structs.size());
         if (resDim == 0) {
             // resT->dim.clear();
@@ -1019,16 +1019,16 @@ namespace das {
         if (expr->type->isString()) {
             reportAstChanged();
             auto ecs = make_smart<ExprConstString>(expr->at);
-            ecs->type = make_smart<TypeDecl>(Type::tString);
+            ecs->type = new TypeDecl(Type::tString);
             return ecs;
         } else if (expr->type->isEnumT()) {
             auto f0 = expr->type->enumType->find(0, "");
             if (!f0.empty()) {
                 reportAstChanged();
-                auto et = make_smart<TypeDecl>(*expr->type);
+                auto et = new TypeDecl(*expr->type);
                 et->ref = false;
                 auto ens = make_smart<ExprConstEnumeration>(expr->at, f0, et);
-                ens->type = make_smart<TypeDecl>(*et);
+                ens->type = new TypeDecl(*et);
                 ens->type->constant = true;
                 return ens;
             } else {
@@ -1040,10 +1040,10 @@ namespace das {
                 expr->type->ref = false;
                 reportAstChanged();
                 auto ews = make_smart<ExprConstPtr>(expr->at);
-                ews->type = make_smart<TypeDecl>(*expr->type);
+                ews->type = new TypeDecl(*expr->type);
                 ews->isSmartPtr = expr->type->smartPtr;
                 if (expr->type->firstType) {
-                    ews->ptrType = make_smart<TypeDecl>(*expr->type->firstType);
+                    ews->ptrType = new TypeDecl(*expr->type->firstType);
                 }
                 return ews;
             }
@@ -1051,7 +1051,7 @@ namespace das {
             expr->type->ref = false;
             reportAstChanged();
             auto ews = Program::makeConst(expr->at, expr->type, v_zero());
-            ews->type = make_smart<TypeDecl>(*expr->type);
+            ews->type = new TypeDecl(*expr->type);
             return ews;
         } else if (!expr->type->isRefType()) {
             expr->type->ref = true;
@@ -1085,7 +1085,7 @@ namespace das {
     }
     void InferTypes::preVisit(ExprMakeTuple *expr) {
         Visitor::preVisit(expr);
-        expr->makeType.reset();
+        expr->makeType = nullptr;
         expr->initAllFields = true;
     }
     ExpressionPtr InferTypes::visitMakeTupleIndex(ExprMakeTuple *expr, int index, Expression *init, bool lastField) {
@@ -1134,7 +1134,7 @@ namespace das {
                         expr->at, CompilationError::invalid_type);
                 return Visitor::visit(expr);
             }
-            auto mkt = make_smart<TypeDecl>(Type::tTuple);
+            auto mkt = new TypeDecl(Type::tTuple);
             for (size_t ai = 0; ai != argCount; ++ai) {
                 const auto &val = expr->values[ai];
                 const auto &argT = expr->recordType->argTypes[ai];
@@ -1144,7 +1144,7 @@ namespace das {
                           "", "",
                           expr->at, CompilationError::invalid_type);
                 }
-                auto valT = make_smart<TypeDecl>(*argT);
+                auto valT = new TypeDecl(*argT);
                 valT->ref = false;
                 valT->constant = false;
                 mkt->argTypes.push_back(valT);
@@ -1154,10 +1154,10 @@ namespace das {
             }
             expr->makeType = mkt;
         } else {
-            auto mkt = make_smart<TypeDecl>(Type::tTuple);
+            auto mkt = new TypeDecl(Type::tTuple);
             mkt->at = expr->at;
             for (auto &val : expr->values) {
-                auto valT = make_smart<TypeDecl>(*val->type);
+                auto valT = new TypeDecl(*val->type);
                 if (valT->isVoid()) {
                     error("tuple element type can't be void", "", "",
                           val->at, CompilationError::invalid_type);
@@ -1241,10 +1241,10 @@ namespace das {
             if (index == 0) {
                 if (init->type && !init->type->isAutoOrAlias()) {
                     // blah[] vs blah
-                    TypeDeclPtr mkt;
+                    TypeDeclPtr mkt = nullptr;
                     if (!expr->gen2 && expr->makeType->dim.size() && !init->type->dim.size()) {
                         if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
-                            auto infT = make_smart<TypeDecl>(*expr->makeType);
+                            auto infT = new TypeDecl(*expr->makeType);
                             infT->dim.clear();
                             mkt = TypeDecl::inferGenericType(infT, init->type, false, false, nullptr);
                             if (mkt) {
@@ -1320,7 +1320,7 @@ namespace das {
                         false, // move
                         false  // clone
                         ));
-                    mkv->makeType = make_smart<TypeDecl>(*expr->recordType);
+                    mkv->makeType = new TypeDecl(*expr->recordType);
                     reportAstChanged();
                     return mkv;
                 }
@@ -1377,7 +1377,7 @@ namespace das {
                         bool(fmkv->moveSemantics),
                         bool(fmkv->cloneSemantics)));
                 }
-                mkv->makeType = make_smart<TypeDecl>(*expr->makeType);
+                mkv->makeType = new TypeDecl(*expr->makeType);
                 reportAstChanged();
                 return mkv;
             }
@@ -1386,7 +1386,7 @@ namespace das {
             error("array element has to be copyable or moveable", "", "",
                   expr->at, CompilationError::invalid_type);
         }
-        auto resT = make_smart<TypeDecl>(*expr->makeType);
+        auto resT = new TypeDecl(*expr->makeType);
         uint32_t resDim = uint32_t(expr->values.size());
         if (expr->gen2) {
             resT->dim.push_back(resDim);
@@ -1409,12 +1409,12 @@ namespace das {
                 auto resExpr = expr->values[0];
                 if (resExpr->rtti_isMakeTuple()) {
                     auto mkt = static_pointer_cast<ExprMakeTuple>(resExpr);
-                    mkt->recordType = make_smart<TypeDecl>(*expr->recordType);
-                    mkt->makeType.reset();
+                    mkt->recordType = new TypeDecl(*expr->recordType);
+                    mkt->makeType = nullptr;
                 }
                 if (!expr->recordType->isSameType(*(eval->type), RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no)) { // disable substitue
                     // we need a cast
-                    auto cast = make_smart<ExprCast>(expr->at, resExpr, make_smart<TypeDecl>(*expr->recordType));
+                    auto cast = make_smart<ExprCast>(expr->at, resExpr, new TypeDecl(*expr->recordType));
                     resExpr = cast;
                 }
                 return resExpr;

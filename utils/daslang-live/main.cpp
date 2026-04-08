@@ -194,6 +194,14 @@ static CompileResult compile_script(const string & fn) {
     }
 
     result.ctx = SimulateWithErrReport(result.program, tout);
+    // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
+    {
+        auto & root = gc_root::gc_get_thread_root();
+        if (root.gc_count != 0) {
+            tout << "GC COMPILER LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after compile+simulate\n";
+            root.gc_report();
+        }
+    }
     if (!result.ctx) {
         result.errors = "simulation failed for " + fn;
         tout << "ERROR: " << result.errors << "\n";
@@ -312,6 +320,15 @@ static int run_lifecycle(const string & fn) {
             if (auto ex = ctx->getException()) {
                 tout << "EXCEPTION: " << ex << " at " << ctx->exceptionAt.describe() << "\n";
                 return 1;
+            }
+            // Report app leaks (TypeDecl nodes created during execution)
+            {
+                auto& root = gc_root::gc_get_thread_root();
+                if (root.gc_count != 0) {
+                    tout << "GC APP LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after execution\n";
+                    root.gc_report();
+                    return 1;
+                }
             }
             return 0;
         }
@@ -516,6 +533,16 @@ static int run_lifecycle(const string & fn) {
         ctx->evalWithCatch(fnShutdown, nullptr);
         if (auto ex = ctx->getException()) {
             tout << "EXCEPTION in shutdown(): " << ex << "\n";
+        }
+    }
+
+    // Report GC TypeDecl leaks
+    {
+        auto& root = gc_root::gc_get_thread_root();
+        if (root.gc_count != 0) {
+            tout << "GC LEAK: " << uint64_t(root.gc_count) << " gc_node(s) leaked\n";
+            root.gc_report();
+            return 1;
         }
     }
 

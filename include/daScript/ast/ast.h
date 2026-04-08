@@ -137,6 +137,7 @@ namespace das
         string getMangledName() const;
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         virtual void serialize( AstSerializer & ) { }
+        virtual void gc_collect ( gc_root * /*target*/, gc_root * /*from*/ ) { }
         Module *    module = nullptr;
     };
 
@@ -206,7 +207,7 @@ namespace das
     public:
         struct FieldDeclaration {
             string                  name;
-            TypeDeclPtr             type;
+            TypeDeclPtr             type = nullptr;
             ExpressionPtr           init;
             AnnotationArgumentList  annotation;
             LineInfo                at;
@@ -289,13 +290,15 @@ namespace das
         string getMangledName() const;
         bool hasAnyInitializers() const;
         void serialize( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
         uint64_t getOwnSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
         TypeDeclPtr findAlias ( const string & name ) const;
     public:
+        gc_root *                       gc_type_owner = nullptr;
         string                          name;
         vector<FieldDeclaration>        fields;
         das_hash_map<string,int32_t>    fieldLookup;
-        safebox<TypeDecl>               aliases;
+        safebox<TypeDecl, TypeDeclPtr>               aliases;
         LineInfo                        at;
         Module *                        module = nullptr;
         Structure *                     parent = nullptr;
@@ -343,9 +346,11 @@ namespace das
         bool isAccessDummy() const;
         bool isCtorInitialized() const;
         void serialize ( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
+        gc_root *       gc_type_owner = nullptr;
         string          name;
         string          aka;        // name alias
-        TypeDeclPtr     type;
+        TypeDeclPtr     type = nullptr;
         ExpressionPtr   init;
         ExpressionPtr   source;     // if its interator variable, this is where the source is
         LineInfo        at;
@@ -704,8 +709,10 @@ namespace das
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
         virtual void serialize ( AstSerializer & ser );
+        virtual void gc_collect ( gc_root * target, gc_root * from );
         LineInfo    at;
-        TypeDeclPtr type;
+        TypeDeclPtr type = nullptr;
+        gc_root *   gc_type_owner = nullptr;    // cycle detection marker for gc_collect
         const char * __rtti = nullptr;
         union{
             struct {
@@ -879,12 +886,14 @@ namespace das
         FunctionPtr getOrigin() const;
         Function * getOriginPtr() const;
         void serialize ( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
         void notInferred();
     public:
+        gc_root *           gc_type_owner = nullptr;
         AnnotationList      annotations;
         string              name;
         vector<VariablePtr> arguments;
-        TypeDeclPtr         result;
+        TypeDeclPtr         result = nullptr;
         ExpressionPtr       body;
         int32_t             index = -1;
         uint32_t            totalStackSize = 0;
@@ -1193,6 +1202,7 @@ namespace das
         void serialize( AstSerializer & ser, bool already_exists );
         void setModuleName ( const string & n );
         FileInfo * getFileInfo() const;
+        void gc_collect ( gc_root * from = nullptr );  // move reachable TypeDecl from 'from' root to module_gc_root
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1219,7 +1229,7 @@ namespace das
         }
     public:
         smart_ptr<Context>                          macroContext;
-        safebox<TypeDecl>                           aliasTypes;
+        safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
         safebox<Annotation>                         handleTypes;
         safebox<Structure>                          structures;
         safebox<Enumeration>                        enumerations;
@@ -1247,6 +1257,7 @@ namespace das
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_hash_map<string,Type>                   options;            // options
+        gc_root                                     module_gc_root;     // gc_node root for this module's TypeDecl
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
         uint64_t                                    nameHash = 0;
@@ -1825,6 +1836,7 @@ namespace das
     //      it is not ok to use for every call
     template <typename ReturnType, typename ...Args>
     inline bool verifyCall ( FuncInfo * info, const ModuleLibrary & lib ) {
+        gc_guard gc_scope;  // sweep temporary TypeDecl nodes created by makeType
         vector<TypeDeclPtr> args = { makeType<Args>(lib)... };
         if ( args.size() != info->count ) {
             return false;
@@ -1871,6 +1883,7 @@ namespace das
         vector<DynamicModuleInfo> *g_dyn_modules_resolve = nullptr;
         inline static DAS_THREAD_LOCAL(DebugAgentInstance *) g_threadLocalDebugAgent;
         uint64_t        dataWalkerStringLimit = 0;
+
 
         static daScriptEnvironment *getBound();
         static void setBound(daScriptEnvironment *bnd);

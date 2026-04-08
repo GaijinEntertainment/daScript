@@ -477,11 +477,13 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             bif->noAot = true;
             bif->userScenario = true;
             bif->sideEffectFlags = fun->sideEffectFlags | uint32_t(SideEffects::accessExternal);
+            // and collect it
+            bif->gc_collect(&module->module_gc_root, gc_root::gc_get_active_root());
+            // and now try to add or replace the function in the module
             if ( !module->addFunction(bif, true) ) {
                 module->replaceFunction(bif);
             }
             transformMap[fun.get()] = bindName;
-
             return true;
         }
 

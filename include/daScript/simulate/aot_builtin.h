@@ -56,6 +56,11 @@ namespace das {
     DAS_API void heap_collect ( bool stringHeap, bool validate, Context * context, LineInfoArg * info );
     DAS_API void heap_report ( Context * context, LineInfoArg * info );
     DAS_API void memory_report ( bool errorsOnly, Context * context, LineInfoArg * info );
+    DAS_API uint64_t gc_thread_root_count();
+    DAS_API uint64_t gc_active_root_count();
+    DAS_API void gc_thread_root_report();
+    DAS_API void gc_thread_root_report_detailed(uint64_t max_nodes);
+    DAS_API uint64_t gc_total_id();
     DAS_API void builtin_table_lock_mutable ( const Table & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_table_unlock_mutable ( const Table & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_table_lock ( Table & arr, Context * context, LineInfoArg * at );

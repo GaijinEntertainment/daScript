@@ -149,17 +149,10 @@ Step 2 — Add a field
        qmacro($v(version)))
 
 ``add_structure_field`` appends a new field to the struct's field
-list.  It **moves** both the ``TypeDeclPtr`` and ``ExpressionPtr``
-arguments, so they must be either temporaries or clones.
+list.  It takes a ``TypeDecl?`` and ``ExpressionPtr`` for the field
+type and default value.
 
-.. warning::
-
-   Never pass a ``var inscope`` variable directly to
-   ``add_structure_field`` — it will be moved *and* destroyed at
-   scope exit, causing a double-free crash.  Always pass
-   ``clone_type(...)`` or an inline temporary.
-
-``qmacro_type(type<int>)`` creates a ``TypeDeclPtr`` for ``int``.
+``qmacro_type(type<int>)`` creates a ``TypeDecl?`` for ``int``.
 ``qmacro($v(version))`` creates an integer constant expression.
 
 
@@ -467,7 +460,7 @@ Key takeaways
    * - ``add_structure_field``
      - Appends a field to a struct; moves both type and init expression
    * - ``clone_type``
-     - Deep-clones a ``TypeDeclPtr``; required before move operations
+     - Deep-clones a ``TypeDecl?``
    * - ``qmacro_function``
      - Builds a complete function from reification splices
    * - ``$v(value)``
@@ -475,7 +468,7 @@ Key takeaways
    * - ``$f(name)``
      - Splice a string as a field-access name
    * - ``$t(type)``
-     - Splice a ``TypeDeclPtr`` into parameter/return types
+     - Splice a ``TypeDecl?`` into parameter/return types
    * - ``$b(stmts)``
      - Splice ``array<ExpressionPtr>`` as a statement list
    * - ``find_arg``

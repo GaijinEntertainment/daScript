@@ -205,9 +205,9 @@ namespace das {
 
     struct SimNode_AstGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_AstGetTypeDecl ( const LineInfo & at, const TypeDeclPtr & d, char * dE )
+        SimNode_AstGetTypeDecl ( const LineInfo & at, TypeDeclPtr d, char * dE )
             : SimNode_CallBase(at,"") {
-            typeExpr = d.get();
+            typeExpr = d;
             descr = dE;
         }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
@@ -223,7 +223,6 @@ namespace das {
         }
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
-            typeExpr->addRef();
             return (char *) typeExpr;
         }
         TypeDecl *  typeExpr;   // requires RTTI
@@ -233,7 +232,7 @@ namespace das {
     struct AstTypeDeclMacro : TypeInfoMacro {
         AstTypeDeclMacro() : TypeInfoMacro("ast_typedecl") {}
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
-            return typeFactory<smart_ptr<TypeDecl>>::make(lib);
+            return typeFactory<TypeDecl *>::make(lib);
         }
         virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & error ) override {
 
@@ -252,7 +251,7 @@ namespace das {
                     return nullptr;
                 }
             }
-            context->thisProgram->astTypeInfo[hashValue] = exprTypeInfo->typeexpr.get();
+            context->thisProgram->astTypeInfo[hashValue] = exprTypeInfo->typeexpr;
             char * descr = context->code->allocateName(exprTypeInfo->typeexpr->getMangledName());
             return context->code->makeNode<SimNode_AstGetTypeDecl>(expr->at, exprTypeInfo->typeexpr, descr);
         }

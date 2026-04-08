@@ -19,7 +19,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 
 def private clone_iterator_type(it : TypeDeclPtr) : TypeDeclPtr {
-    var inscope res <- clone_type(it.firstType)
+    var res = clone_type(it.firstType)
     res.flags &= ~TypeDeclFlags.ref
     res.flags |= TypeDeclFlags.constant
     return <- res
@@ -41,7 +41,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         macro_verify(arg0type.isIterator || arg0type.isGoodArrayType, prog, call.at, "expecting iterator or array")
         macro_verify(!arg0type.firstType.isAutoOrAlias, prog, call.at, "iterable type cannot be auto or alias")
         // replacing function
-        var inscope iterType <- clone_iterator_type(arg0type)
+        var iterType = clone_iterator_type(arg0type)
         var inscope res <- qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
         res.force_at(call.at)
         return <- res
@@ -276,7 +276,7 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
         macro_verify(call.arguments[1]._type.isIterator || call.arguments[1]._type.isGoodArrayType, prog, call.at, "expecting iterator or array")
         macro_verify(!call.arguments[0]._type.firstType.isAutoOrAlias, prog, call.at, "iterator or array type cannot be auto or alias")
         // replacing function
-        var inscope iterType <- clone_iterator_type(call.arguments[0]._type)
+        var iterType = clone_iterator_type(call.arguments[0]._type)
         var inscope res <- qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
         res.force_at(call.at)
         return <- res
@@ -632,7 +632,7 @@ def private fold_where_select(argIndex : int; var topValue : ExpressionPtr; var 
     //! folds where + select into a single comprehension
     var eWhere = calls[0]._0
     var eSelect = calls[1]._0
-    var inscope iterType <- clone_type(eWhere.arguments[0]._type.firstType)
+    var iterType = clone_type(eWhere.arguments[0]._type.firstType)
     var inscope whereCond : ExpressionPtr
     whereCond |> move_new <| fold_linq_cond(eWhere.arguments[1], "it")
     var inscope selectExpr : ExpressionPtr
@@ -671,7 +671,7 @@ def private fold_select_where(argIndex : int; var topValue : ExpressionPtr; var 
     //! note, order of select and where is reversed
     var eWhere = calls[1]._0
     var eSelect = calls[0]._0
-    var inscope iterType <- clone_type(eWhere.arguments[0]._type.firstType)
+    var iterType = clone_type(eWhere.arguments[0]._type.firstType)
     var inscope whereCond : ExpressionPtr
     let srcName = "`source`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
     let valName = "`value`{argIndex}`{eSelect.at.line}`{eSelect.at.column}"
@@ -724,7 +724,7 @@ def private fold_linq_default(var expr : ExpressionPtr) : ExpressionPtr {
         return <- default<ExpressionPtr>
     }
     var inscope topExpr <- clone_expression(unsafe(reinterpret<ExpressionPtr>(top)))
-    var inscope topExprType <- clone_type(top._type)
+    var topExprType = clone_type(top._type)
     var inscope topValue = qmacro(source)
     var argIndex = 0
     let argMax = length(calls)

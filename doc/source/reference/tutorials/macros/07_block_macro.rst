@@ -345,7 +345,7 @@ Key takeaways
    * - ``find_arg``
      - Look up annotation argument values by name
    * - ``describe(arg._type)``
-     - Human-readable type name from a ``TypeDeclPtr``
+     - Human-readable type name from a ``TypeDecl?``
    * - ``$ [ann(args)] (params) { body }``
      - Block annotation syntax — annotation between ``$`` and parameters
 

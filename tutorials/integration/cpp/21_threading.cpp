@@ -152,38 +152,39 @@ static void part_b_compile_on_thread() {
         Module::Initialize();
 
         TextPrinter tout;
-        ModuleGroup dummyLibGroup;
-        CodeOfPolicies policies;
-        policies.threadlock_context = true;  // context mutex for thread safety
-        auto fAccess = make_smart<FsFileAccess>();
 
         // 4. Compile, simulate, and run — just like on the main thread.
-        auto program = compileDaScript(getDasRoot() + SCRIPT_NAME,
-                                       fAccess, tout, dummyLibGroup, policies);
-        if (program->failed()) {
-            tout << "  Worker compilation failed.\n";
-            for (auto & err : program->errors) {
-                tout << reportError(err.at, err.what, err.extra,
-                                    err.fixme, err.cerr);
-            }
-        } else {
-            Context ctx(program->getContextStackSize());
-            if (!program->simulate(ctx, tout)) {
-                tout << "  Worker simulation failed.\n";
+        //    Scoped block ensures dummyLibGroup and program are destroyed
+        //    before Module::Shutdown() deletes the modules they reference.
+        {
+            ModuleGroup dummyLibGroup;
+            CodeOfPolicies policies;
+            policies.threadlock_context = true;  // context mutex for thread safety
+            auto fAccess = make_smart<FsFileAccess>();
+
+            auto program = compileDaScript(getDasRoot() + SCRIPT_NAME,
+                                           fAccess, tout, dummyLibGroup, policies);
+            if (program->failed()) {
+                tout << "  Worker compilation failed.\n";
+                for (auto & err : program->errors) {
+                    tout << reportError(err.at, err.what, err.extra,
+                                        err.fixme, err.cerr);
+                }
             } else {
-                auto fn = ctx.findFunction("compute");
-                if (fn) {
-                    vec4f res = ctx.evalWithCatch(fn, nullptr);
-                    result = cast<int32_t>::to(res);
+                Context ctx(program->getContextStackSize());
+                if (!program->simulate(ctx, tout)) {
+                    tout << "  Worker simulation failed.\n";
                 } else {
-                    tout << "  Function 'compute' not found.\n";
+                    auto fn = ctx.findFunction("compute");
+                    if (fn) {
+                        vec4f res = ctx.evalWithCatch(fn, nullptr);
+                        result = cast<int32_t>::to(res);
+                    } else {
+                        tout << "  Function 'compute' not found.\n";
+                    }
                 }
             }
         }
-
-        // Release the program before shutdown — context is on the stack
-        // and will be destroyed first.
-        program.reset();
 
         // 5. Shut down the module system for this thread.
         Module::Shutdown();

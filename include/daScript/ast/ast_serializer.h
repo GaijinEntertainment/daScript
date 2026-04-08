@@ -235,8 +235,8 @@ namespace das {
         template <typename V>
         AstSerializer & operator << ( safebox_map<V> & box );
 
-        template <typename V>
-        AstSerializer & operator << ( safebox<V> & box );
+        template <typename V, typename VT>
+        AstSerializer & operator << ( safebox<V,VT> & box );
 
         template<typename TT>
         AstSerializer & serializePointer ( TT * & ptr );
@@ -295,7 +295,6 @@ namespace das {
     // Opaque handle to expose serializer to daslang.
     struct AstSerializerState {
         unique_ptr<SerializationStorageVector> storage;
-        unique_ptr<AstSerializer> serializer;
     };
 
     // Create a writing serializer.

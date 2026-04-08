@@ -181,7 +181,7 @@ namespace das {
                 ExprVar *evar = (ExprVar *)(expr->left.get());
                 if (auto propGet = promoteToProperty(evar, nullptr)) { // we need both get and set
                     auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
-                    opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                    opRight->type = new TypeDecl(*expr->right->type);
                     if (auto cloneSet = promoteToProperty(evar, opRight)) {
                         removeR2v(cloneSet);
                         return cloneSet;
@@ -197,7 +197,7 @@ namespace das {
                     return propSetOp;                                           // we need only set
                 } else if (auto propGet = promoteToProperty(efield, nullptr)) { // we need both get and set
                     auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
-                    opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                    opRight->type = new TypeDecl(*expr->right->type);
                     if (auto cloneSet = promoteToProperty(efield, opRight)) {
                         removeR2v(cloneSet);
                         return cloneSet;
@@ -216,7 +216,7 @@ namespace das {
                 } else if (auto atGet = inferGenericOperator("[]", eat->at, eat->subexpr, eat->index)) { // we need bot get and set
                     atGet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
                     auto opRight = make_smart<ExprOp2>(expr->at, opName, atGet, expr->right);
-                    opRight->type = make_smart<TypeDecl>(*expr->right->type);
+                    opRight->type = new TypeDecl(*expr->right->type);
                     if (auto atSet = inferGenericOperator3("[]=", eat->at, eat->subexpr, eat->index, opRight)) {
                         atSet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
                         removeR2v(atSet);
@@ -496,7 +496,7 @@ namespace das {
                   expr->at, CompilationError::unsafe);
         } else if (
             forceInscopePod && !expr->podDelete && func && (func->module->allowPodInscope && (!func->fromGeneric || func->fromGeneric->module->allowPodInscope)) // both modules allow pod inscope
-            && !func->hasUnsafe && isPodDelete(expr->left->type.get())                                                                                           // its a pod type
+            && !func->hasUnsafe && isPodDelete(expr->left->type)                                                                                           // its a pod type
         ) {
             reportAstChanged();
             if (logs && logInscopePod) {
@@ -519,7 +519,7 @@ namespace das {
             pLet->generated = true;
             auto pVar = make_smart<Variable>();
             pVar->at = expr->left->at;
-            pVar->type = make_smart<TypeDecl>(Type::autoinfer);
+            pVar->type = new TypeDecl(Type::autoinfer);
             pVar->type->ref = true;
             pVar->name = "_pod_inscope_temp_" + to_string(pVar->at.line) + "_" + to_string(pVar->at.column);
             pVar->init = expr->left->clone();
@@ -536,7 +536,7 @@ namespace das {
             pBlock->list.push_back(pMove);
             return pBlock;
         }
-        expr->type = make_smart<TypeDecl>(); // we return nothing
+        expr->type = new TypeDecl(); // we return nothing
         return Visitor::visit(expr);
     }
     string InferTypes::copyErrorInfo(ExprCopy *expr) const {
@@ -593,7 +593,7 @@ namespace das {
                 return make_smart<ExprMove>(expr->at, expr->left->clone(), expr->right->clone());
             }
         }
-        expr->type = make_smart<TypeDecl>(); // we return nothing
+        expr->type = new TypeDecl(); // we return nothing
         return Visitor::visit(expr);
     }
     void InferTypes::preVisit(ExprClone *expr) {
@@ -641,7 +641,7 @@ namespace das {
                         if (fidx != -1) {
                             reportAstChanged();
                             auto mask = make_smart<ExprConstBitfield>(efield->at, 1ul << fidx);
-                            mask->bitfieldType = make_smart<TypeDecl>(*efield->value->type);
+                            mask->bitfieldType = new TypeDecl(*efield->value->type);
                             auto call = make_smart<ExprCall>(efield->at, "__bit_set");
                             call->arguments.push_back(value->clone());
                             call->arguments.push_back(mask);
@@ -711,7 +711,7 @@ namespace das {
         } else {
             auto cloneType = expr->left->type;
             if (cloneType->isHandle()) {
-                expr->type = make_smart<TypeDecl>(); // we return nothing
+                expr->type = new TypeDecl(); // we return nothing
                 return Visitor::visit(expr);
             } else if (cloneType->isString() && (expr->right->type->isTemp() || multiContext)) {
                 reportAstChanged();
@@ -819,9 +819,9 @@ namespace das {
     ExpressionPtr InferTypes::visit(ExprTryCatch *expr) {
         if (jitEnabled()) {
             auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at, expr->try_block);
-            ((ExprBlock *)tryBlock->block.get())->returnType = make_smart<TypeDecl>(Type::autoinfer);
+            ((ExprBlock *)tryBlock->block.get())->returnType = new TypeDecl(Type::autoinfer);
             auto catchBlock = make_smart<ExprMakeBlock>(expr->catch_block->at, expr->catch_block);
-            ((ExprBlock *)catchBlock->block.get())->returnType = make_smart<TypeDecl>(Type::autoinfer);
+            ((ExprBlock *)catchBlock->block.get())->returnType = new TypeDecl(Type::autoinfer);
             auto ccall = make_smart<ExprCall>(expr->at, "builtin_try_recover");
             ccall->arguments.push_back(tryBlock);
             ccall->arguments.push_back(catchBlock);

@@ -113,7 +113,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
             func_copy.result := null
             unsafe {
                 func_copy.body <- clone_expression(expr.func.fromGeneric.body)
-                func_copy.result <- clone_type(expr.func.fromGeneric.result)
+                func_copy.result = clone_type(expr.func.fromGeneric.result)
             }
         }
 

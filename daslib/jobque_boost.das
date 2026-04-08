@@ -60,7 +60,7 @@ class private NewJobMacro : AstFunctionAnnotation {
         var inscope stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_new_job_clone"
         var stype_ptr = get_ptr(stype)
-        var inscope sttype <- new TypeDecl(at = call.at, baseType = Type.tStructure, structType = stype_ptr)
+        var sttype = new TypeDecl(at = call.at, baseType = Type.tStructure, structType = stype_ptr)
         for (fld in stype.fields) {// TODO: verify field type here
             fld._type.flags &= ~(TypeDeclFlags.constant)
             fld.flags &= ~(FieldDeclarationFlags.capturedConstant)
@@ -70,8 +70,8 @@ class private NewJobMacro : AstFunctionAnnotation {
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
         // make an @@<function<(var L;L):void> type or @@<function<(var L;var L):void> type - depending on how the capture went
-        var inscope ftype <- new TypeDecl(at = call.at, baseType = Type.tFunction)
-        move_new(ftype.firstType) <| new TypeDecl(at = call.at, baseType = Type.tVoid)
+        var ftype = new TypeDecl(at = call.at, baseType = Type.tFunction)
+        ftype.firstType = new TypeDecl(at = call.at, baseType = Type.tVoid)
         ftype.argTypes |> emplace_new <| clone_type(sttype)
         ftype.argTypes |> emplace <| sttype
         if (const_clone) {

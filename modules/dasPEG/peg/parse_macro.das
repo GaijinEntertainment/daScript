@@ -273,7 +273,7 @@ var private failed_to_transform = false
 def transform(var rule : MacroRule) : Definition {
     failed_to_transform = false
     let name = rule.rule.variables[0].name |> string()
-    var inscope type_ <- rule.rule.variables[0]._type
+    var type_ = rule.rule.variables[0]._type
 
     // Transform array<ExprCall?> into an array of Rules
 

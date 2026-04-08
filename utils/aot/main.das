@@ -6,6 +6,7 @@ require daslib/fio
 require daslib/strings_boost
 
 require daslib/rtti
+require daslib/ast_boost
 
 
 def updateCOP(var cop : CodeOfPolicies; gen2 : bool; gen2_make : bool; aot_lib : bool) {
@@ -161,33 +162,39 @@ def main() {
     using() $(var cop : CodeOfPolicies) {
         updateCOP(cop, !gen1, gen2_make, false)
         for ((aot_in, aot_out) in aot_files) {
-            let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> empty()) {
-                to_log(LOG_INFO, "Failed to compile `{aot_in}` in standalone.\n")
-                result = false
-            } else {
-                let written = write_result(res, aot_out, "Aot", force_overwrite)
-                result = written && result
+            ast_gc_guard() {
+                let res = aot(aot_in, false, cross_platform, cop)
+                if (res |> empty()) {
+                    to_log(LOG_INFO, "Failed to compile `{aot_in}` in standalone.\n")
+                    result = false
+                } else {
+                    let written = write_result(res, aot_out, "Aot", force_overwrite)
+                    result = written && result
+                }
             }
         }
         updateCOP(cop, !gen1, gen2_make, true)
         for ((aot_in, aot_out) in aotlib_files) {
-            let res = aot(aot_in, false, cross_platform, cop)
-            if (res |> empty()) {
-                to_log(LOG_INFO, "Failed to compile `{aot_in}` in aotlib.\n")
-                result = false
-            } else {
-                let written = write_result(res, aot_out, "Aot library", force_overwrite)
-                result = written && result
+            ast_gc_guard() {
+                let res = aot(aot_in, false, cross_platform, cop)
+                if (res |> empty()) {
+                    to_log(LOG_INFO, "Failed to compile `{aot_in}` in aotlib.\n")
+                    result = false
+                } else {
+                    let written = write_result(res, aot_out, "Aot library", force_overwrite)
+                    result = written && result
+                }
             }
         }
         updateCOP(cop, !gen1, gen2_make, false)
         for ((ctx_in, ctx_out) in ctx_files) {
-            let is_ok = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
-            if (!is_ok && !quiet) {
-                to_log(LOG_INFO, "Failed to compile `{ctx_in}` in standalone.\n")
+            ast_gc_guard() {
+                let is_ok = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
+                if (!is_ok && !quiet) {
+                    to_log(LOG_INFO, "Failed to compile `{ctx_in}` in standalone.\n")
+                }
+                result = is_ok && result
             }
-            result = is_ok && result
         }
     }
     unsafe {

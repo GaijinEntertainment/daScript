@@ -36,7 +36,7 @@ class DecltypeMacro : AstCallMacro {
             macro_error(prog, expr.at, "decltype requires fully inferred type")
             return <- default<ExpressionPtr>
         }
-        var inscope tt <- clone_type(expr.arguments[0]._type)
+        var tt = clone_type(expr.arguments[0]._type)
         if (remove_ref) {
             tt.flags &= ~TypeDeclFlags.ref
         }

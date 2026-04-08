@@ -106,13 +106,13 @@ time.
 Type checking helper
 ~~~~~~~~~~~~~~~~~~~~
 
-A ``[macro_function]`` inspects whether a ``TypeDeclPtr`` refers to a
+A ``[macro_function]`` inspects whether a ``TypeDecl?`` refers to a
 struct with the ``[audited]`` annotation:
 
 .. code-block:: das
 
    [macro_function]
-   def private is_audited(typ : TypeDeclPtr) : bool {
+   def private is_audited(typ : TypeDecl?) : bool {
        if (!typ.isStructure || typ.structType == null) {
            return false
        }
@@ -136,7 +136,7 @@ capture expression in a call to ``audit_on_capture(value, "name")``:
 .. code-block:: das
 
    def override captureExpression(prog : Program?; mod : Module?;
-           expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
+           expr : ExpressionPtr; etype : TypeDecl?) : ExpressionPtr {
        if (!is_audited(etype)) {
            return <- default<ExpressionPtr>
        }

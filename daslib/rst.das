@@ -174,7 +174,7 @@ def public function_label_file(value : FunctionPtr | Function?; drop_args : int 
     return "{safe_function_name(string(value.name))}-{hash(mn)}"
 }
 
-def public function_label_file(name; value : smart_ptr<TypeDecl>&; drop_args : int = 0) {
+def public function_label_file(name; value : TypeDecl?&; drop_args : int = 0) {
     //! Generates a unique RST label for a function type based on its name and argument types.
     let mn = build_string() $(var w) {
         w |> write(name)
@@ -235,12 +235,6 @@ def function_label_name(value : FunctionPtr | Function?) {
     return res
 }
 
-
-def describe_type_short(td : TypeDecl?) {
-    unsafe {
-        return describe_type_short(reinterpret<TypeDeclPtr> td)
-    }
-}
 
 def cleanup_type_short(name : string) {
     var res = name
@@ -404,12 +398,6 @@ def rst_describe_function_short(func : FunctionPtr | Function?) {
 }
 
 def describe_type(td : TypeDecl?) {
-    unsafe {
-        return describe_type(reinterpret<TypeDeclPtr> td)
-    }
-}
-
-def describe_type(td : TypeDeclPtr) {
     return build_string() $(var writer) {
         if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
             write(writer, make_ref(alias_label_name(td), string(td.alias)))
@@ -763,7 +751,7 @@ def document_topic(doc_file : file; topic, content : string implicit) {
     }
 }
 
-def document_function_topic(doc_file : file; resType : smart_ptr<TypeDecl>&; topic, content : string implicit; var args : array<array<string>>) {
+def document_function_topic(doc_file : file; resType : TypeDecl?&; topic, content : string implicit; var args : array<array<string>>) {
 
     var paramsIdx = -1
     var returnsIdx = -1
@@ -1220,7 +1208,7 @@ def document_class_method(doc_file : file; mod : Module?; value; var fld) {
     fwrite(doc_file, make_label(function_label_name(func)))
 
     let argNames <- [for (arg in func.arguments); string(arg.name)]
-    let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
+    let argTypes <- [for (arg in func.arguments); arg._type]
     let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
     (document_function_declaration(doc_file, "das:function", "{value.name}.{fld.name}",
         argNames, argTypes, argInits, fld._type.firstType, /*drop args*/1))
@@ -1243,7 +1231,7 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
     fwrite(doc_file, make_label(function_label_name(func)))
 
     let argNames <- [for (arg in func.arguments); string(arg.name)]
-    let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
+    let argTypes <- [for (arg in func.arguments); arg._type]
     let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
     (document_function_declaration(doc_file, "das:function", "{value.name}.{fname}",
         argNames, argTypes, argInits, func.result, /*drop args*/1))
@@ -1389,7 +1377,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
                 }
             }
             var first = true
-            var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
+            var annT = new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
             for_each_function(mod, "") $(func) {
                 if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {
                     // ctor
@@ -1555,7 +1543,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         document_struct_method(doc_file, mod, value, func)
     }
 
-    var inscope annT <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
+    var annT = new TypeDecl(baseType = Type.tStructure, structType = get_ptr(value))
     var first = true
     for_each_function(mod, "") $(func) {
         if (func.flags.isClassMethod && func.classParent == value && func.name == value.name && !is_trivial_ctor(func)) {// ctor
@@ -1614,7 +1602,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
 
     var props : array<array<string>>
     props |> emplace(array<string>("field", "type"))
-    var inscope annT <- new TypeDecl(baseType = Type.tHandle,
+    var annT = new TypeDecl(baseType = Type.tHandle,
         annotation = unsafe(reinterpret<TypeAnnotation?> value))
     for_each_function(mod, "") $(func) {
         if (!func.moreFlags.propertyFunction) {
@@ -2056,7 +2044,7 @@ def function_name(func : FunctionPtr | Function?) {
 
 def document_function(doc_file : file; mod : Module?; var func : FunctionPtr | Function?; drop_args : int = 0; prefix : string = ""; objType : string = "das:function"; skip_body : bool = false) {
     let argNames <- [for (arg in func.arguments); string(arg.name)]
-    let argTypes <- [for (arg in func.arguments); get_ptr(arg._type)]
+    let argTypes <- [for (arg in func.arguments); arg._type]
     let argInits <- [for (arg in func.arguments); get_ptr(arg.init)]
     fwrite(doc_file, make_label(function_label_name(func)))
     let funcSafeName = function_name(func)

@@ -97,7 +97,7 @@ The ``[typemacro_function]`` annotation on ``pair`` converts the
 function into an ``AstTypeMacro`` registered under the name
 ``"pair"``.  The annotation also generates code that extracts
 ``dimExpr[1]`` and ``dimExpr[2]`` into the ``T1`` and ``T2``
-``TypeDeclPtr`` parameters.
+``TypeDecl?`` parameters.
 
 The argument names in ``TypeMacroTemplateArgument`` (``"T1"``,
 ``"T2"``) **must** match the alias names used in the template struct

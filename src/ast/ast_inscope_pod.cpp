@@ -131,7 +131,7 @@ namespace das {
                     auto podVar = make_smart<Variable>();
                     podVar->at = expr->sources[i]->at;
                     podVar->name = "`pod`source`" + expr->iterators[i];
-                    podVar->type = make_smart<TypeDecl>(Type::autoinfer);
+                    podVar->type = new TypeDecl(Type::autoinfer);
                     podVar->init = move(expr->sources[i]);
                     podVar->init_via_move = true;
                     podVar->pod_delete = true;

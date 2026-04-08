@@ -35,7 +35,7 @@ macro expansion time:
    * - ``qmacro(expr)``
      - Expression with reification splices (``$v``, ``$e``, etc.).
    * - ``qmacro_type(type<T>)``
-     - Build a ``TypeDeclPtr``.  ``$t(td)`` splices another ``TypeDeclPtr`` inside.
+     - Build a ``TypeDecl?``.  ``$t(td)`` splices another ``TypeDecl?`` inside.
    * - ``qmacro_variable("name", type<T>)``
      - Build a ``VariablePtr``.  Used for function parameters.
    * - ``qmacro_expr(${ stmt; })``
@@ -84,7 +84,7 @@ compile-time values into the generated AST:
      - String → **field** access name
      - ``pair.$f("first")`` → ``pair.first``
    * - ``$t(td)``
-     - Splice a ``TypeDeclPtr`` in type position
+     - Splice a ``TypeDecl?`` in type position
      - ``type<array<$t(int_type)>>`` → ``type<array<int>>``
    * - ``$a(args)``
      - Splice ``array<VariablePtr>`` as parameters
@@ -116,7 +116,7 @@ Key observations:
 
 - **``qmacro_template_class`` + ``add_structure_alias``** — the call
   macro clones the ``struct template``, renames it, and returns a
-  ``TypeDeclPtr``.  ``add_structure_alias`` then registers alias types
+  ``TypeDecl?``.  ``add_structure_alias`` then registers alias types
   (``TFirst`` → ``int``, ``TSecond`` → ``float``) on the cloned struct
   so the compiler resolves them during compilation.  The template's
   ``describe()`` method is also cloned and renamed to

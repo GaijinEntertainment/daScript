@@ -82,7 +82,7 @@ struct AddFieldAnnotation : StructureAnnotation {
         if (!st->findField("id")) {
             st->fields.emplace_back(
                 "id",                               // field name
-                make_smart<TypeDecl>(Type::tInt),    // type: int
+                new TypeDecl(Type::tInt),    // type: int
                 nullptr,                            // no initializer
                 AnnotationArgumentList(),           // no field annotations
                 false,                              // no move semantics

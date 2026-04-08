@@ -11,6 +11,7 @@
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/gc_node.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
@@ -247,7 +248,7 @@ namespace das {
         return program;
     }
 
-    char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
+    char * ast_describe_typedecl ( TypeDecl * t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting type, not null");
         return context->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
@@ -255,7 +256,7 @@ namespace das {
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no),at);
     }
 
-    char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, bool d_ChooseSmartPtr, Context * context, LineInfoArg * at ) {
+    char * ast_describe_typedecl_cpp ( TypeDecl * t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, bool d_ChooseSmartPtr, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting type, not null");
         return context->allocateString(describeCppType(t,
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
@@ -290,7 +291,7 @@ namespace das {
         return context->allocateString(das_to_string(bt), at);
     }
 
-    char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at ) {
+    char * ast_find_bitfield_name ( TypeDecl * bft, Bitfield value, Context * context, LineInfoArg * at ) {
         if ( !bft ) context->throw_error_at(at, "expecting bitfield type, not null");
         return context->allocateString(bft->findBitfieldName(value),at);
     }
@@ -323,13 +324,13 @@ namespace das {
         prog->error(message ? message : "style warning","","",at,CompilationError::style_lint);
     }
 
-    int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
+    int32_t get_variant_field_offset ( TypeDecl * td, int32_t index, Context * context, LineInfoArg * at ) {
         if ( !td ) context->throw_error_at(at,"expecting variant type");
         if ( td->baseType!=Type::tVariant ) context->throw_error_at(at,"expecting variant type, not %s", td->describe().c_str());
         return td->getVariantFieldOffset(index);
     }
 
-    int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
+    int32_t get_tuple_field_offset ( TypeDecl * td, int32_t index, Context * context, LineInfoArg * at ) {
         if ( !td ) context->throw_error_at(at,"expecting tuple type");
         if ( td->baseType!=Type::tTuple ) context->throw_error_at(at,"expecting tuple type, not %s", td->describe().c_str());
         return td->getTupleFieldOffset(index);
@@ -364,6 +365,11 @@ namespace das {
         return int32_t(((Table *) _tab)->size);
     }
 
+    void ast_gc_guard ( const TBlock<void> & block, Context * context, LineInfoArg * at ) {
+        gc_guard scope;
+        das_invoke<void>::invoke(context,at,block);
+    }
+
     void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at ) {
         prog->library.foreach_in_order([&](auto mod){
             das_invoke<void>::invoke<Module *>(context,at,block,mod);
@@ -378,9 +384,9 @@ namespace das {
         },nullptr);
     }
 
-    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_typedef ( Module * mod, const TBlock<void,TTemporary<char *>,TypeDecl *> & block, Context * context, LineInfoArg * at ) {
         mod->aliasTypes.foreach([&](auto aliasType){
-            das_invoke<void>::invoke<const char *,smart_ptr_raw<TypeDecl>>(context,at,block,aliasType->alias.c_str(),aliasType);
+            das_invoke<void>::invoke<const char *,TypeDecl *>(context,at,block,aliasType->alias.c_str(),aliasType);
         });
     }
 
@@ -466,10 +472,10 @@ namespace das {
     }
 
     void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
-        const TBlock<void,char *,char*,smart_ptr_raw<TypeDecl>,uint32_t> & block, Context * context, LineInfoArg * at ) {
+        const TBlock<void,char *,char*,TypeDecl *,uint32_t> & block, Context * context, LineInfoArg * at ) {
         for ( auto & it : ann.fields ) {
             const auto & fld = it.second;
-            das_invoke<void>::invoke<const char *,const char *,smart_ptr_raw<TypeDecl>,uint32_t>(context,at,block,
+            das_invoke<void>::invoke<const char *,const char *,TypeDecl *,uint32_t>(context,at,block,
                 it.first.c_str(), fld.cppName.c_str(),fld.decl,fld.offset);
         }
     }
@@ -489,7 +495,7 @@ namespace das {
         return context->allocateString(getAotHashComment(func),at);
     }
 
-    char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context, LineInfoArg * at ) {
+    char * get_mangled_name_t ( TypeDecl * typ, Context * context, LineInfoArg * at ) {
         if ( !typ ) context->throw_error_at(at,"expecting function");
         return context->allocateString(typ->getMangledName(),at);
     }
@@ -670,7 +676,7 @@ namespace das {
         mod->options[option] = type;
     }
 
-    TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at ) {
+    TypeDeclPtr getUnderlyingValueType ( TypeDecl * type, Context * context, LineInfoArg * at ) {
         if ( !type ) context->throw_error_at(at, "expecting type");
         if ( type->baseType!=Type::tHandle ) context->throw_error_at(at, "expecting handle type");
         return type->annotation->makeValueType();
@@ -700,7 +706,7 @@ namespace das {
         } else if (tstr == "smart_ptr<ast::Variable>") {
             return apply(static_cast<vector<smart_ptr_raw<Variable>>*>(vec));
         } else if (tstr == "smart_ptr<ast::TypeDecl>") {
-            return apply(static_cast<vector<smart_ptr_raw<TypeDecl>>*>(vec));
+            return apply(static_cast<vector<TypeDecl *>*>(vec));
         } else if (tstr == "string") {
             return apply(static_cast<vector<const char *>*>(vec));
         } else if (tstr == "$::das_string") {
@@ -739,7 +745,7 @@ namespace das {
         return apply_to_vec(vec, tstr, get_at);
     }
 
-    int32_t getVectorLength(void* vec, smart_ptr_raw<TypeDecl> type, Context * /*context*/, LineInfoArg * /*at*/) {
+    int32_t getVectorLength(void* vec, TypeDecl * type, Context * /*context*/, LineInfoArg * /*at*/) {
         auto get_size = [](auto *vec) {
             return vec->size();
         };
@@ -765,11 +771,11 @@ namespace das {
         return true;
     }
 
-    TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType ) {
+    TypeDeclPtr inferGenericTypeEx ( TypeDecl * type, TypeDecl * passType, bool topLevel, bool isPassType ) {
         return TypeDecl::inferGenericType(type, passType, topLevel, isPassType, nullptr);
     }
 
-    void updateAliasMapEx ( smart_ptr_raw<Program> program, smart_ptr_raw<TypeDecl> argType, smart_ptr_raw<TypeDecl> passType, Context * context, LineInfoArg * at ) {
+    void updateAliasMapEx ( smart_ptr_raw<Program> program, TypeDecl * argType, TypeDecl * passType, Context * context, LineInfoArg * at ) {
         if ( !program ) context->throw_error_at(at, "expecting program");
         if ( !program->updateAliasMapCallback ) context->throw_error_at(at, "can only call during alias inference (in typeinfo macro)");
         return program->updateAliasMapCallback(argType, passType);
@@ -791,7 +797,7 @@ namespace das {
         return context->allocateString(func->getAotArgumentPrefix(call, argIndex),at);
     }
 
-    bool isAstSameType(smart_ptr<TypeDecl> argType, smart_ptr<TypeDecl> passType, bool refMatters,
+    bool isAstSameType(TypeDecl * argType, TypeDecl * passType, bool refMatters,
                     bool constMatters,
                     bool temporaryMatters,
                     bool allowSubstitute, Context *, LineInfoArg * ) {
@@ -1002,11 +1008,11 @@ namespace das {
         return true;
     }
 
-    void for_each_structure_alias ( Structure * structure, const TBlock<void,smart_ptr_raw<TypeDecl>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_structure_alias ( Structure * structure, const TBlock<void,TypeDecl *> & block, Context * context, LineInfoArg * at ) {
         if ( !structure ) context->throw_error_at(at, "expecting structure");
         structure->aliases.foreach([&](const TypeDeclPtr & aliasType){
             vec4f args[1];
-            args[0] = cast<smart_ptr_raw<TypeDecl>>::from(aliasType);
+            args[0] = cast<TypeDecl *>::from(aliasType);
             context->invoke(block, args, nullptr, at);
         });
     }
@@ -1067,6 +1073,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
             SideEffects::accessExternal, "compileModule")
                 ->args({"context","at"});
+        addExtern<DAS_BIND_FUN(ast_gc_guard)>(*this, lib,  "ast_gc_guard",
+            SideEffects::modifyExternal, "ast_gc_guard")
+                ->args({"block","context","line"});
         addExtern<DAS_BIND_FUN(for_each_module)>(*this, lib,  "for_each_module",
             SideEffects::accessExternal, "for_each_module")
                 ->args({"program","block","context","line"});

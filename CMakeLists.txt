@@ -645,6 +645,7 @@ src/ast/ast_allocate_stack.cpp
 src/ast/ast_derive_alias.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
+src/ast/ast_gc_collect.cpp
 src/ast/ast_inscope_pod.cpp
 src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
@@ -729,8 +730,10 @@ include/daScript/misc/sysos.h
 include/daScript/misc/callable.h
 include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
+include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/uric.h
+src/misc/gc_node.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp

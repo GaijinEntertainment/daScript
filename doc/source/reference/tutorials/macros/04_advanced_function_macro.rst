@@ -195,23 +195,21 @@ Step 2 — create the cache variable
 
 .. code-block:: das
 
-       var inscope retType <- clone_type(fn.result)
+       var retType = clone_type(fn.result)
        retType.flags &= ~TypeDeclFlags.constant
        retType.flags &= ~TypeDeclFlags.ref
-       var inscope wrapperRetType <- clone_type(retType)
+       var wrapperRetType = clone_type(retType)
 
-       var inscope keyType <- new TypeDecl(baseType = Type.tUInt64, at = fn.at)
-       var inscope cacheType <- new TypeDecl(baseType = Type.tTable, at = fn.at)
-       move(cacheType.firstType) <| keyType
-       move(cacheType.secondType) <| retType
+       var keyType = new TypeDecl(baseType = Type.tUInt64, at = fn.at)
+       var cacheType = new TypeDecl(baseType = Type.tTable, at = fn.at)
+       cacheType.firstType = keyType
+       cacheType.secondType = retType
        add_global_var(compiling_module(), cacheName, clone_type(cacheType), fn.at, true)
 
 The table type ``table<uint64; RetType>`` is built manually because
 ``$t()`` splicing doesn't work inside ``typeinfo ast_typedecl`` for table
 value types.  ``clone_type(cacheType)`` is required because
-``add_global_var`` takes ownership of the ``TypeDeclPtr`` without cloning
-it — if you pass an ``inscope`` variable directly, it gets deleted at
-scope exit and the compiler crashes on the next inference pass.
+``add_global_var`` takes ownership of the type without cloning it.
 
 Step 4 — hash key computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -404,7 +402,7 @@ Key techniques summary
 | ``clone_function``           | Deep-clones a function with all annotations  |
 +------------------------------+----------------------------------------------+
 | ``add_global_var``           | Creates module-level variables at compile    |
-|                              | time (pass ``clone_type``, not ``inscope``)  |
+|                              | time (pass ``clone_type`` for the type arg)  |
 +------------------------------+----------------------------------------------+
 | ``qmacro_function``          | Reification: builds a function from spliced  |
 |                              | arguments, body, and return type             |

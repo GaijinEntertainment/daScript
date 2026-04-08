@@ -135,7 +135,7 @@ namespace das {
         return g_cppCTypeTable.find(t);
     }
 
-    bool isConstRedundantForCpp ( const TypeDeclPtr & type ) {
+    bool isConstRedundantForCpp ( const TypeDecl * type ) {
         if ( type->dim.size() ) return false;
         if ( type->isVectorType() ) return true;
         switch ( type->baseType ) {
@@ -221,7 +221,7 @@ namespace das {
 
     static bool crossPlatform = false; // It'll be better to forward this flag everywhere in describeTypeEx
 
-    string describeCppTypeEx ( const smart_ptr_raw<TypeDecl> & type,
+    string describeCppTypeEx ( const TypeDecl * type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
@@ -383,7 +383,7 @@ namespace das {
         return stream.str();
     }
 
-    string describeCppType ( const smart_ptr_raw<TypeDecl> & type,
+    string describeCppType ( const TypeDecl * type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,
@@ -474,15 +474,15 @@ namespace das {
 
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
-            mark(expr->type.get());
+            mark(expr->type);
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn,var,lastArg);
-            mark(var->type.get());
+            mark(var->type);
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block,var,lastArg);
-            mark(var->type.get());
+            mark(var->type);
         }
         void mark ( TypeDecl * decl ) {
             if ( !decl ) return;
@@ -491,17 +491,17 @@ namespace das {
                 if ( useStructs.find(decl->structType)==useStructs.end() ) {
                     useStructs.insert(decl->structType);
                     for ( auto & fld : decl->structType->fields ) {
-                        mark ( fld.type.get() );
+                        mark ( fld.type );
                     }
                 }
             } else if ( decl->baseType==Type::tEnumeration || decl->baseType==Type::tEnumeration8 || decl->baseType==Type::tEnumeration16 || decl->baseType==Type::tEnumeration64 ) {
                 DAS_ASSERT(decl->enumType);
                 useEnums.insert(decl->enumType);
             } else {
-                if ( decl->firstType ) mark ( decl->firstType.get() );
-                if ( decl->secondType ) mark ( decl->secondType.get() );
+                if ( decl->firstType ) mark ( decl->firstType );
+                if ( decl->secondType ) mark ( decl->secondType );
                 for ( auto & arg : decl->argTypes ) {
-                    mark(arg.get());
+                    mark(arg);
                 }
             }
         }

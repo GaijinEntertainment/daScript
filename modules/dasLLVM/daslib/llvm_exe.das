@@ -286,7 +286,7 @@ class CollectExternVisitor : AstVisitor {
         } else {
             if (expr.typeexpr.dim |> length > 0) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
-                    var inscope elemT = clone_type(expr.typeexpr)
+                    var elemT = clone_type(expr.typeexpr)
                     elemT.dim |> clear() // hack to get correct ptr to ctor
                     let name = uid.get_new(expr.typeexpr)
                     if (initialize(name)) {
@@ -364,7 +364,7 @@ class CollectExternVisitor : AstVisitor {
         if (firstT.isWorkhorseType) {
             return firstT.baseType
         } else {
-            var inscope uvt <- get_underlying_value_type(firstT)
+            var uvt = get_underlying_value_type(firstT)
             return uvt.baseType
         }
     }
@@ -418,7 +418,7 @@ class CollectExternVisitor : AstVisitor {
     def override preVisitExprSafeAt(expr : smart_ptr<ExprSafeAt>) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
-            var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
+            var etype = subExprT.isPointer ? subExprT.firstType : subExprT
             add_table_find_call(etype)
         }
     }
@@ -433,8 +433,10 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                var funcs : array<FunctionPtr>; var uids : UidNodes?) {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids)
     var inscope adapter_resolve = make_visitor(*extern_resolver)
-    for (fn in funcs) {
-        visit(fn, adapter_resolve)
+    ast_gc_guard() {
+        for (fn in funcs) {
+            visit(fn, adapter_resolve)
+        }
     }
     // Register [pinvoke] and [export] functions in tabMnLookup so they can be
     // found by name at runtime (e.g. via invoke_in_context).

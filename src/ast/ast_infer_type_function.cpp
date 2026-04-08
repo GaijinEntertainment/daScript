@@ -97,7 +97,7 @@ namespace das {
             for (auto &arg : arguments) {
                 // TODO: support blocks?
                 auto fakeArg = make_smart<ExprTypeDecl>(LineInfo(), arg);
-                fakeArg->type = make_smart<TypeDecl>(*arg);
+                fakeArg->type = new TypeDecl(*arg);
                 fakeCall->arguments.push_back(fakeArg);
             }
             auto fn = inferFunctionCall(fakeCall.get());
@@ -375,7 +375,7 @@ namespace das {
         }
         vector<TypeDeclPtr> nna = nonNamedArguments;
         if (!methodCall) {
-            nna.insert(nna.begin(), make_smart<TypeDecl>(st));
+            nna.insert(nna.begin(), new TypeDecl(st));
         }
         return isFunctionCompatible(methodFunc, nna, arguments, false, false);
     }
@@ -1239,9 +1239,9 @@ namespace das {
                             }
                             TypeDecl::updateAliasMap(argType, passType, aliases, options);
                             if (argType->baseType == Type::option) {
-                                auto it = options.find(argType.get());
+                                auto it = options.find(argType);
                                 if (it != options.end()) {
-                                    auto optionType = argType->argTypes[it->second].get();
+                                    auto optionType = argType->argTypes[it->second];
                                     defaultRef[ai] = optionType->ref;
                                 }
                             } else {
@@ -1283,7 +1283,7 @@ namespace das {
                             if (arg->init) {
                                 arg->init = arg->init->visit(*this);
                                 if (arg->init->type && !arg->init->type->isAutoOrAlias()) {
-                                    arg->type = make_smart<TypeDecl>(*arg->init->type);
+                                    arg->type = new TypeDecl(*arg->init->type);
                                     continue;
                                 }
                             }
@@ -1461,7 +1461,7 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::inferGenericOperatorWithName(const string &opN, const LineInfo &expr_at, const ExpressionPtr &arg0, const string &arg1, InferCallError err) {
-        auto conststring = make_smart<TypeDecl>(Type::tString);
+        auto conststring = new TypeDecl(Type::tString);
         conststring->constant = true;
         auto fieldName = make_smart<ExprConstString>(expr_at, arg1);
         fieldName->type = conststring;

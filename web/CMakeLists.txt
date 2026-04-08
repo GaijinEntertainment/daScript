@@ -346,6 +346,7 @@ SET(AST_SRC
 ../src/ast/ast_const_folding.cpp
 ../src/ast/ast_block_folding.cpp
 ../src/ast/ast_inscope_pod.cpp
+../src/ast/ast_gc_collect.cpp
 ../src/ast/ast_unused.cpp
 ../src/ast/ast_annotations.cpp
 ../src/ast/ast_export.cpp
@@ -429,6 +430,7 @@ SET(MISC_SRC
 ../include/daScript/misc/callable.h
 ../include/daScript/misc/debug_break.h
 ../include/daScript/misc/instance_debugger.h
+../include/daScript/misc/gc_node.h
 ../include/daScript/misc/job_que.h
 ../include/daScript/misc/uric.h
 ../src/misc/sysos.cpp
@@ -436,6 +438,7 @@ SET(MISC_SRC
 ../src/misc/memory_model.cpp
 ../src/misc/job_que.cpp
 ../src/misc/free_list.cpp
+../src/misc/gc_node.cpp
 ../src/misc/daScriptC.cpp
 ../src/misc/uric.cpp
 ../src/misc/format.cpp

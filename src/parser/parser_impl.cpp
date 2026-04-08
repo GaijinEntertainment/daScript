@@ -123,7 +123,7 @@ namespace das {
             if ( pDecl->pTypeDecl ) {
                 int count = pDecl->pNameList ? int(pDecl->pNameList->size()) : 1;
                 for ( int ai=0; ai!=count; ++ai ) {
-                    auto pVarType = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    auto pVarType = new TypeDecl(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         das_yyerror(scanner,"can't have default values in a type declaration",
                             (*pDecl->pNameList)[ai].at,CompilationError::cant_initialize);
@@ -355,10 +355,10 @@ namespace das {
                             das_yyerror(scanner,"structure field is not overriding anything "+name_at.name,name_at.at,
                                 CompilationError::invalid_override);
                         } else {
-                            TypeDeclPtr td;
+                            TypeDeclPtr td = nullptr;
                             ExpressionPtr init;
                             if ( pDecl->pNameList->size()>1 ) {
-                                td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                                td = new TypeDecl(*pDecl->pTypeDecl);
                                 if ( pDecl->pInit ) init = pDecl->pInit->clone();
 
                             } else {
@@ -529,7 +529,7 @@ namespace das {
                     }
                     pVar->at = name_at.at;
                     if ( pDecl->pNameList->size()>1 ) {
-                        pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                        pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                     } else {
                         pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
                     }
@@ -562,7 +562,7 @@ namespace das {
         auto pVar = make_smart<Variable>();
         pVar->name = "`" + bType->alias + "`" + name;
         pVar->at = expr->at;
-        pVar->type = make_smart<TypeDecl>(*bType);
+        pVar->type = new TypeDecl(*bType);
         pVar->type->constant = true;
         pVar->init = expr;
         pVar->private_variable = !pub_var;
@@ -587,7 +587,7 @@ namespace das {
                 }
                 pVar->at = name_at.at;
                 if ( pDecl->pNameList->size()>1 ) {
-                    pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                    pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                 } else {
                     pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
                 }
@@ -657,7 +657,7 @@ namespace das {
                 swap ( funcType->firstType, func->result );
                 funcType->argTypes.reserve ( func->arguments.size() );
                 if ( yyextra->g_thisStructure->isClass ) {
-                    auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
+                    auto selfType = new TypeDecl(yyextra->g_thisStructure);
                     selfType->constant = cnst;
                     funcType->argTypes.push_back(selfType);
                     funcType->argNames.push_back("self");
@@ -751,10 +751,10 @@ namespace das {
                     vars->emplace_back(VariableNameAndPosition(varName,"",func->at));
                     Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
                     if ( ovr == OVERRIDE_OVERRIDE ) {
-                        finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                        finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer));
                     } else if ( ovr == OVERRIDE_SEALED ) {
                         if ( yyextra->g_thisStructure->findField(varName) ) { // only if we are actually overriding a field
-                            finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                            finit = new ExprCast(func->at, finit, new TypeDecl(Type::autoinfer));
                         }
                     }
                     VariableDeclaration * decl = new VariableDeclaration(
@@ -842,11 +842,11 @@ namespace das {
             } else if ( alias->isBitfield() ) {
                 int bit = alias->findArgumentIndex(*eni);
                 if ( bit!=-1 ) {
-                    auto td = make_smart<TypeDecl>(*alias);
+                    auto td = new TypeDecl(*alias);
                     td->ref = false;
                     auto bitConst = new ExprConstBitfield(eniAt, 1ull << uint64_t(bit));
                     bitConst->baseType = alias->baseType;
-                    bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
+                    bitConst->bitfieldType = new TypeDecl(*alias);
                     resConst = bitConst;
                 } else {
                     das_yyerror(scanner,"enumeration or bitfield not found " + *ena, enaAt,
@@ -858,7 +858,7 @@ namespace das {
             }
         }
         if ( pEnum ) {
-            auto td = make_smart<TypeDecl>(pEnum);
+            auto td = new TypeDecl(pEnum);
             resConst = new ExprConstEnumeration(eniAt, *eni, td);
         }
         delete ena;
@@ -887,7 +887,7 @@ namespace das {
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
                             if ( pDecl->pNameList->size()>1 ) {
-                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                                pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                             } else {
                                 pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
                             }
@@ -964,7 +964,7 @@ namespace das {
                     pVar->aka = name_at.aka;
                     pVar->at = name_at.at;
                     if ( decl->pNameList->size()>1 ) {
-                        pVar->type = make_smart<TypeDecl>(*decl->pTypeDecl);
+                        pVar->type = new TypeDecl(*decl->pTypeDecl);
                     } else {
                         pVar->type = decl->pTypeDecl; decl->pTypeDecl = nullptr;
                     }
@@ -1013,7 +1013,7 @@ namespace das {
                         pVar->aka = name_at.aka;
                         pVar->at = name_at.at;
                         if ( pDecl->pNameList->size()>1 ) {
-                            pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                            pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                         } else {
                             pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
                         }
@@ -1059,7 +1059,7 @@ namespace das {
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
                             if ( pDecl->pNameList->size()>1 ) {
-                                pVar->type = make_smart<TypeDecl>(*pDecl->pTypeDecl);
+                                pVar->type = new TypeDecl(*pDecl->pTypeDecl);
                             } else {
                                 pVar->type = pDecl->pTypeDecl; pDecl->pTypeDecl = nullptr;
                             }

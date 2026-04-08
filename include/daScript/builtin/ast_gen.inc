@@ -115,9 +115,9 @@ public:
   __forceinline Func get_isCompatible ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_isCompatible]);
   }
-  __forceinline bool invoke_isCompatible ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, das::vector<smart_ptr<TypeDecl>> & types, AnnotationDeclaration const  & decl, das::string & errors ) const {
+  __forceinline bool invoke_isCompatible ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Function> func, das::vector<TypeDecl *> & types, AnnotationDeclaration const  & decl, das::string & errors ) const {
     return das_invoke_function<bool>::invoke
-      <void *,smart_ptr_raw<Function>,das::vector<smart_ptr<TypeDecl>> &,AnnotationDeclaration const  &,das::string &>
+      <void *,smart_ptr_raw<Function>,das::vector<TypeDecl *> &,AnnotationDeclaration const  &,das::string &>
         (__context__,nullptr,__funcCall__,
           self,func,types,decl,errors);
   }
@@ -390,9 +390,9 @@ public:
   __forceinline Func get_captureExpression ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_captureExpression]);
   }
-  __forceinline smart_ptr<Expression> invoke_captureExpression ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, smart_ptr_raw<Expression> const  expr, smart_ptr_raw<TypeDecl> const  etype ) const {
+  __forceinline smart_ptr<Expression> invoke_captureExpression ( Context * __context__, Func __funcCall__, void * self, Program * const  prog, Module * const  mod, smart_ptr_raw<Expression> const  expr, TypeDecl * const  etype ) const {
     return das_invoke_function<smart_ptr_raw<Expression>>::invoke
-      <void *,Program * const ,Module * const ,smart_ptr_raw<Expression> const ,smart_ptr_raw<TypeDecl> const >
+      <void *,Program * const ,Module * const ,smart_ptr_raw<Expression> const ,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
           self,prog,mod,expr,etype).marshal();
   }
@@ -430,11 +430,11 @@ public:
   __forceinline Func get_visit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<TypeDecl> const  td, smart_ptr_raw<TypeDecl> const  passT ) const {
-    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
-      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<TypeDecl> const ,smart_ptr_raw<TypeDecl> const >
+  __forceinline TypeDecl * invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, TypeDecl * const  td, TypeDecl * const  passT ) const {
+    return das_invoke_function<TypeDecl *>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,TypeDecl * const ,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
-          self,prog,mod,td,passT).marshal();
+          self,prog,mod,td,passT);
   }
 };
 
@@ -991,11 +991,11 @@ public:
   __forceinline Func get_getAstType ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_getAstType]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_getAstType ( Context * __context__, Func __funcCall__, void * self, ModuleLibrary & lib, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) const {
-    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
+  __forceinline TypeDecl * invoke_getAstType ( Context * __context__, Func __funcCall__, void * self, ModuleLibrary & lib, smart_ptr_raw<ExprTypeInfo> const  expr, das::string & errors ) const {
+    return das_invoke_function<TypeDecl *>::invoke
       <void *,ModuleLibrary &,smart_ptr_raw<ExprTypeInfo> const ,das::string &>
         (__context__,nullptr,__funcCall__,
-          self,lib,expr,errors).marshal();
+          self,lib,expr,errors);
   }
 };
 
@@ -1690,38 +1690,38 @@ public:
   __forceinline Func get_preVisitTypeDecl ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitTypeDecl]);
   }
-  __forceinline void invoke_preVisitTypeDecl ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<TypeDecl> const  typ ) const {
+  __forceinline void invoke_preVisitTypeDecl ( Context * __context__, Func __funcCall__, void * self, TypeDecl * const  typ ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<TypeDecl> const >
+      <void *,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
           self,typ);
   }
   __forceinline Func get_visitTypeDecl ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visitTypeDecl]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_visitTypeDecl ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<TypeDecl> const  typ ) const {
-    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
-      <void *,smart_ptr_raw<TypeDecl> const >
+  __forceinline TypeDecl * invoke_visitTypeDecl ( Context * __context__, Func __funcCall__, void * self, TypeDecl * const  typ ) const {
+    return das_invoke_function<TypeDecl *>::invoke
+      <void *,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
-          self,typ).marshal();
+          self,typ);
   }
   __forceinline Func get_preVisitAlias ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitAlias]);
   }
-  __forceinline void invoke_preVisitAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<TypeDecl> const  typ, das::string const  & name ) const {
+  __forceinline void invoke_preVisitAlias ( Context * __context__, Func __funcCall__, void * self, TypeDecl * const  typ, das::string const  & name ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<TypeDecl> const ,das::string const  &>
+      <void *,TypeDecl * const ,das::string const  &>
         (__context__,nullptr,__funcCall__,
           self,typ,name);
   }
   __forceinline Func get_visitAlias ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visitAlias]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_visitAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<TypeDecl> const  typ, das::string const  & name ) const {
-    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
-      <void *,smart_ptr_raw<TypeDecl> const ,das::string const  &>
+  __forceinline TypeDecl * invoke_visitAlias ( Context * __context__, Func __funcCall__, void * self, TypeDecl * const  typ, das::string const  & name ) const {
+    return das_invoke_function<TypeDecl *>::invoke
+      <void *,TypeDecl * const ,das::string const  &>
         (__context__,nullptr,__funcCall__,
-          self,typ,name).marshal();
+          self,typ,name);
   }
   __forceinline Func get_canVisitEnumeration ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitEnumeration]);
@@ -2473,9 +2473,9 @@ public:
   __forceinline Func get_preVisitExprIsType ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprIsType]);
   }
-  __forceinline void invoke_preVisitExprIsType ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprIs> const  expr, smart_ptr_raw<TypeDecl> const  typeDecl ) const {
+  __forceinline void invoke_preVisitExprIsType ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprIs> const  expr, TypeDecl * const  typeDecl ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<ExprIs> const ,smart_ptr_raw<TypeDecl> const >
+      <void *,smart_ptr_raw<ExprIs> const ,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
           self,expr,typeDecl);
   }
@@ -2941,20 +2941,20 @@ public:
   __forceinline Func get_preVisitStructureAlias ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitStructureAlias]);
   }
-  __forceinline void invoke_preVisitStructureAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> const  str, das::string const  & name, smart_ptr_raw<TypeDecl> const  at ) const {
+  __forceinline void invoke_preVisitStructureAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> const  str, das::string const  & name, TypeDecl * const  at ) const {
     das_invoke_function<void>::invoke
-      <void *,smart_ptr_raw<Structure> const ,das::string const  &,smart_ptr_raw<TypeDecl> const >
+      <void *,smart_ptr_raw<Structure> const ,das::string const  &,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
           self,str,name,at);
   }
   __forceinline Func get_visitStructureAlias ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visitStructureAlias]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_visitStructureAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> const  str, das::string const  & name, smart_ptr_raw<TypeDecl> const  at ) const {
-    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
-      <void *,smart_ptr_raw<Structure> const ,das::string const  &,smart_ptr_raw<TypeDecl> const >
+  __forceinline TypeDecl * invoke_visitStructureAlias ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> const  str, das::string const  & name, TypeDecl * const  at ) const {
+    return das_invoke_function<TypeDecl *>::invoke
+      <void *,smart_ptr_raw<Structure> const ,das::string const  &,TypeDecl * const >
         (__context__,nullptr,__funcCall__,
-          self,str,name,at).marshal();
+          self,str,name,at);
   }
   __forceinline Func get_preVisitExprMakeStructIndex ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisitExprMakeStructIndex]);

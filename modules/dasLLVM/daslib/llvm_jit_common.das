@@ -797,7 +797,7 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
             failed("type_to_llvm_abi_type: internal error. unsupported type {describe(t)} at {describe(t.at)}")
             return g_prim_t.LLVMVoidPtrType()
         } else {
-            var inscope tp <- get_underlying_value_type(t)
+            var tp = get_underlying_value_type(t)
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.LLVMFloat4Type()
@@ -818,7 +818,7 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
 def public type_to_llvm_type(t : TypeDeclPtr) {
     var res : LLVMOpaqueType?
     if (t.dim |> length != 0) {
-        var inscope ndt <- clone_type(t)
+        var ndt = clone_type(t)
         ndt.dim |> clear()
         res = type_to_llvm_type(ndt)
         let ndim = length(t.dim)
@@ -884,7 +884,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
         if (t.isRefType) {
             res = LLVMArrayType(g_prim_t.t_int8, uint(t.sizeOf))
         } else {
-            var inscope tp <- get_underlying_value_type(t)
+            var tp = get_underlying_value_type(t)
             if (tp == null) {
                 failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
                 return g_prim_t.t_int32
@@ -905,7 +905,7 @@ def public dim_element_type_to_llvm_type(typ : TypeDeclPtr) {
     if (typ.dim |> length == 0) {
         return type_to_llvm_type(typ)
     } else {
-        var inscope ndt <- clone_type(typ)
+        var ndt = clone_type(typ)
         ndt.dim |> clear()
         return type_to_llvm_type(ndt)
     }

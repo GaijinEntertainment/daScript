@@ -97,7 +97,7 @@ namespace das {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
             auto & sfield = it->second;
-            auto t = isConst && sfield.constDecl ? make_smart<TypeDecl>(*sfield.constDecl) :  make_smart<TypeDecl>(*sfield.decl);
+            auto t = isConst && sfield.constDecl ? new TypeDecl(*sfield.constDecl) :  new TypeDecl(*sfield.decl);
             if ( sfield.offset != -1U ) {
                 t->ref = true;
             }
@@ -112,7 +112,7 @@ namespace das {
         if ( it!=fields.end() ) {
             auto & sfield = it->second;
             if ( sfield.offset!=-1U ) {
-                return isConst && sfield.constDecl ? make_smart<TypeDecl>(*sfield.constDecl) : make_smart<TypeDecl>(*sfield.decl);
+                return isConst && sfield.constDecl ? new TypeDecl(*sfield.constDecl) : new TypeDecl(*sfield.decl);
             } else {
                 return nullptr;
             }
@@ -253,7 +253,7 @@ namespace das {
                     if ( tp->rtti_isBasicStructureAnnotation() ) {
                         auto bs = static_pointer_cast<BasicStructureAnnotation>(tp);
                         if ( !bs->validationNeverFails ) {
-                            auto cppt = make_smart<TypeDecl>(Type::tHandle);
+                            auto cppt = new TypeDecl(Type::tHandle);
                             cppt->annotation = bs.get();
                             auto cppn = describeCppType(cppt);
                             logs << "//\t" << cppn << " aka " << tp->name << "\n";
@@ -270,7 +270,7 @@ namespace das {
                     }
                 });
                 mod->enumerations.foreach([&](auto tp){
-                    auto cppt = make_smart<TypeDecl>(tp);
+                    auto cppt = new TypeDecl(tp);
                     auto cppn = describeCppType(cppt);
                     auto baset = tp->makeBaseType();
                     logs << "//\t" << cppn << " aka " << tp->name << "\n";

@@ -250,7 +250,7 @@ and C++ types:
 
    MAKE_TYPE_FACTORY(Point3, float3)
 
-This creates ``typeFactory<float3>::make()`` (returns ``TypeDeclPtr``)
+This creates ``typeFactory<float3>::make()`` (returns ``TypeDecl*``)
 and ``typeName<float3>()`` (returns ``"Point3"``).
 
 **Type aliases** — to expose ``Point3`` as an alias for ``float3``,

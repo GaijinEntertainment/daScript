@@ -155,18 +155,18 @@ class MemoizeMacro : AstFunctionAnnotation {
 
         // Step 2: Create the private global cache variable
         //         var private `memoize`cache`fib : table<uint64; RetType>
-        var inscope retType <- clone_type(fn.result)
+        var retType = clone_type(fn.result)
         retType.flags &= ~TypeDeclFlags.constant
         retType.flags &= ~TypeDeclFlags.ref
         // Clone again — retType will be consumed by the cache table type,
         // we need a separate copy for the wrapper function's return type.
-        var inscope wrapperRetType <- clone_type(retType)
+        var wrapperRetType = clone_type(retType)
         // Build table<uint64; RetType> type manually — $t() doesn't work
         // inside typeinfo ast_typedecl for table value types
-        var inscope keyType <- new TypeDecl(baseType = Type.tUInt64, at = fn.at)
-        var inscope cacheType <- new TypeDecl(baseType = Type.tTable, at = fn.at)
-        move(cacheType.firstType) <| keyType
-        move(cacheType.secondType) <| retType
+        var keyType = new TypeDecl(baseType = Type.tUInt64, at = fn.at)
+        var cacheType = new TypeDecl(baseType = Type.tTable, at = fn.at)
+        cacheType.firstType = keyType
+        cacheType.secondType = retType
         add_global_var(compiling_module(), cacheName, clone_type(cacheType), fn.at, true)
 
         // Step 3: Build the wrapper function arguments (clone of original)

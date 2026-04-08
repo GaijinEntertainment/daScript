@@ -44,7 +44,7 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
     var inscope fn <- new Function(at = fnMain.at, atDecl = fnMain.at, name := bind_uniform_function_name(fnMain))
     fn.flags |= FunctionFlags.generated
     fn.flags |= FunctionFlags.exports   // note: this is temporary, until we are done with dependency collecting etc
-    move_new(fn.result) <| new TypeDecl(baseType = Type.tVoid, at = fnMain.at)
+    fn.result = new TypeDecl(baseType = Type.tVoid, at = fnMain.at)
     fn.arguments |> emplace_new() <| new Variable(at = fnMain.at,
         name := "__program",
         _type <- new TypeDecl(at = fnMain.at, baseType = Type.tUInt)

@@ -61,7 +61,7 @@ def describe(vvar : VariablePtr) {
 def describe_bitfield(bf; merger : string = "") {
     //! Returns a string listing the set bits of a bitfield value.
     static_if (typeinfo is_bitfield(bf)) {
-        var inscope bftd <- typeinfo ast_typedecl(bf)
+        var bftd = typeinfo ast_typedecl(bf)
         return join([ for (name, bit in bftd.argNames, range(32)); "[{name}]";
             where(int(bf) & (1 << bit)) != 0 ], merger)
     } else {
@@ -136,7 +136,7 @@ def emplace_new(var vec : dasvector`smart_ptr`Expression; var ptr : smart_ptr<Ex
     emplace(vec, ptr)
 }
 
-def emplace_new(var vec : dasvector`smart_ptr`TypeDecl; var ptr : smart_ptr<TypeDecl>) {
+def emplace_new(var vec : VectorTypeDeclPtr; var ptr : TypeDecl?) {
     //! Emplaces a smart pointer to a TypeDecl into a vector.
     emplace(vec, ptr)
 }
@@ -157,7 +157,7 @@ def override_method(var str : StructurePtr; name, funcName : string) : bool {
         if (fld.name == name) {
             var inscope vcast <- new ExprCast(at = str.at,
                 subexpr <- new ExprAddr(at = str.at, target := funcName),
-                castType <- new TypeDecl(at = str.at, baseType = Type.autoinfer)
+                castType = new TypeDecl(at = str.at, baseType = Type.autoinfer)
             )
             move(fld.init) <| vcast
             return true
@@ -317,7 +317,7 @@ def setup_call_list(name : string; at : LineInfo; subblock : block<(var fn : Fun
     if (fn == null) {
         move_new(fn) <| new Function(at = at, atDecl = at, name := "{name}",
             flags = FunctionFlags.generated,
-            result <- new TypeDecl(baseType = Type.autoinfer, at = at)
+            result = new TypeDecl(baseType = Type.autoinfer, at = at)
         )
         var inscope blk <- new ExprBlock(at = at)
         var res = get_ptr(blk)
@@ -355,7 +355,7 @@ def setup_macro(name : string; at : LineInfo) : ExprBlock? {
     if (fn == null) {
         move_new(fn) <| new Function(at = at, atDecl = at, name := "{name}",
             flags = FunctionFlags.generated | FunctionFlags.macroInit | FunctionFlags.privateFunction,
-            result <- new TypeDecl(baseType = Type.autoinfer, at = at)
+            result = new TypeDecl(baseType = Type.autoinfer, at = at)
         )
         var inscope blk <- new ExprBlock(at = at)
         var inscope iblk <- new ExprBlock(at = at)
@@ -411,7 +411,7 @@ class SetupAnyAnnotation : AstStructureAnnotation {
         var inscope cll <- new ExprCall(at = st.at, name := annotation_function_call)
         self->setup_call(st, cll)
         var inscope nee <- new ExprNew(at = st.at, initializer = true,
-            typeexpr <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(st), at = st.at)
+            typeexpr = new TypeDecl(baseType = Type.tStructure, structType = get_ptr(st), at = st.at)
         )
         emplace(cll.arguments, nee)
         emplace(blk.list, cll)
@@ -548,9 +548,9 @@ def private makeAsOrSafeAs(expr; var enull : ExpressionPtr) {
     var inscope vdr <- new ExprField(at = expr.at, name := "__rtti", value <- clone_expression(expr.value))
     var inscope cna <- new ExprConstString(at = expr.at, value := expr.name)
     var inscope cond <- new ExprOp2(at = expr.at, op := "==", left <- vdr, right <- cna)
-    var inscope ctype <- new TypeDecl(at = expr.at,
+    var ctype = new TypeDecl(at = expr.at,
         baseType = Type.tPointer,
-        firstType <- new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
+        firstType = new TypeDecl(at = expr.at, baseType = Type.alias, alias := expr.name)
     )
     var inscope esub <- clone_expression(expr.value)
     if (expr.value._type.baseType == Type.tPointer) {
@@ -706,7 +706,7 @@ def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at :
     let total = any_array_size(data)
     if (total != 0) {
         let stride = info.firstType.sizeOf
-        var inscope mkArr <- new ExprMakeArray(at = at, makeType <- clone_type(info.firstType))
+        var inscope mkArr <- new ExprMakeArray(at = at, makeType = clone_type(info.firstType))
         any_array_foreach(data, stride) $(value) {
             emplace_new(mkArr.values) <| walk_and_convert(value, info.firstType, at)
         }
@@ -715,16 +715,16 @@ def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at :
         emplace(mkToArrayMove.arguments, mkArr)
         return <- mkToArrayMove
     } else {
-        return <- new ExprMakeStruct(at = at, makeType <- clone_type(info))
+        return <- new ExprMakeStruct(at = at, makeType = clone_type(info))
     }
 }
 
 def private walk_and_convert_dim(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     let stride = info.baseSizeOf
     let total = info.countOf
-    var inscope einfo <- clone_type(info)
+    var einfo = clone_type(info)
     clear(einfo.dim)
-    var inscope mkArr <- new ExprMakeArray(at = at, makeType := info)
+    var inscope mkArr <- new ExprMakeArray(at = at, makeType = clone_type(info))
     for (x in range(total)) {
         unsafe {
             var elem <- walk_and_convert(data + stride * x, einfo, at)
@@ -744,7 +744,7 @@ def private walk_and_convert_pointer(data : uint8 const?; info : TypeDeclPtr; at
 }
 
 def private walk_and_convert_tuple(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
-    var inscope mkArr <- new ExprMakeTuple(at = at, recordType <- clone_type(info))
+    var inscope mkArr <- new ExprMakeTuple(at = at, recordType = clone_type(info))
     for (idx in range(info.argTypes |> length)) {
         let offset = get_tuple_field_offset(info, idx)
         unsafe {
@@ -756,7 +756,7 @@ def private walk_and_convert_tuple(data : uint8 const?; info : TypeDeclPtr; at :
 }
 
 def private walk_and_convert_structure(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
-    var inscope mkStruct <- new ExprMakeStruct(at = at, makeType <- clone_type(info))
+    var inscope mkStruct <- new ExprMakeStruct(at = at, makeType = clone_type(info))
     let stype = info.structType
     var inscope mkS <- new MakeStruct(uninitialized)
     for (x in stype.fields) {
@@ -780,7 +780,7 @@ def private walk_and_convert_variant(data : uint8 const?; info : TypeDeclPtr; at
     unsafe {
         let vindex = *reinterpret<int?> data
         let offset = get_variant_field_offset(info, vindex)
-        var mkVariant <- new ExprMakeVariant(at = at, makeType <- clone_type(info))
+        var mkVariant <- new ExprMakeVariant(at = at, makeType = clone_type(info))
         var elem <- walk_and_convert(data + offset, info.argTypes[vindex], at)
         var mkS <- new MakeFieldDecl(at = at, name := info.argNames[vindex], value <- elem)
         if (!info.argTypes[vindex].canCopy) {
@@ -794,16 +794,16 @@ def private walk_and_convert_variant(data : uint8 const?; info : TypeDeclPtr; at
 def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
     let total = any_table_size(data)
     if (total != 0) {
-        var inscope tupT <- new TypeDecl(baseType = Type.tTuple, at = at)
-        emplace_new(tupT.argTypes, clone_type(info.firstType))
-        emplace_new(tupT.argTypes, clone_type(info.secondType))
-        var inscope mkArr <- new ExprMakeArray(at = at, makeType <- clone_type(tupT))
+        var tupT = new TypeDecl(baseType = Type.tTuple, at = at)
+        tupT.argTypes |> push(clone_type(info.firstType))
+        tupT.argTypes |> push(clone_type(info.secondType))
+        var inscope mkArr <- new ExprMakeArray(at = at, makeType = clone_type(tupT))
         let key_stride = info.firstType.sizeOf
         let value_stride = info.secondType.sizeOf
         any_table_foreach(data, key_stride, value_stride) $(pkey, pvalue) {
             var inscope key <- walk_and_convert(pkey, info.firstType, at)
             var inscope value <- walk_and_convert(pvalue, info.secondType, at)
-            var inscope mkTup <- new ExprMakeTuple(at = at, recordType <- clone_type(tupT), isKeyValue = true)
+            var inscope mkTup <- new ExprMakeTuple(at = at, recordType = clone_type(tupT), isKeyValue = true)
             emplace(mkTup.values, key)
             emplace(mkTup.values, value)
             emplace(mkArr.values, mkTup)
@@ -813,7 +813,7 @@ def private walk_and_convert_table(data : uint8 const?; info : TypeDeclPtr; at :
         emplace(mkToTableMove.arguments, mkArr)
         return <- mkToTableMove
     } else {
-        return <- new ExprMakeStruct(at = at, makeType <- clone_type(info))
+        return <- new ExprMakeStruct(at = at, makeType = clone_type(info))
     }
 }
 
@@ -855,7 +855,7 @@ def private walk_and_convert_basic(data : uint8 const?; info : TypeDeclPtr; at :
                 || info.baseType == Type.tBitfield16
                 || info.baseType == Type.tBitfield
                 || info.baseType == Type.tBitfield64) {
-            return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?> data, bitfieldType := info)
+            return new ExprConstBitfield(at = at, value = *reinterpret<bitfield?> data, bitfieldType = clone_type(info))
         } else {
             panic("unsupported {info.baseType}")
             return default<ExpressionPtr>
@@ -917,7 +917,7 @@ def walk_and_convert(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : E
 
 def convert_to_expression(var value : auto& ==const; at : LineInfo) {
     //! Converts a mutable reference value to an AST expression at the given source location.
-    var inscope info <- typeinfo ast_typedecl(value)
+    var info = typeinfo ast_typedecl(value)
     unsafe {
         let pval = addr(value)
         return walk_and_convert(reinterpret<uint8 const?> pval, info, at)
@@ -926,7 +926,7 @@ def convert_to_expression(var value : auto& ==const; at : LineInfo) {
 
 def convert_to_expression(value : auto ==const; at : LineInfo) {
     //! Converts a constant value to an AST expression at the given source location.
-    var inscope info <- typeinfo ast_typedecl(value)
+    var info = typeinfo ast_typedecl(value)
     unsafe {
         let pval = addr(value)
         return walk_and_convert(reinterpret<uint8 const?> pval, info, at)
@@ -1153,12 +1153,12 @@ def private setup {
 
 def public function_to_type(fn : FunctionPtr) : TypeDeclPtr {
     //! Converts a function declaration to a function-type TypeDecl.
-    var inscope td <- new TypeDecl(baseType = Type.tFunction,
-        firstType <- fn.result != null ? clone_type(fn.result) : new TypeDecl(baseType = Type.autoinfer)
+    var td = new TypeDecl(baseType = Type.tFunction,
+        firstType = fn.result != null ? clone_type(fn.result) : new TypeDecl(baseType = Type.autoinfer)
     )
     td.argNames |> resize(length(fn.arguments))
     for (arg, argi in fn.arguments, count()) {
-        td.argTypes |> emplace_new <| clone_type(arg._type)
+        td.argTypes |> push(clone_type(arg._type))
         td.argNames[argi] := arg.name
     }
     return <- td

@@ -84,10 +84,10 @@ class SoaStructMacro : AstStructureAnnotation {
     //!   * ``length``, ``capacity``, ``push``, ``push_clone``, ``emplace``, ``erase``, ``pop``, ``clear``, ``resize``, ``reserve``, ``swap``, ``from_array``, ``to_array`` functions
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (is_in_completion()) {
-            var inscope tdef <- new TypeDecl(at = st.at,
+            var tdef = new TypeDecl(at = st.at,
                 baseType = Type.tArray,
                 alias := "{st.name}`SOA",
-                firstType <- new TypeDecl(at = st.at,
+                firstType = new TypeDecl(at = st.at,
                     baseType = Type.tStructure,
                     structType = get_ptr(st)
                 )
@@ -103,7 +103,7 @@ class SoaStructMacro : AstStructureAnnotation {
         var inscope stype <- clone_structure(get_ptr(st))
         stype.name := "{stype.name}`SOA"
         for (fld in stype.fields) {
-            move_new(fld._type) <| make_field_type(fld)
+            fld._type = make_field_type(fld)
         }
         // [] operator
         var inscope idx_op <- make_index_op(st, stype)
@@ -152,19 +152,19 @@ class SoaStructMacro : AstStructureAnnotation {
         return true
     }
     def make_field_type(fld : FieldDeclaration) : TypeDeclPtr {
-        return <- new TypeDecl(at = fld.at,
+        return new TypeDecl(at = fld.at,
                         baseType = Type.tArray,
-                        firstType <- clone_type(fld._type)
+                        firstType = clone_type(fld._type)
                     )
     }
     def make_soa_type(st : StructurePtr; var stype : StructurePtr; isConst : bool = false) : TypeDeclPtr {
-        return <- new TypeDecl(baseType = Type.tStructure, at = st.at,
+        return new TypeDecl(baseType = Type.tStructure, at = st.at,
             structType = get_ptr(stype),
             flags = isConst ? TypeDeclFlags.constant : bitfield(0)
         )
     }
     def make_index_op(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype, true)
+        var stypeT = make_soa_type(st, stype, true)
         var inscope fn <- qmacro_function("[]") $(st : $t(stypeT); index : int const) {
             return SOA_INDEX()
         }
@@ -172,7 +172,7 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_length(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype, true)
+        var stypeT = make_soa_type(st, stype, true)
         let firstFieldName = string(st.fields[0].name)
         var inscope fn <- qmacro_function("length") $(st : $t(stypeT)) : int {
             return length(st.$f(firstFieldName))
@@ -181,7 +181,7 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_any_named_call(st : StructurePtr; var stype : StructurePtr; var argT : TypeDeclPtr&; fnName, callName : string; argField : bool) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype)
+        var stypeT = make_soa_type(st, stype)
         var inscope bodyExprs : array<ExpressionPtr>
         for (fld in st.fields) {
             let fieldName = string(fld.name)
@@ -198,19 +198,19 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_erase(st : StructurePtr; var stype : StructurePtr) {
-        var inscope argT <- new TypeDecl(baseType = Type.tInt, at = st.at)
+        var argT = new TypeDecl(baseType = Type.tInt, at = st.at)
         return <- make_any_named_call(st, stype, argT, "erase", "erase", false)
     }
     def make_named_call(var st : StructurePtr; var stype : StructurePtr; fnName, callName : string; isConst : bool = false) : FunctionPtr {
-        var inscope argT <- new TypeDecl(baseType = Type.tStructure, at = st.at, structType = get_ptr(st), flags = isConst ? TypeDeclFlags.constant : bitfield(0))
+        var argT = new TypeDecl(baseType = Type.tStructure, at = st.at, structType = get_ptr(st), flags = isConst ? TypeDeclFlags.constant : bitfield(0))
         return <- make_any_named_call(st, stype, argT, fnName, callName, true)
     }
     def make_int_call(st : StructurePtr; var stype : StructurePtr; fnName, callName : string) : FunctionPtr {
-        var inscope argT <- new TypeDecl(baseType = Type.tInt, at = st.at)
+        var argT = new TypeDecl(baseType = Type.tInt, at = st.at)
         return <- make_any_named_call(st, stype, argT, fnName, callName, false)
     }
     def make_no_arg_call(st : StructurePtr; var stype : StructurePtr; fnName, callName : string) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype)
+        var stypeT = make_soa_type(st, stype)
         var inscope bodyExprs : array<ExpressionPtr>
         for (fld in st.fields) {
             let fieldName = string(fld.name)
@@ -223,7 +223,7 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_capacity(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype, true)
+        var stypeT = make_soa_type(st, stype, true)
         let firstFieldName = string(st.fields[0].name)
         var inscope fn <- qmacro_function("capacity") $(st : $t(stypeT)) : int {
             return capacity(st.$f(firstFieldName))
@@ -232,7 +232,7 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_swap(st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype)
+        var stypeT = make_soa_type(st, stype)
         var inscope bodyExprs : array<ExpressionPtr>
         for (fld in st.fields) {
             let fieldName = string(fld.name)
@@ -245,9 +245,9 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_from_array(var st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype)
-        var inscope srcT <- new TypeDecl(baseType = Type.tArray, at = st.at,
-            firstType <- new TypeDecl(baseType = Type.tStructure, at = st.at,
+        var stypeT = make_soa_type(st, stype)
+        var srcT = new TypeDecl(baseType = Type.tArray, at = st.at,
+            firstType = new TypeDecl(baseType = Type.tStructure, at = st.at,
                 structType = get_ptr(st)
             )
         )
@@ -268,13 +268,13 @@ class SoaStructMacro : AstStructureAnnotation {
         return <- fn
     }
     def make_to_array(var st : StructurePtr; var stype : StructurePtr) : FunctionPtr {
-        var inscope stypeT <- make_soa_type(st, stype, true)
-        var inscope retT <- new TypeDecl(baseType = Type.tArray, at = st.at,
-            firstType <- new TypeDecl(baseType = Type.tStructure, at = st.at,
+        var stypeT = make_soa_type(st, stype, true)
+        var retT = new TypeDecl(baseType = Type.tArray, at = st.at,
+            firstType = new TypeDecl(baseType = Type.tStructure, at = st.at,
                 structType = get_ptr(st)
             )
         )
-        var inscope elemT <- new TypeDecl(baseType = Type.tStructure, at = st.at,
+        var elemT = new TypeDecl(baseType = Type.tStructure, at = st.at,
             structType = get_ptr(st)
         )
         var inscope bodyExprs : array<ExpressionPtr>
@@ -283,7 +283,7 @@ class SoaStructMacro : AstStructureAnnotation {
             bodyExprs |> emplace_new <| qmacro_expr(${ soa_elem.$f(fieldName) := st.$f(fieldName)[soa_idx]; })
         }
         let firstFieldName = string(st.fields[0].name)
-        var inscope retT2 <- clone_type(retT)
+        var retT2 = clone_type(retT)
         var inscope fn <- qmacro_function("to_array") $(st : $t(stypeT)) : $t(retT) {
             var result : $t(retT2)
             result |> reserve(length(st.$f(firstFieldName)))

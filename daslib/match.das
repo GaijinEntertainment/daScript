@@ -96,7 +96,7 @@ def match_as_is(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; 
 def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; as_is_name : das_string; access : ExpressionPtr; var to : MatchTo) {
     log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy", wths.at)
-    var inscope prefixType <- clone_type(makeType)
+    var prefixType = clone_type(makeType)
     var inscope prefix <- qmacro_expr() {
         let $i(tempName) : $t(prefixType)
     }
@@ -165,7 +165,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
             {// to create scope
                 var inscope new_access <- whatDim == 1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
                 new_access |> force_at(wths.at)
-                var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
+                var ftype = get_field_type(what, string(mf.name), what.flags.constant)
                 if (ftype == null) {
                     to.errors |> match_error("field {mf.name} not found", mf.at)
                     return false
@@ -234,7 +234,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : ExpressionPt
 [macro_function]
 def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; access : ExpressionPtr; var to : MatchTo) {
     let wdl = length(what.dim)
-    var inscope recT : TypeDeclPtr
+    var recT : TypeDeclPtr
     // find if there is ..., get its index
     var tagIndex = INT_MAX
     for (v, i in wths.values, count()) {
@@ -265,7 +265,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
                 return false
             }
         }
-        move_new(recT) <| clone_type(what)
+        recT = clone_type(what)
         recT.dim |> pop()
         if (!wths.makeType.isAuto && !is_same_type(recT, wths.makeType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
             to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wthsLength}] ... ]] array", wths.at)
@@ -279,7 +279,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
             to.errors |> match_error("{describe(what)} is not a static array", wths.at)
             return false
         }
-        recT := what.firstType
+        recT = clone_type(what.firstType)
         var inscope lenCond <- (tagIndex != INT_MAX ?
             qmacro(length($e(access)) >= $v(wthsLength - 1)) :
             qmacro(length($e(access)) == $v(wthsLength)))
@@ -325,7 +325,7 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         {// to create scope for defer delete
             var inscope new_access <- whatDim == 1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
             new_access |> force_at(wths.at)
-            var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
+            var ftype = get_field_type(what, string(mf.name), what.flags.constant)
             if (ftype == null) {
                 to.errors |> match_error("variant {mf.name} not found", mf.at)
                 return false
@@ -349,7 +349,7 @@ def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expres
         to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
         return false
     }
-    var inscope ftype <- get_field_type(what, string(wthAs.name), what.flags.constant)
+    var ftype = get_field_type(what, string(wthAs.name), what.flags.constant)
     if (ftype == null) {
         to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
         return false

@@ -77,9 +77,9 @@ def identify_target(hit : CursorHit) : RefTarget {
             if (callable is ExprField) {
                 let f = callable as ExprField
                 if (f.value != null && f.value._type != null) {
-                    var vt = get_ptr(f.value._type)
+                    var vt = f.value._type
                     if (vt.structType == null && vt.firstType != null) {
-                        vt = get_ptr(vt.firstType)
+                        vt = vt.firstType
                     }
                     if (vt.structType != null) {
                         return RefTarget(
@@ -109,18 +109,18 @@ def identify_target(hit : CursorHit) : RefTarget {
             let f = expr as ExprField
             fname = string(f.name)
             if (f.value != null && f.value._type != null) {
-                value_type = get_ptr(f.value._type)
+                value_type = f.value._type
             }
         } else {
             let f = expr as ExprSafeField
             fname = string(f.name)
             if (f.value != null && f.value._type != null) {
-                value_type = get_ptr(f.value._type)
+                value_type = f.value._type
             }
         }
         // unwrap pointer types (Foo? → Foo)
         if (value_type != null && value_type.structType == null && value_type.firstType != null) {
-            value_type = get_ptr(value_type.firstType)
+            value_type = value_type.firstType
         }
         if (value_type != null && value_type.structType != null) {
             return RefTarget(
@@ -142,7 +142,7 @@ def identify_target(hit : CursorHit) : RefTarget {
     // ExprConstBitfield → alias (bitfield type)
     if (expr is ExprConstBitfield) {
         if (expr._type != null) {
-            let td = get_ptr(expr._type)
+            let td = expr._type
             if (!empty(td.alias)) {
                 return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
             }
@@ -150,14 +150,14 @@ def identify_target(hit : CursorHit) : RefTarget {
     }
     // Type alias reference (typedef, bitfield, variant, tuple)
     if (expr._type != null) {
-        let td = get_ptr(expr._type)
+        let td = expr._type
         if (!empty(td.alias)) {
             return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
         }
     }
     // Fallback: type reference
     if (expr._type != null) {
-        let td = get_ptr(expr._type)
+        let td = expr._type
         if (td.structType != null) {
             return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
         }
@@ -248,9 +248,9 @@ class RefVisitor : AstVisitor {
         if (target.kind == RefTargetKind.field) {
             let f = get_ptr(expr)
             if (f.name == target.field_name && f.value != null && f.value._type != null) {
-                var vt = get_ptr(f.value._type)
+                var vt = f.value._type
                 if (vt.structType == null && vt.firstType != null) {
-                    vt = get_ptr(vt.firstType)
+                    vt = vt.firstType
                 }
                 if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
                     add_ref(f.atField, "field")
@@ -264,9 +264,9 @@ class RefVisitor : AstVisitor {
         if (target.kind == RefTargetKind.field) {
             let f = get_ptr(expr)
             if (f.name == target.field_name && f.value != null && f.value._type != null) {
-                var vt = get_ptr(f.value._type)
+                var vt = f.value._type
                 if (vt.structType == null && vt.firstType != null) {
-                    vt = get_ptr(vt.firstType)
+                    vt = vt.firstType
                 }
                 if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
                     add_ref(f.atField, "safe field")
@@ -297,7 +297,7 @@ class RefVisitor : AstVisitor {
 
     // TypeDecl → struct/enum/alias type references (in variable types, return types, etc.)
     def override preVisitTypeDecl(typ : TypeDeclPtr) : void {
-        let td = get_ptr(typ)
+        let td = typ
         if (target.kind == RefTargetKind.structure && td.structType != null) {
             if (to_void(td.structType) == target.target_ptr) {
                 add_ref(td.at, "type ref")
@@ -384,7 +384,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) {
             return
         }
-        let td = get_ptr(value)
+        let td = value
         if (int(td.at.line) == line && td.at.fileInfo != null) {
             if (find(string(td.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.alias, alias_name = string(name), name = string(name))

@@ -1986,7 +1986,7 @@ class public CppAot : AstVisitor {
         return nc;
     }
 // is variant
-    def stringify_variadic_types(types : dasvector`smart_ptr`TypeDecl) {
+    def stringify_variadic_types(types : dasvector`ptr`TypeDecl) {
         return (types |> each()
                     |> map(@(t : TypeDeclPtr) : string {
                         return describeCppTypeEx(t,
@@ -3136,7 +3136,7 @@ class public CppAot : AstVisitor {
             write(*ss, ",");
         }
         if (!blk.blockFlags.aotSkipMakeBlock) {
-            var inscope blk_t = blk |> make_block_type()
+            var blk_t = blk |> make_block_type()
             let info = helper.helper |> make_invokable_type_debug_info(blk_t, blk.at);
             write(*ss, "&{funcInfoName(info)},");
         }

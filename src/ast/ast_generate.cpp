@@ -120,7 +120,7 @@ namespace das {
         auto compName = "__acomp_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
         auto pClosure = make_smart<ExprBlock>();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
+        pClosure->returnType = new TypeDecl(Type::autoinfer);
         pClosure->generated = true;
         // temp : Array<expr->subexpr->type>
         auto pVar = make_smart<Variable>();
@@ -128,10 +128,10 @@ namespace das {
         pVar->can_shadow = true;
         pVar->at = expr->at;
         pVar->name = compName;
-        pVar->type = make_smart<TypeDecl>(Type::tArray);
+        pVar->type = new TypeDecl(Type::tArray);
         pVar->type->constant = false;
         pVar->type->removeConstant = true;
-        pVar->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
+        pVar->type->firstType = new TypeDecl(*expr->subexpr->type);
         pVar->type->firstType->ref = false;
         pVar->type->firstType->constant = false;
         if ( expr->subexpr->type->isPointer() && expr->subexpr->type->constant ) {
@@ -212,7 +212,7 @@ namespace das {
     ExpressionPtr generateComprehensionIterator ( ExprArrayComprehension * expr ) {
         auto pClosure = make_smart<ExprBlock>();
         pClosure->at = expr->subexpr->at;
-        pClosure->returnType = make_smart<TypeDecl>(Type::autoinfer);
+        pClosure->returnType = new TypeDecl(Type::autoinfer);
         // yield subexpr
         auto pYield = make_smart<ExprYield>(expr->at, expr->subexpr->clone());
         if ( !expr->subexpr->type->canCopy() ) {
@@ -249,7 +249,7 @@ namespace das {
         auto pMakeBlock = make_smart<ExprMakeBlock>(expr->at,pClosure);
         // generator
         auto pMkGen = make_smart<ExprMakeGenerator>(expr->at, pMakeBlock);
-        pMkGen->iterType = make_smart<TypeDecl>(*expr->subexpr->type);
+        pMkGen->iterType = new TypeDecl(*expr->subexpr->type);
         pMkGen->alwaysSafe = expr->alwaysSafe;
         return pMkGen;
     }
@@ -260,7 +260,7 @@ namespace das {
         auto pAt = make_smart<ExprField>(at, a, b);
         pInvoke->arguments.push_back(pAt);
         pInvoke->isInvokeMethod = true;
-        auto pTypeAuto = make_smart<ExprTypeDecl>(at, make_smart<TypeDecl>(Type::autoinfer));
+        auto pTypeAuto = make_smart<ExprTypeDecl>(at, new TypeDecl(Type::autoinfer));
         pTypeAuto->typeexpr->at = at;
         pInvoke->arguments.push_back(pTypeAuto);
         return pInvoke;
@@ -269,7 +269,7 @@ namespace das {
     /* a->b(args) is short for invoke(type<callStruct>.b, cast<auto> deref(a), args)  */
     ExprInvoke * makeInvokeMethod ( const LineInfo & at, Structure * callStruct, Expression * a, const string & b ) {
         auto pInvoke = new ExprInvoke(at, "invoke");
-        auto callType = make_smart<TypeDecl>(Type::tStructure);
+        auto callType = new TypeDecl(Type::tStructure);
         callType->at = at;
         callType->structType = callStruct;
         auto callTypeExpr = make_smart<ExprTypeDecl>(at, callType);
@@ -278,7 +278,7 @@ namespace das {
         pInvoke->isInvokeMethod = true;
         auto pCast = make_smart<ExprCast>();
         pCast->at = at;
-        pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
+        pCast->castType = new TypeDecl(Type::autoinfer);
         pCast->subexpr = make_smart<ExprPtr2Ref>(at,a);
         pCast->subexpr->alwaysSafe = true;
         pInvoke->arguments.push_back(pCast);
@@ -299,7 +299,7 @@ namespace das {
         fn->privateFunction = isPrivate;
         fn->name = str->name;
         fn->at = fn->atDecl = str->at;
-        fn->result = make_smart<TypeDecl>(str);
+        fn->result = new TypeDecl(str);
         if ( str->isClass ) {
             fn->isClassMethod = true;
             fn->classParent = str;
@@ -318,7 +318,7 @@ namespace das {
                 break;
             }
         }
-        makeT->makeType = make_smart<TypeDecl>(str);
+        makeT->makeType = new TypeDecl(str);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
         returnDecl->moveSemantics = true;
@@ -335,12 +335,12 @@ namespace das {
     FunctionPtr makeClone ( Structure * str ) {
         auto varA = make_smart<Variable>();
         varA->name = "a";
-        varA->type = make_smart<TypeDecl>(str);
+        varA->type = new TypeDecl(str);
         varA->type->isExplicit = true;
         varA->at = str->at;
         auto varB = make_smart<Variable>();
         varB->name = "b";
-        varB->type = make_smart<TypeDecl>(str);
+        varB->type = new TypeDecl(str);
         varB->type->constant = str->canCloneFromConst();    // allow to clone from const
         varB->type->implicit = true;
         varB->at = str->at;
@@ -350,7 +350,7 @@ namespace das {
         fn->safeImplicit = true;
         fn->privateFunction = true;
         fn->at = fn->atDecl = str->at;
-        fn->result = make_smart<TypeDecl>();
+        fn->result = new TypeDecl();
         fn->arguments.push_back(varA);
         fn->arguments.push_back(varB);
         auto block = make_smart<ExprBlock>();
@@ -395,7 +395,7 @@ namespace das {
             auto vsiz = make_smart<Variable>();
             vsiz->at = at;
             vsiz->name = "__size";
-            vsiz->type = make_smart<TypeDecl>(Type::autoinfer);
+            vsiz->type = new TypeDecl(Type::autoinfer);
             vsiz->type->constant = true;
             auto crs = make_smart<ExprCall>(at,"class_rtti_size");
             crs->arguments.push_back(make_smart<ExprVar>(at,"__this"));
@@ -409,7 +409,7 @@ namespace das {
             invk->arguments.push_back(pAt);
             auto pCast = make_smart<ExprCast>();
             pCast->at = at;
-            pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
+            pCast->castType = new TypeDecl(Type::autoinfer);
             auto THISAA = make_smart<ExprVar>(at, "__this");
             pCast->subexpr = make_smart<ExprPtr2Ref>(at,THISAA);
             pCast->subexpr->alwaysSafe = true;
@@ -440,11 +440,11 @@ namespace das {
         fb->at = at;
         fb->list.push_back(ife);
         pFunc->body = fb;
-        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
+        pFunc->result = new TypeDecl(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
         cTHIS->name = "__this";
         cTHIS->at = at;
-        cTHIS->type = make_smart<TypeDecl>(*ptrType);
+        cTHIS->type = new TypeDecl(*ptrType);
         cTHIS->type->constant = false;
         cTHIS->type->removeConstant = true;
         cTHIS->type->ref = true;
@@ -499,11 +499,11 @@ namespace das {
         mz->arguments.push_back(lvar);
         fb->list.push_back(mz);
         pFunc->body = fb;
-        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
+        pFunc->result = new TypeDecl(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
         cTHIS->at = ls->at;
         cTHIS->name = "__this";
-        cTHIS->type = make_smart<TypeDecl>(ls);
+        cTHIS->type = new TypeDecl(ls);
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         if ( needUnsafe ) {
@@ -561,12 +561,12 @@ namespace das {
         delit1->alwaysSafe = true;
         fb->list.push_back(delit1);
         // function goo
-        pFunc->result = make_smart<TypeDecl>(Type::tVoid);
+        pFunc->result = new TypeDecl(Type::tVoid);
         auto cTHIS = make_smart<Variable>();
         cTHIS->at = ls->at;
         cTHIS->name = "__this";
-        cTHIS->type = make_smart<TypeDecl>(Type::tPointer);
-        cTHIS->type->firstType = make_smart<TypeDecl>(ls);
+        cTHIS->type = new TypeDecl(Type::tPointer);
+        cTHIS->type->firstType = new TypeDecl(ls);
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         // wrapInUnsafe(pFunc);
@@ -585,8 +585,8 @@ namespace das {
         auto wb = static_pointer_cast<ExprBlock>(pFunc->body);
         wb->blockFlags = 0;
         wb->arguments.clear();
-        wb->returnType.reset();
-        pFunc->result = make_smart<TypeDecl>(*block->type);
+        wb->returnType = nullptr;
+        pFunc->result = new TypeDecl(*block->type);
         for ( auto & arg : block->arguments ) {
             auto cA = arg->clone();
             cA->marked_used = true;
@@ -635,15 +635,15 @@ namespace das {
         auto wb = static_pointer_cast<ExprBlock>(with->body);
         wb->blockFlags = 0;
         wb->arguments.clear();
-        wb->returnType.reset();
+        wb->returnType = nullptr;
         fb->list.push_back(with);
         pFunc->body = fb;
-        pFunc->result = make_smart<TypeDecl>(*block->type);
+        pFunc->result = new TypeDecl(*block->type);
         auto cTHIS = make_smart<Variable>();
         cTHIS->generated = true;
         cTHIS->at = block->at;
         cTHIS->name = "__this";
-        cTHIS->type = make_smart<TypeDecl>(ls);
+        cTHIS->type = new TypeDecl(ls);
         cTHIS->type->isExplicit = true;
         pFunc->arguments.push_back(cTHIS);
         for ( auto & arg : block->arguments ) {
@@ -684,32 +684,32 @@ namespace das {
         auto btd = block->makeBlockType();
         btd->baseType = Type::tFunction;
         btd->constant = false;
-        auto thisArg = make_smart<TypeDecl>(pStruct);
+        auto thisArg = new TypeDecl(pStruct);
         btd->argTypes.insert(btd->argTypes.begin(), thisArg);
         btd->argNames.insert(btd->argNames.begin(), "__this");
         pStruct->fields.emplace_back("__lambda", btd, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
-        auto finFunc = make_smart<TypeDecl>(Type::tFunction);
-        auto finArg = make_smart<TypeDecl>(Type::tPointer);
-        finArg->firstType = make_smart<TypeDecl>(pStruct);
+        auto finFunc = new TypeDecl(Type::tFunction);
+        auto finArg = new TypeDecl(Type::tPointer);
+        finArg->firstType = new TypeDecl(pStruct);
         finArg->constant = false;
         finArg->removeConstant = true;
         finFunc->argTypes.push_back(finArg);
         finFunc->argNames.push_back("__this");
-        finFunc->firstType = make_smart<TypeDecl>(Type::tVoid);
+        finFunc->firstType = new TypeDecl(Type::tVoid);
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
         if ( needYield ) {
-            auto yt = make_smart<TypeDecl>(Type::tInt);
+            auto yt = new TypeDecl(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
             auto & fldb = pStruct->fields.back();
             fldb.generated = true;
             fldb.type->sanitize();
         }
         for ( auto var : capt ) {
-            auto td = make_smart<TypeDecl>(*var->type);
+            auto td = new TypeDecl(*var->type);
             td->constant = false;
             CaptureMode mode = CaptureMode::capture_any;
             auto it = find_if ( capture.begin(), capture.end(), [&] ( const auto & entry ){
@@ -721,7 +721,7 @@ namespace das {
             if ( isCaptureAsRef(var) || mode==CaptureMode::capture_by_reference ) {
                 td->ref = false;
                 td->constant = var->type->constant;
-                auto ptd = make_smart<TypeDecl>(Type::tPointer);
+                auto ptd = new TypeDecl(Type::tPointer);
                 ptd->firstType = td;
                 td = ptd;
                 pStruct->fields.emplace_back(var->name, td, nullptr, AnnotationArgumentList(), false, var->at);
@@ -752,7 +752,7 @@ namespace das {
         auto makeS = make_smart<ExprMakeStruct>();
         // makeS->useInitializer = true;
         makeS->at = at;
-        makeS->makeType = make_smart<TypeDecl>(ls);
+        makeS->makeType = new TypeDecl(ls);
         auto ms = make_smart<MakeStruct>();
         auto atTHIS = make_smart<ExprAddr>(lf->at, "_::" + lf->name);
         // TODO: expand atTHIS->funcType, so that it points to correct function by type as well
@@ -791,7 +791,7 @@ namespace das {
             auto & lexpr = ms->back();
             thisProgram->library.foreach([&](Module * mod){
                 for ( auto & cm : mod->captureMacros ) {
-                    auto cexpr = cm->captureExpression(thisProgram, thisProgram->thisModule.get(), lexpr->value.get(), cV->type.get());
+                    auto cexpr = cm->captureExpression(thisProgram, thisProgram->thisModule.get(), lexpr->value.get(), cV->type);
                     if ( cexpr != nullptr ) {
                         lexpr->value = cexpr;
                     }
@@ -801,7 +801,7 @@ namespace das {
         }
         makeS->structs.push_back(ms);
         asc->subexpr = makeS;
-        asc->ascType = make_smart<TypeDecl>(*ls->fields[0].type);
+        asc->ascType = new TypeDecl(*ls->fields[0].type);
         asc->ascType->argTypes.erase(asc->ascType->argTypes.begin());
         asc->ascType->argNames.erase(asc->ascType->argNames.begin());
         asc->ascType->baseType = Type::tLambda;
@@ -1021,10 +1021,10 @@ namespace das {
         auto capture = func->arguments[0]->type->structType;
         DAS_ASSERT(capture && "generator first argument is lambda capture");
         for ( auto & var : expr->variables ) {
-            auto vtd = make_smart<TypeDecl>(*var->type);
+            auto vtd = new TypeDecl(*var->type);
             bool isRef = vtd->ref;
             if ( isRef ) {
-                auto pvtd = make_smart<TypeDecl>(Type::tPointer);
+                auto pvtd = new TypeDecl(Type::tPointer);
                 pvtd->firstType = vtd;
                 vtd->ref = false;
                 vtd = pvtd;
@@ -1218,7 +1218,7 @@ namespace das {
         lvar->generated = true;
         lvar->at = expr->at;
         lvar->name = loopVar;
-        lvar->type = make_smart<TypeDecl>(Type::tBool);
+        lvar->type = new TypeDecl(Type::tBool);
         lvar->init = make_smart<ExprConstBool>(expr->at, true);
         leqt->variables.push_back(lvar);
         blk->list.push_back(leqt);
@@ -1231,7 +1231,7 @@ namespace das {
             const auto & iterv = expr->iteratorVariables[si];
             // if its a temp ref type, we need to create a temp variable
             smart_ptr<ExprLet> tempLet;
-            if ( srcNeedTempVar(src.get(), src->type.get()) ) {
+            if ( srcNeedTempVar(src.get(), src->type) ) {
                 tempLet = make_smart<ExprLet>();
                 tempLet->at = expr->at;
                 tempLet->atInit = expr->at;
@@ -1240,7 +1240,7 @@ namespace das {
                 svar->generated = true;
                 svar->at = expr->at;
                 svar->name = srcName + "_temp_var";
-                svar->type = make_smart<TypeDecl>(Type::autoinfer);
+                svar->type = new TypeDecl(Type::autoinfer);
                 svar->init_via_move = true;
                 svar->init = src->clone();
                 tempLet->variables.push_back(svar);
@@ -1255,7 +1255,7 @@ namespace das {
             svar->generated = true;
             svar->at = expr->at;
             svar->name = srcName;
-            svar->type = make_smart<TypeDecl>(Type::autoinfer);
+            svar->type = new TypeDecl(Type::autoinfer);
             svar->init_via_move = true;
             if ( src->type->isGoodIteratorType() ) {
                 svar->init = src->clone();
@@ -1282,8 +1282,8 @@ namespace das {
             srcv->name = srcVarName;
             if ( iterv->type->ref ) {
                 srcv->do_not_delete = true;
-                srcv->type = make_smart<TypeDecl>(Type::tPointer);
-                srcv->type->firstType = make_smart<TypeDecl>(*iterv->type);
+                srcv->type = new TypeDecl(Type::tPointer);
+                srcv->type->firstType = new TypeDecl(*iterv->type);
                 srcv->type->firstType->constant |= src->type->constant;
                 srcv->type->firstType->ref = false;
                 if ( bodyBlock ) {
@@ -1292,7 +1292,7 @@ namespace das {
                     replaceRef2Ptr(expr, iterv->name);
                 }
             } else {
-                srcv->type = make_smart<TypeDecl>(*iterv->type);
+                srcv->type = new TypeDecl(*iterv->type);
                 srcv->type->constant |= src->type->constant;
             }
             srci->variables.push_back(srcv);
@@ -1301,8 +1301,8 @@ namespace das {
             auto vit0 = make_smart<ExprVar>(expr->at, srcVarName);
             auto adri = make_smart<ExprRef2Ptr>(expr->at, vit0);
             adri->alwaysSafe = true;
-            auto pvoid = make_smart<TypeDecl>(Type::tPointer);
-            pvoid->firstType = make_smart<TypeDecl>(Type::tVoid);
+            auto pvoid = new TypeDecl(Type::tPointer);
+            pvoid->firstType = new TypeDecl(Type::tVoid);
             auto rein = make_smart<ExprCast>(expr->at, adri, pvoid);
             rein->reinterpret = true;
             rein->alwaysSafe = true;
@@ -1314,7 +1314,7 @@ namespace das {
             vvar->generated = true;
             vvar->at = expr->at;
             vvar->name = pVarName;
-            vvar->type = make_smart<TypeDecl>(*pvoid);
+            vvar->type = new TypeDecl(*pvoid);
             vvar->init = rein;
             veqt->variables.push_back(vvar);
             blk->list.push_back(veqt);
@@ -1387,11 +1387,11 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        fn->result = new TypeDecl(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
         arg0->name = "dest";
-        arg0->type = make_smart<TypeDecl>(*tupleType);
+        arg0->type = new TypeDecl(*tupleType);
         arg0->type->constant = false;
         arg0->type->explicitConst = false;
         arg0->type->ref = false;
@@ -1399,7 +1399,7 @@ namespace das {
         auto arg1 = make_smart<Variable>();
         arg1->at = at;
         arg1->name = "src";
-        arg1->type = make_smart<TypeDecl>(*tupleType);
+        arg1->type = new TypeDecl(*tupleType);
         arg1->type->constant = fromConst;
         arg1->type->explicitConst = true;
         arg1->type->ref = false;
@@ -1428,11 +1428,11 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
-        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        fn->result = new TypeDecl(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
         arg0->name = "__this";
-        arg0->type = make_smart<TypeDecl>(*tupleType);
+        arg0->type = new TypeDecl(*tupleType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         arg0->type->isExplicit = true;
@@ -1474,11 +1474,11 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        fn->result = new TypeDecl(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
         arg0->name = "dest";
-        arg0->type = make_smart<TypeDecl>(*variantType);
+        arg0->type = new TypeDecl(*variantType);
         arg0->type->constant = false;
         arg0->type->explicitConst = false;
         arg0->type->ref = false;
@@ -1486,7 +1486,7 @@ namespace das {
         auto arg1 = make_smart<Variable>();
         arg1->at = at;
         arg1->name = "src";
-        arg1->type = make_smart<TypeDecl>(*variantType);
+        arg1->type = new TypeDecl(*variantType);
         arg1->type->constant = fromConst;
         arg1->type->explicitConst = true;
         arg1->type->ref = false;
@@ -1538,11 +1538,11 @@ namespace das {
         fn->generated = true;
         fn->name = "finalize";
         fn->at = fn->atDecl = at;
-        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        fn->result = new TypeDecl(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
         arg0->name = "__this";
-        arg0->type = make_smart<TypeDecl>(*variantType);
+        arg0->type = new TypeDecl(*variantType);
         arg0->type->constant = false;
         arg0->type->ref = false;
         arg0->type->isExplicit = true;
@@ -1601,11 +1601,11 @@ namespace das {
         fn->privateFunction = true;
         fn->name = "clone";
         fn->at = fn->atDecl = at;
-        fn->result = make_smart<TypeDecl>(Type::tVoid);
+        fn->result = new TypeDecl(Type::tVoid);
         auto arg0 = make_smart<Variable>();
         arg0->at = at;
         arg0->name = "dest";
-        arg0->type = make_smart<TypeDecl>(*left);
+        arg0->type = new TypeDecl(*left);
         arg0->type->constant = false;
         arg0->type->explicitConst = false;
         arg0->type->ref = true;
@@ -1613,7 +1613,7 @@ namespace das {
         auto arg1 = make_smart<Variable>();
         arg1->at = at;
         arg1->name = "src";
-        arg1->type = make_smart<TypeDecl>(*right);
+        arg1->type = new TypeDecl(*right);
         arg1->type->constant = true;
         arg1->type->ref = false;
         arg1->type->implicit = true;
@@ -1752,7 +1752,7 @@ namespace das {
 
     void modifyToClassMember ( Function * func, Structure * baseClass, bool isExplicit, bool isConstant ) {
         // first argument is this
-        auto argT = make_smart<TypeDecl>(baseClass);
+        auto argT = new TypeDecl(baseClass);
         argT->constant = isConstant;
         argT->isExplicit = isExplicit;
         auto argV = make_smart<Variable>();
@@ -1788,7 +1788,7 @@ namespace das {
         func->at = method->at;
         func->atDecl = method->at;
         func->name = baseClass->name;
-        func->result = make_smart<TypeDecl>(baseClass);
+        func->result = new TypeDecl(baseClass);
         func->isClassMethod = true;
         func->classParent = baseClass;
         DAS_ASSERT(func->classParent);
@@ -1805,14 +1805,14 @@ namespace das {
         makeT->at = func->at;
         makeT->useInitializer = true;
         makeT->nativeClassInitializer = true;
-        makeT->makeType = make_smart<TypeDecl>(baseClass);
+        makeT->makeType = new TypeDecl(baseClass);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto letS = make_smart<ExprLet>();
         letS->at = func->at;
         letS->atInit = func->at;
         letS->visibility = func->atDecl;
         letS->alwaysSafe = true;    // this is due to local class variable
-        auto argT = make_smart<TypeDecl>(baseClass);
+        auto argT = new TypeDecl(baseClass);
         argT->constant = false;
         auto argV = make_smart<Variable>();
         argV->name = "self";
@@ -1845,15 +1845,15 @@ namespace das {
     }
 
     void makeClassRtti ( Structure * baseClass ) {
-        ExpressionPtr finit = make_smart<ExprTypeInfo>(baseClass->at, "rtti_classinfo", make_smart<TypeDecl>(baseClass));
+        ExpressionPtr finit = make_smart<ExprTypeInfo>(baseClass->at, "rtti_classinfo", new TypeDecl(baseClass));
         if ( baseClass->parent ) {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__rtti");
             fd->init = finit;
             fd->parentType = fd->type->isAuto();
             fd->generated = true;
         } else {
-            auto pvoid = make_smart<TypeDecl>(Type::tPointer);
-            pvoid->firstType = make_smart<TypeDecl>(Type::tVoid);
+            auto pvoid = new TypeDecl(Type::tPointer);
+            pvoid->firstType = new TypeDecl(Type::tVoid);
             baseClass->fields.emplace_back(
                 "__rtti",
                 pvoid,
@@ -1871,13 +1871,13 @@ namespace das {
         ExpressionPtr finit = make_smart<ExprAddr>(baseClass->at, "_::" + fname);
         if ( baseClass->parent ) {
             auto fd = (Structure::FieldDeclaration *) baseClass->findField("__finalize");
-            fd->init = make_smart<ExprCast>(baseClass->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+            fd->init = make_smart<ExprCast>(baseClass->at, finit, new TypeDecl(Type::autoinfer));
             fd->parentType = fd->type->isAuto();
             fd->generated = true;
         } else {
             baseClass->fields.emplace_back(
                 "__finalize",
-                make_smart<TypeDecl>(Type::autoinfer),
+                new TypeDecl(Type::autoinfer),
                 finit,
                 AnnotationArgumentList(),
                 false,
@@ -1891,7 +1891,7 @@ namespace das {
         func->at = baseClass->at;
         func->atDecl = baseClass->at;
         func->name = fname;
-        func->result = make_smart<TypeDecl>(Type::tVoid);
+        func->result = new TypeDecl(Type::tVoid);
         func->isClassMethod = true;
         func->classParent = baseClass;
         DAS_ASSERT(func->classParent);
@@ -1900,7 +1900,7 @@ namespace das {
         block->at = func->at;
         func->body = block;
         // only one argument, and its 'self'
-        auto argT = make_smart<TypeDecl>(baseClass);
+        auto argT = new TypeDecl(baseClass);
         argT->constant = false;
         auto argV = make_smart<Variable>();
         argV->name = "self";
@@ -1948,9 +1948,9 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = mks->at;
         block->isClosure = true;
-        block->returnType = make_smart<TypeDecl>(Type::tVoid);
+        block->returnType = new TypeDecl(Type::tVoid);
         // only one argument, and its 'self'
-        auto argT = make_smart<TypeDecl>(*(mks->makeType));
+        auto argT = new TypeDecl(*(mks->makeType));
         argT->constant = false;
         if ( mks->structs.size() > 1 ) {
             argT->dim.push_back(int32_t(mks->structs.size()));

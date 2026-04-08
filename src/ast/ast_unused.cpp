@@ -118,7 +118,7 @@ namespace das {
         }
     protected:
         void propagateAt ( ExprAt * at ) {
-            if ( at->subexpr->type->isHandle() && at->subexpr->type->annotation->isIndexMutable(at->index->type.get()) ) {
+            if ( at->subexpr->type->isHandle() && at->subexpr->type->annotation->isIndexMutable(at->index->type) ) {
                 propagateWrite(at->subexpr.get());
             } else if ( at->subexpr->type->isGoodTableType() ) {
                 propagateWrite(at->subexpr.get());  // note: this makes it so tab[foo] modifies itself
@@ -729,7 +729,7 @@ namespace das {
                                 reportFolding();
                                 auto cle = expr->variable->init->clone();
                                 if ( !cle->type ) {
-                                    cle->type = make_smart<TypeDecl>(*expr->variable->init->type);
+                                    cle->type = new TypeDecl(*expr->variable->init->type);
                                 }
                                 return cle;
                             }
@@ -740,7 +740,7 @@ namespace das {
                                 auto cfv = expr->type->enumType->find(0, "");
                                 if ( !cfv.empty() ) {
                                     reportFolding();
-                                    auto exprV = make_smart<ExprConstEnumeration>(expr->at, cfv, make_smart<TypeDecl>(*expr->type));
+                                    auto exprV = make_smart<ExprConstEnumeration>(expr->at, cfv, new TypeDecl(*expr->type));
                                     exprV->type = expr->type->enumType->makeEnumType();
                                     exprV->type->constant = true;
                                     exprV->value = v_zero();
@@ -749,13 +749,13 @@ namespace das {
                             } else if ( expr->type->baseType==Type::tString ) {
                                 reportFolding();
                                 auto exprV = make_smart<ExprConstString>(expr->at);
-                                exprV->type = make_smart<TypeDecl>(Type::tString);
+                                exprV->type = new TypeDecl(Type::tString);
                                 exprV->type->constant = true;
                                 return exprV;
                             } else {
                                 reportFolding();
                                 auto exprV = Program::makeConst(expr->at, expr->type, v_zero());
-                                exprV->type = make_smart<TypeDecl>(*expr->type);
+                                exprV->type = new TypeDecl(*expr->type);
                                 exprV->type->constant = true;
                                 return exprV;
                             }
