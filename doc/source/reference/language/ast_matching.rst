@@ -164,11 +164,11 @@ Also works on ``let`` declarations and ``for`` loop iterators:
 $t(var) — type capture
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Captures a ``TypeDeclPtr`` from type positions:
+Captures a ``TypeDecl?`` from type positions:
 
 .. code-block:: das
 
-    var inscope captured_type : TypeDeclPtr
+    var captured_type : TypeDecl?
     let r = qmatch(expr, type<$t(captured_type)>)
 
 $c(var) — call name capture

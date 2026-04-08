@@ -77,7 +77,7 @@ class EnumFromStringConstruction : AstEnumerationAnnotation {
     //! Enumeration annotation which implements string constructor for enumeration.
     def override apply(var enu : EnumerationPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! implements enum string constructor
-        var inscope enumT <- new TypeDecl(baseType = Type.tEnumeration, enumType = enu.get_ptr())
+        var enumT = new TypeDecl(baseType = Type.tEnumeration, enumType = enu.get_ptr())
         // lets make a table variable
         let varName = "_`enum`table`{enu.name}"
         add_global_private_let(compiling_module(), varName, enu.at, qmacro(enum_to_table(type<$t(enumT)>)))
@@ -136,7 +136,7 @@ class TypeInfoGetEnumNames : AstTypeInfoMacro {
             errors := "expecting enumeration"
             return <- default<ExpressionPtr>
         }
-        var inscope arr <- new ExprMakeArray(at = expr.at, makeType <- typeinfo ast_typedecl(type<string>))
+        var inscope arr <- new ExprMakeArray(at = expr.at, makeType = typeinfo ast_typedecl(type<string>))
         for (i in iter_range(expr.typeexpr.enumType.list)) {
             {
                 assume name = expr.typeexpr.enumType.list[i].name

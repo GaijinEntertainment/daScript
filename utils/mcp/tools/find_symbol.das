@@ -210,7 +210,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (total_found >= MAX_FIND_RESULTS) {
                 return
             }
-            let td = get_ptr(value)
+            let td = value
             if (td.flags.isPrivateAlias) {
                 return
             }

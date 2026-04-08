@@ -201,7 +201,7 @@ demonstrates the **code generation** pattern for enumeration macros:
                            var group : ModuleGroup;
                            args : AnnotationArgumentList;
                            var errors : das_string) : bool {
-            var inscope enumT <- new TypeDecl(
+            var enumT = new TypeDecl(
                 baseType = Type.tEnumeration,
                 enumType = enu.get_ptr())
             // 1. Create a private global lookup table.

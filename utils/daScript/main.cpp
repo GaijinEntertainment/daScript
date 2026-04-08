@@ -397,6 +397,14 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
                 return true;
 
             auto pctx = SimulateWithErrReport(program, tout);
+            // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
+            {
+                auto & root = gc_root::gc_get_thread_root();
+                if (root.gc_count != 0) {
+                    tout << "GC COMPILE LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after compile\n";
+                    root.gc_report();
+                }
+            }
             if ( !pctx ) {
                 success = false;
             } else if ( program->thisModule->isModule ) {
@@ -431,6 +439,14 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         success = false;
+                    }
+                    // Check for app leaks (TypeDecl nodes created during execution)
+                    {
+                        auto & root = gc_root::gc_get_thread_root();
+                        if (root.gc_count != 0) {
+                            tout << "GC APP LEAK: " << uint64_t(root.gc_count) << " gc_node(s) after execution\n";
+                            root.gc_report();
+                        }
                     }
                 }
             }

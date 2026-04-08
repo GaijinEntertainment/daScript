@@ -91,10 +91,10 @@ class BuildDemoMacro : AstCallMacro {
         // 3. qmacro_type(type<T>) — build a TypeDeclPtr.
         //    $t(typeDecl) — splice a TypeDeclPtr in type position.
         // ===============================================================
-        var inscope int_type   <- qmacro_type(type<int>)
-        var inscope float_type <- qmacro_type(type<float>)
+        var int_type   = qmacro_type(type<int>)
+        var float_type = qmacro_type(type<float>)
         // $t — compose types: array<$t(int_type)> → array<int>
-        var inscope arr_int_type <- qmacro_type(type<array<$t(int_type)>>)
+        var arr_int_type = qmacro_type(type<array<$t(int_type)>>)
 
         // ===============================================================
         // 4. qmacro_variable("name", type<T>) — build a VariablePtr.
@@ -207,7 +207,7 @@ class BuildDemoMacro : AstCallMacro {
         //    Also clones DemoPair`describe → DemoIntFloat`describe,
         //    applying the same alias substitution to the method body.
         // ===============================================================
-        var inscope pair_type <- qmacro_template_class("DemoIntFloat", type<DemoPair>)
+        var pair_type = qmacro_template_class("DemoIntFloat", type<DemoPair>)
         pair_type.structType |> add_structure_alias("TFirst", int_type)
         pair_type.structType |> add_structure_alias("TSecond", float_type)
 
@@ -219,7 +219,7 @@ class BuildDemoMacro : AstCallMacro {
         //     so qmacro_template_function auto-generates substitution
         //     rules — no manual type fixup is needed.
         // ===============================================================
-        var inscope t_value <- clone_type(int_type)
+        var t_value = clone_type(int_type)
         var inscope add_fn <- qmacro_template_function(@@demo_add)
         add_fn.name := "demo_add_int"
         add_fn.flags |= FunctionFlags.generated

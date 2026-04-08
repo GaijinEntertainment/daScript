@@ -43,7 +43,7 @@ namespace das {
                 auto nr2v = make_smart<ExprRef2Value>();
                 nr2v->at = expr->at;
                 nr2v->subexpr = ecast->subexpr;
-                nr2v->type = make_smart<TypeDecl>(*nr2v->subexpr->type);
+                nr2v->type = new TypeDecl(*nr2v->subexpr->type);
                 nr2v->type->ref = false;
                 ecast->subexpr = nr2v;
                 ecast->type->ref = false;
@@ -335,7 +335,7 @@ namespace das {
                 if (lr && rr) {
                     if ( lr->subexpr ) {
                         auto newCond = make_smart<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
-                        newCond->type = make_smart<TypeDecl>(*lr->subexpr->type);
+                        newCond->type = new TypeDecl(*lr->subexpr->type);
                         auto newRet = make_smart<ExprReturn>(expr->at, newCond);
                         newRet->moveSemantics = lr->moveSemantics;
                         reportFolding();

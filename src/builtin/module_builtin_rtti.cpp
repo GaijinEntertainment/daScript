@@ -10,6 +10,7 @@
 
 #include "daScript/misc/performance_time.h"
 #include "daScript/ast/ast_serializer.h"
+#include "daScript/misc/gc_node.h"
 
 using namespace das;
 
@@ -202,7 +203,7 @@ namespace das {
     template <>
     struct typeFactory<RttiValue> {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
-            auto vtype = make_smart<TypeDecl>(Type::tVariant);
+            auto vtype = new TypeDecl(Type::tVariant);
             vtype->alias = "RttiValue";
             vtype->aotAlias = false;
             vtype->addVariant("tBool",   typeFactory<RttiValue::NthType<RttiBool>>::make(library));
@@ -222,7 +223,7 @@ namespace das {
     };
 
     TypeDeclPtr makeModuleFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "ModuleFlags";
         ft->argNames = {
             "builtIn", "promoted", "isPublic", "isModule", "isSolidContext",
@@ -278,7 +279,7 @@ namespace das {
     };
 
     TypeDeclPtr makeContextCategoryFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "context_category_flags";
         ft->argNames = { "dead", "debug_context", "thread_clone", "job_clone", "opengl",
             "debugger_tick", "debugger_attached", "macro_context", "folding_context", "audio" };
@@ -326,7 +327,7 @@ namespace das {
     };
 
     TypeDeclPtr makeSimFunctionFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "SimFunctionFlags";
         ft->argNames = { "aot", "fastcall", "builtin", "jit", "unsafe", "cmres", "pinvoke" };
         return ft;
@@ -356,7 +357,7 @@ namespace das {
     };
 
     TypeDeclPtr makeProgramFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "ProgramFlags";
         ft->argNames = { "failToCompile", "_unsafe", "isCompiling", "isSimulating",
             "isCompilingMacros", "needMacroModule", "promoteToBuiltin",
@@ -395,7 +396,7 @@ namespace das {
     };
 
     TypeDeclPtr makeAnnotationDeclarationFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "AnnotationDeclarationFlags";
         ft->argNames = { "inherited" };
         return ft;
@@ -527,7 +528,7 @@ namespace das {
             return indexType->isIndex();
         }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
-            return make_smart<TypeDecl>(*fieldType);
+            return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
@@ -540,13 +541,17 @@ namespace das {
             return true;
         }
         virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
-            return make_smart<TypeDecl>(*fieldType);
+            return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
             auto rv = src->simulate(context);
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
-        TypeDeclPtr fieldType;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            ManagedStructureAnnotation<ST,false>::gc_collect(target, from);
+            if ( fieldType ) fieldType->gc_collect(target, from);
+        }
+        TypeDeclPtr fieldType = nullptr;
     };
 
     template <typename ST, typename VT>
@@ -578,7 +583,7 @@ namespace das {
 
 
     TypeDeclPtr makeStructInfoFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "StructInfoFlags";
         ft->argNames = { "_class", "_lambda", "heapGC", "stringHeapGC" };
         return ft;
@@ -610,7 +615,7 @@ namespace das {
     }
 
     TypeDeclPtr makeTypeInfoFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "TypeInfoFlags";
         ft->argNames = { "ref", "refType", "canCopy", "isPod", "isRawPod", "isConst", "isTemp", "isImplicit",
             "refValue", "hasInitValue", "isSmartPtr", "isSmartPtrNative", "isHandled",
@@ -678,7 +683,7 @@ namespace das {
     };
 
     TypeDeclPtr makeLocalVariableInfoFlagsFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "LocalVariableInfoFlags";
         ft->argNames = { "cmres" };
         return ft;
@@ -1252,7 +1257,7 @@ namespace das {
         DAS_PTR_NODE;
         SimNode_RttiGetTypeDecl ( const LineInfo & at, const ExpressionPtr & d )
             : SimNode_CallBase(at,"") {
-            typeExpr = d->type.get();
+            typeExpr = d->type;
         }
         virtual SimNode * visit ( SimVisitor & vis ) override {
             V_BEGIN();

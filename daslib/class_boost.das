@@ -27,7 +27,7 @@ class ClassMethodMacro : AstFunctionAnnotation {
             errors := "class_method can be applied only to class methods";
             return false
         }
-        var inscope tt <- new TypeDecl(baseType = Type.tStructure, structType = func.classParent)
+        var tt = new TypeDecl(baseType = Type.tStructure, structType = func.classParent)
         if (explicitConstClassMethod) {
             tt.flags |= TypeDeclFlags.explicitConst
         }

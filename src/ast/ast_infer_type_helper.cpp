@@ -262,7 +262,7 @@ namespace das {
         if (auto rT = fptr->result->findAlias(name, true)) {
             return rT;
         }
-        TypeDeclPtr rT;
+        TypeDeclPtr rT = nullptr;
         thisModule->globals.find_first([&](auto gvar) {
                 if ( auto vT = gvar->type->findAlias(name,false) ) {
                     rT = vT;
@@ -302,7 +302,7 @@ namespace das {
                 return cT;
             }
         }
-        TypeDeclPtr rT;
+        TypeDeclPtr rT = nullptr;
         thisModule->globals.find_first([&](auto gvar) {
                 if ( auto vT = gvar->type->findAlias(name) ) {
                     rT = vT;
@@ -354,11 +354,11 @@ namespace das {
         if (decl->baseType == Type::alias || (decl->baseType == Type::autoinfer && autoToAlias)) {
             if (decl->isTag)
                 return nullptr; // we can never infer a tag type
-            TypeDeclPtr aT;
+            TypeDeclPtr aT = nullptr;
             if (aliases) {
                 auto it = aliases->find(decl->alias);
                 if (it != aliases->end()) {
-                    aT = it->second.get();
+                    aT = it->second;
                 }
             }
             if (!aT) {
@@ -367,11 +367,11 @@ namespace das {
             if (!aT) {
                 auto bT = nameToBasicType(decl->alias);
                 if (bT != Type::none) {
-                    aT = make_smart<TypeDecl>(bT);
+                    aT = new TypeDecl(bT);
                 }
             }
             if (aT) {
-                auto resT = make_smart<TypeDecl>(*aT);
+                auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
@@ -384,7 +384,7 @@ namespace das {
                 return nullptr;
             }
         }
-        auto resT = make_smart<TypeDecl>(*decl);
+        auto resT = new TypeDecl(*decl);
         if (decl->baseType == Type::tPointer) {
             if (decl->firstType) {
                 resT->firstType = inferAlias(decl->firstType, fptr, aliases, options, autoToAlias);
@@ -471,18 +471,18 @@ namespace das {
             return decl;
         }
         if (decl->baseType == Type::alias) {
-            TypeDeclPtr aT;
+            TypeDeclPtr aT = nullptr;
             if (aliases) {
                 auto it = aliases->find(decl->alias);
                 if (it != aliases->end()) {
-                    aT = it->second.get();
+                    aT = it->second;
                 }
             }
             if (!aT) {
                 aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
             }
             if (aT) {
-                auto resT = make_smart<TypeDecl>(*aT);
+                auto resT = new TypeDecl(*aT);
                 resT->at = decl->at;
                 resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
                 resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
@@ -499,7 +499,7 @@ namespace das {
         }
         // if its an option, we go through each
         if (decl->baseType == Type::option) {
-            auto resT = make_smart<TypeDecl>(*decl);
+            auto resT = new TypeDecl(*decl);
             for (size_t iA = 0, iAs = decl->argTypes.size(); iA != iAs; ++iA) {
                 auto &declAT = decl->argTypes[iA];
                 resT->argTypes[iA] = inferPartialAliases(declAT, passType, fptr, aliases);
@@ -509,7 +509,7 @@ namespace das {
         // now, if pass type don't match at all, we use decl as passType
         auto passT = decl->baseType == passType->baseType ? passType : decl;
         // if they don't match, it will not infer no matter what, so we early out
-        auto resT = make_smart<TypeDecl>(*decl);
+        auto resT = new TypeDecl(*decl);
         if (decl->baseType == Type::tPointer) {
             if (decl->firstType && passT->firstType) {
                 resT->firstType = inferPartialAliases(decl->firstType, passT->firstType, fptr, aliases);
@@ -587,7 +587,7 @@ namespace das {
                 if (pSt) {
                     if (eWT->isPointer()) {
                         auto derefV = make_smart<ExprPtr2Ref>(expr->at, eW->with);
-                        derefV->type = make_smart<TypeDecl>(*eWT->firstType);
+                        derefV->type = new TypeDecl(*eWT->firstType);
                         TypeDecl::applyAutoContracts(derefV->type, eWT->firstType);
                         derefV->type->ref = true;
                         derefV->type->constant |= eWT->constant;
@@ -668,7 +668,7 @@ namespace das {
                       type->at, CompilationError::invalid_type);
             } else if (type->dimExpr[0]->type) {
                 if (!type->dimExpr[0]->type->isAutoOrAlias()) {
-                    auto resType = make_smart<TypeDecl>(*type->dimExpr[0]->type);
+                    auto resType = new TypeDecl(*type->dimExpr[0]->type);
                     resType->ref = false;
                     TypeDecl::applyAutoContracts(resType, type);
                     type = resType;
@@ -761,7 +761,7 @@ namespace das {
                     compatibleCast = cT->structType->isCompatibleCast(*seT->structType);
                 }
                 if (compatibleCast) {
-                    auto exprType = make_smart<TypeDecl>(*cT);
+                    auto exprType = new TypeDecl(*cT);
                     exprType->ref = seT->ref;
                     exprType->constant = seT->constant;
                     return exprType;
@@ -782,7 +782,7 @@ namespace das {
                     compatibleCast = cT->firstType->structType->isCompatibleCast(*seT->firstType->structType);
                 }
                 if (compatibleCast) {
-                    auto exprType = make_smart<TypeDecl>(*cT);
+                    auto exprType = new TypeDecl(*cT);
                     exprType->ref = seT->ref;
                     exprType->constant = seT->constant;
                     return exprType;
@@ -806,7 +806,7 @@ namespace das {
             return nullptr;
         }
         // result
-        auto funT = make_smart<TypeDecl>(*seTF);
+        auto funT = new TypeDecl(*seTF);
         auto cresT = cTF->firstType;
         auto resT = funT->firstType;
         if (resT == nullptr) {
@@ -881,8 +881,8 @@ namespace das {
         if (expr->field() && expr->field()->privateField) {
             bool canLookup = false;
             if (func && func->isClassMethod) {
-                TypeDecl selfT(func->classParent);
-                if (selfT.isSameType(*expr->value->type,
+                gc_local<TypeDecl> selfT(new TypeDecl(func->classParent));
+                if (selfT->isSameType(*expr->value->type,
                                      RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::yes)) {
                     canLookup = true;
                 }
@@ -903,7 +903,7 @@ namespace das {
                 auto valT = expr->value->type;
                 if (valT->isPointer() && valT->firstType) {
                     auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
-                    derefV->type = make_smart<TypeDecl>(*valT->firstType);
+                    derefV->type = new TypeDecl(*valT->firstType);
                     TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
                     derefV->type->ref = true;
                     derefV->type->constant |= valT->constant;
@@ -918,7 +918,7 @@ namespace das {
                 auto valT = expr->value->type;
                 if (valT->isPointer() && valT->firstType) {
                     auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
-                    derefV->type = make_smart<TypeDecl>(*valT->firstType);
+                    derefV->type = new TypeDecl(*valT->firstType);
                     TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
                     derefV->type->ref = true;
                     derefV->type->constant |= valT->constant;
@@ -984,7 +984,7 @@ namespace das {
                     return true;
                 }
             } else {
-                resType = make_smart<TypeDecl>(Type::tVoid);
+                resType = new TypeDecl(Type::tVoid);
                 reportAstChanged();
                 return true;
             }
@@ -1111,8 +1111,8 @@ namespace das {
                             }
                         }
                         auto vecType = swz->type->getVectorType(baseType, int(fields.size()));
-                        auto constValue = program->makeConst(expr->at, make_smart<TypeDecl>(vecType), resData);
-                        constValue->type = make_smart<TypeDecl>(vecType);
+                        auto constValue = program->makeConst(expr->at, new TypeDecl(vecType), resData);
+                        constValue->type = new TypeDecl(vecType);
                         constValue->type->at = expr->at;
                         return constValue;
                     }
@@ -1154,7 +1154,7 @@ namespace das {
                     return false;
                 }
                 for (const auto &fd : typ->structType->fields) {
-                    if (fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type.get(), dep, hasHeap))) {
+                    if (fd.type && !fd.doNotDelete && (fd.type->constant || !isPodDelete(fd.type, dep, hasHeap))) {
                         return false;
                     }
                 }
@@ -1162,15 +1162,15 @@ namespace das {
             return true;
         } else if (typ->baseType == Type::tTuple || typ->baseType == Type::tVariant || typ->baseType == Type::option) {
             for (const auto &arg : typ->argTypes) {
-                if (arg->constant || !isPodDelete(arg.get(), dep, hasHeap)) {
+                if (arg->constant || !isPodDelete(arg, dep, hasHeap)) {
                     return false;
                 }
             }
             return true;
         } else if (typ->baseType == Type::tArray || typ->baseType == Type::tTable) {
-            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType.get(), dep, hasHeap)))
+            if (typ->firstType && (typ->firstType->constant || !isPodDelete(typ->firstType, dep, hasHeap)))
                 return false;
-            if (typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType.get(), dep, hasHeap)))
+            if (typ->secondType && (typ->secondType->constant || !isPodDelete(typ->secondType, dep, hasHeap)))
                 return false;
             hasHeap = true;
         } else if (typ->baseType == Type::tPointer) {

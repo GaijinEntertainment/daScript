@@ -6,6 +6,7 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/free_list.h"
+#include "daScript/misc/gc_node.h"
 
 using namespace das;
 
@@ -241,11 +242,18 @@ int das_program_context_stack_size ( das_program * program ) {
 }
 
 int das_program_simulate ( das_program * program, das_context * ctx, das_text_writer * tout ) {
-    if ( ((Program *) program)->simulate(*((Context *)ctx), *((TextWriter *)tout)) ) {
-        return 1;
-    } else {
-        return 0;
+    auto prog = (Program *) program;
+    bool ok;
+    {
+        gc_guard simulate_gc_scope;
+        ok = prog->simulate(*((Context *)ctx), *((TextWriter *)tout));
+        for ( auto mod : prog->library.getModules() ) {
+            if ( !mod->builtIn ) {
+                mod->gc_collect(&simulate_gc_scope.guard_root);
+            }
+        }
     }
+    return ok ? 1 : 0;
 }
 
 das_error * das_program_get_error ( das_program * program, int index ) {

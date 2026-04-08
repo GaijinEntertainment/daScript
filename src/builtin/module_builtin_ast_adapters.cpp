@@ -238,11 +238,11 @@ namespace das {
 
     TypeDeclPtr VisitorAdapter::visit(TypeDecl *td) {
         if ( auto fnVisit = get_visitTypeDecl(classPtr) ) {
-            TypeDeclPtr result;
+            TypeDeclPtr result = nullptr;
             runMacroFunction(context, "visit", [&]() {
                 result = invoke_visitTypeDecl(context,fnVisit,classPtr,td);
             });
-            return return_smart(result,td);
+            return result ? result : td;
         } else {
             return td;
         }
@@ -258,11 +258,11 @@ namespace das {
 
     TypeDeclPtr VisitorAdapter::visitAlias(TypeDecl *td, const string &name) {
         if ( auto fnVisit = get_visitAlias(classPtr) ) {
-            TypeDeclPtr result;
+            TypeDeclPtr result = nullptr;
             runMacroFunction(context, "visitAlias", [&]() {
                 result = invoke_visitAlias(context,fnVisit,classPtr,td,name);
             });
-            return return_smart(result,td);
+            return result ? result : td;
         } else {
             return td;
         }
@@ -326,11 +326,11 @@ namespace das {
 
     TypeDeclPtr VisitorAdapter::visitStructureAlias ( Structure * var, const string & name, TypeDecl * at ) {
         if ( auto fnVisit = get_visitStructureAlias(classPtr) ) {
-            TypeDeclPtr result;
+            TypeDeclPtr result = nullptr;
             runMacroFunction(context, "visitStructureAlias", [&]() {
                 result = invoke_visitStructureAlias(context,fnVisit,classPtr,var,name,at);
             });
-            return return_smart(result,at);
+            return result ? result : at;
         } else {
             return at;
         }
@@ -1627,7 +1627,7 @@ namespace das {
         }
         virtual TypeDeclPtr visit ( Program * prog, Module * mod, const TypeDeclPtr & typ, const TypeDeclPtr & passT ) override {
             if ( auto fnVisit = get_visit(classPtr) ) {
-                TypeDeclPtr result;
+                TypeDeclPtr result = nullptr;
                 runMacroFunction(context, "visit", [&]() {
                     result = invoke_visit(context,fnVisit,classPtr,prog,mod,typ,passT);
                 });
@@ -2184,7 +2184,7 @@ namespace das {
         }
         virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr & expr, string & err ) override {
             if ( auto fnGetAstType = get_getAstType(classPtr) ) {
-                TypeDeclPtr result;
+                TypeDeclPtr result = nullptr;
                 runMacroFunction(context, "getAstType", [&]() {
                     auto tinfo = static_pointer_cast<ExprTypeInfo>(expr);
                     result = invoke_getAstType(context,fnGetAstType,classPtr,lib,tinfo,err);
@@ -2527,18 +2527,14 @@ namespace das {
         func->visit(*adapter);
     }
 
-    smart_ptr_raw<TypeDecl> astVisitTypeDecl ( smart_ptr_raw<TypeDecl> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    TypeDecl * astVisitTypeDecl ( TypeDecl * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!expr)
             context->throw_error_at(line_info, "expr is required");
-        adapter->preVisit(expr.get());
+        adapter->preVisit(expr);
         expr->visit(*adapter);
-        smart_ptr<TypeDecl> res = adapter->visit(expr.get());
-        if ( res.get()!=expr.get() ) {
-            DAS_VERIFYF(res->use_count()==1,"visitor returns new value, refcount must be 1 or else there will be a leak");
-            res->addRef();
-        }
+        TypeDecl * res = adapter->visit(expr);
         return res;
     }
 

@@ -169,15 +169,15 @@ namespace das
             }
         }
         if ( firstType ) {
-            vis.preVisit(firstType.get());
+            vis.preVisit(firstType);
             firstType = firstType->visit(vis);
         }
         if ( secondType ) {
-            vis.preVisit(secondType.get());
+            vis.preVisit(secondType);
             secondType = secondType->visit(vis);
         }
         for ( auto & argType : argTypes ) {
-            vis.preVisit(argType.get());
+            vis.preVisit(argType);
             argType = argType->visit(vis);
         }
         return this;
@@ -249,12 +249,12 @@ namespace das
         if ( !pass ) {
             return;
         } else if ( decl->baseType==Type::option ) {
-            auto it = options.find(decl.get());
+            auto it = options.find(decl);
             DAS_VERIFYF(it!=options.end(),"internal error, option not found for the optional type");
             return updateAliasMap(decl->argTypes[it->second], pass, aliases, options);
         } else if ( decl->baseType==Type::autoinfer ) {
             if ( !decl->alias.empty() && aliases.find(decl->alias)==aliases.end() ) {
-                auto TT = make_smart<TypeDecl>(*pass);
+                auto TT = new TypeDecl(*pass);
                 TT->alias = decl->alias;
                 TT->dim.clear();
                 TT->constant = false;
@@ -265,7 +265,7 @@ namespace das
             }
         } else if ( pass->baseType==Type::autoinfer ) {
             if ( !pass->alias.empty() && aliases.find(pass->alias)==aliases.end() ) {
-                auto TT = make_smart<TypeDecl>(*decl);
+                auto TT = new TypeDecl(*decl);
                 TT->alias = pass->alias;
                 TT->dim.clear();
                 TT->constant = false;
@@ -312,7 +312,7 @@ namespace das
                 TT->implicit = TT->implicit || autoT->implicit;
                 // now we infer type
                 if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
-                    if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
+                    if ( options!=nullptr ) (*options)[autoT] = int(i);
                     return resT;
                 }
             }
@@ -329,7 +329,7 @@ namespace das
         // can't infer from the type, which is already 'auto'
         if ( initT->isAuto() ) {
             if (!autoT->isAuto()) {
-                return make_smart<TypeDecl>(*autoT);
+                return new TypeDecl(*autoT);
             } else if (autoT->baseType == Type::tBlock || autoT->baseType == Type::tFunction
                 || autoT->baseType == Type::tLambda || autoT->baseType == Type::tTuple
                 || autoT->baseType == Type::tVariant ) {
@@ -339,7 +339,7 @@ namespace das
                 if ( aliases && !autoT->alias.empty() ) {
                     auto it = aliases->find(autoT->alias);
                     if ( it != aliases->end() ) {
-                        return make_smart<TypeDecl>(*it->second);
+                        return new TypeDecl(*it->second);
                     }
                 }
                 */
@@ -359,7 +359,7 @@ namespace das
                 }
             }
             if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes, true, passType ) ) {
-                return make_smart<TypeDecl>(*autoT);
+                return new TypeDecl(*autoT);
             } else {
                 return nullptr;
             }
@@ -416,7 +416,7 @@ namespace das
                 return nullptr;
         }
         // now, lets make the type
-        auto TT = make_smart<TypeDecl>(*initT);
+        auto TT = new TypeDecl(*initT);
         TT->at = autoT->at;
         TT->aotAlias = autoT->aotAlias;
         TT->alias = autoT->alias;
@@ -872,30 +872,24 @@ namespace das
         at = decl.at;
         module = decl.module;
         if ( decl.firstType )
-            firstType = make_smart<TypeDecl>(*decl.firstType);
+            firstType = new TypeDecl(*decl.firstType);
         if ( decl.secondType )
-            secondType = make_smart<TypeDecl>(*decl.secondType);
+            secondType = new TypeDecl(*decl.secondType);
         for ( const auto & arg : decl.argTypes ) {
-            argTypes.push_back(make_smart<TypeDecl>(*arg) );
+            argTypes.push_back(new TypeDecl(*arg) );
         }
         argNames = decl.argNames;
     }
 
     void TypeDecl::clone ( TypeDeclPtr & dest, const TypeDeclPtr & src ) {
+        dest = new TypeDecl(*src);
+/*
         if ( src==nullptr ) {
             dest = nullptr;
             return;
         }
         if ( !dest ) {
-            dest = make_smart<TypeDecl>(*src);
-            return;
-        }
-        if ( dest->use_count()!=1 ) {
-#if DAS_TRACK_LOST_POINTER
-            trackLostPointer(dest.get());
-#endif
-            DAS_ASSERTF(false, "internal error: cloning into shared TypeDeclPtr");
-            dest = make_smart<TypeDecl>(*src);                                      // this is a fallback
+            dest = new TypeDecl(*src);
             return;
         }
         dest->baseType = src->baseType;
@@ -922,6 +916,18 @@ namespace das
             clone(dest->argTypes[i], src->argTypes[i]);
         }
         dest->argNames = src->argNames;
+*/
+    }
+
+    void TypeDecl::gc_collect ( gc_root * target, gc_root * from ) {
+        if ( gc_owner == target ) return;                           // already collected
+        if ( from && gc_owner != from ) return;                     // not from our scope
+        if ( !from && gc_owner == nullptr ) return;                 // detached
+        gc_assign(target);
+        if ( firstType ) firstType->gc_collect(target, from);
+        if ( secondType ) secondType->gc_collect(target, from);
+        for ( auto t : argTypes ) if ( t ) t->gc_collect(target, from);
+        for ( auto & de : dimExpr ) if ( de ) de->gc_collect(target, from);
     }
 
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
@@ -3115,7 +3121,7 @@ namespace das
         }
         // if ( type->firstType && isCircularType(type->firstType, all) ) return true;
         // if ( type->secondType && isCircularType(type->secondType, all) ) return true;
-        auto pt = type.get();
+        auto pt = type;
         for (auto it : all) {
             if ( it == pt ) return true;
         }
@@ -3304,7 +3310,7 @@ namespace das
         aMain.first = td;
         aMain.second |= viaPointer;
         if ( td->isBaseVectorType() ) {
-            auto bt = make_smart<TypeDecl>(td->getVectorBaseType());
+            auto bt = new TypeDecl(td->getVectorBaseType());
             auto & aSub = aliases[bt->getMangledName()];
             aSub.first = bt;
             aSub.second |= viaPointer;
@@ -3379,7 +3385,7 @@ namespace das
         if ( sscanf(name.c_str(),"_%d",&index)==1 ) {
             return index;
         } else {
-            auto vT = isPointer() ? firstType.get() : this;
+            auto vT = isPointer() ? firstType : this;
             if (!vT) return -1;
             if ( name=="_first" ) {
                 return 0;
@@ -3393,7 +3399,7 @@ namespace das
     }
 
     int TypeDecl::variantFieldIndex ( const string & name ) const {
-        auto vT = isPointer() ? firstType.get() : this;
+        auto vT = isPointer() ? firstType : this;
         if (!vT) return -1;
         return vT->findArgumentIndex(name);
     }
@@ -3471,7 +3477,7 @@ namespace das
             };
             case 'H': {
                 ch ++;
-                auto pt = make_smart<TypeDecl>(Type::tHandle);
+                auto pt = new TypeDecl(Type::tHandle);
                 auto annName = parseAnyNameInBrackets(ch,true);
                 auto ann = library.findAnnotation(annName,thisModule);
                 if ( thisModule && ann.size()==0 ) {
@@ -3499,7 +3505,7 @@ namespace das
             case 'S': {
                 ch ++;
                 auto sname = parseAnyNameInBrackets(ch,true);
-                auto pt = make_smart<TypeDecl>(Type::tStructure);
+                auto pt = new TypeDecl(Type::tStructure);
                 auto stt = library.findStructure(sname, thisModule);
                 if ( thisModule && stt.size()==0 ) {
                     if ( auto tstt = thisModule->findStructure(sname) ) {
@@ -3541,18 +3547,18 @@ namespace das
             };
             case 'E': {
                 ch ++;
-                TypeDeclPtr pt;
+                TypeDeclPtr pt = nullptr;
                 if ( *ch=='8' ) {
                     ch ++;
-                    pt = make_smart<TypeDecl>(Type::tEnumeration8);
+                    pt = new TypeDecl(Type::tEnumeration8);
                 } else if ( ch[0]=='1' && ch[1]=='6' ) {
                     ch += 2;
-                    pt = make_smart<TypeDecl>(Type::tEnumeration16);
+                    pt = new TypeDecl(Type::tEnumeration16);
                 } else if ( ch[0]=='6' && ch[1]=='4' ) {
                     ch += 2;
-                    pt = make_smart<TypeDecl>(Type::tEnumeration64);
+                    pt = new TypeDecl(Type::tEnumeration64);
                 } else {
-                    pt = make_smart<TypeDecl>(Type::tEnumeration);
+                    pt = new TypeDecl(Type::tEnumeration);
                 }
                 if ( *ch=='<' ) {
                     auto sname = parseAnyNameInBrackets(ch,true);
@@ -3575,66 +3581,66 @@ namespace das
                 return pt;
             };
             case '_': {
-                        if ( ch[1]=='c' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeContext); }
-                else    if ( ch[1]=='l' )                   { ch+=2; return make_smart<TypeDecl>(Type::fakeLineInfo); }
-                else                                        { error("unsupported mangled name format - expecting fake...", ch); return make_smart<TypeDecl>(); }
+                        if ( ch[1]=='c' )                   { ch+=2; return new TypeDecl(Type::fakeContext); }
+                else    if ( ch[1]=='l' )                   { ch+=2; return new TypeDecl(Type::fakeLineInfo); }
+                else                                        { error("unsupported mangled name format - expecting fake...", ch); return new TypeDecl(); }
             }
             case 'i': {
-                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt4); }
-                else    if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tInt8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tInt64); }
-                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tInt); }
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tInt2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tInt3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tInt4); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tInt8); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tInt16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tInt64); }
+                else                                        { ch+=1; return new TypeDecl(Type::tInt); }
             }
             case 'u': {
-                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt4); }
-                else    if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tUInt8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tUInt64); }
-                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tUInt); }
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tUInt2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tUInt3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tUInt4); }
+                else    if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tUInt8); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tUInt16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tUInt64); }
+                else                                        { ch+=1; return new TypeDecl(Type::tUInt); }
             }
             case 'f': {
-                        if ( ch[1]=='2' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat2); }
-                else    if ( ch[1]=='3' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat3); }
-                else    if ( ch[1]=='4' )                   { ch+=2; return make_smart<TypeDecl>(Type::tFloat4); }
-                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tFloat); }
-            case '.':   ch++; return make_smart<TypeDecl>(Type::autoinfer);
-            case '|':   ch++; return make_smart<TypeDecl>(Type::option);
-            case 'D':   ch++; return make_smart<TypeDecl>(Type::typeDecl);
-            case '^':   ch++; return make_smart<TypeDecl>(Type::typeMacro);
-            case '*':   ch++; return make_smart<TypeDecl>(Type::anyArgument);
-            case 'L':   ch++; return make_smart<TypeDecl>(Type::alias);
-            case 'A':   ch++; return make_smart<TypeDecl>(Type::tArray);
-            case 'T':   ch++; return make_smart<TypeDecl>(Type::tTable);
-            case 'G':   ch++; return make_smart<TypeDecl>(Type::tIterator);
-            case '$':   ch++; return make_smart<TypeDecl>(Type::tBlock);
-            case 'U':   ch++; return make_smart<TypeDecl>(Type::tTuple);
-            case 'V':   ch++; return make_smart<TypeDecl>(Type::tVariant);
+                        if ( ch[1]=='2' )                   { ch+=2; return new TypeDecl(Type::tFloat2); }
+                else    if ( ch[1]=='3' )                   { ch+=2; return new TypeDecl(Type::tFloat3); }
+                else    if ( ch[1]=='4' )                   { ch+=2; return new TypeDecl(Type::tFloat4); }
+                else                                        { ch+=1; return new TypeDecl(Type::tFloat); }
+            case '.':   ch++; return new TypeDecl(Type::autoinfer);
+            case '|':   ch++; return new TypeDecl(Type::option);
+            case 'D':   ch++; return new TypeDecl(Type::typeDecl);
+            case '^':   ch++; return new TypeDecl(Type::typeMacro);
+            case '*':   ch++; return new TypeDecl(Type::anyArgument);
+            case 'L':   ch++; return new TypeDecl(Type::alias);
+            case 'A':   ch++; return new TypeDecl(Type::tArray);
+            case 'T':   ch++; return new TypeDecl(Type::tTable);
+            case 'G':   ch++; return new TypeDecl(Type::tIterator);
+            case '$':   ch++; return new TypeDecl(Type::tBlock);
+            case 'U':   ch++; return new TypeDecl(Type::tTuple);
+            case 'V':   ch++; return new TypeDecl(Type::tVariant);
             case 't':   {
-                        if ( ch[1]=='8' )                   { ch+=2; return make_smart<TypeDecl>(Type::tBitfield8); }
-                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return make_smart<TypeDecl>(Type::tBitfield16); }
-                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tBitfield64); }
-                else                                        { ch++; return make_smart<TypeDecl>(Type::tBitfield); }
+                        if ( ch[1]=='8' )                   { ch+=2; return new TypeDecl(Type::tBitfield8); }
+                else    if ( ch[1]=='1' && ch[2]=='6' )     { ch+=3; return new TypeDecl(Type::tBitfield16); }
+                else    if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tBitfield64); }
+                else                                        { ch++; return new TypeDecl(Type::tBitfield); }
             }
             case 'r':   {
-                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tRange64); }
-                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tRange); }
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tRange64); }
+                else                                        { ch+=1; return new TypeDecl(Type::tRange); }
             }
             case 'z':   {
-                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tURange64); }
-                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tURange); }
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return new TypeDecl(Type::tURange64); }
+                else                                        { ch+=1; return new TypeDecl(Type::tURange); }
             }
-            case 'd':   ch++; return make_smart<TypeDecl>(Type::tDouble);
-            case 's':   ch++; return make_smart<TypeDecl>(Type::tString);
-            case 'v':   ch++; return make_smart<TypeDecl>(Type::tVoid);
-            case 'b':   ch++; return make_smart<TypeDecl>(Type::tBool);
+            case 'd':   ch++; return new TypeDecl(Type::tDouble);
+            case 's':   ch++; return new TypeDecl(Type::tString);
+            case 'v':   ch++; return new TypeDecl(Type::tVoid);
+            case 'b':   ch++; return new TypeDecl(Type::tBool);
             case '?':   {
                 ch++;
-                auto pt = make_smart<TypeDecl>(Type::tPointer);
+                auto pt = new TypeDecl(Type::tPointer);
                 if ( *ch=='M' ) {
                     pt->smartPtr = true;
                     pt->smartPtrNative = false;
@@ -3649,10 +3655,10 @@ namespace das
             case '@':   {
                 if ( ch[1]=='@' ) {
                     ch+=2;
-                    return make_smart<TypeDecl>(Type::tFunction);
+                    return new TypeDecl(Type::tFunction);
                 } else {
                     ch++;
-                    return make_smart<TypeDecl>(Type::tLambda);
+                    return new TypeDecl(Type::tLambda);
                 }
             };
             case '&': {
@@ -3705,7 +3711,7 @@ namespace das
                 }
                 }
                 error("unsupported mangled name format - expecting remove trait", ch);
-                return make_smart<TypeDecl>();
+                return new TypeDecl();
             };
             case 'I': {
                 ch ++;
@@ -3740,7 +3746,7 @@ namespace das
             }
         }
         error("unsupported mangled name format symbol", ch);
-        return make_smart<TypeDecl>();
+        return new TypeDecl();
     }
 
     TypeDeclPtr parseTypeFromMangledName ( const char * & ch, const ModuleLibrary & library, Module * thisModule ) {

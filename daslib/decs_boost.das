@@ -257,7 +257,7 @@ def private append_iterator(arch_name : string; var qloop : smart_ptr<ExprFor>; 
     if (getter == "get_default_ro") {
         qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), $e(a.init)))
     } else {
-        var inscope ftype <- clone_type(a._type)
+        var ftype = clone_type(a._type)
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
         var inscope it <- qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
@@ -279,7 +279,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
             iget <- clone_expression(a.init)
         }
     } else {
-        var inscope ftype <- clone_type(a._type)
+        var ftype = clone_type(a._type)
         ftype.flags &= ~TypeDeclFlags.constant
         ftype.flags &= ~TypeDeclFlags.ref
         var inscope getFn <- qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
@@ -289,7 +289,7 @@ def private append_index_lookup(arch_name : string; var qblock : smart_ptr<ExprB
     }
     var inscope vlet <- new ExprLet(at = a.at, atInit = a.at)
     vlet.genFlags |= ExprGenFlags.alwaysSafe
-    var inscope vtype <- clone_type(a._type)
+    var vtype = clone_type(a._type)
     if (getter == "get_default_ro") {
         vtype.flags |= TypeDeclFlags.constant
     } elif (getter == "get_ro") {
@@ -594,7 +594,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         var cquery = cqq as ExprCallMacro
         var inscope qblk <- new ExprBlock(at = func.body.at)                // inside the query block
         qblk.blockFlags |= ExprBlockFlags.isClosure
-        move_new(qblk.returnType) <| new TypeDecl(baseType = Type.tVoid, at = func.at)
+        qblk.returnType = new TypeDecl(baseType = Type.tVoid, at = func.at)
         var req, nreq : array<string>
         for (arg in args) {
             if (arg.basicType == Type.tString) {
@@ -638,7 +638,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         for (arg in func.arguments) {// add function arguments to query arguments
             qblk.arguments |> emplace_new <| new Variable(at = arg.at,
                 name := arg.name,
-                _type <- clone_type(arg._type),
+                _type = clone_type(arg._type),
                 init <- clone_expression(arg.init)
             )
         }
@@ -678,7 +678,7 @@ class FromDecsMacro : AstCallMacro {
             macro_verify(!arg._type.isAutoOrAlias, prog, expr.at, "argument types are not fully inferred")
         }
         // tuple type
-        var inscope tupleType <- new TypeDecl(baseType = Type.tTuple, at = expr.at)
+        var tupleType = new TypeDecl(baseType = Type.tTuple, at = expr.at)
         tupleType.argNames.resize(qblk.arguments.length())
         for (arg, idx in qblk.arguments, count()) {
             tupleType.argTypes |> emplace_new(clone_type(arg._type))
@@ -702,7 +702,7 @@ class FromDecsMacro : AstCallMacro {
         for (arg, idx in qblk.arguments, count()) {
             qbb.arguments |> emplace_new <| new Variable(at = arg.at,
                 name := arg.name,
-                _type <- clone_type(arg._type),
+                _type = clone_type(arg._type),
                 init <- clone_expression(arg.init)
             )
             qbb.arguments[idx]._type.flags &= ~TypeDeclFlags.ref

@@ -159,7 +159,7 @@ After building the statement list, we need a typed block argument.
 
 .. code-block:: das
 
-   var inscope cond_type <- clone_type(cond._type)
+   var cond_type = clone_type(cond._type)
    cond_type.flags.ref = false      // compare values, not references
    cond_type.flags.constant = true  // argument is read-only
 
@@ -172,7 +172,7 @@ Then we assemble the block and mark its argument as shadowable:
    ((call_block as ExprMakeBlock)._block as ExprBlock)
        .arguments[0].flags.can_shadow = true
 
-* **``$t(type)``** — injects a ``TypeDeclPtr`` into the reified AST
+* **``$t(type)``** — injects a ``TypeDecl?`` into the reified AST
 * **``$b(list)``** — injects an ``array<ExpressionPtr>`` as the block body
 * **``can_shadow``** — allows nested ``when()`` calls to each introduce
   their own ``__when_arg__`` without name conflicts

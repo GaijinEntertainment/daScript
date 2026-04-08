@@ -36,7 +36,7 @@ The ``expr`` parameter exposes several fields:
 ===============  ====================  =======================================
 Field            Type                  Description
 ===============  ====================  =======================================
-``typeexpr``     ``TypeDeclPtr``       The type argument (from ``type<T>``)
+``typeexpr``     ``TypeDecl?``         The type argument (from ``type<T>``)
 ``subexpr``      ``ExpressionPtr``     The expression argument (if used)
 ``subtrait``     ``string``            The ``<name>`` in ``typeinfo X<name>``
 ``extratrait``   ``string``            The second ``<a;b>`` parameter
@@ -117,7 +117,7 @@ Key points:
 - ``expr.typeexpr.isStructure`` validates that the type is a structure.
 - ``expr.typeexpr.structType.fields`` iterates all field declarations.
 - ``fld.flags.classMethod`` skips class methods (only data fields appear).
-- ``describe(fld._type, ...)`` converts a ``TypeDeclPtr`` to a human-readable
+- ``describe(fld._type, ...)`` converts a ``TypeDecl?`` to a human-readable
   type name.
 - The result is an ``ExprConstString`` — a compile-time string constant.
 

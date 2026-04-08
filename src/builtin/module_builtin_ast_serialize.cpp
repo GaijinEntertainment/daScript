@@ -249,20 +249,20 @@ namespace das {
         return *this;
     }
 
-    template <typename V>
-    AstSerializer & AstSerializer::operator << ( safebox<V> & box ) {
+    template <typename V, typename VT>
+    AstSerializer & AstSerializer::operator << ( safebox<V,VT> & box ) {
         dtag(HASH_TAG("Safebox"));
         if ( writing ) {
             uint64_t size = box.unlocked_size(); *this << size;
-            box.foreach_with_hash ([&](smart_ptr<V> obj, uint64_t hash) {
+            box.foreach_with_hash ([&](VT obj, uint64_t hash) {
                 *this << hash << obj;
             });
             return *this;
         }
         uint64_t size = 0; *this << size;
-        safebox<V> deser;
+        safebox<V,VT> deser;
         for ( uint64_t i = 0; i < size; i++ ) {
-            smart_ptr<V> obj; uint64_t hash = 0;
+            VT obj {}; uint64_t hash = 0;
             *this << hash << obj;
             deser.insert(hash, obj);
         }
@@ -577,7 +577,7 @@ namespace das {
             if ( !writing ) type = nullptr;
             return *this;
         }
-        uint64_t id = intptr_t(type.get());
+        uint64_t id = intptr_t(type);
         *this << id;
         if ( writing ) {
             if ( smartTypeDeclMap[id] == nullptr ) {
@@ -586,7 +586,7 @@ namespace das {
             }
         } else {
             if ( smartTypeDeclMap[id] == nullptr ) {
-                type = make_smart<TypeDecl>();
+                type = new TypeDecl();
                 smartTypeDeclMap[id] = type;
                 type->serialize(*this);
             } else {
@@ -1792,6 +1792,9 @@ namespace das {
                 daScriptEnvironment::getBound()->g_Program = program;
                 program->finalizeAnnotations();
 
+            // collect TypeDecl nodes onto module root
+                this_mod->gc_collect(gc_root::gc_get_active_root());
+
                 if ( is_macro_module ) {
                     auto time0 = ref_time_ticks();
                     reinstantiateMacroModuleState(ser, program);
@@ -1799,6 +1802,10 @@ namespace das {
                 }
             // unbind the module from the program
                 program->thisModule.release();
+            } else {
+                // we DO NOT collect something which is "already exists"
+                // we leave it hanging, and we keep links to types from other modules and let them claim
+                // this_mod->gc_collect(gc_root::gc_get_active_root());
             }
         }
     }
@@ -2473,7 +2480,7 @@ namespace das {
     AstSerializerState * rtti_create_ast_serializer () {
         auto state = new AstSerializerState();
         state->storage = make_unique<SerializationStorageVector>();
-        state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
+        // state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
         return state;
     }
 
@@ -2481,13 +2488,13 @@ namespace das {
         auto state = new AstSerializerState();
         state->storage = make_unique<SerializationStorageVector>();
         state->storage->buffer.assign(data.data, data.data + data.size);
-        state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
+        // state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
         return state;
     }
 
     void rtti_delete_ast_serializer ( AstSerializerState * state ) {
         if ( state ) {
-            state->serializer->moduleLibrary = nullptr;
+            //state->serializer->moduleLibrary = nullptr;
             delete state;
         }
     }
@@ -2496,7 +2503,9 @@ namespace das {
             AstSerializerState * state,
             const smart_ptr<Program> & program ) {
         auto & prog = const_cast<smart_ptr<Program> &>(program);
-        prog->serialize(*state->serializer);
+        auto serializer = make_unique<AstSerializer>(state->storage.get(), true);
+        prog->serialize(*serializer);
+        serializer->moduleLibrary = nullptr;
         return !prog->failToCompile;
     }
 
@@ -2505,7 +2514,20 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block,
             Context * context, LineInfoArg * at ) {
         auto prog = make_smart<Program>();
-        prog->serialize(*state->serializer);
+        {
+            gc_guard deserialize_gc_scope;
+            auto serializer = make_unique<AstSerializer>(state->storage.get(), false);
+            prog->serialize(*serializer);
+            serializer->moduleLibrary = nullptr;
+            /*
+            // THIS ONES ARE FROM THE "already exist" MODULES
+            auto leftover = deserialize_gc_scope.guard_root.gc_count;
+            if ( leftover ) {
+                LOG(LogLevel::warning) << "das: deserialize: " << leftover << " gc_node(s) left after deserialization\n";
+                deserialize_gc_scope.guard_root.gc_dump_to_thread_root();
+            }
+            */
+        }
         if ( prog->failToCompile ) {
             string err = "deserialization failed";
             das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(

@@ -42,7 +42,7 @@ def private make_shutdown_function(varname : string; at : LineInfo) {
     var inscope fn <- new Function(at = at, atDecl = at, name := "shutdown`{varname}")
     fn.flags |= FunctionFlags.generated
     fn.flags |= FunctionFlags.shutdown
-    move_new(fn.result) <| new TypeDecl(baseType = Type.tVoid, at = at)
+    fn.result = new TypeDecl(baseType = Type.tVoid, at = at)
     var inscope blk <- new ExprBlock(at = at)
     var inscope delv <- new ExprDelete(at = at,
         subexpr <- new ExprVar(at = at, name := varname)

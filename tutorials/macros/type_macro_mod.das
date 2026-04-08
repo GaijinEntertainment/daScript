@@ -48,13 +48,13 @@ class PaddedTypeMacro : AstTypeMacro {
         // parameter like `padded(type<auto(TT)>, 4)`) we return a type
         // with autoinfer so the compiler can match and deduce TT.
         if (td.dimExpr[1]._type == null) {
-            var inscope auto_type : TypeDeclPtr
+            var auto_type : TypeDeclPtr
             if (td.dimExpr[1] is ExprTypeDecl) {
                 // Clone the unresolved type expression (e.g. auto(TT)).
-                auto_type |> move_new <| clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
+                auto_type = clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
             } else {
                 // Fallback: pure auto-infer.
-                auto_type |> move_new <| new TypeDecl(baseType = Type.autoinfer)
+                auto_type = new TypeDecl(baseType = Type.autoinfer)
             }
             auto_type.dim |> push(count)
             return <- auto_type
@@ -63,7 +63,7 @@ class PaddedTypeMacro : AstTypeMacro {
         // --- concrete path ---
         // The type argument is fully inferred.  Clone it and add the
         // dimension to produce the final array type (e.g. float[4]).
-        var inscope final_type <- clone_type(td.dimExpr[1]._type)
+        var final_type = clone_type(td.dimExpr[1]._type)
         final_type.dim |> push(count)
         return <- final_type
     }

@@ -242,7 +242,7 @@ class private TemplateVisitor : AstVisitor {
         if (typ.baseType == Type.alias) {
             let ta = string(typ.alias)
             if (key_exists(rules.type2etype, ta)) {
-                move_new(typ) <| clone_type(unsafe(rules.type2etype[ta]))
+                typ = clone_type(unsafe(rules.type2etype[ta]))
             } elif (key_exists(rules.type2type, ta)) {
                 typ.alias := rules.type2type |> get_value(ta)
             }
@@ -250,7 +250,7 @@ class private TemplateVisitor : AstVisitor {
             let st = typ.structType
             if (key_exists(rules.struct2etype, st)) {
                 let oldFlags = typ.flags
-                move_new(typ) <| clone_type(unsafe(rules.struct2etype[st]))
+                typ = clone_type(unsafe(rules.struct2etype[st]))
                 typ.flags = oldFlags
             }
         }
@@ -266,7 +266,7 @@ class private TemplateVisitor : AstVisitor {
     }
     def override visitTypeDecl(var typ : TypeDeclPtr) : TypeDeclPtr {
         //! Visits type declaration and applies type replacement rules.
-        var inscope tyyp <- clone_type(typ)
+        var tyyp = clone_type(typ)
         replaceAlias(tyyp)
         return <- tyyp
     }
@@ -306,7 +306,7 @@ class private TemplateVisitor : AstVisitor {
                     new_args |> emplace_new <| new Variable(
                             at = arg.at,
                             name := a.name,
-                            _type <- clone_type(a._type),
+                            _type = clone_type(a._type),
                             init <- clone_expression(a.init)
                         )
                 }
@@ -415,7 +415,7 @@ def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAd
     }
 }
 
-def apply_template(var rules : Template; at : LineInfo; var typ : smart_ptr<TypeDecl>; forceAt : bool = true) : TypeDeclPtr {
+def apply_template(var rules : Template; at : LineInfo; var typ : TypeDecl?; forceAt : bool = true) : TypeDeclPtr {
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
     var inscope astVisitorAdapter <- make_visitor(*astVisitor)
@@ -474,7 +474,7 @@ def private add_global_var_any(mod : Module?; vname : string; vat : LineInfo; vf
     //! Adds global variable to the module, given name, type flags and initial value.
     var inscope vvar <- new Variable(at = vat,
         name := vname,
-        _type <- new TypeDecl(at = vat,
+        _type = new TypeDecl(at = vat,
             baseType = Type.autoinfer,
             flags = vflag
         ),
@@ -544,7 +544,7 @@ def make_unique_private_name(prefix : string; vat : LineInfo) {
     return "{prefix}_{vat.line}_{vat.column}"
 }
 
-def apply_template(at : LineInfo; var typ : smart_ptr<TypeDecl>&; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
+def apply_template(at : LineInfo; var typ : TypeDecl?&; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
     //! Applies the template to the given type declaration. If `forceAt` is set, the resulting type declaration will have the same line info as 'at'.
     unsafe {
         // TODO: figure out why this is needed
@@ -619,7 +619,7 @@ def public add_array_ptr_ref(var a : array<smart_ptr<auto(TT)>>) : array<smart_p
 def public add_type_ptr_ref(a : TypeDeclPtr; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Clones a type declaration and applies given flags.
     // var q := a
-    var inscope q <- clone_type(a)
+    var q = clone_type(a)
     q.flags |= flags & (
             TypeDeclFlags.ref | TypeDeclFlags.removeRef
         |   TypeDeclFlags.temporary | TypeDeclFlags.removeTemporary
@@ -644,29 +644,29 @@ def public enum_class_type(st) {
 
 def public add_type_ptr_ref(var st : StructurePtr; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Creates a type declaration from a structure smart pointer.
-    return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = get_ptr(st), flags = flags)
+    return new TypeDecl(at = st.at, baseType = Type.tStructure, structType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Structure?; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Creates a type declaration from a structure raw pointer.
-    return <- new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st, flags = flags)
+    return new TypeDecl(at = st.at, baseType = Type.tStructure, structType = st, flags = flags)
 }
 
 def public add_type_ptr_ref(var st : EnumerationPtr; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Creates a type declaration from an enumeration smart pointer.
-    return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = get_ptr(st), flags = flags)
+    return new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = get_ptr(st), flags = flags)
 }
 
 def public add_type_ptr_ref(var st : Enumeration?; flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Creates a type declaration from an enumeration raw pointer.
-    return <- new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = st, flags = flags)
+    return new TypeDecl(at = st.at, baseType = enum_class_type(st), enumType = st, flags = flags)
 }
 
 [unused_argument(anything), unused_argument(flags)]
 def public add_type_ptr_ref(anything : auto(TT); flags : TypeDeclFlags) : TypeDeclPtr {
     //! Implementation details for the reification. Fallback overload that produces a compile-time error for unsupported types.
     concept_assert(false, "$t reification expected type `TypeDeclPtr`, `StructurePtr`, or `Structure?`, but received {typeinfo typename(type<TT>)}")
-    var inscope decl : TypeDeclPtr
+    var decl : TypeDeclPtr
     return <- decl
 }
 
@@ -710,7 +710,7 @@ class private QRulesVisitor : AstVisitor {
                 return <- typ
             }
             let new_tag_name = "temp`type`{tag_index++}`{typ.at.line}`{typ.at.column}"
-            var inscope ntyp <- new TypeDecl(at = typ.at,
+            var ntyp = new TypeDecl(at = typ.at,
                 baseType = Type.alias,
                 alias := new_tag_name
             )
@@ -1106,7 +1106,7 @@ def public apply_qtype(var expr : smart_ptr<Expression>; blk : block<(var rules 
     //! Implementation details for the expression reification. This is a type declaration reification.
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprTypeDecl)
-    return <- clone_type((res as ExprTypeDecl).typeexpr)
+    return clone_type((res as ExprTypeDecl).typeexpr)
 }
 
 def public expression_at(var expr : ExpressionPtr; at : LineInfo) : ExpressionPtr {
@@ -1210,7 +1210,7 @@ def public apply_qmacro_variable(vname : string; var expr : smart_ptr<Expression
     var inscope vvar <- new Variable(at = expr.at, name := vname, flags = VariableFlags.generated)
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprTypeDecl)
-    move_new(vvar._type) <| clone_type((res as ExprTypeDecl).typeexpr)
+    vvar._type = clone_type((res as ExprTypeDecl).typeexpr)
     return <- vvar
 }
 
@@ -1308,7 +1308,7 @@ class private AstQMethodMacro : AstQNamedClassMacro {
     override apply_call = "apply_qmacro_method"
 }
 
-def public apply_qmacro_template_class(instance_name : string; var template_type : smart_ptr<TypeDecl>; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
+def public apply_qmacro_template_class(instance_name : string; var template_type : TypeDecl?; blk : block<(var rules : Template) : void>) : TypeDeclPtr {
     //! Implementation details for the expression reification. This is a template class instantiation reification.
     var mod = compiling_module()
     var template_structure = template_type.structType
@@ -1317,7 +1317,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
     instance_structure.parent = template_structure.parent
     instance_structure.name := instance_name
     instance_structure.flags &= ~(StructureFlags.isTemplate)
-    var inscope instance_type <- new TypeDecl(at = template_structure.at,
+    var instance_type = new TypeDecl(at = template_structure.at,
         baseType = Type.tStructure,
         structType = get_ptr(instance_structure)
     )
@@ -1364,7 +1364,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             func_clone.name := func_clone_name
             func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
             func_clone.classParent = get_ptr(instance_structure)
-            func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
+            func_clone.result  = apply_template(rules, func.at, clone_type(func.result))
             // expand $a() argument lists in function parameters (blkArg rules)
             // preVisitFunctionArgument collects $a tags from function arguments.
             if (length(rules.blkArg) > 0) {
@@ -1379,7 +1379,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
                             new_args |> emplace_new <| new Variable(
                                 at = farg.at,
                                 name := a.name,
-                                _type <- clone_type(a._type),
+                                _type = clone_type(a._type),
                                 init <- clone_expression(a.init)
                             )
                         }
@@ -1398,30 +1398,30 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
                         body_block.arguments |> emplace_new <| new Variable(
                             at = farg.at,
                             name := farg.name,
-                            _type <- clone_type(farg._type),
+                            _type = clone_type(farg._type),
                             init <- clone_expression(farg.init)
                         )
                     }
                 }
             }
             for (arg in func_clone.arguments) {
-                arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
+                arg._type  = apply_template(rules, arg.at, clone_type(arg._type))
             }
-            func_clone.body |> move_new <| apply_template(rules, func.at, clone_expression(func.body), false)
+            move_new(func_clone.body) <| apply_template(rules, func.at, clone_expression(func.body), false)
             mod |> add_function(func_clone)
         }
     })
     // now we fix up fields
     for (fld in instance_structure.fields) {
-        fld._type |> move_new <| apply_template(rules, fld.at, clone_type(fld._type))
+        fld._type  = apply_template(rules, fld.at, clone_type(fld._type))
         if (fld.init != null) {
-            fld.init |> move_new <| apply_template(rules, fld.at, clone_expression(fld.init))
+            move_new(fld.init) <| apply_template(rules, fld.at, clone_expression(fld.init))
         }
     }
     mod |> add_structure(instance_structure)
     delete rules
-    delete template_type
-    return <- instance_type
+    // template_type is gc-managed, no manual delete
+    return instance_type
 }
 
 def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var rules : Template) : void>) : FunctionPtr {
@@ -1430,9 +1430,9 @@ def public apply_qmacro_template_function(func : FunctionPtr; blk : block<(var r
     invoke(blk, rules)
     var inscope func_clone <- clone_function(func)
     func_clone.moreFlags &= ~(MoreFunctionFlags.isTemplate)
-    func_clone.result |> move_new <| apply_template(rules, func.at, clone_type(func.result))
+    func_clone.result  = apply_template(rules, func.at, clone_type(func.result))
     for (arg in func_clone.arguments) {
-        arg._type |> move_new <| apply_template(rules, arg.at, clone_type(arg._type))
+        arg._type  = apply_template(rules, arg.at, clone_type(arg._type))
     }
     return <- func_clone
 }
@@ -1531,7 +1531,7 @@ def public add_structure_field(var cls : StructurePtr; name : string; var t : Ty
     let fi = length(cls.fields)
     cls.fields |> resize(fi + 1)
     cls.fields[fi].name := name
-    move(cls.fields[fi]._type) <| t
+    cls.fields[fi]._type = t
     move(cls.fields[fi].init) <| init
     return fi
 }

@@ -147,7 +147,7 @@ class WhenMacro : AstCallMacro {
             }
         }
         // --- Build the block's argument type ---
-        var inscope cond_type <- clone_type(cond._type)
+        var cond_type = clone_type(cond._type)
         cond_type.flags.ref = false      // compare values, not references
         cond_type.flags.constant = true  // block argument is read-only
         // --- Assemble: invoke($(arg : type){ body }, condition) ---

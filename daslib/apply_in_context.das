@@ -88,7 +88,7 @@ class AppendCondAnnotation : AstFunctionAnnotation {
       callInCtxArguments |> emplace_new <| qmacro($i(arg.name))
     }
     if (!func.result.isVoid) {
-      var inscope resType = clone_type(func.result)
+      var resType = clone_type(func.result)
       resType.flags &= ~TypeDeclFlags.constant
       ctxFnArguments |> emplace_new <| qmacro_variable(resName, type<$t(resType)?>)
       ctxFnBlockList |> emplace_new <| qmacro_expr(${*$i(resName) = $c(ctxCloneFnName)($a(callInCtxArguments)); })

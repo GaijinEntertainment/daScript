@@ -522,9 +522,9 @@ def test_all_match(t : T?) {
     }
     t |> run("match handle ptr") @@(t : T?) {
         t |> equal("null", match_handle_ptr(default<TypeDeclPtr>))
-        var inscope tp <- new TypeDecl(baseType = Type.tPointer)
+        var tp = new TypeDecl(baseType = Type.tPointer)
         t |> equal("pointer", match_handle_ptr(tp))
-        var inscope tnp <- new TypeDecl(baseType = Type.tInt)
+        var tnp = new TypeDecl(baseType = Type.tInt)
         t |> equal("anything", match_handle_ptr(tnp))
     }
     t |> run("match ast expression ptr") @@(t : T?) {

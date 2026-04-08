@@ -146,7 +146,7 @@ namespace das
     }
 
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context ) {
-        if (!str || !substr)
+        if (!str || !substr || !*str || !*substr)
             return -1;
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
@@ -156,21 +156,21 @@ namespace das
     }
 
     int builtin_string_find2 (const char *str, const char *substr) {
-        if (!str || !substr)
+        if (!str || !substr || !*str || !*substr)
             return -1;
         const char *ret = strstr(str, substr);
         return ret ? int(ret-str) : -1;
     }
 
     int builtin_string_rfind1 ( const char *str, const char *substr, int start, Context * context ) {
-        if (!str || !substr)
+        if (!str || !substr || !*str || !*substr)
             return -1;
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return -1;
         const uint32_t subLen = uint32_t(strlen(substr));
         if (!subLen)
-            return clamp_int(start, 0, strLen);
+            return -1;
         int from = clamp_int(start, 0, strLen);
         if ( from + int(subLen) > int(strLen) )
             from = int(strLen) - int(subLen);
@@ -182,7 +182,7 @@ namespace das
     }
 
     int builtin_string_rfind2 (const char *str, const char *substr) {
-        if (!str || !substr)
+        if (!str || !substr || !*str || !*substr)
             return -1;
         const uint32_t strLen = uint32_t(strlen(str));
         const uint32_t subLen = uint32_t(strlen(substr));

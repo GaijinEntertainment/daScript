@@ -40,7 +40,7 @@ namespace das {
             if (!aT) {
                 auto bT = nameToBasicType(decl->alias);
                 if (bT != Type::none) {
-                    aT = make_smart<TypeDecl>(bT);
+                    aT = new TypeDecl(bT);
                 }
             }
             if (!aT) {
@@ -260,7 +260,7 @@ namespace das {
         }
         vector<TypeDeclPtr> nna = nonNamedArguments;
         if (!methodCall) {
-            nna.insert(nna.begin(), make_smart<TypeDecl>(st));
+            nna.insert(nna.begin(), new TypeDecl(st));
         }
         return describeMismatchingFunction(pAddr->func, nna, arguments, false, false);
     }
@@ -599,7 +599,7 @@ namespace das {
         if (verbose) {
             auto fakeCall = make_smart<ExprCall>(at, "_::finalize");
             auto fakeVar = make_smart<ExprVar>(at, "this");
-            fakeVar->type = make_smart<TypeDecl>(*ftype);
+            fakeVar->type = new TypeDecl(*ftype);
             fakeCall->arguments.push_back(fakeVar);
             vector<TypeDeclPtr> fakeTypes = {ftype};
             reportMissing(fakeCall.get(), fakeTypes, message, true, CompilationError::function_already_declared);
@@ -682,7 +682,7 @@ namespace das {
     }
     string InferTypes::reportMethodVsCall(ExprLooksLikeCall *expr) {
         if (verbose && expr->arguments.size() >= 1) {
-            if (auto tp = expr->arguments[0]->type.get()) {
+            if (auto tp = expr->arguments[0]->type) {
                 Structure *cls = nullptr;
                 if (tp->isClass()) {
                     cls = tp->structType;

@@ -133,7 +133,7 @@ namespace das
             }
             const auto & arg = call->arguments[0];
             if ( arg->type->dim.size() ) {
-                auto arrType = make_smart<TypeDecl>(*arg->type);
+                auto arrType = new TypeDecl(*arg->type);
                 arrType->dim.clear();
                 auto newCall = static_pointer_cast<ExprCall>(call->clone());
                 auto stride = arrType->getSizeOf();

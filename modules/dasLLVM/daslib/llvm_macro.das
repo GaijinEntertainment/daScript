@@ -147,8 +147,10 @@ class JIT_LLVM : AstSimulateMacro {
             let attrs = new Attributes(g_ctx)
             var uids = create_uid_nodes(prog, funcs)
             var fake_visitor = new LlvmJitVisitor(ctx, g_prim_t, uids, jit_flags, null, attrs)
-            for (fun in funcs) {
-                fake_visitor->add_llvm_functions(fun)
+            ast_gc_guard() {
+                for (fun in funcs) {
+                    fake_visitor->add_llvm_functions(fun)
+                }
             }
             unsafe {
                 delete fake_visitor

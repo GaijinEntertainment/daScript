@@ -13,6 +13,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 
 #include "daScript/simulate/simulate_visit_op.h"
+#include "daScript/misc/gc_node.h"
 #include "daScript/simulate/standalone_ctx_utils.h"
 
 das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
@@ -508,6 +509,7 @@ namespace das
     }
 
     vector<SimNode *> ExprMakeVariant::simulateLocal (Context & context) const {
+        gc_guard gc_scope;
         vector<SimNode *> simlist;
         int index = 0;
         int stride = makeType->getStride();
@@ -537,7 +539,7 @@ namespace das
             // lets set variant index
             uint32_t voffset = extraOffset + index*stride;
             auto vconst = make_smart<ExprConstInt>(at, int32_t(fieldVariant));
-            vconst->type = make_smart<TypeDecl>(Type::tInt);
+            vconst->type = new TypeDecl(Type::tInt);
             SimNode * svi;
             if ( useCMRES ) {
                 svi = makeLocalCMResCopy(at,context,voffset,vconst);
@@ -631,6 +633,7 @@ namespace das
     }
 
     vector<SimNode *> ExprMakeStruct::simulateLocal (Context & context) const {
+        gc_guard gc_scope;
         vector<SimNode *> simlist;
         // init with 0
         int total = int(structs.size());
@@ -715,7 +718,7 @@ namespace das
             string fakeName = "__makelocal";
             auto fakeVariable = make_smart<Variable>();
             fakeVariable->name = fakeName;
-            fakeVariable->type = make_smart<TypeDecl>(Type::tHandle);
+            fakeVariable->type = new TypeDecl(Type::tHandle);
             fakeVariable->type->annotation = ann;
             fakeVariable->at = at;
             if ( useCMRES ) {
@@ -740,9 +743,9 @@ namespace das
             if ( useStackRef && total > 1 ) {
                 // if its stackRef with multiple indices, its actually var[total], and lookup is var[index]
                 indexExpr = make_smart<ExprConstInt>(at, 0);
-                indexExpr->type = make_smart<TypeDecl>(Type::tInt);
+                indexExpr->type = new TypeDecl(Type::tInt);
                 fakeExpr = make_smart<ExprAt>(at, fakeExpr, indexExpr);
-                fakeExpr->type = make_smart<TypeDecl>(Type::tHandle);
+                fakeExpr->type = new TypeDecl(Type::tHandle);
                 fakeExpr->type->annotation = ann;
                 fakeExpr->type->ref = true;
             }
@@ -790,7 +793,7 @@ namespace das
             string fakeName = "__makelocal";
             auto fakeVariable = make_smart<Variable>();
             fakeVariable->name = fakeName;
-            fakeVariable->type = make_smart<TypeDecl>(*type);
+            fakeVariable->type = new TypeDecl(*type);
             if ( useCMRES ) {
                 fakeVariable->aliasCMRES = true;
             } else if ( useStackRef ) {
@@ -1228,9 +1231,11 @@ namespace das
     }
 
     SimNode * ExprMakeBlock::simulate (Context & context) const {
+        gc_guard gc_scope;
         auto blk = static_pointer_cast<ExprBlock>(block);
         uint32_t argSp = blk->stackTop;
-        auto info = context.thisHelper->makeInvokeableTypeDebugInfo(blk->makeBlockType(),blk->at);
+        auto bt = blk->makeBlockType();
+        auto info = context.thisHelper->makeInvokeableTypeDebugInfo(bt,blk->at);
         if ( context.gcEnabled || context.debugger  ) {
             context.thisHelper->appendLocalVariables(info, (Expression *)this);
         }
@@ -1713,7 +1718,8 @@ namespace das
             if ( r2v ) {
                 return trySimulate(context, 0, type);
             } else {
-                return trySimulate(context, 0, make_smart<TypeDecl>(Type::none));
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                return trySimulate(context, 0, noneType);
             }
         }
     }
@@ -1993,7 +1999,12 @@ namespace das
                 }
             }
         } else {
-            return trySimulate(context, 0, r2v ? type : make_smart<TypeDecl>(Type::none));
+            if ( r2v ) {
+                return trySimulate(context, 0, type);
+            } else {
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                return trySimulate(context, 0, noneType);
+            }
         }
     }
 
@@ -2003,7 +2014,12 @@ namespace das
             uint32_t mask = 1u << fieldIndex;
             return context.code->makeNode<SimNode_GetBitField>(at, simV, mask);
         } else {
-            return trySimulate(context, 0, r2v ? type : make_smart<TypeDecl>(Type::none));
+            if ( r2v ) {
+                return trySimulate(context, 0, type);
+            } else {
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                return trySimulate(context, 0, noneType);
+            }
         }
     }
 
@@ -2221,7 +2237,8 @@ namespace das
             if ( r2v ) {
                 return trySimulate(context, variable->extraLocalOffset, type);
             } else {
-                return trySimulate(context, variable->extraLocalOffset, make_smart<TypeDecl>(Type::none));
+                gc_local<TypeDecl> noneType = new TypeDecl(Type::none);
+                return trySimulate(context, variable->extraLocalOffset, noneType);
             }
         } else if ( argument) {
             if (variable->type->isRef()) {
@@ -2904,6 +2921,7 @@ namespace das
     }
 
     SimNode * ExprLet::simulateInit(Context & context, const VariablePtr & var, bool local) {
+        gc_guard _guard;
         SimNode * get;
         if ( local ) {
             if ( var->init && var->init->rtti_isMakeLocal() ) {
@@ -2937,7 +2955,7 @@ namespace das
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
-            varExpr->type = make_smart<TypeDecl>(*var->type);
+            varExpr->type = new TypeDecl(*var->type);
             auto retN = makeMove(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at);
@@ -2947,7 +2965,7 @@ namespace das
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
-            varExpr->type = make_smart<TypeDecl>(*var->type);
+            varExpr->type = new TypeDecl(*var->type);
             auto retN = makeCopy(var->init->at, context, varExpr, var->init);
             if ( !retN ) {
                 context.thisProgram->error("internal compilation error, can't generate copy", "", "", var->at);
@@ -2957,7 +2975,7 @@ namespace das
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
-            varExpr->type = make_smart<TypeDecl>(*var->type);
+            varExpr->type = new TypeDecl(*var->type);
             SimNode * retN = nullptr; // it has to be CALL with CMRES
             const auto & rE = var->init;
             if ( rE->rtti_isCall() ) {

@@ -129,7 +129,7 @@ def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {
         if (length(func.arguments) == 0) {
             return
         }
-        var self_type = get_ptr(func.arguments[0]._type)
+        var self_type = func.arguments[0]._type
         if (self_type == null || self_type.structType == null) {
             return
         }
@@ -185,7 +185,7 @@ def write_handled_type_detail(var w : StringBuilderWriter; value : Annotation co
         if (length(func.arguments) == 0) {
             return
         }
-        var first_type = get_ptr(func.arguments[0]._type)
+        var first_type = func.arguments[0]._type
         if (first_type == null) {
             return
         }
@@ -225,7 +225,7 @@ def write_enum_detail(var w : StringBuilderWriter; value; mod : Module?) {
 }
 
 def write_typedef_detail(var w : StringBuilderWriter; name : string; td; mod : Module?) {
-    let typ = get_ptr(td)
+    let typ = td
     if (typ.baseType == Type.tBitfield) {
         write(w, "bitfield {name}  // module {mod.name}\n")
         write(w, "Flags:\n")

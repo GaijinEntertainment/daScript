@@ -128,7 +128,8 @@ namespace das {
         Function fakeFunc;
         fakeFunc.name = "invoke " + blk->describe();
         fakeFunc.at = at;
-        fakeFunc.result = blk->firstType ? blk->firstType : make_smart<TypeDecl>(Type::tVoid);
+        gc_local<TypeDecl> voidType(new TypeDecl(Type::tVoid));
+        fakeFunc.result = blk->firstType ? blk->firstType : (TypeDecl*)voidType;
         fakeFunc.totalStackSize = sizeof(Prologue);
         for ( size_t ai=0, ais=blk->argTypes.size(); ai!=ais; ++ ai ) {
             auto argV = make_smart<Variable>();
@@ -151,13 +152,13 @@ namespace das {
         sti->flags = 0;
         if ( st.isClass ) sti->flags |= StructInfo::flag_class;
         if ( st.isLambda ) sti->flags |= StructInfo::flag_lambda;
-        auto tdecl = TypeDecl((Structure *)&st);
-        auto gcf = tdecl.gcFlags();
+        gc_local<TypeDecl> tdecl(new TypeDecl((Structure *)&st));
+        auto gcf = tdecl->gcFlags();
         if ( gcf & TypeDecl::gcFlag_heap ) sti->flags |= StructInfo::flag_heapGC;
         if ( gcf & TypeDecl::gcFlag_stringHeap ) sti->flags |= StructInfo::flag_stringHeapGC;
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
-        s2cppTypeName[sti] = describeCppType(&tdecl, CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes);
+        s2cppTypeName[sti] = describeCppType(tdecl, CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes);
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
         for ( uint32_t i=0, is=sti->count; i!=is; ++i ) {
             auto & var = st.fields[i];
@@ -264,7 +265,8 @@ namespace das {
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
         } else if ( type->baseType==Type::tStructure && type->structType->parent!=nullptr ) {
-            info->firstType = makeTypeInfo(nullptr, make_smart<TypeDecl>(type->structType->parent));
+            gc_local<TypeDecl> tdecl(new TypeDecl(type->structType->parent));
+            info->firstType = makeTypeInfo(nullptr, tdecl);
         } else {
             info->firstType = nullptr;
         }

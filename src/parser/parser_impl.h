@@ -47,7 +47,7 @@ namespace das {
             : pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
             if ( pNameList ) delete pNameList;
-            if ( pTypeDecl ) delete pTypeDecl;
+            // if ( pTypeDecl ) delete pTypeDecl;
             if ( pInit ) delete pInit;
             if ( annotation ) delete annotation;
         }

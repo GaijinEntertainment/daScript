@@ -581,6 +581,16 @@ namespace das {
                               bool isDep,
                               CodeOfPolicies policies ) {
         ProgramPtr program = make_smart<Program>();
+        gc_guard parse_gc_scope;
+        struct GcCollectOnExit {
+            gc_guard & scope;
+            Program * prog;
+            GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
+            ~GcCollectOnExit() {
+                if ( !prog ) return;
+                prog->thisModule->gc_collect(&scope.guard_root);
+            }
+        } parse_gc_collect(parse_gc_scope, program.get());
         program->library.renameModule(program->thisModule.get(), moduleName);
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
@@ -913,9 +923,9 @@ namespace das {
         ss << fileName;
         auto rtti_require = make_smart<Variable>();
         rtti_require->name = "__rtti_require";
-        rtti_require->type = make_smart<TypeDecl>(Type::tString);
+        rtti_require->type = new TypeDecl(Type::tString);
         rtti_require->init = make_smart<ExprConstString>(ss.str());
-        rtti_require->init->type = make_smart<TypeDecl>(Type::tString);
+        rtti_require->init->type = new TypeDecl(Type::tString);
         rtti_require->used = true;
         rtti_require->private_variable = true;
         res->thisModule->addVariable(rtti_require);
@@ -1079,6 +1089,16 @@ namespace das {
                                 TextWriter & logs,
                                 ModuleGroup & libGroup,
                                 CodeOfPolicies policies ) {
+        gc_guard compile_gc_scope;
+        struct GcCollectOnExit {
+            gc_guard & scope;
+            Program * prog = nullptr;
+            GcCollectOnExit(gc_guard & s) : scope(s) {}
+            ~GcCollectOnExit() {
+                if ( !prog ) return;
+                prog->thisModule->gc_collect(&scope.guard_root);
+            }
+        } compile_gc_collect(compile_gc_scope);
         ReuseCacheGuard rcg;
         bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
@@ -1165,6 +1185,7 @@ namespace das {
             auto & serializer_read = daScriptEnvironment::getBound()->serializer_read;
             if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, modName, access, logs, libGroup, exportAll, false, policies);
+            compile_gc_collect.prog = res.get();
             // wirteback all parsed modules from serializer_write
             if ( daScriptEnvironment::getBound()->serializer_write != nullptr
                 && (!daScriptEnvironment::getBound()->serializer_read || daScriptEnvironment::getBound()->serializer_read->failed) ) {

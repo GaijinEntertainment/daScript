@@ -290,9 +290,9 @@ namespace das {
                         td->at, CompilationError::invalid_name );
                 }
             }
-            if ( td->firstType ) lintType(td->firstType.get());
-            if ( td->secondType ) lintType(td->secondType.get());
-            for ( auto & arg : td->argTypes ) lintType(arg.get());
+            if ( td->firstType ) lintType(td->firstType);
+            if ( td->secondType ) lintType(td->secondType);
+            for ( auto & arg : td->argTypes ) lintType(arg);
         }
         virtual void preVisit ( TypeDecl * td ) override {
             Visitor::preVisit(td);

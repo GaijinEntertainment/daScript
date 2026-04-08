@@ -42,7 +42,7 @@ class EsMacro : AstFunctionAnnotation {
         func.flags |= FunctionFlags.exports
         // Generate [init] function that calls ecs_register(fn_ptr, name, typeinfo)
         let funcName = string(func.name)
-        var inscope stType <- new TypeDecl(at = func.at, baseType = Type.tStructure)
+        var stType = new TypeDecl(at = func.at, baseType = Type.tStructure)
         stType.structType = st
         var blk <- setup_call_list("register`es`{funcName}", func.at, true, true)
         blk.list |> emplace_new <| qmacro(ecs_register(unsafe(reinterpret<void?> @@$c(funcName)), $v(funcName), typeinfo rtti_typeinfo(type<$t(stType)>)))
@@ -53,7 +53,7 @@ class EsMacro : AstFunctionAnnotation {
                 let isRequired = !(gvar.annotation |> find_arg("required") is nothing)
                 if (isRequired) {
                     let gname = string(gvar.name)
-                    var inscope gType <- clone_type(gvar._type)
+                    var gType = clone_type(gvar._type)
                     gblk.list |> emplace_new <| qmacro(ecs_register_global($v(gname), unsafe(addr($i(gname))), typeinfo rtti_typeinfo(type<$t(gType)>)))
                 }
             }

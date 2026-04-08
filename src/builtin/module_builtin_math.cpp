@@ -232,7 +232,7 @@ namespace das {
             const char * fieldNames [] = {"x","y","z","w"};
             for ( int r=0; r!=RowC; ++r ) {
                 this->addFieldEx(fieldNames[r], "m[" + to_string(r) + "]", r*ColC*sizeof(float),
-                    make_smart<TypeDecl>(TypeDecl::getVectorType(Type::tFloat, ColC)));
+                    new TypeDecl(TypeDecl::getVectorType(Type::tFloat, ColC)));
             }
         }
         virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
@@ -242,7 +242,7 @@ namespace das {
             auto decl = idx->type;
             if ( !decl->isIndex() ) return nullptr;
             auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-            auto pt = make_smart<TypeDecl>(bt);
+            auto pt = new TypeDecl(bt);
             pt->ref = true;
             return pt;
         }
@@ -267,7 +267,7 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
-            if ( auto tnode = trySimulate(context, rv, idx, make_smart<TypeDecl>(Type::none), ofs) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, new TypeDecl(Type::none), ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_At>(at,
@@ -279,7 +279,7 @@ namespace das {
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
                                             const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
             auto r2vType = readType->baseType;
-            if ( auto tnode = trySimulate(context, rv, idx, make_smart<TypeDecl>(r2vType), ofs) ) {
+            if ( auto tnode = trySimulate(context, rv, idx, new TypeDecl(r2vType), ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,

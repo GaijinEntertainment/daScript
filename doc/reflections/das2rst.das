@@ -165,7 +165,8 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%),
         group_by_regex("Memset", mod, %regex~(memset.*)$%%),
         group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%),
-        group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name|get_module_file_name)$%%))
+        group_by_regex("Compilation and AOT", mod, %regex~(is_aot_enabled|set_aot|reset_aot|compiling_file_name|compiling_module_name|get_module_file_name)$%%),
+        group_by_regex("GC", mod, %regex~(gc_active_root_count|gc_thread_root_count|gc_thread_root_report|gc_thread_root_report_detailed|gc_total_id)$%%))
     documents("Built-in runtime", mod, "builtin.rst", groups);
 }
 
@@ -306,6 +307,7 @@ def document_module_ast(root : string) {
         group_by_regex("Debug info helpers", mod, %regex~(debug_helper_.*)%%),
         group_by_regex("AOT support", mod, %regex~(aot_require|aot_type_ann_get_field_ptr|aot_need_type_info|aot_previsit_get_field_ptr|aot_previsit_get_field|aot_visit_get_field|write_aot_body|write_aot_suffix|write_aot_macro_suffix|write_aot_macro_prefix|macro_aot_infix|getInitSemanticHashWithDep|get_aot_hash_comment)$%%),
         group_by_regex("String builder writer", mod, %regex~(string_builder_str|string_builder_clear)$%%),
+        group_by_regex("GC", mod, %regex~(ast_gc_guard)$%%),
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     )
     documents("AST manipulation library", mod, "ast.rst", groups)
@@ -1346,6 +1348,7 @@ def document_module_peg(root : string) {
 def main {
     disable_profiler(this_context())
     disable_profiler_log(this_context())
+    ast_gc_guard() {
     let root = get_das_root() + "/doc/source/stdlib/generated"
     // document embedded modules
     document_module_builtin(root)
@@ -1462,4 +1465,5 @@ def main {
     document_module_uriparser_boost(root)
     document_module_utf8_utils(root)
     document_module_validate_code(root)
+    }
 }

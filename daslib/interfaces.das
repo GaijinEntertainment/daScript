@@ -105,7 +105,7 @@ class ImplementsMacro : AstStructureAnnotation {
         }
         cls.annotations |> erase(iface_index)
         // add {st}::_interface_{Foo} : Foo?
-        var inscope iface_ptr <- qmacro_type(type<$t(parent)?>)
+        var iface_ptr = qmacro_type(type<$t(parent)?>)
         st |> add_structure_field(iface_var_name, clone_type(iface_ptr), default<ExpressionPtr>)
         // add function {st}::get`{Foo} : Foo?
         var inscope fn_get_i <- qmacro_method(iface_get_name_func, st) $(var self : $t(st) ==const) : $t(iface_ptr) {
@@ -128,7 +128,7 @@ class ImplementsMacro : AstStructureAnnotation {
             add_function(st._module, fn_get_i_const)
         }
         // add {cls}::_self : {ST}?
-        var inscope st_ptr <- qmacro_type(type<$t(st)?>)
+        var st_ptr = qmacro_type(type<$t(st)?>)
         let fi = cls |> add_structure_field("_self", clone_type(st_ptr), default<ExpressionPtr>)
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete", true)
         cls.fields[fi].flags |= FieldDeclarationFlags.doNotDelete | FieldDeclarationFlags.privateField
@@ -172,7 +172,7 @@ class ImplementsMacro : AstStructureAnnotation {
                     var anc_struct <- compiling_program() |> find_unique_structure(anc_name)
                     if (anc_struct != null) {
                         let anc_get_func = "{st.name}`{anc_get_name}"
-                        var inscope anc_ptr <- qmacro_type(type<$t(anc_struct)?>)
+                        var anc_ptr = qmacro_type(type<$t(anc_struct)?>)
                         // Getter delegates to the direct getter. The IChild? → IParent?
                         // upcast is automatic via class inheritance.
                         var inscope fn_anc <- qmacro_method(anc_get_func, st) $(var self : $t(st)) : $t(anc_ptr) {
@@ -208,17 +208,17 @@ class ImplementsMacro : AstStructureAnnotation {
                         let fmethod_name = "{iface_class_name}`{method_name}"
                         var inscope fmethod_args : array<VariablePtr>
                         var inscope fcall_args : array<ExpressionPtr>
-                        var inscope ret_type : TypeDeclPtr
+                        var ret_type : TypeDeclPtr
                         if (cm._type.isFunction) {
                             // Abstract method — type info is available on the field.
-                            cm.init |> move_new <| qmacro(cast<$t(cm._type)>(@@$i(fmethod_name)))
+                            move_new(cm.init) <| qmacro(cast<$t(cm._type)>(@@$i(fmethod_name)))
                             for (n, t in cm._type.argNames, cm._type.argTypes) {
                                 if (n != "self") {
                                     fcall_args |> emplace_new <| qmacro($i(n))
-                                    fmethod_args |> emplace_new <| new Variable(name := n, _type <- clone_type(t))
+                                    fmethod_args |> emplace_new <| new Variable(name := n, _type = clone_type(t))
                                 }
                             }
-                            ret_type |> move_new <| clone_type(cm._type.firstType)
+                            ret_type  = clone_type(cm._type.firstType)
                         } else {
                             // Default method being overridden — cm._type is autoinfer,
                             // so we look up the interface's actual method function to
@@ -229,15 +229,15 @@ class ImplementsMacro : AstStructureAnnotation {
                                 errors := "cannot find default method function {iface_func_name}"
                                 return false
                             }
-                            cm.init |> move_new <| qmacro(@@$i(fmethod_name))
+                            move_new(cm.init) <| qmacro(@@$i(fmethod_name))
                             for (arg in ifn.arguments) {
                                 let arg_name = string(arg.name)
                                 if (arg_name != "self") {
                                     fcall_args |> emplace_new <| qmacro($i(arg.name))
-                                    fmethod_args |> emplace_new <| new Variable(name := arg_name, _type <- clone_type(arg._type))
+                                    fmethod_args |> emplace_new <| new Variable(name := arg_name, _type = clone_type(arg._type))
                                 }
                             }
-                            ret_type |> move_new <| clone_type(ifn.result)
+                            ret_type  = clone_type(ifn.result)
                         }
                         var inscope fmethod <- qmacro_method(fmethod_name, cls) $(var self : $t(cls); $a(fmethod_args)) : $t(ret_type) {
                             generic_return(invoke(self._self.$f(fld.name), *self._self, $a(fcall_args)))

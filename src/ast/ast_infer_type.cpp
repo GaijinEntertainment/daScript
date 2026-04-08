@@ -353,7 +353,7 @@ namespace das {
                 getOrCreateDummy(thisModule);
             }
         }
-        auto tt = make_smart<TypeDecl>(Type::tStructure);
+        auto tt = new TypeDecl(Type::tStructure);
         tt->structType = var;
         if (isCircularType(tt)) {
             var->circular = true;
@@ -436,7 +436,7 @@ namespace das {
             error("global variable '" + var->name + "' can't be moved", "", "",
                   var->at, CompilationError::cant_move);
         } else if (var->init_via_clone && !var->init->type->canClone()) {
-            auto varType = make_smart<TypeDecl>(*var->type);
+            auto varType = new TypeDecl(*var->type);
             varType->ref = true;
             auto fnList = getCloneFunc(varType, var->init->type);
             if (fnList.size() && verifyCloneFunc(fnList, var->at)) {
@@ -614,7 +614,7 @@ namespace das {
         // if function got no 'result', function is a void function
         if (!func->hasReturn && canFoldResult) {
             if (func->result->isAuto()) {
-                func->result = make_smart<TypeDecl>(Type::tVoid);
+                func->result = new TypeDecl(Type::tVoid);
                 reportAstChanged();
             } else if (!func->result->isVoid()) {
                 error("function does not return a value", "", "",
@@ -716,7 +716,7 @@ namespace das {
         // the reason not to reset it is that usually once inferred it should not change. but in some cases it can.
         // even more rare is that it changed, and then no longer can be inferred. all those cases are pathological
         // and should be avoided. but if you see a bug, this is the first place to look.
-        // expr->type.reset();
+        // expr->type = nullptr;
     }
     vec4f InferTypes::getEnumerationValue(ExprConstEnumeration *expr, bool &inferred) const {
         inferred = false;
@@ -782,7 +782,7 @@ namespace das {
             } else {
                 error("enumeration value not inferred yet " + cE->text, "", "",
                       c->at, CompilationError::invalid_enumeration);
-                c->type.reset();
+                c->type = nullptr;
             }
         } else if (c->baseType == Type::tBitfield || c->baseType == Type::tBitfield8 ||
                    c->baseType == Type::tBitfield16 || c->baseType == Type::tBitfield64) {
@@ -791,21 +791,21 @@ namespace das {
                 TypeDecl::clone(c->type, cB->bitfieldType);
                 c->type->ref = false;
             } else {
-                c->type = make_smart<TypeDecl>(c->baseType);
+                c->type = new TypeDecl(c->baseType);
             }
             c->type->constant = isConstantType(c);
         } else if (c->baseType == Type::tPointer) {
-            c->type = make_smart<TypeDecl>(c->baseType);
+            c->type = new TypeDecl(c->baseType);
             auto cptr = static_cast<ExprConstPtr *>(c);
             c->type->smartPtr = cptr->isSmartPtr;
             if (cptr->ptrType) {
-                c->type->firstType = make_smart<TypeDecl>(*cptr->ptrType);
+                c->type->firstType = new TypeDecl(*cptr->ptrType);
                 c->type->constant = c->type->firstType->constant;
             } else {
                 c->type->constant = false; // true;
             }
         } else {
-            c->type = make_smart<TypeDecl>(c->baseType);
+            c->type = new TypeDecl(c->baseType);
             c->type->constant = isConstantType(c);
         }
         return Visitor::visit(c);
@@ -901,14 +901,14 @@ namespace das {
         if (expr->subexpr->rtti_isTypeDecl()) {
             reportAstChanged();
             if (expr->subexpr->type->isEnum()) {
-                auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
+                auto ewsType = new TypeDecl(*(expr->subexpr->type));
                 ewsType->ref = false;
                 auto anyEnumValue = expr->subexpr->type->enumType->list.size() ? expr->subexpr->type->enumType->list[0].name : "";
                 auto ews = make_smart<ExprConstEnumeration>(expr->at, anyEnumValue, ewsType);
                 ews->type = ewsType;
                 return ews;
             } else if (expr->subexpr->type->isWorkhorseType()) {
-                auto ewsType = make_smart<TypeDecl>(*(expr->subexpr->type));
+                auto ewsType = new TypeDecl(*(expr->subexpr->type));
                 ewsType->ref = false;
                 auto ews = Program::makeConst(expr->at, ewsType, v_zero());
                 ews->type = ewsType;
@@ -951,7 +951,7 @@ namespace das {
             // however having auto or alias in the result may cause problems, so we swap it to void
             // and then swap it back to whatever it was
             auto retT = expr->funcType->firstType;
-            expr->funcType->firstType = make_smart<TypeDecl>(Type::tVoid);
+            expr->funcType->firstType = new TypeDecl(Type::tVoid);
             if (expr->funcType->isAlias()) {
                 auto aT = inferAlias(expr->funcType);
                 if (aT) {
@@ -985,18 +985,18 @@ namespace das {
             expr->func = fns.back();
             expr->func->addr = true;
             expr->func->fastCall = false;
-            expr->type = make_smart<TypeDecl>(Type::tFunction);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->func->result);
+            expr->type = new TypeDecl(Type::tFunction);
+            expr->type->firstType = new TypeDecl(*expr->func->result);
             expr->type->argTypes.reserve(expr->func->arguments.size());
             for (auto &arg : expr->func->arguments) {
-                auto at = make_smart<TypeDecl>(*arg->type);
+                auto at = new TypeDecl(*arg->type);
                 expr->type->argTypes.push_back(at);
                 expr->type->argNames.push_back(arg->name);
             }
             if (expr->func->isTemplate) {
                 error("can't take address of a template function " + describeFunction(expr->func), "", "",
                       expr->at, CompilationError::function_not_found);
-                expr->type.reset();
+                expr->type = nullptr;
             } else {
                 verifyType(expr->type);
             }
@@ -1100,8 +1100,8 @@ namespace das {
                     }
                 }
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*expr->subexpr->type);
             expr->type->firstType->ref = false;
             expr->type->constant |= expr->subexpr->type->constant;
             propagateTempType(expr->subexpr->type, expr->type); // addr(Foo#) is Foo#?#
@@ -1241,7 +1241,7 @@ namespace das {
             }
         }
 
-        expr->type = make_smart<TypeDecl>(Type::tVoid);
+        expr->type = new TypeDecl(Type::tVoid);
         return Visitor::visit(expr);
     }
     void InferTypes::preVisit(ExprAssert *expr) {
@@ -1275,7 +1275,7 @@ namespace das {
             error("assert comment must be string constant", "", "",
                   expr->at, CompilationError::invalid_argument_type);
         }
-        expr->type = make_smart<TypeDecl>(Type::tVoid);
+        expr->type = new TypeDecl(Type::tVoid);
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprQuote *expr) {
@@ -1285,10 +1285,10 @@ namespace das {
             return Visitor::visit(expr);
         }
         // infer
-        expr->type = make_smart<TypeDecl>(Type::tPointer);
+        expr->type = new TypeDecl(Type::tPointer);
         expr->type->smartPtr = true;
         expr->type->smartPtrNative = true;
-        expr->type->firstType = make_smart<TypeDecl>(Type::tHandle);
+        expr->type->firstType = new TypeDecl(Type::tHandle);
         expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression").get();
         // mark quote as noAot
         if (func) {
@@ -1337,7 +1337,7 @@ namespace das {
             error("memzero argument can't be constant", "", "",
                   expr->at, CompilationError::invalid_argument_type);
         }
-        expr->type = make_smart<TypeDecl>();
+        expr->type = new TypeDecl();
         return Visitor::visit(expr);
     }
     ExprLooksLikeCall *InferTypes::makeCallMacro(const LineInfo &at, const string &funcName) {
@@ -1388,12 +1388,12 @@ namespace das {
                     // arg 1 becomes cast<auto> deref(field.value)
                     auto pCast = make_smart<ExprCast>();
                     pCast->at = expr->at;
-                    pCast->castType = make_smart<TypeDecl>(Type::autoinfer);
+                    pCast->castType = new TypeDecl(Type::autoinfer);
                     pCast->subexpr = make_smart<ExprPtr2Ref>(expr->at, eField->value);
                     pCast->subexpr->alwaysSafe = true;
                     expr->arguments[1] = pCast;
                     // arg 0 becomes cast<filed_type>.fieldName
-                    eField->value = make_smart<ExprTypeDecl>(expr->at, make_smart<TypeDecl>(*eFVT));
+                    eField->value = make_smart<ExprTypeDecl>(expr->at, new TypeDecl(*eFVT));
                     // and we are done
                     reportAstChanged();
                     // we don't need to wait for another pass - code bellow handles exactly this case
@@ -1426,7 +1426,7 @@ namespace das {
             if (!blockT) {
                 if (expr->isInvokeMethod) {
                     ExpressionPtr value;
-                    TypeDeclPtr valueType;
+                    TypeDeclPtr valueType = nullptr;
                     string methodName;
                     if (expr->arguments[0]->rtti_isField()) {
                         auto eField = static_pointer_cast<ExprField>(expr->arguments[0]);
@@ -1489,7 +1489,7 @@ namespace das {
                                 callName = "_::" + valueType->firstType->structType->name + "`" + methodName;
                                 newCall->name = callName;
                                 auto derefValue = make_smart<ExprPtr2Ref>(value->at, value);
-                                derefValue->type = make_smart<TypeDecl>(*valueType->firstType);
+                                derefValue->type = new TypeDecl(*valueType->firstType);
                                 derefValue->type->constant |= valueType->constant;
                                 newCall->arguments[0] = derefValue;
                                 fcall = inferFunctionCall(newCall.get(), InferCallError::tryOperator);
@@ -1573,7 +1573,7 @@ namespace das {
                                                   expr->at, CompilationError::invalid_argument_count);
                                         }
                                     } else {
-                                        auto stf = sttf->type.get();
+                                        auto stf = sttf->type;
                                         if (stf && stf->dim.size() == 0 && (stf->baseType == Type::tBlock || stf->baseType == Type::tFunction || stf->baseType == Type::tLambda)) {
                                             reportAstChanged();
                                             expr->isInvokeMethod = false;
@@ -1685,7 +1685,7 @@ namespace das {
         if (blockT->firstType) {
             TypeDecl::clone(expr->type, blockT->firstType);
         } else {
-            expr->type = make_smart<TypeDecl>();
+            expr->type = new TypeDecl();
         }
         // we replace invoke/*method*/(cptr.method, cptr, ...) with invoke/*method*/(typedecl(cptr.type).method, cptr, ...)
         if (expr->isInvokeMethod && expr->arguments.size()) {
@@ -1700,7 +1700,7 @@ namespace das {
             }
             if (eField && !eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias()) {
                 auto fType = eField->value->type->isPointer() ? eField->value->type->firstType : eField->value->type;
-                auto cType = make_smart<TypeDecl>(*fType);
+                auto cType = new TypeDecl(*fType);
                 auto mkType = make_smart<ExprTypeDecl>(eField->at, cType);
                 cType->ref = false;
                 eField->value = mkType;
@@ -1733,7 +1733,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_argument_type);
-            expr->type = make_smart<TypeDecl>(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -1765,7 +1765,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_argument_type);
-            expr->type = make_smart<TypeDecl>(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -1797,8 +1797,8 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_argument_type);
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*containerType->secondType);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*containerType->secondType);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -1831,7 +1831,7 @@ namespace das {
             if (!containerType->firstType->isSameType(*valueType, RefMatters::no, ConstMatters::no, TemporaryMatters::no))
                 error("key must be of the same type as table<key,...>", "", "",
                       expr->at, CompilationError::invalid_argument_type);
-            expr->type = make_smart<TypeDecl>(Type::tBool);
+            expr->type = new TypeDecl(Type::tBool);
         } else {
             error("first argument must be fully qualified table", "", "",
                   expr->at, CompilationError::invalid_argument_type);
@@ -2094,7 +2094,7 @@ namespace das {
                 return make_smart<ExprConstString>(expr->at, expr->typeexpr->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::no));
             } else if (expr->trait == "stripped_typename") {
                 reportAstChanged();
-                auto ctype = make_smart<TypeDecl>(*expr->typeexpr);
+                auto ctype = new TypeDecl(*expr->typeexpr);
                 ctype->constant = false;
                 ctype->temporary = false;
                 ctype->ref = false;
@@ -2613,7 +2613,7 @@ namespace das {
                 cloneFn->arguments.push_back(expr->subexpr->clone());
                 return cloneFn;
             } else {
-                expr->type = make_smart<TypeDecl>();
+                expr->type = new TypeDecl();
                 return Visitor::visit(expr);
             }
         }
@@ -2703,8 +2703,8 @@ namespace das {
         if (expr->ascType) {
             TypeDecl::clone(expr->type, expr->ascType);
         } else {
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->subexpr->type);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*expr->subexpr->type);
             expr->type->firstType->ref = false;
             if (expr->type->firstType->baseType == Type::tHandle) {
                 expr->type->smartPtr = expr->type->firstType->annotation->isSmart();
@@ -2776,15 +2776,15 @@ namespace das {
                 error("invalid syntax for 'new' of class, expected syntax: 'new " + describeType(expr->typeexpr) + "()'", "", "",
                       expr->at, CompilationError::invalid_new_type);
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*expr->typeexpr);
             expr->type->firstType->dim.clear();
             expr->type->dim = expr->typeexpr->dim;
             expr->name = expr->typeexpr->structType->getMangledName();
         } else if (expr->typeexpr->baseType == Type::tHandle) {
             if (expr->typeexpr->annotation->canNew()) {
-                expr->type = make_smart<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
+                expr->type = new TypeDecl(Type::tPointer);
+                expr->type->firstType = new TypeDecl(*expr->typeexpr);
                 expr->type->firstType->dim.clear();
                 expr->type->dim = expr->typeexpr->dim;
                 expr->type->smartPtr = expr->typeexpr->annotation->isSmart();
@@ -2799,8 +2799,8 @@ namespace das {
                       expr->at, CompilationError::invalid_new_type);
                 return Visitor::visit(expr);
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*expr->typeexpr);
             expr->type->firstType->dim.clear();
             expr->type->dim = expr->typeexpr->dim;
             expr->name = expr->typeexpr->getMangledName();
@@ -2810,8 +2810,8 @@ namespace das {
                       expr->at, CompilationError::invalid_new_type);
                 return Visitor::visit(expr);
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*expr->typeexpr);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*expr->typeexpr);
             expr->type->firstType->dim.clear();
             expr->type->dim = expr->typeexpr->dim;
             expr->name = expr->typeexpr->getMangledName();
@@ -2824,7 +2824,7 @@ namespace das {
                   expr->at, CompilationError::invalid_new_type);
         }
         if (expr->type && expr->initializer && !expr->name.empty()) {
-            auto resultType = make_smart<TypeDecl>(*expr->type);
+            auto resultType = new TypeDecl(*expr->type);
             expr->func = inferFunctionCall(expr, InferCallError::functionOrGeneric, nullptr, false).get();
             if (!expr->func && expr->typeexpr->baseType == Type::tStructure) {
                 auto saveName = expr->name;
@@ -2953,12 +2953,12 @@ namespace das {
                 return subset;
             }
             if (!ixT->isIndex()) {
-                expr->type.reset();
+                expr->type = nullptr;
                 error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             } else if (seT->isVectorType()) {
-                expr->type = make_smart<TypeDecl>(seT->getVectorBaseType());
+                expr->type = new TypeDecl(seT->getVectorBaseType());
                 expr->type->ref = seT->ref;
                 expr->type->constant = seT->constant;
             } else if (seT->isGoodArrayType()) {
@@ -3022,8 +3022,8 @@ namespace das {
                           expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 }
-                expr->type = make_smart<TypeDecl>(Type::tPointer);
-                expr->type->firstType = make_smart<TypeDecl>(*seT->secondType);
+                expr->type = new TypeDecl(Type::tPointer);
+                expr->type->firstType = new TypeDecl(*seT->secondType);
                 expr->type->constant |= seT->constant;
             } else if (seT->isHandle()) {
                 // TODO: support handle safe index
@@ -3037,21 +3037,21 @@ namespace das {
             } else if (seT->isVectorType() || seT->isGoodArrayType() || seT->dim.size()) {
                 // bounded types — int/uint only
                 if (!ixT->isIndex()) {
-                    expr->type.reset();
+                    expr->type = nullptr;
                     error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'", "", "",
                           expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if (seT->isVectorType()) {
-                    expr->type = make_smart<TypeDecl>(Type::tPointer);
-                    expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
+                    expr->type = new TypeDecl(Type::tPointer);
+                    expr->type->firstType = new TypeDecl(seT->getVectorBaseType());
                     expr->type->firstType->constant = seT->constant;
                 } else if (seT->isGoodArrayType()) {
                     if (!safeExpression(expr)) {
                         error("safe-index of array<> must be inside the 'unsafe' block", "", "",
                               expr->at, CompilationError::unsafe);
                     }
-                    expr->type = make_smart<TypeDecl>(Type::tPointer);
-                    expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
+                    expr->type = new TypeDecl(Type::tPointer);
+                    expr->type->firstType = new TypeDecl(*seT->firstType);
                     expr->type->firstType->constant |= seT->constant;
                 } else if (seT->dim.size()) {
                     if (!seT->isAutoArrayResolved()) {
@@ -3059,8 +3059,8 @@ namespace das {
                               expr->subexpr->at, CompilationError::cant_index);
                         return Visitor::visit(expr);
                     } else {
-                        expr->type = make_smart<TypeDecl>(Type::tPointer);
-                        expr->type->firstType = make_smart<TypeDecl>(*seT);
+                        expr->type = new TypeDecl(Type::tPointer);
+                        expr->type->firstType = new TypeDecl(*seT);
                         expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
                         if (!expr->type->firstType->dimExpr.empty()) {
                             expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
@@ -3071,7 +3071,7 @@ namespace das {
             } else {
                 // pointer safe-at: a?[index] where a : T*
                 if (!ixT->isIndexExt()) {
-                    expr->type.reset();
+                    expr->type = nullptr;
                     error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'", "", "",
                           expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
@@ -3080,7 +3080,7 @@ namespace das {
                     error("safe-index of pointer must be inside the 'unsafe' block", "", "",
                           expr->at, CompilationError::unsafe);
                 }
-                expr->type = make_smart<TypeDecl>(*expr->subexpr->type);
+                expr->type = new TypeDecl(*expr->subexpr->type);
                 expr->type->constant |= seT->constant;
             }
         } else if (expr->subexpr->type->isGoodArrayType()) {
@@ -3094,8 +3094,8 @@ namespace das {
                 return Visitor::visit(expr);
             }
             auto seT = expr->subexpr->type;
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*seT->firstType);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*seT->firstType);
             expr->type->firstType->constant |= seT->constant;
         } else if (expr->subexpr->type->isGoodTableType()) {
             if (!safeExpression(expr)) {
@@ -3113,8 +3113,8 @@ namespace das {
                       expr->index->at, CompilationError::invalid_index_type);
                 return Visitor::visit(expr);
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*seT->secondType);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*seT->secondType);
             expr->type->constant |= seT->constant;
         } else if (expr->subexpr->type->dim.size()) {
             if (!safeExpression(expr)) {
@@ -3131,8 +3131,8 @@ namespace das {
                 error("type dimensions are not resolved yet: '" + describeType(seT) + "'", "", "",
                       expr->subexpr->at, CompilationError::cant_index);
             }
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(*seT);
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(*seT);
             expr->type->firstType->dim.erase(expr->type->firstType->dim.begin());
             if (!expr->type->firstType->dimExpr.empty()) {
                 expr->type->firstType->dimExpr.erase(expr->type->firstType->dimExpr.begin());
@@ -3145,8 +3145,8 @@ namespace das {
                 return Visitor::visit(expr);
             }
             const auto &seT = expr->subexpr->type;
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
-            expr->type->firstType = make_smart<TypeDecl>(seT->getVectorBaseType());
+            expr->type = new TypeDecl(Type::tPointer);
+            expr->type->firstType = new TypeDecl(seT->getVectorBaseType());
             expr->type->firstType->constant = seT->constant;
         } else {
             error("type can't be safe-indexed: '" + describeType(expr->subexpr->type) + "'", "", "",
@@ -3318,8 +3318,8 @@ namespace das {
                 }
             }
             if (!block->hasReturn && canFoldResult && block->type->isAuto()) {
-                block->returnType = make_smart<TypeDecl>(Type::tVoid);
-                block->type = make_smart<TypeDecl>(Type::tVoid);
+                block->returnType = new TypeDecl(Type::tVoid);
+                block->type = new TypeDecl(Type::tVoid);
                 setBlockCopyMoveFlags(block);
                 reportAstChanged();
             }
@@ -3365,7 +3365,7 @@ namespace das {
         } else {
             auto bt = valT->getVectorBaseType();
             auto rt = valT->isRange() ? TypeDecl::getRangeType(bt, int(expr->fields.size())) : TypeDecl::getVectorType(bt, int(expr->fields.size()));
-            expr->type = make_smart<TypeDecl>(rt);
+            expr->type = new TypeDecl(rt);
             expr->type->constant = valT->constant;
             expr->type->ref = valT->ref;
             if (expr->type->ref) {
@@ -3480,7 +3480,7 @@ namespace das {
         expr->skipQQ = expr->type->isPointer();
         if (!expr->skipQQ) {
             auto fieldType = expr->type;
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer);
             expr->type->firstType = fieldType;
         }
         expr->type->constant |= valT->constant || expr->value->type->constant;
@@ -3528,7 +3528,7 @@ namespace das {
             return Visitor::visit(expr);
         }
         expr->fieldIndex = index;
-        expr->type = make_smart<TypeDecl>(Type::tBool);
+        expr->type = new TypeDecl(Type::tBool);
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprField *expr) {
@@ -3546,7 +3546,7 @@ namespace das {
                         }
                         if ( auto possibleBitfield = mod->findAlias(enumName) ) {
                             if ( possibleBitfield->isBitfield() ) {
-                                possibleBitfields.push_back(possibleBitfield.get());
+                                possibleBitfields.push_back(possibleBitfield);
                             }
                         }
                     }
@@ -3558,7 +3558,7 @@ namespace das {
             }
             if (possibleEnums.size() == 1) {
                 reportAstChanged();
-                auto td = make_smart<TypeDecl>(possibleEnums.back());
+                auto td = new TypeDecl(possibleEnums.back());
                 td->constant = true;
                 auto res = make_smart<ExprConstEnumeration>(makeConstAt(expr), expr->name, td);
                 bool infE = false;
@@ -3571,10 +3571,10 @@ namespace das {
                 int bit = alias->findArgumentIndex(expr->name);
                 if (bit != -1) {
                     reportAstChanged();
-                    auto td = make_smart<TypeDecl>(*alias);
+                    auto td = new TypeDecl(*alias);
                     td->ref = false;
                     auto bitConst = new ExprConstBitfield(makeConstAt(expr), 1ull << uint64_t(bit));
-                    bitConst->bitfieldType = make_smart<TypeDecl>(*alias);
+                    bitConst->bitfieldType = new TypeDecl(*alias);
                     bitConst->type = td;
                     return bitConst;
                 } else {
@@ -3785,7 +3785,7 @@ namespace das {
             }
         } else if (expr->fieldIndex != -1) {
             if (valT->isBitfield()) {
-                expr->type = make_smart<TypeDecl>(Type::tBool);
+                expr->type = new TypeDecl(Type::tBool);
             } else {
                 auto tupleT = valT->isPointer() ? valT->firstType : valT;
                 auto & tt = tupleT->argTypes[expr->fieldIndex];
@@ -3805,7 +3805,7 @@ namespace das {
                 collectMissingOperators(".", mf, true);
                 if (!mf.empty()) {
                     reportDualFunctionNotFound(".`" + expr->name, "field '" + expr->name + "' not found in " + describeType(valT),
-                                               expr->at, mf, {valT}, {valT, make_smart<TypeDecl>(Type::tString)}, true, false, true,
+                                               expr->at, mf, {valT}, {valT, new TypeDecl(Type::tString)}, true, false, true,
                                                CompilationError::cant_get_field, 0, "");
                 } else {
                     error("field '" + expr->name + "' not found in " + describeType(valT), "", "",
@@ -3839,7 +3839,7 @@ namespace das {
                 collectMissingOperators("?.", mf, true);
                 if (!mf.empty()) {
                     reportDualFunctionNotFound("?.`" + expr->name, "can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT),
-                                               expr->at, mf, {expr->value->type}, {expr->value->type, make_smart<TypeDecl>(Type::tString)}, true, false, true,
+                                               expr->at, mf, {expr->value->type}, {expr->value->type, new TypeDecl(Type::tString)}, true, false, true,
                                                CompilationError::cant_get_field, 0, "");
                 } else {
                     error("can only safe dereference a variant or a pointer to a tuple, a structure or a handle " + describeType(valT), "", "",
@@ -3906,7 +3906,7 @@ namespace das {
         expr->skipQQ = expr->type->isPointer();
         if (!expr->skipQQ) {
             auto fieldType = expr->type;
-            expr->type = make_smart<TypeDecl>(Type::tPointer);
+            expr->type = new TypeDecl(Type::tPointer);
             expr->type->firstType = fieldType;
         }
         expr->type->constant |= valT->constant;
@@ -4070,7 +4070,7 @@ namespace das {
     void InferTypes::preVisit(ExprReturn *expr) {
         Visitor::preVisit(expr);
         expr->block = nullptr;
-        expr->returnType.reset();
+        expr->returnType = nullptr;
         // ok, now lets mark early outs for the block chain
         auto i = scopes.size();
         while (i > 0) {
@@ -4167,7 +4167,7 @@ namespace das {
                 TypeDecl::clone(expr->returnType, func->result);
             }
         }
-        expr->type = make_smart<TypeDecl>();
+        expr->type = new TypeDecl();
         if (forceInscopePod && func) {
             if (returnCount == 0)
                 oneReturn = expr;
@@ -4194,7 +4194,7 @@ namespace das {
             reportAstChanged();
             return blk;
         }
-        expr->type = make_smart<TypeDecl>();
+        expr->type = new TypeDecl();
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprBreak *expr) {
@@ -4553,7 +4553,7 @@ namespace das {
             pVar->aka = expr->iteratorsAka[idx];
             pVar->at = expr->iteratorsAt[idx];
             if (src->type->dim.size()) {
-                pVar->type = make_smart<TypeDecl>(*src->type);
+                pVar->type = new TypeDecl(*src->type);
                 pVar->type->ref = true;
                 pVar->type->dim.erase(pVar->type->dim.begin());
                 if (!pVar->type->dimExpr.empty()) {
@@ -4564,20 +4564,20 @@ namespace das {
                     error("can't iterate over const iterator", "", "",
                           expr->at, CompilationError::invalid_iteration_source);
                 }
-                pVar->type = make_smart<TypeDecl>(*src->type->firstType);
+                pVar->type = new TypeDecl(*src->type->firstType);
             } else if (src->type->isGoodArrayType()) {
-                pVar->type = make_smart<TypeDecl>(*src->type->firstType);
+                pVar->type = new TypeDecl(*src->type->firstType);
                 pVar->type->ref = true;
             } else if (src->type->isRange()) {
-                pVar->type = make_smart<TypeDecl>(src->type->getRangeBaseType());
+                pVar->type = new TypeDecl(src->type->getRangeBaseType());
                 pVar->type->ref = false;
                 pVar->type->constant = true;
             } else if (src->type->isString()) {
-                pVar->type = make_smart<TypeDecl>(Type::tInt);
+                pVar->type = new TypeDecl(Type::tInt);
                 pVar->type->ref = false;
                 pVar->type->constant = true;
             } else if (src->type->isHandle() && src->type->annotation->isIterable()) {
-                pVar->type = make_smart<TypeDecl>(*src->type->annotation->makeIteratorType(src));
+                pVar->type = new TypeDecl(*src->type->annotation->makeIteratorType(src));
             } else {
                 error("unsupported iteration type " + src->type->describe() + " for the loop variable " + pVar->name + ", iterating over " + describeType(src->type), "", "",
                       expr->at, CompilationError::invalid_iteration_source);
@@ -4858,7 +4858,7 @@ namespace das {
                     && (func && !func->generated && !func->generator && !func->lambda)
                     // not in the generator block
                     && (blocks.empty() || !blocks.back()->isGeneratorBlock)) {
-                    if (isPodDelete(var->type.get())) {
+                    if (isPodDelete(var->type)) {
                         var->pod_delete = true;
                         reportAstChanged();
                     }
@@ -5008,7 +5008,7 @@ namespace das {
             error("local variable " + var->name + " can't init (move) from a constant value. " + describeType(var->init->type), "", "",
                   var->at, CompilationError::cant_move);
         } else if (var->init_via_clone && !var->init->type->canClone()) {
-            auto varType = make_smart<TypeDecl>(*var->type);
+            auto varType = new TypeDecl(*var->type);
             varType->ref = true;
             auto fnList = getCloneFunc(varType, var->init->type);
             if (fnList.size() && verifyCloneFunc(fnList, expr->at)) {
@@ -5186,12 +5186,12 @@ namespace das {
                         reportMissing(expr, nonNamedTypes, "no matching functions or generics: ", true);
                         return Visitor::visit(expr);
                     }
-                    auto tp = expr->nonNamedArguments[0]->type.get();
+                    auto tp = expr->nonNamedArguments[0]->type;
                     auto vSelf = expr->nonNamedArguments[0];
                     if (tp->isPointer() && tp->firstType) {
-                        tp = tp->firstType.get();
+                        tp = tp->firstType;
                         vSelf = make_smart<ExprPtr2Ref>(vSelf->at, vSelf);
-                        vSelf->type = make_smart<TypeDecl>(*tp);
+                        vSelf->type = new TypeDecl(*tp);
                     }
                     if (tp->isStructure()) {
                         auto callStruct = tp->structType;
@@ -5340,7 +5340,7 @@ namespace das {
             auto ecast = make_smart<ExprCast>(expr->at, expr->clone(), expr->aliasSubstitution);
             ecast->reinterpret = true;
             ecast->alwaysSafe = true;
-            expr->aliasSubstitution.reset();
+            expr->aliasSubstitution = nullptr;
             reportAstChanged();
             return ecast;
         }
@@ -5350,21 +5350,21 @@ namespace das {
                     reportAstChanged();
                     if (expr->arguments.size()) {
                         auto mkt = make_smart<ExprMakeTuple>(expr->at);
-                        mkt->recordType = make_smart<TypeDecl>(*aliasT);
+                        mkt->recordType = new TypeDecl(*aliasT);
                         for (auto &arg : expr->arguments) {
                             mkt->values.push_back(arg->clone());
                         }
                         return mkt;
                     } else {
                         auto mks = make_smart<ExprMakeStruct>(expr->at);
-                        mks->makeType = make_smart<TypeDecl>(*aliasT);
+                        mks->makeType = new TypeDecl(*aliasT);
                         return mks;
                     }
                 } else if (expr->arguments.empty()) {
                     // this is Blah() - so we promote to default<Blah>
                     reportAstChanged();
                     auto mks = make_smart<ExprMakeStruct>(expr->at);
-                    mks->makeType = make_smart<TypeDecl>(*aliasT);
+                    mks->makeType = new TypeDecl(*aliasT);
                     mks->useInitializer = true;
                     mks->alwaysUseInitializer = true;
                     return mks;
@@ -5524,7 +5524,7 @@ namespace das {
         }
     }
     ExpressionPtr InferTypes::visit(ExprStringBuilder *expr) {
-        expr->type = make_smart<TypeDecl>(Type::tString);
+        expr->type = new TypeDecl(Type::tString);
         return evalAndFoldStringBuilder(expr);
     }
 

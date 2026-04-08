@@ -165,6 +165,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
     var res : SuiteResult
     var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
+    let gc_before = gc_thread_root_count()
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             ctx.queued_benchmarks |> clear
@@ -292,6 +293,14 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
                 }
             }
         }
+    }
+    let gc_after = gc_thread_root_count()
+    // Small bounded leaks (< 10) are expected from RTTI type walks in test_module.
+    // Report only significant leaks that suggest a real gc_collect gap.
+    if (gc_after > gc_before + 10ul) {
+        let delta = int64(gc_after) - int64(gc_before)
+        to_log(LOG_WARNING, "GC LEAK: {file_name} — {delta} new TypeDecl nodes on thread root\n")
+        gc_thread_root_report_detailed(uint64(delta))
     }
     return res
 }

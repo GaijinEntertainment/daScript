@@ -123,7 +123,7 @@ namespace das {
     }
 
     TypeDeclPtr Enumeration::makeBaseType() const {
-        return make_smart<TypeDecl>(baseType);
+        return new TypeDecl(baseType);
     }
 
     Type Enumeration::getEnumType() const {
@@ -147,20 +147,20 @@ namespace das {
     }
 
     TypeDeclPtr Enumeration::makeEnumType() const {
-        TypeDeclPtr res;
+        TypeDeclPtr res = nullptr;
         switch (baseType) {
         case Type::tInt8:
         case Type::tUInt8:
-            res = make_smart<TypeDecl>(Type::tEnumeration8); break;
+            res = new TypeDecl(Type::tEnumeration8); break;
         case Type::tInt16:
         case Type::tUInt16:
-            res = make_smart<TypeDecl>(Type::tEnumeration16); break;
+            res = new TypeDecl(Type::tEnumeration16); break;
         case Type::tInt:
         case Type::tUInt:
-            res = make_smart<TypeDecl>(Type::tEnumeration); break;
+            res = new TypeDecl(Type::tEnumeration); break;
         case Type::tInt64:
         case Type::tUInt64:
-            res = make_smart<TypeDecl>(Type::tEnumeration64); break;
+            res = new TypeDecl(Type::tEnumeration64); break;
         default:
             DAS_ASSERTF(0, "we should not be here. unsupported enumeration base type.");
             return nullptr;
@@ -256,11 +256,11 @@ namespace das {
         auto cs = make_smart<Structure>(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
-            cs->fields.emplace_back(fd.name, make_smart<TypeDecl>(*fd.type), fd.init, fd.annotation, fd.moveSemantics, fd.at);
+            cs->fields.emplace_back(fd.name, new TypeDecl(*fd.type), fd.init ? fd.init->clone() : nullptr, fd.annotation, fd.moveSemantics, fd.at);
             cs->fields.back().flags = fd.flags;
         }
         aliases.foreach([&](const TypeDeclPtr & atype) -> bool {
-            cs->aliases.insert(atype->alias, make_smart<TypeDecl>(*atype));
+            cs->aliases.insert(atype->alias, new TypeDecl(*atype));
             return true;
         });
         cs->at = at;
@@ -628,7 +628,7 @@ namespace das {
         auto pVar = make_smart<Variable>();
         pVar->name = name;
         pVar->aka = aka;
-        pVar->type = make_smart<TypeDecl>(*type);
+        pVar->type = new TypeDecl(*type);
         if ( init )
             pVar->init = init->clone();
         if ( source )
@@ -700,7 +700,7 @@ namespace das {
             cfun->arguments.push_back(arg->clone());
         }
         cfun->annotations = cloneAnnotationList(annotations);
-        cfun->result = make_smart<TypeDecl>(*result);
+        cfun->result = new TypeDecl(*result);
         cfun->body = body->clone();
         cfun->index = -1;
         cfun->totalStackSize = 0;
@@ -820,9 +820,9 @@ namespace das {
         for ( auto & arg : arguments ) {
             vis.preVisitArgument(this, arg, arg==arguments.back() );
             if ( arg->type ) {
-                vis.preVisit(arg->type.get());
+                vis.preVisit(arg->type);
                 arg->type = arg->type->visit(vis);
-                arg->type = vis.visit(arg->type.get());
+                arg->type = vis.visit(arg->type);
             }
             if ( arg->init && vis.canVisitArgumentInit(this,arg,arg->init.get()) ) {
                 vis.preVisitArgumentInit(this, arg, arg->init.get());
@@ -834,9 +834,9 @@ namespace das {
             arg = vis.visitArgument(this, arg, arg==arguments.back() );
         }
         if ( result ) {
-            vis.preVisit(result.get());
+            vis.preVisit(result);
             result = result->visit(vis);
-            result = vis.visit(result.get());
+            result = vis.visit(result);
         }
         if ( body ) {
             vis.preVisitFunctionBody(this, body.get());
@@ -1091,7 +1091,7 @@ namespace das {
             return nullptr;
         }
         expr->at = at;
-        expr->type = type ? make_smart<TypeDecl>(*type) : nullptr;
+        expr->type = type ? new TypeDecl(*type) : nullptr;
         expr->genFlags = genFlags;
         return expr;
     }
@@ -1101,7 +1101,7 @@ namespace das {
             auto ar2l = make_smart<ExprRef2Value>();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
-            ar2l->type = make_smart<TypeDecl>(*expr->type);
+            ar2l->type = new TypeDecl(*expr->type);
             ar2l->type->ref = false;
             return ar2l;
         } else {
@@ -1218,9 +1218,9 @@ namespace das {
     ExpressionPtr ExprAddr::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( funcType ) {
-            vis.preVisit(funcType.get());
+            vis.preVisit(funcType);
             funcType = funcType->visit(vis);
-            funcType = vis.visit(funcType.get());
+            funcType = vis.visit(funcType);
         }
         return vis.visit(this);
     }
@@ -1230,7 +1230,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->target = target;
         cexpr->func = func;
-        if (funcType) cexpr->funcType = make_smart<TypeDecl>(*funcType);
+        if (funcType) cexpr->funcType = new TypeDecl(*funcType);
         return cexpr;
     }
 
@@ -1262,7 +1262,7 @@ namespace das {
         auto cexpr = clonePtr<ExprConstBitfield>(expr);
         ExprConstT<uint64_t,ExprConstBitfield>::clone(cexpr);
         if ( bitfieldType ) {
-            cexpr->bitfieldType = make_smart<TypeDecl>(*bitfieldType);
+            cexpr->bitfieldType = new TypeDecl(*bitfieldType);
         }
         return cexpr;
     }
@@ -1274,7 +1274,7 @@ namespace das {
         ExprConst::clone(cexpr);
         cexpr->isSmartPtr = isSmartPtr;
         if ( ptrType ) {
-            cexpr->ptrType = make_smart<TypeDecl>(*ptrType);
+            cexpr->ptrType = new TypeDecl(*ptrType);
         }
         return cexpr;
     }
@@ -1393,9 +1393,9 @@ namespace das {
     ExpressionPtr ExprMakeGenerator::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( iterType ) {
-            vis.preVisit(iterType.get());
+            vis.preVisit(iterType);
             iterType = iterType->visit(vis);
-            iterType = vis.visit(iterType.get());
+            iterType = vis.visit(iterType);
         }
         ExprLooksLikeCall::visit(vis);
         return vis.visit(this);
@@ -1405,7 +1405,7 @@ namespace das {
         auto cexpr = clonePtr<ExprMakeGenerator>(expr);
         ExprLooksLikeCall::clone(cexpr);
         if ( iterType ) {
-            cexpr->iterType = make_smart<TypeDecl>(*iterType);
+            cexpr->iterType = new TypeDecl(*iterType);
         }
         cexpr->capture = capture;
         cexpr->captureAt = captureAt;
@@ -1499,10 +1499,10 @@ namespace das {
     ExpressionPtr ExprIs::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
-        vis.preVisitType(this, typeexpr.get());
-        vis.preVisit(typeexpr.get());
+        vis.preVisitType(this, typeexpr);
+        vis.preVisit(typeexpr);
         typeexpr = typeexpr->visit(vis);
-        typeexpr = vis.visit(typeexpr.get());
+        typeexpr = vis.visit(typeexpr);
         return vis.visit(this);
     }
 
@@ -1510,7 +1510,7 @@ namespace das {
         auto cexpr = clonePtr<ExprIs>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
-        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
+        cexpr->typeexpr = new TypeDecl(*typeexpr);
         return cexpr;
     }
 
@@ -1519,9 +1519,9 @@ namespace das {
     ExpressionPtr ExprTypeDecl::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( typeexpr ) {
-            vis.preVisit(typeexpr.get());
+            vis.preVisit(typeexpr);
             typeexpr = typeexpr->visit(vis);
-            typeexpr = vis.visit(typeexpr.get());
+            typeexpr = vis.visit(typeexpr);
         }
         return vis.visit(this);
     }
@@ -1529,7 +1529,7 @@ namespace das {
     ExpressionPtr ExprTypeDecl::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTypeDecl>(expr);
         Expression::clone(cexpr);
-        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
+        cexpr->typeexpr = new TypeDecl(*typeexpr);
         return cexpr;
     }
 
@@ -1538,9 +1538,9 @@ namespace das {
     ExpressionPtr ExprTypeInfo::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( typeexpr ) {
-            vis.preVisit(typeexpr.get());
+            vis.preVisit(typeexpr);
             typeexpr = typeexpr->visit(vis);
-            typeexpr = vis.visit(typeexpr.get());
+            typeexpr = vis.visit(typeexpr);
         }
         if ( vis.canVisitExpr(this,subexpr.get()) ) {
             if ( subexpr ) {
@@ -1559,7 +1559,7 @@ namespace das {
         if ( subexpr )
             cexpr->subexpr = subexpr->clone();
         if ( typeexpr )
-            cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
+            cexpr->typeexpr = new TypeDecl(*typeexpr);
         return cexpr;
     }
 
@@ -1592,7 +1592,7 @@ namespace das {
         auto cexpr = clonePtr<ExprCast>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
-        cexpr->castType = make_smart<TypeDecl>(*castType);
+        cexpr->castType = new TypeDecl(*castType);
         cexpr->castFlags = castFlags;
         return cexpr;
     }
@@ -1600,9 +1600,9 @@ namespace das {
     ExpressionPtr ExprCast::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( castType ) {
-            vis.preVisit(castType.get());
+            vis.preVisit(castType);
             castType = castType->visit(vis);
-            castType = vis.visit(castType.get());
+            castType = vis.visit(castType);
         }
         subexpr = subexpr->visit(vis);
         return vis.visit(this);
@@ -1614,7 +1614,7 @@ namespace das {
         auto cexpr = clonePtr<ExprAscend>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
-        if ( ascType ) cexpr->ascType = make_smart<TypeDecl>(*ascType);
+        if ( ascType ) cexpr->ascType = new TypeDecl(*ascType);
         cexpr->ascendFlags = ascendFlags;
         return cexpr;
     }
@@ -1630,9 +1630,9 @@ namespace das {
     ExpressionPtr ExprNew::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( typeexpr ) {
-            vis.preVisit(typeexpr.get());
+            vis.preVisit(typeexpr);
             typeexpr = typeexpr->visit(vis);
-            typeexpr = vis.visit(typeexpr.get());
+            typeexpr = vis.visit(typeexpr);
         }
         for ( auto & arg : arguments ) {
             vis.preVisitNewArg(this, arg.get(), arg==arguments.back());
@@ -1645,7 +1645,7 @@ namespace das {
     ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         ExprLooksLikeCall::clone(cexpr);
-        cexpr->typeexpr = make_smart<TypeDecl>(*typeexpr);
+        cexpr->typeexpr = new TypeDecl(*typeexpr);
         cexpr->initializer = initializer;
         return cexpr;
     }
@@ -1747,14 +1747,14 @@ namespace das {
     }
 
     TypeDeclPtr ExprBlock::makeBlockType () const {
-        auto eT = make_smart<TypeDecl>(Type::tBlock);
+        auto eT = new TypeDecl(Type::tBlock);
         eT->constant = true;
         if ( type ) {
-            eT->firstType = make_smart<TypeDecl>(*type);
+            eT->firstType = new TypeDecl(*type);
         }
         for ( auto & arg : arguments ) {
             if ( arg->type ) {
-                eT->argTypes.push_back(make_smart<TypeDecl>(*arg->type));
+                eT->argTypes.push_back(new TypeDecl(*arg->type));
                 eT->argNames.push_back(arg->name);
             }
         }
@@ -1782,9 +1782,9 @@ namespace das {
               auto & arg = *it;
               vis.preVisitBlockArgument(this, arg, arg==arguments.back());
               if ( arg->type ) {
-                  vis.preVisit(arg->type.get());
+                  vis.preVisit(arg->type);
                   arg->type = arg->type->visit(vis);
-                  arg->type = vis.visit(arg->type.get());
+                  arg->type = vis.visit(arg->type);
               }
               if ( arg->init ) {
                   vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
@@ -1797,9 +1797,9 @@ namespace das {
               if ( arg ) ++it; else it = arguments.erase(it);
           }
           if ( returnType ) {
-              vis.preVisit(returnType.get());
+              vis.preVisit(returnType);
               returnType = returnType->visit(vis);
-              returnType = vis.visit(returnType.get());
+              returnType = vis.visit(returnType);
           }
         }
         if ( finallyBeforeBody ) {
@@ -1831,7 +1831,7 @@ namespace das {
         }
         cexpr->blockFlags = blockFlags;
         if ( returnType )
-            cexpr->returnType = make_smart<TypeDecl>(*returnType);
+            cexpr->returnType = new TypeDecl(*returnType);
         for ( auto & arg : arguments ) {
             cexpr->arguments.push_back(arg->clone());
         }
@@ -2407,7 +2407,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->alias = alias;
         if ( subexpr ) cexpr->subexpr = subexpr->clone();
-        if ( assumeType ) cexpr->assumeType = make_smart<TypeDecl>(*assumeType);
+        if ( assumeType ) cexpr->assumeType = new TypeDecl(*assumeType);
         return cexpr;
     }
 
@@ -2516,9 +2516,9 @@ namespace das {
             auto & var = *it;
             vis.preVisitLet(this, var, var==variables.back());
             if ( var->type ) {
-                vis.preVisit(var->type.get());
+                vis.preVisit(var->type);
                 var->type = var->type->visit(vis);
-                var->type = vis.visit(var->type.get());
+                var->type = vis.visit(var->type);
             }
             if ( var->init ) {
                 vis.preVisitLetInit(this, var, var->init.get());
@@ -2716,7 +2716,7 @@ namespace das {
             cexpr->structs.push_back(mfd);
         }
         if ( makeType ) {
-            cexpr->makeType = make_smart<TypeDecl>(*makeType);
+            cexpr->makeType = new TypeDecl(*makeType);
         }
         cexpr->makeStructFlags = makeStructFlags;
         if ( block ) {
@@ -2729,9 +2729,9 @@ namespace das {
         if ( vis.canVisitMakeStructure(this) ) {
             vis.preVisit(this);
             if ( makeType ) {
-                vis.preVisit(makeType.get());
+                vis.preVisit(makeType);
                 makeType = makeType->visit(vis);
-                makeType = vis.visit(makeType.get());
+                makeType = vis.visit(makeType);
             }
             if ( vis.canVisitMakeStructureBody(this) ) {
                 for ( int index=0; index != int(structs.size()); ++index ) {
@@ -2777,16 +2777,16 @@ namespace das {
         for ( auto & fd : variants ) {
             cexpr->variants.push_back(fd->clone());
         }
-        cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        cexpr->makeType = new TypeDecl(*makeType);
         return cexpr;
     }
 
     ExpressionPtr ExprMakeVariant::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( makeType ) {
-            vis.preVisit(makeType.get());
+            vis.preVisit(makeType);
             makeType = makeType->visit(vis);
-            makeType = vis.visit(makeType.get());
+            makeType = vis.visit(makeType);
         }
         int index = 0;
         for ( auto it = variants.begin(); it != variants.end(); index ++ ) {
@@ -2816,9 +2816,9 @@ namespace das {
         for ( auto & val : values ) {
             cexpr->values.push_back(val->clone());
         }
-        cexpr->makeType = make_smart<TypeDecl>(*makeType);
+        cexpr->makeType = new TypeDecl(*makeType);
         if (recordType) {
-            cexpr->recordType = make_smart<TypeDecl>(*recordType);
+            cexpr->recordType = new TypeDecl(*recordType);
         }
         cexpr->gen2 = gen2;
         return cexpr;
@@ -2827,9 +2827,9 @@ namespace das {
     ExpressionPtr ExprMakeArray::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( makeType ) {
-            vis.preVisit(makeType.get());
+            vis.preVisit(makeType);
             makeType = makeType->visit(vis);
-            makeType = vis.visit(makeType.get());
+            makeType = vis.visit(makeType);
         }
         int index = 0;
         for ( auto it = values.begin(); it != values.end(); ) {
@@ -2862,10 +2862,10 @@ namespace das {
         }
         cexpr->recordNames = recordNames;
         if ( makeType ) {
-            cexpr->makeType = make_smart<TypeDecl>(*makeType);
+            cexpr->makeType = new TypeDecl(*makeType);
         }
         if (recordType) {
-            cexpr->recordType = make_smart<TypeDecl>(*recordType);
+            cexpr->recordType = new TypeDecl(*recordType);
         }
         cexpr->isKeyValue = isKeyValue;
         return cexpr;
@@ -2874,9 +2874,9 @@ namespace das {
     ExpressionPtr ExprMakeTuple::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( makeType ) {
-            vis.preVisit(makeType.get());
+            vis.preVisit(makeType);
             makeType = makeType->visit(vis);
-            makeType = vis.visit(makeType.get());
+            makeType = vis.visit(makeType);
         }
         int index = 0;
         for ( auto it = values.begin(); it != values.end(); ) {
@@ -3230,11 +3230,11 @@ namespace das {
     StructurePtr Program::visitStructure(Visitor & vis, Structure * pst) {
         vis.preVisit(pst);
         pst->aliases.foreach([&](auto & alsv){
-            vis.preVisitStructureAlias(pst, alsv->alias, alsv.get());
-            vis.preVisit(alsv.get());
+            vis.preVisitStructureAlias(pst, alsv->alias, alsv);
+            vis.preVisit(alsv);
             auto alssv = alsv->visit(vis);
-            if ( alssv ) alssv = vis.visit(alssv.get());
-            if ( alssv ) alssv = vis.visitStructureAlias(pst, alssv->alias, alssv.get());
+            if ( alssv ) alssv = vis.visit(alssv);
+            if ( alssv ) alssv = vis.visitStructureAlias(pst, alssv->alias, alssv);
             if ( alssv!=alsv ) {
                 pst->aliases.replace(alsv->alias, alssv);
                 alsv = alssv;
@@ -3243,9 +3243,9 @@ namespace das {
         for ( auto & fi : pst->fields ) {
             vis.preVisitStructureField(pst, fi, &fi==&pst->fields.back());
             if ( fi.type ) {
-                vis.preVisit(fi.type.get());
+                vis.preVisit(fi.type);
                 fi.type = fi.type->visit(vis);
-                fi.type = vis.visit(fi.type.get());
+                fi.type = vis.visit(fi.type);
             }
             if ( fi.init && vis.canVisitStructureFieldInit(pst) ) {
                 fi.init = fi.init->visit(vis);
@@ -3404,11 +3404,11 @@ namespace das {
         }
         // aliases
         thatModule->aliasTypes.foreach([&](auto & alsv){
-            vis.preVisitAlias(alsv.get(), alsv->alias);
-            vis.preVisit(alsv.get());
+            vis.preVisitAlias(alsv, alsv->alias);
+            vis.preVisit(alsv);
             auto alssv = alsv->visit(vis);
-            if ( alssv ) alssv = vis.visit(alssv.get());
-            if ( alssv ) alssv = vis.visitAlias(alssv.get(), alssv->alias);
+            if ( alssv ) alssv = vis.visit(alssv);
+            if ( alssv ) alssv = vis.visitAlias(alssv, alssv->alias);
             if ( alssv!=alsv ) {
                 thatModule->aliasTypes.replace(alssv->alias, alssv);
                 alsv = alssv;
@@ -3422,9 +3422,9 @@ namespace das {
             if ( vis.canVisitGlobalVariable(var.get()) ) {
                 vis.preVisitGlobalLet(var);
                 if ( var->type ) {
-                    vis.preVisit(var->type.get());
+                    vis.preVisit(var->type);
                     var->type = var->type->visit(vis);
-                    var->type = vis.visit(var->type.get());
+                    var->type = vis.visit(var->type);
                 }
                 if ( var->init ) {
                     vis.preVisitGlobalLetInit(var, var->init.get());

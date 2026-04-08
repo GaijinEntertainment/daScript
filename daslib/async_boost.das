@@ -78,20 +78,20 @@ class AsyncMacro : AstFunctionAnnotation {
             macro_error(compiling_program(), func.at, "async function should have explicit return type")
             return true
         }
-        var inscope retT : TypeDeclPtr
+        var retT : TypeDeclPtr
         var voidRoutine = true
         if (func.result.baseType == Type.tVoid) {
-            move_new(retT) <| qmacro_type(type<bool>)
+            retT = qmacro_type(type<bool>)
         } else {
             voidRoutine = false
-            retT |> move_new() <| new TypeDecl(baseType = Type.tVariant, at = func.at)
+            retT = new TypeDecl(baseType = Type.tVariant, at = func.at)
             retT.argNames |> resize(2)
             retT.argNames[0] := "res"
             retT.argNames[1] := "wait"
 
             retT.argTypes |> resize(2)
-            retT.argTypes[0] |> move_new() <| clone_type(func.result)
-            retT.argTypes[1] |> move_new() <| typeinfo ast_typedecl(type<bool>)
+            retT.argTypes[0] = clone_type(func.result)
+            retT.argTypes[1] = typeinfo ast_typedecl(type<bool>)
         }
 
         var astVisitor = new CollectAndReplaceIteratorFields()
@@ -99,7 +99,7 @@ class AsyncMacro : AstFunctionAnnotation {
         astVisitor.retType := retT
         var inscope astVisitorAdapter <- make_visitor(*astVisitor)
         visit(func.body, astVisitorAdapter)
-        delete astVisitor.retType
+        // gc handles TypeDecl lifetime
         unsafe {
             delete astVisitor
         }
@@ -130,7 +130,7 @@ class AsyncMacro : AstFunctionAnnotation {
 
         blk.at := func.at
         func.body |> move() <| blk
-        func.result |> move_new() <| qmacro_type(type<iterator<$t(retT)>>)
+        func.result = qmacro_type(type<iterator<$t(retT)>>)
         return true
     }
 }
@@ -164,7 +164,7 @@ enum AssignOp {
 }
 
 [macro_function]
-def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDecl>&; assignOp : AssignOp) : ExpressionPtr {
+def move_clone_copy(var expr; voidRoutine : bool; var retType : TypeDecl?&; assignOp : AssignOp) : ExpressionPtr {
     if (expr.right is ExprCall) {
         var call = expr.right as ExprCall
         if (call.name == "await") {
@@ -210,7 +210,7 @@ def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDe
 class CollectAndReplaceIteratorFields : AstVisitor {
     //! AST visitor that collects and replaces iterator field access in async generators.
     voidRoutine : bool
-    retType : smart_ptr<TypeDecl>
+    @do_not_delete retType : TypeDecl?
 
     @do_not_delete private blocksStack : array<ExprBlock?>
 
@@ -295,13 +295,13 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                                 return <- expr
                             }
 
-                            v._type |> move_new() <| clone_type(fn.result.firstType.argTypes[0])
+                            v._type = clone_type(fn.result.firstType.argTypes[0])
                         }
                     } else {
-                        var inscope rmConst = clone_type(v._type)
+                        var rmConst = clone_type(v._type)
                         rmConst.flags &= ~TypeDeclFlags.constant
                         rmConst.flags &= ~TypeDeclFlags.removeConstant
-                        v._type |> move(rmConst)
+                        v._type = rmConst
                     }
 
                     let name = make_unique_private_name("_async_iterator", expr.at)

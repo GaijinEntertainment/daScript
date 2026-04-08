@@ -24,7 +24,7 @@ class TemplateMacro : AstFunctionAnnotation {
         if (func.result.baseType == Type.tVoid) {
             return true
         }
-        var inscope resType <- clone_type(func.result)
+        var resType = clone_type(func.result)
         if (!resType.flags.ref) {
             resType.flags &= ~TypeDeclFlags.constant
         }

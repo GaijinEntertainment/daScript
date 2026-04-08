@@ -87,7 +87,7 @@ def test_type_info(t : T?) {
         t |> equal(ccc.baseType, Type.tInt)
         t |> equal(ccc.flags.constant, true)
         t |> equal("int const", ccc |> describe)
-        delete ccc
+        // gc handles TypeDecl lifetime
     }
 }
 

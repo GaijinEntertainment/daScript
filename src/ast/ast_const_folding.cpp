@@ -152,7 +152,7 @@ namespace das {
     // at
         virtual void preVisit ( ExprAt * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->subexpr->type->isHandle() && expr->subexpr->type->annotation->isIndexMutable(expr->index->type.get()) ) {
+            if ( expr->subexpr->type->isHandle() && expr->subexpr->type->annotation->isIndexMutable(expr->index->type) ) {
                 expr->noSideEffects = false;
             } else if ( expr->subexpr->type->isGoodTableType() ) {
                 expr->noSideEffects = false;
@@ -356,12 +356,12 @@ namespace das {
                 default: DAS_ASSERTF(0,"we should not be here. unsupported bitfield type");
                 }
                 auto sim = make_smart<ExprConstBitfield>(expr->at, ival);
-                sim->type = make_smart<TypeDecl>(*expr->type);
+                sim->type = new TypeDecl(*expr->type);
                 sim->constexpression = true;
                 sim->at = encloseAt(expr);
                 sim->foldedNonConst = !expr->type->constant;
                 sim->baseType = expr->type->baseType;
-                sim->bitfieldType = make_smart<TypeDecl>(*expr->type);
+                sim->bitfieldType = new TypeDecl(*expr->type);
                 reportFolding();
                 return sim;
             } else {
@@ -369,7 +369,7 @@ namespace das {
                 expr->type->ref = false;
                 auto sim = Program::makeConst(expr->at, expr->type, value);
                 expr->type->ref = wasRef;
-                sim->type = make_smart<TypeDecl>(*expr->type);
+                sim->type = new TypeDecl(*expr->type);
                 sim->constexpression = true;
                 ((ExprConst *)sim.get())->foldedNonConst = !expr->type->constant;
                 sim->at = encloseAt(expr);
@@ -392,7 +392,7 @@ namespace das {
             expr->type->ref = b4ref;
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
             auto sim = make_smart<ExprConstString>(expr->at, res);
-            sim->type = make_smart<TypeDecl>(Type::tString);
+            sim->type = new TypeDecl(Type::tString);
             sim->constexpression = true;
             sim->foldedNonConst = !expr->type->constant;
             sim->at = encloseAt(expr);
@@ -405,7 +405,7 @@ namespace das {
 
     ExpressionPtr FoldingVisitor::cloneWithType ( const ExpressionPtr & expr ) {
         auto rexpr = expr->clone();
-        if ( expr->type ) rexpr->type = make_smart<TypeDecl>(*expr->type);
+        if ( expr->type ) rexpr->type = new TypeDecl(*expr->type);
         return rexpr;
     }
 
@@ -434,7 +434,7 @@ namespace das {
         if ( expr->elements.size()==0 ) {
             // empty string builder is "" string
             auto estr = make_smart<ExprConstString>(expr->at,"");
-            estr->type = make_smart<TypeDecl>(Type::tString);
+            estr->type = new TypeDecl(Type::tString);
             estr->constexpression = true;
             estr->foldedNonConst = !expr->type->constant;
             reportFolding();
@@ -602,7 +602,7 @@ namespace das {
                             return Visitor::visit(expr);
                         }
                         auto sim = Program::makeConst(expr->at, expr->type, cast<bool>::from(res));
-                        sim->type = make_smart<TypeDecl>(*expr->type);
+                        sim->type = new TypeDecl(*expr->type);
                         sim->constexpression = true;
                         reportFolding();
                         return sim;

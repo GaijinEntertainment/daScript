@@ -17,6 +17,9 @@
 #include "daScript/simulate/interop.h"
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/gc_node.h"
+#include "daScript/ast/ast_typedecl.h"
+#include <inttypes.h>
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
@@ -873,6 +876,56 @@ namespace das
         return context->stringHeap->isIntern();
     }
 
+    // gc_node root introspection
+    uint64_t gc_thread_root_count() {
+        return gc_root::gc_get_thread_root().gc_count;
+    }
+
+    uint64_t gc_active_root_count() {
+        auto root = gc_root::gc_get_active_root();
+        return root ? root->gc_count : 0;
+    }
+
+    void gc_thread_root_report() {
+        gc_root::gc_get_thread_root().gc_report();
+    }
+
+    uint64_t gc_total_id() {
+        return gc_root::gc_next_id.load(std::memory_order_relaxed);
+    }
+
+    // Detailed report: dumps the LAST N nodes on the thread root as TypeDecl with location info.
+    // New nodes are appended at the tail, so the tail shows the most recently leaked nodes.
+    // Note: leaked nodes may have dangling sub-type pointers, so we only print safe fields.
+    void gc_thread_root_report_detailed( uint64_t max_nodes ) {
+        auto & root = gc_root::gc_get_thread_root();
+        DAS_FATAL_LOG("gc_thread_root: count=%" PRIu64 " (showing last %" PRIu64 ")\n",
+            root.gc_count, max_nodes < root.gc_count ? max_nodes : root.gc_count);
+        auto node = root.gc_last;
+        uint64_t count = 0;
+        gc_node * start = node;
+        while ( start && count < max_nodes ) {
+            start = start->gc_prev;
+            count++;
+        }
+        node = start ? start->gc_next : root.gc_first;
+        uint64_t idx = root.gc_count > max_nodes ? root.gc_count - max_nodes : 0;
+        while ( node ) {
+            auto td = static_cast<TypeDecl *>(node);
+            // Only print safe fields — describe() may crash on dangling sub-type pointers
+            const char * locFile = (td->at.fileInfo) ? td->at.fileInfo->name.c_str() : nullptr;
+            if ( locFile ) {
+                DAS_FATAL_LOG("  [%" PRIu64 "] id=%" PRIu64 " baseType=%d at %s:%" PRIi32 "\n",
+                    idx, td->gc_id, int(td->baseType), locFile, td->at.line);
+            } else {
+                DAS_FATAL_LOG("  [%" PRIu64 "] id=%" PRIu64 " baseType=%d (no location)\n",
+                    idx, td->gc_id, int(td->baseType));
+            }
+            node = node->gc_next;
+            idx++;
+        }
+    }
+
     void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
         if ( !context->persistent ) {
             context->throw_error_at(info, "heap collection is not allowed in this context, needs 'options persistent'");
@@ -1384,7 +1437,7 @@ namespace das
     };
 
     TypeDeclPtr makePrintFlags() {
-        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        auto ft = new TypeDecl(Type::tBitfield);
         ft->alias = "print_flags";
         ft->argNames = { "escapeString", "namesAndDimensions", "typeQualifiers", "refAddresses", "singleLine", "fixedPoint", "fullTypeInfo" };
         return ft;
@@ -1886,6 +1939,19 @@ namespace das
         addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
             SideEffects::modifyArgument, "set_variant_index")
                 ->args({"variant","index"})->unsafeOperation = true;
+        // gc_node root introspection
+        addExtern<DAS_BIND_FUN(gc_thread_root_count)>(*this, lib, "gc_thread_root_count",
+            SideEffects::accessExternal, "gc_thread_root_count");
+        addExtern<DAS_BIND_FUN(gc_active_root_count)>(*this, lib, "gc_active_root_count",
+            SideEffects::accessExternal, "gc_active_root_count");
+        addExtern<DAS_BIND_FUN(gc_thread_root_report)>(*this, lib, "gc_thread_root_report",
+            SideEffects::modifyExternal, "gc_thread_root_report");
+        auto gcrd = addExtern<DAS_BIND_FUN(gc_thread_root_report_detailed)>(*this, lib, "gc_thread_root_report_detailed",
+            SideEffects::modifyExternal, "gc_thread_root_report_detailed")
+                ->arg("max_nodes");
+        gcrd->arguments[0]->init = make_smart<ExprConstUInt64>(20);
+        addExtern<DAS_BIND_FUN(gc_total_id)>(*this, lib, "gc_total_id",
+            SideEffects::accessExternal, "gc_total_id");
         // heap
         addExtern<DAS_BIND_FUN(heap_allocation_stats)>(*this, lib, "heap_allocation_stats",
             SideEffects::modifyExternal, "heap_allocation_stats")

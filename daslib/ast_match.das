@@ -337,7 +337,7 @@ def qm_extract_type(var expr : ExpressionPtr; var out_type : TypeDeclPtr&) : QMa
     if (!(expr is ExprTypeDecl)) {
         return qm_fail_type(expr)
     }
-    out_type |> move_new <| clone_type((expr as ExprTypeDecl).typeexpr)
+    out_type  = clone_type((expr as ExprTypeDecl).typeexpr)
     return qm_ok()
 }
 
@@ -382,7 +382,7 @@ def qm_convert_local_function(var expr : ExpressionPtr) : ExpressionPtr {
     let fn = ea.func
     // Reconstruct ExprBlock with args + return type + body
     var inscope blk <- new ExprBlock(at = fn.at)
-    blk.returnType |> move_new <| clone_type(fn.result)
+    blk.returnType  = clone_type(fn.result)
     for (arg in fn.arguments) {
         blk.arguments |> emplace_new <| clone_variable(arg)
     }
@@ -479,10 +479,10 @@ def qm_convert_comprehension(var expr : ExpressionPtr) : ExpressionPtr {
     }
     // Reconstruct ExprArrayComprehension
     var inscope result <- new ExprArrayComprehension(at = expr.at)
-    result.exprFor |> move_new <| clone_expression(comp_for)
-    result.subexpr |> move_new <| clone_expression(comp_subexpr)
+    move_new(result.exprFor) <| clone_expression(comp_for)
+    move_new(result.subexpr) <| clone_expression(comp_subexpr)
     if (comp_where != null) {
-        result.exprWhere |> move_new <| clone_expression(comp_where)
+        move_new(result.exprWhere) <| clone_expression(comp_where)
     }
     result.tableSyntax = is_table
     result.generatorSyntax = false
@@ -612,8 +612,8 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
             let tag_expr = get_ptr(pat_type.firstType.dimExpr[0])
             if (tag_expr != null && tag_expr is ExprVar) {
                 let tmp = next_var(index)
-                body |> emplace_new <| qmacro_expr(${ var inscope $i(tmp) <- clone_type($i(td_var)); })
-                body |> emplace_new <| qmacro_expr(${ $i((tag_expr as ExprVar).name) |> move <| $i(tmp); })
+                body |> emplace_new <| qmacro_expr(${ var $i(tmp) = clone_type($i(td_var)); })
+                body |> emplace_new <| qmacro_expr(${ $i((tag_expr as ExprVar).name) = $i(tmp); })
             }
         }
         return
@@ -680,8 +680,8 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         let child_var = next_var(index)
         var inscope nc <- qmacro($i(td_var).firstType == null)
         body |> emplace_new <| qm_type_guard(at, expr_var, nc)
-        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(td_var).firstType); })
-        generate_type_match(get_ptr(pat_type.firstType), child_var, expr_var, body, index, at)
+        body |> emplace_new <| qmacro_expr(${ var $i(child_var) = clone_type($i(td_var).firstType); })
+        generate_type_match(pat_type.firstType, child_var, expr_var, body, index, at)
     }
 
     // ── secondType — recursive ──────────────────────────────
@@ -689,8 +689,8 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         let child_var = next_var(index)
         var inscope nc <- qmacro($i(td_var).secondType == null)
         body |> emplace_new <| qm_type_guard(at, expr_var, nc)
-        body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(td_var).secondType); })
-        generate_type_match(get_ptr(pat_type.secondType), child_var, expr_var, body, index, at)
+        body |> emplace_new <| qmacro_expr(${ var $i(child_var) = clone_type($i(td_var).secondType); })
+        generate_type_match(pat_type.secondType, child_var, expr_var, body, index, at)
     }
 
     // ── argTypes — element-wise recursive ────────────────────
@@ -699,10 +699,10 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
         var inscope lc <- qmacro(length($i(td_var).argTypes) != $v(n_args))
         body |> emplace_new <| qm_type_guard(at, expr_var, lc)
         for (arg, i in pat_type.argTypes, range(n_args)) {
-            let pat_arg = get_ptr(arg)
+            let pat_arg = arg
             if (pat_arg != null) {
                 let child_var = next_var(index)
-                body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(td_var).argTypes[$v(i)]); })
+                body |> emplace_new <| qmacro_expr(${ var $i(child_var) = clone_type($i(td_var).argTypes[$v(i)]); })
                 generate_type_match(pat_arg, child_var, expr_var, body, index, at)
             }
         }
@@ -795,11 +795,11 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
 
                 // Type matching — if argument has a type, match it
                 if (pat_arg._type != null) {
-                    var pat_td = get_ptr(pat_arg._type)
+                    var pat_td = pat_arg._type
                     // Skip if type is autoinfer (unspecified)
                     if (pat_td.baseType != Type.autoinfer) {
                         let td_var = next_var(index)
-                        body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(target_var).arguments[$i(phys_var)]._type); })
+                        body |> emplace_new <| qmacro_expr(${ var $i(td_var) = clone_type($i(target_var).arguments[$i(phys_var)]._type); })
                         generate_type_match(pat_td, td_var, expr_var, body, index, at)
                     }
                 }
@@ -819,11 +819,11 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
 
     // Return type matching
     if (pat_block.returnType != null) {
-        var pat_ret = get_ptr(pat_block.returnType)
+        var pat_ret = pat_block.returnType
         // Skip if return type is autoinfer or void (unspecified)
         if (pat_ret.baseType != Type.autoinfer && pat_ret.baseType != Type.tVoid) {
             let ret_var = next_var(index)
-            body |> emplace_new <| qmacro_expr(${ var inscope $i(ret_var) <- clone_type($i(target_var).$f(ret_field)); })
+            body |> emplace_new <| qmacro_expr(${ var $i(ret_var) = clone_type($i(target_var).$f(ret_field)); })
             generate_type_match(pat_ret, ret_var, expr_var, body, index, at)
         }
     }
@@ -1170,8 +1170,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         body |> emplace_new <| qmacro_expr(${ var $i(cast_var) = $e(as_cast); })
         // Clone the typeexpr for matching
         let td_var = next_var(index)
-        body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(cast_var).typeexpr); })
-        generate_type_match(get_ptr((pattern as ExprTypeDecl).typeexpr), td_var, actual_var, body, index, at)
+        body |> emplace_new <| qmacro_expr(${ var $i(td_var) = clone_type($i(cast_var).typeexpr); })
+        generate_type_match((pattern as ExprTypeDecl).typeexpr, td_var, actual_var, body, index, at)
         return
     }
 
@@ -1496,9 +1496,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope full_body : array<ExpressionPtr>
                         let phys_full = next_var(index)
                         full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, 0); })
-                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        full_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
                         var inscope one_body : array<ExpressionPtr>
-                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| qm_make_zero_const($v(call_name)); })
+                        one_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| qm_make_zero_const($v(call_name)); })
                         // if (is_one_val) { child = zero } else { child = actual[0] }
                         var inscope one_blk <- new ExprBlock(at = at)
                         for (s in one_body) { one_blk.list |> emplace(s); }
@@ -1513,9 +1513,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope full_body : array<ExpressionPtr>
                         let phys_full = next_var(index)
                         full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, 1); })
-                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        full_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
                         var inscope one_body : array<ExpressionPtr>
-                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(single_arg_var)); })
+                        one_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| clone_expression($i(single_arg_var)); })
                         var inscope one_blk <- new ExprBlock(at = at)
                         for (s in one_body) { one_blk.list |> emplace(s); }
                         var inscope full_blk <- new ExprBlock(at = at)
@@ -1529,9 +1529,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         var inscope full_body : array<ExpressionPtr>
                         let phys_full = next_var(index)
                         full_body |> emplace_new <| qmacro_expr(${ var $i(phys_full) = qm_real_call_arg_index($i(cast_var).arguments, $v(i)); })
-                        full_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
+                        full_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| clone_expression($i(cast_var).arguments[$i(phys_full)]); })
                         var inscope one_body : array<ExpressionPtr>
-                        one_body |> emplace_new <| qmacro_expr(${ $i(child_var) |> move_new <| clone_expression($i(single_arg_var)); })
+                        one_body |> emplace_new <| qmacro_expr(${ move_new($i(child_var)) <| clone_expression($i(single_arg_var)); })
                         var inscope one_blk <- new ExprBlock(at = at)
                         for (s in one_body) { one_blk.list |> emplace(s); }
                         var inscope full_blk <- new ExprBlock(at = at)
@@ -1644,13 +1644,13 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 // smart_ptr<TypeDecl> field — use generate_type_match
                 let pv = unsafe(reinterpret<TypeDeclPtr?> p8)
                 if (*pv != null) {
-                    let child_td = get_ptr(*pv)
+                    let child_td = *pv
                     let child_var = next_var(index)
                         // Check not null
                     var inscope ncond <- qmacro($i(cast_var).$f(name) == null)
                     var inscope nfail <- qmacro(qm_fail_null())
                     body |> emplace_new <| qm_guard(at, ncond, nfail)
-                    body |> emplace_new <| qmacro_expr(${ var inscope $i(child_var) <- clone_type($i(cast_var).$f(name)); })
+                    body |> emplace_new <| qmacro_expr(${ var $i(child_var) = clone_type($i(cast_var).$f(name)); })
                     generate_type_match(child_td, child_var, actual_var, body, index, at)
                 }
                 // If pattern's TypeDecl field is null, skip (don't require actual's to be null)
@@ -1733,10 +1733,10 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         }
                         // Type matching (skip autoinfer)
                         if (pat_v._type != null) {
-                            var pat_td = get_ptr(pat_v._type)
+                            var pat_td = pat_v._type
                             if (pat_td.baseType != Type.autoinfer) {
                                 let td_var = next_var(index)
-                                body |> emplace_new <| qmacro_expr(${ var inscope $i(td_var) <- clone_type($i(cast_var).$f(name)[$v(vi)]._type); })
+                                body |> emplace_new <| qmacro_expr(${ var $i(td_var) = clone_type($i(cast_var).$f(name)[$v(vi)]._type); })
                                 generate_type_match(pat_td, td_var, actual_var, body, index, at)
                             }
                         }
@@ -2002,9 +2002,9 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
                 // Build inner block: $(var elem : ExpressionPtr) : QMatchResult { match_code }
                 var inscope inner_blk <- new ExprBlock(at = at)
                 inner_blk.blockFlags |= ExprBlockFlags.isClosure
-                inner_blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+                inner_blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
                 var inscope inner_arg <- new Variable(at = at, name := elem_var)
-                inner_arg._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+                inner_arg._type  = typeinfo ast_typedecl(type<ExpressionPtr>)
                 inner_arg.access_flags |= VariableAccessFlags.access_ref
                 inner_blk.arguments |> emplace(inner_arg)
                 for (stmt in match_body) {
@@ -2074,11 +2074,11 @@ def private qm_validate_expr_arg(prog : ProgramPtr; arg : ExpressionPtr; at : Li
         return false
     }
     if (arg._type.isSmartPointer) {
-        result |> move_new <| clone_expression(arg)
+        move_new(result) <| clone_expression(arg)
         return true
     } elif (arg._type.baseType == Type.tPointer) {
         var inscope cloned <- clone_expression(arg)
-        result |> move_new <| qmacro(add_ptr_ref($e(cloned)))
+        move_new(result) <| qmacro(add_ptr_ref($e(cloned)))
         return true
     } else {
         macro_error(prog, at, "qmatch: first argument must be Expression? or ExpressionPtr, got {describe(arg._type)}")
@@ -2104,9 +2104,9 @@ class private QMatch : AstCallMacro {
         // Build block: $(var _qm_arg : ExpressionPtr) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
         blk.blockFlags |= ExprBlockFlags.isClosure
-        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
-        arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_var._type  = typeinfo ast_typedecl(type<ExpressionPtr>)
         arg_var.access_flags |= VariableAccessFlags.access_ref
         blk.arguments |> emplace(arg_var)
 
@@ -2162,9 +2162,9 @@ class private QMatchBlock : AstCallMacro {
         // Build block: $(var _qm_arg : ExpressionPtr) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
         blk.blockFlags |= ExprBlockFlags.isClosure
-        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         var inscope arg_var <- new Variable(at = at, name := "_qm_arg")
-        arg_var._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_var._type  = typeinfo ast_typedecl(type<ExpressionPtr>)
         arg_var.access_flags |= VariableAccessFlags.access_ref
         blk.arguments |> emplace(arg_var)
 
@@ -2220,15 +2220,15 @@ class private QMatchFunction : AstCallMacro {
         // Build block: $(var _qm_arg : ExpressionPtr; _qm_func : Function?) : QMatchResult { ... }
         var inscope blk <- new ExprBlock(at = at)
         blk.blockFlags |= ExprBlockFlags.isClosure
-        blk.returnType |> move_new <| typeinfo ast_typedecl(type<QMatchResult>)
+        blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         // First param: body (ExpressionPtr)
         var inscope arg_body <- new Variable(at = at, name := "_qm_arg")
-        arg_body._type |> move_new <| typeinfo ast_typedecl(type<ExpressionPtr>)
+        arg_body._type  = typeinfo ast_typedecl(type<ExpressionPtr>)
         arg_body.access_flags |= VariableAccessFlags.access_ref
         blk.arguments |> emplace(arg_body)
         // Second param: function pointer (Function?)
         var inscope arg_func <- new Variable(at = at, name := "_qm_func")
-        arg_func._type |> move_new <| typeinfo ast_typedecl(type<Function?>)
+        arg_func._type  = typeinfo ast_typedecl(type<Function?>)
         blk.arguments |> emplace(arg_func)
 
         blk.list |> emplace_new <| qm_null_guard(at, "_qm_arg")

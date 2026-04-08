@@ -69,3 +69,13 @@ examples/**/modules/
 examples/daslive/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h
+modules/dasAudio/dasModuleAudio.pdb
+modules/dasHV/dasModuleHV.pdb
+modules/dasLiveHost/dasModuleLiveHost.pdb
+modules/dasMinfft/dasModuleMinfft.pdb
+modules/dasPUGIXML/dasModulePUGIXML.pdb
+modules/dasSQLITE/dasModuleSQLITE.pdb
+modules/dasStbImage/dasModuleStbImage.pdb
+modules/dasStdDlg/dasModuleStdDlg.pdb
+modules/dasUnitTest/dasModuleUnitTest.pdb
+tree-sitter-daslang/daslang.pdb

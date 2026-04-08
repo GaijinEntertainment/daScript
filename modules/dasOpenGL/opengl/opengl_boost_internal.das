@@ -103,7 +103,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
         // [template(self)] bind_vertex_buffer(vbo:uint; self:VertexType; vindex:uint=0u)
         var fn <- new Function(at = st.at, atDecl = st.at, name := "bind_vertex_buffer")
         fn.flags |= FunctionFlags.generated
-        fn.result <- new TypeDecl(baseType = Type.tVoid, at = st.at)
+        fn.result = new TypeDecl(baseType = Type.tVoid, at = st.at)
         fn.arguments |> emplace_new() <| new Variable(at = st.at,
             name := "ptrd",
             _type <- new TypeDecl(at = st.at, baseType = Type.tPointer,

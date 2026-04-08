@@ -77,8 +77,8 @@ namespace das
             string      cppName;
             string      aotPrefix;
             string      aotPostfix;
-            TypeDeclPtr decl;
-            TypeDeclPtr constDecl;
+            TypeDeclPtr decl = nullptr;
+            TypeDeclPtr constDecl = nullptr;
             uint32_t    offset;
             __forceinline void adjustAot ( const char * pref, const char * postf ) { aotPrefix=pref; aotPostfix=postf; }
         };
@@ -103,6 +103,12 @@ namespace das
         virtual void aotVisitGetFieldPtr(TextWriter & ss, const string & fieldName) override;
         virtual bool canSubstitute(TypeAnnotation * ann) const override;
         virtual bool hasStringData(das_set<void *> & dep) const override;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            for ( auto & fp : fields ) {
+                if ( fp.second.decl ) fp.second.decl->gc_collect(target, from);
+                if ( fp.second.constDecl ) fp.second.constDecl->gc_collect(target, from);
+            }
+        }
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, const TypeDeclPtr & pT);
         virtual void walk(DataWalker & walker, void * data) override;
         void updateTypeInfo() const;
@@ -450,10 +456,10 @@ namespace das
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
-            return make_smart<TypeDecl>(*vecType);
+            return new TypeDecl(*vecType);
         }
         virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
-            return make_smart<TypeDecl>(*vecType);
+            return new TypeDecl(*vecType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
@@ -487,7 +493,7 @@ namespace das
             {
                 lock_guard<recursive_mutex> guard(walkMutex);
                 if ( !ati ) {
-                    auto dimType = make_smart<TypeDecl>(*vecType);
+                    auto dimType = new TypeDecl(*vecType);
                     dimType->ref = 0;
                     dimType->dim.push_back(1);
                     ati = helpA.makeTypeInfo(nullptr, dimType);
@@ -506,7 +512,10 @@ namespace das
             vecType->getOwnSemanticHash(hb, dep, adep);
             return hb.getHash();
         }
-        TypeDeclPtr                vecType;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            if ( vecType ) vecType->gc_collect(target, from);
+        }
+        TypeDeclPtr                vecType = nullptr;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
         recursive_mutex            walkMutex;
@@ -791,17 +800,20 @@ namespace das
             valueType->getOwnSemanticHash(hb, dep, adep);
             return hb.getHash();
         }
-        TypeDeclPtr valueType;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            if ( valueType ) valueType->gc_collect(target, from);
+        }
+        TypeDeclPtr valueType = nullptr;
     };
 
     template <typename TT>
     void addConstant ( Module & mod, const string & name, const TT & value ) {
         VariablePtr pVar = make_smart<Variable>();
         pVar->name = name;
-        pVar->type = make_smart<TypeDecl>((Type)ToBasicType<TT>::type);
+        pVar->type = new TypeDecl((Type)ToBasicType<TT>::type);
         pVar->type->constant = true;
         pVar->init = Program::makeConst(LineInfo(),pVar->type,cast<TT>::from(value));
-        pVar->init->type = make_smart<TypeDecl>(*pVar->type);
+        pVar->init->type = new TypeDecl(*pVar->type);
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {
@@ -811,10 +823,10 @@ namespace das
     __forceinline void addConstant ( Module & mod, const string & name, const string & value ) {
         VariablePtr pVar = make_smart<Variable>();
         pVar->name = name;
-        pVar->type = make_smart<TypeDecl>(Type::tString);
+        pVar->type = new TypeDecl(Type::tString);
         pVar->type->constant = true;
         pVar->init = make_smart<ExprConstString>(LineInfo(),value);
-        pVar->init->type = make_smart<TypeDecl>(*pVar->type);
+        pVar->init->type = new TypeDecl(*pVar->type);
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);
         if ( !mod.addVariable(pVar) ) {

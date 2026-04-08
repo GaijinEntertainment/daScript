@@ -120,18 +120,18 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
             let f = expr as ExprField
             field_name = string(f.name)
             if (f.value != null && f.value._type != null) {
-                value_type = get_ptr(f.value._type)
+                value_type = f.value._type
             }
         } else {
             let f = expr as ExprSafeField
             field_name = string(f.name)
             if (f.value != null && f.value._type != null) {
-                value_type = get_ptr(f.value._type)
+                value_type = f.value._type
             }
         }
         // unwrap pointer types (Foo? → Foo)
         if (value_type != null && value_type.structType == null && value_type.firstType != null) {
-            value_type = get_ptr(value_type.firstType)
+            value_type = value_type.firstType
         }
         if (value_type != null && value_type.structType != null) {
             let st = value_type.structType
@@ -172,7 +172,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     }
     // Type alias → resolve to typedef declaration
     if (expr._type != null) {
-        let td = get_ptr(expr._type)
+        let td = expr._type
         if (!empty(td.alias)) {
             let file = lineinfo_file(td.at)
             let line = int(td.at.line)
@@ -189,7 +189,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     }
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
-        let td = get_ptr(expr._type)
+        let td = expr._type
         if (td.structType != null) {
             let st = td.structType
             let file = lineinfo_file(st.at)

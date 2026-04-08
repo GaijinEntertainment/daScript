@@ -113,11 +113,11 @@ class private CoroutineMacro : AstFunctionAnnotation {
     //! If return type is specified coroutine can serve as an advanced form of a generator.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Transforms the annotated function into a generator-based coroutine.
-        var inscope retT : TypeDeclPtr
+        var retT : TypeDeclPtr
         if (func.result.baseType == Type.tVoid || func.result.baseType == Type.autoinfer) {
-            move_new(retT) <| qmacro_type(type<bool>)
+            retT = qmacro_type(type<bool>)
         } else {
-            move_new(retT) <| clone_type(func.result)
+            retT = clone_type(func.result)
         }
         var inscope blk <- qmacro_block() {
             return <- generator<$t(retT)> {
@@ -126,7 +126,7 @@ class private CoroutineMacro : AstFunctionAnnotation {
             }
         }
         move(func.body) <| blk
-        move_new(func.result) <| qmacro_type(type<iterator<$t(retT)>>)
+        func.result = qmacro_type(type<iterator<$t(retT)>>)
         return true
     }
 }

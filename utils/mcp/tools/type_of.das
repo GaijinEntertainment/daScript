@@ -27,7 +27,7 @@ def public do_type_of(file : string; line_str, col_str : string; no_opt_str : st
                 if (hit.expr != null && hit.expr._type != null) {
                     write(w, " : {describe(hit.expr._type)}")
                     // add extra detail for struct/enum types
-                    let td = get_ptr(hit.expr._type)
+                    let td = hit.expr._type
                     if (td.structType != null) {
                         let st = td.structType
                         let st_file = lineinfo_file(st.at)
