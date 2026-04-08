@@ -28,7 +28,7 @@ namespace das {
         Realtime = High,
     };
 
-    class DAS_API JobStatus {
+    class DAS_RT_API JobStatus {
     public:
         enum { STATUS_MAGIC = 0xdeadbeef };
         JobStatus();

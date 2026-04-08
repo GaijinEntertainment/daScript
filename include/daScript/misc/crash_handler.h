@@ -416,6 +416,6 @@ namespace das {
 
     // Das-aware crash handler: installs SEH/signal handler + das stack walk callback.
     // Defined in project_specific_crash_handler.cpp.
-    DAS_API void install_das_crash_handler();
+    DAS_RT_API void install_das_crash_handler();
 
 } // namespace das

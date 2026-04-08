@@ -1322,7 +1322,7 @@ namespace das
 
     }
 
-    DAS_API uint64_t get_context_share_counter ( Context * context ) {
+    DAS_RT_API uint64_t get_context_share_counter ( Context * context ) {
         return (uint64_t) context->code.use_count();
     }
 

@@ -6,7 +6,7 @@
 
 namespace das {
 
-    DAS_API uint64_t getCancelLimit();
+    DAS_RT_API uint64_t getCancelLimit();
 
     class StringBuilderWriter : public TextWriter {
     public:
@@ -513,9 +513,9 @@ namespace das {
         }
     };
 
-    DAS_API string debug_value ( const void * pX, TypeInfo * info, PrintFlags flags );
-    DAS_API string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
-    DAS_API string debug_json_value ( void * pX, TypeInfo * info, bool humanReadable );
-    DAS_API string debug_json_value ( vec4f value, TypeInfo * info, bool humanReadable );
-    DAS_API bool debug_json_scan ( Context & ctx, char * dst, TypeInfo * info, const char * json, uint32_t jsonLen, LineInfo * at );
+    DAS_RT_API string debug_value ( const void * pX, TypeInfo * info, PrintFlags flags );
+    DAS_RT_API string debug_value ( vec4f value, TypeInfo * info, PrintFlags flags );
+    DAS_RT_API string debug_json_value ( void * pX, TypeInfo * info, bool humanReadable );
+    DAS_RT_API string debug_json_value ( vec4f value, TypeInfo * info, bool humanReadable );
+    DAS_RT_API bool debug_json_scan ( Context & ctx, char * dst, TypeInfo * info, const char * json, uint32_t jsonLen, LineInfo * at );
 }

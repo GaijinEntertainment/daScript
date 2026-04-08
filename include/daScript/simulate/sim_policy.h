@@ -752,7 +752,7 @@ namespace  das {
     struct DAS_API SimPolicy_Range : SimPolicy_iVec<range,3> {};
     struct DAS_API SimPolicy_URange : SimPolicy_uVec<urange,3> {};
 
-    extern DAS_API const char * rts_null;
+    extern DAS_RT_API const char * rts_null;
 
     __forceinline const char * to_rts ( vec4f a ) {
         const char * s = cast<const char *>::to(a);
@@ -763,7 +763,7 @@ namespace  das {
         return s ? s : rts_null;
     }
 
-    struct DAS_API SimPolicy_String {
+    struct DAS_RT_API SimPolicy_String {
         // even more basic
         static __forceinline void Set     ( char * & a, char * b, Context &, LineInfo * ) { a = b;}
         static __forceinline bool Equ     ( char * a, char * b, Context &, LineInfo * ) { return strcmp(to_rts(a), to_rts(b))==0; }

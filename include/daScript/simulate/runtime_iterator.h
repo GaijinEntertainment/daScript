@@ -5,7 +5,7 @@
 
 namespace das {
 
-    struct DAS_API Iterator {
+    struct DAS_RT_API Iterator {
         Iterator(LineInfo * at) : debugInfo(at) {}
         virtual ~Iterator() {}
         virtual bool first ( Context & context, char * value ) = 0;

@@ -31,7 +31,7 @@ namespace das {
 
 } // namespace das
 
-DAS_API smart_ptr<das::FileAccess> get_file_access( char * pak ) {
+DAS_RT_API smart_ptr<das::FileAccess> get_file_access( char * pak ) {
     if (specificGetFileAccess)
         return specificGetFileAccess(pak);
 #if !DAS_NO_FILEIO
@@ -50,14 +50,14 @@ DAS_API smart_ptr<das::FileAccess> get_file_access( char * pak ) {
 #endif
 }
 
-DAS_API Context * get_context( int stackSize ) {
+DAS_RT_API Context * get_context( int stackSize ) {
     if (specificGetNewContext)
         return specificGetNewContext(stackSize);
     return new Context(stackSize);
 }
 
 
-DAS_API Context * get_clone_context( Context * ctx, uint32_t category ) {
+DAS_RT_API Context * get_clone_context( Context * ctx, uint32_t category ) {
     if (specificGetCloneContext)
         return specificGetCloneContext(ctx, category);
     return new Context(*ctx, category);

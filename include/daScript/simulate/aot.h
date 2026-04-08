@@ -1334,8 +1334,8 @@ namespace das {
         __forceinline TSequence<TT> & operator = ( const Sequence & s ) { this->iter = s.iter; return *this; }
     };
 
-    DAS_API TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at );
-    DAS_API TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at );
+    DAS_RT_API TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at );
+    DAS_RT_API TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at );
 
     template <typename TT, typename Enable = void>
     struct das_iterator;
@@ -2000,17 +2000,17 @@ namespace das {
         }
     };
 
-    DAS_API char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at );
 
-    DAS_API char * das_lexical_cast_int_i8 ( int8_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_u8 ( uint8_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_i16 ( int16_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_u16 ( uint16_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_i64 ( int64_t x, bool hex, Context * __context__, LineInfoArg * at );
-    DAS_API char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_i8 ( int8_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_u8 ( uint8_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_i16 ( int16_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_u16 ( uint16_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_i64 ( int64_t x, bool hex, Context * __context__, LineInfoArg * at );
+    DAS_RT_API char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at );
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer;
@@ -2740,7 +2740,7 @@ namespace das {
         }
     };
 
-    DAS_API void ___noinline das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block );
+    DAS_RT_API void ___noinline das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block );
 
     template <typename TT>
     struct das_call_interop {
@@ -3003,11 +3003,11 @@ namespace das {
     void peek_das_string_T(const string & str, TT && block, Context *, LineInfoArg *) {
         block((char *)str.c_str());
     }
-    DAS_API void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg *);
-    DAS_API char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at );
+    DAS_RT_API void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg *);
+    DAS_RT_API char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at );
 
-    DAS_API __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
-    DAS_API __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
+    DAS_RT_API __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
+    DAS_RT_API __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
 
     template <typename TT, typename QQ>
     struct das_clone {
@@ -3016,11 +3016,11 @@ namespace das {
         }
     };
 
-    DAS_API char * to_das_string(const string & str, Context * ctx, LineInfoArg * at);
-    DAS_API const char * pass_string( const char * str );
-    DAS_API char * clone_pass_string( char * str, Context * ctx, LineInfoArg * at);
-    DAS_API void set_das_string(string & str, const char * bs);
-    DAS_API void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at);
+    DAS_RT_API char * to_das_string(const string & str, Context * ctx, LineInfoArg * at);
+    DAS_RT_API const char * pass_string( const char * str );
+    DAS_RT_API char * clone_pass_string( char * str, Context * ctx, LineInfoArg * at);
+    DAS_RT_API void set_das_string(string & str, const char * bs);
+    DAS_RT_API void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at);
 
     __forceinline bool das_str_equ ( const string & a, const string & b ) { return a==b; }
     __forceinline bool das_str_nequ ( const string & a, const string & b ) { return a!=b; }

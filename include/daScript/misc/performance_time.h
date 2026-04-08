@@ -2,9 +2,9 @@
 
 #define DAS_PROFILE_SECTIONS 0
 
-extern "C" DAS_API int64_t ref_time_ticks ();
-extern "C" DAS_API int get_time_usec ( int64_t reft );
-extern "C" DAS_API int64_t get_time_nsec ( int64_t reft );
+extern "C" DAS_RT_API int64_t ref_time_ticks ();
+extern "C" DAS_RT_API int get_time_usec ( int64_t reft );
+extern "C" DAS_RT_API int64_t get_time_nsec ( int64_t reft );
 
 #if DAS_PROFILE_SECTIONS
 

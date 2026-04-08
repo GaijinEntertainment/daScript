@@ -18,8 +18,8 @@ namespace das {
     };
 
     string getExecutableFileName ( void );
-    DAS_API string getDasRoot ( void );
-    DAS_API void setDasRoot ( const string & dr );
+    DAS_RT_API string getDasRoot ( void );
+    DAS_RT_API void setDasRoot ( const string & dr );
 
     string normalizeFileName ( const char * fileName );
 

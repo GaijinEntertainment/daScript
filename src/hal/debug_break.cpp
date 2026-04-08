@@ -30,7 +30,7 @@ DAS_API void os_debug_break()
 
 namespace das {
     class Context;
-    DAS_API void os_keepalive_call ( Context * ) {}
-    DAS_API void os_keepalive_loop ( Context * ) {}
+    DAS_RT_API void os_keepalive_call ( Context * ) {}
+    DAS_RT_API void os_keepalive_loop ( Context * ) {}
 }
 

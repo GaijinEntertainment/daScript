@@ -80,7 +80,7 @@ namespace das
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
-    struct DAS_API AnnotationArgument {
+    struct DAS_RT_API AnnotationArgument {
         Type    type;       // only tInt, tFloat, tBool, and tString are allowed
         string  name;
         string  sValue;
@@ -113,7 +113,7 @@ namespace das
 
     typedef vector<AnnotationArgument> AnnotationArguments;
 
-    struct DAS_API AnnotationArgumentList : AnnotationArguments {
+    struct DAS_RT_API AnnotationArgumentList : AnnotationArguments {
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
@@ -122,7 +122,7 @@ namespace das
         void serialize ( AstSerializer & ser );
     };
 
-    struct DAS_API Annotation : BasicAnnotation {
+    struct DAS_RT_API Annotation : BasicAnnotation {
         Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
@@ -141,7 +141,7 @@ namespace das
         Module *    module = nullptr;
     };
 
-    struct DAS_API AnnotationDeclaration : gc_node {
+    struct DAS_RT_API AnnotationDeclaration : gc_node {
         AnnotationPtr           annotation = nullptr;
         AnnotationArgumentList  arguments;
         LineInfo                at;
@@ -160,7 +160,7 @@ namespace das
 
     AnnotationList cloneAnnotationList ( const AnnotationList & list );
 
-    class DAS_API Enumeration : public gc_node {
+    class DAS_RT_API Enumeration : public gc_node {
     public:
         struct EnumEntry {
             string          name;
@@ -205,7 +205,7 @@ namespace das
 #endif
     };
 
-    class DAS_API Structure : public gc_node {
+    class DAS_RT_API Structure : public gc_node {
     public:
         struct FieldDeclaration {
             string                  name;
@@ -338,7 +338,7 @@ namespace das
 #endif
     };
 
-    struct DAS_API Variable : gc_node {
+    struct DAS_RT_API Variable : gc_node {
         Variable() { gc_magic = GC_MAGIC_VARIABLE; }
         VariablePtr clone() const;
         string getMangledName() const;
@@ -442,7 +442,7 @@ namespace das
     struct ExprBlock;
     struct ExprCallFunc;
 
-    struct DAS_API FunctionAnnotation : Annotation {
+    struct DAS_RT_API FunctionAnnotation : Annotation {
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
@@ -641,7 +641,7 @@ namespace das
         Structure *            structureType = nullptr;
     };
 
-    struct DAS_API Expression : gc_node {
+    struct DAS_RT_API Expression : gc_node {
         Expression() { gc_magic = GC_MAGIC_EXPRESSION; }
         Expression(const LineInfo & a) : at(a) { gc_magic = GC_MAGIC_EXPRESSION; }
         string describe() const;
@@ -761,7 +761,7 @@ namespace das
 #pragma warning(push)
 #pragma warning(disable:4324)
 #endif
-    struct DAS_API ExprConst : Expression {
+    struct DAS_RT_API ExprConst : Expression {
         ExprConst ( ) : baseType(Type::none) { __rtti = "ExprConst"; }
         ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
@@ -835,7 +835,7 @@ namespace das
         InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p) {}
         void serialize ( AstSerializer & ser );
     };
-    class DAS_API Function : public gc_node {
+    class DAS_RT_API Function : public gc_node {
     public:
         enum class DescribeExtra     { no, yes };
         enum class DescribeModule    { no, yes };
@@ -1037,7 +1037,7 @@ namespace das
     string getAotHashComment ( const Function * fun );
     uint64_t getVariableListAotHash ( const vector<const Variable *> & globs, uint64_t initHash );
 
-    class DAS_API BuiltInFunction : public Function {
+    class DAS_RT_API BuiltInFunction : public Function {
     public:
         BuiltInFunction ( const char *fn, const char * fnCpp );
         virtual string getAotBasicName() const override {
@@ -1137,7 +1137,7 @@ namespace das
 
     bool isValidBuiltinName ( const string & name, bool canPunkt = false );
 
-    class DAS_API Module {
+    class DAS_RT_API Module {
     public:
         Module ( const string & n = "" );
         void promoteToBuiltin(const FileAccessPtr & access);
@@ -1349,7 +1349,7 @@ namespace das
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::cpp; }
     };
 
-    class DAS_API ModuleLibrary {
+    class DAS_RT_API ModuleLibrary {
         friend class Module;
         friend class Program;
     public:
@@ -1388,14 +1388,14 @@ namespace das
         Module *                        thisModule = nullptr;
     };
 
-    struct DAS_API ModuleGroupUserData {
+    struct DAS_RT_API ModuleGroupUserData {
         ModuleGroupUserData ( const string & n ) : name(n) {}
         virtual ~ModuleGroupUserData() {}
         string name;
     };
     typedef shared_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
 
-    class DAS_API ModuleGroup : public ModuleLibrary {
+    class DAS_RT_API ModuleGroup : public ModuleLibrary {
     public:
         virtual ~ModuleGroup();
         ModuleGroupUserData * getUserData ( const string & dataName ) const;
@@ -1482,7 +1482,7 @@ namespace das
         string name;
     };
 
-    class DAS_API DebugInfoHelper {
+    class DAS_RT_API DebugInfoHelper {
     public:
         DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
         DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}
@@ -1884,7 +1884,7 @@ namespace das
         vector<pair<string, string>> paths; // from -> to
     };
 
-    struct DAS_API daScriptEnvironment {
+    struct DAS_RT_API daScriptEnvironment {
         ProgramPtr      g_Program;
         bool            g_isInAot = false;
         Module *        modules = nullptr;
@@ -1917,7 +1917,7 @@ namespace das
         inline static DAS_THREAD_LOCAL(daScriptEnvironment *) owned;
     };
 
-    struct DAS_API daScriptEnvironmentGuard {
+    struct DAS_RT_API daScriptEnvironmentGuard {
         das::daScriptEnvironment *initialBound;
         das::daScriptEnvironment *initialOwned;
 

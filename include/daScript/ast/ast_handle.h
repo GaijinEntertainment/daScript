@@ -72,8 +72,8 @@ namespace das
         bool canDelete = canNew && is_destructible<OT>::value
     > struct ManagedStructureAnnotation ;
 
-    struct DAS_API BasicStructureAnnotation : TypeAnnotation {
-        struct DAS_API StructureField {
+    struct DAS_RT_API BasicStructureAnnotation : TypeAnnotation {
+        struct DAS_RT_API StructureField {
             string      name;
             string      cppName;
             string      aotPrefix;

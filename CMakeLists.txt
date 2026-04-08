@@ -923,7 +923,7 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
             ${RUNTIME_SRCS}
             src/stubs/simulate_stub.cpp
         )
-        TARGET_COMPILE_DEFINITIONS(${library}_runtime PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1)
+        TARGET_COMPILE_DEFINITIONS(${library}_runtime PRIVATE DAS_RT_EXPORTS=1 DAS_MOD_EXPORTS=1)
         TARGET_COMPILE_DEFINITIONS(${library}_runtime PUBLIC DAS_ENABLE_DLL=1)
         target_include_directories(${library}_runtime PRIVATE
                 ${DAS_SMMALLOC_DIR}

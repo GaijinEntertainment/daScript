@@ -1,3 +1,3 @@
 #pragma once
 
-void DAS_API os_debug_break();
+void DAS_RT_API os_debug_break();
