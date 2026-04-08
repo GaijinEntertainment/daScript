@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 // SF2 SoundFont live demo — lo-fi chill beat with hot-reload support.
 // SF2 data persists across reloads (no re-reading from disk).

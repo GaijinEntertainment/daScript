@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 require live/glfw_live
 require opengl/opengl_boost

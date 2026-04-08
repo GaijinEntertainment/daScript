@@ -333,6 +333,25 @@ def clear(box : LockBox?; type_ : auto(TT)) {
     }
 }
 
+def fill(box : LockBox?; data : auto(TT)) {
+    //! stores pointer to data in the lock box and marks it as full (isReady becomes false).
+    //! data must outlive the grab — caller owns the lifetime.
+    _builtin_lockbox_fill(box, unsafe(addr(data)))
+}
+
+def grab(box : LockBox?; blk : block<(var res : auto(TT)) : void>) : bool {
+    //! grabs data from lock box, marks it as empty (isReady becomes true), invokes block.
+    //! does not free the data — caller owns the lifetime.
+    var res = false
+    _builtin_lockbox_grab(box) $(void_data) {
+        if (void_data != null) {
+            var typed_data = unsafe(reinterpret<TT -const?> void_data)
+            invoke(blk, *typed_data)
+            res = true
+        }
+    }
+    return res
+}
 
 [template(tinfo), deprecated(message="use `each_clone` instead")]
 def each(var channel : Channel?; tinfo : auto(TT)) {

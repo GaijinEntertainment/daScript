@@ -1,5 +1,6 @@
 options gen2
 options indenting = 4
+options persistent_heap
 
 require strudel/strudel
 require strudel/strudel_player

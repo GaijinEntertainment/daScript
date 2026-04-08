@@ -40,6 +40,8 @@ namespace das {
         void set ( void * data, TypeInfo * ti, Context * context );
         void get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
         void update ( const TBlock<void *,void *> & blk, TypeInfo * ti, Context * context, LineInfoArg * at );
+        void fill ( void * data, TypeInfo * ti, Context * context );
+        void grab ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     public:
         template <typename TT>
         void peek ( TT && tt ) {
@@ -164,6 +166,8 @@ namespace das {
     DAS_API void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at );
     DAS_API vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args );
     DAS_API void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
+    DAS_API vec4f lockBoxFill ( Context & context, SimNode_CallBase * call, vec4f * args );
+    DAS_API void lockBoxGrab ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     DAS_API void lockBoxUpdate ( LockBox * ch, TypeInfo * ti, const TBlock<void *,void*> & blk, Context * context, LineInfoArg * at );
 
     template <typename TT>

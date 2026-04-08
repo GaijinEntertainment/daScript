@@ -132,6 +132,7 @@ class AudioSource {
     }
     def abstract get_samples(nframes : int) : array<float>
     def abstract append(var data : array<float>) : bool
+    def abstract append_temporary(data : array<float>) : bool
     def set_position(pos : uint64) : uint64 {
         return 0ul
     }
@@ -381,13 +382,17 @@ class AudioSourcePCM : AudioSource {
         offsetFrames = 0
     }
     def override append(var data : array<float>) : bool {
+        append_temporary(data)
+        delete data
+        return true
+    }
+    def override append_temporary(data : array<float>) : bool {
         let ofs = length(samples)
         let nsmp = length(data)
         samples |> resize(ofs + nsmp)
         unsafe {
             memcpy(addr(samples[ofs]), addr(data[0]), nsmp * 4)
         }
-        delete data
         return true
     }
     def finalize {
@@ -425,6 +430,10 @@ class AudioSourcePCMStream : AudioSource {
     }
     def override append(var data : array<float>) : bool {
         chunks |> emplace(StreamChunk(samples <- data))
+        return true
+    }
+    def override append_temporary(data : array<float>) : bool {
+        chunks |> emplace(StreamChunk(samples <- clone_to_move(data)))
         return true
     }
     def finalize {
@@ -493,6 +502,12 @@ class AudioSourcePCMLoop : AudioSource {
         }
         return <- data
     }
+    def override append(var data : array<float>) : bool {
+        return false
+    }
+    def override append_temporary(data : array<float>) : bool {
+        return false
+    }
     def override set_position(pos : uint64) : uint64 {
         let offsetFrames = clamp(int(pos), 0, length(samples) / channels)
         offset = offsetFrames * channels
@@ -542,6 +557,9 @@ class AudioSourceDecoder : AudioSource {
         return <- samples
     }
     def override append(var data : array<float>) : bool {
+        return false
+    }
+    def override append_temporary(data : array<float>) : bool {
         return false
     }
     def override set_position(pos : uint64) : uint64 {
@@ -663,6 +681,7 @@ variant AudioCommand {
     add_pcm_stream          : AudioCommandAddPCMStream
     add_pcm_stream_3d       : AudioCommandAddPCMStream3D
     append_pcm              : tuple<sid : SID; samples : array<float>>
+    append_box_pcm          : tuple<sid : SID; box : void?>
     pause                   : tuple<sid : SID; paused : bool>
     volume                  : tuple<sid : SID; volume : float; time : float>
     pan                     : tuple<sid : SID; pan : float>
@@ -798,6 +817,15 @@ def command_processor {
             g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
                 ch.source->append(pcmd.samples)
             }
+        } elif (cmd is append_box_pcm) {
+            assume pcmd = cmd as append_box_pcm
+            var box = unsafe(reinterpret<LockBox?>(pcmd.box))
+            box |> grab() $(var samples : array<float>) {
+                g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
+                    ch.source->append_temporary(samples)
+                }
+            }
+            box |> release()
         } elif (cmd is pause) {
             let pcmd = cmd as pause
             g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
@@ -1168,6 +1196,15 @@ def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuat
 def public append_to_pcm(sid : SID; var samples : array<float>) {
     //! append samples to PCM stream
     push_cmd <| new AudioCommand(append_pcm <-  (sid, samples))
+    return sid
+}
+
+def public append_box_to_pcm(sid : SID; box : LockBox?; var samples : array<float>) {
+    //! append samples from lock box to PCM stream. Box is grabbed and released on audio thread.
+    //! samples buffer must outlive the grab — caller keeps it alive until box.isReady.
+    _builtin_lockbox_fill(box, unsafe(addr(samples)))
+    box |> add_ref
+    push_cmd <| new AudioCommand(append_box_pcm = (sid, unsafe(reinterpret<void?>(box))))
     return sid
 }
 

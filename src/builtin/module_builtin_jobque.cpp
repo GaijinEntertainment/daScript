@@ -48,6 +48,21 @@ namespace das {
         das_invoke<void>::invoke<void *>(context, at, blk, box.data);
     }
 
+    void LockBox::fill ( void * data, TypeInfo * ti, Context * context ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        box = Feature(data,ti,context);
+        mRemaining = 1;
+        mCond.notify_all();
+    }
+
+    void LockBox::grab ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        das_invoke<void>::invoke<void *>(context, at, blk, box.data);
+        box.clear();
+        mRemaining = 0;
+        mCond.notify_all();
+    }
+
     void LockBox::update ( const TBlock<void *,void *> & blk, TypeInfo * ti, Context * context, LineInfoArg * at ) {
         lock_guard<mutex> guard(mCompleteMutex);
         void * oldData = box.data;
@@ -336,8 +351,23 @@ namespace das {
         ch->get(blk,context,at);
     }
 
+    vec4f lockBoxFill ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto ch = cast<LockBox *>::to(args[0]);
+        if ( !ch ) context.throw_error_at(call->debugInfo, "lockBoxFill: box is null");
+        void * data = cast<void *>::to(args[1]);
+        TypeInfo * ti = call->types[1];
+        ch->fill(data, ti, &context);
+        return v_zero();
+    }
+
+    void lockBoxGrab ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "lockBoxGrab: box is null");
+        ch->grab(blk,context,at);
+    }
+
     struct LockBoxAnnotation : ManagedStructureAnnotation<LockBox,false> {
         LockBoxAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LockBox", ml) {
+            addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
         }
         virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const override {
             return TypeDecl::gcFlag_heap | TypeDecl::gcFlag_stringHeap;
@@ -621,6 +651,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(lockBoxUpdate)>(*this, lib,  "_builtin_lockbox_update",
                 SideEffects::modifyArgumentAndExternal, "lockBoxUpdate")
                     ->args({"box","type_info","block","context","line"});
+            addInterop<lockBoxFill,void,LockBox *,vec4f>(*this, lib,  "_builtin_lockbox_fill",
+                SideEffects::modifyArgumentAndExternal, "lockBoxFill")
+                    ->args({"box","data"});
+            addExtern<DAS_BIND_FUN(lockBoxGrab)>(*this, lib,  "_builtin_lockbox_grab",
+                SideEffects::modifyArgumentAndExternal, "lockBoxGrab")
+                    ->args({"box","block","context","line"});
             // channel
             addInterop<channelPush,void,Channel *,vec4f>(*this, lib,  "_builtin_channel_push",
                 SideEffects::modifyArgumentAndExternal, "channelPush")
