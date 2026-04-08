@@ -139,6 +139,8 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	# We do not need to link dynamic library.
 	SETUP_GLFW(dasModuleGlfw GLFW3_DYN)
 	TARGET_LINK_LIBRARIES(dasModuleGlfw PUBLIC ${DAS_GLFW_DYN_PATH})
+	# GLFW module uses RTTI/compiler APIs => link against the full compiler lib.
+	TARGET_LINK_LIBRARIES(dasModuleGlfw PRIVATE libDaScriptDyn)
 	# Xcode 16.4+ triggers -Welaborated-enum-base on macOS SDK headers
 	# included transitively via glfw3native.h → ApplicationServices.h
 	IF(APPLE)
