@@ -6555,7 +6555,7 @@ class public DisableJitVisitor : AstVisitor {
             if (ssrc_t.isRange || ssrc_t.dim |> length != 0 ||
                 ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
                 ssrc_t.isString) {
-            } else {
+            } elif (!disable) {
                 assert(false,
                     "We shouldn't be here, all loop sources expected to be supported"
                 )
