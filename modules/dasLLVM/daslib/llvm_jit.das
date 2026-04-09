@@ -5242,7 +5242,7 @@ class public LlvmJitVisitor : AstVisitor {
         build_wrapper_function(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(expr.at, hash(fnmna),
             thisBlock.blockFlags.hasMakeBlock || emit_prologue,
-            thisFunc.totalStackSize, thisBlock.arguments)
+            SIZE_OF_PROLOGUE, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
         process_finally(expr)
