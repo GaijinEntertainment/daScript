@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options strict_smart_pointers = false
+options stack = 4_194_304
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_dll_utils
