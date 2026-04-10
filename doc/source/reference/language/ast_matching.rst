@@ -26,7 +26,7 @@ Match a compiled expression and extract parts of it:
 
 .. code-block:: das
 
-    var inscope expr <- qmacro(a + b)
+    var expr = qmacro(a + b)
     var left_name : string
     let r = qmatch(expr, $i(left_name) + b)
     assert(r.matched)
@@ -48,7 +48,7 @@ Returns a :ref:`QMatchResult <struct-ast_match-QMatchResult>`.
 
 .. code-block:: das
 
-    var inscope expr <- qmacro(x * 2 + 1)
+    var expr = qmacro(x * 2 + 1)
     let r = qmatch(expr, x * 2 + 1)
     assert(r.matched)
 
@@ -63,7 +63,7 @@ Optionally matches block arguments and return type:
 
 .. code-block:: das
 
-    var inscope blk <- qmacro_block() {
+    var blk = qmacro_block() {
         var x = 1
         print("{x}\n")
         return x
@@ -102,7 +102,7 @@ arguments, return type, and body:
 
     [test]
     def test_add(t : T?) {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
         let r = qmatch_function(func) $(a : int; b : int) : int {
             return a + b
         }
@@ -125,7 +125,7 @@ Captures a matched sub-expression as a cloned ``ExpressionPtr``.
 
 .. code-block:: das
 
-    var inscope cond, then_val, else_val : ExpressionPtr
+    var cond, then_val, else_val : ExpressionPtr
     let r = qmatch(expr, $e(cond) ? $e(then_val) : $e(else_val))
 
 $v(var) — value extraction
@@ -206,7 +206,7 @@ Capture remaining function arguments:
 
 .. code-block:: das
 
-    var inscope rest : array<VariablePtr>
+    var rest : array<VariablePtr>
     let r = qmatch_function(func) $(a : int; $a(rest)) {
         _wildcard()
     }
@@ -216,7 +216,7 @@ Capture all arguments (no fixed prefix):
 
 .. code-block:: das
 
-    var inscope rest : array<VariablePtr>
+    var rest : array<VariablePtr>
     let r = qmatch_function(func) $($a(rest)) {
         _wildcard()
     }
@@ -226,7 +226,7 @@ Works the same on block arguments:
 
 .. code-block:: das
 
-    var inscope rest : array<VariablePtr>
+    var rest : array<VariablePtr>
     let r = qmatch_block(blk) $(a : int; $a(rest)) {
         return a
     }
@@ -245,7 +245,7 @@ Capture trailing statements (everything after ``foo()``):
 
 .. code-block:: das
 
-    var inscope stmts : array<ExpressionPtr>
+    var stmts : array<ExpressionPtr>
     let r = qmatch_block(blk) $ {
         foo()
         _wildcard($b(stmts))
@@ -255,7 +255,7 @@ Capture leading statements (everything before ``baz()``):
 
 .. code-block:: das
 
-    var inscope stmts : array<ExpressionPtr>
+    var stmts : array<ExpressionPtr>
     let r = qmatch_block(blk) $ {
         _wildcard($b(stmts))
         baz()
@@ -265,7 +265,7 @@ Capture a middle range between two fixed statements:
 
 .. code-block:: das
 
-    var inscope stmts : array<ExpressionPtr>
+    var stmts : array<ExpressionPtr>
     let r = qmatch_block(blk) $ {
         foo()
         _wildcard($b(stmts))

@@ -15,7 +15,7 @@ require dastest/testing_boost public
 [test]
 def test_array_comprehension_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, [for (x in range(10)); x])
         t |> success(r.matched, "array comprehension should match")
     }
@@ -24,7 +24,7 @@ def test_array_comprehension_match(t : T?) {
 [test]
 def test_array_comprehension_wrong_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, [for (x in range(5)); x])
         t |> success(!r.matched, "wrong source should fail")
     }
@@ -33,7 +33,7 @@ def test_array_comprehension_wrong_source(t : T?) {
 [test]
 def test_array_comprehension_wrong_subexpr(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, [for (x in range(10)); y])
         t |> success(!r.matched, "wrong subexpr should fail")
     }
@@ -42,7 +42,7 @@ def test_array_comprehension_wrong_subexpr(t : T?) {
 [test]
 def test_array_comprehension_with_where(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x; where x > 5])
+        var expr = qmacro([for (x in range(10)); x; where x > 5])
         let r = qmatch(expr, [for (x in range(10)); x; where x > 5])
         t |> success(r.matched, "array comprehension with where should match")
     }
@@ -52,7 +52,7 @@ def test_array_comprehension_with_where(t : T?) {
 def test_array_comprehension_where_mismatch(t : T?) {
     ast_gc_guard() {
         // Pattern has where, actual doesn't
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, [for (x in range(10)); x; where x > 5])
         t |> success(!r.matched, "pattern with where vs actual without should fail")
     }
@@ -62,7 +62,7 @@ def test_array_comprehension_where_mismatch(t : T?) {
 def test_array_comprehension_no_where_mismatch(t : T?) {
     ast_gc_guard() {
         // Pattern has no where, actual does
-        var inscope expr <- qmacro([for (x in range(10)); x; where x > 5])
+        var expr = qmacro([for (x in range(10)); x; where x > 5])
         let r = qmatch(expr, [for (x in range(10)); x])
         t |> success(!r.matched, "pattern without where vs actual with should fail")
     }
@@ -71,12 +71,12 @@ def test_array_comprehension_no_where_mismatch(t : T?) {
 [test]
 def test_array_comprehension_capture_subexpr(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x * 2])
-        var inscope sub : ExpressionPtr
+        var expr = qmacro([for (x in range(10)); x * 2])
+        var sub : ExpressionPtr
         let r = qmatch(expr, [for (x in range(10)); $e(sub)])
         t |> success(r.matched, "should match with $e capture on subexpr")
         if (r.matched) {
-            t |> equal(string(get_ptr(sub).__rtti), "ExprOp2")
+            t |> equal(string(sub.__rtti), "ExprOp2")
         }
     }
 }
@@ -84,7 +84,7 @@ def test_array_comprehension_capture_subexpr(t : T?) {
 [test]
 def test_array_comprehension_capture_iterator(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         var name : string
         let r = qmatch(expr, [for ($i(name) in range(10)); x])
         t |> success(r.matched, "should match with $i on iterator")
@@ -97,7 +97,7 @@ def test_array_comprehension_capture_iterator(t : T?) {
 [test]
 def test_array_comprehension_wildcard_subexpr(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x * x + 1])
+        var expr = qmacro([for (x in range(10)); x * x + 1])
         let r = qmatch(expr, [for (x in range(10)); _any()])
         t |> success(r.matched, "wildcard subexpr should match anything")
     }
@@ -108,7 +108,7 @@ def test_array_comprehension_wildcard_subexpr(t : T?) {
 [test]
 def test_array_vs_table_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, {for (x in range(10)); x})
         t |> success(!r.matched, "array pattern vs table actual should fail")
     }
@@ -117,7 +117,7 @@ def test_array_vs_table_mismatch(t : T?) {
 [test]
 def test_table_vs_array_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro({for (x in range(10)); x})
+        var expr = qmacro({for (x in range(10)); x})
         let r = qmatch(expr, [for (x in range(10)); x])
         t |> success(!r.matched, "table pattern vs array actual should fail")
     }
@@ -128,7 +128,7 @@ def test_table_vs_array_mismatch(t : T?) {
 [test]
 def test_table_comprehension_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro({for (x in range(10)); x => x * x})
+        var expr = qmacro({for (x in range(10)); x => x * x})
         let r = qmatch(expr, {for (x in range(10)); x => x * x})
         t |> success(r.matched, "table comprehension should match")
     }
@@ -137,7 +137,7 @@ def test_table_comprehension_match(t : T?) {
 [test]
 def test_table_comprehension_key_only(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro({for (x in range(10)); x})
+        var expr = qmacro({for (x in range(10)); x})
         let r = qmatch(expr, {for (x in range(10)); x})
         t |> success(r.matched, "table comprehension key-only should match")
     }
@@ -146,13 +146,13 @@ def test_table_comprehension_key_only(t : T?) {
 [test]
 def test_table_comprehension_capture_subexpr(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro({for (x in range(10)); x => x * x})
-        var inscope sub : ExpressionPtr
+        var expr = qmacro({for (x in range(10)); x => x * x})
+        var sub : ExpressionPtr
         let r = qmatch(expr, {for (x in range(10)); $e(sub)})
         t |> success(r.matched, "should match with $e capture on table subexpr")
         if (r.matched) {
             // subexpr is x => x * x, which is ExprMakeTuple
-            t |> success(get_ptr(sub) != null, "captured subexpr should not be null")
+            t |> success(sub != null, "captured subexpr should not be null")
         }
     }
 }
@@ -160,7 +160,7 @@ def test_table_comprehension_capture_subexpr(t : T?) {
 [test]
 def test_table_comprehension_wrong_subexpr(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro({for (x in range(10)); x => x * x})
+        var expr = qmacro({for (x in range(10)); x => x * x})
         let r = qmatch(expr, {for (x in range(10)); x => x + x})
         t |> success(!r.matched, "wrong table subexpr should fail")
     }
@@ -171,7 +171,7 @@ def test_table_comprehension_wrong_subexpr(t : T?) {
 [test]
 def test_generator_comprehension_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([iterator for(x in range(10)); x])
+        var expr = qmacro([iterator for(x in range(10)); x])
         let r = qmatch(expr, [iterator for(x in range(10)); x])
         t |> success(r.matched, "generator comprehension should match")
     }
@@ -180,7 +180,7 @@ def test_generator_comprehension_match(t : T?) {
 [test]
 def test_generator_vs_array_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([iterator for(x in range(10)); x])
+        var expr = qmacro([iterator for(x in range(10)); x])
         let r = qmatch(expr, [for (x in range(10)); x])
         t |> success(!r.matched, "generator pattern vs array should fail")
     }
@@ -189,7 +189,7 @@ def test_generator_vs_array_mismatch(t : T?) {
 [test]
 def test_array_vs_generator_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro([for (x in range(10)); x])
+        var expr = qmacro([for (x in range(10)); x])
         let r = qmatch(expr, [iterator for(x in range(10)); x])
         t |> success(!r.matched, "array pattern vs generator should fail")
     }
@@ -200,7 +200,7 @@ def test_array_vs_generator_mismatch(t : T?) {
 [test]
 def test_block_matches_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { return 1; })
+        var expr = qmacro($ { return 1; })
         let r = qmatch(expr, $ { return 1; })
         t |> success(r.matched, "plain block should match plain block")
     }
@@ -209,7 +209,7 @@ def test_block_matches_block(t : T?) {
 [test]
 def test_block_not_lambda(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(@() { return 1; })
+        var expr = qmacro(@() { return 1; })
         let r = qmatch(expr, $ { return 1; })
         t |> success(!r.matched, "plain block pattern should not match lambda")
     }
@@ -218,7 +218,7 @@ def test_block_not_lambda(t : T?) {
 [test]
 def test_lambda_matches_lambda(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(@(x) { return x + 1; })
+        var expr = qmacro(@(x) { return x + 1; })
         let r = qmatch(expr, @(x) { return x + 1; })
         t |> success(r.matched, "lambda should match lambda")
     }
@@ -227,7 +227,7 @@ def test_lambda_matches_lambda(t : T?) {
 [test]
 def test_lambda_not_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { return 1; })
+        var expr = qmacro($ { return 1; })
         let r = qmatch(expr, @() { return 1; })
         t |> success(!r.matched, "lambda pattern should not match plain block")
     }
@@ -236,7 +236,7 @@ def test_lambda_not_block(t : T?) {
 [test]
 def test_local_function_matches(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(@@(x) { return x + 1; })
+        var expr = qmacro(@@(x) { return x + 1; })
         let r = qmatch(expr, @@(x) { return x + 1; })
         t |> success(r.matched, "local function should match local function")
     }
@@ -245,7 +245,7 @@ def test_local_function_matches(t : T?) {
 [test]
 def test_local_function_not_lambda(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(@(x) { return x + 1; })
+        var expr = qmacro(@(x) { return x + 1; })
         let r = qmatch(expr, @@(x) { return x + 1; })
         t |> success(!r.matched, "local function pattern should not match lambda")
     }
@@ -268,9 +268,9 @@ def target_with_local_fn_wrong() {
 [test]
 def test_local_fn_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
-        t |> success(get_ptr(func) != null, "should find target_with_local_fn")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+        t |> success(func != null, "should find target_with_local_fn")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -284,8 +284,8 @@ def test_local_fn_post_inference(t : T?) {
 [test]
 def test_local_fn_post_inference_wrong_body(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -299,18 +299,18 @@ def test_local_fn_post_inference_wrong_body(t : T?) {
 [test]
 def test_local_fn_capture_body(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+        if (func == null) {
             return
         }
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             var f = @@(x : int) { $e(body_expr); }
             feint("{f}")
         }
         t |> success(r.matched, "should match with $e capture on local fn body")
         if (r.matched) {
-            t |> equal(string(get_ptr(body_expr).__rtti), "ExprReturn")
+            t |> equal(string(body_expr.__rtti), "ExprReturn")
         }
     }
 }
@@ -324,8 +324,8 @@ def target_with_local_fn_two_args() {
 [test]
 def test_local_fn_match_two_args(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn_two_args)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn_two_args)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -339,8 +339,8 @@ def test_local_fn_match_two_args(t : T?) {
 [test]
 def test_local_fn_capture_var_name(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_with_local_fn)
+        if (func == null) {
             return
         }
         var vname : string
@@ -378,9 +378,9 @@ def target_comp_where() {
 [test]
 def test_comp_array_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
-        t |> success(get_ptr(func) != null, "should find target_comp_array")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+        t |> success(func != null, "should find target_comp_array")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -394,9 +394,9 @@ def test_comp_array_post_inference(t : T?) {
 [test]
 def test_comp_table_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_table)
-        t |> success(get_ptr(func) != null, "should find target_comp_table")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_table)
+        t |> success(func != null, "should find target_comp_table")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -410,9 +410,9 @@ def test_comp_table_post_inference(t : T?) {
 [test]
 def test_comp_where_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_where)
-        t |> success(get_ptr(func) != null, "should find target_comp_where")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_where)
+        t |> success(func != null, "should find target_comp_where")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -426,8 +426,8 @@ def test_comp_where_post_inference(t : T?) {
 [test]
 def test_comp_wrong_body_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $() {
@@ -441,11 +441,11 @@ def test_comp_wrong_body_post_inference(t : T?) {
 [test]
 def test_comp_capture_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+        if (func == null) {
             return
         }
-        var inscope sub_expr : ExpressionPtr
+        var sub_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             var a <- [for (x in range(10)); $e(sub_expr)]
             feint("{a}")
@@ -460,8 +460,8 @@ def test_comp_capture_post_inference(t : T?) {
 [test]
 def test_comp_capture_iterator_post_inference(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_comp_array)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_comp_array)
+        if (func == null) {
             return
         }
         var iter_name : string

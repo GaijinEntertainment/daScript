@@ -57,7 +57,7 @@ def JV(li : LineInfo) {
 class ExtractMethodMacro : AstFunctionAnnotation {
     //! Function annotation implementing extract-method refactoring.
     method_tag = "!!!extract_method"
-    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (!(call.arguments[0] is ExprConstString)) {
             print("extract_method: first argument must be a string literal")
             return false
@@ -151,21 +151,21 @@ def public extract_variable_ref(method_name : string; var expr : auto(TT)& ==con
 [call_macro(name="extract_variable")]
 class ExtractVariableMacro : AstCallMacro {
     //! Call macro implementing extract-variable refactoring.
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         if (!(expr.arguments[0] is ExprConstString)) {
             macro_error(prog, expr.at, "extract_variable: first argument must be a string literal")
-            return <- default<ExpressionPtr>
+            return null
         }
         assume varType = expr.arguments[1]._type
         if (varType == null || varType.isAutoOrAlias) {
             macro_error(prog, expr.at, "extract_variable: unresolve expression type")
-            return <- default<ExpressionPtr>
+            return null
         }
-        var inscope ccall <- new ExprCall(at = expr.at)
+        var ccall = new ExprCall(at = expr.at)
         ccall.name := (varType.isRef && !varType.isConst) ? "extract_variable_ref" : "extract_variable_nonref"
         ccall.arguments |> emplace_new <| clone_expression(expr.arguments[0])
         ccall.arguments |> emplace_new <| clone_expression(expr.arguments[1])
-        return <- ccall
+        return ccall
     }
 }
 
@@ -173,19 +173,19 @@ class ExtractVariableMacro : AstCallMacro {
 class ExtractVariableFunction : AstFunctionAnnotation {
     //! Function annotation for extract-variable target functions.
     method_tag = "!!!extract_variable"
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         assume cffg = call.func.fromGeneric
         assume varType = call.arguments[1]._type
         if (call.func != null && cffg != null && cffg.name == "extract_variable") {
             if (varType.isConst || !varType.isRef) {
-                var inscope ccall <- clone_expression(call)
+                var ccall = clone_expression(call)
                 (ccall as ExprCall).name := "extract_variable_nonref"
-                return <- ccall
+                return ccall
             }
         }
-        return <- default<ExpressionPtr>
+        return null
     }
-    def override verifyCall(var call : smart_ptr<ExprCallFunc>; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
+    def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         if (!(call.arguments[0] is ExprConstString)) {
             print("extract_variable: first argument must be a string literal")
             return false

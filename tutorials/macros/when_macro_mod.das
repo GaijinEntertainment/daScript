@@ -79,18 +79,18 @@ require daslib/macro_boost
 
 [call_macro(name="when")]
 class WhenMacro : AstCallMacro {
-    def override canVisitArgument(expr : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
+    def override canVisitArgument(expr : ExprCallMacro?; argIndex : int) : bool {
         // Visit the condition (arg 0) so its type is inferred.
         // For the block (arg 1), visit during normal compilation but
         // not during error reporting (the block is already transformed).
         return true if (argIndex == 0)
         return !is_reporting_compilation_errors()
     }
-    def override canFoldReturnResult(expr : smart_ptr<ExprCallMacro>) : bool {
+    def override canFoldReturnResult(expr : ExprCallMacro?) : bool {
         // Don't let the compiler finalize return type before we expand.
         return false
     }
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         // --- Validate arguments ---
         macro_verify(length(expr.arguments) == 2, prog, expr.at,
             "when takes a value and a block")
@@ -107,7 +107,7 @@ class WhenMacro : AstCallMacro {
         macro_verify(length(blk.list) > 0, prog, expr.at,
             "'when' block must have at least one case")
         // --- Build the statement list ---
-        var inscope list : array<ExpressionPtr>
+        var list : array<ExpressionPtr>
         let arg_name = "__when_arg__"
         var any_default = false
         for (stmt, idx in blk.list, count()) {
@@ -123,13 +123,13 @@ class WhenMacro : AstCallMacro {
                 "default case (_) must be last in the block")
             if (is_default) {
                 // _ => value  →  return value
-                list |> emplace_new <| qmacro_block() {
+                list |> push <| qmacro_block() {
                     return $e(tupl.values[1])
                 }
                 any_default = true
             } else {
                 // key => value  →  if (arg == key) { return value; }
-                list |> emplace_new <| qmacro_block() {
+                list |> push <| qmacro_block() {
                     if ($i(arg_name) == $e(tupl.values[0])) {
                         return $e(tupl.values[1])
                     }
@@ -142,7 +142,7 @@ class WhenMacro : AstCallMacro {
         // using typedecl($e(...)), and return the type's default value.
         if (!any_default) {
             assume first_value = (blk.list[0] as ExprMakeTuple).values[1]
-            list |> emplace_new <| qmacro_block() {
+            list |> push <| qmacro_block() {
                 return default<typedecl($e(first_value))>
             }
         }
@@ -151,9 +151,9 @@ class WhenMacro : AstCallMacro {
         cond_type.flags.ref = false      // compare values, not references
         cond_type.flags.constant = true  // block argument is read-only
         // --- Assemble: invoke($(arg : type){ body }, condition) ---
-        var inscope call_block <- qmacro($($i(arg_name) : $t(cond_type)){ $b(list); })
+        var call_block = qmacro($($i(arg_name) : $t(cond_type)){ $b(list); })
         // Allow nested when() by letting the generated name shadow outer ones
         ((call_block as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
-        return <- qmacro(invoke($e(call_block), $e(cond)))
+        return qmacro(invoke($e(call_block), $e(cond)))
     }
 }

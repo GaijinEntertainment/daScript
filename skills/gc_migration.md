@@ -1,278 +1,311 @@
-# GC Migration Skill — TypeDecl (Phase 1)
+# GC Migration Skill — smart_ptr to gc_node
 
-Read this skill file before working with `TypeDecl` gc_node patterns, fixing GC leaks, or migrating other types to gc_node in the future. This is the authoritative reference for all migration patterns, verified against the `gc-typedecl` branch (191 files, 6024 tests passing).
+Read this skill file before migrating daslang code (`.das` files in external repositories, modules, or user projects) from the old `smart_ptr<T>` AST patterns to the new gc_node raw-pointer patterns. This covers **all migrated types** and the concrete code changes needed.
 
-## Architecture
+## Which types migrated
 
-- `gc_node` (`include/daScript/misc/gc_node.h`) is a doubly-linked list node with magic, unique ID, and owner pointer
-- `gc_root` owns a list of gc_nodes. Thread-local `gc_root::gc_active_root` is the default allocation target
-- New `TypeDecl` instances land on the thread-local root via `gc_node()` constructor
-- `Module::gc_collect()` (`src/ast/ast_gc_collect.cpp`) walks all reachable TypeDecl and moves them to the module's root
-- Whatever remains on the thread-local root is garbage — swept by `gc_root::gc_sweep()`
-- `gc_guard` RAII struct redirects thread-local root to a local root for scoped cleanup
-- `gc_local<TypeDecl>` RAII — unlinks from GC on construction, deletes normally (for C++ temporaries)
-- `ast_gc_guard()` — daScript-side function wrapping gc_guard for use in macros, tools, visitors
+The following AST types changed from `smart_ptr<T>` (reference-counted) to `gc_node` (garbage-collected raw pointers):
 
-## C++ Migration Patterns
+| C++ type | Old C++ typedef | New C++ typedef | daScript type |
+|---|---|---|---|
+| `TypeDecl` | `smart_ptr<TypeDecl>` | `TypeDecl*` | `TypeDecl?` (alias `TypeDeclPtr`) |
+| `Expression` (all subclasses) | `smart_ptr<Expression>` | `Expression*` | `Expression?` (alias `ExpressionPtr`) |
+| `Function` | `smart_ptr<Function>` | `Function*` | `Function?` (alias `FunctionPtr`) |
+| `Structure` | `smart_ptr<Structure>` | `Structure*` | `Structure?` (alias `StructurePtr`) |
+| `Enumeration` | `smart_ptr<Enumeration>` | `Enumeration*` | `Enumeration?` (alias `EnumerationPtr`) |
+| `Variable` | `smart_ptr<Variable>` | `Variable*` | `Variable?` (alias `VariablePtr`) |
+| `MakeFieldDecl` | `smart_ptr<MakeFieldDecl>` | `MakeFieldDecl*` | `MakeFieldDecl?` (alias `MakeFieldDeclPtr`) |
+| `MakeStruct` | `smart_ptr<MakeStruct>` | `MakeStruct*` | — |
 
-### Allocation
+**NOT migrated** (still smart_ptr):
+- `ProgramPtr = smart_ptr<Program>`
+- `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`
+- `PassMacroPtr`, `VariantMacroPtr`, `ReaderMacroPtr`, `CallMacroPtr`, etc.
+- `VisitorAdapterPtr` (from `make_visitor`)
+- `smart_ptr<Context>`
 
-| Before | After | Notes |
-|---|---|---|
-| `make_smart<TypeDecl>(...)` | `new TypeDecl(...)` | gc_node ctor links to active root |
-| `make_smart<TypeDecl>(*src)` | `new TypeDecl(*src)` | copy ctor creates new gc_node |
+## daScript code migration (.das files)
 
-### TypeDeclPtr typedef
+This is the main section for migrating user/module `.das` code.
 
-```cpp
-// Before: typedef smart_ptr<TypeDecl> TypeDeclPtr;
-// After:  typedef TypeDecl * TypeDeclPtr;
-```
-
-TypeDeclPtr is now a raw pointer. Most code that uses TypeDeclPtr doesn't change — pointer semantics are the same.
-
-### smart_ptr operations -> raw pointer
+### Variable declarations
 
 | Before | After | Notes |
 |---|---|---|
-| `foo.get()` | `foo` | Already a raw pointer |
-| `foo.reset()` | `foo = nullptr` | |
-| `foo->method()` | `foo->method()` | Unchanged |
-| `foo = make_smart<TypeDecl>(...)` | `foo = new TypeDecl(...)` | |
-| `if (foo)` | `if (foo)` | Unchanged |
-| `foo == nullptr` | `foo == nullptr` | Unchanged |
-| `move_new(foo, expr)` | `foo = expr` | No ownership transfer needed |
-| `move(foo.firstType) <\| expr` | `foo.firstType = expr` | Direct assignment for sub-types |
-| `foo.orphan()` | `auto tmp = foo; foo = nullptr;` | 4 locations |
-| `swap(a, b)` | `swap(a, b)` | Works for raw pointers |
+| `var inscope x <- new ExprCall(...)` | `var x = new ExprCall(...)` | No `inscope`, no `<-` |
+| `var inscope x <- clone_expression(e)` | `var x = clone_expression(e)` | |
+| `var inscope x <- clone_type(t)` | `var x = clone_type(t)` | |
+| `var inscope x <- clone_function(f)` | `var x <- clone_function(f)` | `clone_function` still returns via move |
+| `var inscope x <- qmacro(...)` | `var x = qmacro(...)` | |
+| `var inscope x <- qmacro_block() { ... }` | `var x = qmacro_block() { ... }` | |
+| `var inscope x <- qmacro_function(...) $(args) { ... }` | `var x <- qmacro_function(...) $(args) { ... }` | `qmacro_function` returns via move |
+| `var inscope x <- qmacro_type(type<T>)` | `var x = qmacro_type(type<T>)` | |
+| `var inscope x <- typeinfo ast_typedecl(type<T>)` | `var x = typeinfo ast_typedecl(type<T>)` | |
+| `var inscope x : array<ExpressionPtr>` | `var x : array<ExpressionPtr>` | No `inscope` for arrays of gc types |
+| `var inscope x : array<VariablePtr>` | `var x : array<VariablePtr>` | |
 
-### Function signatures
+**Rule of thumb:** If the type is a gc_node pointer (`ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`) or an array/table of one, remove `inscope` and change `<-` to `=`. Exception: `clone_function` and `qmacro_function` still use `<-` because they return via move semantics on the daScript side.
 
-| Before | After | Notes |
-|---|---|---|
-| `smart_ptr<TypeDecl>` | `TypeDecl *` or `TypeDeclPtr` | |
-| `const TypeDeclPtr &` (param) | `TypeDeclPtr` (by value) | It's just a pointer now |
-| `TypeDeclPtr &` (out param) | `TypeDeclPtr &` | Still by reference |
-| `smart_ptr<TypeDecl> &` | `TypeDecl * &` or `TypeDeclPtr &` | |
+**Still needs `var inscope <-`:** `make_visitor(...)` returns `smart_ptr<VisitorAdapter>` — keep `var inscope adapter <- make_visitor(*v)`.
 
-### smart_ptr_raw<TypeDecl>
-
-~37 core references. Becomes plain `TypeDecl *`:
+### Return statements
 
 | Before | After |
 |---|---|
-| `smart_ptr_raw<TypeDecl>` | `TypeDecl *` |
-| `smart_ptr_raw<TypeDecl> foo` | `TypeDecl * foo` |
-| `.marshal()` calls | remove — already raw pointer |
+| `return <- expr` (returning ExpressionPtr) | `return expr` |
+| `return <- default<ExpressionPtr>` | `return default<ExpressionPtr>` or `return null` |
+| `return <- qmacro(...)` | `return qmacro(...)` |
+| `return <- new ExprConstInt(...)` | `return new ExprConstInt(...)` |
+| `return <- fun` (in visitor `visitFunction`) | `return <- fun` — **keep** (visitor returns use move) |
+
+**Rule:** Remove `<-` from `return` when returning gc_node pointers. Exception: visitor `visitFunction`/`visitExprXxx` methods that return the node back — these still use `return <- fun` because the visitor adapter binding expects move semantics.
+
+### Field assignment
+
+| Before | After |
+|---|---|
+| `fn.result <- new TypeDecl(...)` | `fn.result = new TypeDecl(...)` |
+| `fn.body <- new_body` | `fn.body = new_body` |
+| `td.firstType <- expr` | `td.firstType = expr` |
+| `field |> move_new <| new ExprConstInt(...)` | `field = new ExprConstInt(...)` |
+| `field |> move <| expr` | `field = expr` |
+| `func.body |> move <| new_body` | `func.body = new_body` |
+
+### Array operations
+
+| Before | After | When |
+|---|---|---|
+| `list |> emplace_new <| qmacro_block() { ... }` | `list |> push <| qmacro_block() { ... }` | Local `array<ExpressionPtr>` built by macro |
+| `hashExprs |> emplace_new <| qmacro(...)` | `hashExprs |> push <| qmacro(...)` | Local `array<ExpressionPtr>` |
+| `stmts |> emplace_new <| clone_expression(s)` | `stmts |> push <| clone_expression(s)` | Local `array<ExpressionPtr>` |
+| `sbuilder.elements |> emplace_new <| expr` | `sbuilder.elements |> emplace_new <| expr` | **Keep** — AST node member arrays |
+| `pCall.arguments |> emplace_new <| expr` | `pCall.arguments |> emplace_new <| expr` | **Keep** — AST node member arrays |
+| `blk.list |> emplace_new <| expr` | `blk.list |> emplace_new <| expr` | **Keep** — AST node member arrays |
+| `arr.values |> emplace <| nameExpr` | `arr.values |> emplace(nameExpr)` | Note: pipe vs call syntax |
+
+**Rule:** For **local** `array<ExpressionPtr>` variables that you build up and then splice via `$b()` or `$a()`, use `push`. For **AST node member** arrays (`.elements`, `.arguments`, `.list`, `.values`), keep `emplace_new` or `emplace`.
+
+### Scoping blocks
+
+| Before | After |
+|---|---|
+| `if (true) { var inscope x <- ... }` | `{ var x = ... }` |
+
+The `if (true)` pattern was needed to create a scope for `var inscope` inside loops. With gc_node, use bare blocks `{ ... }` for scoping.
+
+### Macro method signatures
+
+All overridable methods on macro base classes changed their parameter types:
+
+| Before | After |
+|---|---|
+| `var expr : smart_ptr<ExprCallMacro>` | `var expr : ExprCallMacro?` |
+| `var expr : smart_ptr<ExprCallFunc>` | `var expr : ExprCallFunc?` |
+| `var blk : smart_ptr<ExprBlock>` | `var blk : ExprBlock?` |
+| `expr : smart_ptr<ExprReader>` | `expr : ExprReader?` |
+| `expr : smart_ptr<ExprTypeInfo>` | `expr : ExprTypeInfo?` |
+| `expr : smart_ptr<ExprIsVariant>` | `expr : ExprIsVariant?` |
+| `expr : smart_ptr<ExprAsVariant>` | `expr : ExprAsVariant?` |
+| `expr : smart_ptr<ExprSafeAsVariant>` | `expr : ExprSafeAsVariant?` |
+| `expr : smart_ptr<ExprFor>` | `expr : ExprFor?` |
+| `expr : smart_ptr<ExprFind>` | `expr : ExprFind?` |
+| `var call : smart_ptr<ExprCall>` | `var call : ExprCall?` |
+
+Additionally, `canVisitArguments(expr)` → `canVisitArgument(expr; argIndex : int)` and `canFoldReturnResult(expr)` was added to `AstCallMacro`.
+
+### Visitor method signatures
+
+All `AstVisitor` pre/post methods changed from `smart_ptr<ExprXxx>` to `ExprXxx?`:
+
+```das
+// Before
+def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void
+def override visitExprCall(expr : smart_ptr<ExprCall>) : ExpressionPtr
+
+// After  
+def override preVisitExprCall(expr : ExprCall?) : void
+def override visitExprCall(expr : ExprCall?) : ExpressionPtr
+```
+
+This applies to **every** expression visitor method (ExprFor, ExprWhile, ExprBlock, ExprNew, etc.).
+
+### Duplicate overload removal
+
+When `TPtr` and `T?` become the same type, overload pairs become ambiguous:
+
+```das
+// REMOVE this trampoline — TypeDecl? IS TypeDeclPtr now
+def foo(td : TypeDecl?) {
+    unsafe { return foo(reinterpret<TypeDeclPtr> td) }
+}
+// KEEP the real implementation  
+def foo(td : TypeDeclPtr) { ... }
+```
+
+Search pattern: look for `reinterpret<TypeDeclPtr>`, `reinterpret<ExpressionPtr>`, `reinterpret<FunctionPtr>` in trampoline overloads.
+
+### get_ptr() removal
+
+`get_ptr()` extracts a raw pointer from `smart_ptr`. After migration, the value is already a raw pointer:
+
+| Before | After |
+|---|---|
+| `get_ptr(expr)` | `expr` |
+| `func = get_ptr(fun)` | `func = fun` |
+| `get_ptr(expr) is ExprVar` | `expr is ExprVar` |
+
+### enu.get_ptr() for enumType
+
+TypeDecl's `enumType` field changed from `Enumeration*` (already raw) to... it's still `Enumeration*`. But `EnumerationPtr` is now `Enumeration*` too. So:
+
+| Before | After |
+|---|---|
+| `enumType = enu.get_ptr()` | `enumType = enu` |
+
+### build_string pipe syntax
+
+Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var w) { ... }` (dropping the `<|`). Both work, but the codebase standardized on the shorter form.
+
+## C++ code migration
+
+### Allocation
+
+| Before | After |
+|---|---|
+| `make_smart<TypeDecl>(...)` | `new TypeDecl(...)` |
+| `make_smart<ExprConstInt>(...)` | `new ExprConstInt(...)` |
+| `make_smart<Function>()` | `new Function()` |
+| `make_smart<Structure>(name)` | `new Structure(name)` |
+| `make_smart<Enumeration>(name)` | `new Enumeration(name)` |
+| `make_smart<Variable>()` | `new Variable()` |
+| `make_smart<MakeFieldDecl>(...)` | `new MakeFieldDecl(...)` |
+
+### Smart pointer operations
+
+| Before | After |
+|---|---|
+| `ptr.get()` | `ptr` |
+| `ptr.reset()` | `ptr = nullptr` |
+| `ptr.orphan()` | `auto tmp = ptr; ptr = nullptr;` |
+| `ptr.use_count()` | Remove — no refcount |
+| `ptr->addRef()` / `ptr->delRef()` | Remove |
+| `move_new(field, expr)` | `field = expr` |
+| `swap(a, b)` | `swap(a, b)` (unchanged) |
+
+### Function signatures
+
+| Before | After |
+|---|---|
+| `const TypeDeclPtr &` (param) | `TypeDeclPtr` (by value — it's a pointer) |
+| `smart_ptr<Expression> &` | `ExpressionPtr &` or `Expression * &` |
+| `smart_ptr_raw<TypeDecl>` | `TypeDecl *` (remove `.marshal()` calls) |
 
 ### Containers
 
 | Before | After |
 |---|---|
-| `vector<TypeDeclPtr>` (was `vector<smart_ptr<TypeDecl>>`) | `vector<TypeDecl*>` (unchanged with new typedef) |
-| `safebox<TypeDecl>` | `safebox<TypeDecl, TypeDeclPtr>` — second template param for raw pointer |
-| `das_map<string, TypeDeclPtr>` | `das_map<string, TypeDecl*>` (typedef handles it) |
-
-### Removed APIs
-
-| API | Action |
-|---|---|
-| `use_count()` on TypeDeclPtr | Remove — no refcount. Remove assertions using it |
-| `addRef()` / `delRef()` on TypeDecl | Remove — no refcount |
-| `TypeDecl::clone()` use_count==1 optimization | Disabled — always allocate fresh |
+| `safebox<TypeDecl>` | `safebox<TypeDecl, TypeDeclPtr>` |
+| `safebox<Structure>` | `safebox<Structure, StructurePtr>` |
+| `safebox<Enumeration>` | `safebox<Enumeration, EnumerationPtr>` |
 
 ### Parser (.ypp files)
 
-Both `ds_parser.ypp` and `ds2_parser.ypp` have `make_smart<TypeDecl>` in grammar actions. Change to `new TypeDecl(...)`. The `%destructor` for `<pTypeDecl>`, `<pTypeDeclList>`, and `<aTypePair>` must be no-ops (`{ /* gc owns TypeDecl */ }`) — gc handles TypeDecl lifetime, not parser error recovery. Remove explicit `delete` of TypeDecl in grammar actions (e.g. `delete $dimlist`). Edit only `.ypp` files — CMake regenerates `.cpp` via bison automatically.
+1. Replace `make_smart<T>(...)` → `new T(...)` for all migrated types
+2. Change `%destructor` for migrated types to no-ops: `{ /* gc owns T */ }`
+3. Remove explicit `delete` of gc_node types in error recovery paths
+4. Edit only `.ypp` files — CMake regenerates `.cpp` via bison
 
-### Serializer (ast_serializer.cpp)
+### Serializer
 
-TypeDecl serialization changes — `smart_ptr<TypeDecl>` serialize/deserialize becomes raw pointer. The serializer needs to track TypeDecl identity for cross-references (same pointer serialized twice should deserialize to same object). Use a pointer->ID map during serialize, ID->pointer map during deserialize.
+- `smart_ptr<T>` serialize/deserialize becomes raw pointer with identity tracking (pointer→ID map during serialize, ID→pointer during deserialize)
+- Remove `ptr_ref_count::serialize()` calls
+- `make_smart<T>` → `new T` in deserializer
 
-## daScript Migration Patterns
+### Uninitialized pointer fields
 
-### Variable declarations and assignment
+**CRITICAL:** `smart_ptr<T>` auto-initializes to null. `T*` does NOT. Every member field and local variable that was `smart_ptr<T>` must get `= nullptr`. Failure causes random crashes from garbage pointer dereference.
 
-| Before | After | Notes |
-|---|---|---|
-| `var inscope td <- new TypeDecl(...)` | `var td = new TypeDecl(...)` | No inscope, no move |
-| `var inscope td <- clone_type(x)` | `var td = clone_type(x)` | |
-| `var inscope td <- qmacro_type(type<T>)` | `var td = qmacro_type(type<T>)` | |
-| `var inscope td <- typeinfo ast_typedecl(type<T>)` | `var td = typeinfo ast_typedecl(type<T>)` | |
-| `var inscope td <- qmacro_template_class(...)` | `var td = qmacro_template_class(...)` | |
-| `fn.result <- new TypeDecl(...)` | `fn.result = new TypeDecl(...)` | Direct assign, not move |
-| `move(td.firstType) <\| expr` | `td.firstType = expr` | Direct assign for sub-types |
-| `move(td.secondType) <\| expr` | `td.secondType = expr` | |
-| `move_new(ptr) <\| clone_type(x)` | `ptr = clone_type(x)` | |
-| `clone(info.firstType)` on TypeDecl | `clone_type(info.firstType)` | `clone()` doesn't work on raw ptrs |
+### Temporary gc_nodes in C++
 
-### Type annotations
-
-| Before | After | Notes |
-|---|---|---|
-| `smart_ptr<TypeDecl>` in types | `TypeDecl?` | |
-| `TypeDeclPtr` in function params | Still works | Typedef alias for `TypeDecl?` |
-| `var foo : TypeDeclPtr` | `var foo : TypeDecl?` | Or keep `TypeDeclPtr` — same thing |
-| `inscope` on TypeDecl vars | remove | gc handles lifetime |
-| `get_ptr(td)` on TypeDecl | `td` | Already a raw pointer |
-
-### Overload disambiguation
-
-When a module has both `def foo(td : TypeDecl?)` and `def foo(td : TypeDeclPtr)` overloads, they are now **ambiguous** (same type). The trampoline overload (typically `TypeDecl?` → `reinterpret<TypeDeclPtr>`) must be removed. Real example from `daslib/rst.das`:
-
-```das
-// REMOVE this trampoline — TypeDecl? IS TypeDeclPtr now
-def describe_type_short(td : TypeDecl?) {
-    unsafe { return describe_type_short(reinterpret<TypeDeclPtr> td) }
-}
-// KEEP the real implementation
-def describe_type_short(td : TypeDeclPtr) { ... }
-```
-
-### emplace_new still works
-
-`emplace_new(vec, expr)` is still valid for `VectorTypeDeclPtr`. For `argTypes`, both `emplace_new` and `push` work:
-```das
-td.argTypes |> push(clone_type(arg._type))        // OK
-td.argTypes |> emplace_new(clone_type(arg._type))  // also OK
-```
-
-## Temporary TypeDecl in C++ — gc_local<T>
-
-When C++ code creates a temporary `TypeDecl` that is only needed locally (not stored in any module or AST), use `gc_local<TypeDecl>` from `gc_node.h` to prevent GC leaks. This is the replacement for the old pattern where `smart_ptr<TypeDecl>` auto-deleted temporaries.
+Use `gc_local<T>` for C++ code that creates temporary AST nodes outside of compilation:
 
 ```cpp
-#include "daScript/misc/gc_node.h"
-
-// Simple case — single temporary
 gc_local<TypeDecl> td(new TypeDecl(Type::tVoid));
-fakeExpr->type = td;  // implicit conversion to TypeDecl*
-// td is deleted when gc_local goes out of scope
-
-// Complex case — multiple temporaries with vector
-vector<gc_local<TypeDecl>> locals;
-locals.emplace_back(new TypeDecl(Type::tHandle));
-fakeVariable->type = locals.back();
-locals.emplace_back(new TypeDecl(Type::tInt));
-indexExpr->type = locals.back();
-// all deleted when vector goes out of scope
+fakeExpr->type = td;  // implicit conversion to T*
+// td deleted when gc_local goes out of scope
 ```
 
-**When to use:**
-- `DebugInfoHelper::makeTypeInfo` / `makeFunctionDebugInfo` — creates TypeDecl for debug info, discarded after
-- `ast_simulate.cpp` — fake expressions/variables for simulation use TypeDecl temporarily
-- Any C++ code that creates `new TypeDecl(...)` outside of compilation (where gc_guard doesn't cover)
+Use `gc_guard` for scoped GC collection in C++ code that creates many temporaries.
 
-**When NOT needed:**
-- TypeDecl created during compilation (covered by compile gc_guard + gc_collect)
-- TypeDecl stored in module AST (reachable from module root, collected by gc_collect)
-- TypeDecl created inside a `gc_guard` scope (swept when guard exits)
+## GC architecture (for understanding, not usually needed for migration)
 
-**Beware of TypeDecl copy constructor:** `new TypeDecl(*src)` recursively creates `new TypeDecl` for `firstType`, `secondType`, and each `argType`. A single `gc_local` on the root does NOT clean up children. Solutions:
-- **Best:** Don't copy — use the original pointer directly if you don't modify it: `varExpr->type = var->type;`
-- **If you must copy a simple type** (no sub-types): `gc_local` on root is sufficient
-- **If the copy has sub-types:** Use `vector<gc_local<TypeDecl>>` and collect all nodes, or use `makeBlockType`-style collection
+- `gc_node`: base class with doubly-linked list, `gc_magic` tag, unique `gc_id`, `gc_owner` pointer
+- `gc_root`: owns a linked list of gc_nodes. Thread-local root is the default allocation target
+- `new T(...)` for gc_node types: constructor links to `gc_root::gc_active_root`
+- `Module::gc_collect(from)`: walks all reachable AST nodes, moves them from `from` root to module root
+- `gc_root::gc_sweep()`: deletes all nodes remaining on a root (unreachable = garbage)
+- `gc_guard`: RAII — redirects active root to a local root, sweeps on destruction
+- `gc_local<T>`: RAII — unlinks from GC, deletes via C++ destructor (for temporaries)
+- `ast_gc_guard()`: daScript-side wrapper for tools/utilities creating AST nodes at runtime
 
-## ast_gc_guard for daScript tools and utilities
+## ast_gc_guard for daScript tools
 
-Any daScript program or utility that creates TypeDecl nodes at runtime (via `clone_type`, `new TypeDecl`, `qmacro_type`, `typeinfo ast_typedecl`, etc.) should wrap the relevant scope in `ast_gc_guard()`. Without it, the leak detector reports "GC APP LEAK" at exit.
+Any daScript program that creates AST nodes at runtime (via `clone_type`, `new TypeDecl`, `qmacro`, etc.) outside of normal compilation should wrap the scope in `ast_gc_guard()`:
 
 ```das
 require daslib/ast
 
 [export]
-def main {
+def main() {
     ast_gc_guard() {
-        // ... code that creates TypeDecl nodes ...
+        // ... code that creates AST nodes ...
     }
 }
 ```
 
-**Known sites requiring ast_gc_guard:**
-- `doc/reflections/das2rst.das` — creates 300+ TypeDecl nodes during documentation generation
-- `utils/aot/main.das` — AOT compilation creates temporary TypeDecl during each file
-- `modules/dasLLVM/daslib/llvm_jit.das` — JIT compilation creates TypeDecl during visitor walks
-- `modules/dasLLVM/daslib/llvm_exe.das` — same pattern for EXE generation
-- `modules/dasLLVM/daslib/llvm_macro.das` — simulate macros create TypeDecl in loops
+Without this, the leak detector reports "GC APP LEAK" at exit.
 
-## Common Gotchas
+## Debugging GC leaks
 
-1. **`const TypeDeclPtr &` params** — many C++ functions take these. Now just `TypeDeclPtr` by value (pointer copy). The `const &` was only there because smart_ptr copy bumped refcount.
+1. Run program → check output for "GC COMPILE LEAK" / "GC APP LEAK" with node IDs
+2. Set `DAS_GC_BREAK_ON_ID=<id>` env var → get full C++ + daScript stack trace at allocation
+3. Find the `.das` code creating the node
+4. Wrap the scope in `ast_gc_guard() { ... }` or fix the ownership path
 
-2. **Functions returning TypeDeclPtr** — now return `TypeDecl *`. No ownership transfer, no refcount change. The pointer points to a gc_node on some root.
+## Verification workflow
 
-3. **TypeDecl copy constructor** — creates a NEW gc_node on the active root. Deep-clones sub-types. This is correct: copied TypeDecl is a new allocation.
+After migrating `.das` code:
 
-4. **No cascading delete** — when a TypeDecl is swept, its `firstType`/`secondType`/`argTypes` are NOT deleted (they're raw pointers to other gc_nodes, independently managed). `dimExpr` (still `vector<ExpressionPtr>`) DOES cascade via smart_ptr.
+1. **Compile-only check:** `bin/Release/daslang.exe -compile-only your_file.das`
+2. **Run tests:** `bin/Release/daslang.exe dastest/dastest.das -- --test your_tests/`
+3. **Check for GC leaks:** look for "GC COMPILE LEAK" / "GC APP LEAK" in output
+4. **Common compile errors after migration:**
+   - `"can only move to from a reference"` → change `<-` to `=`
+   - `"too many matching functions"` → duplicate overload, remove trampoline
+   - `"variable is not a smart pointer"` → remove `inscope`
+   - `"function not found: get_ptr"` → remove `get_ptr()`, value is already raw pointer
 
-5. **Annotation TypeDeclPtr fields** — 8 annotation classes store TypeDeclPtr. These are initialized during module construction and collected via `Annotation::gc_collect(gc_root*)` virtual.
+## Search patterns for finding code that needs migration
 
-6. **Parser error recovery** — `deleteTypeDeclarationList()` in `parser_impl.cpp` manually deletes TypeDecl during error recovery. With gc, these are already on the thread-local root and will be swept. Remove the manual delete.
-
-7. **`astTypeInfo` cache** — `Program::astTypeInfo` stores raw `TypeDecl*`. These point to TypeDecl owned by ExprTypeInfo expressions. Safe as long as the owning expression is reachable.
-
-8. **CRITICAL: All `TypeDeclPtr` fields/locals MUST be initialized to `nullptr`** — `smart_ptr<TypeDecl>` auto-initialized to null. `TypeDecl*` does NOT. Every struct field, class member, and local variable of type `TypeDeclPtr` that was previously `smart_ptr<TypeDecl>` must get `= nullptr` explicitly. Failure to do this causes random crashes from uninitialized pointer dereference (typically reads from 0xFFFFFFFFFFFFFFFF or 0xCDCDCDCDCDCDCDCD). Use this regex to find violations: `TypeDeclPtr\s+\w+;` (without `= nullptr`).
-
-9. **Parser .ypp files are bison/flex sources** — `ds_parser.cpp`, `ds2_parser.cpp` are generated from `.ypp` by bison. Edit only the `.ypp` source files — CMake regenerates the `.cpp` automatically via bison when `.ypp` changes. Never manually edit generated `.cpp` parser files.
-
-10. **safebox template changed** — `safebox<DataType, VT>` now takes a second template parameter (default `smart_ptr<DataType>`). For gc_node types, pass `TypeDeclPtr` explicitly: `safebox<TypeDecl, TypeDeclPtr>`.
-
-11. **DLL interface cannot export `thread_local`** — On Windows, `__declspec(dllexport)` on a struct/class with `static thread_local` members causes C2492. Solution: use accessor functions (`gc_get_thread_root()`, `gc_get_active_root()`) with `static thread_local` in the .cpp file.
-
-12. **Stack-allocated TypeDecl is fatal** — TypeDecl inherits gc_node. Stack allocation registers with gc_root in constructor. Destructor fires outside gc_sweep, corrupting gc_root linked list. Always use `gc_local<TypeDecl>` for temporaries or `new TypeDecl` for heap.
-
-13. **Duplicate overloads after migration** — any daScript module with both `def foo(td : TypeDecl?)` and `def foo(td : TypeDeclPtr)` overloads now has ambiguous dispatch. Remove the trampoline overload. Found in: `daslib/rst.das` (`describe_type_short`, `describe_type`).
-
-14. **`get_ptr()` on raw TypeDecl pointer** — `get_ptr()` works on `smart_ptr<T>` only. After migration, `field._type` is already `TypeDecl?` — calling `get_ptr()` on it is a compile error. Found in: `daslib/rst.das` (3 sites with `get_ptr(arg._type)`).
-
-## Documentation Update Checklist
-
-After migrating TypeDecl (or any future type), update documentation:
-
-### Generated stdlib docs (das2rst)
-1. Wrap `das2rst.das` main in `ast_gc_guard()` if TypeDecl nodes are created
-2. Run `bin/Release/daslang.exe doc/reflections/das2rst.das`
-3. Fill new `// stub` files in `doc/source/stdlib/handmade/` — check old-hash versions for descriptions to reuse
-4. Add new functions to `group_by_regex` calls in `das2rst.das` to prevent "Uncategorized" sections
-5. Regenerate, verify no Uncategorized: `grep -c Uncategorized doc/source/stdlib/generated/*.rst | grep -v ':0$'`
-
-### RST language and tutorial docs
-Update all `.rst` files under `doc/source/reference/` that reference changed types:
-- **Prose**: `TypeDeclPtr` -> `TypeDecl?` in descriptions, `smart_ptr<TypeDecl>` -> `TypeDecl?`
-- **Code blocks**: `var inscope td <- clone_type(x)` -> `var td = clone_type(x)`, etc.
-- **Removed patterns**: delete explanations about `inscope` double-free, `move()` for sub-types
-- **API signatures** in `macros.rst`: keep `TypeDeclPtr` — it's still a valid typedef used in `daslib/ast.das`
-- **C++ context** (`cpp_api.rst`): use `TypeDecl*` not `TypeDecl?`
-
-Search patterns to find stale RST content:
 ```bash
-grep -rn "var inscope.*TypeDecl\|var inscope.*clone_type\|smart_ptr<TypeDecl>\|move.*firstType.*<|" doc/source/reference/
+# In .das files — find smart_ptr usage for migrated types
+grep -rn "smart_ptr<Expr\|smart_ptr<Function\|smart_ptr<Structure\|smart_ptr<Enumeration\|smart_ptr<Variable\|smart_ptr<MakeFieldDecl\|smart_ptr<MakeStruct\|smart_ptr<TypeDecl" *.das
+
+# Find inscope with migrated types
+grep -rn "var inscope.*ExpressionPtr\|var inscope.*TypeDeclPtr\|var inscope.*FunctionPtr\|var inscope.*StructurePtr\|var inscope.*EnumerationPtr\|var inscope.*VariablePtr\|var inscope.*MakeFieldDeclPtr" *.das
+
+# Find inscope with new/clone/qmacro for migrated types
+grep -rn "var inscope.*<-.*new Expr\|var inscope.*<-.*clone_expression\|var inscope.*<-.*clone_type\|var inscope.*<-.*qmacro\|var inscope.*<-.*new TypeDecl\|var inscope.*<-.*new Function\|var inscope.*<-.*new Variable" *.das
+
+# Find return <- for migrated types
+grep -rn "return <- .*qmacro\|return <- .*new Expr\|return <- .*clone_expression\|return <- default<ExpressionPtr>\|return <- .*new TypeDecl" *.das
+
+# Find move_new for migrated types
+grep -rn "move_new\|move <|" *.das
+
+# Find get_ptr() that may be redundant
+grep -rn "get_ptr(" *.das
+
+# In C++ files — find make_smart for migrated types
+grep -rn "make_smart<TypeDecl>\|make_smart<Expr\|make_smart<Function>\|make_smart<Structure>\|make_smart<Enumeration>\|make_smart<Variable>\|make_smart<MakeFieldDecl>\|make_smart<MakeStruct>" *.cpp *.h
 ```
-
-### Sphinx verification
-```bash
-cd doc && rm -rf sphinx-build ../site/doc
-.venv/Scripts/sphinx-build.exe -b html -d sphinx-build source ../site/doc 2>&1 | grep -iE "warning:|error:"
-```
-Must introduce no new warnings.
-
-## Verification Workflow
-
-After completing the migration, verify with this sequence:
-
-1. **Build**: `cmake --build build --config Release -j 64 -- /nodeReuse:false`
-2. **Lint all modified .das files**: `bin/Release/daslang.exe utils/lint/main.das -- daslib tutorials examples`
-   - 0 crashes = good. Compile errors from missing C++ prereqs are expected.
-   - Watch for: "can only move to from a reference" (need `=` not `<-`), "too many matching functions" (duplicate overloads), "can't delete" (stale `var inscope`)
-3. **Format all modified .das files**: Use MCP `format_file` tool on each
-4. **Run das2rst**: `bin/Release/daslang.exe doc/reflections/das2rst.das` — should produce no output (no leaks)
-5. **Run tests**: `bin/Release/daslang.exe dastest/dastest.das -- --test tests`
-6. **AOT build+test**: `cmake --build build --config Release --target test_aot` then `bin/Release/test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests`
-7. **Sphinx build**: see above
-
-## Debugging GC Leaks
-
-1. Build debug, run the leaking program -> get node IDs from "GC APP LEAK" / "GC COMPILE LEAK" output
-2. Set `DAS_GC_BREAK_ON_ID=<first_id>` env var -> get full C++ + daScript stack trace
-3. Find the `.das` code creating the TypeDecl (usually `clone_type` in a visitor or macro)
-4. Wrap the visitor/macro scope in `ast_gc_guard() { ... }`

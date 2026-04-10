@@ -15,7 +15,7 @@ namespace das {
         CaptureLambda(bool cm);
         virtual void preVisit(ExprVar *expr) override;
         virtual void preVisit(ExprCall *expr) override;
-        das_hash_set<VariablePtr, smart_ptr_hash> scope;
+        das_hash_set<VariablePtr> scope;
         safe_var_set capt;
         bool fail = false;
         bool inClassMethod = false;
@@ -31,25 +31,25 @@ namespace das {
 
     protected:
         Structure *currentStructure = nullptr;
-        FunctionPtr func;
-        VariablePtr globalVar;
+        FunctionPtr func = nullptr;
+        VariablePtr globalVar = nullptr;
         vector<VariablePtr> local;
         vector<ExpressionPtr> loop;
         vector<ExprBlock *> blocks;
         vector<ExprBlock *> scopes;
         vector<ExprWith *> with;
         struct AssumeEntry {
-            smart_ptr<ExprAssume>   expr;
+            ExprAssume *   expr;
             das_hash_set<string>    vars;   // ExprVar names referenced in subexpr
         };
         vector<AssumeEntry> assume;
-        vector<smart_ptr<ExprAssume>> assumeType;
+        vector<ExprAssume *> assumeType;
         vector<size_t> varStack;
         vector<size_t> assumeStack;
         vector<size_t> assumeTypeStack;
         vector<bool> inFinally;
         vector<Function *> inInfer;
-        smart_ptr<ExprReturn> oneReturn;
+        ExprReturn * oneReturn;
         int32_t returnCount = 0;
         bool canFoldResult = true;
         das_hash_set<int32_t> labels;
@@ -238,7 +238,7 @@ namespace das {
 
         ExprWith *hasMatchingWith(const string &fieldName) const;
 
-        ExpressionPtr promoteToProperty(ExprVar *expr, const ExpressionPtr &right);
+        ExpressionPtr promoteToProperty(ExprVar *expr, ExpressionPtr right);
 
         vector<TypeMacro *> findTypeMacro(const string &name) const;
 
@@ -317,7 +317,7 @@ namespace das {
         // ExprRef2Ptr
         virtual ExpressionPtr visit(ExprRef2Ptr *expr) override;
         // ExprNullCoalescing
-        void propagateAlwaysSafe(const ExpressionPtr &expr);
+        void propagateAlwaysSafe(ExpressionPtr expr);
         virtual ExpressionPtr visit(ExprNullCoalescing *expr) override;
         // ExprStaticAssert
         virtual void preVisit(ExprStaticAssert *expr) override;
@@ -403,7 +403,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprIsVariant *expr) override;
         // ExprField
         bool verifyPrivateFieldLookup(ExprField *expr);
-        ExpressionPtr promoteToProperty(ExprField *expr, const ExpressionPtr &right, const string &opName = "clone");
+        ExpressionPtr promoteToProperty(ExprField *expr, ExpressionPtr right, const string &opName = "clone");
 
         LineInfo makeConstAt(ExprField *expr) const;
 
@@ -578,9 +578,9 @@ namespace das {
         bool inferArguments(vector<TypeDeclPtr> &types, const vector<ExpressionPtr> &arguments);
 
         FunctionPtr inferFunctionCall(ExprLooksLikeCall *expr, InferCallError cerr = InferCallError::functionOrGeneric, Function *lookupFunction = nullptr, bool failOnMissingCtor = true, bool visCheck = true);
-        ExpressionPtr inferGenericOperator3(const string &opN, const LineInfo &expr_at, const ExpressionPtr &arg0, const ExpressionPtr &arg1, const ExpressionPtr &arg2, InferCallError err = InferCallError::tryOperator);
-        ExpressionPtr inferGenericOperator(const string &opN, const LineInfo &expr_at, const ExpressionPtr &arg0, const ExpressionPtr &arg1, InferCallError err = InferCallError::tryOperator);
-        ExpressionPtr inferGenericOperatorWithName(const string &opN, const LineInfo &expr_at, const ExpressionPtr &arg0, const string &arg1, InferCallError err = InferCallError::tryOperator);
+        ExpressionPtr inferGenericOperator3(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, ExpressionPtr arg1, ExpressionPtr arg2, InferCallError err = InferCallError::tryOperator);
+        ExpressionPtr inferGenericOperator(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, ExpressionPtr arg1, InferCallError err = InferCallError::tryOperator);
+        ExpressionPtr inferGenericOperatorWithName(const string &opN, const LineInfo &expr_at, ExpressionPtr arg0, const string &arg1, InferCallError err = InferCallError::tryOperator);
 
         Variable *findMatchingBlockOrLambdaVariable(const string &name);
 

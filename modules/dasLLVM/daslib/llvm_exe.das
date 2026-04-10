@@ -172,7 +172,7 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def override preVisitFunction(var fun : FunctionPtr) : void {
-        uid.reset(get_ptr(fun))
+        uid.reset(fun)
     }
 
     def override visitFunction(fun : FunctionPtr) : FunctionPtr {
@@ -191,7 +191,7 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def make_call(expr : smart_ptr<ExprCallFunc>) {
+    def make_call(expr : ExprCallFunc?) {
         if (expr.func == null) { return ; }
         if (has_intrinsic(expr)) { return ; }
         if (expr.func.flags.builtIn) {
@@ -261,23 +261,23 @@ class CollectExternVisitor : AstVisitor {
         any_unimplemented = true
     }
 
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) {
+    def override preVisitExprCall(expr : ExprCall?) {
         make_call(expr)
     }
 
-    def override preVisitExprOp2(var expr : smart_ptr<ExprOp2>) {
+    def override preVisitExprOp2(var expr : ExprOp2?) {
         if (isExprOp2_Func(expr)) {
             make_call(expr)
         }
     }
 
-    def override preVisitExprOp1(var expr : smart_ptr<ExprOp1>) {
+    def override preVisitExprOp1(var expr : ExprOp1?) {
         if (isExprOp1_Func(expr)) {
             make_call(expr)
         }
     }
 
-    def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
+    def override preVisitExprNew(expr : ExprNew?) {
         if (expr.typeexpr.isHandle) {
             let name = uid.get_new(expr.typeexpr)
             if (initialize(name)) {
@@ -305,7 +305,7 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprDelete(var expr : smart_ptr<ExprDelete>) {
+    def override preVisitExprDelete(var expr : ExprDelete?) {
         assume subexpr = expr.subexpr
         assume subT = expr.subexpr._type
         if (subT.isPointer) {
@@ -319,7 +319,7 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprClone(expr : smart_ptr<ExprClone>) : void {
+    def override preVisitExprClone(expr : ExprClone?) : void {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
             let name = uid.get_clone_type(leftT)
@@ -329,7 +329,7 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
+    def override preVisitExprAddr(expr : ExprAddr?) {
         let fn_ptr = register_function(expr.func)
         if (fn_ptr == null) {
             return
@@ -343,13 +343,13 @@ class CollectExternVisitor : AstVisitor {
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
-    def override preVisitExprMakeStructIndex(expr : smart_ptr<ExprMakeStruct>; index : int; last : bool) : void {
+    def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
         if (expr.constructor != null && !expr.constructor.moreFlags.requestJit) {
             register_function(expr.constructor)
         }
     }
 
-    def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) : void {
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
         let annotationData = (expr._block as ExprBlock).annotationData
         if (annotationData != 0 |> uint64()) {
             add_unimplemented(uid.get_block_ann(expr), expr)
@@ -396,26 +396,26 @@ class CollectExternVisitor : AstVisitor {
         LLVMBuildStore(builder, tab_ptr, tab_method)
     }
 
-    def override preVisitExprAt(expr : smart_ptr<ExprAt>) {
+    def override preVisitExprAt(expr : ExprAt?) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType) {
             add_table_at_call(subExprT)
         }
     }
 
-    def override preVisitExprSetInsert(expr : smart_ptr<ExprSetInsert>) {
+    def override preVisitExprSetInsert(expr : ExprSetInsert?) {
         add_table_at_call(expr.arguments[0]._type)
     }
 
-    def override preVisitExprKeyExists(expr : smart_ptr<ExprKeyExists>) {
+    def override preVisitExprKeyExists(expr : ExprKeyExists?) {
         add_table_find_call(expr.arguments[0]._type)
     }
 
-    def override preVisitExprFind(expr : smart_ptr<ExprFind>) {
+    def override preVisitExprFind(expr : ExprFind?) {
         add_table_find_call(expr.arguments[0]._type)
     }
 
-    def override preVisitExprSafeAt(expr : smart_ptr<ExprSafeAt>) {
+    def override preVisitExprSafeAt(expr : ExprSafeAt?) {
         assume subExprT = expr.subexpr._type
         if (subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)) {
             var etype = subExprT.isPointer ? subExprT.firstType : subExprT
@@ -423,7 +423,7 @@ class CollectExternVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprErase(expr : smart_ptr<ExprErase>) {
+    def override preVisitExprErase(expr : ExprErase?) {
         add_table_erase_call(expr.arguments[0]._type)
     }
 }
@@ -442,8 +442,8 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     // found by name at runtime (e.g. via invoke_in_context).
     for (fn in funcs) {
         if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
-            extern_resolver.uid.reset(get_ptr(fn))
-            extern_resolver.register_function(get_ptr(fn))
+            extern_resolver.uid.reset(fn)
+            extern_resolver.register_function(fn)
             extern_resolver.uid.reset(null)
         }
     }

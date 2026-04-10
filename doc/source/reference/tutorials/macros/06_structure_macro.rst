@@ -162,13 +162,13 @@ Step 3 — Generate a stub describe function
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
-   var inscope bodyExprs : array<ExpressionPtr>
+   var bodyExprs : array<ExpressionPtr>
 
-   bodyExprs |> emplace_new <| qmacro(print($v("{st.name} (version ")))
-   bodyExprs |> emplace_new <| qmacro(print("{obj._version}"))
-   bodyExprs |> emplace_new <| qmacro(print($v("):\n")))
+   bodyExprs |> push <| qmacro(print($v("{st.name} (version ")))
+   bodyExprs |> push <| qmacro(print("{obj._version}"))
+   bodyExprs |> push <| qmacro(print($v("):\n")))
 
-   var inscope fn <- qmacro_function(funcName) $(obj : $t(st)) {
+   var fn = qmacro_function(funcName) $(obj : $t(st)) {
        $b(bodyExprs)
    }
    fn.flags |= FunctionFlags.generated
@@ -235,10 +235,10 @@ Step 2 — Find the stub function
 .. code-block:: das
 
    let funcName = "describe_{st.name}"
-   var inscope fn <- st._module |> find_unique_function(funcName)
+   var fn = st._module |> find_unique_function(funcName)
 
 ``find_unique_function`` (from ``daslib/ast_boost``) searches a
-module for a function by name.  It returns a ``smart_ptr<Function>``
+module for a function by name.  It returns a ``FunctionPtr``
 pointing to the same object in the module — modifications through
 this pointer affect the actual function.
 
@@ -273,6 +273,7 @@ Step 4 — Append field-printing statements
            blk.list |> emplace_new <| qmacro(print($v("  {fld.name} = ")))
            blk.list |> emplace_new <| qmacro(print("{obj.$f(fld.name)}"))
            blk.list |> emplace_new <| qmacro(print($v("\n")))
+
        }
    }
 

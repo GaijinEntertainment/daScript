@@ -105,7 +105,7 @@ def writeStandaloneCtor(cfg : StandaloneContextCfg; initFunctions : string; var 
                     panic("Internal compiler errors. Simulating variable which is not used{pvar.name}");
                     return
                 }
-                lookupVariableTable.push(pvar.get_ptr());
+                lookupVariableTable.push(pvar);
             });
         });
     }
@@ -233,20 +233,18 @@ class StandaloneContextGen : CppAot {
             pm |> for_each_global($(pvar) {
                 if (pvar.index < 0 || !pvar.flags.used) return ;
                 if (pvar._module == prog.getThisModule) return ;
-                globals.push(pvar.get_ptr());
+                globals.push(pvar);
             });
         });
 
         for (variable in globals) {
-            assume smart_var_ptr = unsafe(reinterpret<VariablePtr>(variable));
-            preVisitGlobalLetVariable(smart_var_ptr, false);
+            preVisitGlobalLetVariable(variable, false);
             if (variable.init != null) {
-                preVisitGlobalLetVariableInit(smart_var_ptr, variable.init);
+                preVisitGlobalLetVariableInit(variable, variable.init);
                 visit_expression(variable.init, adapter);
-
-                variable.init := visitGlobalLetVariableInit(smart_var_ptr, variable.init);
+                variable.init := visitGlobalLetVariableInit(variable, variable.init);
             }
-            let varn <- visitGlobalLetVariable(smart_var_ptr, false);
+            let varn <- visitGlobalLetVariable(variable, false);
         }
 
         tab --;

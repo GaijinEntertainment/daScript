@@ -1,0 +1,1 @@
+Sets or clears the generated flag on the specified function and all expressions within its body. Generated functions are treated as compiler-produced rather than user-written.

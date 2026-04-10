@@ -1132,6 +1132,15 @@ def clone(var args; var nargs : array<smart_ptr<auto(TT)>>) {
     delete nargs
 }
 
+[expect_any_vector(args), unsafe_when_not_clone_array]
+def clone(var args; var nargs : array<auto(TT)?>) {
+    _::clear(args)
+    for (narg in nargs) {
+        _::push(args, narg)
+    }
+    delete nargs
+}
+
 [unsafe_outside_of_for, nodiscard]
 def keys(a : table<auto(keyT); auto(valT)> ==const | #) : iterator<keyT -const> {
     var it : iterator<keyT -const>

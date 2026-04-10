@@ -90,9 +90,9 @@ class LiveVarsPass : AstPassMacro {
             add_module_require(mod, archiveModule, false)
         }
         // Build per-variable save blocks
-        var inscope saveBlocks : array<ExpressionPtr>
+        var saveBlocks : array<ExpressionPtr>
         for (varName, varKey, varHash in live_var_names, live_var_keys, live_var_hashes) {
-            saveBlocks |> emplace_new <| qmacro_block() {
+            saveBlocks |> push <| qmacro_block() {
                 var ser = new MemSerializer()
                 var arch = Archive(reading = false, stream = ser)
                 var init_hash = $v(varHash)
@@ -104,15 +104,15 @@ class LiveVarsPass : AstPassMacro {
             }
         }
         // Generate __before_reload_live_vars (save)
-        var inscope saveFn <- qmacro_function("__before_reload_live_vars") $() {
+        var saveFn = qmacro_function("__before_reload_live_vars") $() {
             $b(saveBlocks)
         }
         saveFn.flags |= FunctionFlags.exports | FunctionFlags.generated
         compiling_module() |> add_function(saveFn)
         // Build per-variable load blocks
-        var inscope loadBlocks : array<ExpressionPtr>
+        var loadBlocks : array<ExpressionPtr>
         for (varName, varKey, varHash in live_var_names, live_var_keys, live_var_hashes) {
-            loadBlocks |> emplace_new <| qmacro_block() {
+            loadBlocks |> push <| qmacro_block() {
                 var data : array<uint8>
                 if (live_load_bytes($v(varKey), data) && length(data) > 0) {
                     var ser = new MemSerializer(data)
@@ -127,7 +127,7 @@ class LiveVarsPass : AstPassMacro {
             }
         }
         // Generate __after_reload_live_vars (load)
-        var inscope loadFn <- qmacro_function("__after_reload_live_vars") $() {
+        var loadFn = qmacro_function("__after_reload_live_vars") $() {
             $b(loadBlocks)
         }
         loadFn.flags |= FunctionFlags.exports | FunctionFlags.generated

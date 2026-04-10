@@ -12,10 +12,10 @@ namespace das {
     typedef TypeDecl * TypeDeclPtr;
 
     class Structure;
-    typedef smart_ptr<Structure> StructurePtr;
+    typedef Structure * StructurePtr;
 
     class Enumeration;
-    typedef smart_ptr<Enumeration> EnumerationPtr;
+    typedef Enumeration * EnumerationPtr;
 
     struct Annotation;
     typedef smart_ptr<Annotation> AnnotationPtr;
@@ -24,7 +24,7 @@ namespace das {
     typedef smart_ptr<TypeAnnotation> TypeAnnotationPtr;
 
     struct Expression;
-    typedef smart_ptr<Expression> ExpressionPtr;
+    typedef Expression * ExpressionPtr;
 
     typedef das_map<string,TypeDeclPtr> AliasMap;
     typedef das_map<TypeDecl *,int> OptionsMap;
@@ -51,13 +51,12 @@ namespace das {
             gcFlag_heap = (1<<0),
             gcFlag_stringHeap = (1<<1)
         };
-        TypeDecl() = default;
+        TypeDecl() { gc_magic = GC_MAGIC_TYPEDECL; }
         TypeDecl(const TypeDecl & decl);
         TypeDecl & operator = (const TypeDecl & decl) = delete;
-        TypeDecl(Type tt) : baseType(tt) {}
-        TypeDecl(Structure * sp) : baseType(Type::tStructure), structType(sp) {}
-        TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
-        TypeDecl(const EnumerationPtr & ep);
+        TypeDecl(Type tt) : baseType(tt) { gc_magic = GC_MAGIC_TYPEDECL; }
+        TypeDecl(Structure * sp) : baseType(Type::tStructure), structType(sp) { gc_magic = GC_MAGIC_TYPEDECL; }
+        TypeDecl(Enumeration * ep);
         TypeDeclPtr visit ( Visitor & vis );
         friend StringWriter& operator<< (StringWriter& stream, const TypeDecl & decl);
         string getMangledName ( bool fullName=false ) const;

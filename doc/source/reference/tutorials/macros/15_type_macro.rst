@@ -17,13 +17,13 @@ inference.
 
 ``AstTypeMacro`` is the base class.  It has a single method:
 
-``visit(prog : ProgramPtr; mod : Module?; td : TypeDecl?; passT : TypeDecl?) → TypeDecl?``
+``visit(prog : ProgramPtr; mod : Module?; td : TypeDeclPtr; passT : TypeDeclPtr) → TypeDeclPtr``
    ``prog`` is the program being compiled.
    ``mod`` is the module that registered the macro.
    ``td`` is the ``TypeDecl`` node representing the macro invocation —
    its ``dimExpr`` array carries the arguments.
    ``passT`` is non-null only in a generic context (see below).
-   Return the resolved ``TypeDecl?``, or null on error.
+   Return the resolved ``TypeDeclPtr``, or null on error.
 
 The annotation ``[type_macro(name="…")]`` registers a class as a type
 macro.  The name string determines the identifier used in type

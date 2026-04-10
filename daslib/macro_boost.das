@@ -28,16 +28,16 @@ class MacroVerifyMacro : AstFunctionAnnotation {
     //!    if !expr
     //!        macro_error(prog,at,message)
     //!        return [[ExpressionPtr]]
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         // if ..
-        var inscope res <- qmacro_block() {
+        var res = qmacro_block() {
             if (!$e(call.arguments[0])) {
                 macro_error($e(call.arguments[1]), $e(call.arguments[2]), $e(call.arguments[3]))
-                return <- default<ExpressionPtr>
+                return null
             }
         }
         res |> force_at(call.at)
-        return <- res
+        return res
     }
 }
 
@@ -46,23 +46,25 @@ class CaptureBlock : AstVisitor {
     //! AST visitor that captures variables from a block scope.
     @do_not_delete scope : table<Variable?>
     @do_not_delete captured : table<Variable?; ExprVar?>
-    def override preVisitExprVar(expr : smart_ptr<ExprVar>) : void {
+    def override preVisitExprVar(expr : ExprVar?) : void {
         if (!(expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block)) {
             return
         }
-        let vptr = get_ptr(expr.variable)
+        let vptr = expr.variable
         if (!(scope |> key_exists(vptr))) {
-            captured.insert(vptr, unsafe(reinterpret<ExprVar?>(get_ptr(expr))))
+            unsafe {
+                captured[vptr] = reinterpret<ExprVar?> expr
+            }
         }
     }
-    def override preVisitExprLetVariable(expr : smart_ptr<ExprLet>; arg : VariablePtr; lastArg : bool) : void {
-        scope |> insert(get_ptr(arg))
+    def override preVisitExprLetVariable(expr : ExprLet?; arg : VariablePtr; lastArg : bool) : void {
+        scope |> insert(arg)
     }
-    def override preVisitExprForVariable(expr : smart_ptr<ExprFor>; svar : VariablePtr; last : bool) : void {
-        scope |> insert(get_ptr(svar))
+    def override preVisitExprForVariable(expr : ExprFor?; svar : VariablePtr; last : bool) : void {
+        scope |> insert(svar)
     }
-    def override preVisitExprBlockArgument(blk : smart_ptr<ExprBlock>; arg : VariablePtr; lastArg : bool) : void {
-        scope |> insert(get_ptr(arg))
+    def override preVisitExprBlockArgument(blk : ExprBlock?; arg : VariablePtr; lastArg : bool) : void {
+        scope |> insert(arg)
     }
 }
 
@@ -79,7 +81,7 @@ def public capture_block(expr : ExpressionPtr) : array<CapturedVariable> {
     var astVisitor = new CaptureBlock()
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [for (k, v in keys(astVisitor.captured), values(astVisitor.captured)); CapturedVariable(variable=k, expression=v) ]
+    var res := [for (k, v in keys(astVisitor.captured), values(astVisitor.captured)); CapturedVariable(variable=k, expression=v) ]
     unsafe {
         delete astVisitor
     }
@@ -91,14 +93,16 @@ class ColletFinally : AstVisitor {
     //! AST visitor that collects finally blocks.
     @do_not_delete blocks : table<ExprBlock?>
     alwaysFor : bool
-    def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) : void {
-        if (length(blk.finalList) > 0) {
-            blocks |> insert(get_ptr(blk))
-        } elif (alwaysFor && blk.blockFlags.forLoop) {
-            blocks |> insert(get_ptr(blk))
+    def override preVisitExprBlock(blk : ExprBlock?) : void {
+        unsafe {
+            if (length(blk.finalList) > 0) {
+                blocks |> insert(reinterpret<ExprBlock?> blk)
+            } elif (alwaysFor && blk.blockFlags.forLoop) {
+                blocks |> insert(reinterpret<ExprBlock?> blk)
+            }
         }
     }
-    def override canVisitMakeBlockBody(expr : smart_ptr<ExprMakeBlock>) : bool {
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
         return false
     }
 }
@@ -111,7 +115,7 @@ def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
     var astVisitor = new ColletFinally(alwaysFor = alwaysFor)
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [for (k in keys(astVisitor.blocks)); k ]
+    var res := [for (k in keys(astVisitor.blocks)); k ]
     unsafe {
         delete astVisitor
     }
@@ -122,10 +126,10 @@ def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
 class ColletLabels : AstVisitor {
     //! AST visitor that collects label statements.
     labels : table<int>
-    def override preVisitExprLabel(expr : smart_ptr<ExprLabel>) : void {
+    def override preVisitExprLabel(expr : ExprLabel?) : void {
         labels |> insert(expr.labelName)
     }
-    def override canVisitMakeBlockBody(expr : smart_ptr<ExprMakeBlock>) : bool {
+    def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {
         return false
     }
 }
@@ -137,7 +141,7 @@ def public collect_labels(expr : ExpressionPtr) {
     var astVisitor = new ColletLabels()
     var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
-    var res <- [for (k in keys(astVisitor.labels)); k ]
+    var res := [for (k in keys(astVisitor.labels)); k ]
     unsafe {
         delete astVisitor
     }

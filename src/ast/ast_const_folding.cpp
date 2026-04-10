@@ -315,7 +315,7 @@ namespace das {
 
     ExpressionPtr FoldingVisitor::evalAndFold ( Expression * expr ) {
         if ( expr->type->baseType == Type::tString ) return evalAndFoldString(expr);
-        if ( expr->rtti_isConstant() ) return expr;
+        if ( expr->rtti_isConstant() ) return expr->clone();
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
@@ -338,7 +338,7 @@ namespace das {
                 }
                 auto cef = expr->type->enumType->find(ival, "");
                 if ( cef.empty() ) return expr; // it folded to unsupported value
-                auto sim = make_smart<ExprConstEnumeration>(expr->at, cef, expr->type);
+                auto sim = new ExprConstEnumeration(expr->at, cef, expr->type);
                 sim->type = expr->type->enumType->makeEnumType();
                 sim->constexpression = true;
                 sim->at = encloseAt(expr);
@@ -355,7 +355,7 @@ namespace das {
                 case Type::tBitfield64: ival = cast<uint64_t>::to(value); break;
                 default: DAS_ASSERTF(0,"we should not be here. unsupported bitfield type");
                 }
-                auto sim = make_smart<ExprConstBitfield>(expr->at, ival);
+                auto sim = new ExprConstBitfield(expr->at, ival);
                 sim->type = new TypeDecl(*expr->type);
                 sim->constexpression = true;
                 sim->at = encloseAt(expr);
@@ -371,7 +371,7 @@ namespace das {
                 expr->type->ref = wasRef;
                 sim->type = new TypeDecl(*expr->type);
                 sim->constexpression = true;
-                ((ExprConst *)sim.get())->foldedNonConst = !expr->type->constant;
+                ((ExprConst *)sim)->foldedNonConst = !expr->type->constant;
                 sim->at = encloseAt(expr);
                 reportFolding();
                 return sim;
@@ -382,7 +382,7 @@ namespace das {
     }
 
     ExpressionPtr FoldingVisitor::evalAndFoldString ( Expression * expr ) {
-        if ( expr->rtti_isStringConstant() ) return expr;
+        if ( expr->rtti_isStringConstant() ) return expr->clone();
         bool failed;
         vec4f value = eval(expr, failed);
         if ( !failed ) {
@@ -391,7 +391,7 @@ namespace das {
             TypeInfo * pTypeInfo = helper.makeTypeInfo(nullptr,expr->type);
             expr->type->ref = b4ref;
             auto res = debug_value(value, pTypeInfo, PrintFlags::string_builder);
-            auto sim = make_smart<ExprConstString>(expr->at, res);
+            auto sim = new ExprConstString(expr->at, res);
             sim->type = new TypeDecl(Type::tString);
             sim->constexpression = true;
             sim->foldedNonConst = !expr->type->constant;
@@ -403,7 +403,7 @@ namespace das {
         }
     }
 
-    ExpressionPtr FoldingVisitor::cloneWithType ( const ExpressionPtr & expr ) {
+    ExpressionPtr FoldingVisitor::cloneWithType ( ExpressionPtr expr ) {
         auto rexpr = expr->clone();
         if ( expr->type ) rexpr->type = new TypeDecl(*expr->type);
         return rexpr;
@@ -411,29 +411,29 @@ namespace das {
 
     ExpressionPtr FoldingVisitor::evalAndFoldStringBuilder ( ExprStringBuilder * expr )  {
         // concatinate all constant strings, which are close together
-        smart_ptr<ExprConstString> str;
+        ExprConstString * str = nullptr;
         for ( auto it=expr->elements.begin(); it != expr->elements.end(); ) { // note - loop has erase, don't store 'end'
             auto & elem = *it;
             if ( elem->rtti_isStringConstant() ) {
-                auto selem = static_pointer_cast<ExprConstString>(elem);
+                auto selem = static_cast<ExprConstString*>(elem);
                 if ( str ) {
                     str->text += selem->text;
                     it = expr->elements.erase(it);
                     reportFolding();
                 } else {
-                    str = static_pointer_cast<ExprConstString>(cloneWithType(selem));
+                    str = static_cast<ExprConstString*>(cloneWithType(selem));
                     elem = str;
                     ++ it;
                 }
             } else {
-                str.reset();
+                str = nullptr;
                 ++ it;
             }
         }
         // check if we are no longer a builder
         if ( expr->elements.size()==0 ) {
             // empty string builder is "" string
-            auto estr = make_smart<ExprConstString>(expr->at,"");
+            auto estr = new ExprConstString(expr->at,"");
             estr->type = new TypeDecl(Type::tString);
             estr->constexpression = true;
             estr->foldedNonConst = !expr->type->constant;
@@ -442,7 +442,7 @@ namespace das {
         } else if ( expr->elements.size()==1 && expr->elements[0]->rtti_isStringConstant() ) {
             // string builder with one string constant is that constant
             reportFolding();
-            ((ExprConstString *)expr->elements[0].get())->foldedNonConst = !expr->type->constant;
+            ((ExprConstString *)expr->elements[0])->foldedNonConst = !expr->type->constant;
             return expr->elements[0];
         } else {
             return expr;
@@ -479,7 +479,7 @@ namespace das {
         bool isNop ( const FunctionPtr & func ) {
             if ( func->builtIn ) return false;
             if ( func->body->rtti_isBlock() ) {
-                auto block = static_pointer_cast<ExprBlock>(func->body);
+                auto block = static_cast<ExprBlock*>(func->body);
                 if ( block->list.size()==0 && block->finalList.size() ) {
                     return true;
                 }
@@ -491,10 +491,10 @@ namespace das {
             if ( func->builtIn ) return nullptr;
             if ( func->userScenario ) return nullptr;
             if ( func->body->rtti_isBlock() ) {
-                auto block = static_pointer_cast<ExprBlock>(func->body);
+                auto block = static_cast<ExprBlock*>(func->body);
                 if ( block->list.size()==1 && block->finalList.size()==0 ) {
                     if ( block->list.back()->rtti_isReturn() ) {
-                        auto ret = static_pointer_cast<ExprReturn>(block->list.back());
+                        auto ret = static_cast<ExprReturn*>(block->list.back());
                         if ( ret->subexpr && ret->subexpr->rtti_isConstant() ) {
                             return cloneWithType(ret->subexpr);
                         }
@@ -578,16 +578,16 @@ namespace das {
                     //  func != ptr
                     if ( expr->left->type->isGoodFunctionType() ) {
                         bool res;
-                        auto lfn = static_pointer_cast<ExprAddr>(expr->left);
+                        auto lfn = static_cast<ExprAddr*>(expr->left);
                         if ( expr->right->type->isGoodFunctionType() ) {
-                            auto rfn = static_pointer_cast<ExprAddr>(expr->right);
+                            auto rfn = static_cast<ExprAddr*>(expr->right);
                             if ( expr->op=="==" ) {
                                 res = lfn->func == rfn->func;
                             } else {
                                 res = lfn->func != rfn->func;
                             }
                         } else if ( expr->right->type->isPointer() ) {
-                            auto rpt = static_pointer_cast<ExprConstPtr>(expr->right);
+                            auto rpt = static_cast<ExprConstPtr*>(expr->right);
                             if ( !rpt->getValue() ) {
                                 if ( expr->op=="==" ) {
                                     res = false;
@@ -618,9 +618,9 @@ namespace das {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
-                vec4f left = eval(expr->left.get(), failed);
+                vec4f left = eval(expr->left, failed);
                 if ( failed ) return Visitor::visit(expr);
-                vec4f right = eval(expr->right.get(), failed);
+                vec4f right = eval(expr->right, failed);
                 if ( failed ) return Visitor::visit(expr);
                 if ( isSameFoldValue(expr->type, left, right) ) {
                     reportFolding();
@@ -628,7 +628,7 @@ namespace das {
                 }
             } else if ( expr->subexpr->constexpression ) {
                 bool failed;
-                vec4f resB = eval(expr->subexpr.get(), failed);
+                vec4f resB = eval(expr->subexpr, failed);
                 if ( failed ) return Visitor::visit(expr);
                 bool res = cast<bool>::to(resB);
                 reportFolding();
@@ -640,7 +640,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( expr->cond->constexpression ) {
                 bool failed;
-                vec4f resB = eval(expr->cond.get(), failed);
+                vec4f resB = eval(expr->cond, failed);
                 if ( failed ) return Visitor::visit(expr);
                 bool res = cast<bool>::to(resB);
                 reportFolding();
@@ -648,7 +648,7 @@ namespace das {
             }
             if ( expr->if_false ) {
                 if ( expr->if_false->rtti_isBlock() ) {
-                    auto ifeb = static_pointer_cast<ExprBlock>(expr->if_false);
+                    auto ifeb = static_cast<ExprBlock*>(expr->if_false);
                     if ( !ifeb->list.size() && !ifeb->finalList.size() ) {
                         expr->if_false = nullptr;
                         reportFolding();
@@ -657,7 +657,7 @@ namespace das {
             }
             if ( !expr->if_false ) {
                 if ( expr->if_true->rtti_isBlock() ) {
-                    auto ifb = static_pointer_cast<ExprBlock>(expr->if_true);
+                    auto ifb = static_cast<ExprBlock*>(expr->if_true);
                     if ( !ifb->list.size() && !ifb->finalList.size() ) {
                         if ( expr->cond->noSideEffects ) {
                             reportFolding();
@@ -685,7 +685,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             if ( expr->body->rtti_isBlock()) {
-                auto block = static_pointer_cast<ExprBlock>(expr->body);
+                auto block = static_cast<ExprBlock*>(expr->body);
                 if ( !block->list.size() && !block->finalList.size() ) {
                     bool noSideEffects = true;
                     for ( auto & src : expr->sources ) {
@@ -713,7 +713,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->arguments[0]->constexpression ) {
                 bool failed;
-                vec4f resB = eval(expr->arguments[0].get(), failed);
+                vec4f resB = eval(expr->arguments[0], failed);
                 if ( failed ) return Visitor::visit(expr);
                 bool res = cast<bool>::to(resB);
                 if ( res ) {
@@ -727,9 +727,9 @@ namespace das {
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             auto what = expr->arguments[0];
             if ( what->type->baseType==Type::tFunction && what->rtti_isAddr() ) {
-                auto pAddr = static_pointer_cast<ExprAddr>(what);
+                auto pAddr = static_cast<ExprAddr*>(what);
                 auto funcC = pAddr->func;
-                auto pCall = make_smart<ExprCall>(expr->at, funcC->name);
+                auto pCall = new ExprCall(expr->at, funcC->name);
                 pCall->func = funcC;
                 uint32_t numArgs = uint32_t(expr->arguments.size());
                 pCall->arguments.reserve(numArgs-1);
@@ -797,7 +797,7 @@ namespace das {
     public:
         ContractFolding( const ProgramPtr & prog ) : FoldingVisitor(prog) {}
     protected:
-        FunctionPtr             func;
+        FunctionPtr             func = nullptr;
     protected:
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
@@ -807,7 +807,7 @@ namespace das {
             func = f;
         }
         virtual FunctionPtr visit ( Function * that ) override {
-            func.reset();
+            func = nullptr;
             return Visitor::visit(that);
         }
     // turn static assert into nada or report error
@@ -820,20 +820,20 @@ namespace das {
             bool result = false;
             if (cond->constexpression) {
                 bool failed;
-                vec4f resB = eval(cond.get(), failed);
+                vec4f resB = eval(cond, failed);
                 if ( failed ) {
                     program->error("exception while computing static assert condition", "","",expr->at);
                 }
                 result = cast<bool>::to(resB);
             } else {
-                result = ((ExprConstBool *)cond.get())->getValue();
+                result = ((ExprConstBool *)cond)->getValue();
             }
             if ( !result ) {
                 bool iscf = expr->name=="concept_assert";
                 string message;
                 if ( expr->arguments.size()==2 ) {
                     bool failed;
-                    vec4f resM = eval(expr->arguments[1].get(), failed);
+                    vec4f resM = eval(expr->arguments[1], failed);
                     if ( failed ) {
                         program->error("exception while computing static assert message","","", expr->at);
                         message = "";

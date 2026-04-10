@@ -150,7 +150,7 @@ Step 2 — Prepend enter-print
 
 .. code-block:: das
 
-   var inscope enterExpr <- qmacro(print($v(">> {lbl}\n")))
+   var enterExpr = qmacro(print($v(">> {lbl}\n")))
    blk.list |> emplace(enterExpr, 0)
 
 ``blk.list`` is the block's statement array.  ``emplace(vec, val, 0)``
@@ -166,7 +166,7 @@ Step 3 — Append exit-print to ``finalList``
 
 .. code-block:: das
 
-   var inscope exitExpr <- qmacro(print($v("<< {lbl}\n")))
+   var exitExpr = qmacro(print($v("<< {lbl}\n")))
    blk.finalList |> emplace(exitExpr)
 
 ``blk.finalList`` is the block's **finally** section — statements here
@@ -186,7 +186,7 @@ Inside ``finish()``
 
 .. code-block:: das
 
-   def override finish(var blk : smart_ptr<ExprBlock>; var group : ModuleGroup;
+   def override finish(var blk : ExprBlock?; var group : ModuleGroup;
                        args, progArgs : AnnotationArgumentList;
                        var errors : das_string) : bool {
        let labelArg = find_arg(args, "tag")

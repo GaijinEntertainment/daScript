@@ -39,11 +39,11 @@ require daslib/macro_boost
 
 [call_macro(name="hello")]
 class HelloMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         // The simplest macro: ignore arguments, return print("hello\n")
         macro_verify(length(expr.arguments) == 0, prog, expr.at,
             "hello() takes no arguments")
-        return <- qmacro(print("hello, call macro!\n"))
+        return qmacro(print("hello, call macro!\n"))
     }
 }
 
@@ -67,18 +67,18 @@ class HelloMacro : AstCallMacro {
 
 [call_macro(name="greet")]
 class GreetMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         // Validate: exactly one argument, must be a string literal
         macro_verify(length(expr.arguments) == 1, prog, expr.at,
             "greet() requires exactly one string argument")
         macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at,
             "greet() argument must be a string literal")
         // Build: print("hello, {name}!\n") using ExprStringBuilder
-        var inscope sbuilder <- new ExprStringBuilder(at = expr.at)
+        var sbuilder = new ExprStringBuilder(at = expr.at)
         sbuilder.elements |> emplace_new <| new ExprConstString(value := "hello, ", at = expr.at)
         sbuilder.elements |> emplace_new <| clone_expression(expr.arguments[0])
         sbuilder.elements |> emplace_new <| new ExprConstString(value := "!\n", at = expr.at)
-        return <- qmacro(print($e(sbuilder)))
+        return qmacro(print($e(sbuilder)))
     }
 }
 
@@ -102,14 +102,14 @@ class GreetMacro : AstCallMacro {
 
 [call_macro(name="printf")]
 class PrintfMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         // Validate: at least a format string
         macro_verify(length(expr.arguments) >= 1, prog, expr.at,
             "printf requires at least a format string argument")
         macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at,
             "first argument to printf must be a constant string")
         let totalArgs = length(expr.arguments)
-        var inscope sbuilder <- new ExprStringBuilder(at = expr.at)
+        var sbuilder = new ExprStringBuilder(at = expr.at)
         let format = string((expr.arguments[0] as ExprConstString).value)
         var pos = 0
         let format_len = length(format)
@@ -142,6 +142,6 @@ class PrintfMacro : AstCallMacro {
             sbuilder.elements |> emplace_new <| clone_expression(expr.arguments[argNum])
             pos = close + 1
         }
-        return <- qmacro(print($e(sbuilder)))
+        return qmacro(print($e(sbuilder)))
     }
 }

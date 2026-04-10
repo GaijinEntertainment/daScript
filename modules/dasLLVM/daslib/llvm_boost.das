@@ -453,7 +453,7 @@ def describe(blk : LLVMOpaqueBasicBlock?) {
     return st
 }
 
-def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
+def isExprOp2_Func(expr : ExprOp2?) {
     if (!expr.func.flags.builtIn) {
         return true
     }
@@ -463,7 +463,7 @@ def isExprOp2_Func(expr : smart_ptr<ExprOp2>) {
     return false
 }
 
-def isExprOp1_Func(expr : smart_ptr<ExprOp1>) {
+def isExprOp1_Func(expr : ExprOp1?) {
     if (!expr.func.flags.builtIn) {
         return true
     }

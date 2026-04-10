@@ -29,10 +29,10 @@ At compile time, ``[log_calls]`` rewrites the function body to:
 .. code-block:: das
 
    def add(a, b : int) : int {
-       if (true) {
+       {
            print(">> ")
            print("add({a}, {b})\n")
-           if (true) {
+           {
                return a + b       // original body
            }
        } finally {
@@ -64,9 +64,9 @@ New concepts introduced:
 * **``ExprStringBuilder``** — build string interpolations from AST nodes
 * **``qmacro_block`` with ``finally``** — generate statement blocks
   with cleanup sections
-* **``if (true) { ... }``** — scoping trick for variable isolation
+* **``{ ... }``** — bare blocks for variable isolation
 * **``$e(func.body)``** — inject the original function body
-* **``func.body |> move``** — replace the function body
+* **``func.body = new_body``** — replace the function body
 * **``var public``** — module-level mutable state shared across modules
 * **``AnnotationArgumentList``** — reading annotation argument names
   and values (``iValue``)
@@ -144,7 +144,7 @@ interpolation code:
 
 .. code-block:: das
 
-   var inscope call_sb <- new ExprStringBuilder(at = func.at)
+   var call_sb = new ExprStringBuilder(at = func.at)
    call_sb.elements |> emplace_new <| qmacro($v("{string(func.name)}("))
    for (i, arg in count(), func.arguments) {
        if (i > 0) {
@@ -176,11 +176,11 @@ For ``add(a, b : int)``, this produces the equivalent of::
 which at runtime evaluates to ``"add(2, 3)\n"``.
 
 
-The if(true) scoping pattern
-============================
+The bare block scoping pattern
+==============================
 
-The generated code uses ``if (true) { ... }`` blocks that may look
-redundant.  They serve a real purpose — each ``if (true) { ... }``
+The generated code uses bare ``{ ... }`` blocks that may look
+redundant.  They serve a real purpose — each bare block
 creates a **new lexical scope**.  This is important because:
 
 1. The macro may introduce local variables (like ``ref_time`` in extended
@@ -200,11 +200,11 @@ rather than a single expression:
 
 .. code-block:: das
 
-   var inscope new_body <- qmacro_block() {
-       if (true) {
+   var new_body = qmacro_block() {
+       {
            print("{repeat("  ",LOG_DEPTH++)}>> ")
            print($e(call_sb))
-           if (true) {
+           {
                $e(func.body)
            }
        } finally {
@@ -221,7 +221,7 @@ Key details:
 * **``$e(call_sb)``** splices in the ``ExprStringBuilder`` we built
   earlier.  At runtime this becomes the ``print("add(2, 3)\n")`` call.
 * **``$e(func.body)``** splices the function's **original body** into the
-  inner ``if (true)`` block.  This is the key technique — the macro wraps
+  inner bare block.  This is the key technique — the macro wraps
   the original code rather than replacing it.
 * **``finally { ... }``** — the generated block has a ``finally`` section
   that runs even when the original body executes a ``return``.  This
@@ -242,13 +242,13 @@ Finally, we swap the function's body with our new block:
 
 .. code-block:: das
 
-   func.body |> move <| new_body
+   func.body = new_body
    return true
 
-``move`` replaces ``func.body`` with ``new_body`` and clears
-``new_body``.  This is the standard pattern for function body
-replacement in ``apply()`` — the old body has already been captured
-inside the new one via ``$e(func.body)``, so no information is lost.
+Direct assignment replaces ``func.body`` with ``new_body``.
+This is the standard pattern for function body replacement in
+``apply()`` — the old body has already been captured inside the
+new one via ``$e(func.body)``, so no information is lost.
 
 
 Public variables for shared state
@@ -278,7 +278,7 @@ It receives the call expression and can accept or reject it.
 
    [function_macro(name="expect_range")]
    class ExpectRangeMacro : AstFunctionAnnotation {
-       def override verifyCall(var call : smart_ptr<ExprCallFunc>;
+       def override verifyCall(var call : ExprCallFunc?;
                                args, progArgs : AnnotationArgumentList;
                                var errors : das_string) : bool {
            // ... validate call.arguments ...
@@ -470,7 +470,7 @@ We define a class that inherits from ``AstVisitor`` and overrides
        found_print : bool = false
        @safe_when_uninitialized print_at : LineInfo
        def override preVisitExprCall(
-               expr : smart_ptr<ExprCall>) : void {
+               expr : ExprCall?) : void {
            if (expr.func != null
                    && expr.name == "print"
                    && expr.func._module.name == "$") {
@@ -667,12 +667,12 @@ body:
 
 .. code-block:: das
 
-   var inscope new_body <- qmacro_block() {
-       if (true) {
+   var new_body = qmacro_block() {
+       {
            let ref_time = ref_time_ticks()
            print(">> ")
            print($e(call_sb))
-           if (true) {
+           {
                $e(func.body)
            }
        } finally {
@@ -680,7 +680,7 @@ body:
        }
    }
 
-The ``if (true)`` scope keeps ``ref_time`` local to each instrumented
+The bare block scope keeps ``ref_time`` local to each instrumented
 function, preventing name clashes when multiple ``[log_calls]`` functions
 call each other.
 

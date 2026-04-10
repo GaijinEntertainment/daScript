@@ -1,45 +1,23 @@
 options gen2
 // PERF008: Unnecessary get_ptr() for is/as type checks
 //
-// Problem:
-//   Calling get_ptr() before is/as is unnecessary because smart_ptr
-//   supports type checks directly for Expression and TypeDecl types.
+// After GC migration, Expression/TypeDecl are no longer smart_ptr,
+// so get_ptr() can't be called on them. This rule still exists for
+// any user-defined smart_ptr types with __rtti, but there are no
+// built-in smart_ptr types left that support is/as.
 //
-// Bad pattern:
-//   if (get_ptr(expr) is ExprVar) { ... }
-//   var v = get_ptr(expr) as ExprVar
-//
-// Good pattern:
-//   if (expr is ExprVar) { ... }
-//   var v = expr as ExprVar
-
-expect 40217:2
+// This test verifies no false positives on raw pointer is/as.
 
 require daslib/perf_lint
 require daslib/ast_boost
 
-// --- Bad patterns (warnings) ---
+// good: direct is/as on raw pointer (no warnings)
 
-def bad_is_with_get_ptr(expr : ExpressionPtr) : bool {
-    return get_ptr(expr) is ExprVar         // PERF008
-}
-
-def bad_as_with_get_ptr(expr : ExpressionPtr) {
-    var v = get_ptr(expr) as ExprCall       // PERF008
-    print("{v}\n")
-}
-
-// --- Good patterns (no warnings) ---
-
-def good_is_direct(expr : ExpressionPtr) : bool {
+def good_is_raw_ptr(expr : ExpressionPtr) : bool {
     return expr is ExprVar
 }
 
-def good_as_direct(expr : ExpressionPtr) {
+def good_as_raw_ptr(expr : ExpressionPtr) {
     var v = expr as ExprCall
-    print("{v}\n")
-}
-
-def good_is_raw_ptr(expr : Expression?) : bool {
-    return expr is ExprVar
+    unsafe { print("{v}\n"); }
 }

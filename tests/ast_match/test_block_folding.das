@@ -136,8 +136,8 @@ def match_report(t : T?; r : QMatchResult; msg : string) {
 [test]
 def test_dead_code_after_return(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_dead_code)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_dead_code)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         let r = qmatch_function(func) $(a : int) : int {
             return a + 1
         }
@@ -149,9 +149,9 @@ def test_dead_code_after_return(t : T?) {
 [test]
 def test_if_else_to_ternary(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_else_return)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
-        var inscope cond, left, right : ExpressionPtr
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_else_return)
+        if (func == null) { t |> success(false, "function not found"); return ; }
+        var cond, left, right : ExpressionPtr
         let r = qmatch_function(func) $(a, b, c : int) : int {
             return $e(cond) ? $e(left) : $e(right)
         }
@@ -163,10 +163,10 @@ def test_if_else_to_ternary(t : T?) {
 [test]
 def test_if_chain_to_nested_ternary(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_chain)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_chain)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         // Match the outer structure: return (cond ? val : rest)
-        var inscope outer_cond, outer_val, outer_rest : ExpressionPtr
+        var outer_cond, outer_val, outer_rest : ExpressionPtr
         let r = qmatch_function(func) $(a, b : int) : int {
             return $e(outer_cond) ? $e(outer_val) : $e(outer_rest)
         }
@@ -182,8 +182,8 @@ def test_if_chain_to_nested_ternary(t : T?) {
 [test]
 def test_void_trailing_return(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_void_trailing_return)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_void_trailing_return)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         // After optimization: just print("hello\n") — trailing return removed
         // Fake args (__context__, __lineinfo__) are filtered automatically
         let r = qmatch_function(func) $ {
@@ -197,8 +197,8 @@ def test_void_trailing_return(t : T?) {
 [test]
 def test_nested_block_flattened(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_nested_block)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_nested_block)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         let r = qmatch_function(func) $(a : int) : int {
             var x = a + 1
             return x
@@ -211,9 +211,9 @@ def test_nested_block_flattened(t : T?) {
 [test]
 def test_dead_after_if_else(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_dead_after_if_else)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
-        var inscope cond, left, right : ExpressionPtr
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_dead_after_if_else)
+        if (func == null) { t |> success(false, "function not found"); return ; }
+        var cond, left, right : ExpressionPtr
         let r = qmatch_function(func) $(a, b : int) : int {
             return $e(cond) ? $e(left) : $e(right)
         }
@@ -225,10 +225,10 @@ def test_dead_after_if_else(t : T?) {
 [test]
 def test_if_break_chain(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_break)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_break)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         // The for body should have the if with else (not two separate statements)
-        var inscope body : ExpressionPtr
+        var body : ExpressionPtr
         let r = qmatch_function(func) $(a : int) : int {
             var s = 0
             for (i in $e(body)) {
@@ -248,9 +248,9 @@ def test_if_break_chain(t : T?) {
 [test]
 def test_if_continue_chain(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_continue)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
-        var inscope body : ExpressionPtr
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_continue)
+        if (func == null) { t |> success(false, "function not found"); return ; }
+        var body : ExpressionPtr
         let r = qmatch_function(func) $(a : int) : int {
             var s = 0
             for (i in $e(body)) {
@@ -270,10 +270,10 @@ def test_if_continue_chain(t : T?) {
 [test]
 def test_if_chain_5(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_chain_5)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_chain_5)
+        if (func == null) { t |> success(false, "function not found"); return ; }
         // Should be a single return with deeply nested ternary
-        var inscope expr : ExpressionPtr
+        var expr : ExpressionPtr
         let r = qmatch_function(func) $(a : int) : int {
             return $e(expr)
         }
@@ -289,9 +289,9 @@ def test_if_chain_5(t : T?) {
 [test]
 def test_if_return_with_work(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@fold_if_with_work)
-        if (get_ptr(func) == null) { t |> success(false, "function not found"); return ; }
-        var inscope cond, left, right : ExpressionPtr
+        var func = find_module_function_via_rtti(compiling_module(), @@fold_if_with_work)
+        if (func == null) { t |> success(false, "function not found"); return ; }
+        var cond, left, right : ExpressionPtr
         let r = qmatch_function(func) $(a, b : int) : int {
             return $e(cond) ? $e(left) : $e(right)
         }

@@ -873,10 +873,19 @@ namespace das {
 
     // Returns DLL handle.
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
-        auto lib = loadDynamicLibrary(path);
+        string actualPath(path);
+#ifndef DAS_NO_ASSERTIONS
+        // Debug builds produce _debug.shared_module; rewrite the path so that
+        // .das_module files don't need per-config conditional logic.
+        auto pos = actualPath.rfind(".shared_module");
+        if ( pos != string::npos && pos + 14 == actualPath.size() ) {
+            actualPath.insert(pos, "_debug");
+        }
+#endif
+        auto lib = loadDynamicLibrary(actualPath.c_str());
         if (!lib) {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
-                auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + string(path) + "\n";
+                auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + actualPath + "\n";
                 context->to_err(at, err_msg.c_str());
                 if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                     context->throw_error(err_msg.c_str());

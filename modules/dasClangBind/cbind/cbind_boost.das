@@ -1552,7 +1552,7 @@ class CppGenBind : AnyGenBind {
             }
         }
         fprint(enum_class_file, "\t\}\n\};\n\n")
-        fprint(enum_add_file, "addEnumeration(make_smart<Enumeration_{dashing_name}>());\n")
+        fprint(enum_add_file, "addEnumeration(new Enumeration_{dashing_name}());\n")
     }
     def override parse_Alias(var c : CXCursor) {
         let tdn = string(clang_getCursorDisplayName(c))

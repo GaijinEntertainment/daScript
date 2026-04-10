@@ -28,10 +28,10 @@ namespace das
     struct AstSerializer;
 
     class Function;
-    typedef smart_ptr<Function> FunctionPtr;
+    typedef Function * FunctionPtr;
 
     struct Variable;
-    typedef smart_ptr<Variable> VariablePtr;
+    typedef Variable * VariablePtr;
 
     class Program;
     typedef smart_ptr<Program> ProgramPtr;
@@ -40,7 +40,7 @@ namespace das
     typedef smart_ptr<FunctionAnnotation> FunctionAnnotationPtr;
 
     struct Expression;
-    typedef smart_ptr<Expression> ExpressionPtr;
+    typedef Expression * ExpressionPtr;
 
     struct PassMacro;
     typedef smart_ptr<PassMacro> PassMacroPtr;
@@ -159,21 +159,21 @@ namespace das
 
     AnnotationList cloneAnnotationList ( const AnnotationList & list );
 
-    class DAS_API Enumeration : public ptr_ref_count {
+    class DAS_API Enumeration : public gc_node {
     public:
         struct EnumEntry {
             string          name;
             string          cppName;
             LineInfo        at;
-            ExpressionPtr   value;
+            ExpressionPtr   value = nullptr;
             void serialize ( AstSerializer & ser );
         };
     public:
-        Enumeration() = default;
-        Enumeration( const string & na ) : name(na) {}
+        Enumeration() { gc_magic = GC_MAGIC_ENUMERATION; }
+        Enumeration( const string & na ) : name(na) { gc_magic = GC_MAGIC_ENUMERATION; }
         bool add ( const string & f, const LineInfo & at );
-        bool add ( const string & f, const ExpressionPtr & expr, const LineInfo & at );
-        bool addEx ( const string & f, const string & fcpp, const ExpressionPtr & expr, const LineInfo & at );
+        bool add ( const string & f, ExpressionPtr expr, const LineInfo & at );
+        bool addEx ( const string & f, const string & fcpp, ExpressionPtr expr, const LineInfo & at );
         bool addI ( const string & f, int64_t value, const LineInfo & at );
         bool addIEx ( const string & f, const string & fcpp, int64_t value, const LineInfo & at );
         string describe() const { return name; }
@@ -185,6 +185,7 @@ namespace das
         Type getEnumType() const;
         TypeDeclPtr makeEnumType() const;
         void serialize ( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
     public:
         string              name;
         string              cppName;
@@ -203,12 +204,12 @@ namespace das
 #endif
     };
 
-    class DAS_API Structure : public ptr_ref_count {
+    class DAS_API Structure : public gc_node {
     public:
         struct FieldDeclaration {
             string                  name;
             TypeDeclPtr             type = nullptr;
-            ExpressionPtr           init;
+            ExpressionPtr           init = nullptr;
             AnnotationArgumentList  annotation;
             LineInfo                at;
             int                     offset = 0;
@@ -228,7 +229,7 @@ namespace das
                 uint32_t            flags = 0;
             };
             FieldDeclaration() = default;
-            FieldDeclaration(const string & n, const TypeDeclPtr & t,  const ExpressionPtr & i,
+            FieldDeclaration(const string & n, const TypeDeclPtr & t,  ExpressionPtr i,
                              const AnnotationArgumentList & alist, bool ms, const LineInfo & a )
                 : name(n), type(t), init(i), annotation(alist), at(a) {
                 moveSemantics = ms;
@@ -251,8 +252,8 @@ namespace das
             __forceinline bool operator ! () const { return index<0 || owner==nullptr; }
         };
     public:
-        Structure() {}
-        Structure ( const string & n ) : name(n) {}
+        Structure() { gc_magic = GC_MAGIC_STRUCTURE; }
+        Structure ( const string & n ) : name(n) { gc_magic = GC_MAGIC_STRUCTURE; }
         StructurePtr clone() const;
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
@@ -294,7 +295,6 @@ namespace das
         uint64_t getOwnSemanticHash(HashBuilder & hb,das_set<Structure *> & dep, das_set<Annotation *> & adep) const;
         TypeDeclPtr findAlias ( const string & name ) const;
     public:
-        gc_root *                       gc_type_owner = nullptr;
         string                          name;
         vector<FieldDeclaration>        fields;
         das_hash_map<string,int32_t>    fieldLookup;
@@ -337,7 +337,8 @@ namespace das
 #endif
     };
 
-    struct DAS_API Variable : ptr_ref_count {
+    struct DAS_API Variable : gc_node {
+        Variable() { gc_magic = GC_MAGIC_VARIABLE; }
         VariablePtr clone() const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
@@ -347,12 +348,11 @@ namespace das
         bool isCtorInitialized() const;
         void serialize ( AstSerializer & ser );
         void gc_collect ( gc_root * target, gc_root * from );
-        gc_root *       gc_type_owner = nullptr;
         string          name;
         string          aka;        // name alias
         TypeDeclPtr     type = nullptr;
-        ExpressionPtr   init;
-        ExpressionPtr   source;     // if its interator variable, this is where the source is
+        ExpressionPtr   init = nullptr;
+        ExpressionPtr   source = nullptr;     // if its interator variable, this is where the source is
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
@@ -560,8 +560,8 @@ namespace das
         virtual TypeDeclPtr makeValueType() const { return nullptr; }
         virtual TypeDeclPtr makeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string &, bool ) const { return nullptr; }
-        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr & /*src*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
-        virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & /*src*/ ) const { return nullptr; }
+        virtual TypeDeclPtr makeIndexType ( ExpressionPtr /*src*/, ExpressionPtr /*idx*/ ) const { return nullptr; }
+        virtual TypeDeclPtr makeIteratorType ( ExpressionPtr /*src*/ ) const { return nullptr; }
         // aot
         virtual void aotPreVisitGetField ( TextWriter &, const string & ) { }
         virtual void aotPreVisitGetFieldPtr ( TextWriter &, const string & ) { }
@@ -574,10 +574,10 @@ namespace das
         virtual SimNode * simulateNullCoalescing ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                         const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
+                                         ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
-                                            const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
-        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
+                                            ExpressionPtr, ExpressionPtr, uint32_t ) const { return nullptr; }
+        virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, ExpressionPtr ) const { return nullptr; }
         // data walker
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
@@ -636,18 +636,18 @@ namespace das
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
-        smart_ptr<Structure>   structureType;
+        Structure *            structureType = nullptr;
     };
 
-    struct DAS_API Expression : ptr_ref_count {
-        Expression() = default;
-        Expression(const LineInfo & a) : at(a) {}
+    struct DAS_API Expression : gc_node {
+        Expression() { gc_magic = GC_MAGIC_EXPRESSION; }
+        Expression(const LineInfo & a) : at(a) { gc_magic = GC_MAGIC_EXPRESSION; }
         string describe() const;
         virtual ~Expression() {}
         friend StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
-        static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
+        static ExpressionPtr autoDereference ( ExpressionPtr expr );
         virtual SimNode * simulate (Context & /*context*/ ) const { DAS_ASSERT(0); return nullptr; };
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const;
         virtual void markNoDiscard() { }
@@ -712,7 +712,6 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from );
         LineInfo    at;
         TypeDeclPtr type = nullptr;
-        gc_root *   gc_type_owner = nullptr;    // cycle detection marker for gc_collect
         const char * __rtti = nullptr;
         union{
             struct {
@@ -752,11 +751,11 @@ namespace das
     typedef function<ExprLooksLikeCall * (const LineInfo & info)> ExprCallFactory;
 
     template <typename ExprType>
-    inline smart_ptr<ExprType> clonePtr ( const ExpressionPtr & expr ) {
-        return expr ? static_pointer_cast<ExprType>(expr) : make_smart<ExprType>();
+    inline ExprType * clonePtr ( ExpressionPtr expr ) {
+        return expr ? static_cast<ExprType*>(expr) : new ExprType();
     }
 
-    bool isLocalOrGlobal ( const ExpressionPtr & expr );
+    bool isLocalOrGlobal ( ExpressionPtr expr );
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -790,7 +789,7 @@ namespace das
             value = v_zero();
             memcpy(&value, &val, sizeof(TT));
         }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override {
+        virtual ExpressionPtr clone( ExpressionPtr expr ) const override {
             auto cexpr = clonePtr<ExprConstExt>(expr);
             Expression::clone(cexpr);
             cexpr->value = value;
@@ -834,14 +833,15 @@ namespace das
         LineInfo    at;
         Function *  func = nullptr;
         InferHistory() = default;
-        InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p) {}
         void serialize ( AstSerializer & ser );
     };
-    class DAS_API Function : public ptr_ref_count {
+    class DAS_API Function : public gc_node {
     public:
         enum class DescribeExtra     { no, yes };
         enum class DescribeModule    { no, yes };
     public:
+        Function() { gc_magic = GC_MAGIC_FUNCTION; }
         virtual ~Function() {}
         friend StringWriter& operator<< (StringWriter& stream, const Function & func);
         void getMangledName(TextWriter & ss) const;
@@ -869,7 +869,7 @@ namespace das
         FunctionPtr setCaptureString();
         FunctionPtr setNoDiscard();
         FunctionPtr setDeprecated(const string & message);
-        FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
+        FunctionPtr arg_init ( int argIndex, ExpressionPtr initValue ) {
             arguments[argIndex]->init = initValue;
             return this;
         }
@@ -889,12 +889,11 @@ namespace das
         void gc_collect ( gc_root * target, gc_root * from );
         void notInferred();
     public:
-        gc_root *           gc_type_owner = nullptr;
         AnnotationList      annotations;
         string              name;
         vector<VariablePtr> arguments;
         TypeDeclPtr         result = nullptr;
-        ExpressionPtr       body;
+        ExpressionPtr       body = nullptr;
         int32_t             index = -1;
         uint32_t            totalStackSize = 0;
         int32_t             totalGenLabel = 0;
@@ -1078,14 +1077,14 @@ namespace das
             : name(n) {
         }
         virtual void seal( Module * m ) { module = m; }
-        virtual ExpressionPtr getAstChange ( const ExpressionPtr &, string & ) { return nullptr; }
-        virtual TypeDeclPtr getAstType ( ModuleLibrary &, const ExpressionPtr &, string & ) { return nullptr; }
-        virtual SimNode * simluate ( Context *, const ExpressionPtr &, string & ) { return nullptr; }
-        virtual void aotPrefix ( TextWriter &, const ExpressionPtr & ) { }
-        virtual void aotSuffix ( TextWriter &, const ExpressionPtr & ) { }
-        virtual bool aotInfix ( TextWriter &, const ExpressionPtr & ) { return false; }
-        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const { return false; }
-        virtual bool noAot ( const ExpressionPtr & ) const { return false; }
+        virtual ExpressionPtr getAstChange ( ExpressionPtr, string & ) { return nullptr; }
+        virtual TypeDeclPtr getAstType ( ModuleLibrary &, ExpressionPtr, string & ) { return nullptr; }
+        virtual SimNode * simluate ( Context *, ExpressionPtr, string & ) { return nullptr; }
+        virtual void aotPrefix ( TextWriter &, ExpressionPtr ) { }
+        virtual void aotSuffix ( TextWriter &, ExpressionPtr ) { }
+        virtual bool aotInfix ( TextWriter &, ExpressionPtr ) { return false; }
+        virtual bool aotNeedTypeInfo ( ExpressionPtr ) const { return false; }
+        virtual bool noAot ( ExpressionPtr ) const { return false; }
         string name;
         Module * module = nullptr;
     };
@@ -1231,12 +1230,12 @@ namespace das
         smart_ptr<Context>                          macroContext;
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
         safebox<Annotation>                         handleTypes;
-        safebox<Structure>                          structures;
-        safebox<Enumeration>                        enumerations;
-        safebox<Variable>                           globals;
-        safebox<Function>                           functions;          // mangled name 2 function name
+        safebox<Structure, StructurePtr>             structures;
+        safebox<Enumeration, EnumerationPtr>        enumerations;
+        safebox<Variable, VariablePtr>              globals;
+        safebox<Function, FunctionPtr>              functions;          // mangled name 2 function name
         fragile_hash<vector<Function*>>             functionsByName;    // all functions of the same name
-        safebox<Function>                           generics;           // mangled name 2 generic name
+        safebox<Function, FunctionPtr>              generics;           // mangled name 2 generic name
         fragile_hash<vector<Function*>>             genericsByName;     // all generics of the same name
         mutable das_map<string, ExprCallFactory>    callThis;
         das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
@@ -1257,7 +1256,7 @@ namespace das
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         vector<string>                              typeFunctions;      // type functions
         das_hash_map<string,Type>                   options;            // options
-        gc_root                                     module_gc_root;     // gc_node root for this module's TypeDecl
+        gc_root                                     module_gc_root;     // gc_node root for this module's gc-managed AST nodes
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
         uint64_t                                    nameHash = 0;
@@ -1474,7 +1473,7 @@ namespace das
         FuncInfo * makeFunctionDebugInfo ( const Function & fn );
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
-        void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
+        void appendLocalVariables ( FuncInfo * info, ExpressionPtr body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
     public:

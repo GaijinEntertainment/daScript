@@ -133,7 +133,7 @@ namespace das {
         }
     };
 
-    struct AstStructureAnnotation : ManagedStructureAnnotation<Structure> {
+    struct AstStructureAnnotation : ManagedStructureAnnotation<Structure, true, false> {
         AstStructureAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("Structure", ml) {
         }
@@ -176,7 +176,7 @@ namespace das {
         }
     };
 
-    struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration> {
+    struct AstEnumerationAnnotation : ManagedStructureAnnotation <Enumeration, true, false> {
         AstEnumerationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("Enumeration", ml) {
         }
@@ -193,11 +193,11 @@ namespace das {
         }
     };
 
-    template <typename FUNC>
-    struct AstFunctionAnnotation : public ManagedStructureAnnotation<FUNC> {
+    template <typename FUNC, bool hasNew = true>
+    struct AstFunctionAnnotation : public ManagedStructureAnnotation<FUNC, hasNew, false> {
         using ManagedType = FUNC;
         AstFunctionAnnotation(const char *name, ModuleLibrary & ml)
-            : ManagedStructureAnnotation<FUNC> (name, ml) {
+            : ManagedStructureAnnotation<FUNC, hasNew, false> (name, ml) {
         }
         void init () {
             this->template addField<DAS_BIND_MANAGED_FIELD(annotations)>("annotations");
@@ -232,7 +232,7 @@ namespace das {
         }
     };
 
-    struct AstBuiltInFunctionAnnotation : AstFunctionAnnotation<BuiltInFunction> {
+    struct AstBuiltInFunctionAnnotation : AstFunctionAnnotation<BuiltInFunction, false> {
         AstBuiltInFunctionAnnotation(ModuleLibrary &ml)
             : AstFunctionAnnotation("BuiltInFunction", ml) {
             this->template addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
@@ -241,7 +241,7 @@ namespace das {
         }
     };
 
-    struct AstExternalFnBaseAnnotation : AstFunctionAnnotation<ExternalFnBase> {
+    struct AstExternalFnBaseAnnotation : AstFunctionAnnotation<ExternalFnBase, false> {
         AstExternalFnBaseAnnotation(ModuleLibrary &ml)
             : AstFunctionAnnotation("ExternalFnBase", ml) {
             this->template addField<DAS_BIND_MANAGED_FIELD(cppName)>("cppName");
@@ -261,7 +261,7 @@ namespace das {
     };
 
 
-    struct AstVariableAnnotation : ManagedStructureAnnotation<Variable> {
+    struct AstVariableAnnotation : ManagedStructureAnnotation<Variable, true, false> {
         AstVariableAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("Variable", ml) {
         }

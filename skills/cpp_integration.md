@@ -188,7 +188,7 @@ DAS_BASE_BIND_ENUM(CppEnum, DasName, Value1, Value2, Value3)
 using namespace das;
 
 // In module constructor:
-addEnumeration(make_smart<EnumerationDasName>());
+addEnumeration(new EnumerationDasName());
 ```
 
 - `DAS_BASE_BIND_ENUM` creates class `EnumerationDasName` + `typeFactory<CppEnum>`
@@ -196,7 +196,7 @@ addEnumeration(make_smart<EnumerationDasName>());
 - `DAS_BASE_BIND_ENUM_98` — for unscoped (C-style) enums
 - **Critical**: place enum macros BEFORE `using namespace das` — the macros define names inside `namespace das` that collide with global enum names
 - **Name collision pitfall**: `das::LogLevel` is defined internally in `include/daScript/misc/string_writer.h` — do NOT name your enum `LogLevel` when `using namespace das`
-- Manual construction alternative: `make_smart<Enumeration>("Name")` + `pEnum->addIEx("Value", "CppEnum::Value", intValue, LineInfo())`
+- Manual construction alternative: `new Enumeration("Name")` + `pEnum->addIEx("Value", "CppEnum::Value", intValue, LineInfo())`
 
 ## Low-level interop — `addInterop`
 

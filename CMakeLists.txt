@@ -321,6 +321,8 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
         SUFFIX ".shared_module"
         PREFIX ""
     )
+    # Debug builds use _debug suffix so Debug and Release .shared_module can coexist
+    SET_PROPERTY(TARGET ${module_name} PROPERTY OUTPUT_NAME_DEBUG "${module_name}_debug")
     # Ignore tutorial, profile, test.
     if(NOT "${FOLDER_NAME}" STREQUAL "tutorial" AND
        NOT "${FOLDER_NAME}" STREQUAL "profile" AND

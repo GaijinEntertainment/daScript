@@ -9,9 +9,27 @@
 #define DAS_GC_DEBUG 0
 #endif
 
-#define GC_MAGIC_ALIVE  0x1ee7c0deu
-#define GC_MAGIC_DEAD   0xdeadc0deu
-#define GC_MAGIC_SWEPT  0x5ee9da7au
+// Alive magic: 0x1ee7TTTT where TTTT is a type tag.
+// gc_is_alive() checks the upper 16 bits; gc_type_tag() reads the lower 16.
+#define GC_MAGIC_ALIVE_PREFIX   0x1ee70000u
+#define GC_TAG_TYPEDECL         0x0001u
+#define GC_TAG_EXPRESSION       0x0002u
+#define GC_TAG_MAKEFIELDDECL   0x0003u
+#define GC_TAG_MAKESTRUCT      0x0004u
+#define GC_TAG_FUNCTION        0x0005u
+#define GC_TAG_ENUMERATION     0x0006u
+#define GC_TAG_STRUCTURE       0x0007u
+#define GC_TAG_VARIABLE        0x0008u
+#define GC_MAGIC_TYPEDECL       (GC_MAGIC_ALIVE_PREFIX | GC_TAG_TYPEDECL)       // 0x1ee70001
+#define GC_MAGIC_EXPRESSION     (GC_MAGIC_ALIVE_PREFIX | GC_TAG_EXPRESSION)     // 0x1ee70002
+#define GC_MAGIC_MAKEFIELDDECL (GC_MAGIC_ALIVE_PREFIX | GC_TAG_MAKEFIELDDECL)  // 0x1ee70003
+#define GC_MAGIC_MAKESTRUCT    (GC_MAGIC_ALIVE_PREFIX | GC_TAG_MAKESTRUCT)     // 0x1ee70004
+#define GC_MAGIC_FUNCTION      (GC_MAGIC_ALIVE_PREFIX | GC_TAG_FUNCTION)       // 0x1ee70005
+#define GC_MAGIC_ENUMERATION  (GC_MAGIC_ALIVE_PREFIX | GC_TAG_ENUMERATION)    // 0x1ee70006
+#define GC_MAGIC_STRUCTURE    (GC_MAGIC_ALIVE_PREFIX | GC_TAG_STRUCTURE)      // 0x1ee70007
+#define GC_MAGIC_VARIABLE     (GC_MAGIC_ALIVE_PREFIX | GC_TAG_VARIABLE)       // 0x1ee70008
+#define GC_MAGIC_DEAD           0xdeadc0deu
+#define GC_MAGIC_SWEPT_PREFIX   0x5ee90000u
 
 namespace das {
 
@@ -23,7 +41,7 @@ namespace das {
     // Module::gc_collect() moves reachable nodes to the module's root;
     // whatever remains on the thread-local root is garbage and gets swept.
     struct DAS_API gc_node {
-        uint32_t    gc_magic = GC_MAGIC_ALIVE;
+        uint32_t    gc_magic = GC_MAGIC_ALIVE_PREFIX;
         gc_node *   gc_prev = nullptr;
         gc_node *   gc_next = nullptr;
         gc_root *   gc_owner = nullptr;
@@ -39,8 +57,17 @@ namespace das {
         void gc_unlink();                       // remove from current root (sets gc_owner=nullptr)
         void gc_link ( gc_root * root );        // add to root's list
         void gc_assign ( gc_root * new_root );  // O(1) unlink + relink
-        bool gc_is_alive() const { return gc_magic == GC_MAGIC_ALIVE; }
+        bool gc_is_alive() const { return (gc_magic & 0xFFFF0000u) == GC_MAGIC_ALIVE_PREFIX; }
+        uint16_t gc_type_tag() const { return gc_magic & 0xFFFFu; }
+        const char * gc_type_name() const;      // "TypeDecl", "Expression", or "gc_node"
         void gc_verify() const;                 // asserts gc_is_alive(), reports gc_id on failure
+
+        // Compatibility stubs for smart_ptr_raw<T>::marshal().
+        // Expression/TypeDecl are no longer refcounted, but ast_gen.inc
+        // calls marshal() which instantiates smart_ptr_policy<T>::delRef.
+        __forceinline void addRef() {}
+        __forceinline bool delRef() { return false; }
+        __forceinline unsigned int use_count() const { return 1; }
     };
 
     // gc_root — owns a doubly-linked list of gc_nodes.

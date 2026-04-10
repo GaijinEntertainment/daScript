@@ -1121,58 +1121,58 @@ static const yytype_int16 yyrline[] =
     2053,  2054,  2055,  2056,  2057,  2058,  2059,  2060,  2061,  2062,
     2066,  2076,  2085,  2094,  2099,  2100,  2101,  2102,  2103,  2104,
     2105,  2106,  2107,  2108,  2109,  2110,  2111,  2112,  2113,  2114,
-    2115,  2120,  2127,  2139,  2144,  2154,  2158,  2165,  2168,  2168,
-    2168,  2173,  2173,  2173,  2186,  2190,  2194,  2199,  2206,  2215,
-    2220,  2227,  2227,  2227,  2234,  2238,  2248,  2257,  2266,  2270,
-    2273,  2279,  2280,  2281,  2282,  2283,  2284,  2285,  2286,  2287,
-    2288,  2289,  2290,  2291,  2292,  2293,  2294,  2295,  2296,  2297,
-    2298,  2299,  2300,  2301,  2302,  2303,  2304,  2305,  2306,  2307,
-    2314,  2315,  2316,  2317,  2318,  2319,  2320,  2321,  2322,  2323,
-    2324,  2325,  2332,  2333,  2334,  2335,  2336,  2337,  2338,  2339,
-    2353,  2354,  2355,  2356,  2357,  2360,  2363,  2364,  2364,  2364,
-    2367,  2372,  2376,  2380,  2380,  2380,  2385,  2388,  2392,  2392,
-    2392,  2397,  2400,  2401,  2402,  2403,  2404,  2405,  2406,  2407,
-    2408,  2410,  2414,  2422,  2427,  2431,  2440,  2441,  2442,  2443,
-    2444,  2445,  2446,  2450,  2454,  2458,  2462,  2466,  2470,  2474,
-    2478,  2482,  2489,  2490,  2499,  2503,  2504,  2505,  2509,  2510,
-    2514,  2515,  2516,  2520,  2521,  2525,  2536,  2537,  2538,  2539,
-    2544,  2547,  2547,  2551,  2551,  2570,  2569,  2585,  2584,  2598,
-    2607,  2619,  2628,  2638,  2639,  2640,  2641,  2642,  2646,  2649,
-    2658,  2659,  2663,  2666,  2669,  2684,  2693,  2694,  2698,  2701,
-    2704,  2717,  2718,  2722,  2728,  2734,  2743,  2746,  2753,  2756,
-    2762,  2763,  2764,  2768,  2769,  2773,  2780,  2785,  2794,  2800,
-    2811,  2814,  2819,  2824,  2832,  2842,  2853,  2856,  2856,  2876,
-    2877,  2881,  2882,  2883,  2887,  2894,  2894,  2913,  2916,  2932,
-    2952,  2953,  2954,  2959,  2959,  2989,  2992,  2999,  3009,  3009,
-    3013,  3014,  3015,  3019,  3029,  3049,  3072,  3073,  3077,  3078,
-    3082,  3088,  3089,  3090,  3091,  3095,  3096,  3097,  3101,  3104,
-    3115,  3120,  3115,  3140,  3147,  3152,  3161,  3167,  3178,  3179,
-    3180,  3181,  3182,  3183,  3184,  3185,  3186,  3187,  3188,  3189,
-    3190,  3191,  3192,  3193,  3194,  3195,  3196,  3197,  3198,  3199,
-    3200,  3201,  3202,  3203,  3204,  3208,  3209,  3210,  3211,  3212,
-    3213,  3214,  3215,  3219,  3230,  3234,  3241,  3253,  3260,  3266,
-    3276,  3277,  3282,  3287,  3301,  3311,  3321,  3331,  3341,  3354,
-    3355,  3356,  3357,  3358,  3362,  3366,  3366,  3366,  3380,  3381,
-    3385,  3389,  3396,  3400,  3407,  3408,  3409,  3410,  3411,  3426,
-    3432,  3432,  3432,  3436,  3441,  3448,  3448,  3455,  3459,  3463,
-    3468,  3473,  3478,  3483,  3487,  3491,  3496,  3500,  3504,  3509,
-    3509,  3509,  3515,  3522,  3522,  3522,  3527,  3527,  3527,  3533,
-    3533,  3533,  3538,  3543,  3543,  3543,  3548,  3548,  3548,  3557,
-    3562,  3562,  3562,  3567,  3567,  3567,  3576,  3581,  3581,  3581,
-    3586,  3586,  3586,  3595,  3595,  3595,  3601,  3601,  3601,  3610,
-    3613,  3624,  3640,  3640,  3645,  3654,  3640,  3683,  3683,  3688,
-    3698,  3683,  3727,  3727,  3727,  3780,  3781,  3782,  3783,  3784,
-    3788,  3795,  3802,  3808,  3814,  3821,  3828,  3834,  3843,  3846,
-    3852,  3860,  3865,  3872,  3877,  3884,  3889,  3895,  3896,  3900,
-    3901,  3906,  3907,  3911,  3912,  3916,  3917,  3921,  3922,  3923,
-    3927,  3928,  3929,  3933,  3934,  3938,  3971,  4010,  4029,  4049,
-    4069,  4090,  4090,  4090,  4098,  4098,  4098,  4105,  4105,  4105,
-    4116,  4116,  4116,  4127,  4131,  4137,  4153,  4159,  4165,  4171,
-    4171,  4171,  4185,  4190,  4197,  4217,  4245,  4269,  4269,  4269,
-    4279,  4279,  4279,  4293,  4293,  4293,  4307,  4316,  4316,  4316,
-    4336,  4343,  4343,  4343,  4353,  4358,  4365,  4368,  4374,  4394,
-    4413,  4421,  4441,  4466,  4467,  4471,  4472,  4477,  4487,  4490,
-    4493,  4496,  4504,  4513,  4525,  4535
+    2115,  2120,  2126,  2137,  2142,  2152,  2156,  2163,  2166,  2166,
+    2166,  2171,  2171,  2171,  2184,  2188,  2192,  2197,  2204,  2212,
+    2217,  2224,  2224,  2224,  2231,  2235,  2245,  2254,  2263,  2267,
+    2270,  2276,  2277,  2278,  2279,  2280,  2281,  2282,  2283,  2284,
+    2285,  2286,  2287,  2288,  2289,  2290,  2291,  2292,  2293,  2294,
+    2295,  2296,  2297,  2298,  2299,  2300,  2301,  2302,  2303,  2304,
+    2311,  2312,  2313,  2314,  2315,  2316,  2317,  2318,  2319,  2320,
+    2321,  2322,  2329,  2330,  2331,  2332,  2333,  2334,  2335,  2336,
+    2350,  2351,  2352,  2353,  2354,  2357,  2360,  2361,  2361,  2361,
+    2364,  2369,  2373,  2377,  2377,  2377,  2382,  2385,  2389,  2389,
+    2389,  2394,  2397,  2398,  2399,  2400,  2401,  2402,  2403,  2404,
+    2405,  2407,  2411,  2419,  2424,  2428,  2437,  2438,  2439,  2440,
+    2441,  2442,  2443,  2447,  2451,  2455,  2459,  2463,  2467,  2471,
+    2475,  2479,  2486,  2487,  2496,  2500,  2501,  2502,  2506,  2507,
+    2511,  2512,  2513,  2517,  2518,  2522,  2533,  2534,  2535,  2536,
+    2541,  2544,  2544,  2548,  2548,  2567,  2566,  2582,  2581,  2595,
+    2604,  2616,  2625,  2635,  2636,  2637,  2638,  2639,  2643,  2646,
+    2655,  2656,  2660,  2663,  2666,  2681,  2690,  2691,  2695,  2698,
+    2701,  2714,  2715,  2719,  2725,  2731,  2740,  2743,  2750,  2753,
+    2759,  2760,  2761,  2765,  2766,  2770,  2777,  2782,  2791,  2797,
+    2808,  2811,  2816,  2821,  2829,  2839,  2850,  2853,  2853,  2873,
+    2874,  2878,  2879,  2880,  2884,  2891,  2891,  2910,  2913,  2929,
+    2949,  2950,  2951,  2956,  2956,  2986,  2989,  2996,  3006,  3006,
+    3010,  3011,  3012,  3016,  3026,  3046,  3069,  3070,  3074,  3075,
+    3079,  3085,  3086,  3087,  3088,  3092,  3093,  3094,  3098,  3101,
+    3112,  3117,  3112,  3137,  3144,  3149,  3158,  3164,  3175,  3176,
+    3177,  3178,  3179,  3180,  3181,  3182,  3183,  3184,  3185,  3186,
+    3187,  3188,  3189,  3190,  3191,  3192,  3193,  3194,  3195,  3196,
+    3197,  3198,  3199,  3200,  3201,  3205,  3206,  3207,  3208,  3209,
+    3210,  3211,  3212,  3216,  3227,  3231,  3238,  3250,  3257,  3263,
+    3273,  3274,  3279,  3284,  3298,  3308,  3318,  3328,  3338,  3351,
+    3352,  3353,  3354,  3355,  3359,  3363,  3363,  3363,  3377,  3378,
+    3382,  3386,  3393,  3397,  3404,  3405,  3406,  3407,  3408,  3423,
+    3429,  3429,  3429,  3433,  3438,  3445,  3445,  3452,  3456,  3460,
+    3465,  3470,  3475,  3480,  3484,  3488,  3493,  3497,  3501,  3506,
+    3506,  3506,  3512,  3519,  3519,  3519,  3524,  3524,  3524,  3530,
+    3530,  3530,  3535,  3540,  3540,  3540,  3545,  3545,  3545,  3554,
+    3559,  3559,  3559,  3564,  3564,  3564,  3573,  3578,  3578,  3578,
+    3583,  3583,  3583,  3592,  3592,  3592,  3598,  3598,  3598,  3607,
+    3610,  3621,  3637,  3637,  3642,  3651,  3637,  3680,  3680,  3685,
+    3695,  3680,  3724,  3724,  3724,  3777,  3778,  3779,  3780,  3781,
+    3785,  3792,  3799,  3805,  3811,  3818,  3825,  3831,  3840,  3843,
+    3849,  3857,  3862,  3869,  3874,  3881,  3886,  3892,  3893,  3897,
+    3898,  3903,  3904,  3908,  3909,  3913,  3914,  3918,  3919,  3920,
+    3924,  3925,  3926,  3930,  3931,  3935,  3968,  4007,  4026,  4046,
+    4066,  4087,  4087,  4087,  4095,  4095,  4095,  4102,  4102,  4102,
+    4113,  4113,  4113,  4124,  4128,  4134,  4150,  4156,  4162,  4168,
+    4168,  4168,  4182,  4187,  4194,  4214,  4242,  4266,  4266,  4266,
+    4276,  4276,  4276,  4290,  4290,  4290,  4304,  4313,  4313,  4313,
+    4333,  4340,  4340,  4340,  4350,  4355,  4362,  4365,  4371,  4391,
+    4410,  4418,  4438,  4463,  4464,  4468,  4469,  4474,  4484,  4487,
+    4490,  4493,  4501,  4510,  4522,  4532
 };
 #endif
 
@@ -6120,7 +6120,7 @@ yydestruct (const char *yymsg,
         break;
 
     case YYSYMBOL_make_struct_fields: /* make_struct_fields  */
-            { delete ((*yyvaluep).pMakeStruct); }
+            { /* gc owns MakeStruct */ }
         break;
 
     case YYSYMBOL_make_variant_dim: /* make_variant_dim  */
@@ -6655,7 +6655,7 @@ yyreduce:
         bool err;
         auto esconst = unescapeString(*(yyvsp[0].s),&err);
         if ( err ) das_yyerror(scanner,"invalid escape sequence",tokAt(scanner,(yylsp[-1])), CompilationError::invalid_escape_sequence);
-        auto sc = make_smart<ExprConstString>(tokAt(scanner,(yylsp[0])),esconst);
+        auto sc = new ExprConstString(tokAt(scanner,(yylsp[0])),esconst);
         delete (yyvsp[0].s);
         static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression))->elements.push_back(sc);
         (yyval.pExpression) = (yyvsp[-1].pExpression);
@@ -6667,7 +6667,7 @@ yyreduce:
         auto se = (yyvsp[-2].pExpression);
         if ( !(yyvsp[-1].s)->empty() ) {
             auto call_fmt = new ExprCall(tokAt(scanner,(yylsp[-1])), "_::fmt");
-            call_fmt->arguments.push_back(make_smart<ExprConstString>(tokAt(scanner,(yylsp[-1])),":" + *(yyvsp[-1].s)));
+            call_fmt->arguments.push_back(new ExprConstString(tokAt(scanner,(yylsp[-1])),":" + *(yyvsp[-1].s)));
             call_fmt->arguments.push_back(se);
             se = call_fmt;
         }
@@ -6684,7 +6684,7 @@ yyreduce:
             (yyval.pExpression) = new ExprConstString(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])),"");
             delete (yyvsp[-1].pExpression);
         } else if ( strb->elements.size()==1 && strb->elements[0]->rtti_isStringConstant() ) {
-            auto sconst = static_pointer_cast<ExprConstString>(strb->elements[0]);
+            auto sconst = static_cast<ExprConstString*>(strb->elements[0]);
             (yyval.pExpression) = new ExprConstString(tokRangeAt(scanner,(yylsp[-2]),(yylsp[0])),sconst->text);
             delete (yyvsp[-1].pExpression);
         } else {
@@ -8712,7 +8712,7 @@ yyreduce:
 
   case 384: /* block_or_simple_block: "=>" expr  */
                                         {
-            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-1])), (yyvsp[0].pExpression));
+            auto retE = new ExprReturn(tokAt(scanner,(yylsp[-1])), (yyvsp[0].pExpression));
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,(yylsp[-1]));
             blkE->list.push_back(retE);
@@ -8722,7 +8722,7 @@ yyreduce:
 
   case 385: /* block_or_simple_block: "=>" "<-" expr  */
                                                {
-            auto retE = make_smart<ExprReturn>(tokAt(scanner,(yylsp[-2])), (yyvsp[0].pExpression));
+            auto retE = new ExprReturn(tokAt(scanner,(yylsp[-2])), (yyvsp[0].pExpression));
             retE->moveSemantics = true;
             auto blkE = new ExprBlock();
             blkE->at = tokAt(scanner,(yylsp[-2]));
@@ -9054,8 +9054,7 @@ yyreduce:
   case 451: /* expr_named_call: name_in_namespace '(' '[' make_struct_fields ']' ')'  */
                                                                          {
         auto nc = new ExprNamedCall(tokAt(scanner,(yylsp[-5])),*(yyvsp[-5].s));
-        nc->arguments = *(yyvsp[-2].pMakeStruct);
-        delete (yyvsp[-2].pMakeStruct);
+        nc->arguments = (yyvsp[-2].pMakeStruct);
         delete (yyvsp[-5].s);
         (yyval.pExpression) = nc;
     }
@@ -9065,8 +9064,7 @@ yyreduce:
                                                                                                   {
         auto nc = new ExprNamedCall(tokAt(scanner,(yylsp[-7])),*(yyvsp[-7].s));
         nc->nonNamedArguments = sequenceToList((yyvsp[-5].pExpression));
-        nc->arguments = *(yyvsp[-2].pMakeStruct);
-        delete (yyvsp[-2].pMakeStruct);
+        nc->arguments = (yyvsp[-2].pMakeStruct);
         delete (yyvsp[-7].s);
         (yyval.pExpression) = nc;
     }
@@ -9120,7 +9118,7 @@ yyreduce:
 
   case 460: /* func_addr_expr: '@' '@' '<' $@25 type_declaration_no_options '>' $@26 func_addr_name  */
                                                                                                                                                        {
-        auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value.get()));
+        auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value));
         expr->funcType = (yyvsp[-3].pTypeDecl);
         (yyval.pExpression) = (yyvsp[0].pExpression);
     }
@@ -9136,7 +9134,7 @@ yyreduce:
 
   case 463: /* func_addr_expr: '@' '@' '<' $@27 optional_function_argument_list optional_function_type '>' $@28 func_addr_name  */
                                                                                                                                                                                      {
-        auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value.get()));
+        auto expr = (ExprAddr *) ((yyvsp[0].pExpression)->rtti_isAddr() ? (yyvsp[0].pExpression) : (((ExprTag *) (yyvsp[0].pExpression))->value));
         expr->funcType = new TypeDecl(Type::tFunction);
         expr->funcType->firstType = (yyvsp[-3].pTypeDecl);
         if ( (yyvsp[-4].pVarDeclList) ) {
@@ -9183,9 +9181,8 @@ yyreduce:
                                                                                         {
         auto nc = new ExprNamedCall(tokAt(scanner,(yylsp[-5])),*(yyvsp[-5].s));
         nc->methodCall = true;
-        nc->arguments = *(yyvsp[-2].pMakeStruct);
+        nc->arguments = (yyvsp[-2].pMakeStruct);
         nc->nonNamedArguments.push_back((yyvsp[-7].pExpression));
-        delete (yyvsp[-2].pMakeStruct);
         delete (yyvsp[-5].s);
         (yyval.pExpression) = nc;
     }
@@ -11760,7 +11757,7 @@ yyreduce:
 
   case 860: /* make_struct_fields: "name" copy_or_move expr  */
                                                {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         delete (yyvsp[-2].s);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11770,7 +11767,7 @@ yyreduce:
 
   case 861: /* make_struct_fields: "name" ":=" expr  */
                                       {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
         delete (yyvsp[-2].s);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11780,7 +11777,7 @@ yyreduce:
 
   case 862: /* make_struct_fields: make_struct_fields ',' "name" copy_or_move expr  */
                                                                            {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
@@ -11789,7 +11786,7 @@ yyreduce:
 
   case 863: /* make_struct_fields: make_struct_fields ',' "name" ":=" expr  */
                                                                   {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-2]), (yylsp[0])),*(yyvsp[-2].s),(yyvsp[0].pExpression),false,true);
         delete (yyvsp[-2].s);
         ((MakeStruct *)(yyvsp[-4].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-4].pMakeStruct);
@@ -11798,7 +11795,7 @@ yyreduce:
 
   case 864: /* make_struct_fields: "$f" '(' expr2 ')' copy_or_move expr  */
                                                                             {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         mfd->tag = (yyvsp[-3].pExpression);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11808,7 +11805,7 @@ yyreduce:
 
   case 865: /* make_struct_fields: "$f" '(' expr2 ')' ":=" expr  */
                                                                    {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner, (yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner, (yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
         mfd->tag = (yyvsp[-3].pExpression);
         auto msd = new MakeStruct();
         msd->push_back(mfd);
@@ -11818,7 +11815,7 @@ yyreduce:
 
   case 866: /* make_struct_fields: make_struct_fields ',' "$f" '(' expr2 ')' copy_or_move expr  */
                                                                                                         {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]),(yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-5]),(yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),(yyvsp[-1].b),false);
         mfd->tag = (yyvsp[-3].pExpression);
         ((MakeStruct *)(yyvsp[-7].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-7].pMakeStruct);
@@ -11827,7 +11824,7 @@ yyreduce:
 
   case 867: /* make_struct_fields: make_struct_fields ',' "$f" '(' expr2 ')' ":=" expr  */
                                                                                                {
-        auto mfd = make_smart<MakeFieldDecl>(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
+        auto mfd = new MakeFieldDecl(tokRangeAt(scanner,(yylsp[-5]), (yylsp[0])),"``MACRO``TAG``FIELD``",(yyvsp[0].pExpression),false,true);
         mfd->tag = (yyvsp[-3].pExpression);
         ((MakeStruct *)(yyvsp[-7].pMakeStruct))->push_back(mfd);
         (yyval.pMakeStruct) = (yyvsp[-7].pMakeStruct);
@@ -12266,7 +12263,7 @@ yyreduce:
   case 924: /* make_dim_decl: '[' optional_expr_list ']'  */
                                                     {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-2])));
+            auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-2])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = new TypeDecl(Type::autoinfer);
             mka->gen2 = true;
@@ -12417,7 +12414,7 @@ yyreduce:
 
   case 936: /* make_dim_decl: "array" '(' expr_list optional_comma ')'  */
                                                                    {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-4])));
+        auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-4])));
         mka->values = sequenceToList((yyvsp[-2].pExpression));
         mka->makeType = new TypeDecl(Type::autoinfer);
         mka->gen2 = true;
@@ -12438,7 +12435,7 @@ yyreduce:
   case 939: /* make_dim_decl: "array" '<' $@102 type_declaration_no_options '>' $@103 '(' optional_expr_list ')'  */
                                                                                                                                                                         {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-8])));
+            auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = (yyvsp[-5].pTypeDecl);
             mka->gen2 = true;
@@ -12516,7 +12513,7 @@ yyreduce:
   case 948: /* make_table_decl: open_block optional_expr_map_tuple_list close_block  */
                                                                               {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-2])));
+            auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-2])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = new TypeDecl(Type::autoinfer);
             auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-2])),"to_table_move");
@@ -12560,7 +12557,7 @@ yyreduce:
 
   case 950: /* make_table_decl: "table" '(' optional_expr_map_tuple_list ')'  */
                                                                        {
-        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-3])));
+        auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-3])));
         mka->values = sequenceToList((yyvsp[-1].pExpression));
         mka->makeType = new TypeDecl(Type::autoinfer);
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-3])),"to_table_move");
@@ -12572,7 +12569,7 @@ yyreduce:
   case 951: /* make_table_decl: "table" '<' type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'  */
                                                                                                                  {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-6])));
+            auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-6])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = (yyvsp[-4].pTypeDecl);
             auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,(yylsp[-6])),"to_table_move");
@@ -12595,7 +12592,7 @@ yyreduce:
   case 952: /* make_table_decl: "table" '<' type_declaration_no_options c_or_s type_declaration_no_options '>' '(' optional_expr_map_tuple_list ')'  */
                                                                                                                                                              {
         if ( (yyvsp[-1].pExpression) ) {
-            auto mka = make_smart<ExprMakeArray>(tokAt(scanner,(yylsp[-8])));
+            auto mka = new ExprMakeArray(tokAt(scanner,(yylsp[-8])));
             mka->values = sequenceToList((yyvsp[-1].pExpression));
             mka->makeType = new TypeDecl(Type::tTuple);
             mka->makeType->argTypes.push_back((yyvsp[-6].pTypeDecl));

@@ -1,0 +1,1 @@
+Adds a new entry with the given name to the specified enumeration. Returns the integer value assigned to the new entry.

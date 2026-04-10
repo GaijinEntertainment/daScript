@@ -13,7 +13,7 @@ require dastest/testing_boost public
 [test]
 def test_nested_blocks(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
+        var expr = qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
         let r = qmatch(expr, foo() $ { bar() $(x : int) { baz(x); }; })
         t |> success(r.matched, "nested blocks should match")
     }
@@ -22,7 +22,7 @@ def test_nested_blocks(t : T?) {
 [test]
 def test_nested_blocks_wrong_inner_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
+        var expr = qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
         let r = qmatch(expr, foo() $ { bar() $(x : int) { other(x); }; })
         t |> success(!r.matched, "wrong inner block body should fail")
     }
@@ -31,7 +31,7 @@ def test_nested_blocks_wrong_inner_body(t : T?) {
 [test]
 def test_nested_blocks_wrong_inner_arg(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
+        var expr = qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
         let r = qmatch(expr, foo() $ { bar() $(y : int) { baz(x); }; })
         t |> success(!r.matched, "wrong inner block arg name should fail")
     }
@@ -40,7 +40,7 @@ def test_nested_blocks_wrong_inner_arg(t : T?) {
 [test]
 def test_nested_blocks_wrong_inner_arg_type(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
+        var expr = qmacro(foo() $ { bar() $(x : int) { baz(x); }; })
         let r = qmatch(expr, foo() $ { bar() $(x : float) { baz(x); }; })
         t |> success(!r.matched, "wrong inner block arg type should fail")
     }
@@ -51,7 +51,7 @@ def test_nested_blocks_wrong_inner_arg_type(t : T?) {
 [test]
 def test_three_level_nesting(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(a() $ { b() $ { c() $ { print(); }; }; })
+        var expr = qmacro(a() $ { b() $ { c() $ { print(); }; }; })
         let r = qmatch(expr, a() $ { b() $ { c() $ { print(); }; }; })
         t |> success(r.matched, "three-level nested blocks should match")
     }
@@ -60,7 +60,7 @@ def test_three_level_nesting(t : T?) {
 [test]
 def test_three_level_nesting_wrong_deepest(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(a() $ { b() $ { c() $ { print(); }; }; })
+        var expr = qmacro(a() $ { b() $ { c() $ { print(); }; }; })
         let r = qmatch(expr, a() $ { b() $ { c() $ { foo(); }; }; })
         t |> success(!r.matched, "wrong deepest block body should fail")
     }
@@ -71,7 +71,7 @@ def test_three_level_nesting_wrong_deepest(t : T?) {
 [test]
 def test_block_in_qmatch_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo() $ { bar(); }; })
+        var expr = qmacro($ { foo() $ { bar(); }; })
         let r = qmatch_block(expr) $ {
             foo() $ {
                 bar()
@@ -84,7 +84,7 @@ def test_block_in_qmatch_block(t : T?) {
 [test]
 def test_block_in_qmatch_block_wrong(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo() $ { bar(); }; })
+        var expr = qmacro($ { foo() $ { bar(); }; })
         let r = qmatch_block(expr) $ {
             foo() $ {
                 baz()
@@ -97,7 +97,7 @@ def test_block_in_qmatch_block_wrong(t : T?) {
 [test]
 def test_typed_block_in_qmatch_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo() $(x : int) { bar(x); }; })
+        var expr = qmacro($ { foo() $(x : int) { bar(x); }; })
         let r = qmatch_block(expr) $ {
             foo() $(x : int) {
                 bar(x)
@@ -112,7 +112,7 @@ def test_typed_block_in_qmatch_block(t : T?) {
 [test]
 def test_block_after_wildcard(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { setup(); foo() $(x : int) { bar(x); }; })
+        var expr = qmacro($ { setup(); foo() $(x : int) { bar(x); }; })
         let r = qmatch_block(expr) $ {
             _wildcard()
             foo() $(x : int) {
@@ -128,7 +128,7 @@ def test_block_after_wildcard(t : T?) {
 [test]
 def test_invoke_with_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(invoke(cb) $ { print(); })
+        var expr = qmacro(invoke(cb) $ { print(); })
         let r = qmatch(expr, invoke(cb) $ { print(); })
         t |> success(r.matched, "invoke with block should match")
     }
@@ -137,7 +137,7 @@ def test_invoke_with_block(t : T?) {
 [test]
 def test_invoke_wrong_first_arg(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(invoke(cb) $ { print(); })
+        var expr = qmacro(invoke(cb) $ { print(); })
         let r = qmatch(expr, invoke(other) $ { print(); })
         t |> success(!r.matched, "invoke with wrong first arg should fail")
     }
@@ -148,7 +148,7 @@ def test_invoke_wrong_first_arg(t : T?) {
 [test]
 def test_sibling_blocks(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo() $ { bar(); }; baz() $(x : int) { qux(x); }; })
+        var expr = qmacro($ { foo() $ { bar(); }; baz() $(x : int) { qux(x); }; })
         let r = qmatch_block(expr) $ {
             foo() $ {
                 bar()
@@ -164,7 +164,7 @@ def test_sibling_blocks(t : T?) {
 [test]
 def test_sibling_blocks_wrong_second(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo() $ { bar(); }; baz() $(x : int) { qux(x); }; })
+        var expr = qmacro($ { foo() $ { bar(); }; baz() $(x : int) { qux(x); }; })
         let r = qmatch_block(expr) $ {
             foo() $ {
                 bar()

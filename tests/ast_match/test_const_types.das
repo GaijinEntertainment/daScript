@@ -61,8 +61,8 @@ def target_int2() : int2 {
 [test]
 def test_int64_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_int64)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_int64)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : int64) {
@@ -81,8 +81,8 @@ def test_int64_match(t : T?) {
 [test]
 def test_int64_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_int64)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_int64)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : int64) {
@@ -95,8 +95,8 @@ def test_int64_mismatch(t : T?) {
 [test]
 def test_uint_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_uint)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_uint)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : uint) {
@@ -115,8 +115,8 @@ def test_uint_match(t : T?) {
 [test]
 def test_uint_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_uint)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_uint)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : uint) {
@@ -129,8 +129,8 @@ def test_uint_mismatch(t : T?) {
 [test]
 def test_double_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_double)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_double)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : double) {
@@ -149,8 +149,8 @@ def test_double_match(t : T?) {
 [test]
 def test_double_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_double)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_double)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : double) {
@@ -163,8 +163,8 @@ def test_double_mismatch(t : T?) {
 [test]
 def test_uint64_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_uint64)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_uint64)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : uint64) {
@@ -183,8 +183,8 @@ def test_uint64_match(t : T?) {
 [test]
 def test_null_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_null_check)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_null_check)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : int?) {
@@ -203,8 +203,8 @@ def test_null_match(t : T?) {
 [test]
 def test_range_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_range)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_range)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -223,8 +223,8 @@ def test_range_match(t : T?) {
 [test]
 def test_range_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_range)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_range)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -237,8 +237,8 @@ def test_range_mismatch(t : T?) {
 [test]
 def test_float2_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_float2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_float2)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -257,8 +257,8 @@ def test_float2_match(t : T?) {
 [test]
 def test_float2_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_float2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_float2)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -271,8 +271,8 @@ def test_float2_mismatch(t : T?) {
 [test]
 def test_int2_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_int2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_int2)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -291,8 +291,8 @@ def test_int2_match(t : T?) {
 [test]
 def test_int2_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_int2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_int2)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $ {
@@ -306,8 +306,8 @@ def test_int2_mismatch(t : T?) {
 def test_identity_enum(t : T?) {
     ast_gc_guard() {
         // enum identity — just body match, no constant folding
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_enum)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_enum)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : Type) {
@@ -327,8 +327,8 @@ def target_float4() : float4 {
 [test]
 def test_float2_capture_v(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_float2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_float2)
+        if (func == null) {
             return
         }
         var x_val : float
@@ -343,8 +343,8 @@ def test_float2_capture_v(t : T?) {
 [test]
 def test_float2_capture_v_wrong_fixed(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_float2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_float2)
+        if (func == null) {
             return
         }
         var x_val : float
@@ -358,8 +358,8 @@ def test_float2_capture_v_wrong_fixed(t : T?) {
 [test]
 def test_int2_capture_v(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_int2)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_int2)
+        if (func == null) {
             return
         }
         var y_val : int
@@ -374,8 +374,8 @@ def test_int2_capture_v(t : T?) {
 [test]
 def test_float4_capture_v(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_float4)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_float4)
+        if (func == null) {
             return
         }
         var x_val, w_val : float
@@ -391,8 +391,8 @@ def test_float4_capture_v(t : T?) {
 [test]
 def test_range_capture_v(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_range)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_range)
+        if (func == null) {
             return
         }
         var lo, hi : int

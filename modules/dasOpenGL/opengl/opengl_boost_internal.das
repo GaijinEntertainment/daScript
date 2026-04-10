@@ -58,7 +58,7 @@ def get_shader_const_name(arg : ExpressionPtr; var errors : das_string) {
 
 [tag_function_macro(tag="compile_shader_tag")]
 class BgfxCompileShaderFunctionAnnotation : AstFunctionAnnotation {
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         // see if there
         if (call.arguments[0]._type == null || call.arguments[1]._type == null) {
             return default<ExpressionPtr>
@@ -80,7 +80,7 @@ class BgfxCompileShaderFunctionAnnotation : AstFunctionAnnotation {
 
 [tag_function_macro(tag="compile_compute_shader_tag")]
 class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation {
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         // see if there
         if (call.arguments[0]._type == null) {
             return default<ExpressionPtr>
@@ -113,7 +113,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
             name := "self",
             _type <- new TypeDecl(at = st.at,
                 baseType = Type.tStructure,
-                structType = get_ptr(st)
+                structType = st
             )
         )
         fn.arguments |> emplace_new() <| new Variable(at = st.at,
@@ -123,7 +123,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
         )
         var blk <- new ExprBlock(at = st.at)
         // for each field
-        var stype <- new TypeDecl(baseType = Type.tStructure, structType = get_ptr(st), at = st.at)
+        var stype <- new TypeDecl(baseType = Type.tStructure, structType = st, at = st.at)
         for (fld, attri in st.fields, count()) {
             // attri+vindex
             var vattr_i <- new ExprOp2(at = fld.at,

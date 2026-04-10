@@ -47,59 +47,59 @@ class UidGen : AstVisitor {
         uid = 0 |> uint64()
     }
 
-    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
-        add(get_ptr(expr))
+    def override preVisitExprAddr(expr : ExprAddr?) {
+        add(expr)
     }
 
-    def override preVisitExprNew(expr : smart_ptr<ExprNew>) {
-        add(get_ptr(expr))
+    def override preVisitExprNew(expr : ExprNew?) {
+        add(expr)
         add(expr.typeexpr)
     }
 
-    def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) {
-        add(get_ptr(expr))
+    def override preVisitExprAscend(expr : ExprAscend?) {
+        add(expr)
         add(expr.subexpr._type)
     }
 
-    def override preVisitExprDelete(expr : smart_ptr<ExprDelete>) {
-        add(get_ptr(expr))
+    def override preVisitExprDelete(expr : ExprDelete?) {
+        add(expr)
         add(expr.subexpr._type.firstType)
     }
 
-    def override preVisitExprClone(expr : smart_ptr<ExprClone>) {
+    def override preVisitExprClone(expr : ExprClone?) {
         add(expr.left._type)
     }
 
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
-        add(get_ptr(expr))
+    def override preVisitExprTypeInfo(expr : ExprTypeInfo?) {
+        add(expr)
     }
 
-    def override preVisitExprBlock(expr : smart_ptr<ExprBlock>) {
-        add(get_ptr(expr))
+    def override preVisitExprBlock(expr : ExprBlock?) {
+        add(expr)
     }
 
-    def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
-        add(get_ptr(expr))
+    def override preVisitExprMakeStruct(expr : ExprMakeStruct?) {
+        add(expr)
     }
 
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) {
-        add(get_ptr(expr))
+    def override preVisitExprCall(expr : ExprCall?) {
+        add(expr)
     }
 
-    def override preVisitExprOp2(var expr : smart_ptr<ExprOp2>) {
-        add(get_ptr(expr))
+    def override preVisitExprOp2(var expr : ExprOp2?) {
+        add(expr)
     }
 
-    def override preVisitExprOp1(var expr : smart_ptr<ExprOp1>) {
-        add(get_ptr(expr))
+    def override preVisitExprOp1(var expr : ExprOp1?) {
+        add(expr)
     }
 
-    def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) {
-        add(get_ptr(expr))
+    def override preVisitExprStringBuilder(expr : ExprStringBuilder?) {
+        add(expr)
     }
 
-    def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) {
-        add(get_ptr(expr))
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) {
+        add(expr)
     }
 
 }
@@ -128,16 +128,16 @@ class public UidNodes {
         }
     }
 
-    def get_addr(expr : smart_ptr<ExprAddr>) : DllName {
-        return get_base(get_ptr(expr), "addr_{get_mangled_name(expr.func)}")
+    def get_addr(expr : ExprAddr?) : DllName {
+        return get_base(expr, "addr_{get_mangled_name(expr.func)}")
     }
 
     def get_new(expr : TypeDeclPtr) : DllName {
         return get_base(expr, "new`handle`{get_mangled_name(expr)}")
     }
 
-    def get_ascend_new(expr : smart_ptr<ExprAscend>) {
-        return get_base(get_ptr(expr), "ascend_new`handle`{get_mangled_name(expr.subexpr._type)}")
+    def get_ascend_new(expr : ExprAscend?) {
+        return get_base(expr, "ascend_new`handle`{get_mangled_name(expr.subexpr._type)}")
     }
 
     def get_delete_type(t : TypeDeclPtr) : DllName {
@@ -148,28 +148,28 @@ class public UidNodes {
         return get_base(t, "clone`handle`{get_mangled_name(t)}")
     }
 
-    def get_tinfo(expr : smart_ptr<ExprTypeInfo>) {
-        return get_base(get_ptr(expr), "tinfo_{expr.typeexpr.get_mnh}")
+    def get_tinfo(expr : ExprTypeInfo?) {
+        return get_base(expr, "tinfo_{expr.typeexpr.get_mnh}")
     }
 
-    def get_ctor(expr : smart_ptr<ExprMakeStruct>) {
-        return get_base(get_ptr(expr), "ctor_{expr.constructor}")
+    def get_ctor(expr : ExprMakeStruct?) {
+        return get_base(expr, "ctor_{expr.constructor}")
     }
 
-    def get_call(expr : smart_ptr<ExprCallFunc>) : DllName {
-        return get_base(get_ptr(expr), "call_{get_mangled_name(expr.func)}")
+    def get_call(expr : ExprCallFunc?) : DllName {
+        return get_base(expr, "call_{get_mangled_name(expr.func)}")
     }
 
     def public get_block_name_ptr(blk : ExprBlock?) : DllName {
         return get_base(blk, "block_{get_mangled_name(blk)}")
     }
 
-    def public get_block_name(blk : smart_ptr<ExprBlock>) : DllName {
-        return get_base(get_ptr(blk), "block_{get_mangled_name(blk)}")
+    def public get_block_name(blk : ExprBlock?) : DllName {
+        return get_base(blk, "block_{get_mangled_name(blk)}")
     }
 
-    def public get_block_ann(mk_blk : smart_ptr<ExprMakeBlock>) : DllName {
-        return get_base(get_ptr(mk_blk), "makeblock_ann")
+    def public get_block_ann(mk_blk : ExprMakeBlock?) : DllName {
+        return get_base(mk_blk, "makeblock_ann")
     }
 
     def reset(var func : Function?) {

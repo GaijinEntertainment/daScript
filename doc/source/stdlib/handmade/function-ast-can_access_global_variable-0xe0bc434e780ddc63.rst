@@ -1,0 +1,1 @@
+Checks whether the given global variable is accessible from the specified module context, taking into account visibility rules and the module where the access originates.

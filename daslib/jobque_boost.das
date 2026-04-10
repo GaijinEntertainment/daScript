@@ -49,7 +49,7 @@ class private NewJobMacro : AstFunctionAnnotation {
     //! this macro handles `new_job` and `new_thread` calls.
     //! the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
     //! a cloning infrastructure is generated for the lambda, which is invoked in the new context.
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         //! Transforms the new_job or new_thread call by generating lambda cloning infrastructure.
         macro_verify(call.arguments[0] is ExprAscend, compiling_program(), call.at, "expecting lambda declaration, ExprAscend")
         var asc = call.arguments[0] as ExprAscend
@@ -57,15 +57,15 @@ class private NewJobMacro : AstFunctionAnnotation {
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type == null || mks._type.baseType != Type.tStructure), compiling_program(), call.at, "expecting lambda declaration, not a structure")
         // clone structure type. make fields non-constant, so that they can be cloned
-        var inscope stype <- clone_structure(mks._type.structType)
+        var stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_new_job_clone"
-        var stype_ptr = get_ptr(stype)
+        var stype_ptr = stype
         var sttype = new TypeDecl(at = call.at, baseType = Type.tStructure, structType = stype_ptr)
         for (fld in stype.fields) {// TODO: verify field type here
             fld._type.flags &= ~(TypeDeclFlags.constant)
             fld.flags &= ~(FieldDeclarationFlags.capturedConstant)
         }
-        var inscope pclone <- make_clone_structure(stype_ptr)
+        var pclone = make_clone_structure(stype_ptr)
         let const_clone = pclone.arguments[1]._type.flags.constant
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
@@ -78,7 +78,7 @@ class private NewJobMacro : AstFunctionAnnotation {
             ftype.argTypes[1].flags |= TypeDeclFlags.constant
         }
         // make a new_job_invoke call
-        var inscope ncall <- new ExprCall(at = call.at, name := "{call.name}_invoke")
+        var ncall = new ExprCall(at = call.at, name := "{call.name}_invoke")
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new ExprAddr(at = call.at, target := "clone", funcType <- ftype)
         ncall.arguments |> emplace_new <| new ExprConstInt(at = call.at, value = int(mks._type.sizeOf))
@@ -470,13 +470,13 @@ class private ParallelForJobMacro : AstFunctionAnnotation {
     //! Base macro for parallel_for, parallel_for_each, and parallel_map.
     //! Wraps the block body in ``new_job`` and redirects to the runtime implementation.
     function_name : string = "jobque_boost::_parallel_for"
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         let last_index = call.arguments.length() - 1
         macro_verify(call.arguments[last_index] is ExprMakeBlock, compiling_program(), call.at, "expecting block as {last_index} argument")
-        var inscope newCall <- clone_expression(call)
+        var newCall = clone_expression(call)
         assume newCallCall = (newCall as ExprCall)
         newCallCall.name := function_name
-        var inscope new_body <- qmacro(new_job(@ {$b(((call.arguments[last_index] as ExprMakeBlock)._block as ExprBlock).list); }))
+        var new_body = qmacro(new_job(@ {$b(((call.arguments[last_index] as ExprMakeBlock)._block as ExprBlock).list); }))
         var new_block = ((newCallCall.arguments[last_index] as ExprMakeBlock)._block as ExprBlock)
         new_block.list.clear()
         new_block.list.emplace(new_body)
@@ -602,13 +602,13 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
     //! Capture macro for channel and job status objects in lambda captures.
     def make_capture_call(expr : ExpressionPtr; name : string) : ExpressionPtr {
         //! Creates a call expression that captures (adds a reference to) a jobque object.
-        var inscope pCall <- new ExprCall(at = expr.at, name := name)
+        var pCall = new ExprCall(at = expr.at, name := name)
         pCall.arguments |> emplace_new <| clone_expression(expr)
         return <- pCall
     }
     def make_release_call(fld : FieldDeclaration; name : string) : ExpressionPtr {
         //! Creates a call expression that releases (decrements the reference of) a captured jobque object.
-        var inscope pCall <- new ExprCall(at = fld.at, name := name)
+        var pCall = new ExprCall(at = fld.at, name := name)
         pCall.arguments |> emplace_new <| new ExprField(at = fld.at,
             value <- new ExprVar(at = fld.at, name := "__this"),
             name := fld.name,
@@ -627,7 +627,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         } elif (typ |> isPtrToJQ("LockBox")) {
             return <- make_capture_call(expr, "jobque_boost::capture_jobque_lock_box")
         }
-        return <- default<ExpressionPtr>
+        return null
     }
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
         //! Implementation details for the capture macro.
@@ -640,13 +640,13 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         }
         for (fld in lcs.fields) {
             if (fld._type |> isPtrToJQ("Channel")) {
-                var inscope pCall <- make_release_call(fld, "jobque_boost::release_capture_jobque_channel")
+                var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_channel")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             } elif (fld._type |> isPtrToJQ("JobStatus")) {
-                var inscope pCall <- make_release_call(fld, "jobque_boost::release_capture_jobque_job_status")
+                var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_job_status")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             } elif (fld._type |> isPtrToJQ("LockBox")) {
-                var inscope pCall <- make_release_call(fld, "jobque_boost::release_capture_jobque_lock_box")
+                var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_lock_box")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             }
         }

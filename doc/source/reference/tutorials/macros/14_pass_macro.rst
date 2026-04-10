@@ -76,20 +76,16 @@ Section 1 — lint_macro (compile-time analysis)
     [lint_macro]
     class CodeStatsLint : AstPassMacro {
         def override apply(prog : ProgramPtr; mod : Module?) : bool {
+            let cm = compiling_module()
             let WARN_THRESHOLD = 4
-            get_ptr(prog) |> for_each_module() $(var m : Module?) {
-                if (m.moduleFlags.builtIn) {
-                    return  // skip C++ built-in modules
+            cm |> for_each_function("") $(var func : FunctionPtr) {
+                if (func.body == null || !(func.body is ExprBlock)) {
+                    return
                 }
-                m |> for_each_function("") <| $(var func : FunctionPtr) {
-                    if (func.body == null || !(func.body is ExprBlock)) {
-                        return
-                    }
-                    let body = func.body as ExprBlock
-                    let nStmts = length(body.list)
-                    if (nStmts > WARN_THRESHOLD) {
-                        print("[lint] '{func.name}' has {nStmts} statements (>{WARN_THRESHOLD})\n")
-                    }
+                let body = func.body as ExprBlock
+                let nStmts = length(body.list)
+                if (nStmts > WARN_THRESHOLD) {
+                    print("[lint] '{func.name}' has {nStmts} top-level statements (>{WARN_THRESHOLD})\n")
                 }
             }
             return false  // lint macros don't modify the AST
@@ -100,10 +96,10 @@ Key points:
 
 - ``[lint_macro]`` means this class runs **after inference succeeds**,
   during the read-only lint phase.
-- ``get_ptr(prog) |> for_each_module()`` walks the **entire compiled
-  program**.  ``m.moduleFlags.builtIn`` skips C++ built-in modules so
-  only user code is inspected.
-- ``for_each_function("")`` iterates each module's functions.  The
+- ``compiling_module()`` returns the module being compiled right now.
+  This is **not** the same as ``mod``, which is the module that owns
+  the macro (``pass_macro_mod``).
+- ``for_each_function("")`` iterates the module's functions.  The
   empty string means "all names".
 - The lint checks function body size: any function with more than
   ``WARN_THRESHOLD`` top-level statements triggers a compile-time
@@ -140,7 +136,7 @@ The visitor walks the AST and modifies function bodies:
         astChanged : bool = false
         @do_not_delete func : Function?
         def override preVisitFunction(var fun : FunctionPtr) {
-            func = get_ptr(fun)
+            func = fun
         }
         def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
             // Skip our own helper to avoid infinite recursion at runtime.
@@ -165,7 +161,7 @@ The visitor walks the AST and modifies function bodies:
             }
             // Insert _trace_enter("function_name") at the beginning.
             let fname = string(fun.name)
-            var inscope expr <- qmacro(_trace_enter($v(fname)))
+            var expr = qmacro(_trace_enter($v(fname)))
             body.list |> emplace(expr, 0)
             astChanged = true
             func.not_inferred()

@@ -124,7 +124,7 @@ The following example modifies function calls at compilation time to add a preco
 
     [tag_function_macro(tag="get_hint_tag")]
     class GetHintFnMacro : AstFunctionAnnotation {
-        def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+        def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
             if (call.arguments[1] is ExprConstString) {
                 unsafe {
                     var new_call := call // <- clone_expression(call)
@@ -134,7 +134,7 @@ The following example modifies function calls at compilation time to add a preco
                     return new_call
                 }
             }
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
     }
 

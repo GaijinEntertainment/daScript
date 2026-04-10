@@ -11,19 +11,19 @@ require dastest/testing_boost public
 // ── Helpers to build test expressions ───────────────────────────────────
 
 def make_int(val : int) : ExpressionPtr {
-    return <- qmacro($v(val))
+    return qmacro($v(val))
 }
 
 def make_bool(val : bool) : ExpressionPtr {
-    return <- qmacro($v(val))
+    return qmacro($v(val))
 }
 
 def make_add_ab() : ExpressionPtr {
-    return <- qmacro(a + b)
+    return qmacro(a + b)
 }
 
 def make_add_xb() : ExpressionPtr {
-    return <- qmacro(x + b)
+    return qmacro(x + b)
 }
 
 // ── Basic matching ──────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ def test_result_types(t : T?) {
 [test]
 def test_const_int_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         t |> success(qmatch(expr, 42).matched, "42 should match 42")
     }
 }
@@ -50,7 +50,7 @@ def test_const_int_match(t : T?) {
 [test]
 def test_const_int_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         let r = qmatch(expr, 99)
         t |> success(!r.matched, "42 should not match 99")
         t |> equal(int(r.error), int(QMatchError.field_mismatch))
@@ -60,7 +60,7 @@ def test_const_int_mismatch(t : T?) {
 [test]
 def test_rtti_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         let r = qmatch(expr, true)
         t |> success(!r.matched, "int should not match bool pattern")
         t |> equal(int(r.error), int(QMatchError.rtti_mismatch))
@@ -70,7 +70,7 @@ def test_rtti_mismatch(t : T?) {
 [test]
 def test_const_bool_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_bool(true)
+        var expr = make_bool(true)
         t |> success(qmatch(expr, true).matched, "true == true")
     }
 }
@@ -78,7 +78,7 @@ def test_const_bool_match(t : T?) {
 [test]
 def test_const_bool_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_bool(false)
+        var expr = make_bool(false)
         t |> success(!qmatch(expr, true).matched, "false != true")
     }
 }
@@ -86,7 +86,7 @@ def test_const_bool_mismatch(t : T?) {
 [test]
 def test_op2_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_add_ab()
+        var expr <- make_add_ab()
         t |> success(qmatch(expr, a + b).matched, "a+b matches a+b")
     }
 }
@@ -94,7 +94,7 @@ def test_op2_match(t : T?) {
 [test]
 def test_op2_wrong_op(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_add_ab()
+        var expr <- make_add_ab()
         t |> success(!qmatch(expr, a - b).matched, "a+b does not match a-b")
     }
 }
@@ -102,7 +102,7 @@ def test_op2_wrong_op(t : T?) {
 [test]
 def test_op2_wrong_var(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_add_xb()
+        var expr <- make_add_xb()
         t |> success(!qmatch(expr, a + b).matched, "x+b does not match a+b")
     }
 }
@@ -113,14 +113,14 @@ def test_op2_wrong_var(t : T?) {
 def test_capture_e_op2(t : T?) {
     ast_gc_guard() {
         // Match a + b, capture left and right as ExpressionPtr
-        var inscope expr <- make_add_ab()
-        var inscope left : ExpressionPtr
-        var inscope right : ExpressionPtr
+        var expr <- make_add_ab()
+        var left : ExpressionPtr
+        var right : ExpressionPtr
         let r = qmatch(expr, $e(left) + $e(right))
         t |> success(r.matched, "should match with $e captures")
         if (r.matched) {
-            t |> equal(string(get_ptr(left).__rtti), "ExprVar")
-            t |> equal(string(get_ptr(right).__rtti), "ExprVar")
+            t |> equal(string(left.__rtti), "ExprVar")
+            t |> equal(string(right.__rtti), "ExprVar")
         }
     }
 }
@@ -129,8 +129,8 @@ def test_capture_e_op2(t : T?) {
 def test_capture_e_rtti_mismatch(t : T?) {
     ast_gc_guard() {
         // $e captures should still fail on RTTI mismatch at the outer level
-        var inscope expr <- make_int(42)
-        var inscope captured : ExpressionPtr
+        var expr = make_int(42)
+        var captured : ExpressionPtr
         let r = qmatch(expr, $e(captured) + $e(captured))
         t |> success(!r.matched, "int should not match op2 pattern even with $e")
         t |> equal(int(r.error), int(QMatchError.rtti_mismatch))
@@ -142,7 +142,7 @@ def test_capture_e_rtti_mismatch(t : T?) {
 [test]
 def test_capture_v_int(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         var val : int
         let r = qmatch(expr, $v(val))
         t |> success(r.matched, "should match ExprConstInt with $v")
@@ -162,7 +162,7 @@ def test_capture_v_int(t : T?) {
 def test_capture_i_var(t : T?) {
     ast_gc_guard() {
         // Extract variable name from ExprVar
-        var inscope expr <- qmacro(my_variable)
+        var expr = qmacro(my_variable)
         var name : string
         let r = qmatch(expr, $i(name))
         t |> success(r.matched, "should match ExprVar with $i")
@@ -176,7 +176,7 @@ def test_capture_i_var(t : T?) {
 def test_capture_i_from_op2(t : T?) {
     ast_gc_guard() {
         // Extract variable names from a + b
-        var inscope expr <- make_add_ab()
+        var expr <- make_add_ab()
         var left_name : string
         var right_name : string
         let r = qmatch(expr, $i(left_name) + $i(right_name))
@@ -195,7 +195,7 @@ def test_capture_i_from_op2(t : T?) {
 [test]
 def test_null_expr_fails(t : T?) {
     ast_gc_guard() {
-        var inscope expr : ExpressionPtr
+        var expr : ExpressionPtr
         let r = qmatch(expr, 42)
         t |> success(!r.matched, "null expr should fail")
         t |> equal(int(r.error), int(QMatchError.null_expression))
@@ -207,7 +207,7 @@ def test_null_expr_fails(t : T?) {
 [test]
 def test_const_string_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro("hello")
+        var expr = qmacro("hello")
         t |> success(qmatch(expr, "hello").matched, "hello == hello")
     }
 }
@@ -215,7 +215,7 @@ def test_const_string_match(t : T?) {
 [test]
 def test_const_string_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro("hello")
+        var expr = qmacro("hello")
         t |> success(!qmatch(expr, "world").matched, "hello != world")
     }
 }
@@ -225,7 +225,7 @@ def test_const_string_mismatch(t : T?) {
 [test]
 def test_const_float_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(3.14)
+        var expr = qmacro(3.14)
         t |> success(qmatch(expr, 3.14).matched, "3.14 == 3.14")
     }
 }
@@ -233,7 +233,7 @@ def test_const_float_match(t : T?) {
 [test]
 def test_const_float_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(3.14)
+        var expr = qmacro(3.14)
         t |> success(!qmatch(expr, 2.71).matched, "3.14 != 2.71")
     }
 }
@@ -243,7 +243,7 @@ def test_const_float_mismatch(t : T?) {
 [test]
 def test_int_vs_string(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         t |> success(!qmatch(expr, "hello").matched, "int vs string")
     }
 }
@@ -251,7 +251,7 @@ def test_int_vs_string(t : T?) {
 [test]
 def test_bool_vs_int(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_bool(true)
+        var expr = make_bool(true)
         t |> success(!qmatch(expr, 42).matched, "bool vs int")
     }
 }
@@ -259,7 +259,7 @@ def test_bool_vs_int(t : T?) {
 [test]
 def test_op2_vs_const(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_add_ab()
+        var expr <- make_add_ab()
         t |> success(!qmatch(expr, 42).matched, "op2 vs const")
     }
 }
@@ -267,7 +267,7 @@ def test_op2_vs_const(t : T?) {
 [test]
 def test_const_vs_op2(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_int(42)
+        var expr = make_int(42)
         t |> success(!qmatch(expr, a + b).matched, "const vs op2")
     }
 }
@@ -276,13 +276,13 @@ def test_const_vs_op2(t : T?) {
 
 def make_block_ab() : ExpressionPtr {
     // Block: { a + b; return c; }
-    return <- qmacro($ { a + b; return c; })
+    return qmacro($ { a + b; return c; })
 }
 
 [test]
 def test_block_exact_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_ab()
+        var expr <- make_block_ab()
         let r = qmatch_block(expr) $ {
             a + b
             return c
@@ -294,7 +294,7 @@ def test_block_exact_match(t : T?) {
 [test]
 def test_block_wrong_stmt(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_ab()
+        var expr <- make_block_ab()
         let r = qmatch_block(expr) $ {
             a - b
             return c
@@ -306,7 +306,7 @@ def test_block_wrong_stmt(t : T?) {
 [test]
 def test_block_extra_stmt(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_ab()
+        var expr <- make_block_ab()
         let r = qmatch_block(expr) $ {
             a + b
         }
@@ -317,7 +317,7 @@ def test_block_extra_stmt(t : T?) {
 [test]
 def test_block_wildcard_trailing(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_ab()
+        var expr <- make_block_ab()
         let r = qmatch_block(expr) $ {
             a + b
             _wildcard()
@@ -329,7 +329,7 @@ def test_block_wildcard_trailing(t : T?) {
 [test]
 def test_block_wildcard_leading(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_ab()
+        var expr <- make_block_ab()
         let r = qmatch_block(expr) $ {
             _wildcard()
             return c
@@ -342,22 +342,22 @@ def test_block_wildcard_leading(t : T?) {
 
 def make_block_1() : ExpressionPtr {
     // { a + b }
-    return <- qmacro($ { a + b; })
+    return qmacro($ { a + b; })
 }
 
 def make_block_2() : ExpressionPtr {
     // { print(); a + b }
-    return <- qmacro($ { print(); a + b; })
+    return qmacro($ { print(); a + b; })
 }
 
 def make_block_3() : ExpressionPtr {
     // { print(); print(); a + b }
-    return <- qmacro($ { print(); print(); a + b; })
+    return qmacro($ { print(); print(); a + b; })
 }
 
 def make_block_4() : ExpressionPtr {
     // { a + b; return c; print() }
-    return <- qmacro($ { a + b; return c; print(); })
+    return qmacro($ { a + b; return c; print(); })
 }
 
 // _wildcard() before a fixed pattern — zero prefix
@@ -366,7 +366,7 @@ def make_block_4() : ExpressionPtr {
 def test_wildcard_zero_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual has just a + b (wildcard matches 0)
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             _wildcard()
             a + b
@@ -379,7 +379,7 @@ def test_wildcard_zero_prefix(t : T?) {
 def test_wildcard_one_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual: print(); a + b
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             _wildcard()
             a + b
@@ -392,7 +392,7 @@ def test_wildcard_one_prefix(t : T?) {
 def test_wildcard_two_prefix(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b  — actual: print(); print(); a + b
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             _wildcard()
             a + b
@@ -407,7 +407,7 @@ def test_wildcard_two_prefix(t : T?) {
 def test_wildcard_trailing_multi(t : T?) {
     ast_gc_guard() {
         // Pattern: a + b; _wildcard()  — actual: a + b; return c; print()
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             a + b
             _wildcard()
@@ -421,7 +421,7 @@ def test_wildcard_trailing_multi(t : T?) {
 [test]
 def test_no_wildcard_exact(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             a + b
         }
@@ -432,7 +432,7 @@ def test_no_wildcard_exact(t : T?) {
 [test]
 def test_no_wildcard_too_few(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             a + b
         }
@@ -446,7 +446,7 @@ def test_no_wildcard_too_few(t : T?) {
 def test_wildcard_sandwich(t : T?) {
     ast_gc_guard() {
         // Pattern: _wildcard(); a + b; _wildcard()  — actual: print(); a + b; return c; print()
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             _wildcard()
             a + b
@@ -461,7 +461,7 @@ def test_wildcard_sandwich(t : T?) {
 [test]
 def test_wildcard_only(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             _wildcard()
         }
@@ -474,7 +474,7 @@ def test_wildcard_only(t : T?) {
 [test]
 def test_wildcard_empty_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ {})
+        var expr = qmacro($ {})
         let r = qmatch_block(expr) $ {
             _wildcard()
         }
@@ -487,7 +487,7 @@ def test_wildcard_empty_block(t : T?) {
 [test]
 def test_wildcard1_zero_fails(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             _wildcard1()
             a + b
@@ -499,7 +499,7 @@ def test_wildcard1_zero_fails(t : T?) {
 [test]
 def test_wildcard1_one_passes(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             _wildcard1()
             a + b
@@ -512,7 +512,7 @@ def test_wildcard1_one_passes(t : T?) {
 def test_wildcard1_two_prefix(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — _wildcard1 should scan forward to find a + b
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             _wildcard1()
             a + b
@@ -525,7 +525,7 @@ def test_wildcard1_two_prefix(t : T?) {
 def test_wildcard1_sandwich(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b; return c; print() } — _wildcard1 on both sides
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             _wildcard1()
             return c
@@ -539,7 +539,7 @@ def test_wildcard1_sandwich(t : T?) {
 def test_wildcard1_sandwich_too_few_before(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — a + b is at pos 0, no room for 1+ before it
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             _wildcard1()
             a + b
@@ -554,7 +554,7 @@ def test_wildcard1_sandwich_too_few_before(t : T?) {
 [test]
 def test_any_exact(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             _any()
             a + b
@@ -566,7 +566,7 @@ def test_any_exact(t : T?) {
 [test]
 def test_any_zero_fails(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             _any()
             a + b
@@ -580,7 +580,7 @@ def test_any_zero_fails(t : T?) {
 [test]
 def test_wildcard_not_found(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             _wildcard()
             return c
@@ -594,7 +594,7 @@ def test_wildcard_not_found(t : T?) {
 [test]
 def test_two_fixed_with_wildcards(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             a + b
             _wildcard()
@@ -618,7 +618,7 @@ def test_two_fixed_with_wildcards(t : T?) {
 def test_optional_zero(t : T?) {
     ast_gc_guard() {
         // { a + b } — _optional() matches 0, then fixed matches a + b
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             _optional()
             a + b
@@ -631,7 +631,7 @@ def test_optional_zero(t : T?) {
 def test_optional_one(t : T?) {
     ast_gc_guard() {
         // { print(); a + b } — _optional() matches print(), then fixed matches a + b
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             _optional()
             a + b
@@ -644,7 +644,7 @@ def test_optional_one(t : T?) {
 def test_optional_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — _optional() can't match 2, should fail
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             _optional()
             a + b
@@ -657,7 +657,7 @@ def test_optional_two_fails(t : T?) {
 def test_optional_trailing_zero(t : T?) {
     ast_gc_guard() {
         // { a + b } — fixed matches, trailing _optional() matches 0
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             a + b
             _optional()
@@ -671,7 +671,7 @@ def test_optional_trailing_one(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — fixed matches a+b, trailing _optional() matches 1? No, 2 remain
         // Use { print(); a + b } — fixed matches print(), trailing _optional() matches a+b (1)
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             print()
             _optional()
@@ -684,7 +684,7 @@ def test_optional_trailing_one(t : T?) {
 def test_optional_trailing_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); print(); a + b } — fixed matches print(), trailing _optional() has 2 remaining
-        var inscope expr <- make_block_3()
+        var expr <- make_block_3()
         let r = qmatch_block(expr) $ {
             print()
             _optional()
@@ -697,7 +697,7 @@ def test_optional_trailing_two_fails(t : T?) {
 def test_optional_trailing_only_zero(t : T?) {
     ast_gc_guard() {
         // Empty block — trailing _optional() alone matches 0
-        var inscope expr <- qmacro($ { })
+        var expr = qmacro($ { })
         let r = qmatch_block(expr) $ {
             _optional()
         }
@@ -709,7 +709,7 @@ def test_optional_trailing_only_zero(t : T?) {
 def test_optional_trailing_only_one(t : T?) {
     ast_gc_guard() {
         // { a + b } — _optional() alone matches 1
-        var inscope expr <- make_block_1()
+        var expr <- make_block_1()
         let r = qmatch_block(expr) $ {
             _optional()
         }
@@ -721,7 +721,7 @@ def test_optional_trailing_only_one(t : T?) {
 def test_optional_trailing_only_two_fails(t : T?) {
     ast_gc_guard() {
         // { print(); a + b } — _optional() alone can't match 2
-        var inscope expr <- make_block_2()
+        var expr <- make_block_2()
         let r = qmatch_block(expr) $ {
             _optional()
         }
@@ -733,7 +733,7 @@ def test_optional_trailing_only_two_fails(t : T?) {
 def test_optional_sandwich(t : T?) {
     ast_gc_guard() {
         // { a + b; return c; print() } — fixed, _optional(), fixed
-        var inscope expr <- make_block_4()
+        var expr <- make_block_4()
         let r = qmatch_block(expr) $ {
             a + b
             _optional()
@@ -747,7 +747,7 @@ def test_optional_sandwich(t : T?) {
 def test_optional_sandwich_zero(t : T?) {
     ast_gc_guard() {
         // { a + b; print() } — 2 stmts, fixed + _optional(0) + fixed
-        var inscope expr <- qmacro($ { a + b; print(); })
+        var expr = qmacro($ { a + b; print(); })
         let r = qmatch_block(expr) $ {
             a + b
             _optional()
@@ -761,7 +761,7 @@ def test_optional_sandwich_zero(t : T?) {
 def test_optional_sandwich_two_fails(t : T?) {
     ast_gc_guard() {
         // { a + b; foo(); bar(); print() } — 4 stmts, 2 between fixed stmts
-        var inscope expr <- qmacro($ { a + b; foo(); bar(); print(); })
+        var expr = qmacro($ { a + b; foo(); bar(); print(); })
         let r = qmatch_block(expr) $ {
             a + b
             _optional()

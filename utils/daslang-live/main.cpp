@@ -72,7 +72,8 @@ static SetWatchedFilesFn dll_set_watched_files = nullptr;
 
 static void * get_dll_symbol(const char * name) {
 #ifdef _WIN32
-    HMODULE hMod = GetModuleHandleA("dasModuleLiveHost.shared_module");
+    HMODULE hMod = GetModuleHandleA("dasModuleLiveHost_debug.shared_module");
+    if (!hMod) hMod = GetModuleHandleA("dasModuleLiveHost.shared_module");
     if (!hMod) hMod = GetModuleHandleA("dasModuleLiveHost");
     return hMod ? (void*)GetProcAddress(hMod, name) : nullptr;
 #else

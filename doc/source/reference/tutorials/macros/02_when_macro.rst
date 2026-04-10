@@ -59,7 +59,7 @@ that expands to::
 
   if (!condition) {
       macro_error(prog, at, message)
-      return <- default<ExpressionPtr>
+      return null
   }
 
 This means ``macro_verify`` **short-circuits** — if the condition is false,
@@ -79,7 +79,7 @@ fully error-checked until after the macro transforms them.
 
 .. code-block:: das
 
-   def override canVisitArgument(expr : smart_ptr<ExprCallMacro>;
+   def override canVisitArgument(expr : ExprCallMacro?;
            argIndex : int) : bool {
        return true if (argIndex == 0)
        return !is_reporting_compilation_errors()
@@ -103,7 +103,7 @@ unexpanded:
 .. code-block:: das
 
    def override canFoldReturnResult(
-           expr : smart_ptr<ExprCallMacro>) : bool {
+           expr : ExprCallMacro?) : bool {
        return false
    }
 
@@ -132,11 +132,11 @@ return using ``qmacro_block``:
 .. code-block:: das
 
    if (is_default) {
-       list |> emplace_new <| qmacro_block() {
+       list |> push <| qmacro_block() {
            return $e(tupl.values[1])
        }
    } else {
-       list |> emplace_new <| qmacro_block() {
+       list |> push <| qmacro_block() {
            if ($i(arg_name) == $e(tupl.values[0])) {
                return $e(tupl.values[1])
            }
@@ -167,7 +167,7 @@ Then we assemble the block and mark its argument as shadowable:
 
 .. code-block:: das
 
-   var inscope call_block <- qmacro(
+   var call_block = qmacro(
        $($i(arg_name) : $t(cond_type)){ $b(list); })
    ((call_block as ExprMakeBlock)._block as ExprBlock)
        .arguments[0].flags.can_shadow = true
@@ -181,7 +181,7 @@ The final result is an ``invoke`` call:
 
 .. code-block:: das
 
-   return <- qmacro(invoke($e(call_block), $e(cond)))
+   return qmacro(invoke($e(call_block), $e(cond)))
 
 
 Auto-generated default case
@@ -196,7 +196,7 @@ default value (``""`` for strings, ``0`` for ints, etc.):
 
    if (!any_default) {
        assume first_value = (blk.list[0] as ExprMakeTuple).values[1]
-       list |> emplace_new <| qmacro_block() {
+       list |> push <| qmacro_block() {
            return default<typedecl($e(first_value))>
        }
    }

@@ -1,0 +1,1 @@
+Returns true if the given function uses copy-on-return elimination (CMRES), meaning its return value is constructed directly in the caller's memory rather than being copied.

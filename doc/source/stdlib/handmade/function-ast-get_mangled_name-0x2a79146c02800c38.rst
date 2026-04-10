@@ -1,0 +1,1 @@
+Returns the mangled name of the given function, which uniquely identifies it by encoding the function name along with its argument and return types.

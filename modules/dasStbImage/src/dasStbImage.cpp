@@ -235,10 +235,10 @@ public:
                 ->args({"x","y","comp","data","quality","block","context","at"});
 
         // ---- stb_image_resize2: enums ----
-        addEnumeration(make_smart<Enumerationstbir_pixel_layout>());
-        addEnumeration(make_smart<Enumerationstbir_edge>());
-        addEnumeration(make_smart<Enumerationstbir_filter>());
-        addEnumeration(make_smart<Enumerationstbir_datatype>());
+        addEnumeration(new Enumerationstbir_pixel_layout());
+        addEnumeration(new Enumerationstbir_edge());
+        addEnumeration(new Enumerationstbir_filter());
+        addEnumeration(new Enumerationstbir_datatype());
 
         // ---- stb_image_resize2: simple API ----
         addExtern<DAS_BIND_FUN(stbir_resize_uint8_srgb)> (*this, lib, "stbir_resize_uint8_srgb",

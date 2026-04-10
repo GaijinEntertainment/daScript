@@ -1,0 +1,1 @@
+Iterates over all functions that the given function calls or references, invoking the provided block for each one.

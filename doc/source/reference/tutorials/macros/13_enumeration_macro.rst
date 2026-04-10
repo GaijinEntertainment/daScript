@@ -79,7 +79,7 @@ Full source: :download:`enum_macro_mod.das <../../../../../tutorials/macros/enum
             }
             // Set total = number of original entries.
             // length(enu.list) is now N+1, so total = N+1-1 = N.
-            enu.list[idx].value |> move_new() <| new ExprConstInt(
+            enu.list[idx].value = new ExprConstInt(
                 at = enu.at, value = length(enu.list) - 1)
             return true
         }
@@ -91,8 +91,8 @@ Key points:
   validate existing entries.
 - ``add_enumeration_entry(enu, "total")`` appends a new entry and
   returns its index (or ``-1`` on failure).
-- ``enu.list[idx].value`` is an ``ExpressionPtr`` — use ``move_new``
-  to assign a new ``ExprConstInt`` with the desired integer value.
+- ``enu.list[idx].value`` is an ``ExpressionPtr`` — assign a new
+  ``ExprConstInt`` with the desired integer value.
 - ``enu.at`` provides the source location for the generated expression.
 - Return ``false`` with an error message to abort compilation — the
   error will point to the enum declaration.
@@ -203,17 +203,17 @@ demonstrates the **code generation** pattern for enumeration macros:
                            var errors : das_string) : bool {
             var enumT = new TypeDecl(
                 baseType = Type.tEnumeration,
-                enumType = enu.get_ptr())
+                enumType = enu)
             // 1. Create a private global lookup table.
             let varName = "_`enum`table`{enu.name}"
             add_global_private_let(
                 compiling_module(), varName, enu.at,
                 qmacro(enum_to_table(type<$t(enumT)>)))
             // 2. Generate the panic-on-miss constructor.
-            var inscope enumFn <- qmacro_function("{enu.name}")
+            var enumFn = qmacro_function("{enu.name}")
                 $(src : string) : $t(enumT) {
                     if (!key_exists($i(varName), src)) {
-                        panic("enum value '{src}' not found")
+                        panic("string_to_enum: enum value '{src}' not found in enum '{typeinfo typename(type<$t(enumT)>)}'")
                     }
                     return $i(varName)?[src] ?? default<$t(enumT)>
                 }
@@ -222,7 +222,7 @@ demonstrates the **code generation** pattern for enumeration macros:
             force_generated(enumFn, true)
             compiling_module() |> add_function(enumFn)
             // 3. Generate the default-on-miss constructor.
-            var inscope enumFnDefault <- qmacro_function("{enu.name}")
+            var enumFnDefault = qmacro_function("{enu.name}")
                 $(src : string; defaultValue : $t(enumT)) : $t(enumT) {
                     return $i(varName)?[src] ?? defaultValue
                 }

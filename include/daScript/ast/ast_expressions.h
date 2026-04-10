@@ -10,7 +10,7 @@ namespace das
         ExprReader () { __rtti = "ExprReader"; }
         ExprReader ( const LineInfo & a, const ReaderMacroPtr & rm )
             : Expression(a), macro(rm) { __rtti = "ExprReader"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -23,7 +23,7 @@ namespace das
         ExprLabel () { __rtti = "ExprLabel"; };
         ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )
             : Expression(a), label(s), comment(cm) { __rtti = "ExprLabel"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isLabel() const override { return true; }
@@ -37,9 +37,9 @@ namespace das
         ExprGoto () { __rtti = "ExprGoto"; };
         ExprGoto ( const LineInfo & a, int32_t s )
             : Expression(a), label(s) { __rtti = "ExprGoto"; }
-        ExprGoto ( const LineInfo & a, const ExpressionPtr & s )
+        ExprGoto ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprGoto"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isGoto() const override { return true; }
@@ -47,12 +47,12 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         int32_t  label = -1;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
     };
 
     struct DAS_API ExprRef2Value : Expression {
         ExprRef2Value() { __rtti = "ExprRef2Value"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * GetR2V ( Context & context, const LineInfo & a, const TypeDeclPtr & type, SimNode * expr );
@@ -60,34 +60,34 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
     };
 
     struct DAS_API ExprRef2Ptr : Expression {
         ExprRef2Ptr () { __rtti = "ExprRef2Ptr"; };
-        ExprRef2Ptr ( const LineInfo & a, const ExpressionPtr & s )
+        ExprRef2Ptr ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprRef2Ptr"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isRef2Ptr() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
     };
 
     struct DAS_API ExprPtr2Ref : Expression {
         ExprPtr2Ref () { __rtti = "ExprPtr2Ref"; };
-        ExprPtr2Ref ( const LineInfo & a, const ExpressionPtr & s )
+        ExprPtr2Ref ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprPtr2Ref"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isPtr2Ref() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
         bool unsafeDeref = false;
         bool assumeNoAlias = false;
     };
@@ -96,7 +96,7 @@ namespace das
         ExprAddr ()  { __rtti = "ExprAddr"; };
         ExprAddr ( const LineInfo & a, const string & n )
             : Expression(a), target(n) { __rtti = "ExprAddr"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAddr() const override { return true; }
@@ -109,37 +109,37 @@ namespace das
 
     struct DAS_API ExprNullCoalescing : ExprPtr2Ref {
         ExprNullCoalescing () { __rtti = "ExprNullCoalescing"; };
-        ExprNullCoalescing ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & defVal )
+        ExprNullCoalescing ( const LineInfo & a, ExpressionPtr s, ExpressionPtr defVal )
             : ExprPtr2Ref(a,s), defaultValue(defVal) { __rtti = "ExprNullCoalescing"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isNullCoalescing() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   defaultValue;
+        ExpressionPtr   defaultValue = nullptr;
     };
 
     struct DAS_API ExprDelete : Expression {
         ExprDelete() { __rtti = "ExprDelete"; }
-        ExprDelete ( const LineInfo & a, const ExpressionPtr & s )
+        ExprDelete ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprDelete"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr subexpr;
-        ExpressionPtr sizeexpr;
+        ExpressionPtr   subexpr = nullptr;
+        ExpressionPtr   sizeexpr = nullptr;
         bool native = false;
     };
 
     struct DAS_API ExprAt : Expression {
         ExprAt() { __rtti = "ExprAt"; };
-        ExprAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo = false )
+        ExprAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i, bool no_promo = false )
             : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; no_promotion = no_promo; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -147,7 +147,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   subexpr, index;
+        ExpressionPtr   subexpr = nullptr, index = nullptr;
         union {
             struct {
                 bool        r2v : 1;
@@ -163,9 +163,9 @@ namespace das
 
     struct DAS_API ExprSafeAt : ExprAt {
         ExprSafeAt() { __rtti = "ExprSafeAt"; };
-        ExprSafeAt ( const LineInfo & a, const ExpressionPtr & s, const ExpressionPtr & i, bool no_promo=false )
+        ExprSafeAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i, bool no_promo=false )
             : ExprAt(a,s,i,no_promo) { __rtti = "ExprSafeAt"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -178,7 +178,7 @@ namespace das
 
     struct DAS_API ExprBlock : Expression {
         ExprBlock() { __rtti = "ExprBlock"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
         uint32_t getFinallyEvalFlags() const;
@@ -242,7 +242,7 @@ namespace das
         ExprVar () { __rtti = "ExprVar"; };
         ExprVar ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprVar"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -251,7 +251,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string              name;
-        VariablePtr         variable;
+        VariablePtr         variable = nullptr;
         ExprBlock *         pBlock = nullptr;
         int                 argumentIndex = -1;
         union {
@@ -271,17 +271,17 @@ namespace das
 
     struct DAS_API ExprTag : Expression {
         ExprTag () { __rtti = "ExprTag"; }
-        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const string & n )
+        ExprTag ( const LineInfo & a, ExpressionPtr se, const string & n )
             : Expression(a), subexpr(se), name(n) { __rtti = "ExprTag"; }
-        ExprTag ( const LineInfo & a, const ExpressionPtr & se, const ExpressionPtr & va, const string & n )
+        ExprTag ( const LineInfo & a, ExpressionPtr se, ExpressionPtr va, const string & n )
             : Expression(a), subexpr(se), value(va), name(n) { __rtti = "ExprTag"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   subexpr;
-        ExpressionPtr   value;
+        ExpressionPtr   subexpr = nullptr;
+        ExpressionPtr   value = nullptr;
         string          name;
     };
 
@@ -289,11 +289,11 @@ namespace das
 
     struct DAS_API ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
-        ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
+        ExprField ( const LineInfo & a, ExpressionPtr val, const string & n, bool no_promo=false )
             : Expression(a), value(val), name(n), atField(a) { __rtti = "ExprField"; no_promotion = no_promo; }
-        ExprField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
+        ExprField ( const LineInfo & a, const LineInfo & af, ExpressionPtr val, const string & n, bool no_promo=false )
             : Expression(a), value(val), name(n), atField(af) { __rtti = "ExprField"; no_promotion = no_promo; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -302,7 +302,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
         Structure::FieldDeclaration * field() const;
-        ExpressionPtr   value;
+        ExpressionPtr   value = nullptr;
         string          name;
         LineInfo        atField;
         Structure::FieldDeclarationRef fieldRef;
@@ -329,9 +329,9 @@ namespace das
 
     struct DAS_API ExprIsVariant : ExprField {
         ExprIsVariant () { __rtti = "ExprIsVariant"; };
-        ExprIsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+        ExprIsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprIsVariant"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return false; }
@@ -341,9 +341,9 @@ namespace das
 
     struct DAS_API ExprAsVariant : ExprField {
         ExprAsVariant () { __rtti = "ExprAsVariant"; };
-        ExprAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+        ExprAsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprAsVariant"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return false; }
@@ -353,9 +353,9 @@ namespace das
 
     struct DAS_API ExprSafeAsVariant : ExprField {
         ExprSafeAsVariant () { __rtti = "ExprSafeAsVariant"; };
-        ExprSafeAsVariant ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+        ExprSafeAsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprSafeAsVariant"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return false; }
@@ -367,16 +367,16 @@ namespace das
 
     struct DAS_API ExprSwizzle : Expression {
         ExprSwizzle () { __rtti = "ExprSwizzle"; };
-        ExprSwizzle ( const LineInfo & a, const ExpressionPtr & val, const string & n )
+        ExprSwizzle ( const LineInfo & a, ExpressionPtr val, const string & n )
             : Expression(a), value(val), mask(n) { __rtti = "ExprSwizzle"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isSwizzle() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   value;
+        ExpressionPtr   value = nullptr;
         string          mask;
         vector<uint8_t> fields;
         union {
@@ -391,11 +391,11 @@ namespace das
 
     struct DAS_API ExprSafeField : ExprField {
         ExprSafeField () { __rtti = "ExprSafeField"; };
-        ExprSafeField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
+        ExprSafeField ( const LineInfo & a, ExpressionPtr val, const string & n, bool no_promo=false )
             : ExprField(a,val,n,no_promo) { __rtti = "ExprSafeField"; }
-        ExprSafeField ( const LineInfo & a, const LineInfo & af, const ExpressionPtr & val, const string & n, bool no_promo=false )
+        ExprSafeField ( const LineInfo & a, const LineInfo & af, ExpressionPtr val, const string & n, bool no_promo=false )
             : ExprField(a,af,val,n,no_promo) { __rtti = "ExprSafeField"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -410,7 +410,7 @@ namespace das
         ExprLooksLikeCall () { __rtti = "ExprLooksLikeCall"; };
         ExprLooksLikeCall ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprLooksLikeCall"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         void autoDereference();
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         SimNode * keepAlive ( Context &, SimNode * result ) const;
@@ -431,7 +431,7 @@ namespace das
         ExprCallMacro ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -461,7 +461,7 @@ namespace das
         ExprOp () { __rtti = "ExprOp"; };
         ExprOp ( const LineInfo & a, const string & o )
             : ExprCallFunc(a,o), op(o) { __rtti = "ExprOp"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string  op;
@@ -470,9 +470,9 @@ namespace das
     // unary    !subexpr
     struct DAS_API ExprOp1 : ExprOp {
         ExprOp1 () { __rtti = "ExprOp1"; };
-        ExprOp1 ( const LineInfo & a, const string & o, const ExpressionPtr & s )
+        ExprOp1 ( const LineInfo & a, const string & o, ExpressionPtr s )
             : ExprOp(a,o), subexpr(s) { __rtti = "ExprOp1"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return subexpr->tail(); }
@@ -482,15 +482,15 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
     };
 
     // binary   left < right
     struct DAS_API ExprOp2 : ExprOp {
         ExprOp2 () { __rtti = "ExprOp2"; };
-        ExprOp2 ( const LineInfo & a, const string & o, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprOp2 ( const LineInfo & a, const string & o, ExpressionPtr l, ExpressionPtr r )
             : ExprOp(a,o), left(l), right(r) { __rtti = "ExprOp2"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual Expression * tail() override { return right->tail(); }
@@ -500,15 +500,15 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   left, right;
+        ExpressionPtr   left = nullptr, right = nullptr;
     };
 
     // this copies one object to the other
     struct DAS_API ExprCopy : ExprOp2 {
         ExprCopy () { __rtti = "ExprCopy"; };
-        ExprCopy ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; };
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -527,9 +527,9 @@ namespace das
     // this moves one object to the other
     struct DAS_API ExprMove : ExprOp2 {
         ExprMove () { __rtti = "ExprMove"; };
-        ExprMove ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; };
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -547,9 +547,9 @@ namespace das
     // this clones one object to the other
     struct DAS_API ExprClone : ExprOp2 {
         ExprClone () { __rtti = "ExprClone"; };
-        ExprClone ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprClone ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; };
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -560,7 +560,7 @@ namespace das
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
     struct DAS_API ExprSequence : ExprOp2 {
-        ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, ",", l, r) { __rtti = "ExprSequence"; }
         virtual bool rtti_isSequence() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -569,10 +569,10 @@ namespace das
     // trinary  subexpr ? left : right
     struct DAS_API ExprOp3 : ExprOp {
         ExprOp3 () { __rtti = "ExprOp3"; };
-        ExprOp3 ( const LineInfo & a, const string & o, const ExpressionPtr & s,
-                 const ExpressionPtr & l, const ExpressionPtr & r )
+        ExprOp3 ( const LineInfo & a, const string & o, ExpressionPtr s,
+                 ExpressionPtr l, ExpressionPtr r )
             : ExprOp(a,o), subexpr(s), left(l), right(r) { __rtti = "ExprOp3"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual Expression * tail() override { return right->tail(); }
         virtual bool swap_tail ( Expression * expr, Expression * swapExpr ) override;
@@ -582,29 +582,29 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
-        ExpressionPtr   subexpr, left, right;
+        ExpressionPtr   subexpr = nullptr, left = nullptr, right = nullptr;
     };
 
     struct DAS_API ExprTryCatch : Expression {
         ExprTryCatch() { __rtti = "ExprTryCatch"; };
-        ExprTryCatch ( const LineInfo & a, const ExpressionPtr & t, const ExpressionPtr & c )
+        ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c )
             : Expression(a), try_block(t), catch_block(c) { __rtti = "ExprTryCatch"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr try_block, catch_block;
+        ExpressionPtr   try_block = nullptr, catch_block = nullptr;
     };
 
     struct DAS_API ExprReturn : Expression {
         ExprReturn() { __rtti = "ExprReturn"; };
-        ExprReturn ( const LineInfo & a, const ExpressionPtr & s )
+        ExprReturn ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprReturn"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override {
             uint32_t ef = EvalFlags::stopForReturn;
             if ( fromYield ) ef |= EvalFlags::yield;
@@ -613,7 +613,7 @@ namespace das
         virtual bool rtti_isReturn() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr subexpr;
+        ExpressionPtr   subexpr = nullptr;
         union {
             struct {
                 bool moveSemantics      : 1;
@@ -640,7 +640,7 @@ namespace das
             : Expression(a) { __rtti = "ExprBreak"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForBreak; }
         virtual bool rtti_isBreak() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -652,7 +652,7 @@ namespace das
             : Expression(a) { __rtti = "ExprContinue"; }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::stopForContinue; }
         virtual bool rtti_isContinue() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -681,7 +681,7 @@ namespace das
             : ExprConstT(a,ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
         bool isSmartPtr = false;
         TypeDeclPtr ptrType = nullptr;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         virtual bool rtti_isNullPtr() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -714,11 +714,11 @@ namespace das
             enumType = td->enumType;
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        EnumerationPtr  enumType;
+        EnumerationPtr  enumType = nullptr;
         string          text;
     };
 
@@ -751,7 +751,7 @@ namespace das
             : ExprConstT(i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         ExprConstBitfield(const LineInfo & a, uint64_t i = 0)
             : ExprConstT(a,i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         auto getValue() const { return ExprConstT::getValue(); };
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -831,8 +831,8 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr );
-    pair<int64_t,bool> tryGetConstExprIntOrUInt ( const ExpressionPtr & expr );
+    int64_t getConstExprIntOrUInt ( ExpressionPtr expr );
+    pair<int64_t,bool> tryGetConstExprIntOrUInt ( ExpressionPtr expr );
 
     struct DAS_API ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())
@@ -932,7 +932,7 @@ namespace das
         ExprConstString(const LineInfo & a, const string & str = string())
             : ExprConst(a,Type::tString), text(str) { __rtti = "ExprConstString"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         const string & getValue() const { return text; }
         virtual bool rtti_isStringConstant() const override { return true; }
@@ -946,7 +946,7 @@ namespace das
         ExprStringBuilder(const LineInfo & a)
             : Expression(a) { __rtti = "ExprStringBuilder"; }
         virtual bool rtti_isStringBuilder() const override { return true; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -963,7 +963,7 @@ namespace das
     struct DAS_API ExprLet : Expression {
         ExprLet() { __rtti = "ExprLet"; }
         Variable * find ( const string & name ) const;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode * simulateInit(Context & context, const VariablePtr & var, bool local);
@@ -990,7 +990,7 @@ namespace das
         ExprFor ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprFor"; }
         Variable * findIterator ( const string & name ) const;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual uint32_t getEvalFlags() const override;
@@ -1004,7 +1004,7 @@ namespace das
         vector<uint8_t>         iteratorsTupleExpansion;
         vector<VariablePtr>     iteratorVariables;
         vector<ExpressionPtr>   sources;
-        ExpressionPtr           body;
+        ExpressionPtr   body = nullptr;
         LineInfo                visibility;
         bool                    allowIteratorOptimization = false;  // if enabled, unused source variables can be removed
         bool                    canShadow = false;                  // if enabled, local variables can shadow
@@ -1014,58 +1014,58 @@ namespace das
         ExprUnsafe() { __rtti = "ExprUnsafe"; };
         ExprUnsafe(const LineInfo & a)
             : Expression(a) { __rtti = "ExprUnsafe"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isUnsafe() const override { return true; }
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   body;
+        ExpressionPtr   body = nullptr;
     };
 
     struct DAS_API ExprWhile : Expression {
         ExprWhile() { __rtti = "ExprWhile"; };
         ExprWhile(const LineInfo & a)
             : Expression(a) { __rtti = "ExprWhile"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override;
         virtual bool rtti_isWhile() const override { return true; }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        static void simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk );
+        static void simulateFinal ( Context & context, ExpressionPtr bod, SimNode_Block * blk );
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   cond, body;
+        ExpressionPtr   cond = nullptr, body = nullptr;
     };
 
     struct DAS_API ExprWith : Expression {
         ExprWith() { __rtti = "ExprWith"; };
         ExprWith(const LineInfo & a)
             : Expression(a) { __rtti = "ExprWith"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isWith() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   with, body;
+        ExpressionPtr   with = nullptr, body = nullptr;
     };
 
     struct DAS_API ExprAssume : Expression {
         ExprAssume() { __rtti = "ExprAssume"; };
-        ExprAssume(const LineInfo & a, const string & al, const ExpressionPtr & se )
+        ExprAssume(const LineInfo & a, const string & al, ExpressionPtr se )
             : Expression(a), alias(al), subexpr(se) { __rtti = "ExprAssume"; }
         ExprAssume(const LineInfo & a, const string & al, const TypeDeclPtr & at )
             : Expression(a), alias(al), assumeType(at) { __rtti = "ExprAssume"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAssume() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string          alias;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr     assumeType = nullptr;
     };
 
@@ -1094,25 +1094,25 @@ namespace das
 
     struct DAS_API ExprMakeBlock : Expression {
         ExprMakeBlock () { __rtti = "ExprMakeBlock"; };
-        ExprMakeBlock ( const LineInfo & a, const ExpressionPtr & b, bool isl = false, bool islf = false )
+        ExprMakeBlock ( const LineInfo & a, ExpressionPtr b, bool isl = false, bool islf = false )
             : Expression(a), block(b) {
             __rtti = "ExprMakeBlock";
             b->at = a;
             isLambda = isl;
             isLocalFunction = islf;
-            auto blk = (ExprBlock *)b.get();
+            auto blk = (ExprBlock *)b;
             blk->isClosure = true;
             blk->isLambdaBlock = isl;
         }
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual bool rtti_isMakeBlock() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         vector<CaptureEntry>    capture;
         LineInfo                captureAt;
-        ExpressionPtr block;
+        ExpressionPtr   block = nullptr;
         uint32_t stackTop = 0;
         union {
             struct {
@@ -1126,9 +1126,9 @@ namespace das
 
     struct DAS_API ExprMakeGenerator : ExprLooksLikeCall {
         ExprMakeGenerator () { __rtti = "ExprMakeGenerator"; };
-        ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b = nullptr );
+        ExprMakeGenerator ( const LineInfo & a, ExpressionPtr b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1139,14 +1139,14 @@ namespace das
 
     struct DAS_API ExprYield : Expression {
         ExprYield () { __rtti = "ExprYield"; };
-        ExprYield ( const LineInfo & a, const ExpressionPtr & val );
+        ExprYield ( const LineInfo & a, ExpressionPtr val );
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual uint32_t getEvalFlags() const override { return EvalFlags::yield; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr subexpr;
+        ExpressionPtr   subexpr = nullptr;
         union {
             struct {
                 bool moveSemantics      : 1;
@@ -1159,7 +1159,7 @@ namespace das
         ExprInvoke () { __rtti = "ExprInvoke"; name = "invoke"; };
         ExprInvoke ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprInvoke>(a,name) { __rtti = "ExprInvoke"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isInvoke() const override { return true; }
         bool isCopyOrMove() const;
@@ -1176,7 +1176,7 @@ namespace das
         ExprAssert ( ) { __rtti = "ExprAssert"; name="assert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
             : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; __rtti = "ExprAssert"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1188,7 +1188,7 @@ namespace das
         ExprQuote ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
         virtual ExpressionPtr visit(Visitor & vis) override;
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
@@ -1198,7 +1198,7 @@ namespace das
         ExprStaticAssert () { __rtti = "ExprStaticAssert"; name="static_assert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprStaticAssert>(a,name) { __rtti = "ExprStaticAssert"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1207,7 +1207,7 @@ namespace das
         ExprDebug () { __rtti = "ExprDebug"; name="debug"; };
         ExprDebug ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprDebug>(a, name) { __rtti = "ExprDebug"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1216,7 +1216,7 @@ namespace das
         ExprMemZero () { __rtti = "ExprMemZero"; name="memzero"; };
         ExprMemZero ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprMemZero>(a, name) { __rtti = "ExprMemZero"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1226,7 +1226,7 @@ namespace das
         ExprTableKeysOrValues() { __rtti = "ExprTableKeysOrValues"; };
         ExprTableKeysOrValues ( const LineInfo & a, const string & name )
             : ExprLooksLikeCall(a, name) { __rtti = "ExprTableKeysOrValues"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprTableKeysOrValues<It,SimNodeT,first>>(expr);
             ExprLooksLikeCall::clone(cexpr);
             return cexpr;
@@ -1248,7 +1248,7 @@ namespace das
         ExprArrayCallWithSizeOrIndex() { __rtti = "ExprArrayCallWithSizeOrIndex"; };
         ExprArrayCallWithSizeOrIndex ( const LineInfo & a, const string & name )
             : ExprLooksLikeCall(a, name) { __rtti = "ExprArrayCallWithSizeOrIndex"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override {
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override {
             auto cexpr = clonePtr<ExprArrayCallWithSizeOrIndex<It,SimNodeT>>(expr);
             ExprLooksLikeCall::clone(cexpr);
             return cexpr;
@@ -1268,7 +1268,7 @@ namespace das
         ExprErase() { __rtti = "ExprErase"; name="erase"; };
         ExprErase ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprErase>(a, "erase") { __rtti = "ExprErase"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1277,7 +1277,7 @@ namespace das
         ExprFind() { __rtti = "ExprFind"; name="find"; };
         ExprFind ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprFind>(a, "find") { __rtti = "ExprFind"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1286,7 +1286,7 @@ namespace das
         ExprKeyExists() { __rtti = "ExprKeyExists"; name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
@@ -1295,26 +1295,26 @@ namespace das
         ExprSetInsert() { __rtti = "ExprSetInsert"; name="insert"; };
         ExprSetInsert ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprSetInsert>(a, "insert") { __rtti = "ExprSetInsert"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
     struct DAS_API ExprTypeInfo : Expression {
         ExprTypeInfo () { __rtti = "ExprTypeInfo"; }
-        ExprTypeInfo ( const LineInfo & a, const string & tr, const ExpressionPtr & s,
+        ExprTypeInfo ( const LineInfo & a, const string & tr, ExpressionPtr s,
                       const string & stt="", const string & ett="" )
             : Expression(a), trait(tr), subexpr(s), subtrait(stt), extratrait(ett) { __rtti = "ExprTypeInfo"; }
         ExprTypeInfo ( const LineInfo & a, const string & tr, const TypeDeclPtr & d,
                       const string & stt="", const string & ett="" )
             : Expression(a), trait(tr), typeexpr(d), subtrait(stt), extratrait(ett) { __rtti = "ExprTypeInfo"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string              trait;
-        ExpressionPtr       subexpr;
+        ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr         typeexpr = nullptr;
         string              subtrait;
         string              extratrait;
@@ -1323,28 +1323,28 @@ namespace das
 
     struct DAS_API ExprIs : Expression {
         ExprIs () { __rtti = "ExprIs"; };
-        ExprIs ( const LineInfo & a, const ExpressionPtr & s, const TypeDeclPtr & t )
+        ExprIs ( const LineInfo & a, ExpressionPtr s, const TypeDeclPtr & t )
             : Expression(a), subexpr(s), typeexpr(t) { __rtti = "ExprIs"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr     typeexpr = nullptr;
     };
 
     struct DAS_API ExprAscend : Expression {
         ExprAscend() { __rtti = "ExprAscend";};
-        ExprAscend( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & as = nullptr )
+        ExprAscend( const LineInfo & a, ExpressionPtr se, const TypeDeclPtr & as = nullptr )
             : Expression(a), subexpr(se), ascType(as) { __rtti = "ExprAscend"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isAscend() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr     ascType = nullptr;
         uint32_t        stackTop = 0;
         union {
@@ -1358,16 +1358,16 @@ namespace das
 
     struct DAS_API ExprCast : Expression {
         ExprCast() { __rtti = "ExprCast"; };
-        ExprCast( const LineInfo & a, const ExpressionPtr & se, const TypeDeclPtr & ct )
+        ExprCast( const LineInfo & a, ExpressionPtr se, const TypeDeclPtr & ct )
             : Expression(a), subexpr(se), castType(ct) { __rtti = "ExprCast"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isCast() const override { return true; }
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   subexpr = nullptr;
         TypeDeclPtr     castType = nullptr;
         union {
             struct {
@@ -1382,7 +1382,7 @@ namespace das
         ExprNew() { __rtti = "ExprNew"; };
         ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
             : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
@@ -1396,7 +1396,7 @@ namespace das
         ExprCall ( const LineInfo & a, const string & n )
             : ExprCallFunc(a,n) { __rtti = "ExprCall"; }
         virtual bool rtti_isCall() const override { return true; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
@@ -1415,17 +1415,17 @@ namespace das
 
     struct DAS_API ExprIfThenElse : Expression {
         ExprIfThenElse () { __rtti = "ExprIfThenElse"; };
-        ExprIfThenElse ( const LineInfo & a, const ExpressionPtr & c,
-                        const ExpressionPtr & ift, const ExpressionPtr & iff )
+        ExprIfThenElse ( const LineInfo & a, ExpressionPtr c,
+                        ExpressionPtr ift, ExpressionPtr iff )
             : Expression(a), cond(c), if_true(ift), if_false(iff) { __rtti = "ExprIfThenElse"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isIfThenElse() const override { return true; }
         virtual uint32_t getEvalFlags() const override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   cond, if_true, if_false;
+        ExpressionPtr   cond = nullptr, if_true = nullptr, if_false = nullptr;
         union {
             struct {
                 bool isStatic : 1;
@@ -1436,13 +1436,13 @@ namespace das
     };
 
     struct MakeFieldDecl;
-    typedef smart_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+    typedef MakeFieldDecl *   MakeFieldDeclPtr;
 
-    struct MakeFieldDecl : ptr_ref_count {
+    struct MakeFieldDecl : gc_node {
         LineInfo        at;
         string          name;
-        ExpressionPtr   value;
-        ExpressionPtr   tag;
+        ExpressionPtr   value = nullptr;
+        ExpressionPtr   tag = nullptr;
         union {
             struct {
                 bool    moveSemantics : 1;
@@ -1450,27 +1450,31 @@ namespace das
             };
             uint32_t    flags = 0;
         };
-        MakeFieldDecl () = default;
-        MakeFieldDecl ( const LineInfo & a, const string & n, const ExpressionPtr & e, bool mv, bool cl )
+        MakeFieldDecl () { gc_magic = GC_MAGIC_MAKEFIELDDECL; }
+        MakeFieldDecl ( const LineInfo & a, const string & n, ExpressionPtr e, bool mv, bool cl )
             : at(a), name(n), value(e) {
+            gc_magic = GC_MAGIC_MAKEFIELDDECL;
             moveSemantics = mv;
             cloneSemantics = cl;
         }
         MakeFieldDeclPtr clone() const;
         void serialize( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
     };
 
-    class MakeStruct : public vector<MakeFieldDeclPtr>, public ptr_ref_count {
+    class MakeStruct : public vector<MakeFieldDeclPtr>, public gc_node {
     public:
+        MakeStruct() { gc_magic = GC_MAGIC_MAKESTRUCT; }
         void serialize( AstSerializer & ser );
+        void gc_collect ( gc_root * target, gc_root * from );
     };
-    typedef smart_ptr<MakeStruct>      MakeStructPtr;
+    typedef MakeStruct *      MakeStructPtr;
 
     struct DAS_API ExprNamedCall : Expression {
         ExprNamedCall () { __rtti = "ExprNamedCall"; };
         ExprNamedCall ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprNamedCall";}
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isNamedCall() const override { return true; }
@@ -1478,7 +1482,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         string      name;
         vector<ExpressionPtr>  nonNamedArguments;
-        MakeStruct  arguments;
+        MakeStructPtr  arguments = nullptr;
         bool        argumentsFailedToInfer = false;
         bool        methodCall = false;
     };
@@ -1512,7 +1516,7 @@ namespace das
         ExprMakeStruct() { __rtti = "ExprMakeStruct"; };
         ExprMakeStruct ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeStruct"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1522,7 +1526,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         virtual void markNoDiscard() override;
         vector<MakeStructPtr>       structs;
-        ExpressionPtr               block;
+        ExpressionPtr   block = nullptr;
         Function *                  constructor = nullptr;
         union {
             struct {
@@ -1547,7 +1551,7 @@ namespace das
         ExprMakeVariant() { __rtti = "ExprMakeVariant"; };
         ExprMakeVariant ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeVariant"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1563,7 +1567,7 @@ namespace das
         ExprMakeArray() { __rtti = "ExprMakeArray"; };
         ExprMakeArray ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeArray"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1582,7 +1586,7 @@ namespace das
         ExprMakeTuple ( const LineInfo & at )
             : ExprMakeArray(at) { __rtti = "ExprMakeTuple"; }
         virtual bool rtti_isMakeTuple() const override { return true; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual vector<SimNode *> simulateLocal ( Context & context ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1597,14 +1601,14 @@ namespace das
         ExprArrayComprehension() { __rtti = "ExprArrayComprehension"; };
         ExprArrayComprehension ( const LineInfo & at )
             : Expression(at) { __rtti = "ExprArrayComprehension"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
-        ExpressionPtr   exprFor;
-        ExpressionPtr   exprWhere;
-        ExpressionPtr   subexpr;
+        ExpressionPtr   exprFor = nullptr;
+        ExpressionPtr   exprWhere = nullptr;
+        ExpressionPtr   subexpr = nullptr;
         bool            generatorSyntax = false;
         bool            tableSyntax = false;
     };
@@ -1613,7 +1617,7 @@ namespace das
         ExprTypeDecl () { __rtti = "ExprTypeDecl"; };
         ExprTypeDecl ( const LineInfo & a, const TypeDeclPtr & d )
             : Expression(a), typeexpr(d) { __rtti = "ExprTypeDecl"; }
-        virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
+        virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isTypeDecl() const override { return true; }

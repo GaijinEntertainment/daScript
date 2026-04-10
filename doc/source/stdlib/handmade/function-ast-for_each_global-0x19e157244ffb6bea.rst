@@ -1,0 +1,1 @@
+Iterates over all global variables defined in the given module, calling the provided block for each one.

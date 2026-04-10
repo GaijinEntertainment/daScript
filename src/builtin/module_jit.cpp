@@ -329,7 +329,7 @@ extern "C" {
             if ( module->name != moduleName ) return true;
             auto fn = module->findFunction(funcMangledName);
             if ( fn && fn->builtIn ) {
-                *dllGlobal = static_cast<BuiltInFunction *>(fn.get())->getBuiltinAddress();
+                *dllGlobal = static_cast<BuiltInFunction *>(fn)->getBuiltinAddress();
                 found = *dllGlobal != nullptr;
                 return !found;
             }
@@ -341,7 +341,7 @@ extern "C" {
                 auto resolverFn = module->findUniqueFunction("__dasbind_resolve");
                 if ( resolverFn && resolverFn->builtIn ) {
                     auto resolver = (void * (*)(const char *))
-                        static_cast<BuiltInFunction *>(resolverFn.get())->getBuiltinAddress();
+                        static_cast<BuiltInFunction *>(resolverFn)->getBuiltinAddress();
                     if ( resolver ) {
                         *dllGlobal = resolver(funcMangledName);
                         found = *dllGlobal != nullptr;

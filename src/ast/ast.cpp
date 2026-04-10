@@ -7,22 +7,22 @@ namespace das {
 
     // local or global
 
-    bool isLocalOrGlobal ( const ExpressionPtr & expr ) {
+    bool isLocalOrGlobal ( ExpressionPtr expr ) {
         if ( expr->rtti_isVar() ) {
-            auto ev = static_pointer_cast<ExprVar>(expr);
+            auto ev = static_cast<ExprVar*>(expr);
             return ev->local || !(ev->argument || ev->block);
         } else if ( expr->rtti_isAt() ) {
-            auto ea = static_pointer_cast<ExprAt>(expr);
+            auto ea = static_cast<ExprAt*>(expr);
             if ( ea->subexpr && ea->subexpr->type && ea->subexpr->type->dim.size() ) {
                 return isLocalOrGlobal(ea->subexpr);
             }
         } else if ( expr->rtti_isField() ) {
-            auto ef = static_pointer_cast<ExprField>(expr);
+            auto ef = static_cast<ExprField*>(expr);
             if ( ef->value && ef->value->type && (ef->value->type->baseType!=Type::tHandle || ef->value->type->isLocal()) ) {
                 return isLocalOrGlobal(ef->value);
             }
         } else if ( expr->rtti_isSwizzle() ) {
-            auto sw = static_pointer_cast<ExprSwizzle>(expr);
+            auto sw = static_cast<ExprSwizzle*>(expr);
             if ( sw->value ) {
                 return isLocalOrGlobal(sw->value);
             }
@@ -204,14 +204,14 @@ namespace das {
     }
 
     bool Enumeration::addI ( const string & f, int64_t value, const LineInfo & att ) {
-        return add(f, make_smart<ExprConstInt64>(value),att);
+        return add(f, new ExprConstInt64(value),att);
     }
 
     bool Enumeration::addIEx ( const string & f, const string & fcpp, int64_t value, const LineInfo & att ) {
-        return addEx(f, fcpp, make_smart<ExprConstInt64>(value),att);
+        return addEx(f, fcpp, new ExprConstInt64(value),att);
     }
 
-    bool Enumeration::addEx ( const string & na, const string & naCpp, const ExpressionPtr & expr, const LineInfo & att ) {
+    bool Enumeration::addEx ( const string & na, const string & naCpp, ExpressionPtr expr, const LineInfo & att ) {
         auto it = find_if(list.begin(), list.end(), [&](const EnumEntry & arg){
             return arg.name == na;
         });
@@ -228,7 +228,7 @@ namespace das {
         }
     }
 
-    bool Enumeration::add ( const string & na, const ExpressionPtr & expr, const LineInfo & att ) {
+    bool Enumeration::add ( const string & na, ExpressionPtr expr, const LineInfo & att ) {
         return addEx(na,"",expr,att);
     }
 
@@ -253,7 +253,7 @@ namespace das {
     }
 
     StructurePtr Structure::clone() const {
-        auto cs = make_smart<Structure>(name);
+        auto cs = new Structure(name);
         cs->fields.reserve(fields.size());
         for ( auto & fd : fields ) {
             cs->fields.emplace_back(fd.name, new TypeDecl(*fd.type), fd.init ? fd.init->clone() : nullptr, fd.annotation, fd.moveSemantics, fd.at);
@@ -625,7 +625,7 @@ namespace das {
     // variable
 
     VariablePtr Variable::clone() const {
-        auto pVar = make_smart<Variable>();
+        auto pVar = new Variable();
         pVar->name = name;
         pVar->aka = aka;
         pVar->type = new TypeDecl(*type);
@@ -671,7 +671,7 @@ namespace das {
             return false;
         }
         if ( init->rtti_isCallFunc() ) {
-            auto cfun = static_pointer_cast<ExprCallFunc>(init);
+            auto cfun = static_cast<ExprCallFunc*>(init);
             if ( cfun->func && cfun->func->isTypeConstructor ) {
                 return true;
             }
@@ -694,7 +694,7 @@ namespace das {
     }
 
     FunctionPtr Function::clone() const {
-        auto cfun = make_smart<Function>();
+        auto cfun = new Function();
         cfun->name = name;
         for ( const auto & arg : arguments ) {
             cfun->arguments.push_back(arg->clone());
@@ -824,11 +824,11 @@ namespace das {
                 arg->type = arg->type->visit(vis);
                 arg->type = vis.visit(arg->type);
             }
-            if ( arg->init && vis.canVisitArgumentInit(this,arg,arg->init.get()) ) {
-                vis.preVisitArgumentInit(this, arg, arg->init.get());
+            if ( arg->init && vis.canVisitArgumentInit(this,arg,arg->init) ) {
+                vis.preVisitArgumentInit(this, arg, arg->init);
                 arg->init = arg->init->visit(vis);
                 if ( arg->init ) {
-                    arg->init = vis.visitArgumentInit(this, arg, arg->init.get());
+                    arg->init = vis.visitArgumentInit(this, arg, arg->init);
                 }
             }
             arg = vis.visitArgument(this, arg, arg==arguments.back() );
@@ -839,9 +839,9 @@ namespace das {
             result = vis.visit(result);
         }
         if ( body ) {
-            vis.preVisitFunctionBody(this, body.get());
+            vis.preVisitFunctionBody(this, body);
             if ( body ) body = body->visit(vis);
-            if ( body ) body = vis.visitFunctionBody(this, body.get());
+            if ( body ) body = vis.visitFunctionBody(this, body);
         }
         return vis.visit(this);
     }
@@ -941,9 +941,9 @@ namespace das {
 
     Function * Function::getOriginPtr() const {
         if ( fromGeneric ) {
-            auto origin = fromGeneric.get();
+            auto origin = fromGeneric;
             while ( origin->fromGeneric ) {
-                origin = origin->fromGeneric.get();
+                origin = origin->fromGeneric;
             }
             return origin;
         } else {
@@ -974,14 +974,14 @@ namespace das {
     void BuiltInFunction::construct (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
         for ( size_t argi=1; argi != args.size(); ++argi ) {
-            auto arg = make_smart<Variable>();
+            auto arg = new Variable();
             arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
-                arg->init = make_smart<ExprFakeContext>(at);
+                arg->init = new ExprFakeContext(at);
                 arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
-                arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init = new ExprFakeLineInfo(at);
                 arg->init->generated = true;
             }
             if ( arg->type->isTempType() ) {
@@ -1013,14 +1013,14 @@ namespace das {
     void BuiltInFunction::constructExternal (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
         for ( size_t argi=1; argi != args.size(); ++argi ) {
-            auto arg = make_smart<Variable>();
+            auto arg = new Variable();
             arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
-                arg->init = make_smart<ExprFakeContext>(at);
+                arg->init = new ExprFakeContext(at);
                 arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
-                arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init = new ExprFakeLineInfo(at);
                 arg->init->generated = true;
             }
             this->arguments.push_back(arg);
@@ -1045,14 +1045,14 @@ namespace das {
     void BuiltInFunction::constructInterop (const vector<TypeDeclPtr> & args ) {
         this->totalStackSize = sizeof(Prologue);
         for ( size_t argi=1; argi!=args.size(); ++argi ) {
-            auto arg = make_smart<Variable>();
+            auto arg = new Variable();
             arg->name = "arg" + to_string(argi-1);
             arg->type = args[argi];
             if ( arg->type->baseType==Type::fakeContext ) {
-                arg->init = make_smart<ExprFakeContext>(at);
+                arg->init = new ExprFakeContext(at);
                 arg->init->generated = true;
             } else if ( arg->type->baseType==Type::fakeLineInfo ) {
-                arg->init = make_smart<ExprFakeLineInfo>(at);
+                arg->init = new ExprFakeLineInfo(at);
                 arg->init->generated = true;
             }
             this->arguments.push_back(arg);
@@ -1082,7 +1082,7 @@ namespace das {
         return ss.str();
     }
 
-    ExpressionPtr Expression::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr Expression::clone( ExpressionPtr expr ) const {
         if ( !expr ) {
             DAS_ASSERTF(0,
                    "its not ok to clone Expression as is."
@@ -1096,9 +1096,9 @@ namespace das {
         return expr;
     }
 
-    ExpressionPtr Expression::autoDereference ( const ExpressionPtr & expr ) {
+    ExpressionPtr Expression::autoDereference ( ExpressionPtr expr ) {
         if ( expr->type && !expr->type->isAutoOrAlias() && expr->type->isRef() && !expr->type->isRefType() ) {
-            auto ar2l = make_smart<ExprRef2Value>();
+            auto ar2l = new ExprRef2Value();
             ar2l->subexpr = expr;
             ar2l->at = expr->at;
             ar2l->type = new TypeDecl(*expr->type);
@@ -1116,7 +1116,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprReader::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprReader::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprReader>(expr);
         Expression::clone(cexpr);
         cexpr->macro = macro;
@@ -1131,7 +1131,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprLabel::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprLabel::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprLabel>(expr);
         Expression::clone(cexpr);
         cexpr->label = label;
@@ -1149,7 +1149,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprGoto::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprGoto::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprGoto>(expr);
         Expression::clone(cexpr);
         cexpr->label = label;
@@ -1167,7 +1167,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprRef2Value::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprRef2Value::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprRef2Value>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1186,7 +1186,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprRef2Ptr::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprRef2Ptr::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprRef2Ptr>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1205,7 +1205,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprPtr2Ref::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprPtr2Ref::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1225,7 +1225,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprAddr::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprAddr::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprAddr>(expr);
         Expression::clone(cexpr);
         cexpr->target = target;
@@ -1239,12 +1239,12 @@ namespace das {
     ExpressionPtr ExprNullCoalescing::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
-        vis.preVisitNullCoaelescingDefault(this, defaultValue.get());
+        vis.preVisitNullCoaelescingDefault(this, defaultValue);
         defaultValue = defaultValue->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprNullCoalescing::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprNullCoalescing::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprNullCoalescing>(expr);
         ExprPtr2Ref::clone(cexpr);
         cexpr->defaultValue = defaultValue->clone();
@@ -1258,7 +1258,7 @@ namespace das {
 
     // ConstBitfield
 
-    ExpressionPtr ExprConstBitfield::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprConstBitfield::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprConstBitfield>(expr);
         ExprConstT<uint64_t,ExprConstBitfield>::clone(cexpr);
         if ( bitfieldType ) {
@@ -1269,7 +1269,7 @@ namespace das {
 
     // ConstPtr
 
-    ExpressionPtr ExprConstPtr::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprConstPtr::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprConstPtr>(expr);
         ExprConst::clone(cexpr);
         cexpr->isSmartPtr = isSmartPtr;
@@ -1285,12 +1285,12 @@ namespace das {
         vis.preVisit((ExprConst *)this);
         vis.preVisit(this);
         auto res = vis.visit(this);
-        if ( res.get() != this )
+        if ( res != this )
             return res;
         return vis.visit((ExprConst *)this);
     }
 
-    ExpressionPtr ExprConstEnumeration::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprConstEnumeration::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprConstEnumeration>(expr);
         ExprConst::clone(cexpr);
         cexpr->enumType = enumType;
@@ -1305,12 +1305,12 @@ namespace das {
         vis.preVisit((ExprConst *)this);
         vis.preVisit(this);
         auto res = vis.visit(this);
-        if ( res.get() != this )
+        if ( res != this )
             return res;
         return vis.visit((ExprConst *)this);
     }
 
-    ExpressionPtr ExprConstString::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprConstString::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprConstString>(expr);
         Expression::clone(cexpr);
         cexpr->value = value;
@@ -1321,7 +1321,7 @@ namespace das {
     string TypeDecl::typeMacroName() const {
         if ( dimExpr.size()<1 ) return "";
         if ( dimExpr[0]->rtti_isStringConstant() ) {
-            return ((ExprConstString *)dimExpr[0].get())->text;
+            return ((ExprConstString *)dimExpr[0])->text;
         } else {
             return "";
         }
@@ -1329,7 +1329,7 @@ namespace das {
 
     // ExprStaticAssert
 
-    ExpressionPtr ExprStaticAssert::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprStaticAssert::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprStaticAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1337,7 +1337,7 @@ namespace das {
 
     // ExprAssert
 
-    ExpressionPtr ExprAssert::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprAssert::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprAssert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->isVerify = isVerify;
@@ -1350,15 +1350,15 @@ namespace das {
         vis.preVisit(this);
         if ( vis.canVisitQuoteSubexpression(this) ) {
             for ( auto & arg : arguments ) {
-                vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                vis.preVisitLooksLikeCallArg(this, arg, arg==arguments.back());
                 arg = arg->visit(vis);
-                arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                arg = vis.visitLooksLikeCallArg(this, arg, arg==arguments.back());
             }
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprQuote::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprQuote::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprQuote>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1366,7 +1366,7 @@ namespace das {
 
     // ExprDebug
 
-    ExpressionPtr ExprDebug::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprDebug::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprDebug>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1374,7 +1374,7 @@ namespace das {
 
     // ExprMemZero
 
-    ExpressionPtr ExprMemZero::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMemZero::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMemZero>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1382,7 +1382,7 @@ namespace das {
 
     // ExprMakeGenerator
 
-    ExprMakeGenerator::ExprMakeGenerator ( const LineInfo & a, const ExpressionPtr & b )
+    ExprMakeGenerator::ExprMakeGenerator ( const LineInfo & a, ExpressionPtr b )
     : ExprLooksLikeCall(a, "generator") {
         __rtti = "ExprMakeGenerator";
         if ( b ) {
@@ -1401,7 +1401,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprMakeGenerator::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeGenerator::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeGenerator>(expr);
         ExprLooksLikeCall::clone(cexpr);
         if ( iterType ) {
@@ -1414,7 +1414,7 @@ namespace das {
 
     // ExprYield
 
-    ExprYield::ExprYield ( const LineInfo & a, const ExpressionPtr & b ) : Expression(a) {
+    ExprYield::ExprYield ( const LineInfo & a, ExpressionPtr b ) : Expression(a) {
         __rtti = "ExprYield";
         subexpr = b;
     }
@@ -1425,7 +1425,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprYield::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprYield::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprYield>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1441,7 +1441,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprMakeBlock::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeBlock::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeBlock>(expr);
         Expression::clone(cexpr);
         cexpr->block = block->clone();
@@ -1455,7 +1455,7 @@ namespace das {
 
     // ExprInvoke
 
-    ExpressionPtr ExprInvoke::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprInvoke::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprInvoke>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->isInvokeMethod = isInvokeMethod;
@@ -1464,7 +1464,7 @@ namespace das {
 
     // ExprErase
 
-    ExpressionPtr ExprErase::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprErase::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprErase>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1472,7 +1472,7 @@ namespace das {
 
     // ExprSetInsert
 
-    ExpressionPtr ExprSetInsert::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprSetInsert::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprSetInsert>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1480,7 +1480,7 @@ namespace das {
 
     // ExprFind
 
-    ExpressionPtr ExprFind::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprFind::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprFind>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1488,7 +1488,7 @@ namespace das {
 
     // ExprKeyExists
 
-    ExpressionPtr ExprKeyExists::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprKeyExists::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprKeyExists>(expr);
         ExprLooksLikeCall::clone(cexpr);
         return cexpr;
@@ -1506,7 +1506,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprIs::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprIs::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprIs>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1526,7 +1526,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprTypeDecl::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprTypeDecl::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprTypeDecl>(expr);
         Expression::clone(cexpr);
         cexpr->typeexpr = new TypeDecl(*typeexpr);
@@ -1542,7 +1542,7 @@ namespace das {
             typeexpr = typeexpr->visit(vis);
             typeexpr = vis.visit(typeexpr);
         }
-        if ( vis.canVisitExpr(this,subexpr.get()) ) {
+        if ( vis.canVisitExpr(this,subexpr) ) {
             if ( subexpr ) {
                 subexpr = subexpr->visit(vis);
             }
@@ -1550,7 +1550,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprTypeInfo::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprTypeInfo::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprTypeInfo>(expr);
         Expression::clone(cexpr);
         cexpr->trait = trait;
@@ -1571,13 +1571,13 @@ namespace das {
             subexpr = subexpr->visit(vis);
         }
         if ( sizeexpr ) {
-            vis.preVisitDeleteSizeExpression(this, sizeexpr.get());
+            vis.preVisitDeleteSizeExpression(this, sizeexpr);
             sizeexpr = sizeexpr->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprDelete::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprDelete::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprDelete>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1588,7 +1588,7 @@ namespace das {
 
     // ExprCast
 
-    ExpressionPtr ExprCast::clone( const ExpressionPtr & expr  ) const {
+    ExpressionPtr ExprCast::clone( ExpressionPtr expr  ) const {
         auto cexpr = clonePtr<ExprCast>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1610,7 +1610,7 @@ namespace das {
 
     // ExprAscend
 
-    ExpressionPtr ExprAscend::clone( const ExpressionPtr & expr  ) const {
+    ExpressionPtr ExprAscend::clone( ExpressionPtr expr  ) const {
         auto cexpr = clonePtr<ExprAscend>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1635,14 +1635,14 @@ namespace das {
             typeexpr = vis.visit(typeexpr);
         }
         for ( auto & arg : arguments ) {
-            vis.preVisitNewArg(this, arg.get(), arg==arguments.back());
+            vis.preVisitNewArg(this, arg, arg==arguments.back());
             arg = arg->visit(vis);
-            arg = vis.visitNewArg(this, arg.get(), arg==arguments.back());
+            arg = vis.visitNewArg(this, arg, arg==arguments.back());
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprNew::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprNew::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprNew>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->typeexpr = new TypeDecl(*typeexpr);
@@ -1655,12 +1655,12 @@ namespace das {
     ExpressionPtr ExprAt::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
-        vis.preVisitAtIndex(this, index.get());
+        vis.preVisitAtIndex(this, index);
         index = index->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprAt::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprAt::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprAt>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1678,12 +1678,12 @@ namespace das {
     ExpressionPtr ExprSafeAt::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
-        vis.preVisitSafeAtIndex(this, index.get());
+        vis.preVisitSafeAtIndex(this, index);
         index = index->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprSafeAt::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprSafeAt::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprSafeAt>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -1718,7 +1718,7 @@ namespace das {
     void ExprBlock::collapse ( vector<ExpressionPtr> & res, const vector<ExpressionPtr> & lst ) {
         for ( const auto & ex :lst ) {
             if ( ex->rtti_isBlock() ) {
-                auto blk = static_pointer_cast<ExprBlock>(ex);
+                auto blk = static_cast<ExprBlock*>(ex);
                 // note: no need to check for `isCollapseable'. typically needCollapse is sufficient
                 if ( /* blk->isCollapseable && */ blk->finalList.empty() ) {
                     collapse(res, blk->list);
@@ -1766,9 +1766,9 @@ namespace das {
             vis.preVisitBlockFinal(this);
             for ( auto it = finalList.begin(); it!=finalList.end(); ) {
                 auto & subexpr = *it;
-                vis.preVisitBlockFinalExpression(this, subexpr.get());
+                vis.preVisitBlockFinalExpression(this, subexpr);
                 if ( subexpr ) subexpr = subexpr->visit(vis);
-                if ( subexpr ) subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
+                if ( subexpr ) subexpr = vis.visitBlockFinalExpression(this, subexpr);
                 if ( subexpr ) ++it; else it = finalList.erase(it);
             }
             vis.visitBlockFinal(this);
@@ -1787,10 +1787,10 @@ namespace das {
                   arg->type = vis.visit(arg->type);
               }
               if ( arg->init ) {
-                  vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
+                  vis.preVisitBlockArgumentInit(this, arg, arg->init);
                   arg->init = arg->init->visit(vis);
                   if ( arg->init ) {
-                      arg->init = vis.visitBlockArgumentInit(this, arg, arg->init.get());
+                      arg->init = vis.visitBlockArgumentInit(this, arg, arg->init);
                   }
               }
               arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
@@ -1807,9 +1807,9 @@ namespace das {
         }
         for ( auto it = list.begin(); it!=list.end(); ) {
             auto & subexpr = *it;
-            vis.preVisitBlockExpression(this, subexpr.get());
+            vis.preVisitBlockExpression(this, subexpr);
             if ( subexpr ) subexpr = subexpr->visit(vis);
-            if ( subexpr ) subexpr = vis.visitBlockExpression(this, subexpr.get());
+            if ( subexpr ) subexpr = vis.visitBlockExpression(this, subexpr);
             if ( subexpr ) ++it; else it = list.erase(it);
         }
         if ( !finallyBeforeBody ) {
@@ -1818,7 +1818,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprBlock::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprBlock::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprBlock>(expr);
         Expression::clone(cexpr);
         cexpr->list.reserve(list.size());
@@ -1874,7 +1874,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprSwizzle::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprSwizzle::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprSwizzle>(expr);
         Expression::clone(cexpr);
         cexpr->mask = mask;
@@ -1894,7 +1894,7 @@ namespace das {
         return fieldRef.get();
     }
 
-    ExpressionPtr ExprField::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprField::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprField>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
@@ -1922,7 +1922,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprIsVariant::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprIsVariant::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprIsVariant>(expr);
         ExprField::clone(cexpr);
         return cexpr;
@@ -1936,7 +1936,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprAsVariant::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprAsVariant::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprAsVariant>(expr);
         ExprField::clone(cexpr);
         return cexpr;
@@ -1950,7 +1950,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprSafeAsVariant::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprSafeAsVariant::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprSafeAsVariant>(expr);
         ExprField::clone(cexpr);
         return cexpr;
@@ -1964,7 +1964,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprSafeField::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprSafeField::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprSafeField>(expr);
         ExprField::clone(cexpr);
         return cexpr;
@@ -1976,15 +1976,15 @@ namespace das {
         vis.preVisit(this);
         for ( auto it = elements.begin(); it!=elements.end(); ) {
             auto & elem = *it;
-            vis.preVisitStringBuilderElement(this, elem.get(), elem==elements.back());
+            vis.preVisitStringBuilderElement(this, elem, elem==elements.back());
             elem = elem->visit(vis);
-            if ( elem ) elem = vis.visitStringBuilderElement(this, elem.get(), elem==elements.back());
+            if ( elem ) elem = vis.visitStringBuilderElement(this, elem, elem==elements.back());
             if ( elem ) ++ it; else it = elements.erase(it);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprStringBuilder::clone( const ExpressionPtr & expr  ) const {
+    ExpressionPtr ExprStringBuilder::clone( ExpressionPtr expr  ) const {
         auto cexpr = clonePtr<ExprStringBuilder>(expr);
         Expression::clone(cexpr);
         cexpr->elements.reserve(elements.size());
@@ -2001,7 +2001,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprVar::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprVar::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprVar>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
@@ -2022,13 +2022,13 @@ namespace das {
             subexpr = subexpr->visit(vis);
         }
         if ( value ) {
-            vis.preVisitTagValue(this, value.get());
+            vis.preVisitTagValue(this, value);
             value = value->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprTag::clone ( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprTag::clone ( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprTag>(expr);
         Expression::clone(cexpr);
         if ( subexpr )  cexpr->subexpr = subexpr->clone();
@@ -2039,12 +2039,12 @@ namespace das {
 
     // ExprOp
 
-    ExpressionPtr ExprOp::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprOp::clone( ExpressionPtr expr ) const {
         if ( !expr ) {
             DAS_ASSERTF(0,"can't clone ExprOp");
             return nullptr;
         }
-        auto cexpr = static_pointer_cast<ExprOp>(expr);
+        auto cexpr = static_cast<ExprOp*>(expr);
         ExprCallFunc::clone(cexpr);
         cexpr->op = op;
         cexpr->func = func;
@@ -2055,7 +2055,7 @@ namespace das {
     // ExprOp1
 
     bool ExprOp1::swap_tail ( Expression * expr, Expression * swapExpr ) {
-        if ( subexpr.get()==expr ) {
+        if ( subexpr==expr ) {
             subexpr = swapExpr;
             return true;
         } else {
@@ -2069,7 +2069,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprOp1::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprOp1::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprOp1>(expr);
         ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -2095,7 +2095,7 @@ namespace das {
     // ExprOp2
 
     bool ExprOp2::swap_tail ( Expression * expr, Expression * swapExpr ) {
-        if ( right.get()==expr ) {
+        if ( right==expr ) {
             right = swapExpr;
             return true;
         } else {
@@ -2106,12 +2106,12 @@ namespace das {
     ExpressionPtr ExprOp2::visit(Visitor & vis) {
         vis.preVisit(this);
         left = left->visit(vis);
-        vis.preVisitRight(this, right.get());
+        vis.preVisitRight(this, right);
         right = right->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprOp2::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprOp2::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprOp2>(expr);
         ExprOp::clone(cexpr);
         cexpr->left = left->clone();
@@ -2145,7 +2145,7 @@ namespace das {
     // ExprOp3
 
     bool ExprOp3::swap_tail ( Expression * expr, Expression * swapExpr ) {
-        if ( right.get()==expr ) {
+        if ( right==expr ) {
             right = swapExpr;
             return true;
         } else {
@@ -2156,14 +2156,14 @@ namespace das {
     ExpressionPtr ExprOp3::visit(Visitor & vis) {
         vis.preVisit(this);
         subexpr = subexpr->visit(vis);
-        vis.preVisitLeft(this, left.get());
+        vis.preVisitLeft(this, left);
         left = left->visit(vis);
-        vis.preVisitRight(this, right.get());
+        vis.preVisitRight(this, right);
         right = right->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprOp3::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprOp3::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprOp3>(expr);
         ExprOp::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
@@ -2207,18 +2207,18 @@ namespace das {
     ExpressionPtr ExprMove::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( vis.isRightFirst(this) ) {
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
             left = left->visit(vis);
         } else {
             left = left->visit(vis);
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprMove::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMove::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMove>(expr);
         ExprOp2::clone(cexpr);
         cexpr->moveFlags = moveFlags;
@@ -2230,18 +2230,18 @@ namespace das {
     ExpressionPtr ExprClone::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( vis.isRightFirst(this) ) {
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
             left = left->visit(vis);
         } else {
             left = left->visit(vis);
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprClone::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprClone::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprClone>(expr);
         ExprOp2::clone(cexpr);
         return cexpr;
@@ -2252,18 +2252,18 @@ namespace das {
     ExpressionPtr ExprCopy::visit(Visitor & vis) {
         vis.preVisit(this);
         if ( vis.isRightFirst(this) ) {
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
             left = left->visit(vis);
         } else {
             left = left->visit(vis);
-            vis.preVisitRight(this, right.get());
+            vis.preVisitRight(this, right);
             right = right->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprCopy::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprCopy::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprCopy>(expr);
         ExprOp2::clone(cexpr);
         cexpr->copyFlags = copyFlags;
@@ -2275,7 +2275,7 @@ namespace das {
     ExpressionPtr ExprTryCatch::visit(Visitor & vis) {
         vis.preVisit(this);
         try_block = try_block->visit(vis);
-        vis.preVisitCatch(this,catch_block.get());
+        vis.preVisitCatch(this,catch_block);
         catch_block = catch_block->visit(vis);
         return vis.visit(this);
     }
@@ -2284,7 +2284,7 @@ namespace das {
         return try_block->getEvalFlags() | catch_block->getEvalFlags();
     }
 
-    ExpressionPtr ExprTryCatch::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprTryCatch::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprTryCatch>(expr);
         Expression::clone(cexpr);
         cexpr->try_block = try_block->clone();
@@ -2302,7 +2302,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprReturn::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprReturn::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprReturn>(expr);
         Expression::clone(cexpr);
         if ( subexpr )
@@ -2320,7 +2320,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprBreak::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprBreak::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprBreak>(expr);
         Expression::clone(cexpr);
         return cexpr;
@@ -2333,7 +2333,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprContinue::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprContinue::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprContinue>(expr);
         Expression::clone(cexpr);
         return cexpr;
@@ -2345,17 +2345,17 @@ namespace das {
         vis.preVisit(this);
         cond = cond->visit(vis);
         if ( vis.canVisitIfSubexpr(this) ) {
-            vis.preVisitIfBlock(this, if_true.get());
+            vis.preVisitIfBlock(this, if_true);
             if_true = if_true->visit(vis);
             if ( if_false ) {
-                vis.preVisitElseBlock(this, if_false.get());
+                vis.preVisitElseBlock(this, if_false);
                 if_false = if_false->visit(vis);
             }
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprIfThenElse::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprIfThenElse::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprIfThenElse>(expr);
         Expression::clone(cexpr);
         cexpr->cond = cond->clone();
@@ -2377,12 +2377,12 @@ namespace das {
     ExpressionPtr ExprWith::visit(Visitor & vis) {
         vis.preVisit(this);
         with = with->visit(vis);
-        vis.preVisitWithBody(this, body.get());
+        vis.preVisitWithBody(this, body);
         body = body->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprWith::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprWith::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprWith>(expr);
         Expression::clone(cexpr);
         cexpr->with = with->clone();
@@ -2402,7 +2402,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprAssume::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprAssume::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprAssume>(expr);
         Expression::clone(cexpr);
         cexpr->alias = alias;
@@ -2419,7 +2419,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprUnsafe::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprUnsafe::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprUnsafe>(expr);
         Expression::clone(cexpr);
         cexpr->body = body->clone();
@@ -2435,12 +2435,12 @@ namespace das {
     ExpressionPtr ExprWhile::visit(Visitor & vis) {
         vis.preVisit(this);
         cond = cond->visit(vis);
-        vis.preVisitWhileBody(this, body.get());
+        vis.preVisitWhileBody(this, body);
         body = body->visit(vis);
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprWhile::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprWhile::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprWhile>(expr);
         Expression::clone(cexpr);
         cexpr->cond = cond->clone();
@@ -2461,19 +2461,19 @@ namespace das {
             var = vis.visitFor(this, var, var==iteratorVariables.back());
         }
         for ( auto & src : sources ) {
-            vis.preVisitForSource(this, src.get(), src==sources.back());
+            vis.preVisitForSource(this, src, src==sources.back());
             src = src->visit(vis);
-            src = vis.visitForSource(this, src.get(), src==sources.back());
+            src = vis.visitForSource(this, src, src==sources.back());
         }
         vis.preVisitForStack(this);
         if ( body ) {
-            vis.preVisitForBody(this, body.get());
+            vis.preVisitForBody(this, body);
             body = body->visit(vis);
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprFor::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprFor::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprFor>(expr);
         Expression::clone(cexpr);
         cexpr->iterators = iterators;
@@ -2498,7 +2498,7 @@ namespace das {
     Variable * ExprFor::findIterator(const string & name) const {
         for ( auto & v : iteratorVariables ) {
             if ( v->name==name ) {
-                return v.get();
+                return v;
             }
         }
         return nullptr;
@@ -2521,9 +2521,9 @@ namespace das {
                 var->type = vis.visit(var->type);
             }
             if ( var->init ) {
-                vis.preVisitLetInit(this, var, var->init.get());
+                vis.preVisitLetInit(this, var, var->init);
                 var->init = var->init->visit(vis);
-                var->init = vis.visitLetInit(this, var, var->init.get());
+                var->init = vis.visitLetInit(this, var, var->init);
             }
             var = vis.visitLet(this, var, var==variables.back());
             if ( var ) ++it; else it = variables.erase(it);
@@ -2531,7 +2531,7 @@ namespace das {
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprLet::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprLet::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprLet>(expr);
         Expression::clone(cexpr);
         for ( auto & var : variables )
@@ -2545,7 +2545,7 @@ namespace das {
     Variable * ExprLet::find(const string & name) const {
         for ( auto & v : variables ) {
             if ( v->name==name ) {
-                return v.get();
+                return v;
             }
         }
         return nullptr;
@@ -2558,16 +2558,16 @@ namespace das {
         int index = 0;
         for ( auto & arg : arguments ) {
             if ( !macro || macro->canVisitArguments(this,index) ) {
-                vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                vis.preVisitLooksLikeCallArg(this, arg, arg==arguments.back());
                 arg = arg->visit(vis);
-                arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                arg = vis.visitLooksLikeCallArg(this, arg, arg==arguments.back());
             }
             index ++;
         }
         return vis.visit(this);
     }
 
-    ExpressionPtr ExprCallMacro::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprCallMacro::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprCallMacro>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->macro = macro;
@@ -2581,10 +2581,10 @@ namespace das {
         if ( vis.canVisitLooksLikeCall(this) ) {
             vis.preVisit(this);
             for ( auto & arg : arguments ) {
-                if ( vis.canVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back()) ) {
-                    vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                if ( vis.canVisitLooksLikeCallArg(this, arg, arg==arguments.back()) ) {
+                    vis.preVisitLooksLikeCallArg(this, arg, arg==arguments.back());
                     arg = arg->visit(vis);
-                    arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
+                    arg = vis.visitLooksLikeCallArg(this, arg, arg==arguments.back());
                 }
             }
             return vis.visit(this);
@@ -2593,7 +2593,7 @@ namespace das {
         }
     }
 
-    ExpressionPtr ExprLooksLikeCall::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprLooksLikeCall::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprLooksLikeCall>(expr);
         Expression::clone(cexpr);
         cexpr->atEnclosure = atEnclosure;
@@ -2632,9 +2632,9 @@ namespace das {
         if ( vis.canVisitCall(this) ) {
             vis.preVisit(this);
             for ( auto & arg : arguments ) {
-                vis.preVisitCallArg(this, arg.get(), arg==arguments.back());
+                vis.preVisitCallArg(this, arg, arg==arguments.back());
                 arg = arg->visit(vis);
-                arg = vis.visitCallArg(this, arg.get(), arg==arguments.back());
+                arg = vis.visitCallArg(this, arg, arg==arguments.back());
             }
             return vis.visit(this);
         } else {
@@ -2646,7 +2646,7 @@ namespace das {
         notDiscarded = true;
     }
 
-    ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprCall::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprCall>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->func = func;
@@ -2661,17 +2661,18 @@ namespace das {
 
             if (nonNamedArguments.size() > 0) {
                 ExprCall dummy;
+                dummy.gc_unlink();
                 for (auto& arg : nonNamedArguments) {
-                    vis.preVisitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+                    vis.preVisitCallArg(&dummy, arg, arg == nonNamedArguments.back());
                     arg = arg->visit(vis);
-                    arg = vis.visitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+                    arg = vis.visitCallArg(&dummy, arg, arg == nonNamedArguments.back());
                 }
                 this->argumentsFailedToInfer = dummy.argumentsFailedToInfer;
             }
-            for (auto& arg : arguments) {
-                vis.preVisitNamedCallArg(this, arg.get(), arg == arguments.back());
+            if ( arguments ) for (auto& arg : *arguments) {
+                vis.preVisitNamedCallArg(this, arg, arg == arguments->back());
                 arg->value = arg->value->visit(vis);
-                arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
+                arg = vis.visitNamedCallArg(this, arg, arg==arguments->back());
             }
             return vis.visit(this);
         } else {
@@ -2679,13 +2680,16 @@ namespace das {
         }
     }
 
-    ExpressionPtr ExprNamedCall::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprNamedCall::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprNamedCall>(expr);
         Expression::clone(cexpr);
         cexpr->name = name;
-        cexpr->arguments.reserve(arguments.size());
-        for ( auto & arg : arguments ) {
-            cexpr->arguments.push_back(arg->clone());
+        if ( arguments ) {
+            cexpr->arguments = new MakeStruct();
+            cexpr->arguments->reserve(arguments->size());
+            for ( auto & arg : *arguments ) {
+                cexpr->arguments->push_back(arg->clone());
+            }
         }
         cexpr->methodCall = methodCall;
         return cexpr;
@@ -2694,7 +2698,7 @@ namespace das {
     // make structure
 
     MakeFieldDeclPtr MakeFieldDecl::clone() const {
-        auto md = make_smart<MakeFieldDecl>();
+        auto md = new MakeFieldDecl();
         md->at = at;
         md->flags = flags;
         md->name = name;
@@ -2703,12 +2707,12 @@ namespace das {
         return md;
     }
 
-    ExpressionPtr ExprMakeStruct::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeStruct::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeStruct>(expr);
         ExprMakeLocal::clone(cexpr);
         cexpr->structs.reserve ( structs.size() );
         for ( auto & fields : structs ) {
-            auto mfd = make_smart<MakeStruct>();
+            auto mfd = new MakeStruct();
             mfd->reserve( fields->size() );
             for ( auto & fd : *fields ) {
                 mfd->push_back(fd->clone());
@@ -2739,20 +2743,20 @@ namespace das {
                     auto & fields = structs[index];
                     for ( auto it = fields->begin(); it != fields->end(); ) {
                         auto & field = *it;
-                        vis.preVisitMakeStructureField(this, index, field.get(), field==fields->back());
+                        vis.preVisitMakeStructureField(this, index, field, field==fields->back());
                         field->value = field->value->visit(vis);
                         if ( field ) {
-                            field = vis.visitMakeStructureField(this, index, field.get(), field==fields->back());
+                            field = vis.visitMakeStructureField(this, index, field, field==fields->back());
                         }
                         if ( field ) ++it; else it = fields->erase(it);
                     }
                     vis.visitMakeStructureIndex(this, index, index==int(structs.size()-1));
                 }
             }
-            if ( block && vis.canVisitMakeStructureBlock(this, block.get()) ) {
-                vis.preVisitMakeStructureBlock(this, block.get());
+            if ( block && vis.canVisitMakeStructureBlock(this, block) ) {
+                vis.preVisitMakeStructureBlock(this, block);
                 block = block->visit(vis);
-                if ( block ) block = vis.visitMakeStructureBlock(this, block.get());
+                if ( block ) block = vis.visitMakeStructureBlock(this, block);
             }
             return vis.visit(this);
         } else {
@@ -2770,7 +2774,7 @@ namespace das {
 
     // make variant
 
-    ExpressionPtr ExprMakeVariant::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeVariant::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeVariant>(expr);
         ExprMakeLocal::clone(cexpr);
         cexpr->variants.reserve ( variants.size() );
@@ -2791,10 +2795,10 @@ namespace das {
         int index = 0;
         for ( auto it = variants.begin(); it != variants.end(); index ++ ) {
             auto & field = *it;
-            vis.preVisitMakeVariantField(this, index, field.get(), field==variants.back());
+            vis.preVisitMakeVariantField(this, index, field, field==variants.back());
             field->value = field->value->visit(vis);
             if ( field ) {
-                field = vis.visitMakeVariantField(this, index, field.get(), field==variants.back());
+                field = vis.visitMakeVariantField(this, index, field, field==variants.back());
             }
             if ( field ) ++it; else it = variants.erase(it);
         }
@@ -2809,7 +2813,7 @@ namespace das {
 
     // make array
 
-    ExpressionPtr ExprMakeArray::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeArray::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeArray>(expr);
         ExprMakeLocal::clone(cexpr);
         cexpr->values.reserve ( values.size() );
@@ -2834,10 +2838,10 @@ namespace das {
         int index = 0;
         for ( auto it = values.begin(); it != values.end(); ) {
             auto & value = *it;
-            vis.preVisitMakeArrayIndex(this, index, value.get(), index==int(values.size()-1));
+            vis.preVisitMakeArrayIndex(this, index, value, index==int(values.size()-1));
             value = value->visit(vis);
             if ( value ) {
-                value = vis.visitMakeArrayIndex(this, index, value.get(), index==int(values.size()-1));
+                value = vis.visitMakeArrayIndex(this, index, value, index==int(values.size()-1));
             }
             if ( value ) ++it; else it = values.erase(it);
             index ++;
@@ -2853,7 +2857,7 @@ namespace das {
 
     // make tuple
 
-    ExpressionPtr ExprMakeTuple::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprMakeTuple::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprMakeTuple>(expr);
         ExprMakeLocal::clone(cexpr);
         cexpr->values.reserve ( values.size() );
@@ -2881,10 +2885,10 @@ namespace das {
         int index = 0;
         for ( auto it = values.begin(); it != values.end(); ) {
             auto & value = *it;
-            vis.preVisitMakeTupleIndex(this, index, value.get(), index==int(values.size()-1));
+            vis.preVisitMakeTupleIndex(this, index, value, index==int(values.size()-1));
             value = value->visit(vis);
             if ( value ) {
-                value = vis.visitMakeTupleIndex(this, index, value.get(), index==int(values.size()-1));
+                value = vis.visitMakeTupleIndex(this, index, value, index==int(values.size()-1));
             }
             if ( value ) ++it; else it = values.erase(it);
             index ++;
@@ -2895,7 +2899,7 @@ namespace das {
 
     // array comprehension
 
-    ExpressionPtr ExprArrayComprehension::clone( const ExpressionPtr & expr ) const {
+    ExpressionPtr ExprArrayComprehension::clone( ExpressionPtr expr ) const {
         auto cexpr = clonePtr<ExprArrayComprehension>(expr);
         Expression::clone(cexpr);
         cexpr->exprFor = exprFor->clone();
@@ -2911,10 +2915,10 @@ namespace das {
     ExpressionPtr ExprArrayComprehension::visit(Visitor & vis) {
         vis.preVisit(this);
         exprFor = exprFor->visit(vis);
-        vis.preVisitArrayComprehensionSubexpr(this, subexpr.get());
+        vis.preVisitArrayComprehensionSubexpr(this, subexpr);
         subexpr = subexpr->visit(vis);
         if ( exprWhere ) {
-            vis.preVisitArrayComprehensionWhere(this, exprWhere.get());
+            vis.preVisitArrayComprehensionWhere(this, exprWhere);
             exprWhere = exprWhere->visit(vis);
         }
         return vis.visit(this);
@@ -3091,7 +3095,7 @@ namespace das {
         } else if ( enums.size() ) {
             if ( enums.size()==1 ) {
                 auto pTD = new TypeDecl(enums.back());
-                pTD->enumType = enums.back().get();
+                pTD->enumType = enums.back();
                 pTD->at = at;
                 return pTD;
             } else {
@@ -3151,28 +3155,28 @@ namespace das {
         return res;
     }
 
-    pair<int64_t,bool> tryGetConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+    pair<int64_t,bool> tryGetConstExprIntOrUInt ( ExpressionPtr expr ) {
         DAS_ASSERTF ( expr && expr->rtti_isConstant(),
                      "expecting constant. something in enumeration (or otherwise) did not fold.");
-        auto econst = static_pointer_cast<ExprConst>(expr);
+        auto econst = static_cast<ExprConst*>(expr);
         switch (econst->baseType) {
-        case Type::tInt8:       return make_pair(static_pointer_cast<ExprConstInt8>(expr)->getValue(), true);
-        case Type::tUInt8:      return make_pair(static_pointer_cast<ExprConstUInt8>(expr)->getValue(), true);
-        case Type::tInt16:      return make_pair(static_pointer_cast<ExprConstInt16>(expr)->getValue(), true);
-        case Type::tUInt16:     return make_pair(static_pointer_cast<ExprConstUInt16>(expr)->getValue(), true);
-        case Type::tInt:        return make_pair(static_pointer_cast<ExprConstInt>(expr)->getValue(), true);
-        case Type::tUInt:       return make_pair(static_pointer_cast<ExprConstUInt>(expr)->getValue(), true);
-        case Type::tBitfield:   return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
-        case Type::tBitfield8:  return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
-        case Type::tBitfield16: return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
-        case Type::tBitfield64: return make_pair(static_pointer_cast<ExprConstBitfield>(expr)->getValue(), true);
-        case Type::tInt64:      return make_pair(static_pointer_cast<ExprConstInt64>(expr)->getValue(), true);
-        case Type::tUInt64:     return make_pair(static_pointer_cast<ExprConstUInt64>(expr)->getValue(), true);
+        case Type::tInt8:       return make_pair(static_cast<ExprConstInt8*>(expr)->getValue(), true);
+        case Type::tUInt8:      return make_pair(static_cast<ExprConstUInt8*>(expr)->getValue(), true);
+        case Type::tInt16:      return make_pair(static_cast<ExprConstInt16*>(expr)->getValue(), true);
+        case Type::tUInt16:     return make_pair(static_cast<ExprConstUInt16*>(expr)->getValue(), true);
+        case Type::tInt:        return make_pair(static_cast<ExprConstInt*>(expr)->getValue(), true);
+        case Type::tUInt:       return make_pair(static_cast<ExprConstUInt*>(expr)->getValue(), true);
+        case Type::tBitfield:   return make_pair(static_cast<ExprConstBitfield*>(expr)->getValue(), true);
+        case Type::tBitfield8:  return make_pair(static_cast<ExprConstBitfield*>(expr)->getValue(), true);
+        case Type::tBitfield16: return make_pair(static_cast<ExprConstBitfield*>(expr)->getValue(), true);
+        case Type::tBitfield64: return make_pair(static_cast<ExprConstBitfield*>(expr)->getValue(), true);
+        case Type::tInt64:      return make_pair(static_cast<ExprConstInt64*>(expr)->getValue(), true);
+        case Type::tUInt64:     return make_pair(static_cast<ExprConstUInt64*>(expr)->getValue(), true);
         default:                return make_pair(0, false);
         }
     }
 
-    int64_t getConstExprIntOrUInt ( const ExpressionPtr & expr ) {
+    int64_t getConstExprIntOrUInt ( ExpressionPtr expr ) {
         auto result = tryGetConstExprIntOrUInt(expr);
         DAS_ASSERTF ( result.second,
             "we should not even be here. there is an enumeration of unsupported type."
@@ -3183,46 +3187,46 @@ namespace das {
     ExpressionPtr Program::makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value ) {
         if ( type->dim.size() || type->ref ) return nullptr;
         switch ( type->baseType ) {
-            case Type::tBool:           return make_smart<ExprConstBool>(at, cast<bool>::to(value));
-            case Type::tInt8:           return make_smart<ExprConstInt8>(at, cast<int8_t>::to(value));
-            case Type::tInt16:          return make_smart<ExprConstInt16>(at, cast<int16_t>::to(value));
-            case Type::tInt64:          return make_smart<ExprConstInt64>(at, cast<int64_t>::to(value));
-            case Type::tInt:            return make_smart<ExprConstInt>(at, cast<int32_t>::to(value));
-            case Type::tInt2:           return make_smart<ExprConstInt2>(at, cast<int2>::to(value));
-            case Type::tInt3:           return make_smart<ExprConstInt3>(at, cast<int3>::to(value));
-            case Type::tInt4:           return make_smart<ExprConstInt4>(at, cast<int4>::to(value));
-            case Type::tUInt8:          return make_smart<ExprConstUInt8>(at, cast<uint8_t>::to(value));
-            case Type::tUInt16:         return make_smart<ExprConstUInt16>(at, cast<uint16_t>::to(value));
-            case Type::tUInt64:         return make_smart<ExprConstUInt64>(at, cast<uint64_t>::to(value));
-            case Type::tUInt:           return make_smart<ExprConstUInt>(at, cast<uint32_t>::to(value));
-            case Type::tBitfield:       return make_smart<ExprConstBitfield>(at, cast<uint32_t>::to(value));
+            case Type::tBool:           return new ExprConstBool(at, cast<bool>::to(value));
+            case Type::tInt8:           return new ExprConstInt8(at, cast<int8_t>::to(value));
+            case Type::tInt16:          return new ExprConstInt16(at, cast<int16_t>::to(value));
+            case Type::tInt64:          return new ExprConstInt64(at, cast<int64_t>::to(value));
+            case Type::tInt:            return new ExprConstInt(at, cast<int32_t>::to(value));
+            case Type::tInt2:           return new ExprConstInt2(at, cast<int2>::to(value));
+            case Type::tInt3:           return new ExprConstInt3(at, cast<int3>::to(value));
+            case Type::tInt4:           return new ExprConstInt4(at, cast<int4>::to(value));
+            case Type::tUInt8:          return new ExprConstUInt8(at, cast<uint8_t>::to(value));
+            case Type::tUInt16:         return new ExprConstUInt16(at, cast<uint16_t>::to(value));
+            case Type::tUInt64:         return new ExprConstUInt64(at, cast<uint64_t>::to(value));
+            case Type::tUInt:           return new ExprConstUInt(at, cast<uint32_t>::to(value));
+            case Type::tBitfield:       return new ExprConstBitfield(at, cast<uint32_t>::to(value));
             case Type::tBitfield8:      {
-                auto res = make_smart<ExprConstBitfield>(at, cast<uint8_t>::to(value));
+                auto res = new ExprConstBitfield(at, cast<uint8_t>::to(value));
                 res->baseType = Type::tBitfield8;
                 return res;
             }
             case Type::tBitfield16:     {
-                auto res = make_smart<ExprConstBitfield>(at, cast<uint16_t>::to(value));
+                auto res = new ExprConstBitfield(at, cast<uint16_t>::to(value));
                 res->baseType = Type::tBitfield16;
                 return res;
             }
             case Type::tBitfield64:     {
-                auto res = make_smart<ExprConstBitfield>(at, cast<uint64_t>::to(value));
+                auto res = new ExprConstBitfield(at, cast<uint64_t>::to(value));
                 res->baseType = Type::tBitfield64;
                 return res;
             }
-            case Type::tUInt2:          return make_smart<ExprConstUInt2>(at, cast<uint2>::to(value));
-            case Type::tUInt3:          return make_smart<ExprConstUInt3>(at, cast<uint3>::to(value));
-            case Type::tUInt4:          return make_smart<ExprConstUInt4>(at, cast<uint4>::to(value));
-            case Type::tFloat:          return make_smart<ExprConstFloat>(at, cast<float>::to(value));
-            case Type::tFloat2:         return make_smart<ExprConstFloat2>(at, cast<float2>::to(value));
-            case Type::tFloat3:         return make_smart<ExprConstFloat3>(at, cast<float3>::to(value));
-            case Type::tFloat4:         return make_smart<ExprConstFloat4>(at, cast<float4>::to(value));
-            case Type::tDouble:         return make_smart<ExprConstDouble>(at, cast<double>::to(value));
-            case Type::tRange:          return make_smart<ExprConstRange>(at, cast<range>::to(value));
-            case Type::tURange:         return make_smart<ExprConstURange>(at, cast<urange>::to(value));
-            case Type::tRange64:        return make_smart<ExprConstRange64>(at, cast<range64>::to(value));
-            case Type::tURange64:       return make_smart<ExprConstURange64>(at, cast<urange64>::to(value));
+            case Type::tUInt2:          return new ExprConstUInt2(at, cast<uint2>::to(value));
+            case Type::tUInt3:          return new ExprConstUInt3(at, cast<uint3>::to(value));
+            case Type::tUInt4:          return new ExprConstUInt4(at, cast<uint4>::to(value));
+            case Type::tFloat:          return new ExprConstFloat(at, cast<float>::to(value));
+            case Type::tFloat2:         return new ExprConstFloat2(at, cast<float2>::to(value));
+            case Type::tFloat3:         return new ExprConstFloat3(at, cast<float3>::to(value));
+            case Type::tFloat4:         return new ExprConstFloat4(at, cast<float4>::to(value));
+            case Type::tDouble:         return new ExprConstDouble(at, cast<double>::to(value));
+            case Type::tRange:          return new ExprConstRange(at, cast<range>::to(value));
+            case Type::tURange:         return new ExprConstURange(at, cast<urange>::to(value));
+            case Type::tRange64:        return new ExprConstRange64(at, cast<range64>::to(value));
+            case Type::tURange64:       return new ExprConstURange64(at, cast<urange64>::to(value));
             default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }
@@ -3260,9 +3264,9 @@ namespace das {
         size_t count = 0;
         size_t total = penum->list.size();
         for ( auto & itf : penum->list ) {
-            vis.preVisitEnumerationValue(penum, itf.name, itf.value.get(), count==total);
+            vis.preVisitEnumerationValue(penum, itf.name, itf.value, count==total);
             if ( itf.value ) itf.value = itf.value->visit(vis);
-            itf.value = vis.visitEnumerationValue(penum, itf.name, itf.value.get(), count==total);
+            itf.value = vis.visitEnumerationValue(penum, itf.name, itf.value, count==total);
             count ++;
         }
         return vis.visit(penum);
@@ -3317,12 +3321,12 @@ namespace das {
         das_hash_map<Structure *, das_hash_set<Structure *>> deps;
         das_hash_set<Structure *> allSet;
         for ( auto & sp : structs ) {
-            allSet.insert(sp.get());
+            allSet.insert(sp);
         }
         for ( auto & sp : structs ) {
-            auto & d = deps[sp.get()];
+            auto & d = deps[sp];
             for ( auto & field : sp->fields ) {
-                collectStructDeps(field.type, sp.get(), d);
+                collectStructDeps(field.type, sp, d);
             }
             // only keep deps that are in our set
             das_hash_set<Structure *> filtered;
@@ -3340,7 +3344,7 @@ namespace das {
         sorted.reserve(structs.size());
         // seed with zero-dependency structs
         for ( auto & sp : structs ) {
-            if ( inDegree[sp.get()] == 0 ) sorted.push_back(sp.get());
+            if ( inDegree[sp] == 0 ) sorted.push_back(sp);
         }
         // process in FIFO order
         for ( size_t qi = 0; qi < sorted.size(); qi++ ) {
@@ -3355,7 +3359,7 @@ namespace das {
         if ( sorted.size() != structs.size() ) return; // cycle - keep original order
         // reorder structs to match sorted order
         das_hash_map<Structure *, StructurePtr> byPtr;
-        for ( auto & sp : structs ) byPtr[sp.get()] = sp;
+        for ( auto & sp : structs ) byPtr[sp] = sp;
         for ( size_t i = 0; i < sorted.size(); i++ ) {
             structs[i] = byPtr[sorted[i]];
         }
@@ -3365,8 +3369,8 @@ namespace das {
         vis.preVisitModule(thatModule);
         // enumerations
         thatModule->enumerations.foreach([&](auto & penum){
-            if ( vis.canVisitEnumeration(penum.get()) ) {
-                auto penumn = visitEnumeration(vis, penum.get());
+            if ( vis.canVisitEnumeration(penum) ) {
+                auto penumn = visitEnumeration(vis, penum);
                 if ( penumn != penum ) {
                     thatModule->enumerations.replace(penum->name, penumn);
                     penum = penumn;
@@ -3378,24 +3382,24 @@ namespace das {
             // collect, topologically sort, then visit
             vector<StructurePtr> allStructs;
             thatModule->structures.foreach([&](auto & spst){
-                if ( vis.canVisitStructure(spst.get()) ) {
+                if ( vis.canVisitStructure(spst) ) {
                     allStructs.push_back(spst);
                 }
             });
             topoSortStructures(allStructs);
             for ( auto & spst : allStructs ) {
-                Structure * pst = spst.get();
+                Structure * pst = spst;
                 StructurePtr pstn = visitStructure(vis, pst);
-                if ( pstn.get() != pst ) {
+                if ( pstn != pst ) {
                     thatModule->structures.replace(pst->name, pstn);
                 }
             }
         } else {
             thatModule->structures.foreach([&](auto & spst){
-                Structure * pst = spst.get();
+                Structure * pst = spst;
                 if ( vis.canVisitStructure(pst) ) {
                     StructurePtr pstn = visitStructure(vis, pst);
-                    if ( pstn.get() != pst ) {
+                    if ( pstn != pst ) {
                         thatModule->structures.replace(pst->name, pstn);
                         spst = pstn;
                     }
@@ -3419,7 +3423,7 @@ namespace das {
         // globals
         vis.preVisitGlobalLetBody(this);
         thatModule->globals.foreach([&](auto & var){
-            if ( vis.canVisitGlobalVariable(var.get()) ) {
+            if ( vis.canVisitGlobalVariable(var) ) {
                 vis.preVisitGlobalLet(var);
                 if ( var->type ) {
                     vis.preVisit(var->type);
@@ -3427,9 +3431,9 @@ namespace das {
                     var->type = vis.visit(var->type);
                 }
                 if ( var->init ) {
-                    vis.preVisitGlobalLetInit(var, var->init.get());
+                    vis.preVisitGlobalLetInit(var, var->init);
                     var->init = var->init->visit(vis);
-                    var->init = vis.visitGlobalLetInit(var, var->init.get());
+                    var->init = vis.visitGlobalLetInit(var, var->init);
                 }
                 auto varn = vis.visitGlobalLet(var);
                 if ( varn!=var ) {
@@ -3455,7 +3459,7 @@ namespace das {
         // functions
         thatModule->functions.foreach([&](auto & fn){
             if ( !fn->builtIn ) {
-                if ( vis.canVisitFunction(fn.get()) ) {
+                if ( vis.canVisitFunction(fn) ) {
                     auto nfn = fn->visit(vis);
                     if ( fn != nfn ) {
                         thatModule->functions.replace(fn->getMangledName(), nfn);

@@ -1,0 +1,1 @@
+Iterates over all enumerations defined in the given module, calling the provided block for each one.

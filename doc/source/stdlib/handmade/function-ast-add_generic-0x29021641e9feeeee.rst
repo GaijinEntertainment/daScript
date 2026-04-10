@@ -1,0 +1,1 @@
+Adds a generic (template) function to the specified module. Returns true if the generic was added successfully, or false if a conflicting generic already exists.

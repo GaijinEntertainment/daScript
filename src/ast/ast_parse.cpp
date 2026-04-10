@@ -921,10 +921,10 @@ namespace das {
             ss << get<1>(arq) << " ";
         }
         ss << fileName;
-        auto rtti_require = make_smart<Variable>();
+        auto rtti_require = new Variable();
         rtti_require->name = "__rtti_require";
         rtti_require->type = new TypeDecl(Type::tString);
-        rtti_require->init = make_smart<ExprConstString>(ss.str());
+        rtti_require->init = new ExprConstString(ss.str());
         rtti_require->init->type = new TypeDecl(Type::tString);
         rtti_require->used = true;
         rtti_require->private_variable = true;

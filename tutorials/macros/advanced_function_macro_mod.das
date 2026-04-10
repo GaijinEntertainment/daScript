@@ -130,7 +130,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         let originalCopyName = "`memoize`original`{fn.name}"
 
         // Check that we haven't already generated a wrapper with this name
-        var inscope existingWrapper <- fn._module |> find_unique_function(wrapperName)
+        var existingWrapper = fn._module |> find_unique_function(wrapperName)
         if (existingWrapper != null) {
             errors := "duplicate memoize wrapper for '{string(fn.name)}'"
             return false
@@ -138,7 +138,7 @@ class MemoizeMacro : AstFunctionAnnotation {
 
         // Step 1: Clone the original function (without [memoize] annotation)
         //         so the wrapper can call it without triggering transform()
-        var inscope originalCopy <- clone_function(fn)
+        var originalCopy <- clone_function(fn)
         originalCopy.name := originalCopyName
         originalCopy.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
         // Remove [memoize] from the clone to prevent infinite transform loop
@@ -170,44 +170,44 @@ class MemoizeMacro : AstFunctionAnnotation {
         add_global_var(compiling_module(), cacheName, clone_type(cacheType), fn.at, true)
 
         // Step 3: Build the wrapper function arguments (clone of original)
-        var inscope wrapperArgs : array<VariablePtr>
+        var wrapperArgs : array<VariablePtr>
         for (arg in fn.arguments) {
             wrapperArgs |> emplace_new <| clone_variable(arg)
         }
 
         // Step 4: Build the hash key computation
         //         let key = hash(a) ^ hash(b) ^ ...
-        var inscope hashExprs : array<ExpressionPtr>
+        var hashExprs : array<ExpressionPtr>
         for (arg in fn.arguments) {
-            hashExprs |> emplace_new <| qmacro(hash($i(arg.name)))
+            hashExprs |> push <| qmacro(hash($i(arg.name)))
         }
 
         // Combine hashes with XOR
-        var inscope keyExpr <- hashExprs[0]
+        var keyExpr = hashExprs[0]
         for (i in range(1, length(hashExprs))) {
             {
-                var inscope xorExpr <- qmacro($e(keyExpr) ^ $e(hashExprs[i]))
-                unsafe { keyExpr <- xorExpr; }
+                var xorExpr = qmacro($e(keyExpr) ^ $e(hashExprs[i]))
+                keyExpr = xorExpr
             }
         }
 
         // Step 5: Build the call to the original (unannotated) copy
         //         `memoize`original`fib(arg1, arg2, ...)
-        var inscope callArgs : array<ExpressionPtr>
+        var callArgs : array<ExpressionPtr>
         for (arg in fn.arguments) {
-            callArgs |> emplace_new <| qmacro($i(arg.name))
+            callArgs |> push <| qmacro($i(arg.name))
         }
 
         // Step 6: Assemble the wrapper body
-        var inscope bodyExprs : array<ExpressionPtr>
-        bodyExprs |> emplace_new <| qmacro_expr(${ let key = $e(keyExpr); })
-        bodyExprs |> emplace_new <| qmacro_expr(${ if (key_exists($i(cacheName), key)) { unsafe { return $i(cacheName)[key]; } } })
-        bodyExprs |> emplace_new <| qmacro_expr(${ let result = $c(originalCopyName)($a(callArgs)); })
-        bodyExprs |> emplace_new <| qmacro_expr(${ $i(cacheName) |> insert_clone(key, result); })
-        bodyExprs |> emplace_new <| qmacro_expr(${ return result; })
+        var bodyExprs : array<ExpressionPtr>
+        bodyExprs |> push <| qmacro_expr(${ let key = $e(keyExpr); })
+        bodyExprs |> push <| qmacro_expr(${ if (key_exists($i(cacheName), key)) { unsafe { return $i(cacheName)[key]; } } })
+        bodyExprs |> push <| qmacro_expr(${ let result = $c(originalCopyName)($a(callArgs)); })
+        bodyExprs |> push <| qmacro_expr(${ $i(cacheName) |> insert_clone(key, result); })
+        bodyExprs |> push <| qmacro_expr(${ return result; })
 
         // Step 7: Create the wrapper function
-        var inscope wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {
+        var wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {
             $b(bodyExprs)
         }
         wrapperFn.flags |= FunctionFlags.generated | FunctionFlags.privateFunction
@@ -239,7 +239,7 @@ class MemoizeMacro : AstFunctionAnnotation {
     // Compare with daslib/templates.das TemplateMacro, which uses
     // the same clone-and-redirect pattern.
     // ------------------------------------------------------------------
-    def override transform(var call : smart_ptr<ExprCallFunc>;
+    def override transform(var call : ExprCallFunc?;
                            var errors : das_string) : ExpressionPtr {
 
         // Read the wrapper name stored by patch()
@@ -249,14 +249,14 @@ class MemoizeMacro : AstFunctionAnnotation {
                 if (wrapperArg is tString) {
                     let wrapperName = wrapperArg as tString
                     // Clone the call and redirect to the wrapper
-                    var inscope newCall <- clone_expression(call)
+                    var newCall = clone_expression(call)
                     (newCall as ExprCall).name := wrapperName
-                    return <- newCall
+                    return newCall
                 }
             }
         }
 
         // No wrapper yet (first inference pass before patch runs) — keep original
-        return <- default<ExpressionPtr>
+        return default<ExpressionPtr>
     }
 }

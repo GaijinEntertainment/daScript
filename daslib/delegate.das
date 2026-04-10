@@ -42,12 +42,12 @@ def private get_arg_name(funcType : TypeDeclPtr; index : int) : string {
 [macro_function]
 def private build_invoke_call(at : LineInfo; var targetExpr : ExpressionPtr; funcType : TypeDeclPtr) : ExpressionPtr {
     //! Builds  invoke(target, arg0, arg1, ...)  as an ExprInvoke (special node for lambda/function calls).
-    var inscope call <- new ExprInvoke(at = at, name := "invoke")
+    var call = new ExprInvoke(at = at, name := "invoke")
     (call as ExprInvoke).arguments |> emplace(targetExpr)
     for (i in range(length(funcType.argTypes))) {
         (call as ExprInvoke).arguments |> emplace_new <| new ExprVar(at = at, name := get_arg_name(funcType, i))
     }
-    return <- call
+    return call
 }
 
 // ── template: non-void return ──────────────────────────────────────────
@@ -249,44 +249,44 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     let nArgs = length(FuncType.argTypes)
 
     // invoke parameter list
-    var inscope invokeArgs : array<VariablePtr>
+    var invokeArgs : array<VariablePtr>
     // forward expressions (ExprVar for each arg name)
-    var inscope fwdExprs : array<ExpressionPtr>
+    var fwdExprs : array<ExpressionPtr>
     for (idx in range(nArgs)) {
         let argName = get_arg_name(FuncType, idx)
         invokeArgs |> emplace_new <| new Variable(at = macroArgument.at, name := argName,
             _type = clone_type(FuncType.argTypes[idx]))
-        fwdExprs |> emplace_new <| new ExprVar(at = macroArgument.at, name := argName)
+        fwdExprs |> push(new ExprVar(at = macroArgument.at, name := argName))
     }
 
     // lambda args for wrapper (separate copies)
-    var inscope lambdaArgs : array<VariablePtr>
-    var inscope lambdaFwd  : array<ExpressionPtr>
+    var lambdaArgs : array<VariablePtr>
+    var lambdaFwd  : array<ExpressionPtr>
     for (idx in range(nArgs)) {
         let argName = get_arg_name(FuncType, idx)
         lambdaArgs |> emplace_new <| new Variable(at = macroArgument.at, name := argName,
             _type = clone_type(FuncType.argTypes[idx]))
-        lambdaFwd |> emplace_new <| new ExprVar(at = macroArgument.at, name := argName)
+        lambdaFwd |> push(new ExprVar(at = macroArgument.at, name := argName))
     }
 
     // ── instantiate template ───────────────────────────────────────────
     var resType : TypeDeclPtr
     if (is_void) {
         // void-specific reification variables
-        var inscope voidCall <- build_invoke_call(macroArgument.at,
+        var voidCall = build_invoke_call(macroArgument.at,
             new ExprVar(at = macroArgument.at, name := "cb"), FuncType)
-        var inscope wrapperLambda <- qmacro(@($a(lambdaArgs)) {
+        var wrapperLambda = qmacro(@($a(lambdaArgs)) {
             invoke(fn, $a(lambdaFwd))
         })
         resType = qmacro_template_class(struct_name, type<DelegateVoid>)
     } else {
         // non-void-specific reification variables
-        var inscope discardCall <- build_invoke_call(macroArgument.at,
+        var discardCall = build_invoke_call(macroArgument.at,
             qmacro(invocation_list[delegate_i]), FuncType)
-        var inscope lastCall <- build_invoke_call(macroArgument.at,
+        var lastCall = build_invoke_call(macroArgument.at,
             qmacro(invocation_list[delegate_n - 1]), FuncType)
         var retType = clone_type(FuncType.firstType)
-        var inscope wrapperLambda <- qmacro(@($a(lambdaArgs)) : $t(retType) {
+        var wrapperLambda = qmacro(@($a(lambdaArgs)) : $t(retType) {
             return invoke(fn, $a(lambdaFwd))
         })
         resType = qmacro_template_class(struct_name, type<DelegateReturn>)

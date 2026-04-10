@@ -27,7 +27,7 @@ class EsMacro : AstFunctionAnnotation {
         var st : Structure?
         for_each_structure(compiling_module()) $(s) {
             if (!s.flags.generated && !s.flags.isLambda && !s.flags._generator) {
-                st = get_ptr(s)
+                st = s
             }
         }
         if (st == null) {

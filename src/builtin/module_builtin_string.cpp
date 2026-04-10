@@ -883,7 +883,7 @@ namespace das
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // string builder writer
-            addEnumeration(make_smart<EnumerationConversionResult>());
+            addEnumeration(new EnumerationConversionResult());
             addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context","lineinfo"})->unsafeOperation = true;
@@ -1038,21 +1038,21 @@ namespace das
                 SideEffects::none, "string_to_double")->args({"str","context","at"});
             // fast conversion, returns 0 if fails
             addExtern<DAS_BIND_FUN(fast_to_int8)>(*this, lib, "to_int8",
-                SideEffects::none, "fast_to_int8")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_int8")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_uint8)>(*this, lib, "to_uint8",
-                SideEffects::none, "fast_to_uint8")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_uint8")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_int16)>(*this, lib, "to_int16",
-                SideEffects::none, "fast_to_int16")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_int16")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_uint16)>(*this, lib, "to_uint16",
-                SideEffects::none, "fast_to_uint16")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_uint16")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
-                SideEffects::none, "fast_to_int")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_int")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
-                SideEffects::none, "fast_to_uint")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_uint")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
-                SideEffects::none, "fast_to_int64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_int64")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
-                SideEffects::none, "fast_to_uint64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+                SideEffects::none, "fast_to_uint64")->args({"value","hex"})->arg_init(1,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(das_to_cpp_float)>(*this, lib, "to_cpp_float",
                 SideEffects::modifyExternal, "das_to_cpp_float")->args({"value","context", "at"});
             addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
@@ -1061,21 +1061,21 @@ namespace das
                 SideEffects::none, "fast_to_double")->arg("value");
             // conversion which returns error and offset of the first invalid character
             addExtern<DAS_BIND_FUN(convert_from_string_int8)>(*this, lib, "int8",
-                SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint8)>(*this, lib, "uint8",
-                SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int16)>(*this, lib, "int16",
-                SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint16)>(*this, lib, "uint16",
-                SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int32)>(*this, lib, "int",
-                SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint32)>(*this, lib, "uint",
-                SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int64)>(*this, lib, "int64",
-                SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint64)>(*this, lib, "uint64",
-                SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
+                SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","hex"})->arg_init(3,new ExprConstBool(false));
             addExtern<DAS_BIND_FUN(convert_from_string_float)>(*this, lib, "float",
                 SideEffects::modifyArgument, "convert_from_string_float")->args({"str","result","offset"});
             addExtern<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
