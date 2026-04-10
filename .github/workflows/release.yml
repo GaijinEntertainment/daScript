@@ -241,8 +241,8 @@ jobs:
             EXEC=""
           fi
           ./daslang${EXEC} _dasroot_/dastest/dastest.das -jit -- --color --failures-only --test "$TEST_PATH"
-          ./daslang${EXEC} _dasroot_/dastest/dastest.das -- --color --failures-only --test "$TEST_PATH" --ser serialized.bin
-          ./daslang${EXEC} _dasroot_/dastest/dastest.das -- --color --failures-only --test "$TEST_PATH" --deser serialized.bin
+          ./daslang${EXEC} _dasroot_/dastest/dastest.das -- --color --failures-only --test "$TEST_PATH/language" --ser serialized.bin
+          ./daslang${EXEC} _dasroot_/dastest/dastest.das -- --color --failures-only --test "$TEST_PATH/language" --deser serialized.bin
 
       - name: "Install binaries"
         if: matrix.cmake_preset == 'Release'

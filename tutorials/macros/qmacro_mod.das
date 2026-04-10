@@ -61,14 +61,14 @@ def template demo_add(a, b : $t(t_value)) : $t(t_value) {
 
 [call_macro(name="build_demo")]
 class BuildDemoMacro : AstCallMacro {
-    def override visit(prog : ProgramPtr; mod : Module?; var expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
 
         // ===============================================================
         // 1. quote(expr) — plain AST capture, NO reification.
         //    Returns ExpressionPtr.  Use for simple literal constants.
         // ===============================================================
-        var inscope literal_true <- quote(true)   // ExprConstBool
-        var inscope literal_zero <- quote(0)      // ExprConstInt
+        var literal_true = quote(true)   // ExprConstBool
+        var literal_zero = quote(0)      // ExprConstInt
 
         // ===============================================================
         // 2. qmacro(expr) — expression with reification splices.
@@ -81,11 +81,11 @@ class BuildDemoMacro : AstCallMacro {
         let greeting = "hello from qmacro"
 
         // $v — compile-time string becomes a constant in the AST.
-        var inscope print_greeting <- qmacro(print($v("{greeting}!\n")))
+        var print_greeting = qmacro(print($v("{greeting}!\n")))
 
         // $e — insert an already-built ExpressionPtr into the tree.
-        var inscope msg_expr <- qmacro("the literal is: ")
-        var inscope print_literal <- qmacro(print($e(msg_expr) + "{$e(literal_true)}\n"))
+        var msg_expr = qmacro("the literal is: ")
+        var print_literal = qmacro(print($e(msg_expr) + "{$e(literal_true)}\n"))
 
         // ===============================================================
         // 3. qmacro_type(type<T>) — build a TypeDeclPtr.
@@ -100,25 +100,25 @@ class BuildDemoMacro : AstCallMacro {
         // 4. qmacro_variable("name", type<T>) — build a VariablePtr.
         //    Used to create function arguments programmatically.
         // ===============================================================
-        var inscope tag_var <- qmacro_variable("tag", type<string>)
+        var tag_var <- qmacro_variable("tag", type<string>)
 
         // ===============================================================
         // 5. qmacro_expr(${ statement; }) — single statement.
         //    Returns ExpressionPtr.  Useful for let/var declarations
         //    that need statement syntax in an expression context.
         // ===============================================================
-        var inscope let_stmt <- qmacro_expr(${ let title = "items"; })
+        var let_stmt = qmacro_expr(${ let title = "items"; })
 
         // ===============================================================
         // 6. qmacro_block() { stmts } — multiple statements as ExprBlock.
         //    $b(stmts) — splice array<ExpressionPtr> as a block body.
         // ===============================================================
-        var inscope steps : array<ExpressionPtr>
-        steps |> emplace_new <| qmacro(print("  step 1\n"))
-        steps |> emplace_new <| qmacro(print("  step 2\n"))
-        steps |> emplace_new <| qmacro(print("  step 3\n"))
+        var steps : array<ExpressionPtr>
+        steps |> push <| qmacro(print("  step 1\n"))
+        steps |> push <| qmacro(print("  step 2\n"))
+        steps |> push <| qmacro(print("  step 3\n"))
 
-        var inscope block_stmts <- qmacro_block() {
+        var block_stmts = qmacro_block() {
             print("qmacro_block body:\n")
             $b(steps)
         }
@@ -128,7 +128,7 @@ class BuildDemoMacro : AstCallMacro {
         //    Like qmacro_block but returns array<ExpressionPtr> —
         //    each statement becomes a separate element.
         // ===============================================================
-        var inscope extra <- qmacro_block_to_array() {
+        var extra <- qmacro_block_to_array() {
             print("  extra A\n")
             print("  extra B\n")
         }
@@ -145,51 +145,51 @@ class BuildDemoMacro : AstCallMacro {
         //      $f(name) — splice a string as a field access name
         // ===============================================================
         let fn_name = "demo_run"
-        var inscope fn_args : array<VariablePtr>
+        var fn_args : array<VariablePtr>
         fn_args |> emplace_new <| clone_variable(tag_var)
 
         // Build the function body — each statement demonstrates
         // a different reification operator or qmacro variant.
-        var inscope fn_body : array<ExpressionPtr>
+        var fn_body : array<ExpressionPtr>
 
         // $v — greeting is baked in as a string constant.
-        fn_body |> emplace_new <| clone_expression(print_greeting)
+        fn_body |> push <| clone_expression(print_greeting)
 
         // $e — two sub-expressions spliced into a larger expression.
-        fn_body |> emplace_new <| clone_expression(print_literal)
+        fn_body |> push <| clone_expression(print_literal)
 
         // $c — string becomes a function call name.
         //      $c("print") → ExprCall { name = "print" }
         let print_fn = "print"
-        fn_body |> emplace_new <| qmacro($c(print_fn)($v("called via $c\n")))
+        fn_body |> push <| qmacro($c(print_fn)($v("called via $c\n")))
 
         // $i — string becomes an identifier (variable reference).
         //      $i("tag") → ExprVar { name = "tag" }
         let tag_name = "tag"
-        fn_body |> emplace_new <| qmacro(print("$i resolved tag = {$i(tag_name)}\n"))
+        fn_body |> push <| qmacro(print("$i resolved tag = {$i(tag_name)}\n"))
 
         // $f — string becomes a field access name.
         //      pair.$f("first") → pair.first
         let field_name = "first"
-        fn_body |> emplace_new <| qmacro_expr(${
+        fn_body |> push <| qmacro_expr(${
             let pair = DemoIntFloat(first = 42, second = 3.14);
         })
-        fn_body |> emplace_new <| qmacro(print("pair.$f first = {pair.$f(field_name)}\n"))
+        fn_body |> push <| qmacro(print("pair.$f first = {pair.$f(field_name)}\n"))
 
         // qmacro_block result — three steps spliced via $b.
-        fn_body |> emplace_new <| clone_expression(block_stmts)
+        fn_body |> push <| clone_expression(block_stmts)
 
         // qmacro_block_to_array — extra statements appended.
         for (s in extra) {
-            fn_body |> emplace_new <| clone_expression(s)
+            fn_body |> push <| clone_expression(s)
         }
 
         // qmacro_expr — a let declaration as a single statement.
-        fn_body |> emplace_new <| clone_expression(let_stmt)
-        fn_body |> emplace_new <| qmacro(print("title = {title}\n"))
+        fn_body |> push <| clone_expression(let_stmt)
+        fn_body |> push <| qmacro(print("title = {title}\n"))
 
         // $a — splice argument list; $b — splice body statements.
-        var inscope demo_fn <- qmacro_function(fn_name) $($a(fn_args)) {
+        var demo_fn <- qmacro_function(fn_name) $($a(fn_args)) {
             $b(fn_body)
         }
         demo_fn.flags |= FunctionFlags.generated
@@ -220,7 +220,7 @@ class BuildDemoMacro : AstCallMacro {
         //     rules — no manual type fixup is needed.
         // ===============================================================
         var t_value = clone_type(int_type)
-        var inscope add_fn <- qmacro_template_function(@@demo_add)
+        var add_fn <- qmacro_template_function(@@demo_add)
         add_fn.name := "demo_add_int"
         add_fn.flags |= FunctionFlags.generated
         add_function(compiling_module(), add_fn)
@@ -232,8 +232,7 @@ class BuildDemoMacro : AstCallMacro {
         //     returns (first, second) as a tuple.
         // ===============================================================
 
-        var inscope pair_struct_type <- add_ptr_ref(pair_type.structType)
-        var inscope method <- qmacro_method("get_tuple", pair_struct_type) $(var self : $t(pair_type)) {
+        var method <- qmacro_method("get_tuple", pair_type.structType) $(var self : $t(pair_type)) {
             return (self.first, self.second)
         }
         add_function(compiling_module(), method)
@@ -242,6 +241,6 @@ class BuildDemoMacro : AstCallMacro {
         // Return value — all real work was done via add_function /
         // qmacro_template_class.  Return a trivial expression.
         // ===============================================================
-        return <- quote(true)
+        return quote(true)
     }
 }

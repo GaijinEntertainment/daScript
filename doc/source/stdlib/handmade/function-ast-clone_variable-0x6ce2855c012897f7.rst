@@ -1,0 +1,1 @@
+Creates and returns a deep copy of the specified variable, including its type declaration and initializer expression.

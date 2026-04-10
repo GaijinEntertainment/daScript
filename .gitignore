@@ -79,3 +79,13 @@ modules/dasStbImage/dasModuleStbImage.pdb
 modules/dasStdDlg/dasModuleStdDlg.pdb
 modules/dasUnitTest/dasModuleUnitTest.pdb
 tree-sitter-daslang/daslang.pdb
+libhv.20260408.log
+modules/dasAudio/dasModuleAudio_debug.pdb
+modules/dasHV/dasModuleHV_debug.pdb
+modules/dasLiveHost/dasModuleLiveHost_debug.pdb
+modules/dasMinfft/dasModuleMinfft_debug.pdb
+modules/dasPUGIXML/dasModulePUGIXML_debug.pdb
+modules/dasSQLITE/dasModuleSQLITE_debug.pdb
+modules/dasStbImage/dasModuleStbImage_debug.pdb
+modules/dasStdDlg/dasModuleStdDlg_debug.pdb
+modules/dasUnitTest/dasModuleUnitTest_debug.pdb

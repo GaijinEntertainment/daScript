@@ -125,7 +125,7 @@ Part 2 — The macro class
 
    [tag_function_macro(tag="once_tag")]
    class OnceMacro : AstFunctionAnnotation {
-       def override transform(var call : smart_ptr<ExprCallFunc>;
+       def override transform(var call : ExprCallFunc?;
                               var errors : das_string) : ExpressionPtr {
            // ... rewrite every call to once()
        }
@@ -167,7 +167,7 @@ Step 2 — Create the global flag
 
    if (!compiling_module() |> add_global_private_var(flag_name, call.at) <| quote(false)) {
        errors := "can't add global variable {flag_name}"
-       return <- default<ExpressionPtr>
+       return default<ExpressionPtr>
    }
 
 ``add_global_private_var`` inserts a private ``bool`` variable (initialized
@@ -183,11 +183,11 @@ Step 3 — Extract the block body
 
 .. code-block:: das
 
-   var inscope block_clone <- clone_expression(call.arguments[0])
-   var inscope blk <- move_unquote_block(block_clone)
-   var inscope stmts : array<ExpressionPtr>
+   var block_clone = clone_expression(call.arguments[0])
+   var blk = move_unquote_block(block_clone)
+   var stmts : array<ExpressionPtr>
    for (s in blk.list) {
-       stmts |> emplace_new <| clone_expression(s)
+       stmts |> push <| clone_expression(s)
    }
 
 When the user writes ``once() { ... }``, the first argument is an
@@ -206,14 +206,14 @@ Step 4 — Build the replacement
 
 .. code-block:: das
 
-   var inscope replacement <- qmacro_block() {
+   var replacement = qmacro_block() {
        if (!$i(flag_name)) {
            $i(flag_name) = true
            $b(stmts)
        }
    }
    replacement |> force_at(call.at)
-   return <- replacement
+   return replacement
 
 ``qmacro_block`` builds an ``ExprBlock`` using the reification
 mini-language:

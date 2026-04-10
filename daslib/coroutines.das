@@ -27,7 +27,7 @@ typedef Coroutine = iterator<bool>
 typedef Coroutines = array<Coroutine>
 
 [macro_function]
-def private verify_inside_coroutine(prog : ProgramPtr; call : smart_ptr<ExprCallMacro>&) : bool {
+def private verify_inside_coroutine(prog : ProgramPtr; call : ExprCallMacro?&) : bool {
     //! Verifies that a call macro is being used inside a [coroutine] or [async] annotated function.
     //! Returns true if valid, false if not (and emits macro_error).
     if (call.inFunction == null) {
@@ -50,13 +50,13 @@ class private YieldFrom : AstCallMacro {
     //!         yield t
     //!
     //! The idea is that coroutine or generator can continuously yield from another sub-coroutine or generator.
-    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         //! Visits the yeild_from macro call and rewrites it into a for-yield loop.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting yeild_from(iterator)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting iterator")
         macro_verify(call.arguments[0]._type.isIterator, prog, call.at, "expecting iterator")
         let iname = make_unique_private_name("_yield_from_iterator", call.at)
-        return <- qmacro_block() {
+        return qmacro_block() {
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname)
             }
@@ -69,13 +69,13 @@ class private CoContinue : AstCallMacro {
     //! This macro converts co_continue to yield true.
     //! The idea is that coroutine without specified type is underneath a coroutine which yields bool.
     //! That way co_continue() does not distract from the fact that it is a generator<bool>.
-    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         //! Visits the co_continue macro call and rewrites it to ``yield true``.
         macro_verify(call.arguments |> length == 0, prog, call.at, "expecting co_continue()")
         if (!verify_inside_coroutine(prog, call)) {
-            return <- default<ExpressionPtr>
+            return null
         }
-        return <- qmacro_expr() {
+        return qmacro_expr() {
             yield true
         }
     }
@@ -89,14 +89,14 @@ class private CoAwait : AstCallMacro {
     //!         yield t
     //!
     //! The idea is that coroutine or generator can wait for a sub-coroutine to finish.
-    def override visit(prog : ProgramPtr; mod : Module?; var call : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         //! Visits the co_await macro call and rewrites it into a for-yield loop over the sub-coroutine.
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting co_await(subroutine)")
         if (!verify_inside_coroutine(prog, call)) {
-            return <- default<ExpressionPtr>
+            return null
         }
         let iname = make_unique_private_name("_co_await_iterator", call.at)
-        return <- qmacro_block() {
+        return qmacro_block() {
             for ($i(iname) in $e(call.arguments[0])) {
                 yield $i(iname)
             }
@@ -119,13 +119,13 @@ class private CoroutineMacro : AstFunctionAnnotation {
         } else {
             retT = clone_type(func.result)
         }
-        var inscope blk <- qmacro_block() {
+        var blk = qmacro_block() {
             return <- generator<$t(retT)> {
                 $e(func.body)
                 return false
             }
         }
-        move(func.body) <| blk
+        func.body = blk
         func.result = qmacro_type(type<iterator<$t(retT)>>)
         return true
     }

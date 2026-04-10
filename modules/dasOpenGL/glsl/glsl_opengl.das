@@ -41,7 +41,7 @@ class GlslComputeProgram : GlslOpenGLShader {
 
 [macro_function]
 def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
-    var inscope fn <- new Function(at = fnMain.at, atDecl = fnMain.at, name := bind_uniform_function_name(fnMain))
+    var fn = new Function(at = fnMain.at, atDecl = fnMain.at, name := bind_uniform_function_name(fnMain))
     fn.flags |= FunctionFlags.generated
     fn.flags |= FunctionFlags.exports   // note: this is temporary, until we are done with dependency collecting etc
     fn.result = new TypeDecl(baseType = Type.tVoid, at = fnMain.at)
@@ -49,7 +49,7 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
         name := "__program",
         _type <- new TypeDecl(at = fnMain.at, baseType = Type.tUInt)
     )
-    move_new(fn.body) <| new ExprBlock(at = fnMain.at)
+    fn.body = new ExprBlock(at = fnMain.at)
     if (!(compiling_module() |> add_function(fn))) {
         panic("can't setup")
     }
@@ -58,45 +58,45 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
 
 [macro_function]
 def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
-    var inscope blk <- new ExprBlock(at = fn.at)
+    var blk = new ExprBlock(at = fn.at)
     collect_dependencies(fnMain) $(vfun, vvar) {
         for (vv in vvar) {
             if (vv.annotation |> find_arg("uniform") is tBool) {
                 if (is_glsl_structure(vv, "sampler2D")) {
                     // bind_sampler_2d(binding, varName.texture2D)
                     let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var inscope vtex <- new ExprField(at = vv.at,
+                    var vtex = new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := "texture2D"
                     )
-                    var inscope cll_bind <- new ExprCall(at = vv.at, name := "bind_sampler_2d")
+                    var cll_bind = new ExprCall(at = vv.at, name := "bind_sampler_2d")
                     cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
                     cll_bind.arguments |> emplace(vtex)
                     blk.list |> emplace(cll_bind)
                     // glUniformAny(gl_GetUniformLocation("varName"),binding)
-                    var inscope cll_gul <- new ExprCall(at = vv.at, name := "glGetUniformLocation")
+                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
                     cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var inscope cll_uni <- new ExprCall(at = vv.at, name := "glUniformAny")
+                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
                     cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
                     blk.list |> emplace(cll_uni)
                 } elif (is_glsl_structure(vv, "sampler3D")) {
                     // bind_sampler_2d(binding, varName.texture2D)
                     let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var inscope vtex <- new ExprField(at = vv.at,
+                    var vtex = new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := "texture3D"
                     )
-                    var inscope cll_bind <- new ExprCall(at = vv.at, name := "bind_sampler_3d")
+                    var cll_bind = new ExprCall(at = vv.at, name := "bind_sampler_3d")
                     cll_bind.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
                     cll_bind.arguments |> emplace(vtex)
                     blk.list |> emplace(cll_bind)
                     // glUniformAny(gl_GetUniformLocation("varName"),binding)
-                    var inscope cll_gul <- new ExprCall(at = vv.at, name := "glGetUniformLocation")
+                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
                     cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var inscope cll_uni <- new ExprCall(at = vv.at, name := "glUniformAny")
+                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
                     cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
                     blk.list |> emplace(cll_uni)
@@ -104,7 +104,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     // bind_sampler_any(binding, varName.texture?D, format, access)
                     let is2D = is_glsl_structure(vv, "image2D")
                     let binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
-                    var inscope vtex <- new ExprField(at = vv.at,
+                    var vtex = new ExprField(at = vv.at,
                         value <- new ExprVar(at = vv.at, name := vv.name),
                         name := is2D ? "texture2D" : "texture3D"
                     )
@@ -117,7 +117,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     if (vv.annotation |> find_arg("readonly") is tBool) {
                         access = "GL_READ_ONLY"
                     }
-                    var inscope cll_uni <- new ExprCall(at = vv.at, name := "bind_image_any")
+                    var cll_uni = new ExprCall(at = vv.at, name := "bind_image_any")
                     cll_uni.arguments |> emplace_new() <| new ExprConstInt(at = vv.at, value = binding)
                     cll_uni.arguments |> emplace(vtex)
                     cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := format)
@@ -125,10 +125,10 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     blk.list |> emplace(cll_uni)
                 } else {
                     // glUniformAny(gl_GetUniformLocation("varName"),varName)
-                    var inscope cll_gul <- new ExprCall(at = vv.at, name := "glGetUniformLocation")
+                    var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
                     cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
-                    var inscope cll_uni <- new ExprCall(at = vv.at, name := "glUniformAny")
+                    var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
                     cll_uni.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := vv.name)
                     blk.list |> emplace(cll_uni)

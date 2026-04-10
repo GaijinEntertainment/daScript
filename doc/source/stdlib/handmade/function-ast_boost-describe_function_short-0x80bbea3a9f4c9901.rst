@@ -1,0 +1,1 @@
+Returns a short human-readable description of the given function, including its name and signature.

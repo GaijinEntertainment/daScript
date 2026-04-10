@@ -199,7 +199,7 @@ namespace das {
         if ( !program ) context->throw_error_at(line, "Can't collect dependencies outside of compilation.");
         program->markExecutableSymbolUse();
         DependencyCollector collector;
-        collector.collect(fun.get());
+        collector.collect(fun);
         auto vecFunc = collector.getStableDependencies();
         auto vecVars = collector.getStableVariableDependencies();
         vector<const Function *> tfun;

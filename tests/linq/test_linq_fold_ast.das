@@ -58,14 +58,14 @@ def target_zip3_predicate_fold() : array<int> {
 [test]
 def test_where_fold_produces_comprehension(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_where_fold)
-        t |> success(get_ptr(func) != null, "should find target_where_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_fold)
+        t |> success(func != null, "should find target_where_fold")
+        if (func == null) {
             return
         }
         // fold_where output: invoke($(var source) .. var pass_0 <- COMP; return <- pass_0 .., src)
-        var inscope comp_expr : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var comp_expr : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(comp_expr)
@@ -77,7 +77,7 @@ def test_where_fold_produces_comprehension(t : T?) {
             return
         }
         // Verify the captured expression is a comprehension with where
-        var inscope resolved <- qm_resolve_comprehension(comp_expr)
+        var resolved <- qm_resolve_comprehension(comp_expr)
         t |> success(resolved != null, "inner expression should be a comprehension")
         if (resolved == null) {
             return
@@ -90,13 +90,13 @@ def test_where_fold_produces_comprehension(t : T?) {
 [test]
 def test_where_fold_comprehension_pattern(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_where_fold)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_fold)
+        if (func == null) {
             return
         }
         // Match the full structure including comprehension pattern
-        var inscope where_cond : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var where_cond : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); it; where $e(where_cond)]
@@ -112,13 +112,13 @@ def test_where_fold_comprehension_pattern(t : T?) {
 [test]
 def test_select_fold_produces_comprehension(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_select_fold)
-        t |> success(get_ptr(func) != null, "should find target_select_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_fold)
+        t |> success(func != null, "should find target_select_fold")
+        if (func == null) {
             return
         }
-        var inscope comp_expr : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var comp_expr : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(comp_expr)
@@ -129,7 +129,7 @@ def test_select_fold_produces_comprehension(t : T?) {
         if (!r.matched) {
             return
         }
-        var inscope resolved <- qm_resolve_comprehension(comp_expr)
+        var resolved <- qm_resolve_comprehension(comp_expr)
         t |> success(resolved != null, "inner should be a comprehension")
         if (resolved == null) {
             return
@@ -142,12 +142,12 @@ def test_select_fold_produces_comprehension(t : T?) {
 [test]
 def test_select_fold_comprehension_pattern(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_select_fold)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_fold)
+        if (func == null) {
             return
         }
-        var inscope select_expr : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var select_expr : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); $e(select_expr)]
@@ -169,14 +169,14 @@ def test_select_fold_comprehension_pattern(t : T?) {
 [test]
 def test_where_select_fold_comprehension(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_where_select_fold)
-        t |> success(get_ptr(func) != null, "should find target_where_select_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_where_select_fold)
+        t |> success(func != null, "should find target_where_select_fold")
+        if (func == null) {
             return
         }
-        var inscope select_expr : ExpressionPtr
-        var inscope where_cond : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var select_expr : ExpressionPtr
+        var where_cond : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- [for (it in source); $e(select_expr); where $e(where_cond)]
@@ -200,15 +200,15 @@ def test_where_select_fold_comprehension(t : T?) {
 [test]
 def test_select_where_fold_structure(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_select_where_fold)
-        t |> success(get_ptr(func) != null, "should find target_select_where_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_select_where_fold)
+        t |> success(func != null, "should find target_select_where_fold")
+        if (func == null) {
             return
         }
         // select_where fold produces an invoke with a lambda that has a for loop + if
         // It is NOT a simple comprehension - verify the fold still happened
-        var inscope inner_expr : ExpressionPtr
-        var inscope source_expr : ExpressionPtr
+        var inner_expr : ExpressionPtr
+        var source_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- invoke($(var source : array<int>) {
                 var pass_0 : array<int> <- $e(inner_expr)
@@ -220,7 +220,7 @@ def test_select_where_fold_structure(t : T?) {
             return
         }
         // The inner expression should NOT be a comprehension (select_where uses a different strategy)
-        var inscope resolved <- qm_resolve_comprehension(inner_expr)
+        var resolved <- qm_resolve_comprehension(inner_expr)
         t |> success(resolved == null, "select_where should not produce a simple comprehension")
     }
 }
@@ -230,13 +230,13 @@ def test_select_where_fold_structure(t : T?) {
 [test]
 def test_reverse_where_fold_structure(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_reverse_where_fold)
-        t |> success(get_ptr(func) != null, "should find target_reverse_where_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_reverse_where_fold)
+        t |> success(func != null, "should find target_reverse_where_fold")
+        if (func == null) {
             return
         }
         // Multi-step fold: reverse_to_array + where comprehension
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- $e(body_expr)
         }
@@ -253,13 +253,13 @@ def test_reverse_where_fold_structure(t : T?) {
 [test]
 def test_zip_fold_structure(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_zip_fold)
-        t |> success(get_ptr(func) != null, "should find target_zip_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip_fold)
+        t |> success(func != null, "should find target_zip_fold")
+        if (func == null) {
             return
         }
         // zip fold recursively folds the second argument
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- $e(body_expr)
         }
@@ -334,13 +334,13 @@ def test_zip_fold_result(t : T?) {
 [test]
 def test_zip3_fold_structure(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_zip3_fold)
-        t |> success(get_ptr(func) != null, "should find target_zip3_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip3_fold)
+        t |> success(func != null, "should find target_zip3_fold")
+        if (func == null) {
             return
         }
         // zip3 fold: all three sources should be folded into invoke wrappers
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- $e(body_expr)
         }
@@ -355,12 +355,12 @@ def test_zip3_fold_structure(t : T?) {
 [test]
 def test_zip3_predicate_fold_structure(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_zip3_predicate_fold)
-        t |> success(get_ptr(func) != null, "should find target_zip3_predicate_fold")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_zip3_predicate_fold)
+        t |> success(func != null, "should find target_zip3_predicate_fold")
+        if (func == null) {
             return
         }
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_function(func) $() {
             return <- $e(body_expr)
         }

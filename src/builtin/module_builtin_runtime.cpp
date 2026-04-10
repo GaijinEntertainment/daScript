@@ -188,7 +188,7 @@ namespace das
                 return nullptr;
             }
             call->inFunction->unsafeOperation = true;
-            return make_smart<ExprConstBool>(call->at, true);
+            return new ExprConstBool(call->at, true);
         }
     };
 
@@ -1286,21 +1286,21 @@ namespace das
 
     struct ClassInfoMacro : TypeInfoMacro {
         ClassInfoMacro() : TypeInfoMacro("rtti_classinfo") {}
-        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, ExpressionPtr, string & ) override {
             return typeFactory<void *>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & )  override {
-            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+        virtual SimNode * simluate ( Context * context, ExpressionPtr expr, string & )  override {
+            auto exprTypeInfo = static_cast<ExprTypeInfo*>(expr);
             TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
             return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);
         }
-        virtual void aotPrefix ( TextWriter & ss, const ExpressionPtr & ) override {
+        virtual void aotPrefix ( TextWriter & ss, ExpressionPtr ) override {
             ss << "(void *)(&";
         }
-        virtual void aotSuffix ( TextWriter & ss, const ExpressionPtr & ) override {
+        virtual void aotSuffix ( TextWriter & ss, ExpressionPtr ) override {
             ss << ")";
         }
-        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const override {
+        virtual bool aotNeedTypeInfo ( ExpressionPtr ) const override {
             return true;
         }
     };
@@ -1419,7 +1419,7 @@ namespace das
     struct UnescapedStringMacro : public ReaderMacro {
         UnescapedStringMacro ( ) : ReaderMacro("_esc") {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprReader * expr ) override {
-            return make_smart<ExprConstString>(expr->at,expr->sequence);
+            return new ExprConstString(expr->at,expr->sequence);
         }
         virtual bool accept ( Program *, Module *, ExprReader * re, int Ch, const LineInfo & ) override {
             if ( Ch==-1 ) return false;
@@ -1503,6 +1503,14 @@ namespace das
 
     char * builtin_das_root ( Context * context, LineInfoArg * at ) {
         return context->allocateString(getDasRoot(), at);
+    }
+
+    char * builtin_shared_module_extension ( Context * context, LineInfoArg * at ) {
+#ifdef DAS_NO_ASSERTIONS
+        return context->allocateString(".shared_module", at);
+#else
+        return context->allocateString("_debug.shared_module", at);
+#endif
     }
 
     char * builtin_get_das_version ( Context * context, LineInfoArg * at ) {
@@ -1809,6 +1817,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
                 ->args({"context","at"});
+        addExtern<DAS_BIND_FUN(builtin_shared_module_extension)>(*this, lib, "shared_module_extension",
+            SideEffects::none,"builtin_shared_module_extension")
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(builtin_get_das_version)>(*this, lib, "get_das_version",
             SideEffects::none,"builtin_get_das_version")
                 ->args({"context","at"});
@@ -1854,13 +1865,13 @@ namespace das
         auto fnCount = addExtern<DAS_BIND_FUN(builtin_count),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "count",
             SideEffects::modifyExternal, "builtin_count")
                 ->args({"start","step","context","at"})->setNoDiscard();
-        fnCount->arguments[0]->init = make_smart<ExprConstInt>(0);  // start=0
-        fnCount->arguments[1]->init = make_smart<ExprConstInt>(1);  // step=0
+        fnCount->arguments[0]->init = new ExprConstInt(0);  // start=0
+        fnCount->arguments[1]->init = new ExprConstInt(1);  // step=0
         auto fnuCount = addExtern<DAS_BIND_FUN(builtin_ucount),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ucount",
             SideEffects::none, "builtin_ucount")
                 ->args({"start","step","context","at"})->setNoDiscard();
-        fnuCount->arguments[0]->init = make_smart<ExprConstUInt>(0);  // start=0
-        fnuCount->arguments[1]->init = make_smart<ExprConstUInt>(1);  // step=0
+        fnuCount->arguments[0]->init = new ExprConstUInt(0);  // start=0
+        fnuCount->arguments[1]->init = new ExprConstUInt(1);  // step=0
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator")
@@ -1922,8 +1933,8 @@ namespace das
         auto fnsw = addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk",
             SideEffects::modifyExternal, "builtin_stackwalk")
                 ->args({"args","vars","context","lineinfo"});
-        fnsw->arguments[0]->init = make_smart<ExprConstBool>(true);
-        fnsw->arguments[1]->init = make_smart<ExprConstBool>(true);
+        fnsw->arguments[0]->init = new ExprConstBool(true);
+        fnsw->arguments[1]->init = new ExprConstBool(true);
         // profiler
         addExtern<DAS_BIND_FUN(resetProfiler)>(*this, lib, "reset_profiler",
             SideEffects::modifyExternal, "resetProfiler")
@@ -1949,7 +1960,7 @@ namespace das
         auto gcrd = addExtern<DAS_BIND_FUN(gc_thread_root_report_detailed)>(*this, lib, "gc_thread_root_report_detailed",
             SideEffects::modifyExternal, "gc_thread_root_report_detailed")
                 ->arg("max_nodes");
-        gcrd->arguments[0]->init = make_smart<ExprConstUInt64>(20);
+        gcrd->arguments[0]->init = new ExprConstUInt64(20);
         addExtern<DAS_BIND_FUN(gc_total_id)>(*this, lib, "gc_total_id",
             SideEffects::accessExternal, "gc_total_id");
         // heap
@@ -1981,8 +1992,8 @@ namespace das
                 SideEffects::modifyExternal, "heap_collect")
                     ->args({"string_heap","validate","context","at"});
         hcol->unsafeOperation = true;
-        hcol->arguments[0]->init = make_smart<ExprConstBool>(true);
-        hcol->arguments[1]->init = make_smart<ExprConstBool>(false);
+        hcol->arguments[0]->init = new ExprConstBool(true);
+        hcol->arguments[1]->init = new ExprConstBool(false);
         addExtern<DAS_BIND_FUN(string_heap_report)>(*this, lib, "string_heap_report",
             SideEffects::modifyExternal, "string_heap_report")
                 ->args({"context","line"});

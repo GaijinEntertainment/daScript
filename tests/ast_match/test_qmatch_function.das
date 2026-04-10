@@ -30,9 +30,9 @@ def target_if_return(a, b, c : int) : int {
 [test]
 def test_function_simple(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_simple)
-        t |> success(get_ptr(func) != null, "should find target_simple")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_simple)
+        t |> success(func != null, "should find target_simple")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) {
@@ -51,13 +51,13 @@ def test_function_simple(t : T?) {
 [test]
 def test_function_if_return(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_if_return)
-        t |> success(get_ptr(func) != null, "should find target_if_return")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_if_return)
+        t |> success(func != null, "should find target_if_return")
+        if (func == null) {
             return
         }
         // After optimization, if/else return may fold into ternary
-        var inscope cond : ExpressionPtr
+        var cond : ExpressionPtr
         let r_ternary = qmatch_function(func) $(a, b, c : int) {
             return $e(cond) ? $e(cond) : $e(cond)
         }
@@ -75,8 +75,8 @@ def test_function_if_return(t : T?) {
 [test]
 def test_function_wrong_pattern(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_simple)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_simple)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) {

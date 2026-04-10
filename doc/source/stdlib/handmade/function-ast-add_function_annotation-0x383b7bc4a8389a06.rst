@@ -1,0 +1,1 @@
+Attaches a function annotation to the specified function. The annotation is moved from the provided smart pointer.

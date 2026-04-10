@@ -83,10 +83,10 @@ class CaptureAuditMacro : AstCaptureMacro {
 
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
         if (is_in_completion()) {
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         if (!is_audited(etype)) {
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Determine the field name from the expression (typically an ExprVar)
         var field_name = "unknown"
@@ -94,10 +94,10 @@ class CaptureAuditMacro : AstCaptureMacro {
             field_name = string((expr as ExprVar).name)
         }
         // Wrap: capture_macro_mod::audit_on_capture(original_expr, "field_name")
-        var inscope pCall <- new ExprCall(at = expr.at, name := "capture_macro_mod::audit_on_capture")
+        var pCall = new ExprCall(at = expr.at, name := "capture_macro_mod::audit_on_capture")
         pCall.arguments |> emplace_new <| clone_expression(expr)
         pCall.arguments |> emplace_new <| new ExprConstString(at = expr.at, value := field_name)
-        return <- pCall
+        return pCall
     }
 
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
@@ -115,7 +115,7 @@ class CaptureAuditMacro : AstCaptureMacro {
             // different from the user-written finally{} block on the lambda
             // literal, which goes into the FINALIZER and runs on destruction.
             {
-                var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_after_invoke")
+                var pCall = new ExprCall(at = fld.at, name := "capture_macro_mod::audit_after_invoke")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             }
@@ -131,7 +131,7 @@ class CaptureAuditMacro : AstCaptureMacro {
                 continue
             }
             {
-                var inscope pCall <- new ExprCall(at = fld.at, name := "capture_macro_mod::audit_on_finalize")
+                var pCall = new ExprCall(at = fld.at, name := "capture_macro_mod::audit_on_finalize")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))
                 (fun.body as ExprBlock).list |> emplace(pCall)
             }

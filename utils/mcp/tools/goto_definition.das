@@ -69,7 +69,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            let variable = get_ptr(v.variable)
+            let variable = v.variable
             let file = lineinfo_file(variable.at)
             let line = int(variable.at.line)
             return DefinitionResult(
@@ -156,7 +156,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     if (expr is ExprConstEnumeration) {
         let e = expr as ExprConstEnumeration
         if (e.enumType != null) {
-            let en = get_ptr(e.enumType)
+            let en = e.enumType
             let file = lineinfo_file(en.at)
             let line = int(en.at.line)
             return DefinitionResult(

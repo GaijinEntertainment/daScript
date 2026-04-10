@@ -95,16 +95,16 @@ class SerializableMacro : AstStructureAnnotation {
         // splice compile-time strings, and only `obj` (the generated
         // function's parameter) for runtime references.
         let funcName = "describe_{st.name}"
-        var inscope bodyExprs : array<ExpressionPtr>
+        var bodyExprs : array<ExpressionPtr>
 
         // Header: "StructName (version N):\n"
-        bodyExprs |> emplace_new <| qmacro(print($v("{st.name} (version ")))
-        bodyExprs |> emplace_new <| qmacro(print("{obj._version}"))
-        bodyExprs |> emplace_new <| qmacro(print($v("):\n")))
+        bodyExprs |> push <| qmacro(print($v("{st.name} (version ")))
+        bodyExprs |> push <| qmacro(print("{obj._version}"))
+        bodyExprs |> push <| qmacro(print($v("):\n")))
 
         // Build and register the stub.
         // $t(st) splices the struct type, $b() injects the statements.
-        var inscope fn <- qmacro_function(funcName) $(obj : $t(st)) {
+        var fn = qmacro_function(funcName) $(obj : $t(st)) {
             $b(bodyExprs)
         }
         fn.flags |= FunctionFlags.generated
@@ -143,7 +143,7 @@ class SerializableMacro : AstStructureAnnotation {
 
         // Find the stub function generated in apply()
         let funcName = "describe_{st.name}"
-        var inscope fn <- st._module |> find_unique_function(funcName)
+        var fn = st._module |> find_unique_function(funcName)
         if (fn == null) {
             errors := "[serializable] internal error: '{funcName}' not found"
             return false

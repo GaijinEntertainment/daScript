@@ -174,7 +174,7 @@ class SpoofTemplateReader : AstReaderMacro {
         }
     }
 
-    def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprReader>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr {
         return <- new ExprConstString(at = expr.at, value := expr.sequence)
     }
 }
@@ -268,7 +268,7 @@ class SpoofInstanceReader : AstReaderMacro {
         }
         return "" if (failed)
         // lets find the variable for the template
-        var inscope vptr : VariablePtr
+        var vptr : VariablePtr
         find_matching_variable(get_ptr(prog), null, iargs.varName, false) $(vars) {
             if (vars |> length == 0) {
                 prog |> macro_error(info, "no matching variable found for {iargs.varName}")

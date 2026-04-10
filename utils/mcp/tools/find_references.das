@@ -64,12 +64,12 @@ def identify_target(hit : CursorHit) : RefTarget {
     if (expr is ExprInvoke) {
         let inv = expr as ExprInvoke
         if (length(inv.arguments) > 0) {
-            let callable = get_ptr(inv.arguments[0])
+            let callable = inv.arguments[0]
             // first arg is a variable (function pointer parameter/local)
             if (callable is ExprVar) {
                 let v = callable as ExprVar
                 if (v.variable != null) {
-                    let variable = get_ptr(v.variable)
+                    let variable = v.variable
                     return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = string(variable.name))
                 }
             }
@@ -97,7 +97,7 @@ def identify_target(hit : CursorHit) : RefTarget {
     if (expr is ExprVar) {
         let v = expr as ExprVar
         if (v.variable != null) {
-            let variable = get_ptr(v.variable)
+            let variable = v.variable
             return RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(variable), name = string(variable.name))
         }
     }
@@ -135,8 +135,7 @@ def identify_target(hit : CursorHit) : RefTarget {
     if (expr is ExprConstEnumeration) {
         let e = expr as ExprConstEnumeration
         if (e.enumType != null) {
-            let en = get_ptr(e.enumType)
-            return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(en), name = string(en.name))
+            return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e.enumType), name = string(e.enumType.name))
         }
     }
     // ExprConstBitfield → alias (bitfield type)
@@ -202,7 +201,7 @@ class RefVisitor : AstVisitor {
     }
 
     def override preVisitFunction(fun : FunctionPtr) : void {
-        currentFunc = get_ptr(fun)
+        currentFunc = fun
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
@@ -211,86 +210,79 @@ class RefVisitor : AstVisitor {
     }
 
     // ExprCall → function reference
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
+    def override preVisitExprCall(expr : ExprCall?) : void {
         if (target.kind == RefTargetKind.func) {
-            let c = get_ptr(expr)
-            if (c.func != null && to_void(c.func) == target.target_ptr) {
-                add_ref(c.at, "call")
+            if (expr.func != null && to_void(expr.func) == target.target_ptr) {
+                add_ref(expr.at, "call")
             }
         }
     }
 
     // ExprAddr → function pointer reference (@@func)
-    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) : void {
+    def override preVisitExprAddr(expr : ExprAddr?) : void {
         if (target.kind == RefTargetKind.func) {
-            let a = get_ptr(expr)
-            if (a.func != null && to_void(a.func) == target.target_ptr) {
-                add_ref(a.at, "addr")
+            if (expr.func != null && to_void(expr.func) == target.target_ptr) {
+                add_ref(expr.at, "addr")
             }
         }
     }
 
     // ExprVar → variable reference
-    def override preVisitExprVar(expr : smart_ptr<ExprVar>) : void {
+    def override preVisitExprVar(expr : ExprVar?) : void {
         if (target.kind == RefTargetKind.variable) {
-            let v = get_ptr(expr)
-            if (v.variable != null) {
-                let vptr = get_ptr(v.variable)
+            if (expr.variable != null) {
+                let vptr = expr.variable
                 if (to_void(vptr) == target.target_ptr) {
-                    add_ref(v.at, "variable")
+                    add_ref(expr.at, "variable")
                 }
             }
         }
     }
 
     // ExprField → field reference
-    def override preVisitExprField(expr : smart_ptr<ExprField>) : void {
+    def override preVisitExprField(expr : ExprField?) : void {
         if (target.kind == RefTargetKind.field) {
-            let f = get_ptr(expr)
-            if (f.name == target.field_name && f.value != null && f.value._type != null) {
-                var vt = f.value._type
+            if (expr.name == target.field_name && expr.value != null && expr.value._type != null) {
+                var vt = expr.value._type
                 if (vt.structType == null && vt.firstType != null) {
                     vt = vt.firstType
                 }
                 if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
-                    add_ref(f.atField, "field")
+                    add_ref(expr.atField, "field")
                 }
             }
         }
     }
 
     // ExprSafeField → field reference (?.field)
-    def override preVisitExprSafeField(expr : smart_ptr<ExprSafeField>) : void {
+    def override preVisitExprSafeField(expr : ExprSafeField?) : void {
         if (target.kind == RefTargetKind.field) {
-            let f = get_ptr(expr)
-            if (f.name == target.field_name && f.value != null && f.value._type != null) {
-                var vt = f.value._type
+            if (expr.name == target.field_name && expr.value != null && expr.value._type != null) {
+                var vt = expr.value._type
                 if (vt.structType == null && vt.firstType != null) {
                     vt = vt.firstType
                 }
                 if (vt.structType != null && to_void(vt.structType) == target.field_struct_ptr) {
-                    add_ref(f.atField, "safe field")
+                    add_ref(expr.atField, "safe field")
                 }
             }
         }
     }
 
     // ExprConstEnumeration → enum value reference
-    def override preVisitExprConstEnumeration(expr : smart_ptr<ExprConstEnumeration>) : void {
+    def override preVisitExprConstEnumeration(expr : ExprConstEnumeration?) : void {
         if (target.kind == RefTargetKind.enumeration) {
-            let e = get_ptr(expr)
-            if (e.enumType != null && to_void(get_ptr(e.enumType)) == target.target_ptr) {
-                add_ref(e.at, "enum value")
+            if (expr.enumType != null && to_void(expr.enumType) == target.target_ptr) {
+                add_ref(expr.at, "enum value")
             }
         }
     }
 
     // ExprConstBitfield → bitfield value reference
-    def override preVisitExprConstBitfield(expr : smart_ptr<ExprConstBitfield>) : void {
+    def override preVisitExprConstBitfield(expr : ExprConstBitfield?) : void {
         if (target.kind == RefTargetKind.alias) {
-            let e = get_ptr(expr)
-            if (e._type != null && !empty(e._type.alias) && e._type.alias == target.alias_name) {
-                add_ref(e.at, "bitfield value")
+            if (expr._type != null && !empty(expr._type.alias) && expr._type.alias == target.alias_name) {
+                add_ref(expr.at, "bitfield value")
             }
         }
     }
@@ -339,7 +331,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) {
             return
         }
-        let f = get_ptr(func)
+        let f = func
         if (int(f.at.line) == line && f.at.fileInfo != null) {
             if (find(string(f.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.func, target_ptr = to_void(f), name = string(f.name))
@@ -354,7 +346,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) {
             return
         }
-        let s = get_ptr(st)
+        let s = st
         if (int(s.at.line) == line && s.at.fileInfo != null) {
             if (find(string(s.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(s), name = string(s.name))
@@ -369,7 +361,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) {
             return
         }
-        let e = get_ptr(en)
+        let e = en
         if (int(e.at.line) == line && e.at.fileInfo != null) {
             if (find(string(e.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = string(e.name))
@@ -399,7 +391,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) {
             return
         }
-        let v = get_ptr(value)
+        let v = value
         if (int(v.at.line) == line && v.at.fileInfo != null) {
             if (find(string(v.at.fileInfo.name), file) >= 0) {
                 result = RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(v), name = string(v.name))

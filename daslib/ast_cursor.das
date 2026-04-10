@@ -105,16 +105,16 @@ class CursorVisitor : AstVisitor {
     }
 
     def override preVisitFunction(fun : FunctionPtr) : void {
-        currentFunc = get_ptr(fun)
+        currentFunc = fun
     }
 
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         currentFunc = null
-        return <- fun
+        return fun
     }
 
     def override preVisitExpression(expr : ExpressionPtr) : void {
-        let e = get_ptr(expr)
+        let e = expr
         // filter by file if specified
         if (!empty(targetFile) && e.at.fileInfo != null) {
             let fname = string(e.at.fileInfo.name)
@@ -162,7 +162,7 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
 //! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
 def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
-    visitor.currentFunc = get_ptr(func)
+    visitor.currentFunc = func
     var inscope adapter <- make_visitor(*visitor)
     visit(func, adapter)
     var result <- reverse_hits(visitor.hits)

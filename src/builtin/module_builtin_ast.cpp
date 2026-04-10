@@ -161,12 +161,12 @@ namespace das {
     }
 
     void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
-            const TBlock<void,TTemporary<TArray<smart_ptr_raw<Variable>>>> & block, Context * context, LineInfoArg * arg ) {
+            const TBlock<void,TTemporary<TArray<Variable *>>> & block, Context * context, LineInfoArg * arg ) {
         if ( !program ) context->throw_error_at(arg, "expecting program");
         if ( !_name ) context->throw_error_at(arg, "expecting name");
         string moduleName, varName;
         splitTypeName(_name, moduleName, varName);
-        vector<smart_ptr_raw<Variable>> result;
+        vector<Variable *> result;
         auto inWhichModule = getCurrentSearchModule(program, func, moduleName.c_str());
         program->library.foreach([&](Module * mod) -> bool {
             if ( auto var = mod->findVariable(varName) ) {
@@ -224,7 +224,7 @@ namespace das {
         return static_cast<TypeAnnotation*>(ann.get());
     }
 
-    smart_ptr_raw<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
+    Function * findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
         if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
         if ( !mod ) context->throw_error_at(line_info, "module not found");
         auto fn = mod->findFunction(func.PTR->mangledName);
@@ -266,7 +266,11 @@ namespace das {
             d_ChooseSmartPtr ? ChooseSmartPtr::yes : ChooseSmartPtr::no),at);
     }
 
-    char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
+    Expression * ast_add_ptr_ref_expression ( Expression * src ) {
+        return src;
+    }
+
+    char * ast_describe_expression ( Expression * t, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting expression, not null");
         TextWriter ss;
         ss << *t;
@@ -280,7 +284,7 @@ namespace das {
         return context->allocateString(ss.str(),at);
     }
 
-    char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at ) {
+    char * ast_describe_function ( Function * t, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting function, not null");
         TextWriter ss;
         ss << *t;
@@ -302,7 +306,7 @@ namespace das {
     }
 
     int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value ) {
-        return ast_find_enum_value_ex(enu.get(), value);
+        return ast_find_enum_value_ex(enu, value);
     }
 
     char * ast_find_enum_name ( Enumeration *enu, int64_t value, Context * context, LineInfoArg * at ) {
@@ -390,31 +394,31 @@ namespace das {
         });
     }
 
-    void for_each_enumeration ( Module * mod, const TBlock<void,smart_ptr_raw<Enumeration>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_enumeration ( Module * mod, const TBlock<void,Enumeration *> & block, Context * context, LineInfoArg * at ) {
         das_hash_map<string, EnumerationPtr> enums;
         mod->enumerations.foreach([&](auto penum){
             enums.emplace(penum->name, penum);
         });
         for (auto [k, penum]: ordered(enums)) {
-            das_invoke<void>::invoke<smart_ptr_raw<Enumeration>>(context,at,block,penum);
+            das_invoke<void>::invoke<Enumeration *>(context,at,block,penum);
         }
     }
 
-    void for_each_structure ( Module * mod, const TBlock<void,smart_ptr_raw<Structure>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_structure ( Module * mod, const TBlock<void,Structure *> & block, Context * context, LineInfoArg * at ) {
         mod->structures.foreach([&](auto pst){
-            das_invoke<void>::invoke<smart_ptr_raw<Structure>>(context,at,block,pst);
+            das_invoke<void>::invoke<Structure *>(context,at,block,pst);
         });
     }
 
-    void for_each_generic ( Module * mod, const TBlock<void,smart_ptr_raw<Function>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_generic ( Module * mod, const TBlock<void,Function *> & block, Context * context, LineInfoArg * at ) {
         mod->generics.foreach([&](auto fn){
-            das_invoke<void>::invoke<smart_ptr_raw<Function>>(context,at,block,fn);
+            das_invoke<void>::invoke<Function *>(context,at,block,fn);
         });
     }
 
-    void for_each_global ( Module * mod, const TBlock<void,smart_ptr_raw<Variable>> & block, Context * context, LineInfoArg * at ) {
+    void for_each_global ( Module * mod, const TBlock<void,Variable *> & block, Context * context, LineInfoArg * at ) {
         mod->globals.foreach([&](auto var){
-            das_invoke<void>::invoke<smart_ptr_raw<Variable>>(context,at,block,var);
+            das_invoke<void>::invoke<Variable *>(context,at,block,var);
         });
     }
 
@@ -485,7 +489,7 @@ namespace das {
         func->notInferred();
     }
 
-    char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context, LineInfoArg * at ) {
+    char * get_mangled_name ( Function * func, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at,"expecting function");
         return context->allocateString(func->getMangledName(),at);
     }
@@ -500,24 +504,24 @@ namespace das {
         return context->allocateString(typ->getMangledName(),at);
     }
 
-    char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at ) {
+    char * get_mangled_name_v ( Variable * var, Context * context, LineInfoArg * at ) {
         if ( !var ) context->throw_error_at(at,"expecting function");
         return context->allocateString(var->getMangledName(),at);
     }
 
-    char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at ) {
+    char * get_mangled_name_b ( ExprBlock * expr, Context * context, LineInfoArg * at ) {
         if ( !expr ) context->throw_error_at(at,"expecting block");
         return context->allocateString(expr->getMangledName(),at);
     }
 
-    void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
+    void get_use_global_variables ( Function * func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at,"expecting function");
         for ( auto & var : func->useGlobalVariables ) {
             das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
         }
     }
 
-    void get_use_functions ( smart_ptr_raw<Function> func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
+    void get_use_functions ( Function * func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at,"expecting function");
         for ( auto & fn : func->useFunctions ) {
             das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
@@ -541,27 +545,27 @@ namespace das {
         return parser.parseTypeFromMangledName(txt, lib, thisModule);
     }
 
-    void forceAtRaw ( const smart_ptr_raw<Expression> & expr, const LineInfo & at ) {
+    void forceAtRaw ( Expression * expr, const LineInfo & at ) {
         forceAt(expr, at);
     }
 
-    void forceAtFunctionRaw ( const smart_ptr_raw<Function> & func, const LineInfo & at ) {
+    void forceAtFunctionRaw ( Function * func, const LineInfo & at ) {
         forceAtFunction(func, at);
     }
 
-    void forceGeneratedRaw ( const smart_ptr_raw<Expression> & expr, bool setGenerated ) {
+    void forceGeneratedRaw ( Expression * expr, bool setGenerated ) {
         forceGenerated(expr, setGenerated);
     }
 
-    void forceGeneratedFunctionRaw ( const smart_ptr_raw<Function> & func, bool setGenerated ) {
+    void forceGeneratedFunctionRaw ( Function * func, bool setGenerated ) {
         forceGeneratedFunction(func, setGenerated);
     }
 
-    bool isExprLikeCall ( const ExpressionPtr & expr ) {
+    bool isExprLikeCall ( ExpressionPtr expr ) {
         return expr->rtti_isCallLikeExpr();
     }
 
-    bool isExprConst ( const ExpressionPtr & expr ) {
+    bool isExprConst ( ExpressionPtr expr ) {
         return expr->rtti_isConstant();
     }
 
@@ -575,7 +579,7 @@ namespace das {
         return program->makeCall(at, name);
     }
 
-    float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok ) {
+    float4 evalSingleExpression ( ExpressionPtr expr, bool & ok ) {
         ok = true;
         das::Context ctx;
         auto node = expr->simulate(ctx);
@@ -634,12 +638,12 @@ namespace das {
         if ( !prog ) context->throw_error_at(at, "expecting program");
         auto st = prog->findStructure(name);
         if ( st.size()!=1 ) return nullptr;
-        return st.back().get();
+        return st.back();
     }
 
     Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
         if ( !module ) context->throw_error_at(at, "expecting module");
-        return module->findStructure(name).get();
+        return module->findStructure(name);
     }
 
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
@@ -702,9 +706,9 @@ namespace das {
     template <typename F>
     static auto apply_to_vec(void* vec, string_view tstr, F apply) {
         if (tstr == "smart_ptr<ast::Expression>") {
-            return apply(static_cast<vector<smart_ptr_raw<Expression>>*>(vec));
+            return apply(static_cast<vector<Expression *>*>(vec));
         } else if (tstr == "smart_ptr<ast::Variable>") {
-            return apply(static_cast<vector<smart_ptr_raw<Variable>>*>(vec));
+            return apply(static_cast<vector<Variable *>*>(vec));
         } else if (tstr == "smart_ptr<ast::TypeDecl>") {
             return apply(static_cast<vector<TypeDecl *>*>(vec));
         } else if (tstr == "string") {
@@ -725,11 +729,11 @@ namespace das {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         } else if (tstr == "rtti_core::LineInfo") {
             return apply(static_cast<vector<LineInfo>*>(vec));
-        } else if (tstr == "smart_ptr<ast::MakeStruct>") {
-            return apply(static_cast<vector<smart_ptr<MakeStruct>>*>(vec));
-        } else if (tstr == "smart_ptr<ast::MakeFieldDecl>") {
+        } else if (tstr == "ast::MakeStruct*") {
+            return apply(static_cast<vector<MakeStructPtr>*>(vec));
+        } else if (tstr == "ast::MakeFieldDecl*") {
             auto vec2 = (MakeStruct*)(vec); // todo: hack, multiple inheritance breaks order in memory.
-            return apply(static_cast<vector<smart_ptr<MakeFieldDecl>>*>(vec2));
+            return apply(static_cast<vector<MakeFieldDeclPtr>*>(vec2));
         } else if (tstr == "ast_core::EnumEntry") {
             return apply(static_cast<vector<Enumeration::EnumEntry>*>(vec));
         }
@@ -781,7 +785,7 @@ namespace das {
         return program->updateAliasMapCallback(argType, passType);
     }
 
-    const Structure * findFieldParent( smart_ptr_raw<Structure> structure, const char *name, Context *, LineInfoArg * ) {
+    const Structure * findFieldParent( Structure * structure, const char *name, Context *, LineInfoArg * ) {
         return structure->findFieldParent(name);
     }
 
@@ -979,7 +983,7 @@ namespace das {
     void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at) {
         module->functions.foreach([&](auto fn) {
             vec4f args[1];
-            args[0] = cast<Function*>::from(fn.get());
+            args[0] = cast<Function*>::from(fn);
             context->invoke(blk, args, nullptr, at);
         });
     }
@@ -1023,7 +1027,7 @@ namespace das {
         return structure->aliases.find(aliasName);
     }
 
-    smart_ptr_raw<Function> findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
+    Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at) {
         if ( !module_name ) context->throw_error_at(at, "expecting module name");
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !program ) context->throw_error_at(at, "only available during compilation");
@@ -1154,6 +1158,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(ast_describe_expression)>(*this, lib,  "describe_expression",
             SideEffects::none, "ast_describe_expression")
                 ->args({"expression","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(ast_add_ptr_ref_expression)>(*this, lib,  "add_ptr_ref",
+            SideEffects::none, "ast_add_ptr_ref_expression")
+                ->args({"expression"});
         addExtern<DAS_BIND_FUN(ast_describe_function)>(*this, lib,  "describe_function",
             SideEffects::none, "ast_describe_function")
                 ->args({"function","context","lineinfo"});
@@ -1168,9 +1175,6 @@ namespace das {
                 ->args({"enum","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
             SideEffects::none, "ast_find_enum_value")
-                ->args({"enum","value"});
-        addExtern<DAS_BIND_FUN(ast_find_enum_value_ex)>(*this, lib,  "find_enum_value",
-            SideEffects::none, "ast_find_enum_value_ex")
                 ->args({"enum","value"});
         addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
             SideEffects::none, "ast_findStructureField")

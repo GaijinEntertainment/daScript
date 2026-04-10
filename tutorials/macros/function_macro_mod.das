@@ -63,7 +63,7 @@ class LogCallsMacro : AstFunctionAnnotation {
                        args : AnnotationArgumentList; var errors : das_string) : bool {
 
         // Step 1: Build an ExprStringBuilder for "funcname(arg1, arg2, ...)\n"
-        var inscope call_sb <- new ExprStringBuilder(at = func.at)
+        var call_sb = new ExprStringBuilder(at = func.at)
         call_sb.elements |> emplace_new <| qmacro($v("{string(func.name)}("))
         for (i, arg in count(), func.arguments) {
             if (i > 0) {
@@ -75,7 +75,7 @@ class LogCallsMacro : AstFunctionAnnotation {
 
         // Step 2: Build the replacement body with entry logging,
         //         original body, and exit logging in a finally block
-        var inscope new_body <- qmacro_block() {
+        var new_body = qmacro_block() {
             {
                 print("{repeat("  ",LOG_DEPTH++)}>> ")
                 print($e(call_sb))
@@ -88,7 +88,7 @@ class LogCallsMacro : AstFunctionAnnotation {
         }
 
         // Step 3: Replace the function body
-        func.body |> move <| new_body
+        func.body = new_body
         return true
     }
 }
@@ -139,7 +139,7 @@ def public getConstantInt(expr : ExpressionPtr; var result : int&) : bool {
 
 [function_macro(name="expect_range")]
 class ExpectRangeMacro : AstFunctionAnnotation {
-    def override verifyCall(var call : smart_ptr<ExprCallFunc>;
+    def override verifyCall(var call : ExprCallFunc?;
                             args, progArgs : AnnotationArgumentList;
                             var errors : das_string) : bool {
 
@@ -198,7 +198,7 @@ class ExpectRangeMacro : AstFunctionAnnotation {
 class NoPrintVisitor : AstVisitor {
     found_print : bool = false
     @safe_when_uninitialized print_at : LineInfo
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
+    def override preVisitExprCall(expr : ExprCall?) : void {
         if (expr.func != null && expr.name == "print" && expr.func._module.name == "$") {
             found_print = true
             print_at = expr.at

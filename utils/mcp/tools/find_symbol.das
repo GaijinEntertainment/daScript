@@ -23,10 +23,9 @@ def write_cpp_name(var w : StringBuilderWriter; cppName : string) {
     }
 }
 
-def get_func_cpp_name(func) : string {
-    let fptr = get_ptr(func)
-    if (fptr.flags.builtIn) {
-        let bfn = fptr as BuiltInFunction
+def get_func_cpp_name(func : Function?) : string {
+    if (func.flags.builtIn) {
+        let bfn = func as BuiltInFunction
         if (bfn != null) {
             return string(bfn.cppName)
         }

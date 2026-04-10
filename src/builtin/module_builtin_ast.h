@@ -195,10 +195,10 @@ namespace das {
     void init_expr_looks_like_call ( BasicStructureAnnotation & ann );
 
     template <typename EXPR>
-    struct AstExprAnnotation : ManagedStructureAnnotation <EXPR> {
+    struct AstExprAnnotation : ManagedStructureAnnotation <EXPR, true, false> {
         const char * parentExpression = nullptr;
         AstExprAnnotation(const string & en, ModuleLibrary & ml)
-            : ManagedStructureAnnotation<EXPR> (en, ml) {
+            : ManagedStructureAnnotation<EXPR, true, false> (en, ml) {
         }
         __forceinline void init() {
             init_expr(*this);

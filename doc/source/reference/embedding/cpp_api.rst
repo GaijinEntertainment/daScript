@@ -383,7 +383,7 @@ Binding C++ enumerations
    using namespace das;
 
    // In module constructor:
-   addEnumeration(make_smart<EnumerationDasName>());
+   addEnumeration(new EnumerationDasName());
 
 * ``DAS_BASE_BIND_ENUM`` creates ``EnumerationDasName`` class +
   ``typeFactory<CppEnum>``

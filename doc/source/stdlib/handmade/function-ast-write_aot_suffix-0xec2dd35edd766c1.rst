@@ -1,0 +1,1 @@
+Writes the AOT (ahead-of-time compilation) suffix section for the given structure annotation, outputting generated C++ code to the string builder writer.

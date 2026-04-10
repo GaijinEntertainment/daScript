@@ -455,21 +455,21 @@ namespace das
         virtual bool canMove() const override { return false; }
         virtual bool canCopy() const override { return false; }
         virtual bool isLocal() const override { return false; }
-        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
+        virtual TypeDeclPtr makeIndexType ( ExpressionPtr, ExpressionPtr ) const override {
             return new TypeDecl(*vecType);
         }
-        virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
+        virtual TypeDeclPtr makeIteratorType ( ExpressionPtr ) const override {
             return new TypeDecl(*vecType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_AtStdVector>(at,
                                                                rv->simulate(context),
                                                                idx->simulate(context),
                                                                ofs);
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type,
-                                            const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+                                            ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             if ( type->isHandle() ) {
                 auto expr = context.code->makeNode<SimNode_AtStdVector>(at,
                                                                 rv->simulate(context),
@@ -485,7 +485,7 @@ namespace das
             }
         }
 
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
             auto rv = src->simulate(context);
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
@@ -808,7 +808,7 @@ namespace das
 
     template <typename TT>
     void addConstant ( Module & mod, const string & name, const TT & value ) {
-        VariablePtr pVar = make_smart<Variable>();
+        VariablePtr pVar = new Variable();
         pVar->name = name;
         pVar->type = new TypeDecl((Type)ToBasicType<TT>::type);
         pVar->type->constant = true;
@@ -821,11 +821,11 @@ namespace das
         }
     }
     __forceinline void addConstant ( Module & mod, const string & name, const string & value ) {
-        VariablePtr pVar = make_smart<Variable>();
+        VariablePtr pVar = new Variable();
         pVar->name = name;
         pVar->type = new TypeDecl(Type::tString);
         pVar->type->constant = true;
-        pVar->init = make_smart<ExprConstString>(LineInfo(),value);
+        pVar->init = new ExprConstString(LineInfo(),value);
         pVar->init->type = new TypeDecl(*pVar->type);
         pVar->init->constexpression = true;
         pVar->initStackSize = sizeof(Prologue);

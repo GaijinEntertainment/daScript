@@ -357,15 +357,30 @@ Smart Pointers
 
 Smart pointers (``smart_ptr<T>``) are reference-counted pointers to C++-managed (handled) types.
 They are **not** available for regular Daslang structs or classes — only for types registered
-as handled types from the C++ side (such as AST node types in ``daslib/ast``).
+as handled types from the C++ side.
 
-Smart pointers are primarily used in the macro and AST manipulation context:
+.. note::
+
+    Most AST node types (``Expression``, ``Function``, ``Structure``, ``Enumeration``,
+    ``Variable``, ``MakeFieldDecl``, ``MakeStruct``) are **not** smart pointers.
+    They are garbage-collected (``gc_node``) types — ``new`` returns a raw pointer (``T?``)
+    and the GC manages their lifetime.  Use plain assignment (``=``) and plain ``return``,
+    not ``var inscope``, ``<-``, or ``return <-``.
+
+    Smart pointers are still used for a few non-GC types such as ``Context``.
+
+Smart pointers in AST code:
 
 .. code-block:: das
 
     require daslib/ast
 
-    var inscope expr : smart_ptr<ExprConstInt> <- new ExprConstInt(value=42)
+    // GC types — plain assignment, no inscope, no <-
+    var expr = new ExprConstInt(value=42)       // Expression is gc_node
+    var fn = new ExprCall(at=expr.at, name:="foo")
+
+    // Smart pointer types (non-GC) — use inscope + <-
+    var inscope adapter <- make_visitor(*visitor)   // VisitorAdapter is smart_ptr
 
 The key properties of smart pointers:
 
@@ -379,10 +394,10 @@ declared with ``inscope`` to ensure automatic cleanup:
 
 .. code-block:: das
 
-    var inscope a <- new ExprConstInt(value=1)   // create — safe, no unsafe needed
-    var inscope b <- a                           // move — safe, a becomes null
+    var inscope a <- make_visitor(*visitor)   // create — safe, no unsafe needed
+    var inscope b <- a                        // move — safe, a becomes null
     unsafe {
-        var inscope c <- some_function()         // move from function result — unsafe
+        var inscope c <- some_function()      // move from function result — unsafe
     }
 
 Ownership transfer functions
@@ -395,29 +410,6 @@ already hold a value:
 ``move(dest, src)``
     Transfers ownership from ``src`` into ``dest``. If ``dest`` already holds a value,
     its reference count is decremented. After the call, ``src`` becomes null.
-    Both arguments must be existing smart pointer variables:
-
-    .. code-block:: das
-
-        var inscope a <- new ExprConstInt(value=1)
-        var inscope b <- new ExprConstInt(value=2)
-        b |> move <| a       // b now holds what a held; old b is released; a is null
-
-``move_new(dest, src)``
-    Transfers ownership from a newly created smart pointer into ``dest``. If ``dest``
-    already holds a value, its reference count is decremented. This is the idiomatic
-    way to replace the contents of a smart pointer field or variable:
-
-    .. code-block:: das
-
-        var inscope fn <- find_function("foo")
-        fn |> move_new <| new Function(name := "bar")   // fn now holds the new Function
-
-    It can also be called in function-call style:
-
-    .. code-block:: das
-
-        move_new(fn) <| new Function(name := "bar")
 
 ``smart_ptr_clone(dest, src)``
     Clones (increments the reference count of) ``src`` into ``dest``. Both ``dest`` and
@@ -425,9 +417,6 @@ already hold a value:
 
 ``smart_ptr_use_count(ptr)``
     Returns the current reference count of the smart pointer as a ``uint``.
-
-Smart pointer types frequently appear in ``daslib/ast`` and ``daslib/ast_boost`` when
-building or transforming AST nodes in macros.
 
 -----------
 Iterators

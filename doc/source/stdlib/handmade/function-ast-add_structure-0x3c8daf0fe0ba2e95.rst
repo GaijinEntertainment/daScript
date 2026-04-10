@@ -1,0 +1,1 @@
+Adds a structure definition to the specified module. Returns true if the structure was added successfully, or false if a structure with the same name already exists.

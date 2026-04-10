@@ -1,0 +1,1 @@
+Iterates over all functions defined in the given module, calling the provided block for each function regardless of name.

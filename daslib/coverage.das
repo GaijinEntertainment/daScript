@@ -280,7 +280,7 @@ class CoverageMacro : AstVisitor {
     @do_not_delete func : Function?
     def override preVisitFunction(var fun : FunctionPtr) {
         //! Stores a pointer to the current function being visited and records function info for coverage.
-        func = get_ptr(fun)
+        func = fun
         if (fun.flags.generated || fun.flags.init || fun.flags.builtIn) {
             return
         }
@@ -328,7 +328,7 @@ class CoverageMacro : AstVisitor {
         let file = resolve_file_path(string(fun.at.fileInfo.name))
         let fname = string(fun.name)
         var blk = unsafe(reinterpret<ExprBlock?> expr)
-        var inscope prev : array<ExpressionPtr>
+        var prev : array<ExpressionPtr>
         for (ex in blk.list) {
             prev.emplace(ex)
         }
@@ -341,7 +341,7 @@ class CoverageMacro : AstVisitor {
         func.not_inferred()
     }
 
-    def override visitExprIfThenElse(var ifte : smart_ptr<ExprIfThenElse>) : ExpressionPtr {
+    def override visitExprIfThenElse(var ifte : ExprIfThenElse?) : ExpressionPtr {
         //! Instruments if/else branches with branch coverage tracking calls.
         // if (ifte.isStatic) {
         //     return <- ifte
@@ -371,7 +371,7 @@ class CoverageMacro : AstVisitor {
         // instrument true branch
         if (ifte.if_true != null && ifte.if_true is ExprBlock) {
             var true_blk = unsafe(reinterpret<ExprBlock?> ifte.if_true)
-            var inscope prevTrue : array<ExpressionPtr>
+            var prevTrue : array<ExpressionPtr>
             for (ex in true_blk.list) {
                 prevTrue.emplace(ex)
             }
@@ -384,7 +384,7 @@ class CoverageMacro : AstVisitor {
         // instrument false branch
         if (ifte.if_false != null && ifte.if_false is ExprBlock) {
             var false_blk = unsafe(reinterpret<ExprBlock?> ifte.if_false)
-            var inscope prevFalse : array<ExpressionPtr>
+            var prevFalse : array<ExpressionPtr>
             for (ex in false_blk.list) {
                 prevFalse.emplace(ex)
             }
@@ -395,23 +395,23 @@ class CoverageMacro : AstVisitor {
             }
         } elif (ifte.if_false == null) {
             // no else branch — create one with just the branch coverage call
-            var inscope elseBlk <- new ExprBlock(at = ifte.at)
+            var elseBlk = new ExprBlock(at = ifte.at)
             elseBlk.list |> emplace_new <| qmacro(_::add_branch_coverage($v(file), $v(false_idx)))
-            move(ifte.if_false) <| elseBlk
+            ifte.if_false = elseBlk
         }
         astChanged = true
         func.not_inferred()
         return <- ifte
     }
 
-    def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         //! Instruments expression blocks with coverage tracking calls.
         if (blk.at.fileInfo == null) {
             return <- blk
         }
         astChanged = true
         func.not_inferred()
-        var inscope prev : array<ExpressionPtr>
+        var prev : array<ExpressionPtr>
         for (ex in blk.list) {
             prev.emplace(ex)
         }
@@ -441,7 +441,7 @@ class CoverageMacro : AstVisitor {
         return <- blk
     }
 
-    def override preVisitExprAssert(var expr : smart_ptr<ExprAssert>) {
+    def override preVisitExprAssert(var expr : ExprAssert?) {
         // Once coverage added all assertions should become verify
         // since side-effects added when calling coverage tools.
         expr.isVerify = true
@@ -483,7 +483,7 @@ class CoveragePass : AstPassMacro {
         let result = astVisitor.astChanged
         if (result) {
             // generate [init] function that registers all instrumented lines with 0 hits
-            var inscope initFn <- qmacro_function("__coverage_init") $() {
+            var initFn = qmacro_function("__coverage_init") $() {
                 pass
             }
             var blk = unsafe(reinterpret<ExprBlock?> initFn.body)

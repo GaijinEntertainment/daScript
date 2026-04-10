@@ -1,0 +1,1 @@
+Finds and returns the parent structure in the inheritance chain that originally declares the field with the given name. Returns null if the field is not found.

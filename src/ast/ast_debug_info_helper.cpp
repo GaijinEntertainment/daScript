@@ -45,7 +45,7 @@ namespace das {
         }
     }
 
-    void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body ) {
+    void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, ExpressionPtr body ) {
         CollectLocalVariables lv;
         body->visit(lv);
         info->localCount = uint32_t(lv.locals.size());
@@ -125,14 +125,15 @@ namespace das {
     }
 
     FuncInfo * DebugInfoHelper::makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at ) {
-        Function fakeFunc;
+        gc_local<Function> fakeFuncPtr(new Function());
+        Function & fakeFunc = *fakeFuncPtr;
         fakeFunc.name = "invoke " + blk->describe();
         fakeFunc.at = at;
         gc_local<TypeDecl> voidType(new TypeDecl(Type::tVoid));
         fakeFunc.result = blk->firstType ? blk->firstType : (TypeDecl*)voidType;
         fakeFunc.totalStackSize = sizeof(Prologue);
         for ( size_t ai=0, ais=blk->argTypes.size(); ai!=ais; ++ ai ) {
-            auto argV = make_smart<Variable>();
+            auto argV = new Variable();
             argV->at = at;
             argV->name = blk->argNames.empty() ? ("arg_" + to_string(ai)) : blk->argNames[ai];
             argV->type = blk->argTypes[ai];
@@ -316,10 +317,10 @@ namespace das {
         }
         if ( rtti && var.init && var.init->constexpression ) {
             if ( var.init->rtti_isStringConstant() ) {
-                auto sval = static_pointer_cast<ExprConstString>(var.init);
+                auto sval = static_cast<ExprConstString*>(var.init);
                 vi->sValue = debugInfo->allocateCachedName(sval->text);
             } else if ( var.init->rtti_isConstant() ) {
-                auto cval = static_pointer_cast<ExprConst>(var.init);
+                auto cval = static_cast<ExprConst*>(var.init);
                 vi->value = cval->value;
             } else {
                 vi->value = v_zero();
@@ -343,10 +344,10 @@ namespace das {
         vi->offset = 0;
         if ( rtti && var.init && var.init->constexpression ) {
             if ( var.init->rtti_isStringConstant() ) {
-                auto sval = static_pointer_cast<ExprConstString>(var.init);
+                auto sval = static_cast<ExprConstString*>(var.init);
                 vi->sValue = debugInfo->allocateCachedName(sval->text);
             } else if ( var.init->rtti_isConstant() ) {
-                auto cval = static_pointer_cast<ExprConst>(var.init);
+                auto cval = static_cast<ExprConst*>(var.init);
                 vi->value = cval->value;
             } else {
                 vi->value = v_zero();

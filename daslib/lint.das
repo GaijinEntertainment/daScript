@@ -93,38 +93,38 @@ class LintVisitor : AstVisitor {
         noLint = false
         return <- fun
     }
-    def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) : void {
+    def override preVisitExprBlock(blk : ExprBlock?) : void {
         exprForTerminator |> push(0ul)
     }
-    def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         if (length(exprForTerminator) > 0) {
             exprForTerminator |> pop()
         }
         return <- blk
     }
-    def override visitExprBlockExpression(blk : smart_ptr<ExprBlock>; var expr : ExpressionPtr) : ExpressionPtr {
+    def override visitExprBlockExpression(blk : ExprBlock?; var expr : ExpressionPtr) : ExpressionPtr {
         let lb = exprForTerminator |> back()
         if (lb != 0ul) {
-            let eb = intptr(get_ptr(expr))
+            let eb = intptr(expr)
             if (lb != eb) {
                 self->lint_error("LINT001: unreachable code", expr.at)
             }
         }
         return <- expr
     }
-    def override preVisitExprLabel(expr : smart_ptr<ExprLabel>) : void {
+    def override preVisitExprLabel(expr : ExprLabel?) : void {
         if (length(exprForTerminator) > 0) {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(0ul)
     }
-    def override preVisitExprReturn(expr : smart_ptr<ExprReturn>) : void {
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
         if (length(exprForTerminator) > 0) {
             exprForTerminator |> pop()
         }
-        exprForTerminator |> push(intptr(get_ptr(expr)))
+        exprForTerminator |> push(intptr(expr))
     }
-    def override preVisitExprCall(expr : smart_ptr<ExprCall>) : void {
+    def override preVisitExprCall(expr : ExprCall?) : void {
         if (expr.func == null) {
             return
         }
@@ -132,10 +132,10 @@ class LintVisitor : AstVisitor {
             if (length(exprForTerminator) > 0) {
                 exprForTerminator |> pop()
             }
-            exprForTerminator |> push(intptr(get_ptr(expr)))
+            exprForTerminator |> push(intptr(expr))
         }
     }
-    def override preVisitExprForVariable(expr : smart_ptr<ExprFor>; v : VariablePtr; last : bool) : void {
+    def override preVisitExprForVariable(expr : ExprFor?; v : VariablePtr; last : bool) : void {
         if (expr.canShadow) {
             return
         }
@@ -197,7 +197,7 @@ class LintVisitor : AstVisitor {
         }
     }
 
-    def override preVisitExprLet(expr : smart_ptr<ExprLet>) : void {
+    def override preVisitExprLet(expr : ExprLet?) : void {
         for (v in expr.variables) {
             validate_var(v, true)
         }

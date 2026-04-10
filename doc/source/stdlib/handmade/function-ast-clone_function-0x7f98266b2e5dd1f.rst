@@ -1,0 +1,1 @@
+Creates and returns a deep copy of the specified function, including its body, arguments, and annotations.

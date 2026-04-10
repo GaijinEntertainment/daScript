@@ -128,11 +128,11 @@ namespace das
         return static_cast<SimNode_CallBase *>(node);
     }
 
-    SimNode * makeLocalCMResMove (const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
+    SimNode * makeLocalCMResMove (const LineInfo & at, Context & context, uint32_t offset, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
@@ -141,7 +141,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto * right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
@@ -158,7 +158,7 @@ namespace das
         }
     }
 
-    SimNode * makeLocalCMResCopy(const LineInfo & at, Context & context, uint32_t offset, const ExpressionPtr & rE ) {
+    SimNode * makeLocalCMResCopy(const LineInfo & at, Context & context, uint32_t offset, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalCMResCopy on a type, which can't be copied."
@@ -167,7 +167,7 @@ namespace das
         auto right = rE->simulate(context);
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return right;
@@ -175,7 +175,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return right;
@@ -190,11 +190,11 @@ namespace das
         }
     }
 
-    SimNode * makeLocalRefMove (const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
+    SimNode * makeLocalRefMove (const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
@@ -203,7 +203,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
@@ -220,7 +220,7 @@ namespace das
         }
     }
 
-    SimNode * makeLocalRefCopy(const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, const ExpressionPtr & rE ) {
+    SimNode * makeLocalRefCopy(const LineInfo & at, Context & context, uint32_t stackTop, uint32_t offset, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalRefCopy on a type, which can't be copied."
@@ -229,7 +229,7 @@ namespace das
         auto right = rE->simulate(context);
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return right;
@@ -237,7 +237,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return right;
@@ -252,11 +252,11 @@ namespace das
         }
     }
 
-    SimNode * makeLocalMove (const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
+    SimNode * makeLocalMove (const LineInfo & at, Context & context, uint32_t stackTop, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
@@ -265,7 +265,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
@@ -282,7 +282,7 @@ namespace das
         }
     }
 
-    SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, const ExpressionPtr & rE ) {
+    SimNode * makeLocalCopy(const LineInfo & at, Context & context, uint32_t stackTop, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         DAS_ASSERT ( rightType.canCopy() &&
                 "we are calling makeLocalCopy on a type, which can't be copied."
@@ -290,7 +290,7 @@ namespace das
                 "compiler later will likely report internal compilation error.");
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
@@ -299,7 +299,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
@@ -316,7 +316,7 @@ namespace das
         }
     }
 
-    SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
+    SimNode * makeCopy(const LineInfo & at, Context & context, ExpressionPtr lE, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         DAS_ASSERT ( (rightType.canCopy() || rightType.isGoodBlockType()) &&
                 "we are calling makeCopy on a type, which can't be copied."
@@ -324,7 +324,7 @@ namespace das
                 "compiler later will likely report internal compilation error.");
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = lE->simulate(context);
@@ -333,7 +333,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = lE->simulate(context);
@@ -350,11 +350,11 @@ namespace das
         }
     }
 
-    SimNode * makeMove (const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
+    SimNode * makeMove (const LineInfo & at, Context & context, ExpressionPtr lE, ExpressionPtr rE ) {
         const auto & rightType = *rE->type;
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
-            auto cll = static_pointer_cast<ExprCall>(rE);
+            auto cll = static_cast<ExprCall*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = lE->simulate(context);
@@ -363,7 +363,7 @@ namespace das
         }
         // now, invoke with CMRES
         if ( rE->rtti_isInvoke() ) {
-            auto cll = static_pointer_cast<ExprInvoke>(rE);
+            auto cll = static_cast<ExprInvoke*>(rE);
             if ( cll->allowCmresSkip() ) {
                 auto right = rE->simulate(context);
                 getCallBase(right)->cmresEval = lE->simulate(context);
@@ -420,14 +420,14 @@ namespace das
             DAS_ASSERT(totalStackSize == sizeof(Prologue) && "function can't allocate stack");
             DAS_ASSERT((result->isWorkhorseType() || result->isVoid()) && "fastcall can only return a workhorse type");
             DAS_ASSERT(body->rtti_isBlock() && "function must contain a block");
-            auto block = static_pointer_cast<ExprBlock>(body);
+            auto block = static_cast<ExprBlock*>(body);
             if ( block->list.size()==0 ) {
                 DAS_ASSERT(block->inFunction && block->inFunction->result->isVoid() && "only void function produces fastcall NOP");
                 return context.code->makeNode<SimNode_NOP>(block->at);
             }
             if ( block->list.back()->rtti_isReturn() ) {
                 DAS_ASSERT(block->list.back()->rtti_isReturn() && "fastcall body expr is return");
-                auto retE = static_pointer_cast<ExprReturn>(block->list.back());
+                auto retE = static_cast<ExprReturn*>(block->list.back());
                 if ( retE->subexpr ) {
                     return retE->subexpr->simulate(context);
                 } else {
@@ -490,16 +490,16 @@ namespace das
             if ( decl->value->rtti_isMakeLocal() ) {
                 auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
                 uint32_t offset =  extraOffset + index*stride + fieldOffset;
-                auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                auto mkl = static_cast<ExprMakeLocal*>(decl->value);
                 mkl->setRefSp(ref, cmres, sp, offset);
                 mkl->doesNotNeedInit = false;
             } else if ( decl->value->rtti_isCall() ) {
-                auto cll = static_pointer_cast<ExprCall>(decl->value);
+                auto cll = static_cast<ExprCall*>(decl->value);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( decl->value->rtti_isInvoke() ) {
-                auto cll = static_pointer_cast<ExprInvoke>(decl->value);
+                auto cll = static_cast<ExprInvoke*>(decl->value);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
@@ -538,7 +538,7 @@ namespace das
             DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
             // lets set variant index
             uint32_t voffset = extraOffset + index*stride;
-            auto vconst = make_smart<ExprConstInt>(at, int32_t(fieldVariant));
+            auto vconst = new ExprConstInt(at, int32_t(fieldVariant));
             vconst->type = new TypeDecl(Type::tInt);
             SimNode * svi;
             if ( useCMRES ) {
@@ -555,7 +555,7 @@ namespace das
             SimNode * cpy = nullptr;
             if ( decl->value->rtti_isMakeLocal() ) {
                 // so what happens here, is we ask it for the generated commands and append it to this list only
-                auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                auto mkl = static_cast<ExprMakeLocal*>(decl->value);
                 auto lsim = mkl->simulateLocal(context);
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
             } else if ( useCMRES ) {
@@ -615,15 +615,15 @@ namespace das
                 DAS_ASSERT(field && "should have failed in type infer otherwise");
                 if ( decl->value->rtti_isMakeLocal() ) {
                     uint32_t offset =  extraOffset + index*stride + field->offset;
-                    auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                    auto mkl = static_cast<ExprMakeLocal*>(decl->value);
                     mkl->setRefSp(ref, cmres, sp, offset);
                 } else if ( decl->value->rtti_isCall() ) {
-                    auto cll = static_pointer_cast<ExprCall>(decl->value);
+                    auto cll = static_cast<ExprCall*>(decl->value);
                     if ( cll->allowCmresSkip() ) {
                         cll->doesNotNeedSp = true;
                     }
                 } else if ( decl->value->rtti_isInvoke() ) {
-                    auto cll = static_pointer_cast<ExprInvoke>(decl->value);
+                    auto cll = static_cast<ExprInvoke*>(decl->value);
                     if ( cll->allowCmresSkip() ) {
                         cll->doesNotNeedSp = true;
                     }
@@ -683,7 +683,7 @@ namespace das
                     SimNode * cpy;
                     if ( decl->value->rtti_isMakeLocal() ) {
                         // so what happens here, is we ask it for the generated commands and append it to this list only
-                        auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
+                        auto mkl = static_cast<ExprMakeLocal*>(decl->value);
                         auto lsim = mkl->simulateLocal(context);
                         simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                         continue;
@@ -716,7 +716,7 @@ namespace das
             auto ann = makeType->annotation;
             // making fake variable, which points to out field
             string fakeName = "__makelocal";
-            auto fakeVariable = make_smart<Variable>();
+            auto fakeVariable = new Variable();
             fakeVariable->name = fakeName;
             fakeVariable->type = new TypeDecl(Type::tHandle);
             fakeVariable->type->annotation = ann;
@@ -733,18 +733,18 @@ namespace das
             }
             fakeVariable->generated = true;
             // make fake ExprVar which is that field
-            auto fakeVar = make_smart<ExprVar>(at, fakeName);
+            auto fakeVar = new ExprVar(at, fakeName);
             fakeVar->type = fakeVariable->type;
             fakeVar->variable = fakeVariable;
             fakeVar->local = true;
             // make fake expression
             ExpressionPtr fakeExpr = fakeVar;
-            smart_ptr<ExprConstInt> indexExpr;
+            ExprConstInt * indexExpr = nullptr;
             if ( useStackRef && total > 1 ) {
                 // if its stackRef with multiple indices, its actually var[total], and lookup is var[index]
-                indexExpr = make_smart<ExprConstInt>(at, 0);
+                indexExpr = new ExprConstInt(at, 0);
                 indexExpr->type = new TypeDecl(Type::tInt);
-                fakeExpr = make_smart<ExprAt>(at, fakeExpr, indexExpr);
+                fakeExpr = new ExprAt(at, fakeExpr, indexExpr);
                 fakeExpr->type = new TypeDecl(Type::tHandle);
                 fakeExpr->type->annotation = ann;
                 fakeExpr->type->ref = true;
@@ -791,7 +791,7 @@ namespace das
             */
             // making fake variable, which points to entire structure
             string fakeName = "__makelocal";
-            auto fakeVariable = make_smart<Variable>();
+            auto fakeVariable = new Variable();
             fakeVariable->name = fakeName;
             fakeVariable->type = new TypeDecl(*type);
             if ( useCMRES ) {
@@ -804,12 +804,12 @@ namespace das
             }
             fakeVariable->generated = true;
             // make fake ExprVar which is that field
-            auto fakeVar = make_smart<ExprVar>(at, fakeName);
+            auto fakeVar = new ExprVar(at, fakeName);
             fakeVar->type = fakeVariable->type;
             fakeVar->variable = fakeVariable;
             fakeVar->local = true;
             // make fake invoke expression
-            auto fakeInvoke = make_smart<ExprInvoke>(at,"invoke");
+            auto fakeInvoke = new ExprInvoke(at,"invoke");
             fakeInvoke->arguments.push_back(block);
             fakeInvoke->arguments.push_back(fakeVar);
             // simulate it
@@ -844,15 +844,15 @@ namespace das
             auto & val = values[index];
             if ( val->rtti_isMakeLocal() ) {
                 uint32_t offset =  extraOffset + index*stride;
-                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto mkl = static_cast<ExprMakeLocal*>(val);
                 mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( val->rtti_isCall() ) {
-                auto cll = static_pointer_cast<ExprCall>(val);
+                auto cll = static_cast<ExprCall*>(val);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( val->rtti_isInvoke() ) {
-                auto cll = static_pointer_cast<ExprInvoke>(val);
+                auto cll = static_cast<ExprInvoke*>(val);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
@@ -889,7 +889,7 @@ namespace das
             SimNode * cpy;
             if ( val->rtti_isMakeLocal() ) {
                 // so what happens here, is we ask it for the generated commands and append it to this list only
-                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto mkl = static_cast<ExprMakeLocal*>(val);
                 auto lsim = mkl->simulateLocal(context);
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
@@ -944,15 +944,15 @@ namespace das
             auto & val = values[index];
             if ( val->rtti_isMakeLocal() ) {
                 uint32_t offset =  extraOffset + makeType->getTupleFieldOffset(index);
-                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto mkl = static_cast<ExprMakeLocal*>(val);
                 mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( val->rtti_isCall() ) {
-                auto cll = static_pointer_cast<ExprCall>(val);
+                auto cll = static_cast<ExprCall*>(val);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( val->rtti_isInvoke() ) {
-                auto cll = static_pointer_cast<ExprInvoke>(val);
+                auto cll = static_cast<ExprInvoke*>(val);
                 if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
@@ -988,7 +988,7 @@ namespace das
             SimNode * cpy;
             if ( val->rtti_isMakeLocal() ) {
                 // so what happens here, is we ask it for the generated commands and append it to this list only
-                auto mkl = static_pointer_cast<ExprMakeLocal>(val);
+                auto mkl = static_cast<ExprMakeLocal*>(val);
                 auto lsim = mkl->simulateLocal(context);
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
                 continue;
@@ -1156,15 +1156,15 @@ namespace das
     SimNode * ExprAssert::simulate (Context & context) const {
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
-            message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
+            message = static_cast<ExprConstString*>(arguments[1])->getValue();
         return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.constStringHeap->impl_allocateString(message));
     }
 
     struct SimNode_AstGetExpression : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_AstGetExpression ( const LineInfo & at, const ExpressionPtr & e, char * d )
+        SimNode_AstGetExpression ( const LineInfo & at, ExpressionPtr e, char * d )
             : SimNode_CallBase(at,"") {
-            expr = e.get();
+            expr = e;
             descr = d;
         }
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
@@ -1180,7 +1180,7 @@ namespace das
         }
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
-            return (char *) expr->clone().orphan();
+            return (char *) expr->clone();
         }
         Expression *  expr;   // requires RTTI
         char *        descr;
@@ -1199,7 +1199,7 @@ namespace das
         TypeInfo * pTypeInfo = context.thisHelper->makeTypeInfo(nullptr, arguments[0]->type);
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
-            message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
+            message = static_cast<ExprConstString*>(arguments[1])->getValue();
         return context.code->makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
@@ -1232,7 +1232,7 @@ namespace das
 
     SimNode * ExprMakeBlock::simulate (Context & context) const {
         gc_guard gc_scope;
-        auto blk = static_pointer_cast<ExprBlock>(block);
+        auto blk = static_cast<ExprBlock*>(block);
         uint32_t argSp = blk->stackTop;
         auto bt = blk->makeBlockType();
         auto info = context.thisHelper->makeInvokeableTypeDebugInfo(bt,blk->at);
@@ -1254,13 +1254,13 @@ namespace das
         if ( isInvokeMethod ) {
             bool foundOffset = false;
             if ( arguments[0]->rtti_isField() ) {
-                auto field = static_pointer_cast<ExprField>(arguments[0]);
+                auto field = static_cast<ExprField*>(arguments[0]);
                 methodOffset = field->fieldRef->offset;
                 foundOffset = true;
             } else if ( arguments[0]->rtti_isR2V() ) {
-                auto eR2V = static_pointer_cast<ExprRef2Value>(arguments[0]);
+                auto eR2V = static_cast<ExprRef2Value*>(arguments[0]);
                 if ( eR2V->subexpr->rtti_isField() ) {
-                    auto field = static_pointer_cast<ExprField>(eR2V->subexpr);
+                    auto field = static_cast<ExprField*>(eR2V->subexpr);
                     methodOffset = field->fieldRef->offset;
                     foundOffset = true;
                 }
@@ -1641,7 +1641,7 @@ namespace das
             uint32_t stride = subexpr->type->getStride();
             if ( index->rtti_isConstant() ) {
                 // if its constant index, like a[3]..., we try to let node bellow simulate
-                auto idxCE = static_pointer_cast<ExprConst>(index);
+                auto idxCE = static_cast<ExprConst*>(index);
                 uint32_t idxC = cast<uint32_t>::to(idxCE->value);
                 if ( idxC >= range ) {
                     context.thisProgram->error("index out of range " + to_string(idxC) + " of " + to_string(range) + ", " + describe(), "", "",
@@ -1821,14 +1821,14 @@ namespace das
         vector<SimNode *> simlist;
         for ( auto & node : lis ) {
             if ( node->rtti_isLet()) {
-                auto pLet = static_pointer_cast<ExprLet>(node);
-                auto letInit = ExprLet::simulateInit(context, pLet.get());
+                auto pLet = static_cast<ExprLet*>(node);
+                auto letInit = ExprLet::simulateInit(context, pLet);
                 simlist.insert(simlist.end(), letInit.begin(), letInit.end());
                 continue;
             }
             if ( node->rtti_isLabel() ) {
                 if ( ofsmap ) {
-                    auto lnode = static_pointer_cast<ExprLabel>(node);
+                    auto lnode = static_cast<ExprLabel*>(node);
                     (*ofsmap)[lnode->label] = uint32_t(simlist.size());
                 }
                 continue;
@@ -2311,13 +2311,13 @@ namespace das
 
     // we flatten or(or(or(a,b),c),d) into a single vector {a,b,c,d}
     void flattenOrSequence ( const ExprOp2 * op, vector<ExpressionPtr> & ret ) {
-        if ( op->left->rtti_isOp2() && static_pointer_cast<ExprOp2>(op->left)->op==op->op ) {
-            flattenOrSequence(static_pointer_cast<ExprOp2>(op->left).get(), ret);
+        if ( op->left->rtti_isOp2() && static_cast<ExprOp2*>(op->left)->op==op->op ) {
+            flattenOrSequence(static_cast<ExprOp2*>(op->left), ret);
         } else {
             ret.push_back(op->left);
         }
-        if ( op->right->rtti_isOp2() && static_pointer_cast<ExprOp2>(op->right)->op==op->op ) {
-            flattenOrSequence(static_pointer_cast<ExprOp2>(op->right).get(), ret);
+        if ( op->right->rtti_isOp2() && static_cast<ExprOp2*>(op->right)->op==op->op ) {
+            flattenOrSequence(static_cast<ExprOp2*>(op->right), ret);
         } else {
             ret.push_back(op->right);
         }
@@ -2449,7 +2449,7 @@ namespace das
         // return string is its own thing
         if (subexpr && subexpr->type && subexpr->rtti_isConstant()) {
             if (subexpr->type->isSimpleType(Type::tString)) {
-                auto cVal = static_pointer_cast<ExprConstString>(subexpr);
+                auto cVal = static_cast<ExprConstString*>(subexpr);
                 char * str = context.constStringHeap->impl_allocateString(cVal->text);
                 return context.code->makeNode<SimNode_ReturnConstString>(at, str);
             }
@@ -2457,7 +2457,7 @@ namespace das
         // now, lets do the standard everything
         bool skipIt = false;
         if ( subexpr && subexpr->rtti_isMakeLocal() ) {
-            if ( static_pointer_cast<ExprMakeLocal>(subexpr)->useCMRES ) {
+            if ( static_cast<ExprMakeLocal*>(subexpr)->useCMRES ) {
                 skipIt = true;
             }
         }
@@ -2465,7 +2465,7 @@ namespace das
         if (!subexpr) {
             return context.code->makeNode<SimNode_ReturnNothing>(at);
         } else if ( subexpr->rtti_isConstant() ) {
-            auto cVal = static_pointer_cast<ExprConst>(subexpr);
+            auto cVal = static_cast<ExprConst*>(subexpr);
             return context.code->makeNode<SimNode_ReturnConst>(at, cVal->value);
         }
         if ( returnReference ) {
@@ -2502,7 +2502,7 @@ namespace das
             } else if ( returnCMRES ) {
                 // ReturnLocalCMRes
                 if ( subexpr->rtti_isMakeLocal() ) {
-                    auto mkl = static_pointer_cast<ExprMakeLocal>(subexpr);
+                    auto mkl = static_cast<ExprMakeLocal*>(subexpr);
                     if ( mkl->useCMRES ) {
                         SimNode_Block * blockT = context.code->makeNode<SimNode_ReturnLocalCMRes>(at);
                         auto simlist = mkl->simulateLocal(context);
@@ -2550,7 +2550,7 @@ namespace das
     }
 
     SimNode * ExprIfThenElse::simulate (Context & context) const {
-        ExpressionPtr zeroCond;
+        ExpressionPtr zeroCond = nullptr;
         bool condIfZero = false;
         bool match0 = matchEquNequZero(cond, zeroCond, condIfZero);
 #if DAS_DEBUGGER
@@ -2631,9 +2631,9 @@ namespace das
         return nullptr;
     }
 
-    void ExprWhile::simulateFinal ( Context & context, const ExpressionPtr & bod, SimNode_Block * blk ) {
+    void ExprWhile::simulateFinal ( Context & context, ExpressionPtr bod, SimNode_Block * blk ) {
         if ( bod->rtti_isBlock() ) {
-            auto pBlock = static_pointer_cast<ExprBlock>(bod);
+            auto pBlock = static_cast<ExprBlock*>(bod);
             pBlock->simulateBlock(context, blk);
             pBlock->simulateFinal(context, blk);
         } else {
@@ -2772,7 +2772,7 @@ namespace das
             bool NF = flagsE == 0;
             SimNode_ForBase * result;
             DAS_ASSERT(body->rtti_isBlock() && "there would be internal error otherwise");
-            auto subB = static_pointer_cast<ExprBlock>(body);
+            auto subB = static_cast<ExprBlock*>(body);
             bool loop1 = (subB->list.size() == 1);
 #if DAS_DEBUGGER
             if ( context.debugger ) {
@@ -2952,7 +2952,7 @@ namespace das
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
                                                                  var->init->simulate(context));
         } else if ( var->init_via_move && (var->type->canMove() || var->type->isGoodBlockType()) ) {
-            auto varExpr = make_smart<ExprVar>(var->at, var->name);
+            auto varExpr = new ExprVar(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = new TypeDecl(*var->type);
@@ -2962,7 +2962,7 @@ namespace das
             }
             return retN;
         } else if ( !var->init_via_move && (var->type->canCopy() || var->type->isGoodBlockType()) ) {
-            auto varExpr = make_smart<ExprVar>(var->at, var->name);
+            auto varExpr = new ExprVar(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = new TypeDecl(*var->type);
@@ -2972,14 +2972,14 @@ namespace das
             }
             return retN;
         } else if ( var->isCtorInitialized() ) {
-            auto varExpr = make_smart<ExprVar>(var->at, var->name);
+            auto varExpr = new ExprVar(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
             varExpr->type = new TypeDecl(*var->type);
             SimNode * retN = nullptr; // it has to be CALL with CMRES
             const auto & rE = var->init;
             if ( rE->rtti_isCall() ) {
-                auto cll = static_pointer_cast<ExprCall>(rE);
+                auto cll = static_cast<ExprCall*>(rE);
                 if ( cll->allowCmresSkip() ) {
                     retN = rE->simulate(context);
                     getCallBase(retN)->cmresEval = varExpr->simulate(context);
@@ -3192,7 +3192,7 @@ namespace das
                 if ( !fn->used ) return;
                 if ( fn->isTemplate ) return;
                 das_hash_set<Function *> visited;
-                fn->recursive = isRecursive(fn.get(), visited);
+                fn->recursive = isRecursive(fn, visited);
             });
         }
     }
@@ -3321,7 +3321,7 @@ namespace das
                     }
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
-                    fnByMnh[MNH] = pfun.get();
+                    fnByMnh[MNH] = pfun;
                     auto & gfun = context.functions[pfun->index];
                     gfun.name = context.code->allocateName(pfun->name);
                     gfun.mangledName = context.code->allocateName(mangledName);
@@ -3434,7 +3434,7 @@ namespace das
                             LineInfo(), CompilationError::cant_initialize);
                     }
                 }
-                indexToFunction[pfun->index] = pfun.get();
+                indexToFunction[pfun->index] = pfun;
             });
         }
         // verify code and string heaps
@@ -3641,7 +3641,7 @@ namespace das
         for (auto & pm : library.modules) {
             pm->globals.foreach([&](auto var){
                 if (var->used) {
-                    globs.push_back(var.get());
+                    globs.push_back(var);
                 }
             });
         }
@@ -3668,8 +3668,8 @@ namespace das
             pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
-                fnn.push_back(pfun.get());
-                indexToFunction[pfun->index] = pfun.get();
+                fnn.push_back(pfun);
+                indexToFunction[pfun->index] = pfun;
             });
         }
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {

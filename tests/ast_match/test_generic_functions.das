@@ -57,9 +57,9 @@ def target_branch(a : int; threshold : int) : int {
 [test]
 def test_add_int_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        t |> success(get_ptr(func) != null, "should find target_add_int")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        t |> success(func != null, "should find target_add_int")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) {
@@ -78,8 +78,8 @@ def test_add_int_match(t : T?) {
 [test]
 def test_add_float_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_float)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_float)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : float) {
@@ -98,8 +98,8 @@ def test_add_float_match(t : T?) {
 [test]
 def test_identity_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_identity)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_identity)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x : int) {
@@ -118,8 +118,8 @@ def test_identity_match(t : T?) {
 [test]
 def test_wrong_generic_name(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) {
@@ -132,8 +132,8 @@ def test_wrong_generic_name(t : T?) {
 [test]
 def test_wrong_pattern(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) {
@@ -147,8 +147,8 @@ def test_wrong_pattern(t : T?) {
 [test]
 def test_capture_names(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        if (func == null) {
             return
         }
         var call_name, lhs_name, rhs_name : string
@@ -169,13 +169,13 @@ def test_capture_names(t : T?) {
 [test]
 def test_branch_match(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_branch)
-        t |> success(get_ptr(func) != null, "should find target_branch")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_branch)
+        t |> success(func != null, "should find target_branch")
+        if (func == null) {
             return
         }
         // After optimization, may fold to ternary or stay as call
-        var inscope cond : ExpressionPtr
+        var cond : ExpressionPtr
         let r_call = qmatch_function(func) $(a : int; threshold : int) {
             return generic_branch(a, threshold)
         }
@@ -189,8 +189,8 @@ def test_branch_match(t : T?) {
 [test]
 def test_add_arg_types(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        if (func == null) {
             return
         }
         // Verify arg types are int (not auto)
@@ -210,8 +210,8 @@ def test_add_arg_types(t : T?) {
 [test]
 def test_float_arg_types_dont_match_int(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add_int)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add_int)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a : float; b : float) : float {

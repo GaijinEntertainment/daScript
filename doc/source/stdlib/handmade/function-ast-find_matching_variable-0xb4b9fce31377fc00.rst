@@ -1,0 +1,1 @@
+Searches the program for global variables matching the given name that are visible from the specified function's scope. The matching variables are passed to the provided block as a temporary array.

@@ -464,12 +464,12 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 funptr = getDllAddress(ba.library, ba.fn_name, ba.api == ApiType::api_opengl, err);
                 if ( !funptr ) return false;
             }
-            auto wrp = computeWrapper(fun.get());
+            auto wrp = computeWrapper(fun);
             uint64_t code = lateBind(ba.fn_name, ba.library, funptr);
-            auto bif = make_smart<DasBindFunction>(bindName, code, funptr, ba, wrp);
+            auto bif = new DasBindFunction(bindName, code, funptr, ba, wrp);
             bif->result = fun->result;
             for ( auto & a : fun->arguments ) {
-                auto newArg = make_smart<Variable>();
+                auto newArg = new Variable();
                 newArg->name = a->name;
                 newArg->type = a->type;
                 bif->arguments.push_back(newArg);
@@ -483,19 +483,19 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( !module->addFunction(bif, true) ) {
                 module->replaceFunction(bif);
             }
-            transformMap[fun.get()] = bindName;
+            transformMap[fun] = bindName;
             return true;
         }
 
         static bool needWrapArg(ExpressionPtr arg) {
             if ( arg->type->isString() ) {
                 if ( arg->rtti_isCallFunc() ) {
-                    auto pCall = static_pointer_cast<ExprCallFunc>(arg);
+                    auto pCall = static_cast<ExprCallFunc*>(arg);
                     if ( pCall->func->name!="safe_pass_string") {
                         return true;
                     }
                 } else if ( strcmp(arg->__rtti,"ExprConstString")==0 ) {
-                    auto str = static_pointer_cast<ExprConstString>(arg);
+                    auto str = static_cast<ExprConstString*>(arg);
                     if ( str->getValue().empty()) {
                         return true;
                     }
@@ -516,17 +516,17 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             });
             if ( !needToTransform && !hasBindFunction ) return nullptr;
             // clone call, optionally retargeting to the DasBindFunction
-            ExpressionPtr newCallExpr;
+            ExpressionPtr newCallExpr = nullptr;
             DAS_ASSERTF(hasBindFunction, "All dasbind functions should have been mapped, %s is not mapped somehow.", call->func->name.c_str());
-            newCallExpr = make_smart<ExprCall>(call->at, it->second);
+            newCallExpr = new ExprCall(call->at, it->second);
             for ( auto & arg : call->arguments ) {
-                static_cast<ExprCall*>(newCallExpr.get())->arguments.push_back(arg->clone());
+                static_cast<ExprCall*>(newCallExpr)->arguments.push_back(arg->clone());
             }
             // wrap string arguments with safe_pass_string
-            auto & newArgs = static_cast<ExprCallFunc*>(newCallExpr.get())->arguments;
+            auto & newArgs = static_cast<ExprCallFunc*>(newCallExpr)->arguments;
             for ( auto & arg : newArgs ) {
                 if ( needWrapArg(arg) ) {
-                    auto wrapCall = make_smart<ExprCall>(arg->at,"safe_pass_string");
+                    auto wrapCall = new ExprCall(arg->at,"safe_pass_string");
                     wrapCall->arguments.push_back(arg->clone());
                     arg = wrapCall;
                 }

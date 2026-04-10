@@ -422,8 +422,8 @@ namespace das {
             Visitor::preVisit(call);
             if ( call->name=="invoke" ) {   // invoke of anonymous block
                 if ( call->arguments.size() && call->arguments[0]->rtti_isMakeBlock() ) {
-                    auto mkb = static_pointer_cast<ExprMakeBlock>(call->arguments[0]);
-                    auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                    auto mkb = static_cast<ExprMakeBlock*>(call->arguments[0]);
+                    auto blk = static_cast<ExprBlock*>(mkb->block);
                     blk->aotSkipMakeBlock = true;
                 }
             }
@@ -450,7 +450,7 @@ namespace das {
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
             if ( func && func->hasMakeBlock ) {
-                auto block = static_pointer_cast<ExprBlock>(expr->block);
+                auto block = static_cast<ExprBlock*>(expr->block);
                 if ( !block->aotSkipMakeBlock ) {
                     func->aotNeedPrologue = true;
                 }
@@ -915,7 +915,7 @@ namespace das {
                 if (!isAll) {
                     if ( pfun->builtIn || pfun->noAot) return;
                 }
-                fnn.push_back(pfun.get());
+                fnn.push_back(pfun);
             });
         }
         return fnn;
@@ -942,11 +942,8 @@ namespace das {
             auto it = rename.find(var);
             return it==rename.end() ? var->name : it->second;
         }
-        string getVarName ( const VariablePtr & var ) const {
-            return getVarName(var.get());
-        }
         __forceinline bool isMoved(const VariablePtr & var) const {
-            return moved.find(var.get()) != moved.end();
+            return moved.find(var) != moved.end();
         }
         void renameVariable ( Variable * var, const string & newName ) {
             rename[var] = newName;
@@ -970,18 +967,18 @@ namespace das {
         virtual void preVisitFor ( ExprFor * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitFor(expr,var,last);
             for ( auto & varr : expr->iteratorVariables ) {
-                renameVariable(varr.get());
+                renameVariable(varr);
             }
         }
     // block argument
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
-            renameVariable(var.get());
+            renameVariable(var);
         }
     // functon argument
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitArgument(fn, var, lastArg);
-            renameVariable(var.get());
+            renameVariable(var);
         }
     // let
         ExprBlock * getCurrentBlock() const {
@@ -1018,10 +1015,10 @@ namespace das {
             Visitor::preVisitLet(let, var, last);
             if ( auto bfinal = getFinalBlock() ) {
                 bfinal = getTopBlock();
-                variables[bfinal].push_back(var.get());
-                moved.insert(var.get());
+                variables[bfinal].push_back(var);
+                moved.insert(var);
             }
-            renameVariable(var.get());
+            renameVariable(var);
         }
     // make array
         virtual void preVisit ( ExprMakeArray * expr ) override {
@@ -1268,7 +1265,7 @@ namespace das {
             ss << "\n";
             prog->thisModule->functions.foreach([&](auto fn){
                 if ( !fn->builtIn && !fn->noAot && !fn->isTemplate ) {
-                    ss << describeCppFunc(fn.get(),&collector) << ";\n";
+                    ss << describeCppFunc(fn,&collector) << ";\n";
                 }
             });
             ss << "\n";
@@ -1483,8 +1480,8 @@ namespace das {
             Visitor::preVisitLet(let, var, last);
             auto vname = collector.getVarName(var);
             if ( var->init && var->init->rtti_isMakeBlock() ) {
-                auto mkb = static_pointer_cast<ExprMakeBlock>(var->init);
-                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                auto mkb = static_cast<ExprMakeBlock*>(var->init);
+                auto blk = static_cast<ExprBlock*>(mkb->block);
                 blk->aotSkipMakeBlock = true;
                 ss << "auto " << vname << "_TempFunctor = ";
                 var->init->visit(*this);
@@ -1626,7 +1623,7 @@ namespace das {
                     auto blk = *it;
                     for ( const auto & ex : blk->list ) {
                         if ( ex->rtti_isLabel() ) {
-                            auto lab = static_pointer_cast<ExprLabel>(ex);
+                            auto lab = static_cast<ExprLabel*>(ex);
                             ss << tabs() << "case " << lab->label <<": goto label_" << lab->label << ";\n";
                         }
                     }
@@ -1697,7 +1694,7 @@ namespace das {
                 that->arguments.clear();
                 that->arguments.push_back(that->subexpr);
                 CallFunc_preVisit(that);
-                CallFunc_preVisitCallArg(that, that->subexpr.get(), true);
+                CallFunc_preVisitCallArg(that, that->subexpr, true);
             } else if ( isOpPolicy(that) ){
                 outPolicy(that->subexpr->type);
                 ss << "::" << opPolicyName(that) << "(";
@@ -1710,7 +1707,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprOp1 * that ) override {
             if ( !that->func->builtIn || that->func->callBased ) {
-                CallFunc_visitCallArg(that, that->subexpr.get(), true);
+                CallFunc_visitCallArg(that, that->subexpr, true);
                 CallFunc_visit(that);
                 that->arguments.clear();
             } else if ( isOpPolicy(that) ){
@@ -1778,7 +1775,7 @@ namespace das {
                 that->arguments.push_back(that->left);
                 that->arguments.push_back(that->right);
                 CallFunc_preVisit(that);
-                CallFunc_preVisitCallArg(that, that->left.get(), false);
+                CallFunc_preVisitCallArg(that, that->left, false);
             } else if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
                 if ( policyResultNeedCast(pt, that->type) ) {
@@ -1805,8 +1802,8 @@ namespace das {
         virtual void preVisitRight ( ExprOp2 * that, Expression * right ) override {
             Visitor::preVisitRight(that,right);
             if ( !that->func->builtIn || that->func->callBased ) {
-                CallFunc_visitCallArg(that, that->left.get(), false);
-                CallFunc_preVisitCallArg(that, that->right.get(), true);
+                CallFunc_visitCallArg(that, that->left, false);
+                CallFunc_preVisitCallArg(that, that->right, true);
             } else if ( isOpPolicy(that) ) {
                 auto pt = opPolicyBase(that);
                 if ( isRefPolicyOp(that) && (pt->isVectorType() || pt->isString()) ) {
@@ -1844,7 +1841,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprOp2 * that ) override {
             if ( !that->func->builtIn || that->func->callBased ) {
-                CallFunc_visitCallArg(that, that->right.get(), true);
+                CallFunc_visitCallArg(that, that->right, true);
                 CallFunc_visit(that);
                 that->arguments.clear();
             } else if ( isOpPolicy(that) ) {
@@ -2563,7 +2560,7 @@ namespace das {
         virtual void preVisit ( ExprWhile * wh ) override {
             Visitor::preVisit(wh);
             if ( wh->body->rtti_isBlock() ) {
-                auto * block = static_cast<ExprBlock *>(wh->body.get());
+                auto * block = static_cast<ExprBlock *>(wh->body);
                 if ( !block->finalList.empty() ) {
                     ss << "{\n";
                     tab ++;
@@ -2580,7 +2577,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprWhile * wh ) override {
             if ( wh->body->rtti_isBlock() ) {
-                auto * block = static_cast<ExprBlock *>(wh->body.get());
+                auto * block = static_cast<ExprBlock *>(wh->body);
                 if ( !block->finalList.empty() ) {
                     tab --;
                     ss << "\n" << tabs() << "}";
@@ -3137,10 +3134,10 @@ namespace das {
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             if ( expr->block ) {
                 DAS_ASSERT(expr->block->rtti_isMakeBlock());
-                auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+                auto mkb = static_cast<ExprMakeBlock*>(expr->block);
                 DAS_ASSERT(mkb->block->rtti_isBlock());
-                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
-                collector.renameVariable(blk->arguments[0].get(), mksName(expr));
+                auto blk = static_cast<ExprBlock*>(mkb->block);
+                collector.renameVariable(blk->arguments[0], mksName(expr));
                 ss << tabs();
                 blk->visit(*this);
             }
@@ -3261,7 +3258,7 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
-            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            auto block = static_cast<ExprBlock*>(expr->block);
             if ( !block->aotSkipMakeBlock ) {
                 ss << "das_make_block";
                 if ( block->returnType->isRefType() && !block->returnType->ref ) {
@@ -3313,7 +3310,7 @@ namespace das {
             }
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
-            auto block = static_pointer_cast<ExprBlock>(expr->block);
+            auto block = static_cast<ExprBlock*>(expr->block);
             if ( !block->aotSkipMakeBlock ) {
                 ss << ")";
             }
@@ -3361,9 +3358,9 @@ namespace das {
                 if ( bt==Type::tFunction ) {
                     auto einv = static_cast<ExprInvoke *>(call);
                     if ( einv->isInvokeMethod ) {
-                        auto firstArg = call->arguments[0].get();
+                        auto firstArg = call->arguments[0];
                         if ( firstArg->rtti_isR2V() ) {
-                            firstArg = static_cast<ExprRef2Value *>(firstArg)->subexpr.get();
+                            firstArg = static_cast<ExprRef2Value *>(firstArg)->subexpr;
                         }
                         if ( firstArg->rtti_isField() ) {
                             auto field = static_cast<ExprField *>(firstArg);
@@ -3419,7 +3416,7 @@ namespace das {
             }
         }
         virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool ) override {
-            if ( call->arguments.size()>=1 && call->arguments[0].get()==arg &&  call->rtti_isInvoke() ) {
+            if ( call->arguments.size()>=1 && call->arguments[0]==arg &&  call->rtti_isInvoke() ) {
                 auto * inv = (ExprInvoke *) call;
                 if ( inv->isInvokeMethod ) return false;
             }
@@ -3542,7 +3539,7 @@ namespace das {
         bool needsArgPass ( Expression * expr ) const {
             if ( expr->rtti_isMakeBlock() ) {
                 auto mkblock = static_cast<ExprMakeBlock *>(expr);
-                auto block = static_pointer_cast<ExprBlock>(mkblock->block);
+                auto block = static_cast<ExprBlock*>(mkblock->block);
                 if ( block->aotSkipMakeBlock ) {
                     return false;
                 }
@@ -3667,7 +3664,7 @@ namespace das {
             auto it = call->arguments.begin();
             auto its = call->arguments.end();
             for ( ; it!=its; ++it, ++argIndex ) {
-                if ( it->get()==arg ) {
+                if ( *it==arg ) {
                     break;
                 }
             }
@@ -3713,7 +3710,7 @@ namespace das {
             auto it = call->arguments.begin();
             auto its = call->arguments.end();
             for ( ; it!=its; ++it, ++argIndex ) {
-                if ( it->get()==arg ) {
+                if ( *it==arg ) {
                     break;
                 }
             }
@@ -3837,15 +3834,15 @@ namespace das {
             size_t idx;
             auto idxs = ffor->sources.size();
             for ( idx=0; idx!=idxs; ++idx ) {
-                if ( ffor->sources[idx].get()==that ) {
+                if ( ffor->sources[idx]==that ) {
                     break;
                 }
             }
             auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
             ss << tabs() << "// " << var->name << ": " << var->type->describe() << "\n";
-            if ( isCountOrUCount(src.get()) ) {
-                ss << tabs() << "das_iterator_" << ((ExprCallFunc *) src.get())->func->name << " DAS_COMMENT(";
+            if ( isCountOrUCount(src) ) {
+                ss << tabs() << "das_iterator_" << ((ExprCallFunc *) src)->func->name << " DAS_COMMENT(";
             } else {
                 ss << tabs() << "das_iterator<"
                     << describeCppType(src->type,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
@@ -3856,14 +3853,14 @@ namespace das {
             size_t idx;
             auto idxs = ffor->sources.size();
             for ( idx=0; idx!=idxs; ++idx ) {
-                if ( ffor->sources[idx].get()==that ) {
+                if ( ffor->sources[idx]==that ) {
                     break;
                 }
             }
             auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
-            if ( isCountOrUCount(src.get()) ) {
-                auto pCall = ((ExprCall *) src.get());
+            if ( isCountOrUCount(src) ) {
+                auto pCall = ((ExprCall *) src);
                 ss << ") " << forSrcName(var->name) << "(";
                 pCall->arguments[0]->visit(*this);
                 ss << ",";
@@ -4231,7 +4228,7 @@ namespace das {
                 pm->globals.foreach([&]( VariablePtr pvar ){
                     if ( pvar->index < 0 || !pvar->used ) return;
                     if ( pvar->module == prog->thisModule.get() ) return;
-                    globals.push_back(pvar.get());
+                    globals.push_back(pvar);
                 });
                 return true;
             }, "*");
@@ -4239,9 +4236,9 @@ namespace das {
             for ( auto var : globals ) {
                 preVisitGlobalLet(var);
                 if ( var->init ) {
-                    preVisitGlobalLetInit(var, var->init.get());
+                    preVisitGlobalLetInit(var, var->init);
                     var->init = var->init->visit(*this);
-                    var->init = visitGlobalLetInit(var, var->init.get());
+                    var->init = visitGlobalLetInit(var, var->init);
                 }
                 auto varn = visitGlobalLet(var);
             }
@@ -4308,7 +4305,7 @@ namespace das {
                 if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
                 SimFunction * fn = context.getFunction(fni);
-                pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
+                pfun->hash = getFunctionHash(pfun, fn->code, &context);
                 fni++;
             });
         }
@@ -4318,7 +4315,7 @@ namespace das {
             pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used || pfun->isTemplate)
                     return;
-                pfun->aotHash = getFunctionAotHash(pfun.get());
+                pfun->aotHash = getFunctionAotHash(pfun);
                 fni++;
             });
         }
@@ -4336,7 +4333,7 @@ namespace das {
         bool remUS = program->options.getBoolOption("remove_unused_symbols",true);
         for ( auto & pm : program->library.getModules() ) {
             pm->structures.foreach([&](auto ps){
-                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
+                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps) << "; };\n";
             });
         }
         for ( auto & pm : program->library.getModules() ) {
@@ -4348,7 +4345,7 @@ namespace das {
                 enums.emplace(penum->name, penum);
             });
             for (const auto &[name, penum]: ordered(enums)) {
-                auto pe = penum.get();
+                auto pe = penum;
                 if ( !remUS || utm.useEnums.find(pe)!=utm.useEnums.end() ) {
                     program->visitEnumeration(aotVisitor, pe);
                 } else {
@@ -4356,8 +4353,8 @@ namespace das {
                 }
             }
             pm->structures.foreach([&](auto ps){
-                if ( !remUS || utm.useStructs.find(ps.get())!=utm.useStructs.end() ) {
-                    program->visitStructure(aotVisitor, ps.get());
+                if ( !remUS || utm.useStructs.find(ps)!=utm.useStructs.end() ) {
+                    program->visitStructure(aotVisitor, ps);
                 } else {
                     aotVisitor.ss << "// unused structure " << ps->name << "\n";
                 }

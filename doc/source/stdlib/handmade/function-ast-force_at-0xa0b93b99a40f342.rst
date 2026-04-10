@@ -1,0 +1,1 @@
+Overrides the line information of the specified function and all expressions within its body to the given location. Useful for macro-generated functions that should point to a specific source location.

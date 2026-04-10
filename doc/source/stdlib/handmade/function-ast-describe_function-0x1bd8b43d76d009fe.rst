@@ -1,0 +1,1 @@
+Returns a human-readable string description of the specified function, including its name, arguments, and return type.

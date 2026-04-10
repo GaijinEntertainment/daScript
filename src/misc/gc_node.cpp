@@ -10,6 +10,10 @@
 
 namespace das {
 
+    // debugging id - to break on
+
+    static uint64_t gc_break_on_id = 0;
+
     // ---- gc_root statics ----
 
     static thread_local gc_root     s_gc_thread_root;
@@ -76,11 +80,12 @@ namespace das {
         while ( gc_first ) {
             auto node = gc_first;
             gc_unlink(node);
+            uint32_t swept_magic = GC_MAGIC_SWEPT_PREFIX | (node->gc_magic & 0xFFFFu);
 #if DAS_GC_DEBUG
             // !!! DO NOT REMOVE !!!
             // Memory poisoning mode for debugging use-after-sweep.
             // Destroys the object but keeps memory allocated with 0xCD fill.
-            // gc_magic and gc_id are restored so crashed nodes can be identified.
+            // gc_magic (with type tag) and gc_id are restored so crashed nodes can be identified.
             // Set DAS_GC_DEBUG=1 to enable, then use DAS_GC_BREAK_ON_ID to find the creator.
             {
                 uint64_t saved_id = node->gc_id;
@@ -91,11 +96,11 @@ namespace das {
                 auto sz = malloc_usable_size(node);
 #endif
                 memset(node, 0xCD, sz);
-                node->gc_magic = GC_MAGIC_SWEPT;
+                node->gc_magic = swept_magic;
                 node->gc_id = saved_id;
             }
 #else
-            node->gc_magic = GC_MAGIC_SWEPT;
+            node->gc_magic = swept_magic;
             delete node;
 #endif
         }
@@ -115,8 +120,8 @@ namespace das {
         DAS_FATAL_LOG("gc_root %p: count=%" PRIu64 "\n", (const void *)this, gc_count);
         auto node = gc_first;
         while ( node ) {
-            DAS_FATAL_LOG("  node %p: id=%" PRIu64 " magic=0x%08x\n",
-                (const void *)node, node->gc_id, node->gc_magic);
+            DAS_FATAL_LOG("  node %p: id=%" PRIu64 " type=%s magic=0x%08x\n",
+                (const void *)node, node->gc_id, node->gc_type_name(), node->gc_magic);
             node = node->gc_next;
         }
     }
@@ -125,13 +130,33 @@ namespace das {
     // Set gc_break_on_id via debugger or env DAS_GC_BREAK_ON_ID to break
     // when a specific gc_id is assigned. Useful for tracing where a leaked node was born.
 
-    static uint64_t gc_break_on_id = 0;
-
     static uint64_t gc_init_break_on_id() {
         if ( auto env = getenv("DAS_GC_BREAK_ON_ID") ) {
             return strtoull(env, nullptr, 0);
         }
         return 0;
+    }
+
+    static void gc_print_stack_trace() {
+#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED && defined(_WIN32)
+        {
+            CONTEXT ctx;
+            RtlCaptureContext(&ctx);
+            print_stack_trace(&ctx);
+        }
+#elif DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
+        {
+            void * frames[64];
+            int nframes = backtrace(frames, 64);
+            char ** symbols = backtrace_symbols(frames, nframes);
+            if ( symbols ) {
+                for ( int i = 0; i < nframes; i++ ) {
+                    DAS_FATAL_LOG("  [%d] %s\n", i, symbols[i]);
+                }
+                free(symbols);
+            }
+        }
+#endif
     }
 
     static void gc_check_break ( uint64_t id ) {
@@ -141,28 +166,7 @@ namespace das {
         }
         if ( gc_break_on_id && id == gc_break_on_id ) {
             DAS_FATAL_LOG("gc_node break: id=%" PRIu64 "\n", id);
-/*
-#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED && defined(_WIN32)
-            {
-                CONTEXT ctx;
-                RtlCaptureContext(&ctx);
-                print_stack_trace(&ctx);
-            }
-#elif DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
-            // Unix: use backtrace
-            {
-                void * frames[64];
-                int nframes = backtrace(frames, 64);
-                char ** symbols = backtrace_symbols(frames, nframes);
-                if ( symbols ) {
-                    for ( int i = 0; i < nframes; i++ ) {
-                        DAS_FATAL_LOG("  [%d] %s\n", i, symbols[i]);
-                    }
-                    free(symbols);
-                }
-            }
-#endif
-*/
+            gc_print_stack_trace();
             os_debug_break();
         }
     }
@@ -243,12 +247,15 @@ namespace das {
             // During the migration period, this can happen legitimately when old code
             // paths delete TypeDecl. In DAS_GC_DEBUG mode, assert to catch bugs.
 #if DAS_GC_DEBUG
-            DAS_ASSERTF(gc_owner->gc_collecting,
-                "gc_node id=%" PRIu64 " deleted outside of gc_sweep", gc_id);
+            if ( !gc_owner->gc_collecting ) {
+                DAS_FATAL_LOG("gc_node id=%" PRIu64 " deleted outside of gc_sweep\n", gc_id);
+                gc_print_stack_trace();
+                DAS_ASSERTF(false, "gc_node id=%" PRIu64 " deleted outside of gc_sweep", gc_id);
+            }
 #endif
             gc_owner->gc_unlink(this);
         }
-        if ( gc_magic == GC_MAGIC_ALIVE ) {
+        if ( gc_is_alive() ) {
             gc_magic = GC_MAGIC_DEAD;
         }
     }
@@ -272,14 +279,30 @@ namespace das {
         new_root->gc_link(this);
     }
 
+    const char * gc_node::gc_type_name() const {
+        uint16_t tag = gc_magic & 0xFFFFu;
+        switch ( tag ) {
+            case GC_TAG_TYPEDECL:       return "TypeDecl";
+            case GC_TAG_EXPRESSION:     return "Expression";
+            case GC_TAG_MAKEFIELDDECL:  return "MakeFieldDecl";
+            case GC_TAG_MAKESTRUCT:     return "MakeStruct";
+            case GC_TAG_FUNCTION:       return "Function";
+            case GC_TAG_ENUMERATION:    return "Enumeration";
+            case GC_TAG_STRUCTURE:      return "Structure";
+            case GC_TAG_VARIABLE:       return "Variable";
+            default:                    return "gc_node";
+        }
+    }
+
     void gc_node::gc_verify() const {
-        if ( gc_magic != GC_MAGIC_ALIVE ) {
-            if ( gc_magic == GC_MAGIC_SWEPT ) {
-                DAS_FATAL_ERROR("gc_node id=%" PRIu64 " was already swept (use-after-sweep)", gc_id);
+        if ( !gc_is_alive() ) {
+            const char * typeName = gc_type_name();
+            if ( (gc_magic & 0xFFFF0000u) == GC_MAGIC_SWEPT_PREFIX ) {
+                DAS_FATAL_ERROR("%s id=%" PRIu64 " was already swept (use-after-sweep)", typeName, gc_id);
             } else if ( gc_magic == GC_MAGIC_DEAD ) {
-                DAS_FATAL_ERROR("gc_node id=%" PRIu64 " was already deleted (use-after-free)", gc_id);
+                DAS_FATAL_ERROR("%s id=%" PRIu64 " was already deleted (use-after-free)", typeName, gc_id);
             } else {
-                DAS_FATAL_ERROR("gc_node id=%" PRIu64 " has corrupt magic=0x%08x", gc_id, gc_magic);
+                DAS_FATAL_ERROR("%s id=%" PRIu64 " has corrupt magic=0x%08x", typeName, gc_id, gc_magic);
             }
         }
     }

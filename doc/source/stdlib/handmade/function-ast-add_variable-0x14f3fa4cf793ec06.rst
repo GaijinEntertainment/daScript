@@ -1,0 +1,1 @@
+Adds a global variable to the specified module. Returns true if the variable was added successfully, or false if a variable with the same name already exists.

@@ -36,7 +36,7 @@ class EnumTotalAnnotation : AstEnumerationAnnotation {
         }
         // Set total = number of original entries (before we added "total").
         // length(enu.list) is now N+1, so total = N+1-1 = N.
-        enu.list[idx].value |> move_new() <| new ExprConstInt(at = enu.at, value = length(enu.list) - 1)
+        enu.list[idx].value = new ExprConstInt(at = enu.at, value = length(enu.list) - 1)
         return true
     }
 }

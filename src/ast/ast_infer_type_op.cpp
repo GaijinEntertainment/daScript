@@ -36,10 +36,10 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                     reportAstChanged();
-                    auto popc = make_smart<ExprCall>(expr->at, pop);
+                    auto popc = new ExprCall(expr->at, pop);
                     auto stride = expr->subexpr->type->firstType->getSizeOf();
                     popc->arguments.push_back(expr->subexpr->clone());
-                    popc->arguments.push_back(make_smart<ExprConstInt>(expr->at, stride));
+                    popc->arguments.push_back(new ExprConstInt(expr->at, stride));
                     return popc;
                 } else {
                     error("pointer arithmetics only allows +, -, +=, -=, ++, --; not" + expr->op, "", "",
@@ -59,7 +59,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if (unsafeTableLookup && expr->subexpr->rtti_isAt()) { // tab[expr]++ is always safe
-                    auto pAt = static_cast<ExprAt *>(expr->subexpr.get());
+                    auto pAt = static_cast<ExprAt *>(expr->subexpr);
                     if (!pAt->alwaysSafe && pAt->subexpr->type && pAt->subexpr->type->isGoodTableType()) {
                         pAt->alwaysSafe = true;
                         reportAstChanged();
@@ -68,12 +68,12 @@ namespace das {
             }
         }
         auto opName = "_::" + expr->op;
-        auto tempCall = make_smart<ExprLooksLikeCall>(expr->at, opName);
+        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
         tempCall->arguments.push_back(expr->subexpr);
-        expr->func = inferFunctionCall(tempCall.get()).get();
+        expr->func = inferFunctionCall(tempCall);
         if (opName != tempCall->name) { // this happens when the operator gets instanced
             reportAstChanged();
-            auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+            auto opCall = new ExprCall(expr->at, tempCall->name);
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         }
@@ -91,7 +91,7 @@ namespace das {
                 error("unsafe operator '" + expr->name + "' must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && isConstExprFunc(expr->func)) {
-                if (auto se = getConstExpr(expr->subexpr.get())) {
+                if (auto se = getConstExpr(expr->subexpr)) {
                     expr->subexpr = se;
                     return evalAndFold(expr);
                 }
@@ -149,23 +149,23 @@ namespace das {
         Visitor::preVisit(expr);
         if (!strictProperties && isAssignmentOperator(expr->op)) {
             if (expr->left->rtti_isField()) {
-                auto field = static_pointer_cast<ExprField>(expr->left);
+                auto field = static_cast<ExprField*>(expr->left);
                 field->underClone = true;
             } else if (expr->left->rtti_isVar()) {
-                auto var = static_pointer_cast<ExprVar>(expr->left);
+                auto var = static_cast<ExprVar*>(expr->left);
                 var->underClone = true;
             } else if (expr->left->rtti_isAt()) {
-                auto at = static_pointer_cast<ExprAt>(expr->left);
+                auto at = static_cast<ExprAt*>(expr->left);
                 at->underClone = true;
             }
         }
     }
     void InferTypes::removeR2v(ExpressionPtr &expr) {
         if (expr->rtti_isCallLikeExpr()) {
-            auto call = static_pointer_cast<ExprLooksLikeCall>(expr);
+            auto call = static_cast<ExprLooksLikeCall*>(expr);
             if (call->arguments.size() == 2) {
                 if (call->arguments[1]->rtti_isR2V()) {
-                    auto arg = static_pointer_cast<ExprRef2Value>(call->arguments[1]);
+                    auto arg = static_cast<ExprRef2Value*>(call->arguments[1]);
                     call->arguments[1] = arg->subexpr;
                     reportAstChanged();
                 }
@@ -178,9 +178,9 @@ namespace das {
             auto opName = expr->op;
             opName.pop_back();
             if (expr->left->rtti_isVar()) {
-                ExprVar *evar = (ExprVar *)(expr->left.get());
+                ExprVar *evar = (ExprVar *)(expr->left);
                 if (auto propGet = promoteToProperty(evar, nullptr)) { // we need both get and set
-                    auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
+                    auto opRight = new ExprOp2(expr->at, opName, propGet, expr->right);
                     opRight->type = new TypeDecl(*expr->right->type);
                     if (auto cloneSet = promoteToProperty(evar, opRight)) {
                         removeR2v(cloneSet);
@@ -191,12 +191,12 @@ namespace das {
                     }
                 }
             } else if (expr->left->rtti_isField()) {
-                ExprField *efield = (ExprField *)(expr->left.get());
+                ExprField *efield = (ExprField *)(expr->left);
                 if (auto propSetOp = promoteToProperty(efield, expr->right, expr->op)) {
                     removeR2v(propSetOp);
                     return propSetOp;                                           // we need only set
                 } else if (auto propGet = promoteToProperty(efield, nullptr)) { // we need both get and set
-                    auto opRight = make_smart<ExprOp2>(expr->at, opName, propGet, expr->right);
+                    auto opRight = new ExprOp2(expr->at, opName, propGet, expr->right);
                     opRight->type = new TypeDecl(*expr->right->type);
                     if (auto cloneSet = promoteToProperty(efield, opRight)) {
                         removeR2v(cloneSet);
@@ -207,7 +207,7 @@ namespace das {
                     }
                 }
             } else if (expr->left->rtti_isAt()) {
-                ExprAt *eat = (ExprAt *)(expr->left.get());
+                ExprAt *eat = (ExprAt *)(expr->left);
                 auto complexName = "[]" + expr->name;
                 if (auto atComplex = inferGenericOperator3(complexName, eat->at, eat->subexpr, eat->index, expr->right)) {
                     atComplex->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
@@ -215,7 +215,7 @@ namespace das {
                     return atComplex;                                                                    // we need only set
                 } else if (auto atGet = inferGenericOperator("[]", eat->at, eat->subexpr, eat->index)) { // we need bot get and set
                     atGet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
-                    auto opRight = make_smart<ExprOp2>(expr->at, opName, atGet, expr->right);
+                    auto opRight = new ExprOp2(expr->at, opName, atGet, expr->right);
                     opRight->type = new TypeDecl(*expr->right->type);
                     if (auto atSet = inferGenericOperator3("[]=", eat->at, eat->subexpr, eat->index, opRight)) {
                         atSet->alwaysSafe = eat->alwaysSafe | expr->alwaysSafe;
@@ -246,7 +246,7 @@ namespace das {
         if (expr->left->rtti_isConstant() && !expr->right->rtti_isConstant()) {               // if left is const, but right is not
             if (expr->left->type->isNumericComparable() && isCommutativeOperator(expr->op)) { // if its compareable, and its a logic operator
                 auto flip = flipCommutativeOperatorSide(expr->op);                            // we swap left and right, and change the op
-                auto nexpr = make_smart<ExprOp2>(expr->at, flip, expr->right, expr->left);
+                auto nexpr = new ExprOp2(expr->at, flip, expr->right, expr->left);
                 reportAstChanged();
                 return nexpr;
             }
@@ -271,12 +271,12 @@ namespace das {
                 }
                 if (!pop.empty()) {
                     reportAstChanged();
-                    auto popc = make_smart<ExprCall>(expr->at, pop);
+                    auto popc = new ExprCall(expr->at, pop);
                     popc->alwaysSafe = expr->alwaysSafe;
                     auto stride = expr->left->type->firstType->getSizeOf();
                     popc->arguments.push_back(expr->left->clone());
                     popc->arguments.push_back(expr->right->clone());
-                    popc->arguments.push_back(make_smart<ExprConstInt>(expr->at, stride));
+                    popc->arguments.push_back(new ExprConstInt(expr->at, stride));
                     return popc;
                 } else {
                     error("pointer arithmetics only allows +, -, +=, -=, ++, --; not" + expr->op, "", "",
@@ -300,11 +300,11 @@ namespace das {
                           expr->at, CompilationError::invalid_type);
                 } else {
                     reportAstChanged();
-                    auto popc = make_smart<ExprCall>(expr->at, "i_das_ptr_diff");
+                    auto popc = new ExprCall(expr->at, "i_das_ptr_diff");
                     auto stride = expr->left->type->firstType->getSizeOf();
                     popc->arguments.push_back(expr->left->clone());
                     popc->arguments.push_back(expr->right->clone());
-                    popc->arguments.push_back(make_smart<ExprConstInt>(expr->at, stride));
+                    popc->arguments.push_back(new ExprConstInt(expr->at, stride));
                     return popc;
                 }
             }
@@ -314,13 +314,13 @@ namespace das {
                 error("operations on different enumerations are prohibited", "", "",
                       expr->at, CompilationError::invalid_type);
         auto opName = "_::" + expr->op;
-        auto tempCall = make_smart<ExprLooksLikeCall>(expr->at, opName);
+        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
         tempCall->arguments.push_back(expr->left);
         tempCall->arguments.push_back(expr->right);
-        expr->func = inferFunctionCall(tempCall.get(), InferCallError::operatorOp2).get();
+        expr->func = inferFunctionCall(tempCall, InferCallError::operatorOp2);
         if (opName != tempCall->name) { // this happens when the operator gets instanced
             reportAstChanged();
-            auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+            auto opCall = new ExprCall(expr->at, tempCall->name);
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         }
@@ -347,8 +347,8 @@ namespace das {
                 error("unsafe operator '" + expr->name + "' must be inside the 'unsafe' block", "", "",
                       expr->at, CompilationError::unsafe);
             } else if (enableInferTimeFolding && isConstExprFunc(expr->func)) {
-                auto lcc = getConstExpr(expr->left.get());
-                auto rcc = getConstExpr(expr->right.get());
+                auto lcc = getConstExpr(expr->left);
+                auto rcc = getConstExpr(expr->right);
                 if (lcc && rcc) {
                     expr->left = lcc;
                     expr->right = rcc;
@@ -387,9 +387,9 @@ namespace das {
             expr->type->constant |= expr->right->type->constant;
             // lets try to fold it
             if (enableInferTimeFolding) {
-                auto ccc = getConstExpr(expr->subexpr.get());
-                auto lcc = getConstExpr(expr->left.get());
-                auto rcc = getConstExpr(expr->right.get());
+                auto ccc = getConstExpr(expr->subexpr);
+                auto lcc = getConstExpr(expr->left);
+                auto rcc = getConstExpr(expr->right);
                 if (ccc && lcc && rcc) {
                     expr->subexpr = ccc;
                     expr->left = lcc;
@@ -454,13 +454,13 @@ namespace das {
     }
     void InferTypes::preVisit(ExprMove *expr) {
         Visitor::preVisit(expr);
-        markNoDiscard(expr->right.get());
+        markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::visit(ExprMove *expr) {
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
         // infer
-        if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right.get(),
+        if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right,
                                "can only move compatible type", CompilationError::cant_move, expr->at)) {
         } else if (!expr->left->type->isRef()) {
             error("can only move to a reference" + moveErrorInfo(expr), "", "",
@@ -509,15 +509,15 @@ namespace das {
             // var left`temp & = left
             // builtin_collect_local_and_zero(left`temp, size_of(left))
             // left`temp <- right // unconvertable
-            auto pBlock = make_smart<ExprBlock>();
+            auto pBlock = new ExprBlock();
             pBlock->at = expr->at;
             pBlock->isCollapseable = true;
             scopes.back()->needCollapse = true;
-            auto pLet = make_smart<ExprLet>();
+            auto pLet = new ExprLet();
             pLet->at = expr->at;
             pLet->alwaysSafe = true;
             pLet->generated = true;
-            auto pVar = make_smart<Variable>();
+            auto pVar = new Variable();
             pVar->at = expr->left->at;
             pVar->type = new TypeDecl(Type::autoinfer);
             pVar->type->ref = true;
@@ -525,11 +525,11 @@ namespace das {
             pVar->init = expr->left->clone();
             pVar->generated = true;
             pLet->variables.push_back(pVar);
-            auto pCall = make_smart<ExprCall>(expr->at, "_::builtin_collect_local_and_zero");
+            auto pCall = new ExprCall(expr->at, "_::builtin_collect_local_and_zero");
             pCall->alwaysSafe = true;
-            pCall->arguments.push_back(make_smart<ExprVar>(expr->at, pVar->name));
-            pCall->arguments.push_back(make_smart<ExprConstUInt>(expr->at, expr->left->type->getSizeOf()));
-            auto pMove = make_smart<ExprMove>(expr->at, make_smart<ExprVar>(expr->at, pVar->name), expr->right->clone());
+            pCall->arguments.push_back(new ExprVar(expr->at, pVar->name));
+            pCall->arguments.push_back(new ExprConstUInt(expr->at, expr->left->type->getSizeOf()));
+            auto pMove = new ExprMove(expr->at, new ExprVar(expr->at, pVar->name), expr->right->clone());
             pMove->podDelete = true;
             pBlock->list.push_back(pLet);
             pBlock->list.push_back(pCall);
@@ -550,17 +550,17 @@ namespace das {
         Visitor::preVisit(expr);
         if (!strictProperties) {
             if (expr->left->rtti_isField()) {
-                auto field = static_pointer_cast<ExprField>(expr->left);
+                auto field = static_cast<ExprField*>(expr->left);
                 field->underClone = true;
             } else if (expr->left->rtti_isVar()) {
-                auto var = static_pointer_cast<ExprVar>(expr->left);
+                auto var = static_cast<ExprVar*>(expr->left);
                 var->underClone = true;
             } else if (expr->left->rtti_isAt()) {
-                auto at = static_pointer_cast<ExprAt>(expr->left);
+                auto at = static_cast<ExprAt*>(expr->left);
                 at->underClone = true;
             }
         }
-        markNoDiscard(expr->right.get());
+        markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::visit(ExprCopy *expr) {
         if (auto nExpr = promoteAssignmentToProperty(expr)) {
@@ -570,7 +570,7 @@ namespace das {
         if (!expr->left->type || !expr->right->type)
             return Visitor::visit(expr);
         // infer
-        if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right.get(),
+        if (!canCopyOrMoveType(expr->left->type, expr->right->type, TemporaryMatters::no, expr->right,
                                "can only copy compatible type", CompilationError::cant_copy, expr->at)) {
         } else if (!expr->left->type->isRef()) {
             error("can only copy to a reference" + copyErrorInfo(expr), "", "",
@@ -588,9 +588,9 @@ namespace das {
         if (!expr->left->type->canCopy()) {
             error("this type can't be copied" + copyErrorInfo(expr),
                   "", "use move (<-) or clone (:=) instead", expr->at, CompilationError::cant_copy);
-            if (canRelaxAssign(expr->right.get())) {
+            if (canRelaxAssign(expr->right)) {
                 reportAstChanged();
-                return make_smart<ExprMove>(expr->at, expr->left->clone(), expr->right->clone());
+                return new ExprMove(expr->at, expr->left->clone(), expr->right->clone());
             }
         }
         expr->type = new TypeDecl(); // we return nothing
@@ -599,22 +599,22 @@ namespace das {
     void InferTypes::preVisit(ExprClone *expr) {
         Visitor::preVisit(expr);
         if (expr->left->rtti_isField()) {
-            auto field = static_pointer_cast<ExprField>(expr->left);
+            auto field = static_cast<ExprField*>(expr->left);
             field->underClone = true;
         } else if (expr->left->rtti_isVar()) {
-            auto var = static_pointer_cast<ExprVar>(expr->left);
+            auto var = static_cast<ExprVar*>(expr->left);
             var->underClone = true;
         } else if (expr->left->rtti_isAt()) {
-            auto at = static_pointer_cast<ExprAt>(expr->left);
+            auto at = static_cast<ExprAt*>(expr->left);
             at->underClone = true;
         }
-        markNoDiscard(expr->right.get());
+        markNoDiscard(expr->right);
     }
     ExpressionPtr InferTypes::promoteAssignmentToProperty(ExprOp2 *expr) {
         if (expr->right->type && !expr->right->type->isAutoOrAlias()) {
             if (expr->left->rtti_isVar()) {
-                ExprVar *evar = (ExprVar *)(expr->left.get());
-                if (auto cloneSet = promoteToProperty(evar, expr->right.get())) {
+                ExprVar *evar = (ExprVar *)(expr->left);
+                if (auto cloneSet = promoteToProperty(evar, expr->right)) {
                     return cloneSet;
                 }
                 if (auto propGet = promoteToProperty(evar, nullptr)) {
@@ -622,8 +622,8 @@ namespace das {
                     return expr;
                 }
             } else if (expr->left->rtti_isField()) {
-                ExprField *efield = (ExprField *)(expr->left.get());
-                if (auto cloneSet = promoteToProperty(efield, expr->right.get())) {
+                ExprField *efield = (ExprField *)(expr->left);
+                if (auto cloneSet = promoteToProperty(efield, expr->right)) {
                     return cloneSet;
                 }
                 if (auto propGet = promoteToProperty(efield, nullptr)) {
@@ -633,16 +633,16 @@ namespace das {
                 if (expr->right->type->isBool() && efield->value->type && efield->value->type->isBitfield()) { // bitfield.field = bool
                     auto value = efield->value;
                     if (value->rtti_isR2V()) {
-                        value = static_pointer_cast<ExprRef2Value>(value)->subexpr;
+                        value = static_cast<ExprRef2Value*>(value)->subexpr;
                     }
                     if (value->type->ref) {
                         // lets find the right field
                         auto fidx = efield->value->type->bitFieldIndex(efield->name);
                         if (fidx != -1) {
                             reportAstChanged();
-                            auto mask = make_smart<ExprConstBitfield>(efield->at, 1ul << fidx);
+                            auto mask = new ExprConstBitfield(efield->at, 1ul << fidx);
                             mask->bitfieldType = new TypeDecl(*efield->value->type);
-                            auto call = make_smart<ExprCall>(efield->at, "__bit_set");
+                            auto call = new ExprCall(efield->at, "__bit_set");
                             call->arguments.push_back(value->clone());
                             call->arguments.push_back(mask);
                             call->arguments.push_back(expr->right->clone());
@@ -651,7 +651,7 @@ namespace das {
                     }
                 }
             } else if (expr->left->rtti_isAt()) {
-                ExprAt *eat = (ExprAt *)(expr->left.get());
+                ExprAt *eat = (ExprAt *)(expr->left);
                 // lets find []= operator
                 auto opName = "[]" + expr->name;
                 if (auto opAtEq = inferGenericOperator3(opName, expr->at, eat->subexpr, eat->index, expr->right)) {
@@ -682,13 +682,13 @@ namespace das {
         }
         // lets infer clone call (and instance generic if need be)
         auto opName = "_::clone";
-        auto tempCall = make_smart<ExprLooksLikeCall>(expr->at, opName);
+        auto tempCall = new ExprLooksLikeCall(expr->at, opName);
         tempCall->arguments.push_back(expr->left);
         tempCall->arguments.push_back(expr->right);
-        expr->func = inferFunctionCall(tempCall.get(), InferCallError::tryOperator).get();
+        expr->func = inferFunctionCall(tempCall, InferCallError::tryOperator);
         if (expr->func || opName != tempCall->name) { // this happens when the clone gets instanced
             reportAstChanged();
-            auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
+            auto opCall = new ExprCall(expr->at, tempCall->name);
             opCall->arguments = das::move(tempCall->arguments);
             return opCall;
         }
@@ -715,9 +715,9 @@ namespace das {
                 return Visitor::visit(expr);
             } else if (cloneType->isString() && (expr->right->type->isTemp() || multiContext)) {
                 reportAstChanged();
-                auto cloneFn = make_smart<ExprCall>(expr->at, "clone_string");
+                auto cloneFn = new ExprCall(expr->at, "clone_string");
                 cloneFn->arguments.push_back(expr->right->clone());
-                return make_smart<ExprCopy>(expr->at, expr->left->clone(), cloneFn);
+                return new ExprCopy(expr->at, expr->left->clone(), cloneFn);
             } else if (cloneType->isPointer() && cloneType->smartPtr) {
                 if ( !cloneType->firstType || !cloneType->firstType->annotation ) {
                     error("can only clone smart pointer to handled type", "", "",
@@ -727,7 +727,7 @@ namespace das {
                 auto fnClone = makeCloneSmartPtr(expr->at, cloneType, expr->right->type);
                 if (program->addFunction(fnClone)) {
                     reportAstChanged();
-                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                    auto cloneFn = new ExprCall(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return cloneFn;
@@ -737,12 +737,12 @@ namespace das {
                 }
             } else if (cloneType->canCopy(expr->right->type->isTemp() || multiContext)) {
                 reportAstChanged();
-                auto eCopy = make_smart<ExprCopy>(expr->at, expr->left->clone(), expr->right->clone());
+                auto eCopy = new ExprCopy(expr->at, expr->left->clone(), expr->right->clone());
                 eCopy->allowCopyTemp = true;
                 return eCopy;
             } else if (cloneType->isGoodArrayType() || cloneType->isGoodTableType()) {
                 reportAstChanged();
-                auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                auto cloneFn = new ExprCall(expr->at, "_::clone");
                 cloneFn->arguments.push_back(expr->left->clone());
                 cloneFn->arguments.push_back(expr->right->clone());
                 return cloneFn;
@@ -759,7 +759,7 @@ namespace das {
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
                     }
-                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                    auto cloneFn = new ExprCall(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return cloneFn;
@@ -775,7 +775,7 @@ namespace das {
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
                     }
-                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                    auto cloneFn = new ExprCall(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return cloneFn;
@@ -791,7 +791,7 @@ namespace das {
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
                     }
-                    auto cloneFn = make_smart<ExprCall>(expr->at, "_::clone");
+                    auto cloneFn = new ExprCall(expr->at, "_::clone");
                     cloneFn->arguments.push_back(expr->left->clone());
                     cloneFn->arguments.push_back(expr->right->clone());
                     return cloneFn;
@@ -800,7 +800,7 @@ namespace das {
                 }
             } else if (cloneType->dim.size()) {
                 reportAstChanged();
-                auto cloneFn = make_smart<ExprCall>(expr->at, "clone_dim");
+                auto cloneFn = new ExprCall(expr->at, "clone_dim");
                 cloneFn->arguments.push_back(expr->left->clone());
                 cloneFn->arguments.push_back(expr->right->clone());
                 return cloneFn;
@@ -818,11 +818,11 @@ namespace das {
     }
     ExpressionPtr InferTypes::visit(ExprTryCatch *expr) {
         if (jitEnabled()) {
-            auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at, expr->try_block);
-            ((ExprBlock *)tryBlock->block.get())->returnType = new TypeDecl(Type::autoinfer);
-            auto catchBlock = make_smart<ExprMakeBlock>(expr->catch_block->at, expr->catch_block);
-            ((ExprBlock *)catchBlock->block.get())->returnType = new TypeDecl(Type::autoinfer);
-            auto ccall = make_smart<ExprCall>(expr->at, "builtin_try_recover");
+            auto tryBlock = new ExprMakeBlock(expr->try_block->at, expr->try_block);
+            ((ExprBlock *)tryBlock->block)->returnType = new TypeDecl(Type::autoinfer);
+            auto catchBlock = new ExprMakeBlock(expr->catch_block->at, expr->catch_block);
+            ((ExprBlock *)catchBlock->block)->returnType = new TypeDecl(Type::autoinfer);
+            auto ccall = new ExprCall(expr->at, "builtin_try_recover");
             ccall->arguments.push_back(tryBlock);
             ccall->arguments.push_back(catchBlock);
             return ccall;

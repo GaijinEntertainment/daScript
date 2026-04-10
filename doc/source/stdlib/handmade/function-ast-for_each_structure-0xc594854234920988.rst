@@ -1,0 +1,1 @@
+Iterates over all structures defined in the given module, calling the provided block for each one.

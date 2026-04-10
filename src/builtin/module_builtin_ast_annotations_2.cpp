@@ -24,9 +24,9 @@ namespace das {
         }
     };
 
-    struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl> {
+    struct AstMakeFieldDeclAnnotation : ManagedStructureAnnotation<MakeFieldDecl,true,false> {
         AstMakeFieldDeclAnnotation(ModuleLibrary & ml)
-            :  ManagedStructureAnnotation<MakeFieldDecl> ("MakeFieldDecl", ml) {
+            :  ManagedStructureAnnotation<MakeFieldDecl,true,false> ("MakeFieldDecl", ml) {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(value)>("value");
@@ -39,27 +39,20 @@ namespace das {
         AstMakeStructAnnotation(ModuleLibrary & ml)
             :  ManagedVectorAnnotation<MakeStruct> ("MakeStruct", ml) {
         };
-        virtual bool isSmart() const override { return true; }
         virtual bool canNew() const override { return true; }
-        virtual bool canDeletePtr() const override { return true; }
-        virtual string getSmartAnnotationCloneFunction () const override { return "smart_ptr_clone"; }
+        virtual bool canDeletePtr() const override { return false; }
         virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code->makeNode<SimNode_NewHandle<MakeStruct,true>>(at);
+            return context.code->makeNode<SimNode_NewHandle<MakeStruct,false>>(at);
         }
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,true>>(at,sube,count,
+            return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,false>>(at,sube,count,
                 context.code->allocateName("type<"+name+">"));
         }
         static void * jit_new ( Context * ) {
             auto res = new MakeStruct();
-            res->addRef();
             return res;
         }
         static void jit_delete ( void * ptr, Context * ) {
-            if ( ptr ) {
-                auto res = (MakeStruct *) ptr;
-                res->delRef();
-            }
         }
         virtual void * jitGetNew() const override { return (void *) &jit_new; }
         virtual void * jitGetDelete() const override { return (void *) &jit_delete; }

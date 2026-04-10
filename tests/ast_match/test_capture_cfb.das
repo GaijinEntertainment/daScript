@@ -14,7 +14,7 @@ require dastest/testing_boost public
 [test]
 def test_c_call_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo(1, 2))
+        var expr = qmacro(foo(1, 2))
         var cname = ""
         let r = qmatch(expr, $c(cname)(1, 2))
         t |> success(r.matched, "should match call with any name")
@@ -25,7 +25,7 @@ def test_c_call_name(t : T?) {
 [test]
 def test_c_call_name_different(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(bar(a, b))
+        var expr = qmacro(bar(a, b))
         var cname = ""
         let r = qmatch(expr, $c(cname)(a, b))
         t |> success(r.matched, "should match bar call")
@@ -36,7 +36,7 @@ def test_c_call_name_different(t : T?) {
 [test]
 def test_c_args_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo(1, 2))
+        var expr = qmacro(foo(1, 2))
         var cname = ""
         let r = qmatch(expr, $c(cname)(1, 3))
         t |> success(!r.matched, "wrong args should fail even with $c")
@@ -46,7 +46,7 @@ def test_c_args_mismatch(t : T?) {
 [test]
 def test_c_in_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { foo(a); bar(b); })
+        var expr = qmacro($ { foo(a); bar(b); })
         var cname = ""
         let r = qmatch_block(expr) $ {
             _wildcard()
@@ -62,7 +62,7 @@ def test_c_in_block(t : T?) {
 [test]
 def test_f_field_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(a.foo)
+        var expr = qmacro(a.foo)
         var fname = ""
         let r = qmatch(expr, a.$f(fname))
         t |> success(r.matched, "should match field access with any name")
@@ -73,7 +73,7 @@ def test_f_field_name(t : T?) {
 [test]
 def test_f_field_different(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(obj.bar)
+        var expr = qmacro(obj.bar)
         var fname = ""
         let r = qmatch(expr, obj.$f(fname))
         t |> success(r.matched, "should match obj.bar")
@@ -84,7 +84,7 @@ def test_f_field_different(t : T?) {
 [test]
 def test_f_field_value_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(a.foo)
+        var expr = qmacro(a.foo)
         var fname = ""
         let r = qmatch(expr, b.$f(fname))
         t |> success(!r.matched, "wrong value should fail even with $f")
@@ -94,7 +94,7 @@ def test_f_field_value_mismatch(t : T?) {
 [test]
 def test_f_in_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { a.x; b.y; })
+        var expr = qmacro($ { a.x; b.y; })
         var fname = ""
         let r = qmatch_block(expr) $ {
             _wildcard()
@@ -111,8 +111,8 @@ def test_f_in_block(t : T?) {
 def test_b_wildcard_trailing(t : T?) {
     ast_gc_guard() {
         // Capture all trailing statements
-        var inscope expr <- qmacro($ { foo(); bar(); baz(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); bar(); baz(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             foo()
             _wildcard($b(stmts))
@@ -126,8 +126,8 @@ def test_b_wildcard_trailing(t : T?) {
 def test_b_wildcard_leading(t : T?) {
     ast_gc_guard() {
         // Capture all leading statements before a fixed match
-        var inscope expr <- qmacro($ { foo(); bar(); baz(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); bar(); baz(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             _wildcard($b(stmts))
             baz()
@@ -141,8 +141,8 @@ def test_b_wildcard_leading(t : T?) {
 def test_b_wildcard_empty(t : T?) {
     ast_gc_guard() {
         // Wildcard captures zero statements
-        var inscope expr <- qmacro($ { foo(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             _wildcard($b(stmts))
             foo()
@@ -156,8 +156,8 @@ def test_b_wildcard_empty(t : T?) {
 def test_b_wildcard_sandwich(t : T?) {
     ast_gc_guard() {
         // Capture middle statements between two fixed
-        var inscope expr <- qmacro($ { foo(); a(); b(); bar(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); a(); b(); bar(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             foo()
             _wildcard($b(stmts))
@@ -172,8 +172,8 @@ def test_b_wildcard_sandwich(t : T?) {
 def test_b_wildcard1_trailing(t : T?) {
     ast_gc_guard() {
         // _wildcard1 with $b — must have at least 1
-        var inscope expr <- qmacro($ { foo(); bar(); baz(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); bar(); baz(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             foo()
             _wildcard1($b(stmts))
@@ -187,8 +187,8 @@ def test_b_wildcard1_trailing(t : T?) {
 def test_b_any_capture(t : T?) {
     ast_gc_guard() {
         // _any with $b — captures exactly one statement
-        var inscope expr <- qmacro($ { foo(); bar(); })
-        var inscope stmts : array<ExpressionPtr>
+        var expr = qmacro($ { foo(); bar(); })
+        var stmts : array<ExpressionPtr>
         let r = qmatch_block(expr) $ {
             _any($b(stmts))
             bar()
@@ -202,7 +202,7 @@ def test_b_any_capture(t : T?) {
 def test_b_no_tag_still_works(t : T?) {
     ast_gc_guard() {
         // Wildcards without $b still work as before
-        var inscope expr <- qmacro($ { foo(); bar(); baz(); })
+        var expr = qmacro($ { foo(); bar(); baz(); })
         let r = qmatch_block(expr) $ {
             _wildcard()
             baz()

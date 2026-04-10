@@ -76,7 +76,7 @@ class OnceMacro : AstFunctionAnnotation {
 
     // transform() is called for every call to the tagged function.
     // It receives the call expression and returns a replacement.
-    def override transform(var call : smart_ptr<ExprCallFunc>; var errors : das_string) : ExpressionPtr {
+    def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
 
         // Step 1: Generate a unique name for the global flag variable.
         //         make_unique_private_name uses the call-site LineInfo
@@ -89,30 +89,30 @@ class OnceMacro : AstFunctionAnnotation {
         //         initializer expression (ExprConstBool with value false).
         if (!compiling_module() |> add_global_private_var(flag_name, call.at) <| quote(false)) {
             errors := "can't add global variable {flag_name}"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
 
         // Step 3: Extract the block body from the call argument.
         //         When the user writes once() { ... }, the first
         //         argument is an ExprMakeBlock wrapping an ExprBlock.
         //         We clone the block, unwrap it, and extract its statements.
-        var inscope block_clone <- clone_expression(call.arguments[0])
-        var inscope blk <- move_unquote_block(block_clone)
-        var inscope stmts : array<ExpressionPtr>
+        var block_clone = clone_expression(call.arguments[0])
+        var blk = move_unquote_block(block_clone)
+        var stmts : array<ExpressionPtr>
         for (s in blk.list) {
-            stmts |> emplace_new <| clone_expression(s)
+            stmts |> push <| clone_expression(s)
         }
 
         // Step 4: Build the replacement AST using qmacro_block.
         //         $i(flag_name) splices the flag name as an identifier.
         //         $b(stmts) splices the statement array into the block.
-        var inscope replacement <- qmacro_block() {
+        var replacement = qmacro_block() {
             if (!$i(flag_name)) {
                 $i(flag_name) = true
                 $b(stmts)
             }
         }
         replacement |> force_at(call.at)
-        return <- replacement
+        return replacement
     }
 }

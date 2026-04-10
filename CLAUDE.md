@@ -101,6 +101,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang_live.md` | Working with `daslang-live.exe`, live-reload lifecycle, REST API, `[live_command]`, `[before_reload]`/`[after_reload]`, persistent store, `live/glfw_live`, `live/live_api` |
 | `skills/perf_lint.md` | Adding new performance lint rules to `daslib/perf_lint.das` |
 | `skills/style_lint.md` | Adding new style lint rules to `daslib/style_lint.das` |
+| `skills/gc_migration.md` | Migrating `.das` or C++ code from `smart_ptr<T>` to gc_node for AST types (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl) |
 | `skills/version_update.md` | Bumping the daslang version number (all files that need updating) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
 

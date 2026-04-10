@@ -527,11 +527,11 @@ namespace das {
         virtual bool isIndexable ( const TypeDeclPtr & indexType ) const override {
             return indexType->isIndex();
         }
-        virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & ) const override {
+        virtual TypeDeclPtr makeIndexType ( ExpressionPtr, ExpressionPtr ) const override {
             return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
-                                         const ExpressionPtr & rv, const ExpressionPtr & idx, uint32_t ofs ) const override {
+                                         ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_DebugInfoAtField<ST>>(at,
                                                                                 rv->simulate(context),
                                                                                 idx->simulate(context),
@@ -540,10 +540,10 @@ namespace das {
         virtual bool isIterable ( ) const override {
             return true;
         }
-        virtual TypeDeclPtr makeIteratorType ( const ExpressionPtr & ) const override {
+        virtual TypeDeclPtr makeIteratorType ( ExpressionPtr ) const override {
             return new TypeDecl(*fieldType);
         }
-        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, const ExpressionPtr & src ) const override {
+        virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
             auto rv = src->simulate(context);
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
@@ -1255,7 +1255,7 @@ namespace das {
 
     struct SimNode_RttiGetTypeDecl : SimNode_CallBase {
         DAS_PTR_NODE;
-        SimNode_RttiGetTypeDecl ( const LineInfo & at, const ExpressionPtr & d )
+        SimNode_RttiGetTypeDecl ( const LineInfo & at, ExpressionPtr d )
             : SimNode_CallBase(at,"") {
             typeExpr = d->type;
         }
@@ -1274,15 +1274,15 @@ namespace das {
 
     struct RttiTypeInfoMacro : TypeInfoMacro {
         RttiTypeInfoMacro() : TypeInfoMacro("rtti_typeinfo") {}
-        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, const ExpressionPtr &, string & ) override {
+        virtual TypeDeclPtr getAstType ( ModuleLibrary & lib, ExpressionPtr, string & ) override {
             return typeFactory<const TypeInfo>::make(lib);
         }
-        virtual SimNode * simluate ( Context * context, const ExpressionPtr & expr, string & ) override {
-            auto exprTypeInfo = static_pointer_cast<ExprTypeInfo>(expr);
+        virtual SimNode * simluate ( Context * context, ExpressionPtr expr, string & ) override {
+            auto exprTypeInfo = static_cast<ExprTypeInfo*>(expr);
             TypeInfo * typeInfo = context->thisHelper->makeTypeInfo(nullptr, exprTypeInfo->typeexpr);
             return context->code->makeNode<SimNode_TypeInfo>(expr->at, typeInfo);
         }
-        virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const override {
+        virtual bool aotNeedTypeInfo ( ExpressionPtr ) const override {
             return true;
         }
     };
@@ -1489,7 +1489,7 @@ namespace das {
             addAnnotation(make_smart<CodeOfPoliciesAnnotation>(lib));
             addCtorAndUsing<CodeOfPolicies>(*this,lib,"CodeOfPolicies","CodeOfPolicies");
             // enums
-            addEnumeration(make_smart<EnumerationCompilationError>());
+            addEnumeration(new EnumerationCompilationError());
             // type annotations
             addAnnotation(make_smart<FileInfoAnnotation>(lib));
             addAnnotation(make_smart<LineInfoAnnotation>(lib));
@@ -1503,7 +1503,7 @@ namespace das {
             addAnnotation(make_smart<ModuleAnnotation>(lib));
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
             addAnnotation(make_smart<AstSerializerAnnotation>(lib));
-            addEnumeration(make_smart<EnumerationType>());
+            addEnumeration(new EnumerationType());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
             addVectorAnnotation<AnnotationArguments>(this,lib,"AnnotationArguments");
             addVectorAnnotation<AnnotationArgumentList>(this,lib,"AnnotationArgumentList");
@@ -1515,9 +1515,9 @@ namespace das {
             addAnnotation(make_smart<BasicStructureAnnotationAnnotation>(lib));
             addAnnotation(make_smart<EnumValueInfoAnnotation>(lib));
             addAnnotation(make_smart<EnumInfoAnnotation>(lib));
-            addEnumeration(make_smart<EnumerationRefMatters>());
-            addEnumeration(make_smart<EnumerationConstMatters>());
-            addEnumeration(make_smart<EnumerationTemporaryMatters>());
+            addEnumeration(new EnumerationRefMatters());
+            addEnumeration(new EnumerationConstMatters());
+            addEnumeration(new EnumerationTemporaryMatters());
             auto sia = make_smart<StructInfoAnnotation>(lib);              // this is type forward decl
             addAnnotation(sia);
             addRecAnnotation<TypeInfoAnnotation>(lib);
@@ -1697,7 +1697,7 @@ namespace das {
             auto dl = addExtern<DAS_BIND_FUN(builtin_debug_line)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_line")
                     ->args({"lineinfo","fully","context","at"});
-            dl->arguments[1]->init = make_smart<ExprConstBool>(false);
+            dl->arguments[1]->init = new ExprConstBool(false);
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
                 SideEffects::none, "builtin_get_typeinfo_mangled_name")
                     ->args({"type","context","at"});

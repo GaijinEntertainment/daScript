@@ -297,7 +297,7 @@ namespace das {
 
     struct AstContext {
         bool valid = false;
-        FunctionPtr             func;
+        FunctionPtr             func = nullptr;
         vector<ExpressionPtr>   loop;
         vector<ExpressionPtr>   blocks;
         vector<ExpressionPtr>   scopes;
@@ -354,7 +354,7 @@ namespace das {
         ExpressionPtr evalAndFold ( Expression * expr );
         ExpressionPtr evalAndFoldString ( Expression * expr );
         ExpressionPtr evalAndFoldStringBuilder ( ExprStringBuilder * expr );
-        ExpressionPtr cloneWithType ( const ExpressionPtr & expr );
+        ExpressionPtr cloneWithType ( ExpressionPtr expr );
         bool isSameFoldValue ( const TypeDeclPtr & t, vec4f a, vec4f b ) const {
             return memcmp(&a,&b,t->getSizeOf()) == 0;
         }
@@ -364,21 +364,21 @@ namespace das {
     ExpressionPtr ExprLikeCall<TT>::visit(Visitor & vis) {
         vis.preVisit(static_cast<TT *>(this));
         auto llk = ExprLooksLikeCall::visit(vis);
-        return llk.get()==this ? vis.visit(static_cast<TT *>(this)) : llk;
+        return llk==this ? vis.visit(static_cast<TT *>(this)) : llk;
     }
 
     template <typename It, typename SimNodeT, bool first>
     ExpressionPtr ExprTableKeysOrValues<It,SimNodeT,first>::visit(Visitor & vis) {
         vis.preVisit(static_cast<It *>(this));
         auto llk = ExprLooksLikeCall::visit(vis);
-        return llk.get()==this ? vis.visit(static_cast<It *>(this)) : llk;
+        return llk == this ? vis.visit(static_cast<It *>(this)) : llk;
     }
 
     template <typename It, typename SimNodeT>
     ExpressionPtr ExprArrayCallWithSizeOrIndex<It,SimNodeT>::visit(Visitor & vis) {
         vis.preVisit(static_cast<It *>(this));
         auto llk = ExprLooksLikeCall::visit(vis);
-        return llk.get()==this ? vis.visit(static_cast<It *>(this)) : llk;
+        return llk == this ? vis.visit(static_cast<It *>(this)) : llk;
     }
 
     template <typename TT, typename ExprConstExt>
@@ -386,7 +386,7 @@ namespace das {
         vis.preVisit((ExprConst*)this);
         vis.preVisit((ExprConstExt*)this);
         auto res = vis.visit((ExprConstExt*)this);
-        if ( res.get()!=this ) return res;
+        if ( res!=this ) return res;
         return vis.visit((ExprConst *)this);
     }
 }

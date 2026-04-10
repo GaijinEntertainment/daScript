@@ -76,8 +76,8 @@ def into_terminal(var expr : ExpressionPtr) : tuple<int; int> {
     } elif (expr is ExprCall && (expr as ExprCall).name == "interval") {
         // Range of charachters '1'..'9'
 
-        var inscope left_exp <- expr as ExprCall.arguments[0]
-        var inscope right_exp <- expr as ExprCall.arguments[1]
+        var left_exp = (expr as ExprCall).arguments[0]
+        var right_exp = (expr as ExprCall).arguments[1]
 
         if (!left_exp is ExprConstInt || !right_exp is ExprConstInt) {
             transfrom_error(expr.at, "Range ends should be integer constants")
@@ -239,8 +239,8 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         // Log partial matching: log("Here goes your message")
 
         var log = expr as ExprCall
-        var inscope message <- log.arguments[0] |> clone_expression
-        return <- new Rule_(rule <- Rule(terminal <- Terminal(log_msg <- message)))
+        var message = log.arguments[0] |> clone_expression
+        return <- new Rule_(rule <- Rule(terminal <- Terminal(log_msg = message)))
     } elif (expr is ExprOp1 && (expr as ExprOp1).op == "+") {
         // Several (+) -- one or more
         var op1 <- expr as ExprOp1
@@ -281,7 +281,7 @@ def transform(var rule : MacroRule) : Definition {
 
     for (alt in rule.alternatives) {
         {// creates scope for inscope
-            var inscope blk : ExpressionPtr <- clone_expression(alt.arguments |> back)
+            var blk = clone_expression(alt.arguments |> back)
 
             var sequence : array<Rule_?>
 
@@ -331,16 +331,16 @@ class ParseMacro : AstCallMacro {
     //!     THEREFORE, DO NOT PUT STATEFUL ACTIONS in the parser generator. Thank you for your attention.
 
 
-    def override canVisitArgument(expr : smart_ptr<ExprCallMacro>; argIndex : int) : bool {
+    def override canVisitArgument(expr : ExprCallMacro?; argIndex : int) : bool {
         // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
         return false
     }
 
-    def override canFoldReturnResult(expr : smart_ptr<ExprCallMacro>) : bool {
+    def override canFoldReturnResult(expr : ExprCallMacro?) : bool {
         return false
     }
 
-    def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprCallMacro>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : ExpressionPtr {
         g_failed = false // refresh for new errors
 
         // Verify
@@ -380,7 +380,7 @@ class ParseMacro : AstCallMacro {
         }
 
         if (failed_to_transform) {
-            return <- default<ExpressionPtr>
+            return null
         }
 
         // Generate
@@ -398,7 +398,7 @@ class ParseMacro : AstCallMacro {
                 compiling_program() |> macro_error(expr.at, err)
             }
             g_errors |> clear()
-            return <- default<ExpressionPtr>
+            return null
         }
 
         // Emit wrapper code

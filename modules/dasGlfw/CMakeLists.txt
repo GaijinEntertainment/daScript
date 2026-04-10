@@ -2,10 +2,10 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
     SET(DAS_GLFW_INCLUDED TRUE)
     MESSAGE(STATUS "dasGlfw module included.")
 	SET(DAS_GLFW_DIR ${CMAKE_SOURCE_DIR}/modules/dasGlfw)
-	SET(GLFW_INCLUDE_DIR ${DAS_GLFW_DIR}/glfw/include)
+	SET(GLFW_INCLUDE_DIR ${DAS_GLFW_DIR}/glfw/$<CONFIG>/include)
 
-	SET(GLFW_STATIC_LIB_PATH ${DAS_GLFW_DIR}/glfw)
-	SET(GLFW_DYNAMIC_LIB_PATH ${DAS_GLFW_DIR}/glfw_dyn)
+	SET(GLFW_STATIC_LIB_PATH ${DAS_GLFW_DIR}/glfw/$<CONFIG>)
+	SET(GLFW_DYNAMIC_LIB_PATH ${DAS_GLFW_DIR}/glfw_dyn/$<CONFIG>)
 
 	include(ExternalProject)
 
@@ -33,10 +33,11 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 				${glfw3_target}
 				URL ${GLFW_URL}
 				URL_HASH ${GLFW_URL_HASH}
+				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 				PREFIX ${prefix_dir}
 				CMAKE_ARGS
 					-DOSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
-					-DCMAKE_INSTALL_PREFIX=${install_prefix}
+					-DCMAKE_INSTALL_PREFIX=${install_prefix}/Release
 					-DCMAKE_BUILD_TYPE=Release
 					-DGLFW_BUILD_EXAMPLES=OFF
 					-DGLFW_BUILD_TESTS=OFF
@@ -44,17 +45,17 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 					-DBUILD_SHARED_LIBS=${build_shared_libs}
 				BUILD_BYPRODUCTS ${glfw_libraries}
 				BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
-				INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG>
+				INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${install_prefix}/$<CONFIG>
 			)
 		ELSE()
 			ExternalProject_Add(
 				${glfw3_target}
 				URL ${GLFW_URL}
 				URL_HASH ${GLFW_URL_HASH}
+				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 				PREFIX ${prefix_dir}
 				CMAKE_ARGS
-					-DCMAKE_INSTALL_PREFIX=${install_prefix}
-					-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+					-DCMAKE_INSTALL_PREFIX=${install_prefix}/Release
 					-DGLFW_BUILD_EXAMPLES=OFF
 					-DGLFW_BUILD_TESTS=OFF
 					-DGLFW_BUILD_DOCS=OFF
@@ -65,7 +66,7 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 					-DBUILD_SHARED_LIBS=${build_shared_libs}
 				BUILD_BYPRODUCTS ${glfw_libraries}
 				BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config $<CONFIG>
-				INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG>
+				INSTALL_COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config $<CONFIG> --prefix ${install_prefix}/$<CONFIG>
 			)
 		ENDIF()
 	ENDMACRO()
@@ -168,9 +169,13 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 	ENDIF()
 	IF(WIN32)
 		# On Win we have .dll and .lib in runtime only .dll is needed.
-		install(FILES ${GLFW_DYNAMIC_LIB_PATH}/bin/glfw3.dll DESTINATION ${DAS_INSTALL_BINDIR})
+		install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/bin/glfw3.dll DESTINATION ${DAS_INSTALL_BINDIR})
 	ELSE()
-		install(FILES ${DAS_GLFW_DYN_PATH} DESTINATION ${DAS_INSTALL_LIBDIR})
+		IF(APPLE)
+			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.${GLFW_VERSION}.dylib DESTINATION ${DAS_INSTALL_LIBDIR})
+		ELSE()
+			install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/lib/libglfw.so.${GLFW_VERSION} DESTINATION ${DAS_INSTALL_LIBDIR})
+		ENDIF()
 	ENDIF()
 
     file(GLOB DASGLFW_SOURCES

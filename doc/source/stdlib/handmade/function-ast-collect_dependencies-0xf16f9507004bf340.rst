@@ -1,0 +1,1 @@
+Collects all functions and global variables that the specified function depends on, and passes them to the provided block as two arrays.

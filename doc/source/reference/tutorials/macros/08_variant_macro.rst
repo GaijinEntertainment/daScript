@@ -95,22 +95,22 @@ that decide whether this macro should handle the expression:
 .. code-block:: das
 
    def override visitExprIsVariant(prog : ProgramPtr; mod : Module?;
-                                   expr : smart_ptr<ExprIsVariant>) : ExpressionPtr {
+                                   expr : ExprIsVariant?) : ExpressionPtr {
        assume vtype = expr.value._type
        // 1. Value must be a pointer to a structure
        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) {
-           return <- default<ExpressionPtr>
+           return null
        }
        // 2. Target name must refer to an [interface]-annotated struct
        let iname = string(expr.name)
        var tgt = prog |> find_unique_structure(iname)
        if (tgt == null || !is_interface_struct(tgt)) {
-           return <- default<ExpressionPtr>
+           return null
        }
        ...
    }
 
-If any check fails, the method returns ``default<ExpressionPtr>`` ---
+If any check fails, the method returns ``null`` ---
 declining to handle this expression and letting the next resolution
 stage take over.
 
@@ -163,7 +163,7 @@ getter:
 
 .. code-block:: das
 
-   var inscope val <- clone_expression(expr.value)
+   var val = clone_expression(expr.value)
    return <- qmacro($e(val) != null ? $c(func_name)(*$e(expr.value)) : null)
 
 ``clone_expression`` is needed because the value expression appears

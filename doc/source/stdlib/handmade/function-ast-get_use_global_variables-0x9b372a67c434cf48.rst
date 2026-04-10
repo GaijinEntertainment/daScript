@@ -1,0 +1,1 @@
+Iterates over all global variables that the given function accesses, invoking the provided block for each one.

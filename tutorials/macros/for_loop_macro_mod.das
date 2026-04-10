@@ -15,9 +15,9 @@ require strings
 [for_loop_macro(name=table_kv)]
 class TableKVForLoop : AstForLoopMacro {
     //! Transforms  for ((k,v) in tab)  into  for (k, v in keys(tab), values(tab)).
-    def override visitExprFor(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprFor>) : ExpressionPtr {
+    def override visitExprFor(prog : ProgramPtr; mod : Module?; expr : ExprFor?) : ExpressionPtr {
         if (is_in_completion()) {
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Find a tuple-expanded iterator whose source is a table
         var tab_index = -1
@@ -30,18 +30,18 @@ class TableKVForLoop : AstForLoopMacro {
             }
         }
         if (tab_index == -1) {
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Split the backtick-joined name "k`v" into key_name and val_name
         let joined_name = string(expr.iterators[tab_index])
         let bt = find(joined_name, "`")
         if (bt < 0 || find(joined_name, "`", bt + 1) >= 0) {
-            return <- default<ExpressionPtr>  // need exactly 2 parts
+            return default<ExpressionPtr>  // need exactly 2 parts
         }
         let key_name = slice(joined_name, 0, bt)
         let val_name = slice(joined_name, bt + 1)
         // Clone the for expression
-        var inscope new_for_e <- clone_expression(expr)
+        var new_for_e = clone_expression(expr)
         var new_for = new_for_e as ExprFor
         // Erase the table entry from all parallel vectors
         let source_at = expr.sources[tab_index].at
@@ -70,12 +70,12 @@ class TableKVForLoop : AstForLoopMacro {
         new_for.iteratorsTupleExpansion |> push(0u8)
         // Clear iterator variables for re-inference
         new_for.iteratorVariables |> clear()
-        return <- new_for_e
+        return new_for_e
     }
 }
 
 def make_kv_call(fn_name : string; src_expr : ExpressionPtr; at : LineInfo) : ExpressionPtr {
-    var inscope call <- new ExprCall(at = at, name := fn_name)
+    var call = new ExprCall(at = at, name := fn_name)
     call.arguments |> emplace_new <| clone_expression(src_expr)
-    return <- call
+    return call
 }

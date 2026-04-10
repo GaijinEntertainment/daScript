@@ -112,7 +112,7 @@ struct with the ``[audited]`` annotation:
 .. code-block:: das
 
    [macro_function]
-   def private is_audited(typ : TypeDecl?) : bool {
+   def private is_audited(typ : TypeDeclPtr) : bool {
        if (!typ.isStructure || typ.structType == null) {
            return false
        }
@@ -136,20 +136,20 @@ capture expression in a call to ``audit_on_capture(value, "name")``:
 .. code-block:: das
 
    def override captureExpression(prog : Program?; mod : Module?;
-           expr : ExpressionPtr; etype : TypeDecl?) : ExpressionPtr {
+           expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
        if (!is_audited(etype)) {
-           return <- default<ExpressionPtr>
+           return default<ExpressionPtr>
        }
        var field_name = "unknown"
        if (expr is ExprVar) {
            field_name = string((expr as ExprVar).name)
        }
-       var inscope pCall <- new ExprCall(at = expr.at,
+       var pCall = new ExprCall(at = expr.at,
            name := "capture_macro_mod::audit_on_capture")
        pCall.arguments |> emplace_new <| clone_expression(expr)
        pCall.arguments |> emplace_new <| new ExprConstString(
            at = expr.at, value := field_name)
-       return <- pCall
+       return pCall
    }
 
 ``audit_on_capture`` prints ``[audit] captured 'name'`` and returns
@@ -172,8 +172,8 @@ a print call to the function body's ``finalList``:
            if (!is_audited(fld._type)) {
                continue
            }
-           if (true) {   // scope needed for var inscope inside a loop
-               var inscope pCall <- new ExprCall(at = fld.at,
+           {
+               var pCall = new ExprCall(at = fld.at,
                    name := "capture_macro_mod::audit_after_invoke")
                pCall.arguments |> emplace_new <| new ExprConstString(
                    at = fld.at, value := string(fld.name))
@@ -182,9 +182,8 @@ a print call to the function body's ``finalList``:
        }
    }
 
-The ``if (true)`` wrapper is required because ``var inscope`` is not
-allowed directly inside a ``for`` loop — the extra scope satisfies
-the compiler.
+The bare block wrapper provides a lexical scope for the intermediate
+variable inside the loop.
 
 releaseFunction
 ~~~~~~~~~~~~~~~
@@ -202,8 +201,8 @@ before the compiler-generated ``delete *__this``:
            if (!is_audited(fld._type)) {
                continue
            }
-           if (true) {   // scope needed for var inscope inside a loop
-               var inscope pCall <- new ExprCall(at = fld.at,
+           {
+               var pCall = new ExprCall(at = fld.at,
                    name := "capture_macro_mod::audit_on_finalize")
                pCall.arguments |> emplace_new <| new ExprConstString(
                    at = fld.at, value := string(fld.name))

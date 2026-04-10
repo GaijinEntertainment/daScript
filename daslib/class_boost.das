@@ -34,9 +34,9 @@ class ClassMethodMacro : AstFunctionAnnotation {
         if (func.moreFlags.isConstClassMethod) {
             tt.flags |= TypeDeclFlags.constant
         }
-        var inscope vv <- qmacro_variable("self", type<$t(tt)>)
+        var vv <- qmacro_variable("self", type<$t(tt)>)
         emplace(func.arguments, vv, 0)
-        func.body |> move_new <| qmacro_block() {
+        func.body = qmacro_block() {
             with (self) {
                 $e(func.body)
             }

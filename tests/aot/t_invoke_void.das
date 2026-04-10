@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options stack = 4096
+options no_coverage
 
 require dastest/testing_boost public
 

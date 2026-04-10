@@ -59,11 +59,11 @@ class CsvReader : AstReaderMacro {
         }
     }
 
-    def override visit(prog : ProgramPtr; mod : Module?; expr : smart_ptr<ExprReader>) : ExpressionPtr {
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr {
         //! Parse the collected CSV text at compile time and embed
         //! the resulting string array directly in the AST.
         if (is_in_completion()) {
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         let seq = string(expr.sequence)
         var items <- split(seq, ",")
@@ -72,7 +72,7 @@ class CsvReader : AstReaderMacro {
         }
         // convert_to_expression turns any daScript value into AST nodes.
         // Here it produces an ExprMakeArray of ExprConstString values.
-        return <- convert_to_expression(items, expr.at)
+        return convert_to_expression(items, expr.at)
     }
 }
 

@@ -353,9 +353,7 @@ namespace das {
         });
         // collect types in enumerations
         enumerations.foreach([&](auto & en) {
-            for ( auto & val : en->list ) {
-                if ( val.value ) val.value->gc_collect(target, from);
-            }
+            en->gc_collect(target, from);
         });
     }
 
@@ -558,7 +556,7 @@ namespace das {
             }
         }
         if ( functions.insert(mangledName, fn) ) {
-            functionsByName[hash64z(fn->name.c_str())].push_back(fn.get());
+            functionsByName[hash64z(fn->name.c_str())].push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -577,12 +575,12 @@ namespace das {
         // get old function pointer before replacing (avoid touching stale types)
         auto oldFn = functions.find(mangledHash);
         if ( !oldFn ) return false;
-        auto oldFnPtr = oldFn.get();
+        auto oldFnPtr = oldFn;
         // replace in safebox objects map
         functions.replace(mangledHash, fn);
         // replace in objectsInOrder (compare by pointer, not by mangled name)
         functions.foreach([&](auto & ofn){
-            if ( ofn.get() == oldFnPtr ) {
+            if ( ofn == oldFnPtr ) {
                 ofn = fn;
             }
         });
@@ -591,7 +589,7 @@ namespace das {
         if ( kv ) {
             for ( auto & fp : kv->second ) {
                 if ( fp == oldFnPtr ) {
-                    fp = fn.get();
+                    fp = fn;
                     break;
                 }
             }
@@ -604,7 +602,7 @@ namespace das {
         auto mangledName = fn->getMangledName();
         fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
-            genericsByName[hash64z(fn->name.c_str())].push_back(fn.get());
+            genericsByName[hash64z(fn->name.c_str())].push_back(fn);
             fn->module = this;
             return true;
         } else {
@@ -870,7 +868,7 @@ namespace das {
         bool failed = false;
         functions.foreach([&](auto fun){
             if ( fun->builtIn ) {
-                auto bif = (BuiltInFunction *) fun.get();
+                auto bif = (BuiltInFunction *) fun;
                 if ( !bif->policyBased && bif->cppName.empty() ) {
                     DAS_FATAL_LOG("builtin function %s is missing cppName\n", fun->describe().c_str());
                     failed = true;
@@ -1091,7 +1089,7 @@ namespace das {
         auto t = new TypeDecl(Type::tStructure);
         auto structs = findStructure(name,nullptr);
         if ( structs.size()==1 ) {
-            t->structType = structs.back().get();
+            t->structType = structs.back();
         } else {
             DAS_FATAL_ERROR("makeStructureType(%s) failed\n", name.c_str());
             return nullptr;

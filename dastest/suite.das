@@ -329,7 +329,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
             return
         }
         let func = context |> get_function_by_mnh(f.hash)
-        var inscope fn <- modPtr |> find_module_function_via_rtti(func)
+        var fn = modPtr |> find_module_function_via_rtti(func)
         if (fn == null) {
             return
         }

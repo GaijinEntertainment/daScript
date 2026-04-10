@@ -13,7 +13,7 @@ require dastest/testing_boost public
 [test]
 def test_call_with_block_no_args(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); })
+        var expr = qmacro(foo() $ { bar(); })
         let r = qmatch(expr, foo() $ { bar(); })
         t |> success(r.matched, "call with block should match")
     }
@@ -22,7 +22,7 @@ def test_call_with_block_no_args(t : T?) {
 [test]
 def test_call_with_block_wrong_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); })
+        var expr = qmacro(foo() $ { bar(); })
         let r = qmatch(expr, foo() $ { baz(); })
         t |> success(!r.matched, "wrong block body should fail")
     }
@@ -31,7 +31,7 @@ def test_call_with_block_wrong_body(t : T?) {
 [test]
 def test_call_with_block_wrong_call_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); })
+        var expr = qmacro(foo() $ { bar(); })
         let r = qmatch(expr, other() $ { bar(); })
         t |> success(!r.matched, "wrong call name should fail")
     }
@@ -42,7 +42,7 @@ def test_call_with_block_wrong_call_name(t : T?) {
 [test]
 def test_call_with_typed_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $(a : int) { bar(a); })
+        var expr = qmacro(foo() $(a : int) { bar(a); })
         let r = qmatch(expr, foo() $(a : int) { bar(a); })
         t |> success(r.matched, "typed block should match")
     }
@@ -51,7 +51,7 @@ def test_call_with_typed_block(t : T?) {
 [test]
 def test_call_with_typed_block_wrong_arg_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $(a : int) { bar(a); })
+        var expr = qmacro(foo() $(a : int) { bar(a); })
         let r = qmatch(expr, foo() $(x : int) { bar(a); })
         t |> success(!r.matched, "wrong block arg name should fail")
     }
@@ -60,7 +60,7 @@ def test_call_with_typed_block_wrong_arg_name(t : T?) {
 [test]
 def test_call_with_typed_block_wrong_arg_type(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $(a : int) { bar(a); })
+        var expr = qmacro(foo() $(a : int) { bar(a); })
         let r = qmatch(expr, foo() $(a : float) { bar(a); })
         t |> success(!r.matched, "wrong block arg type should fail")
     }
@@ -69,7 +69,7 @@ def test_call_with_typed_block_wrong_arg_type(t : T?) {
 [test]
 def test_call_with_two_block_args(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $(a : int, b : float) { bar(a, b); })
+        var expr = qmacro(foo() $(a : int, b : float) { bar(a, b); })
         let r = qmatch(expr, foo() $(a : int, b : float) { bar(a, b); })
         t |> success(r.matched, "two typed block args should match")
     }
@@ -78,7 +78,7 @@ def test_call_with_two_block_args(t : T?) {
 [test]
 def test_call_with_two_block_args_wrong_second(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $(a : int, b : float) { bar(a, b); })
+        var expr = qmacro(foo() $(a : int, b : float) { bar(a, b); })
         let r = qmatch(expr, foo() $(a : int, b : string) { bar(a, b); })
         t |> success(!r.matched, "wrong second block arg type should fail")
     }
@@ -89,7 +89,7 @@ def test_call_with_two_block_args_wrong_second(t : T?) {
 [test]
 def test_block_with_return_type(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(invoke(cb) $(a : int) : float { return 1.0; })
+        var expr = qmacro(invoke(cb) $(a : int) : float { return 1.0; })
         let r = qmatch(expr, invoke(cb) $(a : int) : float { return 1.0; })
         t |> success(r.matched, "block with return type should match")
     }
@@ -98,7 +98,7 @@ def test_block_with_return_type(t : T?) {
 [test]
 def test_block_with_wrong_return_type(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(invoke(cb) $(a : int) : float { return 1.0; })
+        var expr = qmacro(invoke(cb) $(a : int) : float { return 1.0; })
         let r = qmatch(expr, invoke(cb) $(a : int) : int { return 1.0; })
         t |> success(!r.matched, "wrong return type should fail")
     }
@@ -107,7 +107,7 @@ def test_block_with_wrong_return_type(t : T?) {
 [test]
 def test_block_no_return_pattern_matches_any(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(invoke(cb) $(a : int) : float { return 1.0; })
+        var expr = qmacro(invoke(cb) $(a : int) : float { return 1.0; })
         let r = qmatch(expr, invoke(cb) $(a : int) { return 1.0; })
         t |> success(r.matched, "omitted return type should match any")
     }
@@ -118,7 +118,7 @@ def test_block_no_return_pattern_matches_any(t : T?) {
 [test]
 def test_block_no_arg(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(defer() $ { print(); })
+        var expr = qmacro(defer() $ { print(); })
         let r = qmatch(expr, defer() $ { print(); })
         t |> success(r.matched, "no-arg block should match")
     }
@@ -127,7 +127,7 @@ def test_block_no_arg(t : T?) {
 [test]
 def test_block_no_arg_wrong_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(defer() $ { print(); })
+        var expr = qmacro(defer() $ { print(); })
         let r = qmatch(expr, defer() $ { foo(); })
         t |> success(!r.matched, "wrong no-arg block body should fail")
     }
@@ -138,7 +138,7 @@ def test_block_no_arg_wrong_body(t : T?) {
 [test]
 def test_block_multi_stmts(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); baz(); })
+        var expr = qmacro(foo() $ { bar(); baz(); })
         let r = qmatch(expr, foo() $ { bar(); baz(); })
         t |> success(r.matched, "multi-stmt block should match")
     }
@@ -147,7 +147,7 @@ def test_block_multi_stmts(t : T?) {
 [test]
 def test_block_multi_stmts_wrong_order(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); baz(); })
+        var expr = qmacro(foo() $ { bar(); baz(); })
         let r = qmatch(expr, foo() $ { baz(); bar(); })
         t |> success(!r.matched, "wrong stmt order should fail")
     }
@@ -156,7 +156,7 @@ def test_block_multi_stmts_wrong_order(t : T?) {
 [test]
 def test_block_multi_stmts_extra(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo() $ { bar(); baz(); })
+        var expr = qmacro(foo() $ { bar(); baz(); })
         let r = qmatch(expr, foo() $ { bar(); })
         t |> success(!r.matched, "fewer pattern stmts should fail")
     }
@@ -167,7 +167,7 @@ def test_block_multi_stmts_extra(t : T?) {
 [test]
 def test_call_with_args_and_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo(1, 2) $ { bar(); })
+        var expr = qmacro(foo(1, 2) $ { bar(); })
         let r = qmatch(expr, foo(1, 2) $ { bar(); })
         t |> success(r.matched, "call with args + block should match")
     }
@@ -176,7 +176,7 @@ def test_call_with_args_and_block(t : T?) {
 [test]
 def test_call_with_wrong_args_and_block(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(foo(1, 2) $ { bar(); })
+        var expr = qmacro(foo(1, 2) $ { bar(); })
         let r = qmatch(expr, foo(1, 3) $ { bar(); })
         t |> success(!r.matched, "wrong call arg should fail")
     }
@@ -187,7 +187,7 @@ def test_call_with_wrong_args_and_block(t : T?) {
 [test]
 def test_block_var_arg(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro(build_string() $(var writer) { write(writer, "hello"); })
+        var expr = qmacro(build_string() $(var writer) { write(writer, "hello"); })
         let r = qmatch(expr, build_string() $(var writer) { write(writer, "hello"); })
         t |> success(r.matched, "block with var arg should match")
     }

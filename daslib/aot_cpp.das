@@ -439,7 +439,7 @@ class NoAotMarker : AstVisitor {
     }
     // function
     def override preVisitFunction(var f : FunctionPtr) {
-        func = get_ptr(f);
+        func = f;
     }
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
         var tmp := func
@@ -453,7 +453,7 @@ class NoAotMarker : AstVisitor {
         }
     }
     // looks like call
-    def override preVisitExprLooksLikeCall(call : smart_ptr<ExprLooksLikeCall>) {
+    def override preVisitExprLooksLikeCall(call : ExprLooksLikeCall?) {
         if (call.name == "invoke") {   // invoke of anonymous blk
             if (!empty(call.arguments) && call.arguments[0] is ExprMakeBlock) {
                 let mkb = call.arguments[0] as ExprMakeBlock;
@@ -470,14 +470,14 @@ class public PrologueMarker : AstVisitor {
 
     // function
     def override preVisitFunction(var f : FunctionPtr) {
-        func = get_ptr(f);
+        func = f;
     }
     def override visitFunction(var that : FunctionPtr) {
         func = null;
         return <- that;
     }
     // ExprMakeBlock
-    def override preVisitExprMakeBlock(expr : smart_ptr<ExprMakeBlock>) {
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) {
         if (func != null && func.flags.hasMakeBlock) {
             let blk = expr._block as ExprBlock;
             if (!blk.blockFlags.aotSkipMakeBlock) {
@@ -505,7 +505,7 @@ class UseTypeMarker : AstVisitor {
     def override preVisitFunctionArgument(fn : FunctionPtr; variable : VariablePtr; lastArg : bool) {
         mark(variable._type);
     }
-    def override preVisitExprBlockArgument(expr_blk : smart_ptr<ExprBlock>; variable : VariablePtr; lastArg : bool) {
+    def override preVisitExprBlockArgument(expr_blk : ExprBlock?; variable : VariablePtr; lastArg : bool) {
         mark(variable._type);
     }
     def mark(decl : TypeDeclPtr) {
@@ -918,20 +918,20 @@ def public aotFuncName(func : Function?) {
 
 class public BlockVariableCollector : AstVisitor {
     //! AST visitor that collects block-level variable declarations for AOT code generation.
-    def override preVisitExprBlock(blk : smart_ptr<ExprBlock>) {
+    def override preVisitExprBlock(blk : ExprBlock?) {
         push(stack, blk as ExprBlock);
     }
     def getVarName(variable : VariablePtr) {
-        return rename?[variable.get_ptr()] ?? string(variable.name)
+        return rename?[variable] ?? string(variable.name)
     }
     def isMoved(variable : VariablePtr) {
-        return moved |> key_exists(variable.get_ptr())
+        return moved |> key_exists(variable)
     }
     def renameVariableTo(variable : VariablePtr; newName : string) {
-        rename |> insert(variable.get_ptr(), newName);
+        rename |> insert(variable, newName);
     }
 
-    def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         stack |> pop();
         return blk;
     }
@@ -941,17 +941,17 @@ class public BlockVariableCollector : AstVisitor {
     }
     def renameVariable(variable : VariablePtr) {
         if (needRenaming(variable)) {
-            rename |> insert(variable.get_ptr(), "__{aotSuffixNameEx(variable.name,"_Var")}_rename_at_{variable.at.line:d}_{(tempCounter++):d}");
+            rename |> insert(variable, "__{aotSuffixNameEx(variable.name,"_Var")}_rename_at_{variable.at.line:d}_{(tempCounter++):d}");
         }
     }
 // for loop
-    def override preVisitExprForVariable(expr : smart_ptr<ExprFor>; variable : VariablePtr; last : bool) {
+    def override preVisitExprForVariable(expr : ExprFor?; variable : VariablePtr; last : bool) {
         for (varr in expr.iteratorVariables) {
             renameVariable(varr);
         }
     }
 // blk argument
-    def override preVisitExprBlockArgument(blk : smart_ptr<ExprBlock>; variable : VariablePtr; lastArg : bool) {
+    def override preVisitExprBlockArgument(blk : ExprBlock?; variable : VariablePtr; lastArg : bool) {
         renameVariable(variable);
     }
 // functon argument
@@ -989,56 +989,56 @@ class public BlockVariableCollector : AstVisitor {
         }
         return stack[0];
     }
-    def override preVisitExprLetVariable(let_var : smart_ptr<ExprLet>; var variable : VariablePtr; last : bool) {
+    def override preVisitExprLetVariable(let_var : ExprLet?; var variable : VariablePtr; last : bool) {
         var bfinal = getFinalBlock()
         if (bfinal != null) {
             bfinal = getTopBlock();
-            variables[bfinal] |> push(variable.get_ptr());
-            moved |> insert(variable.get_ptr());
+            variables[bfinal] |> push(variable);
+            moved |> insert(variable);
         }
         renameVariable(variable);
     }
 
-    def handleExpr(var expr : smart_ptr<ExprMakeLocal>) {
+    def handleExpr(var expr : ExprMakeLocal?) {
         let need_insert = !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
         if (need_insert) {
             let blk = getCurrentBlock();
-            localTemps[blk] |> push(expr.get_ptr());
+            localTemps[blk] |> push(expr);
         }
     }
 
 // make array
-    def override preVisitExprMakeArray(var expr : smart_ptr<ExprMakeArray>) {
+    def override preVisitExprMakeArray(var expr : ExprMakeArray?) {
         handleExpr(expr)
     }
 // make tuple
-    def override preVisitExprMakeTuple(var expr : smart_ptr<ExprMakeTuple>) {
+    def override preVisitExprMakeTuple(var expr : ExprMakeTuple?) {
         handleExpr(expr)
     }
 // make structure
-    def override preVisitExprMakeStruct(var expr : smart_ptr<ExprMakeStruct>) {
+    def override preVisitExprMakeStruct(var expr : ExprMakeStruct?) {
         handleExpr(expr)
     }
 // make variant
-    def override preVisitExprMakeVariant(var expr : smart_ptr<ExprMakeVariant>) {
+    def override preVisitExprMakeVariant(var expr : ExprMakeVariant?) {
         handleExpr(expr)
     }
 // call with CMRES
-    def override preVisitExprCall(var expr : smart_ptr<ExprCall>) {
+    def override preVisitExprCall(var expr : ExprCall?) {
         let need_insert = !expr.doesNotNeedSp && expr.stackTop != 0u;
         if (need_insert) {
             let blk = getCurrentBlock();
-            localTemps[blk] |> push(expr.get_ptr());
+            localTemps[blk] |> push(expr);
         }
     }
 // invoke with CMRES
-    def override preVisitExprLooksLikeCall(var expr : smart_ptr<ExprLooksLikeCall>) {
+    def override preVisitExprLooksLikeCall(var expr : ExprLooksLikeCall?) {
         if (expr is ExprInvoke) {
             let inv = expr as ExprInvoke;
             let need_insert = !inv.doesNotNeedSp && inv.stackTop != 0u;
             if (need_insert) {
                 let blk = getCurrentBlock();
-                localTemps[blk] |> push(expr.get_ptr());
+                localTemps[blk] |> push(expr);
             }
         }
     }
@@ -1063,13 +1063,13 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
         }
         describeLocalCppType(unsafe(addr(writer)), fn.result,
             cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
-        write(writer, " {needName ? aotFuncName(fn.get_ptr()) : "(*)"}");
+        write(writer, " {needName ? aotFuncName(fn) : "(*)"}");
             // let prefix = fn.arguments |> empty() ? "" : ", "
             /*
             let prefix = "";
             var args_str = "";
             for (arg1 in fn.arguments) {
-                let arg : smart_ptr<Variable> := arg1;
+                let arg : Variable? := arg1;
                 args_str += ", ";
                 args_str += build_string() $(writer2) {
                                                     if (isLocalVec(arg._type)) {
@@ -1088,7 +1088,7 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
             let args_str = (
                 fn.arguments
                 |> each()
-                |> map(@(arg : smart_ptr<Variable>) : string {
+                |> map(@(arg : Variable?) : string {
                     return build_string() $(writer2) {
                         if (isLocalVec(arg._type)) {
                             describeLocalCppType(unsafe(addr(writer2)), arg._type, cross_platform);
@@ -1206,10 +1206,10 @@ class public CppAot : AstVisitor {
         write(*ss, "namespace {aotModuleName(that._module)} \{\n");
         for (ann in that.annotations) {
             if (ann.annotation is StructureAnnotation) {
-                get_struct_aot_prefix(ann.annotation as StructureAnnotation, that.get_ptr(), ann.arguments, ss);
+                get_struct_aot_prefix(ann.annotation as StructureAnnotation, that, ann.arguments, ss);
             }
         }
-        write(*ss, "\nstruct {aotStructName(that.get_ptr())}");
+        write(*ss, "\nstruct {aotStructName(that)}");
         if (that.flags.cppLayout && that.parent != null) {
             write(*ss, " : {aotStructName(that.parent)}");
         }
@@ -1222,7 +1222,7 @@ class public CppAot : AstVisitor {
     }
     def override preVisitStructureField(that : StructurePtr; decl : FieldDeclaration; last : bool) {
         let from = find_struct_field_parent(that, string(decl.name));
-        if (that.flags.cppLayout && from != unsafe(reinterpret<Structure const?>(that.get_ptr()))) {
+        if (that.flags.cppLayout && from != unsafe(reinterpret<Structure const?>(that))) {
             write(*ss, "    /* skipping {decl.name}, from {from.name} */");
         } else {
             write(*ss, "    {describeCppType(decl._type, DescribeConfig(cross_platform=cross_platform,skip_const = true))} {aotFieldName(string(decl.name))};");
@@ -1237,7 +1237,7 @@ class public CppAot : AstVisitor {
     def override visitStructure(that : StructurePtr) {
         write(*ss, "};\n");   // structure
         if (!cross_platform && !that.fields |> empty()) {
-            let s_name = aotStructName(that.get_ptr())
+            let s_name = aotStructName(that)
             write(*ss, "static_assert(sizeof({s_name})=={that.sizeOf},\"structure size mismatch with DAS\");\n");
             for (tf in that.fields) {
                 write(*ss, "static_assert(offsetof({s_name},{aotFieldName(string(tf.name))})=={tf.offset},\"structure field offset mismatch with DAS\");\n");
@@ -1276,7 +1276,7 @@ class public CppAot : AstVisitor {
         for (tmp in temps) {
             write(*ss, tabs());
             describeVarLocalCppType(ss, tmp._type, cross_platform);
-            write(*ss, " {makeLocalTempName(unsafe(reinterpret<ExpressionPtr>(tmp)))};\n");
+            write(*ss, " {makeLocalTempName(tmp)};\n");
         }
     }
     def override visitGlobalLet(prog : ProgramPtr) {
@@ -1284,7 +1284,7 @@ class public CppAot : AstVisitor {
         write(*ss, "}\n");
     }
 // global
-    def override preVisitGlobalLetVariable(variable : smart_ptr<Variable>; lastArg : bool) {
+    def override preVisitGlobalLetVariable(variable : Variable?; lastArg : bool) {
         write(*ss, tabs());
         if (!variable.flags.used) {
             write(*ss, "/* ");
@@ -1319,12 +1319,12 @@ class public CppAot : AstVisitor {
         return true;
     }
     def override preVisitFunction(fn : FunctionPtr) {
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn.get_ptr()) == aot_filter_function)) {
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
             write(*ss, "\n/*<<AOT_FUNC_BEGIN>>*/");
         }
         write(*ss, "\ninline ");
         describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes);
-        write(*ss, " {aotFuncName(fn.get_ptr())} ( Context * __context__");
+        write(*ss, " {aotFuncName(fn)} ( Context * __context__");
     }
     def override preVisitFunctionBody(fn : FunctionPtr; expr : ExpressionPtr) {
         if (fn.flags.aotNeedPrologue || prologue) {
@@ -1369,7 +1369,7 @@ class public CppAot : AstVisitor {
         } else {
             write(*ss, "\n");
         }
-        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn.get_ptr()) == aot_filter_function)) {
+        if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
             write(*ss, "/*<<AOT_FUNC_END>>*/\n");
         }
         return fn;
@@ -1377,8 +1377,8 @@ class public CppAot : AstVisitor {
 // blk
     def makeLocalTempName(expr : ExpressionPtr) {
         // todo: fix casts to parents A -> B -> C (from A to B)
-        if (!local_temp_names |> key_exists(expr.get_ptr())) {
-            local_temp_names |> insert(expr.get_ptr(), local_temp_names |> length());
+        if (!local_temp_names |> key_exists(expr)) {
+            local_temp_names |> insert(expr, local_temp_names |> length());
         }
         /*if (isMakeLocal(expr)) {
             stackTop = (expr as ExprMakeLocal).stackTop;
@@ -1393,9 +1393,9 @@ class public CppAot : AstVisitor {
         } else {
             panic("we should not be here. we need stacktop for the name");
         }
-        return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{local_temp_names |> get_value(expr.get_ptr()):d}";
+        return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{local_temp_names |> get_value(expr):d}";
     }
-    def override preVisitExprBlock(var blk : smart_ptr<ExprBlock>) {
+    def override preVisitExprBlock(var blk : ExprBlock?) {
         push(scopes, blk as ExprBlock);
         blk.blockFlags |= ExprBlockFlags.finallyBeforeBody;
         if (blk.blockFlags.inTheLoop) {
@@ -1404,11 +1404,11 @@ class public CppAot : AstVisitor {
         write(*ss, "\{\n");
         tab ++;
         // pre-declare variables
-        assume vars = collector.variables[blk.get_ptr()];
+        assume vars = collector.variables[blk];
         for (variable in vars) {
             write(*ss, "{tabs()}");
             describeVarLocalCppType(ss, variable._type, cross_platform);
-            let varname = collector.getVarName(unsafe(reinterpret<VariablePtr>(variable)));
+            let varname = collector.getVarName(variable);
             var vname = varname
             let constRef = (variable._type.flags.constant &&
                            variable._type.isRefType &&
@@ -1424,31 +1424,31 @@ class public CppAot : AstVisitor {
             }
         }
         // pre-declare locals
-        collector.localTemps.get(blk.get_ptr()) $(temps) {
+        collector.localTemps.get(blk) $(temps) {
             for (tmp in temps) {
                 write(*ss, tabs());
                 describeVarLocalCppType(ss, tmp._type, cross_platform);
-                let tempName = makeLocalTempName(unsafe(reinterpret<ExpressionPtr>(tmp)));
+                let tempName = makeLocalTempName(tmp);
                 write(*ss, " {tempName}; {tempName};\n");
             }
         }
     }
-    def override preVisitExprBlockArgumentInit(blk : smart_ptr<ExprBlock>; variable : VariablePtr; init : ExpressionPtr) {
+    def override preVisitExprBlockArgumentInit(blk : ExprBlock?; variable : VariablePtr; init : ExpressionPtr) {
         write(*ss, "\n#if 0\n");
     }
-    def override visitExprBlockArgumentInit(blk : smart_ptr<ExprBlock>; variable : VariablePtr; init : ExpressionPtr) {
+    def override visitExprBlockArgumentInit(blk : ExprBlock?; variable : VariablePtr; init : ExpressionPtr) {
         write(*ss, "\n#endif\n");
         return init;
     }
-    def override preVisitExprBlockExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) {
         write(*ss, tabs());
     }
-    def override visitExprBlockExpression(blk : smart_ptr<ExprBlock>; that : ExpressionPtr) {
+    def override visitExprBlockExpression(blk : ExprBlock?; that : ExpressionPtr) {
         write(*ss, ";")
         newLine();
         return that;
     }
-    def override visitExprBlock(var blk : smart_ptr<ExprBlock>) : ExpressionPtr {
+    def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         tab --;
         write(*ss, "{tabs()}\}")
         blk.blockFlags &= ~ExprBlockFlags.finallyBeforeBody
@@ -1456,25 +1456,25 @@ class public CppAot : AstVisitor {
         scopes |> pop();
         return blk;
     }
-    def finallyName(blk : smart_ptr<ExprBlock>) {
+    def finallyName(blk : ExprBlock?) {
         return "__finally_{blk.at.line:d}";
     }
-    def override preVisitExprBlockFinal(blk : smart_ptr<ExprBlock>) {
+    def override preVisitExprBlockFinal(blk : ExprBlock?) {
         write(*ss, "{tabs()}/* finally */ auto {finallyName(blk)}= das_finally([&]()\{\n");
     }
-    def override preVisitExprBlockFinalExpression(blk : smart_ptr<ExprBlock>; expr : ExpressionPtr) {
+    def override preVisitExprBlockFinalExpression(blk : ExprBlock?; expr : ExpressionPtr) {
         write(*ss, "{tabs()}");
     }
-    def override visitExprBlockFinalExpression(blk : smart_ptr<ExprBlock>; that : ExpressionPtr) {
+    def override visitExprBlockFinalExpression(blk : ExprBlock?; that : ExpressionPtr) {
         write(*ss, ";");
         newLine();
         return that;
     }
-    def override visitExprBlockFinal(blk : smart_ptr<ExprBlock>) {
+    def override visitExprBlockFinal(blk : ExprBlock?) {
         write(*ss, "{tabs()}/* end finally */ \});\n");
     }
 // let
-    def override preVisitExprLetVariable(let_ : smart_ptr<ExprLet>; var variable : VariablePtr; last : bool) {
+    def override preVisitExprLetVariable(let_ : ExprLet?; var variable : VariablePtr; last : bool) {
         let vname = collector.getVarName(variable);
         if (variable.init != null && variable.init is ExprMakeBlock) {
             var mkb = variable.init as ExprMakeBlock;
@@ -1506,7 +1506,7 @@ class public CppAot : AstVisitor {
             write(*ss, "das_zero({cvname})");
         }
     }
-    def override visitExprLetVariable(let_ : smart_ptr<ExprLet>; variable : VariablePtr; last : bool) {
+    def override visitExprLetVariable(let_ : ExprLet?; variable : VariablePtr; last : bool) {
         if (!last) write(*ss, "; ");
         if (!collector.isMoved(variable)) {
             if (variable._type.flags.constant && variable._type.isRefType && !variable._type.flags.ref) {
@@ -1523,7 +1523,7 @@ class public CppAot : AstVisitor {
         }
         return variable;
     }
-    def override preVisitExprLetVariableInit(let_ : smart_ptr<ExprLet>; variable : VariablePtr; expr : ExpressionPtr) {
+    def override preVisitExprLetVariableInit(let_ : ExprLet?; variable : VariablePtr; expr : ExpressionPtr) {
         if (variable.flags.init_via_move && variable.init is ExprMakeBlock) {
             write(*ss, " = ");
         } elif (variable.flags.init_via_move) {
@@ -1569,7 +1569,7 @@ class public CppAot : AstVisitor {
             write(*ss, "(char *{maybeRef})(");
         }
     }
-    def override visitExprLetVariableInit(let_ : smart_ptr<ExprLet>; variable : VariablePtr; expr : ExpressionPtr) {
+    def override visitExprLetVariableInit(let_ : ExprLet?; variable : VariablePtr; expr : ExpressionPtr) {
         if (expr._type.isString) {
             write(*ss, ")");
         }
@@ -1597,18 +1597,18 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // label
-    def override preVisitExprLabel(that : smart_ptr<ExprLabel>) {
+    def override preVisitExprLabel(that : ExprLabel?) {
         write(*ss, "label_{that.labelName}:;");
     }
 // goto
-    def override preVisitExprGoto(that : smart_ptr<ExprGoto>) {
+    def override preVisitExprGoto(that : ExprGoto?) {
         if (that.subexpr == null) {
             write(*ss, "goto label_{that.labelName}");
         } else {
             write(*ss, "switch (");
         }
     }
-    def override visitExprGoto(var that : smart_ptr<ExprGoto>) : ExpressionPtr {
+    def override visitExprGoto(var that : ExprGoto?) : ExpressionPtr {
         if (that.subexpr != null) {
             write(*ss, ") \{\n");
             scopes |> reverse();
@@ -1627,39 +1627,39 @@ class public CppAot : AstVisitor {
         return that;
     }
 // copy
-    def override preVisitExprCopy(that : smart_ptr<ExprCopy>) {
+    def override preVisitExprCopy(that : ExprCopy?) {
         write(*ss, "das_copy(");
     }
-    def override preVisitExprCopyRight(that : smart_ptr<ExprCopy>; right : ExpressionPtr) {
+    def override preVisitExprCopyRight(that : ExprCopy?; right : ExpressionPtr) {
         write(*ss, ",");
     }
-    def override visitExprCopy(var that : smart_ptr<ExprCopy>) : ExpressionPtr {
+    def override visitExprCopy(var that : ExprCopy?) : ExpressionPtr {
         write(*ss, ")");
         return that;
     }
 // clone
-    def override preVisitExprClone(that : smart_ptr<ExprClone>) {
+    def override preVisitExprClone(that : ExprClone?) {
         let cfg = DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform)
         let cfg2 := cfg
         let left_t = describeCppType(that.left._type, cfg);
         let right_t = describeCppType(that.right._type, cfg2);
         write(*ss, "das_clone<{left_t},{right_t}>::clone(");
     }
-    def override preVisitExprCloneRight(that : smart_ptr<ExprClone>; right : ExpressionPtr) {
+    def override preVisitExprCloneRight(that : ExprClone?; right : ExpressionPtr) {
         write(*ss, ",");
     }
-    def override visitExprClone(var that : smart_ptr<ExprClone>) : ExpressionPtr {
+    def override visitExprClone(var that : ExprClone?) : ExpressionPtr {
         write(*ss, ")");
         return that;
     }
 // move
-    def override preVisitExprMove(that : smart_ptr<ExprMove>) {
+    def override preVisitExprMove(that : ExprMove?) {
         write(*ss, "das_move(");
     }
-    def override preVisitExprMoveRight(that : smart_ptr<ExprMove>; right : ExpressionPtr) {
+    def override preVisitExprMoveRight(that : ExprMove?; right : ExpressionPtr) {
         write(*ss, ",");
     }
-    def override visitExprMove(var that : smart_ptr<ExprMove>) : ExpressionPtr {
+    def override visitExprMove(var that : ExprMove?) : ExpressionPtr {
         write(*ss, ")");
         return that;
     }
@@ -1671,13 +1671,13 @@ class public CppAot : AstVisitor {
             write(*ss, "SimPolicy<{decl.annotation.cppName.empty() ? decl.annotation.name : decl.annotation.cppName}>");
         }
     }
-    def isOpPolicy1(that : smart_ptr<ExprOp1>) {
+    def isOpPolicy1(that : ExprOp1?) {
         if (is_alpha(first_character(that.op))) {
             return true;
         }
         return that.subexpr._type.isPolicyType;
     }
-    def override preVisitExprOp1(var that : smart_ptr<ExprOp1>) {
+    def override preVisitExprOp1(var that : ExprOp1?) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
             var subexpr := that.subexpr
@@ -1696,7 +1696,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override visitExprOp1(var that : smart_ptr<ExprOp1>) : ExpressionPtr {
+    def override visitExprOp1(var that : ExprOp1?) : ExpressionPtr {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             CallFunc_visitCallArg(that, that.subexpr, true);
             CallFunc_visit(that);
@@ -1714,18 +1714,18 @@ class public CppAot : AstVisitor {
         return that;
     }
 // op2
-    def isSetBool(that : smart_ptr<ExprOp2>) {
+    def isSetBool(that : ExprOp2?) {
         return ((that.op == "||=" || that.op == "&&=" || that.op == "^^=") &&
                 that.right._type.baseType == Type.tBool && that.right._type.isSimpleType);
     }
-    def isOpPolicy2(that : smart_ptr<ExprOp2>) {
+    def isOpPolicy2(that : ExprOp2?) {
         if (is_alpha(first_character(that.op))) return true;
         if (that.op == "/" || that.op == "%") return true;
         if (that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>=") return true;
         if (that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
         return that._type.isPolicyType || that.left._type.isPolicyType || that.right._type.isPolicyType;
     }
-    def opPolicyBase(that : smart_ptr<ExprOp2>) {
+    def opPolicyBase(that : ExprOp2?) {
         if (that._type.isPolicyType) {
             return that._type;
         } elif (that.left._type.isPolicyType) {
@@ -1734,8 +1734,8 @@ class public CppAot : AstVisitor {
             return that.right._type;
         }
     }
-    def opPolicyName(that : smart_ptr<ExprOp>) {
-        assume fn = (unsafe(reinterpret<ExprCallFunc?>(that.get_ptr()))).func;
+    def opPolicyName(that : ExprOp?) {
+        assume fn = (unsafe(reinterpret<ExprCallFunc?>(that))).func;
         if (fn.flags.builtIn) {
             let bfn = fn as BuiltInFunction;
             return string(bfn.cppName.empty() ? bfn.name : bfn.cppName);
@@ -1743,7 +1743,7 @@ class public CppAot : AstVisitor {
             return "/* NotAPolicy */";
         }
     }
-    def isRefPolicyOp(th : smart_ptr<ExprOp2>) {
+    def isRefPolicyOp(th : ExprOp2?) {
         let op = string(th.op);
         return ["+=", "-=", "*=", "/=", "%=",// math
                 "&=", "|=", "^=",         // bin
@@ -1752,7 +1752,7 @@ class public CppAot : AstVisitor {
                 ]._any(_ == op)
     }
 
-    def override preVisitExprOp2(var that : smart_ptr<ExprOp2>) {
+    def override preVisitExprOp2(var that : ExprOp2?) {
         if (!noBracket(that)) write(*ss, "(");
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             that.arguments |> clear();
@@ -1792,7 +1792,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override preVisitExprOp2Right(that : smart_ptr<ExprOp2>; right : ExpressionPtr) {
+    def override preVisitExprOp2Right(that : ExprOp2?; right : ExpressionPtr) {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             CallFunc_visitCallArg(that, that.left, false);
             CallFunc_preVisitCallArg(that, that.right, true);
@@ -1835,7 +1835,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override visitExprOp2(var that : smart_ptr<ExprOp2>) : ExpressionPtr {
+    def override visitExprOp2(var that : ExprOp2?) : ExpressionPtr {
         if (!that.func.flags.builtIn || that.func.flags.callBased) {
             CallFunc_visitCallArg(that, that.right, true);
             CallFunc_visit(that);
@@ -1862,12 +1862,12 @@ class public CppAot : AstVisitor {
         return that;
     }
 // op3
-    def override preVisitExprOp3(that : smart_ptr<ExprOp3>) {
+    def override preVisitExprOp3(that : ExprOp3?) {
         if (!noBracket(that)) {
             write(*ss, "(");
         }
     }
-    def override preVisitExprOp3Left(that : smart_ptr<ExprOp3>; left : ExpressionPtr) {
+    def override preVisitExprOp3Left(that : ExprOp3?; left : ExpressionPtr) {
         write(*ss, " ? ");
         assume argT = left._type;
         if (isLocalVec(argT)) {
@@ -1880,7 +1880,7 @@ class public CppAot : AstVisitor {
         }
         write(*ss, "<{describeCppType(that._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
-    def override preVisitExprOp3Right(that : smart_ptr<ExprOp3>; right : ExpressionPtr) {
+    def override preVisitExprOp3Right(that : ExprOp3?; right : ExpressionPtr) {
         write(*ss, ") : ");
         if (isLocalVec(right._type)) {
             write(*ss, "(vec4f)");
@@ -1892,7 +1892,7 @@ class public CppAot : AstVisitor {
         }
         write(*ss, "<{describeCppType(that._type, DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
-    def override visitExprOp3(var that : smart_ptr<ExprOp3>) : ExpressionPtr {
+    def override visitExprOp3(var that : ExprOp3?) : ExpressionPtr {
         write(*ss, ")");
         if (!noBracket(that)) {
             write(*ss, ")");
@@ -1900,7 +1900,7 @@ class public CppAot : AstVisitor {
         return that;
     }
 // return
-    def override preVisitExprReturn(expr : smart_ptr<ExprReturn>) {
+    def override preVisitExprReturn(expr : ExprReturn?) {
         write(*ss, "return ");
         if (expr.returnFlags.moveSemantics) {
             write(*ss, "/* <- */ ");
@@ -1923,7 +1923,7 @@ class public CppAot : AstVisitor {
             write(*ss, "<{describeCppType(retT, DescribeConfig(skip_const=true, cross_platform=cross_platform))}>::cast(");
         }
     }
-    def override visitExprReturn(var expr : smart_ptr<ExprReturn>) : ExpressionPtr {
+    def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         if (expr.returnFunc == null && expr._block == null) {
             write(*ss, "/* no function/block for return */ ");
             return expr;
@@ -1935,20 +1935,20 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // break
-    def override preVisitExprBreak(that : smart_ptr<ExprBreak>) {
+    def override preVisitExprBreak(that : ExprBreak?) {
         write(*ss, "break");
     }
 // continue
-    def override preVisitExprContinue(that : smart_ptr<ExprContinue>) {
+    def override preVisitExprContinue(that : ExprContinue?) {
         write(*ss, "continue");
     }
 // var
-    def override preVisitExprVar(variable : smart_ptr<ExprVar>) {
+    def override preVisitExprVar(variable : ExprVar?) {
         if (variable._type.flags.aotAlias) {
             write(*ss, "das_alias<{variable._type.alias}>::from(");
         }
     }
-    def override visitExprVar(var variable : smart_ptr<ExprVar>) : ExpressionPtr {
+    def override visitExprVar(var variable : ExprVar?) : ExpressionPtr {
         if (variable.varFlags.local && variable.variable._type.flags.ref) {
             write(*ss, "(*{collector.getVarName(variable.variable)})");
         } elif (variable.varFlags.local || variable.pBlock != null || variable.varFlags.argument) {
@@ -1964,7 +1964,7 @@ class public CppAot : AstVisitor {
         return variable;
     }
 // null coaelescing
-    def override preVisitExprNullCoalescing(nc : smart_ptr<ExprNullCoalescing>) {
+    def override preVisitExprNullCoalescing(nc : ExprNullCoalescing?) {
         if (nc._type.flags.aotAlias) {
             write(*ss, "das_alias<{nc._type.alias}>::from(");
         }
@@ -1975,10 +1975,10 @@ class public CppAot : AstVisitor {
             write(*ss, "({type_str2} *)");
         }
     }
-    def override preVisitExprNullCoalescingDefault(nc : smart_ptr<ExprNullCoalescing>; expr : ExpressionPtr) {
+    def override preVisitExprNullCoalescingDefault(nc : ExprNullCoalescing?; expr : ExpressionPtr) {
         write(*ss, ",");
     }
-    def override visitExprNullCoalescing(var nc : smart_ptr<ExprNullCoalescing>) : ExpressionPtr {
+    def override visitExprNullCoalescing(var nc : ExprNullCoalescing?) : ExpressionPtr {
         write(*ss, ")");
         if (nc._type.flags.aotAlias) {
             write(*ss, ")");
@@ -2008,23 +2008,23 @@ class public CppAot : AstVisitor {
         }
     }
 
-    def override preVisitExprIsVariant(field : smart_ptr<ExprIsVariant>) {
+    def override preVisitExprIsVariant(field : ExprIsVariant?) {
         assume var_type = field.value._type;
         write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::is(")
     }
-    def override visitExprIsVariant(var field : smart_ptr<ExprIsVariant>) : ExpressionPtr {
+    def override visitExprIsVariant(var field : ExprIsVariant?) : ExpressionPtr {
         write(*ss, ")");
         return field;
     }
 // as variant
-    def override preVisitExprAsVariant(field : smart_ptr<ExprAsVariant>) {
+    def override preVisitExprAsVariant(field : ExprAsVariant?) {
         assume var_type = field.value._type;
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
         }
         write(*ss, "{get_variant_field(var_type, field.fieldIndex)}::as(");
     }
-    def override visitExprAsVariant(var field : smart_ptr<ExprAsVariant>) : ExpressionPtr {
+    def override visitExprAsVariant(var field : ExprAsVariant?) : ExpressionPtr {
         write(*ss, ",__context__)");
         if (field._type.flags.aotAlias) {
             write(*ss, ")");
@@ -2032,14 +2032,14 @@ class public CppAot : AstVisitor {
         return field;
     }
 // safe as variant
-    def override preVisitExprSafeAsVariant(field : smart_ptr<ExprSafeAsVariant>) {
+    def override preVisitExprSafeAsVariant(field : ExprSafeAsVariant?) {
         assume fieldT = field.value._type.isPointer ? field.value._type.firstType :  field.value._type;
         if (fieldT.flags.aotAlias) {
             write(*ss, "das_alias<{fieldT.alias}>::from(");
         }
         write(*ss, "{get_variant_field(fieldT, field.fieldIndex)}::safe_as{(field.skipQQ ? "_ptr" : "")}(")
     }
-    def override visitExprSafeAsVariant(var field : smart_ptr<ExprSafeAsVariant>) : ExpressionPtr {
+    def override visitExprSafeAsVariant(var field : ExprSafeAsVariant?) : ExpressionPtr {
         write(*ss, ")");
         assume fieldT = field.value._type.isPointer ? field.value._type.firstType :  field.value._type;
         if (fieldT.flags.aotAlias) {
@@ -2048,7 +2048,7 @@ class public CppAot : AstVisitor {
         return field;
     }
 // safe field
-    def override preVisitExprSafeField(field : smart_ptr<ExprSafeField>) {
+    def override preVisitExprSafeField(field : ExprSafeField?) {
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
         }
@@ -2083,7 +2083,7 @@ class public CppAot : AstVisitor {
             write(*ss, ",&{mod_name}{vtype.structType.name}::{aotFieldName(string(field.name))}>::get(");
         }
     }
-    def override visitExprSafeField(var field : smart_ptr<ExprSafeField>) : ExpressionPtr {
+    def override visitExprSafeField(var field : ExprSafeField?) : ExpressionPtr {
         assume vtype = field.value._type.firstType;
         if (vtype.isHandle) {
             let type_str = describeCppType(vtype, DescribeConfig(skip_const = true, redundant_const = true, cross_platform = cross_platform));
@@ -2112,7 +2112,7 @@ class public CppAot : AstVisitor {
         }
     }
 
-    def override preVisitExprField(field : smart_ptr<ExprField>) {
+    def override preVisitExprField(field : ExprField?) {
         if (field._type.flags.aotAlias) {
             write(*ss, "das_alias<{field._type.alias}>::from(");
         }
@@ -2151,7 +2151,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override visitExprField(var field : smart_ptr<ExprField>) : ExpressionPtr {
+    def override visitExprField(var field : ExprField?) : ExpressionPtr {
         if (field.value._type.isBitfield) {
             write(*ss, ",1u << {field.fieldIndex})");
         } elif (field.value._type.isTuple) {
@@ -2187,7 +2187,7 @@ class public CppAot : AstVisitor {
         return field;
     }
 // at
-    def override preVisitExprAt(expr : smart_ptr<ExprAt>) {
+    def override preVisitExprAt(expr : ExprAt?) {
         if (expr._type.flags.aotAlias) {
             write(*ss, "das_alias<{expr._type.alias}>::from(");
         }
@@ -2196,7 +2196,7 @@ class public CppAot : AstVisitor {
             write(*ss, "das_index<{type_str}>::at(");
         }
     }
-    def override preVisitExprAtIndex(var expr : smart_ptr<ExprAt>; index : ExpressionPtr) {
+    def override preVisitExprAtIndex(var expr : ExprAt?; index : ExpressionPtr) {
         if (!expr.subexpr._type.dim |> empty() || expr.subexpr._type.isGoodArrayType || expr.subexpr._type.isGoodTableType) {
             if (expr.subexpr._type.flags.isNativeDim) {
                 write(*ss, "[");
@@ -2208,7 +2208,7 @@ class public CppAot : AstVisitor {
         }
 
     }
-    def override visitExprAt(var expr : smart_ptr<ExprAt>) : ExpressionPtr {
+    def override visitExprAt(var expr : ExprAt?) : ExpressionPtr {
         if (expr.subexpr._type.flags.isNativeDim) {
             write(*ss, "]");
         } else {
@@ -2220,7 +2220,7 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // safe at
-    def override preVisitExprSafeAt(expr : smart_ptr<ExprSafeAt>) {
+    def override preVisitExprSafeAt(expr : ExprSafeAt?) {
         let isPtr : bool = expr.subexpr._type.isPointer;
         assume seT = isPtr ? expr.subexpr._type.firstType : expr.subexpr._type;
         if ((!seT.dim |> empty() || seT.isGoodArrayType || seT.isGoodTableType)) {
@@ -2235,23 +2235,23 @@ class public CppAot : AstVisitor {
         }
         write(*ss, isPtr ? "(" : "&(");
     }
-    def override preVisitExprSafeAtIndex(expr : smart_ptr<ExprSafeAt>; index : ExpressionPtr) {
+    def override preVisitExprSafeAtIndex(expr : ExprSafeAt?; index : ExpressionPtr) {
         write(*ss, "),");
     }
-    def override visitExprSafeAt(var that : smart_ptr<ExprSafeAt>) : ExpressionPtr {
+    def override visitExprSafeAt(var that : ExprSafeAt?) : ExpressionPtr {
         write(*ss, ",__context__)");
         return that;
     }
 // const
-    def override visitExprFakeContext(var c : smart_ptr<ExprFakeContext>) : ExpressionPtr {
+    def override visitExprFakeContext(var c : ExprFakeContext?) : ExpressionPtr {
         write(*ss, "__context__");
         return c;
     }
-    def override visitExprFakeLineInfo(var c : smart_ptr<ExprFakeLineInfo>) : ExpressionPtr {
+    def override visitExprFakeLineInfo(var c : ExprFakeLineInfo?) : ExpressionPtr {
         write(*ss, "((LineInfoArg *)(&LineInfo::g_LineInfoNULL))");
         return c;
     }
-    def override visitExprConstPtr(var c : smart_ptr<ExprConstPtr>) : ExpressionPtr {
+    def override visitExprConstPtr(var c : ExprConstPtr?) : ExpressionPtr {
         if (c.getValue != null) {
             write(*ss, "((void *) 0x{unsafe(reinterpret<int64>(c.getValue)):x}))");
         } else {
@@ -2259,7 +2259,7 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstEnumeration(var c : smart_ptr<ExprConstEnumeration>) : ExpressionPtr {
+    def override visitExprConstEnumeration(var c : ExprConstEnumeration?) : ExpressionPtr {
         let cfg = DescribeConfig(skip_ref = true, skip_const = true, redundant_const = false, cross_platform = cross_platform);
         let type_str = describeCppType(c._type, cfg);
         write(*ss, type_str);
@@ -2275,19 +2275,19 @@ class public CppAot : AstVisitor {
         write(*ss, "::{ctext}");
         return c;
     }
-    def override visitExprConstInt(var c : smart_ptr<ExprConstInt>) : ExpressionPtr {
+    def override visitExprConstInt(var c : ExprConstInt?) : ExpressionPtr {
         write(*ss, "{c.getValue}");
         return c;
     }
-    def override visitExprConstInt8(var c : smart_ptr<ExprConstInt8>) : ExpressionPtr {
+    def override visitExprConstInt8(var c : ExprConstInt8?) : ExpressionPtr {
         write(*ss, "{c.getValue}");
         return c;
     }
-    def override visitExprConstInt16(var c : smart_ptr<ExprConstInt16>) : ExpressionPtr {
+    def override visitExprConstInt16(var c : ExprConstInt16?) : ExpressionPtr {
         write(*ss, "{c.getValue}");
         return c;
     }
-    def override visitExprConstInt64(var c : smart_ptr<ExprConstInt64>) : ExpressionPtr{
+    def override visitExprConstInt64(var c : ExprConstInt64?) : ExpressionPtr{
         if (c.getValue == LONG_MIN) {
             write(*ss, "INT64_MIN"); // silence overflow warning
         } else {
@@ -2295,23 +2295,23 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstUInt8(var c : smart_ptr<ExprConstUInt8>) : ExpressionPtr {
+    def override visitExprConstUInt8(var c : ExprConstUInt8?) : ExpressionPtr {
         write(*ss, "0x{uint(c.getValue):x}");
         return c;
     }
-    def override visitExprConstUInt16(var c : smart_ptr<ExprConstUInt16>) : ExpressionPtr {
+    def override visitExprConstUInt16(var c : ExprConstUInt16?) : ExpressionPtr {
         write(*ss, "0x{uint(c.getValue):x}");
         return c;
     }
-    def override visitExprConstUInt64(var c : smart_ptr<ExprConstUInt64>) : ExpressionPtr {
+    def override visitExprConstUInt64(var c : ExprConstUInt64?) : ExpressionPtr {
         write(*ss, "UINT64_C(0x{c.getValue:x})");
         return c;
     }
-    def override visitExprConstUInt(var c : smart_ptr<ExprConstUInt>) : ExpressionPtr {
+    def override visitExprConstUInt(var c : ExprConstUInt?) : ExpressionPtr {
         write(*ss, "0x{c.getValue:x}u");
         return c;
     }
-    def override visitExprConstBitfield(var c : smart_ptr<ExprConstBitfield>) : ExpressionPtr {
+    def override visitExprConstBitfield(var c : ExprConstBitfield?) : ExpressionPtr {
         if (c._type.baseType == Type.tBitfield64) {
             write(*ss, "UINT64_C(0x{c.getValue:x})");
         } elif (c._type.baseType == Type.tBitfield16) {
@@ -2323,7 +2323,7 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstBool(var c : smart_ptr<ExprConstBool>) : ExpressionPtr {
+    def override visitExprConstBool(var c : ExprConstBool?) : ExpressionPtr {
         write(*ss, (c.getValue ? "true" : "false"));
         return c;
     }
@@ -2335,18 +2335,18 @@ class public CppAot : AstVisitor {
     def writeOutDouble(val : double) {
         write(*ss, to_cpp_double(val));
     }
-    def override visitExprConstDouble(var c : smart_ptr<ExprConstDouble>) : ExpressionPtr {
+    def override visitExprConstDouble(var c : ExprConstDouble?) : ExpressionPtr {
         writeOutDouble(c.getValue);
         return c;
     }
     def writeOutFloat(value : float) {
         write(*ss, to_cpp_float(value));
     }
-    def override visitExprConstFloat(var c : smart_ptr<ExprConstFloat>) : ExpressionPtr {
+    def override visitExprConstFloat(var c : ExprConstFloat?) : ExpressionPtr {
         writeOutFloat(c.getValue);
         return c;
     }
-    def override visitExprConstString(var c : smart_ptr<ExprConstString>) : ExpressionPtr {
+    def override visitExprConstString(var c : ExprConstString?) : ExpressionPtr {
         if (c.value.empty()) {
             write(*ss, "nullptr");
         } else {
@@ -2354,57 +2354,57 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstInt2(var c : smart_ptr<ExprConstInt2>) : ExpressionPtr {
+    def override visitExprConstInt2(var c : ExprConstInt2?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "int2({val.x},{val.y})");
         return c;
     }
-    def override visitExprConstRange(var c : smart_ptr<ExprConstRange>) : ExpressionPtr {
+    def override visitExprConstRange(var c : ExprConstRange?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "range({val.x:d},{val.y:d})");
         return c;
     }
-    def override visitExprConstRange64(var c : smart_ptr<ExprConstRange64>) : ExpressionPtr {
+    def override visitExprConstRange64(var c : ExprConstRange64?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "range64({val.x:d},{val.y:d})");
         return c;
     }
-    def override visitExprConstInt3(var c : smart_ptr<ExprConstInt3>) : ExpressionPtr {
+    def override visitExprConstInt3(var c : ExprConstInt3?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "int3({val.x:d},{val.y:d},{val.z:d})");
         return c;
     }
-    def override visitExprConstInt4(var c : smart_ptr<ExprConstInt4>) : ExpressionPtr {
+    def override visitExprConstInt4(var c : ExprConstInt4?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "int4({val.x:d},{val.y:d},{val.z:d},{val.w:d})");
         return c;
     }
-    def override visitExprConstUInt2(var c : smart_ptr<ExprConstUInt2>) : ExpressionPtr {
+    def override visitExprConstUInt2(var c : ExprConstUInt2?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "uint2({val.x:d},{val.y:d})");
         return c;
     }
-    def override visitExprConstURange(var c : smart_ptr<ExprConstURange>) : ExpressionPtr {
+    def override visitExprConstURange(var c : ExprConstURange?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "urange({val.x:d},{val.y:d})");
         return c;
     }
-    def override visitExprConstURange64(var c : smart_ptr<ExprConstURange64>) : ExpressionPtr {
+    def override visitExprConstURange64(var c : ExprConstURange64?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "urange64({val.x:d},{val.y:d})");
         return c;
     }
-    def override visitExprConstUInt3(var c : smart_ptr<ExprConstUInt3>) : ExpressionPtr {
+    def override visitExprConstUInt3(var c : ExprConstUInt3?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "uint3({val.x:d},{val.y:d},{val.z:d})");
         return c;
     }
-    def override visitExprConstUInt4(var c : smart_ptr<ExprConstUInt4>) : ExpressionPtr {
+    def override visitExprConstUInt4(var c : ExprConstUInt4?) : ExpressionPtr {
         let val = c.getValue;
         write(*ss, "uint4({val.x:d},{val.y:d},{val.z:d},{val.w:d})");
         return c;
     }
-    def override visitExprConstFloat2(var c : smart_ptr<ExprConstFloat2>) : ExpressionPtr {
+    def override visitExprConstFloat2(var c : ExprConstFloat2?) : ExpressionPtr {
         let val = c.getValue;
         if (val.x == 0.0f && val.y == 0.0f) {
             write(*ss, "v_zero()");
@@ -2421,7 +2421,7 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstFloat3(var c : smart_ptr<ExprConstFloat3>) : ExpressionPtr {
+    def override visitExprConstFloat3(var c : ExprConstFloat3?) : ExpressionPtr {
         let val = c.getValue;
         if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f) {
             write(*ss, "v_zero()");
@@ -2440,7 +2440,7 @@ class public CppAot : AstVisitor {
         }
         return c;
     }
-    def override visitExprConstFloat4(var c : smart_ptr<ExprConstFloat4>) : ExpressionPtr {
+    def override visitExprConstFloat4(var c : ExprConstFloat4?) : ExpressionPtr {
         let val = c.getValue;
         if (val.x == 0.0f && val.y == 0.0f && val.z == 0.0f && val.w == 0.0f) {
             write(*ss, "v_zero()");
@@ -2462,22 +2462,22 @@ class public CppAot : AstVisitor {
         return c;
     }
 // ExprAssume
-    def override preVisitExprAssume(expr : smart_ptr<ExprAssume>) {
+    def override preVisitExprAssume(expr : ExprAssume?) {
         write(*ss, "\n#if 0 // with, note optimizations are off\n");
     }
-    def override visitExprAssume(var expr : smart_ptr<ExprAssume>) : ExpressionPtr {
+    def override visitExprAssume(var expr : ExprAssume?) : ExpressionPtr {
         write(*ss, "\n#endif\n");
         return expr;
     }
 // ExprWith
-    def override preVisitExprWith(expr : smart_ptr<ExprWith>) {
+    def override preVisitExprWith(expr : ExprWith?) {
         write(*ss, "\n#if 0 // with, note optimizations are off\n");
     }
-    def override preVisitExprWithBody(expr : smart_ptr<ExprWith>; body : ExpressionPtr) {
+    def override preVisitExprWithBody(expr : ExprWith?; body : ExpressionPtr) {
         write(*ss, "\n#endif\n");
     }
 // ExprWhile
-    def override preVisitExprWhile(wh : smart_ptr<ExprWhile>) {
+    def override preVisitExprWhile(wh : ExprWhile?) {
         if (wh.body is ExprBlock) {
             let blk = wh.body as ExprBlock;
             if (!blk.finalList.empty()) {
@@ -2489,10 +2489,10 @@ class public CppAot : AstVisitor {
         }
         write(*ss, "while ( ");
     }
-    def override preVisitExprWhileBody(wh : smart_ptr<ExprWhile>; body : ExpressionPtr) {
+    def override preVisitExprWhileBody(wh : ExprWhile?; body : ExpressionPtr) {
         write(*ss, " )\n{tabs()}");
     }
-    def override visitExprWhile(var wh : smart_ptr<ExprWhile>) : ExpressionPtr {
+    def override visitExprWhile(var wh : ExprWhile?) : ExpressionPtr {
         if (wh.body is ExprBlock) {
             let blk = wh.body as ExprBlock;
             if (!blk.finalList.empty()) {
@@ -2503,10 +2503,10 @@ class public CppAot : AstVisitor {
         return wh;
     }
 // if then else
-    def override preVisitExprIfThenElse(ifte : smart_ptr<ExprIfThenElse>) {
+    def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) {
         write(*ss, "if ( ");
     }
-    def override preVisitExprIfThenElseIfBlock(ifte : smart_ptr<ExprIfThenElse>; blk : ExpressionPtr) {
+    def override preVisitExprIfThenElseIfBlock(ifte : ExprIfThenElse?; blk : ExpressionPtr) {
         if (!(blk is ExprBlock)) {
             write(*ss, " ) \{\n");
             tab ++;
@@ -2516,7 +2516,7 @@ class public CppAot : AstVisitor {
             write(*ss, tabs());
         }
     }
-    def override preVisitExprIfThenElseElseBlock(ifte : smart_ptr<ExprIfThenElse>; blk : ExpressionPtr) {
+    def override preVisitExprIfThenElseElseBlock(ifte : ExprIfThenElse?; blk : ExpressionPtr) {
         if (ifte.if_true != null && !(ifte.if_true is ExprBlock)) {
             write(*ss, ";\n");
             tab --;
@@ -2531,7 +2531,7 @@ class public CppAot : AstVisitor {
             write(*ss, tabs());
         }
     }
-    def override visitExprIfThenElse(var ifte : smart_ptr<ExprIfThenElse>) : ExpressionPtr {
+    def override visitExprIfThenElse(var ifte : ExprIfThenElse?) : ExpressionPtr {
         var isNotBlock : bool
         if (ifte.if_false != null) {
             isNotBlock = !(ifte.if_false is ExprBlock)
@@ -2547,7 +2547,7 @@ class public CppAot : AstVisitor {
         return ifte;
     }
 // swizzle
-    def override preVisitExprSwizzle(expr : smart_ptr<ExprSwizzle>) {
+    def override preVisitExprSwizzle(expr : ExprSwizzle?) {
         if (expr._type.flags.ref) {
             let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
             let value_str = describeCppType(expr.value._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
@@ -2582,7 +2582,7 @@ class public CppAot : AstVisitor {
             write(*ss, "das_alias<{expr.value._type.alias}>::from(");
         }
      }
-    def override visitExprSwizzle(var expr : smart_ptr<ExprSwizzle>) : ExpressionPtr {
+    def override visitExprSwizzle(var expr : ExprSwizzle?) : ExpressionPtr {
         if (expr.value._type.flags.aotAlias) {
             write(*ss, ")");
         }
@@ -2612,7 +2612,7 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // string builder
-    def outputCallTypeInfo(nArgs : uint; elements : dasvector`smart_ptr`Expression) {
+    def outputCallTypeInfo(nArgs : uint; elements : dasvector`ptr`Expression) {
         let debug_info_name = "__tinfo_{debugInfoGlobal++:d}";
         let tinfo_str = (
             elements |> each()
@@ -2631,7 +2631,7 @@ class public CppAot : AstVisitor {
             return debug_info_name;
         }
     }
-    def override preVisitExprStringBuilder(expr : smart_ptr<ExprStringBuilder>) {
+    def override preVisitExprStringBuilder(expr : ExprStringBuilder?) {
         let nArgs = uint(length(expr.elements));
         write(*ss, "das_string_builder");
         if (expr.stringBuilderFlags.isTempString) {write(*ss, "_temp"); }
@@ -2641,30 +2641,30 @@ class public CppAot : AstVisitor {
             write(*ss, "{debug_info_name}, ");
         }
     }
-    def override preVisitExprStringBuilderElement(sb : smart_ptr<ExprStringBuilder>; expr : ExpressionPtr; last : bool) {
+    def override preVisitExprStringBuilderElement(sb : ExprStringBuilder?; expr : ExpressionPtr; last : bool) {
         write(*ss, "cast<{describeCppType(expr._type,DescribeConfig(cross_platform=cross_platform))}");
         if (expr._type.isRefType && !expr._type.flags.ref) {
             write(*ss, " &");
         }
         write(*ss, ">::from(");
     }
-    def override visitExprStringBuilderElement(sb : smart_ptr<ExprStringBuilder>; expr : ExpressionPtr; last : bool) {
+    def override visitExprStringBuilderElement(sb : ExprStringBuilder?; expr : ExpressionPtr; last : bool) {
         write(*ss, ")");
         if (!last) {
             write(*ss, ", ");
         }
         return expr;
     }
-    def override visitExprStringBuilder(var expr : smart_ptr<ExprStringBuilder>) : ExpressionPtr {
+    def override visitExprStringBuilder(var expr : ExprStringBuilder?) : ExpressionPtr {
         write(*ss, "))");
         return expr;
     }
 // typedecl
-    def override preVisitExprTypeDecl(expr : smart_ptr<ExprTypeDecl>) {
+    def override preVisitExprTypeDecl(expr : ExprTypeDecl?) {
         write(*ss, "das_typedecl_value<{describeCppType(expr.typeexpr,DescribeConfig(cross_platform=cross_platform))}>()()");
     }
 // type-info
-    def override preVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>) {
+    def override preVisitExprTypeInfo(expr : ExprTypeInfo?) {
         if (expr.macro == null) {
             panic("internal error. we should only be here if there is a macro.");
         }
@@ -2676,14 +2676,14 @@ class public CppAot : AstVisitor {
         }
     }
 
-    def override canVisitExprTypeInfo(expr : smart_ptr<ExprTypeInfo>; expr_ : ExpressionPtr) {
+    def override canVisitExprTypeInfo(expr : ExprTypeInfo?; expr_ : ExpressionPtr) {
         if (expr.macro == null) {
             panic("internal error. we should only be here if there is a macro.");
         }
         return expr.macro |> macro_aot_infix(ss, expr);
     }
 
-    def override visitExprTypeInfo(var expr : smart_ptr<ExprTypeInfo>) : ExpressionPtr {
+    def override visitExprTypeInfo(var expr : ExprTypeInfo?) : ExpressionPtr {
         if (expr.macro == null) {
             panic("internal error. we should only be here if there is a macro.");
         }
@@ -2692,27 +2692,27 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // try-catch
-    def override preVisitExprTryCatch(tc : smart_ptr<ExprTryCatch>) {
+    def override preVisitExprTryCatch(tc : ExprTryCatch?) {
         write(*ss, "das_try_recover(__context__, [&]()\n");
         write(*ss, "{tabs()}");
     }
-    def override preVisitExprTryCatchCatch(tc : smart_ptr<ExprTryCatch>; blk : ExpressionPtr) {
+    def override preVisitExprTryCatchCatch(tc : ExprTryCatch?; blk : ExpressionPtr) {
         write(*ss, ", [&]()\n");
         write(*ss, "{tabs()}");
     }
-    def override visitExprTryCatch(var tc : smart_ptr<ExprTryCatch>) : ExpressionPtr {
+    def override visitExprTryCatch(var tc : ExprTryCatch?) : ExpressionPtr {
         write(*ss, ")");
         return tc;
     }
 // ptr2ref
-    def override preVisitExprPtr2Ref(ptr2ref : smart_ptr<ExprPtr2Ref>) {
+    def override preVisitExprPtr2Ref(ptr2ref : ExprPtr2Ref?) {
         if (ptr2ref.unsafeDeref) {
             write(*ss, "(*(");
         } else {
             write(*ss, "das_deref(__context__,");
         }
     }
-    def override visitExprPtr2Ref(var ptr2ref : smart_ptr<ExprPtr2Ref>) : ExpressionPtr {
+    def override visitExprPtr2Ref(var ptr2ref : ExprPtr2Ref?) : ExpressionPtr {
         if (ptr2ref.unsafeDeref) {
             write(*ss, "))");
         } else {
@@ -2721,10 +2721,10 @@ class public CppAot : AstVisitor {
         return ptr2ref;
     }
  // ref2ptr
-    def override preVisitExprRef2Ptr(ref2ptr : smart_ptr<ExprRef2Ptr>) {
+    def override preVisitExprRef2Ptr(ref2ptr : ExprRef2Ptr?) {
         write(*ss, "das_ref(__context__,");
     }
-    def override visitExprRef2Ptr(var ref2ptr : smart_ptr<ExprRef2Ptr>) : ExpressionPtr {
+    def override visitExprRef2Ptr(var ref2ptr : ExprRef2Ptr?) : ExpressionPtr {
         write(*ss, ")");
         return ref2ptr;
     }
@@ -2733,7 +2733,7 @@ class public CppAot : AstVisitor {
         return "Func(__context__->fnByMangledName(/*{name}*/ 0x{hash:x}))";
     }
 
-    def override preVisitExprAddr(expr : smart_ptr<ExprAddr>) {
+    def override preVisitExprAddr(expr : ExprAddr?) {
         if (expr.func != null) {
             let mangledName =  expr.func |> get_mangled_name();
             let hash = expr.func.getMangledNameHash;
@@ -2743,15 +2743,15 @@ class public CppAot : AstVisitor {
         }
     }
 // cast
-    def override preVisitExprCast(expr : smart_ptr<ExprCast>) {
+    def override preVisitExprCast(expr : ExprCast?) {
         write(*ss, "{(expr.castFlags.upcastCast ? "das_upcast" : "das_cast")}<{describeCppType(expr.castType,DescribeConfig(cross_platform=cross_platform))}>::cast(");
     }
-    def override visitExprCast(var expr : smart_ptr<ExprCast>) : ExpressionPtr {
+    def override visitExprCast(var expr : ExprCast?) : ExpressionPtr {
         write(*ss, ")");
         return expr;
     }
 // delete
-    def override preVisitExprDelete(edel : smart_ptr<ExprDelete>) {
+    def override preVisitExprDelete(edel : ExprDelete?) {
         assume subt = edel.subexpr._type;
         assume subft = subt.firstType;
         if (subt.isPointer && subft.baseType == Type.tHandle) {
@@ -2769,16 +2769,16 @@ class public CppAot : AstVisitor {
         write(*ss, ">::clear(__context__,");
     }
     // DELETE
-    def override preVisitExprDeleteSizeExpression(del : smart_ptr<ExprDelete>; expr : ExpressionPtr) {
+    def override preVisitExprDeleteSizeExpression(del : ExprDelete?; expr : ExpressionPtr) {
         write(*ss, ",");
     }
 
-    def override visitExprDelete(var edel : smart_ptr<ExprDelete>) : ExpressionPtr {
+    def override visitExprDelete(var edel : ExprDelete?) : ExpressionPtr {
         write(*ss, ")");
         return edel;
     }
 // ascend
-    def override preVisitExprAscend(expr : smart_ptr<ExprAscend>) {
+    def override preVisitExprAscend(expr : ExprAscend?) {
         let info : TypeInfo?  = (expr.ascendFlags.needTypeInfo
                                 ? helper.helper |> make_type_info(null, expr.subexpr._type)
                                 : null);
@@ -2796,12 +2796,12 @@ class public CppAot : AstVisitor {
             write(*ss, "nullptr,");
         }
     }
-    def override visitExprAscend(var expr : smart_ptr<ExprAscend>) : ExpressionPtr {
+    def override visitExprAscend(var expr : ExprAscend?) : ExpressionPtr {
         write(*ss, ")");
         return expr;
     }
 // new
-    def override preVisitExprNew(enew : smart_ptr<ExprNew>) {
+    def override preVisitExprNew(enew : ExprNew?) {
         if (!enew._type.dim |> empty()) {
             if (enew._type.firstType.isHandle) {
                 let type_str = describeCppType(enew._type.firstType, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
@@ -2850,12 +2850,12 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override preVisitExprNewArgument(enew : smart_ptr<ExprNew>; arg : ExpressionPtr; last : bool) {
+    def override preVisitExprNewArgument(enew : ExprNew?; arg : ExpressionPtr; last : bool) {
         if (enew.initializer) {
             CallFunc_preVisitCallArg(enew, arg, last);
         }
     }
-    def override visitExprNewArgument(enew : smart_ptr<ExprNew>; arg : ExpressionPtr; last : bool) {
+    def override visitExprNewArgument(enew : ExprNew?; arg : ExpressionPtr; last : bool) {
         if (enew.initializer) {
             CallFunc_visitCallArg(enew, arg, last);
         } else {
@@ -2864,7 +2864,7 @@ class public CppAot : AstVisitor {
         }
         return arg;
     }
-    def override visitExprNew(var enew : smart_ptr<ExprNew>) : ExpressionPtr {
+    def override visitExprNew(var enew : ExprNew?) : ExpressionPtr {
         if (enew.initializer) {
             CallFunc_visit(enew);
             write(*ss, "; \})");
@@ -2874,17 +2874,17 @@ class public CppAot : AstVisitor {
         return enew;
     }
 // make variant
-    def needTempSrc(expr : smart_ptr<ExprMakeLocal>) {
+    def needTempSrc(expr : ExprMakeLocal?) {
         return !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
     }
-    def mkvName(expr : smart_ptr<ExprMakeVariant>) {
+    def mkvName(expr : ExprMakeVariant?) {
         if (needTempSrc(expr)) {
             return makeLocalTempName(expr);
         } else {
             return "__mkv_{expr.at.line:d}";
         }
     }
-    def override preVisitExprMakeVariant(expr : smart_ptr<ExprMakeVariant>) {
+    def override preVisitExprMakeVariant(expr : ExprMakeVariant?) {
         let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
         write(*ss, "(([&]() -> {type_str}{needTempSrc(expr) ? "&" : ""} \{\n");
         tab ++;
@@ -2895,7 +2895,7 @@ class public CppAot : AstVisitor {
             write(*ss, "{tabs()}das_zero({mkvName(expr)});\n");
         }
     }
-    def override preVisitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) {
+    def override preVisitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
         let variantIndex = find_argument_index(expr._type, string(decl.name));
         if (variantIndex == -1) {
             panic("should not infer otherwise");
@@ -2909,7 +2909,7 @@ class public CppAot : AstVisitor {
             write(*ss, "das_auto_cast<{type_str}>::cast(");
         }
     }
-    def override visitExprMakeVariantField(expr : smart_ptr<ExprMakeVariant>; index : int; decl : MakeFieldDeclPtr; last : bool) {
+    def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
         let variantIndex = find_argument_index(expr._type, string(decl.name))
         if (expr._type.argTypes[variantIndex].isPointer && decl.value._type.isPointer && expr._type.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(expr._type.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {
             write(*ss, ")");
@@ -2917,21 +2917,21 @@ class public CppAot : AstVisitor {
         write(*ss, ";\n");
         return decl;
     }
-    def override visitExprMakeVariant(var expr : smart_ptr<ExprMakeVariant>) : ExpressionPtr {
+    def override visitExprMakeVariant(var expr : ExprMakeVariant?) : ExpressionPtr {
         write(*ss, "{tabs()}return {mkvName(expr)};\n");
         tab --;
         write(*ss, "{tabs()}\})())");
         return expr;
     }
 // make structure
-    def mksName(expr : smart_ptr<ExprMakeStruct>) {
+    def mksName(expr : ExprMakeStruct?) {
         if (needTempSrc(expr)) {
             return makeLocalTempName(expr);
         } else {
             return "__mks_{expr.at.line:d}";
         }
     }
-    def override preVisitExprMakeStruct(expr : smart_ptr<ExprMakeStruct>) {
+    def override preVisitExprMakeStruct(expr : ExprMakeStruct?) {
         write(*ss, "(([&](");
         if (expr.makeStructFlags.isNewHandle) {
             let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, cross_platform = cross_platform));
@@ -2985,7 +2985,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override preVisitExprMakeStructField(expr : smart_ptr<ExprMakeStruct>; index : int; decl : MakeFieldDeclPtr; last : bool) {
+    def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) {
         write(*ss, "{tabs()}");
         write(*ss, "{decl.flags.moveSemantics ? "das_move((" : "das_copy(("}");
         if (expr.makeType.baseType == Type.tHandle) {
@@ -3001,18 +3001,18 @@ class public CppAot : AstVisitor {
         }
         write(*ss, "),(");
     }
-    def override visitExprMakeStructField(expr : smart_ptr<ExprMakeStruct>; index : int; var decl : MakeFieldDeclPtr; last : bool) {
+    def override visitExprMakeStructField(expr : ExprMakeStruct?; index : int; var decl : MakeFieldDeclPtr; last : bool) {
         write(*ss, "));\n");
         return decl;
     }
-    def override canVisitExprMakeStructBlock(str : smart_ptr<ExprMakeStruct>; expr : ExpressionPtr) { return false; }
+    def override canVisitExprMakeStructBlock(str : ExprMakeStruct?; expr : ExpressionPtr) { return false; }
 
-    def override visitExprMakeStruct(var expr : smart_ptr<ExprMakeStruct>) : ExpressionPtr {
+    def override visitExprMakeStruct(var expr : ExprMakeStruct?) : ExpressionPtr {
         if (expr._block != null) {
             assert(expr._block is ExprMakeBlock);
             var mkb = expr._block as ExprMakeBlock;
             assert(mkb._block is ExprBlock);
-            var blk <- unsafe(reinterpret<ExprBlock?>(mkb._block.get_ptr()));
+            var blk = unsafe(reinterpret<ExprBlock?>(mkb._block));
             collector.renameVariableTo(blk.arguments[0], mksName(expr));
             write(*ss, "{tabs()}");
             visit_expression(mkb._block, adapter);
@@ -3027,14 +3027,14 @@ class public CppAot : AstVisitor {
         return expr;
     }
 // make array
-    def mkaName(expr : smart_ptr<ExprMakeArray>) {
+    def mkaName(expr : ExprMakeArray?) {
         if (!needTempSrc(expr)) {
             return "__mka_{expr.at.line:d}";
         } else {
             return makeLocalTempName(expr);
         }
     }
-    def override preVisitExprMakeArray(expr : smart_ptr<ExprMakeArray>) {
+    def override preVisitExprMakeArray(expr : ExprMakeArray?) {
         let type_str = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform));
         write(*ss, "(([&]() -> {type_str}{(needTempSrc(expr) ? "&" : "")} \{\n");
         tab ++;
@@ -3045,14 +3045,14 @@ class public CppAot : AstVisitor {
             write(*ss, "{tabs()}das_zero({mkaName(expr)});\n");
         }
     }
-    def override preVisitExprMakeArrayIndex(expr : smart_ptr<ExprMakeArray>; index : int; init : ExpressionPtr; last : bool) {
+    def override preVisitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
         if (init._type.canCopy) {
             write(*ss, "{tabs()}{mkaName(expr)}({index},__context__) = ");
         } else {
             write(*ss, "{tabs()}das_move({mkaName(expr)}({index},__context__),");
         }
     }
-    def override visitExprMakeArrayIndex(expr : smart_ptr<ExprMakeArray>; index : int; init : ExpressionPtr; last : bool) {
+    def override visitExprMakeArrayIndex(expr : ExprMakeArray?; index : int; init : ExpressionPtr; last : bool) {
         if (init._type.canCopy) {
             write(*ss, ";\n");
         } else {
@@ -3060,21 +3060,21 @@ class public CppAot : AstVisitor {
         }
         return init;
     }
-    def override visitExprMakeArray(var expr : smart_ptr<ExprMakeArray>) : ExpressionPtr {
+    def override visitExprMakeArray(var expr : ExprMakeArray?) : ExpressionPtr {
         write(*ss, "{tabs()}return {mkaName(expr)};\n");
         tab --;
         write(*ss, "{tabs()}\})())");
         return expr;
     }
 // make tuple
-    def mktName(expr : smart_ptr<ExprMakeTuple>) {
+    def mktName(expr : ExprMakeTuple?) {
         if (!needTempSrc(expr)) {
             return "__mkt_{expr.at.line:d}";
         } else {
             return makeLocalTempName(expr);
         }
     }
-    def override preVisitExprMakeTuple(expr : smart_ptr<ExprMakeTuple>) {
+    def override preVisitExprMakeTuple(expr : ExprMakeTuple?) {
         let type_str1 = describeCppType(expr._type, DescribeConfig(skip_ref = true, skip_const = true, cross_platform = cross_platform))
         write(*ss, "(([&]() -> {type_str1}{(needTempSrc(expr) ? "&" : "")} \{\n");
         tab ++;
@@ -3086,14 +3086,14 @@ class public CppAot : AstVisitor {
             write(*ss, "{tabs()}das_zero({mktName(expr)});\n");
         }
     }
-    def override preVisitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; init : ExpressionPtr; last : bool) {
+    def override preVisitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; init : ExpressionPtr; last : bool) {
         if (init._type.canCopy) {
             write(*ss, "{tabs()}{get_tuple_field(expr.makeType, index)}::get({mktName(expr)}) = ");
         } else {
             write(*ss, "{tabs()}das_move({get_tuple_field(expr.makeType, index)}::get({mktName(expr)}),");
         }
     }
-    def override visitExprMakeTupleIndex(expr : smart_ptr<ExprMakeTuple>; index : int; var init : ExpressionPtr; last : bool) {
+    def override visitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; var init : ExpressionPtr; last : bool) {
         if (init._type.canCopy) {
             write(*ss, ";\n");
         } else {
@@ -3101,7 +3101,7 @@ class public CppAot : AstVisitor {
         }
         return init;
     }
-    def override visitExprMakeTuple(var expr : smart_ptr<ExprMakeTuple>) : ExpressionPtr {
+    def override visitExprMakeTuple(var expr : ExprMakeTuple?) : ExpressionPtr {
         write(*ss, "{tabs()}return {mktName(expr)};\n");
         tab --;
         write(*ss, "{tabs()}\})())");
@@ -3175,7 +3175,7 @@ class public CppAot : AstVisitor {
     }
 
 // looks like call
-    def override preVisitExprLooksLikeCall(var call : smart_ptr<ExprLooksLikeCall>) {
+    def override preVisitExprLooksLikeCall(var call : ExprLooksLikeCall?) {
         if (isInvokeWithTemp(call)) {
             write(*ss, "({makeLocalTempName(call)} = (");
         }
@@ -3274,14 +3274,14 @@ class public CppAot : AstVisitor {
             write(*ss, "{call.name}(");
         }
     }
-    def override canVisitExprLooksLikeCallArgument(call : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) {
+    def override canVisitExprLooksLikeCallArgument(call : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
         if (length(call.arguments) >= 1 && call.arguments[0] == arg &&  call is ExprInvoke) {
             let inv = call as ExprInvoke;
             if (inv.isInvokeMethod) return false;
         }
         return true;
     }
-    def override preVisitExprLooksLikeCallArgument(call : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) {
+    def override preVisitExprLooksLikeCallArgument(call : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
         if (call.name == "invoke") {
             assume argType = arg._type;
             if (arg._type.isRefType) {
@@ -3291,7 +3291,7 @@ class public CppAot : AstVisitor {
             }
         }
     }
-    def override visitExprLooksLikeCallArgument(call : smart_ptr<ExprLooksLikeCall>; arg : ExpressionPtr; last : bool) {
+    def override visitExprLooksLikeCallArgument(call : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
         if (call.name == "invoke") {
             assume argType = arg._type;
             if (arg._type.isRefType) {
@@ -3311,7 +3311,7 @@ class public CppAot : AstVisitor {
         }
         return arg;
     }
-    def override visitExprLooksLikeCall(var call : smart_ptr<ExprLooksLikeCall>) : ExpressionPtr {
+    def override visitExprLooksLikeCall(var call : ExprLooksLikeCall?) : ExpressionPtr {
         if (call.name == "debug") {
             write(*ss, "))");
         } elif (call.name == "assert" || call.name == "verify") {
@@ -3355,7 +3355,7 @@ class public CppAot : AstVisitor {
         }
         return policyArgNeedCast(polType, resType);
     }
-    def isPolicyBasedCall(call : smart_ptr<ExprCall>) {
+    def isPolicyBasedCall(call : ExprCall?) {
         let bif = call.func as BuiltInFunction;
         if (call.arguments |> empty() && call.func.result.baseType == Type.tHandle) {
             // c-tor?
@@ -3366,7 +3366,7 @@ class public CppAot : AstVisitor {
             return false;
         }
     }
-    def isPolicyBasedCallFunc(call : smart_ptr<ExprCallFunc>) {
+    def isPolicyBasedCallFunc(call : ExprCallFunc?) {
         if (call.func.flags.builtIn) {
             let bif = call.func as BuiltInFunction;
             if (bif.flags.policyBased) {
@@ -3407,21 +3407,21 @@ class public CppAot : AstVisitor {
         }
         return needsArgPassType(expr._type);
     }
-    def isCallWithTemp(call : smart_ptr<ExprCallFunc>) {
+    def isCallWithTemp(call : ExprCallFunc?) {
         if (call is ExprCall) {
             let expr = call as ExprCall;
             return !expr.doesNotNeedSp && expr.stackTop != 0u;
         }
         return false;
     }
-    def isInvokeWithTemp(call : smart_ptr<ExprLooksLikeCall>) {
+    def isInvokeWithTemp(call : ExprLooksLikeCall?) {
         if (call is ExprInvoke) {
             let inv = call as ExprInvoke;
             return !inv.doesNotNeedSp && inv.stackTop != 0u;
         }
         return false;
     }
-    def CallFunc_preVisit(call : smart_ptr<ExprCallFunc>) {
+    def CallFunc_preVisit(call : ExprCallFunc?) {
         if (call.func.moreFlags.propertyFunction) {     // property function goes ((arg0).name()). we do `((` here
             if (call.func.result.flags.aotAlias) {
                 write(*ss, "das_alias<{call.func.result.alias}>::from(");
@@ -3432,13 +3432,13 @@ class public CppAot : AstVisitor {
             write(*ss, "((");
             return ;
         }
-        let aotName = get_aot_name(call.func, call.get_ptr());
+        let aotName = get_aot_name(call.func, call);
         for (ann in call.func.annotations) {
             if (ann.annotation is FunctionAnnotation) {
                 let pAnn = ann.annotation as FunctionAnnotation;
                 if (!(aotPrefix |> key_exists(aotName))) {
                     aot_prefixes.push(build_string() $(writer) {
-                        get_func_aot_prefix(pAnn, unsafe(addr(writer)), call.get_ptr());
+                        get_func_aot_prefix(pAnn, unsafe(addr(writer)), call);
                     })
                     aotPrefix |> insert(aotName);
                 }
@@ -3521,17 +3521,17 @@ class public CppAot : AstVisitor {
     def needStringCast(func : Function?; arg : TypeDeclPtr) {
         return func.moreFlags.needStringCast && arg.isString && !arg.flags.ref;
     }
-    def CallFunc_preVisitCallArg(call : smart_ptr<ExprCallFunc>; arg : ExpressionPtr; is_last : bool) {
+    def CallFunc_preVisitCallArg(call : ExprCallFunc?; arg : ExpressionPtr; is_last : bool) {
         if (call.func.moreFlags.propertyFunction) return ;  // property function goes ((arg0).name()). we do nothing here
         var argIndex = 0;
         for (it in range(length(call.arguments))) {
-            if (call.arguments[it].get_ptr() == arg.get_ptr()) {
+            if (call.arguments[it] == arg) {
                 break;
             }
             argIndex++;
         }
         assert(argIndex != length(call.arguments));
-        write(*ss, "{get_aot_arg_prefix(call.func, call.get_ptr(), argIndex)}");
+        write(*ss, "{get_aot_arg_prefix(call.func, call, argIndex)}");
         assume argType = call.arguments[argIndex]._type;
         assume funArgType = call.func.arguments[argIndex]._type;
         if (funArgType.isAotAlias) {
@@ -3564,7 +3564,7 @@ class public CppAot : AstVisitor {
             write(*ss, "(das_string_cast(");
         }
     }
-    def CallFunc_visitCallArg(call : smart_ptr<ExprCallFunc>; arg : ExpressionPtr; last : bool) {
+    def CallFunc_visitCallArg(call : ExprCallFunc?; arg : ExpressionPtr; last : bool) {
         if (call.func.moreFlags.propertyFunction) return ;  // property function goes ((arg0).name()). we do nothing here
         var argIndex = 0;
         for (it in range(length(call.arguments))) {
@@ -3598,12 +3598,12 @@ class public CppAot : AstVisitor {
             write(*ss, ")");
         }
         if (funArgType.isAotAlias) write(*ss, ")");
-        write(*ss, "{get_aot_arg_suffix(call.func, call.get_ptr(), argIndex)}");
+        write(*ss, "{get_aot_arg_suffix(call.func, call, argIndex)}");
         if (!last) {
             write(*ss, ",");
         }
     }
-    def CallFunc_visit(call : smart_ptr<ExprCallFunc>) {
+    def CallFunc_visit(call : ExprCallFunc?) {
         if (call.func.moreFlags.propertyFunction) {     // property function goes ((arg0).name()). we do `).name())` here
             if (call.func.flags.builtIn) {
                 let efn = call.func as ExternalFnBase;
@@ -3640,17 +3640,17 @@ class public CppAot : AstVisitor {
             write(*ss, "))");
         }
     }
-    def override preVisitExprCall(call : smart_ptr<ExprCall>) {
+    def override preVisitExprCall(call : ExprCall?) {
         CallFunc_preVisit(call);
     }
-    def override preVisitExprCallArgument(call : smart_ptr<ExprCall>; arg : ExpressionPtr; last : bool) {
+    def override preVisitExprCallArgument(call : ExprCall?; arg : ExpressionPtr; last : bool) {
         CallFunc_preVisitCallArg(call, arg, last);
     }
-    def override visitExprCallArgument(call : smart_ptr<ExprCall>; arg : ExpressionPtr; last : bool) {
+    def override visitExprCallArgument(call : ExprCall?; arg : ExpressionPtr; last : bool) {
         CallFunc_visitCallArg(call, arg, last);
         return arg;
     }
-    def override visitExprCall(var call : smart_ptr<ExprCall>) : ExpressionPtr {
+    def override visitExprCall(var call : ExprCall?) : ExpressionPtr {
         CallFunc_visit(call);
         return call;
     }
@@ -3658,16 +3658,16 @@ class public CppAot : AstVisitor {
     def forSrcName(varName : das_string) {
         return "__{aotSuffixNameEx(varName, "")}_iterator";
     }
-    def needLoopName(ffor : smart_ptr<ExprFor>) {
+    def needLoopName(ffor : ExprFor?) {
         return "__need_loop_{ffor.at.line:d}";
     }
-    def override preVisitExprFor(ffor : smart_ptr<ExprFor>) {
+    def override preVisitExprFor(ffor : ExprFor?) {
         write(*ss, "\{\n");
         tab ++;
         let nl = needLoopName(ffor);
         write(*ss, "{tabs()}bool {nl} = true;\n");
     }
-    def override preVisitExprForBody(ffor : smart_ptr<ExprFor>) {
+    def override preVisitExprForBody(ffor : ExprFor?) {
         let nl = needLoopName(ffor);
         if (ffor.body is ExprBlock) {
             let blk = ffor.body as ExprBlock;
@@ -3690,10 +3690,10 @@ class public CppAot : AstVisitor {
         if (!(isExprCallFunc(expr))) {
             return false;
         }
-        assume call = unsafe(reinterpret<smart_ptr<ExprCallFunc>>(expr));
+        assume call = unsafe(reinterpret<ExprCallFunc?>(expr));
         return call.func != null && call.func.flags.builtIn && call.func._module.name == "$" && (call.name == "count" || call.name == "ucount");
     }
-    def override preVisitExprForSource(ffor : smart_ptr<ExprFor>; that : ExpressionPtr; last : bool) {
+    def override preVisitExprForSource(ffor : ExprFor?; that : ExpressionPtr; last : bool) {
         var idx = 0;
         let idxs = length(ffor.sources);
         for (id in range(idxs)) {
@@ -3706,13 +3706,13 @@ class public CppAot : AstVisitor {
         assume variable = ffor.iteratorVariables[idx];
         write(*ss, "{tabs()}// {variable.name}: {variable._type.describe()}\n");
         if (isCountOrUCount(src)) {
-            write(*ss, "{tabs()}das_iterator_{(unsafe(reinterpret<smart_ptr<ExprCallFunc>>(src))).func.name} DAS_COMMENT(");
+            write(*ss, "{tabs()}das_iterator_{(unsafe(reinterpret<ExprCallFunc?>(src))).func.name} DAS_COMMENT(");
         } else {
             let type_str = describeCppType(src._type, DescribeConfig(substitute_ref = true, skip_ref = true, cross_platform = cross_platform));
             write(*ss, "{tabs()}das_iterator<{type_str}> {forSrcName(variable.name)}(");
         }
     }
-    def override visitExprForSource(ffor : smart_ptr<ExprFor>; that : ExpressionPtr; last : bool) {
+    def override visitExprForSource(ffor : ExprFor?; that : ExpressionPtr; last : bool) {
         var idx = 0;
         let idxs = length(ffor.sources);
         for (id in range(idxs)) {
@@ -3724,7 +3724,7 @@ class public CppAot : AstVisitor {
         assume src = ffor.sources[idx];
         assume variable = ffor.iteratorVariables[idx];
         if (isCountOrUCount(src)) {
-            assume pCall = unsafe(reinterpret<smart_ptr<ExprCallFunc>>(src));
+            assume pCall = unsafe(reinterpret<ExprCallFunc?>(src));
             write(*ss, ") {forSrcName(variable.name)}(");
             visit_expression(pCall.arguments[0], adapter);
             write(*ss, ",");
@@ -3744,7 +3744,7 @@ class public CppAot : AstVisitor {
         write(*ss, ") && {nl};\n");
         return that;
     }
-    def override visitExprFor(var ffor : smart_ptr<ExprFor>) : ExpressionPtr {
+    def override visitExprFor(var ffor : ExprFor?) : ExpressionPtr {
         write(*ss, "\n");
         for (x in range(ffor.iteratorVariables |> length)) {
             assume variable = ffor.iteratorVariables[ffor.iteratorVariables |> length - 1 - x];
@@ -3769,7 +3769,7 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
             return ;
         }
         pm |> for_each_structure($(ps) {
-            write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps.get_ptr())}; \};\n");
+            write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps)}; \};\n");
         });
     });
     program.get_ptr() |> for_each_module_no_order($(pm) {
@@ -3777,14 +3777,14 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
             return ;
         }
         pm |> for_each_enumeration($(penum) {
-            if (!remUS || utm.useEnums |> key_exists(penum.get_ptr())) {
+            if (!remUS || utm.useEnums |> key_exists(penum)) {
                 program |> visit_enumeration(penum, aotVisitor.adapter)
             } else {
                 write(*aotVisitor.ss, "// unused enumeration {penum.name}\n");
             }
         });
         pm |> for_each_structure($(ps) {
-            if (!remUS || utm.useStructs |> key_exists(ps.get_ptr())) {
+            if (!remUS || utm.useStructs |> key_exists(ps)) {
                 program |> visit_structure(ps, aotVisitor.adapter);
             } else {
                 write(*aotVisitor.ss, "// unused structure {ps.name}\n");
@@ -3809,7 +3809,7 @@ class ArgsConverter : AstVisitor {
     }
 
     def override preVisitFunction(fn : FunctionPtr) {
-        write(*ss, "static vec4f __wrap_{aotFuncName(fn.get_ptr())} ( Context * __context__ ) \{\n")
+        write(*ss, "static vec4f __wrap_{aotFuncName(fn)} ( Context * __context__ ) \{\n")
         assert(arg_id == 0u)
     }
 
@@ -3845,7 +3845,7 @@ class ArgsConverter : AstVisitor {
             describeLocalCppType(ss, fn.result, cross_platform, CpptSubstitureRef.no, CpptSkipConst.yes)
             write(*ss, " *) __context__->abiCMRES) = ")
         }
-        write(*ss, "{aotFuncName(fn.get_ptr())}(__context__")
+        write(*ss, "{aotFuncName(fn)}(__context__")
         for (arg in fn.arguments) {
             write(*ss, ", arg_{aotSuffixNameEx(arg.name, "")}")
         }
@@ -3876,7 +3876,7 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
             if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }
-            fnn |> push(pfun.get_ptr());
+            fnn |> push(pfun);
         });
     }
     return <- fnn;
@@ -3944,7 +3944,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
             if (pfun.index < 0 || !pfun.flags.used) return ;
-            pfun.hash = get_function_hash_by_id(pfun.get_ptr(), pfun.index, unsafe(reinterpret<void?>(ctx)));
+            pfun.hash = get_function_hash_by_id(pfun, pfun.index, unsafe(reinterpret<void?>(ctx)));
             fni++;
         })
     });
@@ -3953,7 +3953,7 @@ def public setAotHashes(program : ProgramPtr; var ctx : Context) {
     program.get_ptr() |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(pfun) {
             if (pfun.index < 0 || !pfun.flags.used) return ;
-            pfun.aotHash = get_function_aot_hash(pfun.get_ptr());
+            pfun.aotHash = get_function_aot_hash(pfun);
         });
     });
 }

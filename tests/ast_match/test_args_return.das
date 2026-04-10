@@ -26,9 +26,9 @@ def target_three(x, y, z : float) : float {
 [test]
 def test_func_arg_names(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        t |> success(get_ptr(func) != null, "should find target_add")
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        t |> success(func != null, "should find target_add")
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) : int {
@@ -45,8 +45,8 @@ def test_func_arg_names(t : T?) {
 [test]
 def test_func_arg_name_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x, y : int) : int {
@@ -59,8 +59,8 @@ def test_func_arg_name_mismatch(t : T?) {
 [test]
 def test_func_arg_count_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a : int) : int {
@@ -73,8 +73,8 @@ def test_func_arg_count_mismatch(t : T?) {
 [test]
 def test_func_return_type_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : int) : float {
@@ -87,8 +87,8 @@ def test_func_return_type_mismatch(t : T?) {
 [test]
 def test_func_no_return_matches_any(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         // No return type specified — should match any
@@ -102,8 +102,8 @@ def test_func_no_return_matches_any(t : T?) {
 [test]
 def test_func_no_args_fails_when_target_has_args(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         // No args in pattern — target has args, should fail
@@ -117,8 +117,8 @@ def test_func_no_args_fails_when_target_has_args(t : T?) {
 [test]
 def test_func_arg_type_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(a, b : float) : int {
@@ -131,8 +131,8 @@ def test_func_arg_type_mismatch(t : T?) {
 [test]
 def test_func_three_args(t : T?) {
     ast_gc_guard() {
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_three)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_three)
+        if (func == null) {
             return
         }
         let r = qmatch_function(func) $(x, y, z : float) : float {
@@ -147,7 +147,7 @@ def test_func_three_args(t : T?) {
 [test]
 def test_block_args(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($(a : int; b : float) : int { return a; })
+        var expr = qmacro($(a : int; b : float) : int { return a; })
         let r = qmatch_block(expr) $(a : int; b : float) : int {
             return a
         }
@@ -158,7 +158,7 @@ def test_block_args(t : T?) {
 [test]
 def test_block_args_wrong_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($(a : int; b : float) : int { return a; })
+        var expr = qmacro($(a : int; b : float) : int { return a; })
         let r = qmatch_block(expr) $(x : int; b : float) : int {
             return x
         }
@@ -169,7 +169,7 @@ def test_block_args_wrong_name(t : T?) {
 [test]
 def test_block_args_wrong_type(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($(a : int; b : float) : int { return a; })
+        var expr = qmacro($(a : int; b : float) : int { return a; })
         let r = qmatch_block(expr) $(a : float; b : float) : int {
             return a
         }
@@ -180,7 +180,7 @@ def test_block_args_wrong_type(t : T?) {
 [test]
 def test_block_no_args_fails_when_target_has_args(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($(a : int) : int { return a; })
+        var expr = qmacro($(a : int) : int { return a; })
         // No args in pattern — target has args, should fail
         let r = qmatch_block(expr) $ {
             return a
@@ -200,11 +200,11 @@ def target_five(a, b : int; c : float; d : string; e : bool) : int {
 def test_a_capture_all(t : T?) {
     ast_gc_guard() {
         // $a(rest) with no fixed args — captures all arguments
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $($a(rest)) {
             _wildcard()
         }
@@ -217,19 +217,19 @@ def test_a_capture_all(t : T?) {
 def test_a_capture_remainder(t : T?) {
     ast_gc_guard() {
         // Match first arg, capture rest
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_three)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_three)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $(x : float; $a(rest)) {
             _wildcard()
         }
         t |> success(r.matched, "should match first arg and capture rest")
         t |> equal(length(rest), 2, "should capture 2 remaining args")
         if (length(rest) == 2) {
-            t |> equal(string(get_ptr(rest[0]).name), "y", "first remaining should be y")
-            t |> equal(string(get_ptr(rest[1]).name), "z", "second remaining should be z")
+            t |> equal(string(rest[0].name), "y", "first remaining should be y")
+            t |> equal(string(rest[1].name), "z", "second remaining should be z")
         }
     }
 }
@@ -238,18 +238,18 @@ def test_a_capture_remainder(t : T?) {
 def test_a_capture_one_remaining(t : T?) {
     ast_gc_guard() {
         // Match all but last, capture last via $a
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $(a : int; $a(rest)) : int {
             _wildcard()
         }
         t |> success(r.matched, "should match first arg and capture last")
         t |> equal(length(rest), 1, "should capture 1 remaining arg")
         if (length(rest) == 1) {
-            t |> equal(string(get_ptr(rest[0]).name), "b", "remaining should be b")
+            t |> equal(string(rest[0].name), "b", "remaining should be b")
         }
     }
 }
@@ -258,11 +258,11 @@ def test_a_capture_one_remaining(t : T?) {
 def test_a_capture_empty(t : T?) {
     ast_gc_guard() {
         // Match all fixed args, $a captures zero remaining
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $(a, b : int; $a(rest)) : int {
             _wildcard()
         }
@@ -275,11 +275,11 @@ def test_a_capture_empty(t : T?) {
 def test_a_too_few_args(t : T?) {
     ast_gc_guard() {
         // More fixed args in pattern than actual — should fail
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_add)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_add)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $(a, b, c : int; $a(rest)) {
             _wildcard()
         }
@@ -291,11 +291,11 @@ def test_a_too_few_args(t : T?) {
 def test_a_capture_five_args(t : T?) {
     ast_gc_guard() {
         // Capture many remaining args
-        var inscope func <- find_module_function_via_rtti(compiling_module(), @@target_five)
-        if (get_ptr(func) == null) {
+        var func = find_module_function_via_rtti(compiling_module(), @@target_five)
+        if (func == null) {
             return
         }
-        var inscope rest : array<VariablePtr>
+        var rest : array<VariablePtr>
         let r = qmatch_function(func) $(a : int; $a(rest)) {
             _wildcard()
         }
@@ -308,8 +308,8 @@ def test_a_capture_five_args(t : T?) {
 def test_a_block_capture(t : T?) {
     ast_gc_guard() {
         // $a on block arguments
-        var inscope expr <- qmacro($(a : int; b : float; c : string) { return a; })
-        var inscope rest : array<VariablePtr>
+        var expr = qmacro($(a : int; b : float; c : string) { return a; })
+        var rest : array<VariablePtr>
         let r = qmatch_block(expr) $(a : int; $a(rest)) {
             return a
         }

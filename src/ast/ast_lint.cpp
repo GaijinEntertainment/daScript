@@ -54,7 +54,7 @@ namespace das {
         return g_cpp_keywords.find(str) != g_cpp_keywords.end();
     }
 
-    bool hasLabels ( const smart_ptr<ExprBlock> & block ) {
+    bool hasLabels ( const ExprBlock * block ) {
         for ( auto & be : block->list ) {
             if ( be->rtti_isLabel() ) {
                 return true;
@@ -63,11 +63,11 @@ namespace das {
         return false;
     }
 
-    bool exprReturns ( const ExpressionPtr & expr ) {
+    bool exprReturns ( ExpressionPtr expr ) {
         if ( expr->rtti_isReturn() ) {
             return true;
         } else if ( expr->rtti_isBlock() ) {
-            auto block = static_pointer_cast<ExprBlock>(expr);
+            auto block = static_cast<ExprBlock*>(expr);
             if ( hasLabels(block) ) {
                 // NOTE: block with labels assumed to always return for now. real world analysis is hard
                 return true;
@@ -82,31 +82,31 @@ namespace das {
                 }
             }
         } else if ( expr->rtti_isIfThenElse() ) {
-            auto ite = static_pointer_cast<ExprIfThenElse>(expr);
+            auto ite = static_cast<ExprIfThenElse*>(expr);
             if ( ite->if_false ) {
                 return exprReturns(ite->if_true) && exprReturns(ite->if_false);
             }
         } else if ( expr->rtti_isWith() ) {
-            auto wth = static_pointer_cast<ExprWith>(expr);
+            auto wth = static_cast<ExprWith*>(expr);
             return exprReturns(wth->body);
         } else if ( expr->rtti_isWhile() ) {
-            auto wh = static_pointer_cast<ExprWhile>(expr);
+            auto wh = static_cast<ExprWhile*>(expr);
             return exprReturns(wh->body);
         } else if ( expr->rtti_isFor() ) {
-            auto fr = static_pointer_cast<ExprFor>(expr);
+            auto fr = static_cast<ExprFor*>(expr);
             return exprReturns(fr->body);
         } else if ( expr->rtti_isUnsafe() ) {
-            auto us = static_pointer_cast<ExprUnsafe>(expr);
+            auto us = static_cast<ExprUnsafe*>(expr);
             return exprReturns(us->body);
         }
         return false;
     }
 
-   bool exprReturnsOrBreaks ( const ExpressionPtr & expr ) {
+   bool exprReturnsOrBreaks ( ExpressionPtr expr ) {
         if ( expr->rtti_isReturn() ) {
             return true;
         } else if ( expr->rtti_isBlock() ) {
-            auto block = static_pointer_cast<ExprBlock>(expr);
+            auto block = static_cast<ExprBlock*>(expr);
             if ( hasLabels(block) ) {
                 // NOTE: block with labels assumed to always return for now. real world analysis is hard
                 return true;
@@ -121,21 +121,21 @@ namespace das {
                 }
             }
         } else if ( expr->rtti_isIfThenElse() ) {
-            auto ite = static_pointer_cast<ExprIfThenElse>(expr);
+            auto ite = static_cast<ExprIfThenElse*>(expr);
             if ( ite->if_false ) {
                 return exprReturnsOrBreaks(ite->if_true) && exprReturnsOrBreaks(ite->if_false);
             }
         } else if ( expr->rtti_isWith() ) {
-            auto wth = static_pointer_cast<ExprWith>(expr);
+            auto wth = static_cast<ExprWith*>(expr);
             return exprReturnsOrBreaks(wth->body);
         } else if ( expr->rtti_isWhile() ) {
-            auto wh = static_pointer_cast<ExprWhile>(expr);
+            auto wh = static_cast<ExprWhile*>(expr);
             return exprReturns(wh->body);   // note has its own break
         } else if ( expr->rtti_isFor() ) {
-            auto fr = static_pointer_cast<ExprFor>(expr);
+            auto fr = static_cast<ExprFor*>(expr);
             return exprReturns(fr->body);   // note has its own break
         } else if ( expr->rtti_isUnsafe() ) {
-            auto us = static_pointer_cast<ExprUnsafe>(expr);
+            auto us = static_cast<ExprUnsafe*>(expr);
             return exprReturnsOrBreaks(us->body);
         }
         return false;
@@ -418,12 +418,12 @@ namespace das {
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
             Visitor::preVisitGlobalLetInit(var,that);
-            globalVar = var.get();
+            globalVar = var;
             das_hash_set<const Variable*> visitedVar;
             das_hash_set<const Function*> visitedFunc;
             vector<PathToLoop> path;
-            path.push_back(PathToLoop{var.get(), nullptr});
-            if ( detectLoop(path, var.get(), visitedVar, visitedFunc) ) {
+            path.push_back(PathToLoop{var, nullptr});
+            if ( detectLoop(path, var, visitedVar, visitedFunc) ) {
                 TextWriter ss;
                 for ( auto & step : path ) {
                     if ( step.var ) {
@@ -507,7 +507,7 @@ namespace das {
         }
         void verifyToTableMove ( ExprCall * expr ) {
             if ( expr->arguments[0]->rtti_isMakeArray() ) {
-                auto ma = static_cast<ExprMakeArray *>(expr->arguments[0].get());
+                auto ma = static_cast<ExprMakeArray *>(expr->arguments[0]);
                 if ( ma->values.size()==0 ) return;
                 auto recType = ma->recordType ? ma->recordType : ma->makeType;
                 if ( recType->isTuple() ) {
@@ -515,10 +515,10 @@ namespace das {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isMakeTuple() ) {
-                                auto mt = static_cast<ExprMakeTuple *>(arg.get());
+                                auto mt = static_cast<ExprMakeTuple *>(arg);
                                 if ( mt->values.size()==2 ) {   // its redundant
                                     if ( mt->values[0]->rtti_isStringConstant() ) {
-                                        auto mc = static_cast<ExprConstString *>(mt->values[0].get());
+                                        auto mc = static_cast<ExprConstString *>(mt->values[0]);
                                         if ( seen.find(mc->text.c_str())==seen.end() ) {
                                             seen.insert(mc->text.c_str());
                                         } else {
@@ -533,10 +533,10 @@ namespace das {
                         das_set<vec4f,hash_vec4f,equalto_vec4f> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isMakeTuple() ) {
-                                auto mt = static_cast<ExprMakeTuple *>(arg.get());
+                                auto mt = static_cast<ExprMakeTuple *>(arg);
                                 if ( mt->values.size()==2 ) {   // its redundant
                                     if ( mt->values[0]->rtti_isConstant() ) {
-                                        auto mc = static_cast<ExprConst *>(mt->values[0].get());
+                                        auto mc = static_cast<ExprConst *>(mt->values[0]);
                                         if ( seen.find(mc->value)==seen.end() ) {
                                             seen.insert(mc->value);
                                         } else {
@@ -553,7 +553,7 @@ namespace das {
                         das_set<const char *,hash_ccs,equalto_ccs> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isStringConstant() ) {
-                                auto mc = static_cast<ExprConstString *>(arg.get());
+                                auto mc = static_cast<ExprConstString *>(arg);
                                 if ( seen.find(mc->text.c_str())==seen.end() ) {
                                     seen.insert(mc->text.c_str());
                                 } else {
@@ -566,7 +566,7 @@ namespace das {
                         das_set<vec4f,hash_vec4f,equalto_vec4f> seen;
                         for ( const auto & arg : ma->values ) {
                             if ( arg->rtti_isConstant() ) {
-                                auto mc = static_cast<ExprConst *>(arg.get());
+                                auto mc = static_cast<ExprConst *>(arg);
                                 if ( seen.find(mc->value)==seen.end() ) {
                                     seen.insert(mc->value);
                                 } else {
@@ -641,7 +641,7 @@ namespace das {
                     program->error("builtin_try_recover shouldn't be called directly.",
                         "", "Use `try { ... } recover { ... }` instead.",
                         expr->at, CompilationError::invalid_argument_type );
-                } else if (exprReturns(static_pointer_cast<ExprMakeBlock>(expr->arguments.front())->block)) {
+                } else if (exprReturns(static_cast<ExprMakeBlock*>(expr->arguments.front())->block)) {
                     program->error("try { ... } recover { ... } can't have return inside in jit mode",
                         "This feature is not implemented yet.", "",
                         expr->at, CompilationError::not_expecting_return_value );
@@ -671,14 +671,14 @@ namespace das {
         virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
             Visitor::visit(expr);
             if ( expr->isInvokeMethod ) {
-                auto arg0 = expr->arguments[0].get();
+                auto arg0 = expr->arguments[0];
                 if ( arg0->rtti_isR2V() ) {
-                    arg0 = static_cast<ExprRef2Value*>(arg0)->subexpr.get();
+                    arg0 = static_cast<ExprRef2Value*>(arg0)->subexpr;
                 }
                 if ( arg0->rtti_isField() ) {
                     auto field = static_cast<ExprField*>(arg0);
                     if ( field->value->rtti_isTypeDecl() ) {
-                        usedTypeExprs.erase(field->value.get());
+                        usedTypeExprs.erase(field->value);
                     }
                 }
             }
@@ -692,7 +692,7 @@ namespace das {
                     if ( arg->isAccessDummy() ) {
                         auto & earg = expr->arguments[argIndex];
                         if ( earg->rtti_isTypeDecl() ) {
-                            usedTypeExprs.erase(earg.get());
+                            usedTypeExprs.erase(earg);
                         }
                     }
                     ++argIndex;
@@ -726,19 +726,19 @@ namespace das {
                 }
             }
         }
-        string getNamelessHint ( const ExpressionPtr & left, const ExpressionPtr & right, const string & op ) const {
+        string getNamelessHint ( ExpressionPtr left, ExpressionPtr right, const string & op ) const {
             if ( left->rtti_isMakeTuple() ) {
-                auto mkt = static_pointer_cast<ExprMakeTuple>(left);
-                smart_ptr<ExprVar> firstField;
+                auto mkt = static_cast<ExprMakeTuple*>(left);
+                ExprVar * firstField = nullptr;
                 for ( const auto & val : mkt->values ) {
                     auto value = val;
                     if ( value->rtti_isR2V() ) {
-                        value = static_pointer_cast<ExprRef2Value>(value)->subexpr;
+                        value = static_cast<ExprRef2Value*>(value)->subexpr;
                     }
                     if ( value->rtti_isField() ) {
-                        auto field = static_pointer_cast<ExprField>(value);
+                        auto field = static_cast<ExprField*>(value);
                         if ( field->value->rtti_isVar() ) {
-                            auto var = static_pointer_cast<ExprVar>(field->value);
+                            auto var = static_cast<ExprVar*>(field->value);
                             if ( var->variable->type->isTuple() ) {
                                 if ( !firstField ) {
                                     firstField = var;

@@ -60,9 +60,10 @@ namespace das
 
     // auto or generic type conversion
 
-    TypeDecl::TypeDecl(const EnumerationPtr & ep)
-        : baseType(ep->getEnumType()), enumType(ep.get())
+    TypeDecl::TypeDecl(Enumeration * ep)
+        : baseType(ep->getEnumType()), enumType(ep)
     {
+        gc_magic = GC_MAGIC_TYPEDECL;
     }
 
     LineInfo TypeDecl::getDeclarationLocation() const {
@@ -854,6 +855,7 @@ namespace das
     }
 
     TypeDecl::TypeDecl(const TypeDecl & decl) {
+        gc_magic = GC_MAGIC_TYPEDECL;
         baseType = decl.baseType;
         structType = decl.structType;
         enumType = decl.enumType;
@@ -928,6 +930,10 @@ namespace das
         if ( secondType ) secondType->gc_collect(target, from);
         for ( auto t : argTypes ) if ( t ) t->gc_collect(target, from);
         for ( auto & de : dimExpr ) if ( de ) de->gc_collect(target, from);
+        // this??
+        if ( structType ) structType->gc_collect(target, from);
+        if ( enumType ) enumType->gc_collect(target, from);
+        if ( annotation ) annotation->gc_collect(target, from);
     }
 
     TypeDecl * TypeDecl::findAlias ( const string & name, bool allowAuto ) {
@@ -3513,7 +3519,7 @@ namespace das
                     }
                 }
                 if ( stt.size()==1 ) error("unknown structure '" + sname + "'", ch);
-                pt->structType = stt.back().get();
+                pt->structType = stt.back();
                 return pt;
             }
             case '0': {
@@ -3569,7 +3575,7 @@ namespace das
                         }
                     }
                     if ( stt.size()!=1 ) error("unresolved enumeration '" + sname + "'", ch);
-                    pt->enumType = stt.back().get();
+                    pt->enumType = stt.back();
                 }
                 return pt;
             }

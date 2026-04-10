@@ -636,7 +636,7 @@ def genEnums(hf, mf, df : FILE const?) {
             continue
         }
         fprint(df, "#ifdef {getDefinePrefix(en.cppName)}\n")
-        fprint(df, "addEnumeration(make_smart<Enumeration{enName}>());\n")
+        fprint(df, "addEnumeration(new Enumeration{enName}());\n")
         if (isFlags) {
             fprint(df, "addEnumFlagOps<{en.cppName}>(*this,lib,\"{en.cppName}\");\n")
         }

@@ -69,10 +69,10 @@ namespace das
             }
         }
 
-        void skipMakeBlock ( const ExpressionPtr & expr ) {
+        void skipMakeBlock ( ExpressionPtr expr ) {
             if ( expr->rtti_isMakeBlock() ) {
-                auto mkb = static_pointer_cast<ExprMakeBlock>(expr);
-                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                auto mkb = static_cast<ExprMakeBlock*>(expr);
+                auto blk = static_cast<ExprBlock*>(mkb->block);
                 blk->aotSkipMakeBlock = true;
             }
         }

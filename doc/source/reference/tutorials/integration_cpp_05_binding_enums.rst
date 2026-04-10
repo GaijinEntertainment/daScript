@@ -106,8 +106,8 @@ class:
 
 .. code-block:: cpp
 
-   addEnumeration(make_smart<EnumerationDirection>());
-   addEnumeration(make_smart<EnumerationSeverity>());
+   addEnumeration(new EnumerationDirection());
+   addEnumeration(new EnumerationSeverity());
 
 
 Manual enum construction
@@ -119,7 +119,7 @@ the enum lives in a deeply nested namespace), you can construct an
 
 .. code-block:: cpp
 
-   auto pEnum = make_smart<Enumeration>("Severity");
+   auto pEnum = new Enumeration("Severity");
    pEnum->cppName  = "Severity";
    pEnum->external = true;
    pEnum->baseType = Type::tInt;

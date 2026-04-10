@@ -55,7 +55,7 @@ namespace das {
 
         ExpressionPtr arg = arguments; // `arguments` will be freed by smart ptr destructor
         while ( arg->rtti_isSequence() ) {
-            auto pSeq = static_pointer_cast<ExprSequence>(arg);
+            auto pSeq = static_cast<ExprSequence*>(arg);
             DAS_ASSERT(!pSeq->right->rtti_isSequence());
             argList.push_back(pSeq->right);
             arg = pSeq->left;
@@ -95,18 +95,13 @@ namespace das {
 
     void deleteNameExprList ( vector<tuple<string,Expression *>> * list ) {
         if ( !list ) return;
-        for ( auto & p : *list ) {
-            if ( get<1>(p) ) {
-                delete get<1>(p);
-            }
-        }
+        // Expression is gc_node — don't delete, GC will collect
         delete list;
     }
 
     void deleteTypeDeclarationList ( vector<Expression *> * list ) {
         if ( !list ) return;
-        for ( auto pD : *list )
-            delete pD;
+        // Expression is gc_node — don't delete, GC will collect
         delete list;
     }
 
@@ -205,7 +200,7 @@ namespace das {
 
     Expression * ast_arrayComprehension ( yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax ) {
-        auto pFor = make_smart<ExprFor>(loc);
+        auto pFor = new ExprFor(loc);
         pFor->visibility = forend;
         for ( const auto & np : *iters ) {
             pFor->iterators.push_back(np.name);
@@ -234,13 +229,13 @@ namespace das {
     Structure * ast_structureName ( yyscan_t scanner, bool sealed, string * name, const LineInfo & atName,
         string * parent, const LineInfo & atParent ) {
         das_checkName(scanner,*name,atName);
-        StructurePtr pStruct;
+        StructurePtr pStruct = nullptr;
         if ( parent ) {
             auto structs = yyextra->g_Program->findStructure(*parent);
             if ( structs.size()==1 ) {
                 pStruct = structs.back()->clone();
                 pStruct->name = *name;
-                pStruct->parent = structs.back().get();
+                pStruct->parent = structs.back();
                 if ( pStruct->parent->sealed ) {
                     das_yyerror(scanner,"can't derive from a sealed class or structure "+*parent,atParent,
                         CompilationError::invalid_override);
@@ -260,7 +255,7 @@ namespace das {
             delete parent;
         }
         if ( !pStruct ) {
-            pStruct = make_smart<Structure>(*name);
+            pStruct = new Structure(*name);
         }
         pStruct->sealed = sealed;
         if ( !yyextra->g_Program->addStructure(pStruct) ) {
@@ -269,9 +264,9 @@ namespace das {
             delete name;
             return nullptr;
         } else {
-            yyextra->g_thisStructure = pStruct.get();
+            yyextra->g_thisStructure = pStruct;
             delete name;
-            return pStruct.get();
+            return pStruct;
         }
     }
 
@@ -356,7 +351,7 @@ namespace das {
                                 CompilationError::invalid_override);
                         } else {
                             TypeDeclPtr td = nullptr;
-                            ExpressionPtr init;
+                            ExpressionPtr init = nullptr;
                             if ( pDecl->pNameList->size()>1 ) {
                                 td = new TypeDecl(*pDecl->pTypeDecl);
                                 if ( pDecl->pInit ) init = pDecl->pInit->clone();
@@ -366,7 +361,7 @@ namespace das {
                                 init = pDecl->pInit; pDecl->pInit = nullptr;
                             }
                             if ( pDecl->isStatic ) {
-                                auto pVar = make_smart<Variable>();
+                                auto pVar = new Variable();
                                 pVar->name = pStruct->name + "`" + name_at.name;
                                 pVar->type = td;
                                 pVar->init = init;
@@ -477,21 +472,20 @@ namespace das {
 
     Enumeration * ast_addEmptyEnum ( yyscan_t scanner, string * name, const LineInfo & atName ) {
         das_checkName(scanner,*name,atName);
-        auto pEnum = make_smart<Enumeration>(*name);
+        auto pEnum = new Enumeration(*name);
         delete name;
         pEnum->at = atName;
         if ( !yyextra->g_Program->addEnumeration(pEnum) ) {
             das_yyerror(scanner,"enumeration is already defined "+pEnum->name, atName,
                 CompilationError::enumeration_already_declared);
-            return pEnum.orphan();
+            return pEnum;
         } else {
-            return pEnum.get();
+            return pEnum;
         }
     }
 
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt ) {
         if ( !pEnum->module ) {
-            pEnum->delRef();
             return;
         }
         pEnum->baseType = ebt;
@@ -513,14 +507,13 @@ namespace das {
             swap ( pEnum->annotations, *annL );
             delete annL;
         }
-        delete pE;
     }
 
     void ast_globalLetList (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, vector<VariableDeclaration*> * list ) {
         for ( auto pDecl : *list ) {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
-                    VariablePtr pVar = make_smart<Variable>();
+                    VariablePtr pVar = new Variable();
                     pVar->name = name_at.name;
                     pVar->aka = name_at.aka;
                     if ( !name_at.aka.empty() ) {
@@ -559,7 +552,7 @@ namespace das {
     }
 
     void ast_globalBitfieldConst ( yyscan_t scanner, const TypeDeclPtr & bType, bool pub_var, const string & name, Expression * expr ) {
-        auto pVar = make_smart<Variable>();
+        auto pVar = new Variable();
         pVar->name = "`" + bType->alias + "`" + name;
         pVar->at = expr->at;
         pVar->type = new TypeDecl(*bType);
@@ -578,7 +571,7 @@ namespace das {
         auto pDecl = decl;
         if ( pDecl->pTypeDecl ) {
             for ( const auto & name_at : *pDecl->pNameList ) {
-                VariablePtr pVar = make_smart<Variable>();
+                VariablePtr pVar = new Variable();
                 pVar->name = name_at.name;
                 pVar->aka = name_at.aka;
                 if ( !name_at.aka.empty() ) {
@@ -834,7 +827,7 @@ namespace das {
             das_yyerror(scanner,"enumeration or bitfield not found " + *ena, enaAt,
                 CompilationError::type_not_found);
         } else if ( enums.size()==1 ) {
-            pEnum = enums.back().get();
+            pEnum = enums.back();
         } else if ( aliases.size()==1 ) {
             auto alias = aliases.back();
             if ( alias->isEnum() ) {
@@ -882,7 +875,7 @@ namespace das {
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name_at : *pDecl->pNameList ) {
                         if ( !closure->findArgument(name_at.name) ) {
-                            VariablePtr pVar = make_smart<Variable>();
+                            VariablePtr pVar = new Variable();
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
@@ -959,7 +952,7 @@ namespace das {
         if ( decl->pTypeDecl ) {
             for ( const auto & name_at : *decl->pNameList ) {
                 if ( !pLet->find(name_at.name) ) {
-                    VariablePtr pVar = make_smart<Variable>();
+                    VariablePtr pVar = new Variable();
                     pVar->name = name_at.name;
                     pVar->aka = name_at.aka;
                     pVar->at = name_at.at;
@@ -1008,7 +1001,7 @@ namespace das {
             if ( pDecl->pTypeDecl ) {
                 for ( const auto & name_at : *pDecl->pNameList ) {
                     if ( !pLet->find(name_at.name) ) {
-                        VariablePtr pVar = make_smart<Variable>();
+                        VariablePtr pVar = new Variable();
                         pVar->name = name_at.name;
                         pVar->aka = name_at.aka;
                         pVar->at = name_at.at;
@@ -1045,7 +1038,7 @@ namespace das {
 
     Function * ast_functionDeclarationHeader ( yyscan_t scanner, string * name, vector<VariableDeclaration*> * list,
         TypeDecl * result, const LineInfo & nameAt ) {
-        auto pFunction = make_smart<Function>();
+        auto pFunction = new Function();
         pFunction->at = nameAt;
         pFunction->name = *name;
         pFunction->result = result;
@@ -1054,7 +1047,7 @@ namespace das {
                 if ( pDecl->pTypeDecl ) {
                     for ( const auto & name_at : *pDecl->pNameList ) {
                         if ( !pFunction->findArgument(name_at.name) ) {
-                            VariablePtr pVar = make_smart<Variable>();
+                            VariablePtr pVar = new Variable();
                             pVar->name = name_at.name;
                             pVar->aka = name_at.aka;
                             pVar->at = name_at.at;
@@ -1086,7 +1079,7 @@ namespace das {
             deleteVariableDeclarationList(list);
         }
         delete name;
-        return pFunction.orphan();
+        return pFunction;
     }
 
     void das_collect_all_keywords ( Module * mod, yyscan_t scanner ) {
@@ -1170,7 +1163,7 @@ namespace das {
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
             pCall->arguments.push_back(arg);
             if ( !fncall->swap_tail(pVar,pCall) ) {
-                delete pVar;
+                // gc_node — don't delete Expression
                 return pCall;
             } else {
                 return fncall;
@@ -1192,7 +1185,7 @@ namespace das {
                 delete arg;
             } else {
                 auto mkb = (ExprMakeBlock *) arg;
-                auto blk = (ExprBlock *) mkb->block.get();
+                auto blk = (ExprBlock *) mkb->block;
                 if ( blk->arguments.size() != 1 ) {
                     das_yyerror(scanner,"can't pipe into make struct. block must have exactly one argument (that structure itself)",
                         locAt,CompilationError::cant_pipe);
@@ -1218,7 +1211,7 @@ namespace das {
         } else if ( fncall->rtti_isVar() ) {
             auto pVar = (ExprVar *) fncall;
             auto pCall = yyextra->g_Program->makeCall(pVar->at,pVar->name);
-            if ( pVar->use_count()==0 ) delete pVar;
+            // GC-managed: no manual delete needed
             pCall->arguments.insert(pCall->arguments.begin(),arg);
             return pCall;
         } else if (fncall->rtti_isNamedCall()) {
@@ -1227,11 +1220,11 @@ namespace das {
             return fncall;
         } else if (fncall->rtti_isField() ) {
             auto pField = (ExprField*)fncall;
-            pField->value = ast_rpipe(scanner, arg, pField->value.get(), locAt);
+            pField->value = ast_rpipe(scanner, arg, pField->value, locAt);
             return fncall;
         } else if (fncall->rtti_isSafeField() ) {
             auto pField = (ExprSafeField*)fncall;
-            pField->value = ast_rpipe(scanner, arg, pField->value.get(), locAt);
+            pField->value = ast_rpipe(scanner, arg, pField->value, locAt);
             return fncall;
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
@@ -1278,7 +1271,6 @@ namespace das {
                 fld->emplace_back(f);
                 mks->structs.push_back(fld);
             }
-            delete decl;
         }
         return mks;
     }

@@ -1,0 +1,1 @@
+Removes the specified structure from the given module. Returns true if the structure was found and removed, false otherwise.

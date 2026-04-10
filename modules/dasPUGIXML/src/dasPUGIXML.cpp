@@ -709,10 +709,10 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         // enumerations
-        addEnumeration(make_smart<Enumerationxml_parse_status>());
-        addEnumeration(make_smart<Enumerationxml_node_type>());
-        addEnumeration(make_smart<Enumerationxml_encoding>());
-        addEnumeration(make_smart<Enumerationxpath_value_type>());
+        addEnumeration(new Enumerationxml_parse_status());
+        addEnumeration(new Enumerationxml_node_type());
+        addEnumeration(new Enumerationxml_encoding());
+        addEnumeration(new Enumerationxpath_value_type());
         // type annotations
         addAnnotation(make_smart<XmlAttributeAnnotation>(lib));
         addAnnotation(make_smart<XmlTextAnnotation>(lib));

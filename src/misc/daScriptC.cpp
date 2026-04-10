@@ -432,7 +432,7 @@ das_module * das_module_find ( const char * name ) {
 }
 
 void das_module_bind_interop_function ( das_module * mod, das_module_group * lib, das_interop_function * fun, char * name, char * cppName, uint32_t sideffects, char* args ) {
-    auto fn = make_smart<CFunction>(name, *(ModuleLibrary *)lib, cppName, fun);
+    auto fn = new CFunction(name, *(ModuleLibrary *)lib, cppName, fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
     MangledNameParser parser;
@@ -447,7 +447,7 @@ void das_module_bind_interop_function ( das_module * mod, das_module_group * lib
 }
 
 void das_module_bind_interop_function_unaligned ( das_module * mod, das_module_group * lib, das_interop_function_unaligned * fun, char * name, char * cppName, uint32_t sideffects, char* args ) {
-    auto fn = make_smart<CFunction_Unaligned>(name, *(ModuleLibrary *)lib, cppName, fun);
+    auto fn = new CFunction_Unaligned(name, *(ModuleLibrary *)lib, cppName, fun);
     fn->setSideEffects((das::SideEffects) sideffects);
     vector <TypeDeclPtr> arguments;
     MangledNameParser parser;
@@ -493,10 +493,10 @@ void das_structure_add_field ( das_structure * st, das_module * mod, das_module_
 }
 
 das_enumeration * das_enumeration_make ( const char * name, const char * cppname, int ext ) {
-    auto pEnum = make_smart<Enumeration>(name);
+    auto pEnum = new Enumeration(name);
     pEnum->cppName = cppname;
     pEnum->external = ext;
-    return (das_enumeration *) pEnum.orphan();
+    return (das_enumeration *) pEnum;
 }
 
 void das_enumeration_add_value ( das_enumeration * enu, const char * name, const char * cppName, int value ) {

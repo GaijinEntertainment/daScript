@@ -8,22 +8,38 @@ namespace das {
     // ---- base classes ----
 
     void Expression::gc_collect ( gc_root * target, gc_root * from ) {
-        if ( gc_type_owner == target ) return;
-        gc_type_owner = target;
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
         if ( type ) type->gc_collect(target, from);
     }
 
     void Variable::gc_collect ( gc_root * target, gc_root * from ) {
-        if ( gc_type_owner == target ) return;
-        gc_type_owner = target;
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
         if ( type ) type->gc_collect(target, from);
         if ( init ) init->gc_collect(target, from);
         if ( source ) source->gc_collect(target, from);
     }
 
+    void Enumeration::gc_collect ( gc_root * target, gc_root * from ) {
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
+        for ( auto & val : list ) {
+            if ( val.value ) val.value->gc_collect(target, from);
+        }
+    }
+
     void Structure::gc_collect ( gc_root * target, gc_root * from ) {
-        if ( gc_type_owner == target ) return;
-        gc_type_owner = target;
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
         for ( auto & field : fields ) {
             if ( field.type ) field.type->gc_collect(target, from);
             if ( field.init ) field.init->gc_collect(target, from);
@@ -35,8 +51,10 @@ namespace das {
     }
 
     void Function::gc_collect ( gc_root * target, gc_root * from ) {
-        if ( gc_type_owner == target ) return;
-        gc_type_owner = target;
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
         if ( result ) result->gc_collect(target, from);
         for ( auto & arg : arguments ) if ( arg ) arg->gc_collect(target, from);
         if ( body ) body->gc_collect(target, from);
@@ -445,17 +463,33 @@ namespace das {
         if ( variable ) variable->gc_collect(target, from);
     }
 
+    // ---- MakeFieldDecl / MakeStruct (gc_node) ----
+
+    void MakeFieldDecl::gc_collect ( gc_root * target, gc_root * from ) {
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
+        if ( value ) value->gc_collect(target, from);
+        if ( tag ) tag->gc_collect(target, from);
+    }
+
+    void MakeStruct::gc_collect ( gc_root * target, gc_root * from ) {
+        if ( gc_owner == target ) return;
+        if ( from && gc_owner != from ) return;
+        if ( !from && gc_owner == nullptr ) return;
+        gc_assign(target);
+        for ( auto & field : *this ) {
+            if ( field ) field->gc_collect(target, from);
+        }
+    }
+
     // ---- ExprNamedCall : Expression (NOT ExprLooksLikeCall) ----
 
     void ExprNamedCall::gc_collect ( gc_root * target, gc_root * from ) {
         Expression::gc_collect(target, from);
         for ( auto & e : nonNamedArguments ) if ( e ) e->gc_collect(target, from);
-        for ( auto & field : arguments ) {
-            if ( field ) {
-                if ( field->value ) field->value->gc_collect(target, from);
-                if ( field->tag ) field->tag->gc_collect(target, from);
-            }
-        }
+        if ( arguments ) arguments->gc_collect(target, from);
     }
 
     // ---- ExprMakeLocal and descendants ----
@@ -470,14 +504,7 @@ namespace das {
         ExprMakeLocal::gc_collect(target, from);
         if ( block ) block->gc_collect(target, from);
         for ( auto & ms : structs ) {
-            if ( ms ) {
-                for ( auto & field : *ms ) {
-                    if ( field ) {
-                        if ( field->value ) field->value->gc_collect(target, from);
-                        if ( field->tag ) field->tag->gc_collect(target, from);
-                    }
-                }
-            }
+            if ( ms ) ms->gc_collect(target, from);
         }
     }
 
@@ -485,10 +512,7 @@ namespace das {
     void ExprMakeVariant::gc_collect ( gc_root * target, gc_root * from ) {
         ExprMakeLocal::gc_collect(target, from);
         for ( auto & field : variants ) {
-            if ( field ) {
-                if ( field->value ) field->value->gc_collect(target, from);
-                if ( field->tag ) field->tag->gc_collect(target, from);
-            }
+            if ( field ) field->gc_collect(target, from);
         }
     }
 

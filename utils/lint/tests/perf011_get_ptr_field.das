@@ -4,19 +4,22 @@ options gen2
 // Problem: get_ptr() is unnecessary for field access on smart_ptr.
 //
 // Bad pattern:
-//   let name = get_ptr(expr).__rtti
+//   let name = get_ptr(prog).flags
 //
 // Good pattern:
-//   let name = expr.__rtti
+//   let name = prog.flags
 
+expect 40217:1
+
+require daslib/perf_lint
 require daslib/ast_boost
 
 // bad: get_ptr for field access (1 warning)
-def bad_get_ptr_field(expr : ExpressionPtr) {
-    let rtti = get_ptr(expr).__rtti
+def bad_get_ptr_field(prog : ProgramPtr) {
+    let f = get_ptr(prog).flags
 }
 
 // good: direct field access
-def good_field_access(expr : ExpressionPtr) {
-    let rtti = expr.__rtti
+def good_field_access(prog : ProgramPtr) {
+    let f = prog.flags
 }

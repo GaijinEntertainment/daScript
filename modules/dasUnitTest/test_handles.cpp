@@ -156,7 +156,7 @@ struct CheckRange : StructureAnnotation {
                     int32_t minVal = INT32_MIN;
                     int32_t maxVal = INT32_MAX;
                     if (fd.init && fd.init->rtti_isConstant()) {
-                        val = static_pointer_cast<ExprConstInt>(fd.init)->getValue();
+                        val = static_cast<ExprConstInt*>(fd.init)->getValue();
                     }
                     if (auto minA = fd.annotation.find("min", Type::tInt)) {
                         minVal = minA->iValue;
@@ -224,13 +224,13 @@ struct CheckEidFunctionAnnotation : TransformFunctionAnnotation {
     virtual ExpressionPtr transformCall ( ExprCallFunc * call, string & err ) override {
         auto arg = call->arguments[1];
         if ( arg->type && arg->type->isString() && arg->type->isConst() && arg->rtti_isConstant() ) {
-            auto starg = static_pointer_cast<ExprConstString>(arg);
+            auto starg = static_cast<ExprConstString*>(arg);
             if (!starg->getValue().empty()) {
                 auto hv = hash_blockz64((uint8_t *)starg->text.c_str());
-                auto hconst = make_smart<ExprConstUInt64>(arg->at, hv);
+                auto hconst = new ExprConstUInt64(arg->at, hv);
                 hconst->type = new TypeDecl(Type::tUInt64);
                 hconst->type->constant = true;
-                auto newCall = static_pointer_cast<ExprCallFunc>(call->clone());
+                auto newCall = static_cast<ExprCallFunc*>(call->clone());
                 newCall->arguments.insert(newCall->arguments.begin() + 2, hconst);
                 return newCall;
             } else {
@@ -677,7 +677,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(__create_scene_node)>(*this, lib, "__create_scene_node",
         SideEffects::none, "__create_scene_node");
     // byte code interpreter
-    addEnumeration(make_smart<EnumerationOpCode>());
+    addEnumeration(new EnumerationOpCode());
     addAnnotation(make_smart<ByteCodeAnnotation>(lib));
     addExtern<DAS_BIND_FUN(evalByteCode)>(*this, lib, "evalByteCode",
         SideEffects::modifyArgumentAndAccessExternal, "evalByteCode");

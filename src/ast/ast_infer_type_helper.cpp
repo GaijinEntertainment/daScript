@@ -444,7 +444,7 @@ namespace das {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
             for (auto &de : decl->dimExpr) {
                 if (de && de->rtti_isTypeDecl()) {
-                    auto td = static_pointer_cast<ExprTypeDecl>(de);
+                    auto td = static_cast<ExprTypeDecl*>(de);
                     // since we don't have passType in typeexpr(3), we pass what we have
                     td->typeexpr = inferPartialAliases(td->typeexpr, td->typeexpr, fptr, aliases);
                 }
@@ -551,7 +551,7 @@ namespace das {
         for (auto it = with.rbegin(), its = with.rend(); it != its; ++it) {
             auto eW = *it;
             if (auto eWT = eW->with->type) {
-                StructurePtr pSt;
+                StructurePtr pSt = nullptr;
                 if (eWT->isStructure()) {
                     pSt = eWT->structType;
                 } else if (eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure()) {
@@ -574,11 +574,11 @@ namespace das {
         }
         return nullptr;
     }
-    ExpressionPtr InferTypes::promoteToProperty(ExprVar *expr, const ExpressionPtr &right) {
+    ExpressionPtr InferTypes::promoteToProperty(ExprVar *expr, ExpressionPtr right) {
         for (auto it = with.rbegin(), its = with.rend(); it != its; ++it) {
             auto eW = *it;
             if (auto eWT = eW->with->type) {
-                StructurePtr pSt;
+                StructurePtr pSt = nullptr;
                 if (eWT->isStructure()) {
                     pSt = eWT->structType;
                 } else if (eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure()) {
@@ -586,7 +586,7 @@ namespace das {
                 }
                 if (pSt) {
                     if (eWT->isPointer()) {
-                        auto derefV = make_smart<ExprPtr2Ref>(expr->at, eW->with);
+                        auto derefV = new ExprPtr2Ref(expr->at, eW->with);
                         derefV->type = new TypeDecl(*eWT->firstType);
                         TypeDecl::applyAutoContracts(derefV->type, eWT->firstType);
                         derefV->type->ref = true;
@@ -637,9 +637,9 @@ namespace das {
             for (size_t i = 0, is = type->dim.size(); i != is; ++i) {
                 if (type->dim[i] == TypeDecl::dimConst) {
                     if (type->dimExpr[i]) {
-                        if (auto constExpr = getConstExpr(type->dimExpr[i].get())) {
+                        if (auto constExpr = getConstExpr(type->dimExpr[i])) {
                             if (constExpr->type->isIndex()) {
-                                auto cI = static_pointer_cast<ExprConstInt>(constExpr);
+                                auto cI = static_cast<ExprConstInt*>(constExpr);
                                 auto dI = cI->getValue();
                                 if (dI > 0) {
                                     type->dim[i] = dI;
@@ -714,7 +714,7 @@ namespace das {
         return any;
     }
     FunctionPtr InferTypes::getOrCreateDummy(Module *mod) {
-        auto dummy = make_smart<Function>();
+        auto dummy = new Function();
         dummy->name = "```dummy```";
         dummy->module = mod;
         dummy->generated = true;
@@ -845,7 +845,7 @@ namespace das {
     }
     void InferTypes::updateNewFlags(ExprAscend *expr) {
         if (expr->subexpr->rtti_isMakeStruct()) {
-            auto mks = static_pointer_cast<ExprMakeStruct>(expr->subexpr);
+            auto mks = static_cast<ExprMakeStruct*>(expr->subexpr);
             if (expr->subexpr->type->baseType == Type::tHandle) {
                 if (!mks->isNewHandle) {
                     reportAstChanged();
@@ -895,14 +895,14 @@ namespace das {
         }
         return true;
     }
-    ExpressionPtr InferTypes::promoteToProperty(ExprField *expr, const ExpressionPtr &right, const string &opName) {
+    ExpressionPtr InferTypes::promoteToProperty(ExprField *expr, ExpressionPtr right, const string &opName) {
         if (!expr->no_promotion && expr->value->type) {
             if (right) {
                 if (auto cloneSet = inferGenericOperator(".`" + expr->name + "`" + opName, expr->at, expr->value, right))
                     return cloneSet;
                 auto valT = expr->value->type;
                 if (valT->isPointer() && valT->firstType) {
-                    auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
+                    auto derefV = new ExprPtr2Ref(expr->at, expr->value);
                     derefV->type = new TypeDecl(*valT->firstType);
                     TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
                     derefV->type->ref = true;
@@ -917,7 +917,7 @@ namespace das {
                     return opE;
                 auto valT = expr->value->type;
                 if (valT->isPointer() && valT->firstType) {
-                    auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
+                    auto derefV = new ExprPtr2Ref(expr->at, expr->value);
                     derefV->type = new TypeDecl(*valT->firstType);
                     TypeDecl::applyAutoContracts(derefV->type, valT->firstType);
                     derefV->type->ref = true;
@@ -999,7 +999,7 @@ namespace das {
                 error("expecting a return value", "", "",
                       expr->at, CompilationError::expecting_return_value);
             } else {
-                if (!canCopyOrMoveType(resType, expr->subexpr->type, TemporaryMatters::yes, expr->subexpr.get(),
+                if (!canCopyOrMoveType(resType, expr->subexpr->type, TemporaryMatters::yes, expr->subexpr,
                                        "incompatible return type", CompilationError::invalid_return_type, expr->at)) {
                 }
                 if (resType->ref && !expr->subexpr->type->isRef()) {
@@ -1069,7 +1069,7 @@ namespace das {
         }
         if (expr->rtti_isR2V()) {
             auto r2v = static_cast<ExprRef2Value *>(expr);
-            return getConstExpr(r2v->subexpr.get());
+            return getConstExpr(r2v->subexpr);
         }
         if (expr->rtti_isVar()) { // global variable which happens to be constant
             auto var = static_cast<ExprVar *>(expr);
@@ -1080,7 +1080,7 @@ namespace das {
                     !var->block) {
                     if (variable->init->rtti_isConstant()) {
                         variable->access_fold = true;
-                        return variable->init;
+                        return variable->init->clone();
                     }
                 }
             }
@@ -1088,12 +1088,12 @@ namespace das {
         if (expr->rtti_isSwizzle()) {
             auto swz = static_cast<ExprSwizzle *>(expr);
             if (swz->value->type) {
-                if (auto cswz = getConstExpr(swz->value.get())) {
+                if (auto cswz = getConstExpr(swz->value)) {
                     int dim = swz->value->type->getVectorDim();
                     vector<uint8_t> fields;
                     if (TypeDecl::buildSwizzleMask(swz->mask, dim, fields)) {
                         auto baseType = swz->value->type->getVectorBaseType();
-                        vec4f data = static_cast<ExprConst *>(cswz.get())->value;
+                        vec4f data = static_cast<ExprConst *>(cswz)->value;
                         vec4f resData = v_zero();
                         if (baseType != Type::tInt64 && baseType != Type::tUInt64) {
                             int32_t *res = (int32_t *)&resData;
@@ -1183,7 +1183,7 @@ namespace das {
     bool InferTypes::isEmptyInit(const VariablePtr &var) const {
         if (var->type && var->init) {
             if (var->init->rtti_isMakeStruct()) {
-                auto ma = (ExprMakeStruct *)(var->init.get());
+                auto ma = (ExprMakeStruct *)(var->init);
                 if (ma->structs.empty() && ma->makeType) {
                     if (var->type->isGoodArrayType() && ma->makeType->isGoodArrayType() && ma->makeType->firstType->baseType == Type::autoinfer) {
                         return true;
@@ -1199,7 +1199,7 @@ namespace das {
         reportAstChanged();
         var->init_via_clone = false;
         var->init_via_move = true;
-        auto c2m = make_smart<ExprCall>(var->at, "clone_to_move");
+        auto c2m = new ExprCall(var->at, "clone_to_move");
         c2m->arguments.push_back(var->init);
         return c2m;
     }
@@ -1244,9 +1244,9 @@ namespace das {
         int partIndex = 0;
         for (auto &part : parts) {
             // we build var_name._partIndex
-            auto varName = make_smart<ExprVar>(varAt, name);
-            auto partExpr = make_smart<ExprField>(varAt, varName, "_" + to_string(partIndex), true);
-            assume.push_back(AssumeEntry{make_smart<ExprAssume>(varAt, part, ExpressionPtr(partExpr)), {}});
+            auto varName = new ExprVar(varAt, name);
+            auto partExpr = new ExprField(varAt, varName, "_" + to_string(partIndex), true);
+            assume.push_back(AssumeEntry{new ExprAssume(varAt, part, ExpressionPtr(partExpr)), {}});
             partIndex++;
         }
     }
@@ -1262,7 +1262,7 @@ namespace das {
             return false;
         if (!expr->arguments[1]->rtti_isCall()) {
             if (expr->arguments[1]->rtti_isMakeStruct()) {
-                auto mks = static_cast<ExprMakeStruct *>(expr->arguments[1].get());
+                auto mks = static_cast<ExprMakeStruct *>(expr->arguments[1]);
                 if (mks->structs.size() == 0) {
                     return true; // its default<array<T>>
                 } else {
@@ -1272,7 +1272,7 @@ namespace das {
                 return false;
             }
         }
-        auto call = (ExprCall *)(expr->arguments[1].get());
+        auto call = (ExprCall *)(expr->arguments[1]);
         if (!call->func)
             return false;
         if (!call->func->fromGeneric)

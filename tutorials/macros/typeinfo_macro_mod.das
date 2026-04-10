@@ -31,14 +31,14 @@ require daslib/ast_boost
 
 [typeinfo_macro(name="struct_info")]
 class TypeInfoGetStructInfo : AstTypeInfoMacro {
-    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
+    def override getAstChange(expr : ExprTypeInfo?; var errors : das_string) : ExpressionPtr {
         if (expr.typeexpr == null) {
             errors := "type is missing or not inferred"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         if (!expr.typeexpr.isStructure) {
             errors := "expecting structure type"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Build "Name(f1:t1, f2:t2, ...)" string.
         let result = build_string() $(var w) {
@@ -57,7 +57,7 @@ class TypeInfoGetStructInfo : AstTypeInfoMacro {
             }
             w |> write(")")
         }
-        return <- new ExprConstString(at = expr.at, value := result)
+        return new ExprConstString(at = expr.at, value := result)
     }
 }
 
@@ -70,25 +70,25 @@ class TypeInfoGetStructInfo : AstTypeInfoMacro {
 
 [typeinfo_macro(name="enum_value_strings")]
 class TypeInfoGetEnumValueStrings : AstTypeInfoMacro {
-    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
+    def override getAstChange(expr : ExprTypeInfo?; var errors : das_string) : ExpressionPtr {
         if (expr.typeexpr == null) {
             errors := "type is missing or not inferred"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         if (!expr.typeexpr.isEnum) {
             errors := "expecting enumeration type"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Build ExprMakeArray of ExprConstString entries.
-        var inscope arr <- new ExprMakeArray(at = expr.at, makeType <- typeinfo ast_typedecl(type<string>))
+        var arr = new ExprMakeArray(at = expr.at, makeType <- typeinfo ast_typedecl(type<string>))
         for (i in iter_range(expr.typeexpr.enumType.list)) {
             {
                 assume entry = expr.typeexpr.enumType.list[i]
-                var inscope nameExpr <- new ExprConstString(at = expr.at, value := entry.name)
-                arr.values |> emplace <| nameExpr
+                var nameExpr = new ExprConstString(at = expr.at, value := entry.name)
+                arr.values |> emplace(nameExpr)
             }
         }
-        return <- arr
+        return arr
     }
 }
 
@@ -103,18 +103,18 @@ class TypeInfoGetEnumValueStrings : AstTypeInfoMacro {
 
 [typeinfo_macro(name="has_non_static_method")]
 class TypeInfoHasNonStaticMethod : AstTypeInfoMacro {
-    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr {
+    def override getAstChange(expr : ExprTypeInfo?; var errors : das_string) : ExpressionPtr {
         if (expr.typeexpr == null) {
             errors := "type is missing or not inferred"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         if (!expr.typeexpr.isStructure) {
             errors := "expecting structure or class type"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         if (empty(expr.subtrait)) {
             errors := "expecting method name as subtrait: typeinfo has_non_static_method<method_name>(type<T>)"
-            return <- default<ExpressionPtr>
+            return default<ExpressionPtr>
         }
         // Check if any field with the given name has classMethod flag.
         var found = false
@@ -125,6 +125,6 @@ class TypeInfoHasNonStaticMethod : AstTypeInfoMacro {
                 break
             }
         }
-        return <- new ExprConstBool(at = expr.at, value = found)
+        return new ExprConstBool(at = expr.at, value = found)
     }
 }

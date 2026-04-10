@@ -1126,10 +1126,10 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti_core"));
-        addEnumeration(make_smart<Enumeration_ws_opcode>());
-        addEnumeration(make_smart<Enumeration_ws_session_type>());
-        addEnumeration(make_smart<Enumeration_http_method>());
-        addEnumeration(make_smart<Enumeration_http_status>());
+        addEnumeration(new Enumeration_ws_opcode());
+        addEnumeration(new Enumeration_ws_session_type());
+        addEnumeration(new Enumeration_http_method());
+        addEnumeration(new Enumeration_http_status());
         // client
         addAnnotation(make_smart<WebSocketClientAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeWebSocketClient)> (*this, lib, "make_web_socket_client",
@@ -1229,11 +1229,11 @@ public:
         addExtern<DAS_BIND_FUN(das_resp_string)> (*this, lib, "TEXT_PLAIN",
             SideEffects::worstDefault, "das_resp_string")
                 ->args({"response","text","status"})
-                ->arg_init(2,make_smart<ExprConstEnumeration>(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
+                ->arg_init(2,new ExprConstEnumeration(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
         addExtern<DAS_BIND_FUN(das_resp_json)> (*this, lib, "JSON",
             SideEffects::worstDefault, "das_resp_json")
                 ->args({"response","json_string","status"})
-                ->arg_init(2,make_smart<ExprConstEnumeration>(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
+                ->arg_init(2,new ExprConstEnumeration(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
         addExtern<DAS_BIND_FUN(das_resp_redirect)> (*this, lib, "REDIRECT",
             SideEffects::worstDefault, "das_resp_redirect")
                 ->args({"response","location","status"});
@@ -1243,7 +1243,7 @@ public:
         addExtern<DAS_BIND_FUN(das_resp_data)> (*this, lib, "DATA",
             SideEffects::worstDefault, "das_resp_data")
                 ->args({"response","data","length","status"})
-                ->arg_init(3,make_smart<ExprConstEnumeration>(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
+                ->arg_init(3,new ExprConstEnumeration(int(HTTP_STATUS_OK), http_status_enum->makeEnumType()));
         addExtern<DAS_BIND_FUN(das_resp_set_header)> (*this, lib, "set_header",
             SideEffects::worstDefault, "das_resp_set_header")
                 ->args({"response","key","value"});

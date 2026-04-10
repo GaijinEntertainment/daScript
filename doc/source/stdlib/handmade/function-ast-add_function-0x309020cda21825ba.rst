@@ -1,0 +1,1 @@
+Adds a function to the specified module. Returns true if the function was added successfully, or false if a conflicting function already exists.

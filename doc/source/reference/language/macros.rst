@@ -112,8 +112,8 @@ There is additionally the ``[function_macro]`` annotation which accomplishes the
 .. code-block:: das
 
     class AstFunctionAnnotation {
-        def abstract transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
-        def abstract verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract transform ( var call : ExprCallFunc?; var errors : das_string ) : ExpressionPtr
+        def abstract verifyCall ( var call : ExprCallFunc?; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
@@ -163,11 +163,11 @@ Lets review the following example from ``ast_boost`` of how the ``macro`` annota
         def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool {
             compiling_program().flags |= ProgramFlags needMacroModule
             func.flags |= FunctionFlags init
-            var blk <- new ExprBlock(at=func.at)
-            var ifm <- new ExprCall(at=func.at, name:="is_compiling_macros")
-            var ife <- new ExprIfThenElse(at=func.at, cond<-ifm, if_true<-func.body)
+            var blk = new ExprBlock(at=func.at)
+            var ifm = new ExprCall(at=func.at, name:="is_compiling_macros")
+            var ife = new ExprIfThenElse(at=func.at, cond=ifm, if_true=func.body)
             push(blk.list,ife)
-            func.body <- blk
+            func.body = blk
             return true
         }
     }
@@ -185,8 +185,8 @@ AstBlockAnnotation
 .. code-block:: das
 
     class AstBlockAnnotation {
-        def abstract apply ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract finish ( var blk:smart_ptr<ExprBlock>; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract apply ( var blk:ExprBlock?; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract finish ( var blk:ExprBlock?; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
     }
 
 ``add_new_block_annotation`` adds a block annotation to a module.
@@ -213,17 +213,6 @@ The ``AstStructureAnnotation`` macro lets you manipulate structure or class defi
 
 ``add_new_structure_annotation`` adds a structure annotation to a module.
 There is additionally the ``[structure_macro]`` annotation which accomplishes the same thing.
-
-``AstStructureAnnotation`` allows 4 different manipulations:
-
-.. code-block:: das
-
-    class AstStructureAnnotation {
-        def abstract apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract finish ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        def abstract patch ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var astChanged : bool& ) : bool
-        def abstract complete ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string; var context : smart_ptr<Context> ) : bool
-    }
 
 ``apply`` is invoked before the infer pass. It is the best time to modify the structure, generate some code, etc.
 
@@ -292,9 +281,9 @@ Each of the 3 transformations are covered in the appropriate abstract function:
 .. code-block:: das
 
     class AstVariantMacro {
-        def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
-        def abstract visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
-        def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
+        def abstract visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:ExprIsVariant? ) : ExpressionPtr
+        def abstract visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:ExprAsVariant? ) : ExpressionPtr
+        def abstract visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:ExprSafeAsVariant? ) : ExpressionPtr
     }
 
 Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost>`:
@@ -304,11 +293,11 @@ Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost
     // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
     // if value is ast::Expr*
     class BetterRttiVisitor : AstVariantMacro {
-        def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant>) : ExpressionPtr {
+        def override visitExprIsVariant(prog:ProgramPtr; mod:Module?;expr:ExprIsVariant?) : ExpressionPtr {
             if ( isExpression(expr.value._type) ) {
-                var vdr <- new ExprField(at=expr.at, name:="__rtti", value <- clone_expression(expr.value))
-                var cna <- new ExprConstString(at=expr.at, value:=expr.name)
-                var veq <- new ExprOp2(at=expr.at, op:="==", left<-vdr, right<-cna)
+                var vdr = new ExprField(at=expr.at, name:="__rtti", value = clone_expression(expr.value))
+                var cna = new ExprConstString(at=expr.at, value:=expr.name)
+                var veq = new ExprOp2(at=expr.at, op:="==", left=vdr, right=cna)
                 return veq
             }
             return default<ExpressionPtr>
@@ -317,7 +306,7 @@ Let's review the following example from :ref:`daslib/ast_boost <stdlib_ast_boost
 
     // note the following usage
     class GetHintFnMacro : AstFunctionAnnotation {
-        def override transform ( var call : smart_ptr<ExprCall>; var errors : das_string ) : ExpressionPtr {
+        def override transform ( var call : ExprCallFunc?; var errors : das_string ) : ExpressionPtr {
             if ( call.arguments[1] is ExprConstString ) {    // HERE EXPRESSION WILL BE REPLACED
                 ...
             }
@@ -344,7 +333,7 @@ via one of two patterns:
 
     class AstReaderMacro {
         def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
-        def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
+        def abstract visit ( prog:ProgramPtr; mod:Module?; expr:ExprReader? ) : ExpressionPtr
         def abstract suffix ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; info:LineInfo; var outLine:int&; var outFile:FileInfo?& ) : string
     }
 
@@ -371,16 +360,16 @@ Consider the implementation for the example above:
                 return true
             }
         }
-        def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr {
+        def override visit ( prog:ProgramPtr; mod:Module?; expr:ExprReader? ) : ExpressionPtr {
             let seqStr = string(expr.sequence)
-            var arrT <- new TypeDecl(baseType=Type tInt)
+            var arrT = new TypeDecl(baseType=Type tInt)
             push(arrT.dim,length(seqStr))
-            var mkArr <- new ExprMakeArray(at = expr.at, makeType <- arrT)
+            var mkArr = new ExprMakeArray(at = expr.at, makeType <- arrT)
             for ( x in seqStr ) {
-                var mkC <- new ExprConstInt(at=expr.at, value=x)
+                var mkC = new ExprConstInt(at=expr.at, value=x)
                 push(mkArr.values,mkC)
             }
-            return <- mkArr
+            return mkArr
         }
     }
 
@@ -418,9 +407,10 @@ The ``[call_macro]`` annotation automates the same thing:
     .. code-block:: das
 
         class AstCallMacro {
-            def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
-            def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-            def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
+            def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : void
+            def abstract visit ( prog:ProgramPtr; mod:Module?; expr:ExprCallMacro? ) : ExpressionPtr
+            def abstract canVisitArgument ( expr:ExprCallMacro?; argIndex:int ) : bool
+            def abstract canFoldReturnResult ( expr:ExprCallMacro? ) : bool
         }
 
 ``apply`` from :ref:`daslib/apply <stdlib_apply>` is an example of such a macro:
@@ -429,7 +419,7 @@ The ``[call_macro]`` annotation automates the same thing:
 
     [call_macro(name="apply")]  // apply(value, block)
     class ApplyMacro : AstCallMacro {
-        def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr {
+        def override visit ( prog:ProgramPtr; mod:Module?; var expr:ExprCallMacro? ) : ExpressionPtr {
             ...
         }
     }
@@ -440,7 +430,9 @@ Note how the name is provided in the ``[call_macro]`` annotation.
 
 ``visit`` is called after the arguments are visited.
 
-``canVisitArguments`` is called to determine if the macro can visit the arguments.
+``canVisitArgument`` is called per-argument to determine if the macro should visit that argument.
+
+``canFoldReturnResult`` controls whether the compiler can finalize the return type while the macro is unexpanded.
 
 ------------
 AstPassMacro
@@ -519,8 +511,8 @@ AstTypeInfoMacro
 .. code-block:: das
 
     class AstTypeInfoMacro {
-        def abstract getAstChange ( expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : ExpressionPtr
-        def abstract getAstType ( var lib:ModuleLibrary; expr:smart_ptr<ExprTypeInfo>; var errors:das_string ) : TypeDeclPtr
+        def abstract getAstChange ( expr:ExprTypeInfo?; var errors:das_string ) : ExpressionPtr
+        def abstract getAstType ( var lib:ModuleLibrary; expr:ExprTypeInfo?; var errors:das_string ) : TypeDeclPtr
     }
 
 ``add_new_typeinfo_macro`` adds a typeinfo macro to a module.
@@ -553,7 +545,7 @@ AstForLoopMacro
 .. code-block:: das
 
     class AstForLoopMacro {
-        def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprFor> ) : ExpressionPtr
+        def abstract visitExprFor ( prog:ProgramPtr; mod:Module?; expr:ExprFor? ) : ExpressionPtr
     }
 
 ``add_new_for_loop_macro`` adds a reader macro to a module.
@@ -682,8 +674,8 @@ It contains a callback for every single expression in prefix and postfix form, a
     class AstVisitor {
         ...
         // find
-            def abstract preVisitExprFind(expr:smart_ptr<ExprFind>) : void          // prefix
-            def abstract visitExprFind(expr:smart_ptr<ExprFind>) : ExpressionPtr    // postifx
+            def abstract preVisitExprFind(expr:ExprFind?) : void          // prefix
+            def abstract visitExprFind(expr:ExprFind?) : ExpressionPtr    // postfix
         ...
     }
 

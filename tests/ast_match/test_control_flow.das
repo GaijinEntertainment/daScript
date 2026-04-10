@@ -13,7 +13,7 @@ require dastest/testing_boost public
 [test]
 def test_if_then(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { if (a < 5) { return b; }; })
+        var expr = qmacro($ { if (a < 5) { return b; }; })
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 return b
@@ -26,7 +26,7 @@ def test_if_then(t : T?) {
 [test]
 def test_if_then_else(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { if (a < 5) { return b; } else { return c; }; })
+        var expr = qmacro($ { if (a < 5) { return b; } else { return c; }; })
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 return b
@@ -41,7 +41,7 @@ def test_if_then_else(t : T?) {
 [test]
 def test_if_then_wrong_cond(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { if (a < 5) { return b; }; })
+        var expr = qmacro($ { if (a < 5) { return b; }; })
         let r = qmatch_block(expr) $ {
             if (a > 5) {
                 return b
@@ -54,7 +54,7 @@ def test_if_then_wrong_cond(t : T?) {
 [test]
 def test_if_then_wrong_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { if (a < 5) { return b; }; })
+        var expr = qmacro($ { if (a < 5) { return b; }; })
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 return c
@@ -68,7 +68,7 @@ def test_if_then_wrong_body(t : T?) {
 def test_if_has_else_but_pattern_doesnt(t : T?) {
     ast_gc_guard() {
         // Actual has else, pattern doesn't — should fail because else is a non-null field
-        var inscope expr <- qmacro($ { if (a < 5) { return b; } else { return c; }; })
+        var expr = qmacro($ { if (a < 5) { return b; } else { return c; }; })
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 return b
@@ -82,7 +82,7 @@ def test_if_has_else_but_pattern_doesnt(t : T?) {
 def test_if_no_else_but_pattern_has(t : T?) {
     ast_gc_guard() {
         // Actual has no else, pattern has else — should fail
-        var inscope expr <- qmacro($ { if (a < 5) { return b; }; })
+        var expr = qmacro($ { if (a < 5) { return b; }; })
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 return b
@@ -98,8 +98,8 @@ def test_if_no_else_but_pattern_has(t : T?) {
 def test_if_capture_cond(t : T?) {
     ast_gc_guard() {
         // Capture the condition expression
-        var inscope expr <- qmacro($ { if (a < 5) { return b; }; })
-        var inscope cond : ExpressionPtr
+        var expr = qmacro($ { if (a < 5) { return b; }; })
+        var cond : ExpressionPtr
         let r = qmatch_block(expr) $ {
             if ($e(cond)) {
                 return b
@@ -107,7 +107,7 @@ def test_if_capture_cond(t : T?) {
         }
         t |> success(r.matched, "should match with $e capture on condition")
         if (r.matched) {
-            t |> equal(string(get_ptr(cond).__rtti), "ExprOp2")
+            t |> equal(string(cond.__rtti), "ExprOp2")
         }
     }
 }
@@ -116,9 +116,9 @@ def test_if_capture_cond(t : T?) {
 def test_if_capture_bodies(t : T?) {
     ast_gc_guard() {
         // Capture both branches
-        var inscope expr <- qmacro($ { if (a < 5) { return b; } else { return c; }; })
-        var inscope then_body : ExpressionPtr
-        var inscope else_body : ExpressionPtr
+        var expr = qmacro($ { if (a < 5) { return b; } else { return c; }; })
+        var then_body : ExpressionPtr
+        var else_body : ExpressionPtr
         let r = qmatch_block(expr) $ {
             if (a < 5) {
                 $e(then_body)
@@ -138,7 +138,7 @@ def test_if_capture_bodies(t : T?) {
 [test]
 def test_while_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { while (x > 0) { x --; }; })
+        var expr = qmacro($ { while (x > 0) { x --; }; })
         let r = qmatch_block(expr) $ {
             while (x > 0) {
                 x --
@@ -151,7 +151,7 @@ def test_while_match(t : T?) {
 [test]
 def test_while_wrong_cond(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { while (x > 0) { x --; }; })
+        var expr = qmacro($ { while (x > 0) { x --; }; })
         let r = qmatch_block(expr) $ {
             while (x < 0) {
                 x --
@@ -164,8 +164,8 @@ def test_while_wrong_cond(t : T?) {
 [test]
 def test_while_capture_cond(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { while (x > 0) { x --; }; })
-        var inscope cond : ExpressionPtr
+        var expr = qmacro($ { while (x > 0) { x --; }; })
+        var cond : ExpressionPtr
         let r = qmatch_block(expr) $ {
             while ($e(cond)) {
                 x --
@@ -173,7 +173,7 @@ def test_while_capture_cond(t : T?) {
         }
         t |> success(r.matched, "should capture while condition")
         if (r.matched) {
-            t |> equal(string(get_ptr(cond).__rtti), "ExprOp2")
+            t |> equal(string(cond.__rtti), "ExprOp2")
         }
     }
 }
@@ -183,7 +183,7 @@ def test_while_capture_cond(t : T?) {
 [test]
 def test_for_match(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in arr) { print(); }; })
+        var expr = qmacro($ { for (x in arr) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (x in arr) {
                 print()
@@ -196,7 +196,7 @@ def test_for_match(t : T?) {
 [test]
 def test_for_wrong_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in arr) { print(); }; })
+        var expr = qmacro($ { for (x in arr) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (x in arr) {
                 foo()
@@ -209,7 +209,7 @@ def test_for_wrong_body(t : T?) {
 [test]
 def test_for_wrong_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in arr) { print(); }; })
+        var expr = qmacro($ { for (x in arr) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (x in other) {
                 print()
@@ -224,7 +224,7 @@ def test_for_wrong_source(t : T?) {
 [test]
 def test_return_value(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { return a + b; })
+        var expr = qmacro($ { return a + b; })
         let r = qmatch_block(expr) $ {
             return a + b
         }
@@ -235,7 +235,7 @@ def test_return_value(t : T?) {
 [test]
 def test_return_wrong_value(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { return a + b; })
+        var expr = qmacro($ { return a + b; })
         let r = qmatch_block(expr) $ {
             return a - b
         }
@@ -246,14 +246,14 @@ def test_return_wrong_value(t : T?) {
 [test]
 def test_return_capture(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { return a + b; })
-        var inscope val : ExpressionPtr
+        var expr = qmacro($ { return a + b; })
+        var val : ExpressionPtr
         let r = qmatch_block(expr) $ {
             return $e(val)
         }
         t |> success(r.matched, "should capture return value")
         if (r.matched) {
-            t |> equal(string(get_ptr(val).__rtti), "ExprOp2")
+            t |> equal(string(val.__rtti), "ExprOp2")
         }
     }
 }
@@ -263,7 +263,7 @@ def test_return_capture(t : T?) {
 [test]
 def test_for_two_iterators(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (k, v in keys, values) {
                 print()
@@ -276,7 +276,7 @@ def test_for_two_iterators(t : T?) {
 [test]
 def test_for_two_iterators_wrong_name(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (k, x in keys, values) {
                 print()
@@ -289,7 +289,7 @@ def test_for_two_iterators_wrong_name(t : T?) {
 [test]
 def test_for_two_iterators_wrong_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (k, v in keys, other) {
                 print()
@@ -302,7 +302,7 @@ def test_for_two_iterators_wrong_source(t : T?) {
 [test]
 def test_for_iterator_count_mismatch(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (k in keys) {
                 print()
@@ -318,7 +318,7 @@ def test_for_iterator_count_mismatch(t : T?) {
 def test_for_capture_single_with_two_iterators(t : T?) {
     ast_gc_guard() {
         // $i tag only works on the first iterator (parser limitation)
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         var name1 : string
         let r = qmatch_block(expr) $ {
             for ($i(name1), v in keys, values) {
@@ -333,7 +333,7 @@ def test_for_capture_single_with_two_iterators(t : T?) {
 [test]
 def test_for_capture_first_wrong_second(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
         var name1 : string
         let r = qmatch_block(expr) $ {
             for ($i(name1), x in keys, values) {
@@ -349,8 +349,8 @@ def test_for_capture_first_wrong_second(t : T?) {
 [test]
 def test_for_capture_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in range(10)) { print(); }; })
-        var inscope src : ExpressionPtr
+        var expr = qmacro($ { for (x in range(10)) { print(); }; })
+        var src : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for (x in $e(src)) {
                 print()
@@ -366,9 +366,9 @@ def test_for_capture_source(t : T?) {
 [test]
 def test_for_capture_two_sources(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { print(); }; })
-        var inscope src1 : ExpressionPtr
-        var inscope src2 : ExpressionPtr
+        var expr = qmacro($ { for (k, v in keys, values) { print(); }; })
+        var src1 : ExpressionPtr
+        var src2 : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for (k, v in $e(src1), $e(src2)) {
                 print()
@@ -387,8 +387,8 @@ def test_for_capture_two_sources(t : T?) {
 [test]
 def test_for_capture_body(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in arr) { a + b; }; })
-        var inscope body_expr : ExpressionPtr
+        var expr = qmacro($ { for (x in arr) { a + b; }; })
+        var body_expr : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for (x in arr) {
                 $e(body_expr)
@@ -406,9 +406,9 @@ def test_for_capture_body(t : T?) {
 [test]
 def test_for_capture_iterator_and_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (x in range(10)) { print(); }; })
+        var expr = qmacro($ { for (x in range(10)) { print(); }; })
         var iter_name : string
-        var inscope src : ExpressionPtr
+        var src : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for ($i(iter_name) in $e(src)) {
                 print()
@@ -425,11 +425,11 @@ def test_for_capture_iterator_and_source(t : T?) {
 [test]
 def test_for_capture_iterator_and_sources(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (k, v in keys, values) { a + b; }; })
+        var expr = qmacro($ { for (k, v in keys, values) { a + b; }; })
         var name1 : string
-        var inscope src1 : ExpressionPtr
-        var inscope src2 : ExpressionPtr
-        var inscope body_expr : ExpressionPtr
+        var src1 : ExpressionPtr
+        var src2 : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_block(expr) $ {
             for ($i(name1), v in $e(src1), $e(src2)) {
                 $e(body_expr)
@@ -450,7 +450,7 @@ def test_for_capture_iterator_and_sources(t : T?) {
 [test]
 def test_for_range_source(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (i in range(10)) { print(); }; })
+        var expr = qmacro($ { for (i in range(10)) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (i in range(10)) {
                 print()
@@ -463,7 +463,7 @@ def test_for_range_source(t : T?) {
 [test]
 def test_for_range_wrong_arg(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { for (i in range(10)) { print(); }; })
+        var expr = qmacro($ { for (i in range(10)) { print(); }; })
         let r = qmatch_block(expr) $ {
             for (i in range(20)) {
                 print()
@@ -478,9 +478,9 @@ def test_for_range_wrong_arg(t : T?) {
 [test]
 def test_for_in_wildcard(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { var x = 0; for (i in arr) { x += i; }; print(); })
+        var expr = qmacro($ { var x = 0; for (i in arr) { x += i; }; print(); })
         var iter_name : string
-        var inscope body_expr : ExpressionPtr
+        var body_expr : ExpressionPtr
         let r = qmatch_block(expr) $ {
             _wildcard()
             for ($i(iter_name) in arr) {
@@ -498,7 +498,7 @@ def test_for_in_wildcard(t : T?) {
 [test]
 def test_if_in_wildcard_sandwich(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { print(); if (a < 5) { return b; }; foo(); })
+        var expr = qmacro($ { print(); if (a < 5) { return b; }; foo(); })
         let r = qmatch_block(expr) $ {
             _wildcard()
             if (a < 5) {
@@ -513,7 +513,7 @@ def test_if_in_wildcard_sandwich(t : T?) {
 [test]
 def test_while_after_wildcard(t : T?) {
     ast_gc_guard() {
-        var inscope expr <- qmacro($ { var x = 10; while (x > 0) { x --; }; })
+        var expr = qmacro($ { var x = 10; while (x > 0) { x --; }; })
         let r = qmatch_block(expr) $ {
             _wildcard()
             while (x > 0) {

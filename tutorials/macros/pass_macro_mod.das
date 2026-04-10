@@ -65,7 +65,7 @@ class TraceCallsVisitor : AstVisitor {
     astChanged : bool = false
     @do_not_delete func : Function?
     def override preVisitFunction(var fun : FunctionPtr) {
-        func = get_ptr(fun)
+        func = fun
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         // Skip our own helper to avoid infinite recursion at runtime.
@@ -89,7 +89,7 @@ class TraceCallsVisitor : AstVisitor {
         }
         // Insert _trace_enter("function_name") at the beginning of the body.
         let fname = string(fun.name)
-        var inscope expr <- qmacro(_trace_enter($v(fname)))
+        var expr = qmacro(_trace_enter($v(fname)))
         body.list |> emplace(expr, 0)
         astChanged = true
         func.not_inferred()

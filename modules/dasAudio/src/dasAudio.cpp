@@ -620,7 +620,7 @@ public:
         // audio constants
         addConstant<int>(*this, "MA_SAMPLE_RATE", HRTF_SAMPLE_RATE);
         // reverb
-        addEnumeration(make_smart<EnumerationI3DL2Preset>());
+        addEnumeration(new EnumerationI3DL2Preset());
         addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));
         addAnnotation(make_smart<I3DL2ReverbAnnotation>(lib));
         addExtern<DAS_BIND_FUN(dasAudio_setSampleRate)>(*this, lib, "set_sample_rate",
@@ -652,11 +652,11 @@ public:
         addExtern<DAS_BIND_FUN(dasAudio_mixerContext),SimNode_ExtFuncCallRef>(*this, lib, "mixer_context",
             SideEffects::modifyExternal, "dasAudio_mixerContext");
         // enums
-        addEnumeration(make_smart<Enumerationma_format>());
-        addEnumeration(make_smart<Enumerationma_resample_algorithm>());
-        addEnumeration(make_smart<Enumerationma_channel_mix_mode>());
-        addEnumeration(make_smart<Enumerationma_dither_mode>());
-        addEnumeration(make_smart<Enumerationma_result>());
+        addEnumeration(new Enumerationma_format());
+        addEnumeration(new Enumerationma_resample_algorithm());
+        addEnumeration(new Enumerationma_channel_mix_mode());
+        addEnumeration(new Enumerationma_dither_mode());
+        addEnumeration(new Enumerationma_result());
         // resampler
         addAnnotation(make_smart<MAResamplerConfigAnnotation>(lib));
         addAnnotation(make_smart<MAResamplerAnnotation>(lib));

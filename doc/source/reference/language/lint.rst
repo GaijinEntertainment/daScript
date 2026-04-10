@@ -248,9 +248,8 @@ a new string unnecessarily.
 PERF008 — unnecessary ``get_ptr()`` for ``is``/``as``
 ======================================================
 
-``smart_ptr<Expression>`` and ``TypeDecl?`` support ``is`` and ``as``
-type checks directly. Calling ``get_ptr()`` first to convert to a raw pointer
-is unnecessary.
+``ExpressionPtr`` and ``TypeDeclPtr`` support ``is`` and ``as``
+type checks directly. Calling ``get_ptr()`` first is unnecessary.
 
 .. code-block:: das
 
