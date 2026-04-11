@@ -438,8 +438,9 @@ class QuotePass : AstPassMacro {
             return false // nothing to do
         }
         var astVisitor = new QuoteConverter()
-        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(prog, astVisitorAdapter)
+        make_visitor(*astVisitor) $(astVisitorAdapter) {
+            visit(prog, astVisitorAdapter)
+        }
         let result = astVisitor.astChanged
         unsafe {
             delete astVisitor

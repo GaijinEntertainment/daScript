@@ -189,9 +189,10 @@ class public UidNodes {
 def public create_uid_nodes(prog : Program?; funcs : array<FunctionPtr>) {
     var res = new table<void?, uint64>()
     var uids = new UidGen(id_map = res)
-    var inscope adapter <- make_visitor(*uids)
-    for (fun in funcs) {
-        visit(fun, adapter)
+    make_visitor(*uids) $(adapter) {
+        for (fun in funcs) {
+            visit(fun, adapter)
+        }
     }
     unsafe {
         delete uids

@@ -103,8 +103,9 @@ class TraceCallsPass : AstPassMacro {
     //! Pass macro that inserts trace calls at every function entry.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         var astVisitor = new TraceCallsVisitor()
-        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(prog, astVisitorAdapter)
+        make_visitor(*astVisitor) $(astVisitorAdapter) {
+            visit(prog, astVisitorAdapter)
+        }
         let result = astVisitor.astChanged
         unsafe {
             delete astVisitor

@@ -269,7 +269,7 @@ bitfield public LlvmJitFlags {
 
 [macro]
 class public LlvmJitVisitor : AstVisitor {
-    adapter : smart_ptr<VisitorAdapter>
+    adapter : VisitorAdapter?
     e2v : table<Expression?; LLVMOpaqueValue?>
     v2v : table<Variable?; LLVMOpaqueValue?>
     v2t : table<LLVMOpaqueValue?; LLVMOpaqueType?>
@@ -5259,30 +5259,31 @@ class public LlvmJitVisitor : AstVisitor {
 
     def make_block_function(expr : ExprMakeBlock?; captured : array<CapturedVariable>; first_field_index : int; captureType : LLVMOpaqueType?) : tuple<func : LLVMOpaqueValue?; impl : LLVMOpaqueValue?> {
         var astVisitor = new LlvmJitVisitor(jit_context, types, uid, flags, g_di_builder, attributes)
-        unsafe {
-            astVisitor.adapter <- make_visitor(*astVisitor)
-        }
-        let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?> expr._block), thisFunc, captureType)
-        var cblk = (*astVisitor)->before_function_entry()
-        var carg = (*astVisitor)->get_capture_param()
-        carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
-        for (c, ai in captured, count()) {
-            var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai + first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
-            if (c.eref) {
-                var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
-                var arg_p = LLVMBuildAlloca(astVisitor.g_builder, arg_t, "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}_var")
-                LLVMBuildStore(astVisitor.g_builder, arg_i, arg_p)
-                (*astVisitor)->setV(c.variable, arg_p)
-            } else {
-                (*astVisitor)->setV(c.variable, arg_i)
+        var result : LLVMOpaqueValue?
+        var impl : LLVMOpaqueValue?
+        make_visitor(*astVisitor) $(mv_adapter) {
+            astVisitor.adapter = mv_adapter
+            let fmna = (*astVisitor)->pre_make_block(unsafe(reinterpret<ExprBlock?> expr._block), thisFunc, captureType)
+            var cblk = (*astVisitor)->before_function_entry()
+            var carg = (*astVisitor)->get_capture_param()
+            carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
+            for (c, ai in captured, count()) {
+                var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai + first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
+                if (c.eref) {
+                    var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
+                    var arg_p = LLVMBuildAlloca(astVisitor.g_builder, arg_t, "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}_var")
+                    LLVMBuildStore(astVisitor.g_builder, arg_i, arg_p)
+                    (*astVisitor)->setV(c.variable, arg_p)
+                } else {
+                    (*astVisitor)->setV(c.variable, arg_i)
+                }
             }
+            (*astVisitor)->after_function_entry(cblk)
+            visit(expr._block, astVisitor.adapter)
+            (*astVisitor)->post_make_block(unsafe(reinterpret<ExprBlock?> expr._block))
+            result = LLVMGetNamedFunction(g_mod, fmna.publ())
+            impl = LLVMGetNamedFunction(g_mod, fmna.impl())
         }
-        (*astVisitor)->after_function_entry(cblk)
-        visit(expr._block, astVisitor.adapter)
-        (*astVisitor)->post_make_block(unsafe(reinterpret<ExprBlock?> expr._block))
-        let result = LLVMGetNamedFunction(g_mod, fmna.publ())
-        let impl = LLVMGetNamedFunction(g_mod, fmna.impl())
-        astVisitor.adapter := null
         unsafe {
             delete astVisitor
         }
@@ -6352,11 +6353,11 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
         globalVar |> LLVMSetInitializer(types.ConstI64(aot_hash))
     }
     var astVisitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
-    unsafe {
-        astVisitor.adapter <- make_visitor(*astVisitor)
-    }
-    ast_gc_guard() {
-        visit(fn, astVisitor.adapter)
+    make_visitor(*astVisitor) $(mv_adapter) {
+        astVisitor.adapter = mv_adapter
+        ast_gc_guard() {
+            visit(fn, astVisitor.adapter)
+        }
     }
     if (length(g_errors) > 0) {
         let errors = g_errors |> join("\n")
@@ -6364,7 +6365,6 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
         to_log(LOG_ERROR, "LLVM JIT FAILED:\n{errors}\n")
         g_failed = true
     }
-    astVisitor.adapter := null
     unsafe {
         delete astVisitor
     }
@@ -6379,70 +6379,72 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
                                               fn_name : string = "init_globals") {
     let attrs = new Attributes(g_ctx)
     var visitor = new LlvmJitVisitor(ctx, types, uids, flags, null, attrs)
-    var inscope adapter = make_visitor(*visitor)
-    visitor.adapter := adapter
+    var globals_fn : LLVMOpaqueValue?
+    var globals_fn_type : LLVMOpaqueType?
+    make_visitor(*visitor) $(adapter) {
+        visitor.adapter = adapter
 
-    let globals_fn_type = LLVMFunctionType(types.t_void,
-        array<LLVMTypeRef>(types.LLVMVoidPtrType())
-    )
-    let globals_fn = LLVMAddFunctionWithType(g_mod, fn_name, globals_fn_type)
-    if (flags.need_di) {
-        set_debug_linkage(globals_fn)
-    } else {
-        set_private_linkage(globals_fn)
-    }
-    visitor.ffunc = globals_fn
-    let entry = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "entry")
-    let body = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "body")
-    visitor.function_entry = entry
-    LLVMPositionBuilderAtEnd(visitor.g_builder, body)
-    let ctx_param = LLVMGetParam(globals_fn, 0u)
+        globals_fn_type = LLVMFunctionType(types.t_void,
+            array<LLVMTypeRef>(types.LLVMVoidPtrType())
+        )
+        globals_fn = LLVMAddFunctionWithType(g_mod, fn_name, globals_fn_type)
+        if (flags.need_di) {
+            set_debug_linkage(globals_fn)
+        } else {
+            set_private_linkage(globals_fn)
+        }
+        visitor.ffunc = globals_fn
+        let entry = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "entry")
+        let body = LLVMAppendBasicBlockInContext(g_ctx, globals_fn, "body")
+        visitor.function_entry = entry
+        LLVMPositionBuilderAtEnd(visitor.g_builder, body)
+        let ctx_param = LLVMGetParam(globals_fn, 0u)
 
-    ast_gc_guard() {
+        ast_gc_guard() {
 
-        // dummy Function with 0 arguments so get_context_param returns LLVMGetParam(ffunc, 0u)
-        var dummyFunc <- new Function(name := fn_name)
-        visitor.thisFunc = dummyFunc
+            // dummy Function with 0 arguments so get_context_param returns LLVMGetParam(ffunc, 0u)
+            var dummyFunc <- new Function(name := fn_name)
+            visitor.thisFunc = dummyFunc
 
-        prog |> for_each_module() $(mod) {
-            mod |> for_each_global() $(glob) {
-                if (glob.init != null && glob.flags.used) {
-                    // compute global variable destination pointer before visiting init expression
-                    let isSolidContext = glob._module.moduleFlags.isSolidContext
-                    var vptr : LLVMOpaqueValue?
-                    if (!isSolidContext) {
-                        let mnh = hash(get_mangled_name(glob))
-                        var params = fixed_array(
-                            LLVMConstInt(types.t_int64, mnh, 0),
-                            ctx_param
-                        )
-                        var func = LLVMGetNamedFunction(g_mod, glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH)
-                        var typ = g_fn_types[glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH]
-                        vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
-                        vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
-                    } else {
-                        var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
-                        let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                        var global_ptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
-                        global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
-                        vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
-                    }
-                    // register CMRES destination so init expressions that return by copy/move
-                    // write directly into the global variable's memory
-                    let usedCmres = visitor.make_call_to_cmres(glob.init, vptr)
-                    visit_expression(glob.init, adapter)
-                    if (!usedCmres) {
-                        visitor.build_copy(vptr, glob.init)
+            prog |> for_each_module() $(mod) {
+                mod |> for_each_global() $(glob) {
+                    if (glob.init != null && glob.flags.used) {
+                        // compute global variable destination pointer before visiting init expression
+                        let isSolidContext = glob._module.moduleFlags.isSolidContext
+                        var vptr : LLVMOpaqueValue?
+                        if (!isSolidContext) {
+                            let mnh = hash(get_mangled_name(glob))
+                            var params = fixed_array(
+                                LLVMConstInt(types.t_int64, mnh, 0),
+                                ctx_param
+                            )
+                            var func = LLVMGetNamedFunction(g_mod, glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH)
+                            var typ = g_fn_types[glob.flags.global_shared ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH]
+                            vptr = LLVMBuildCall2(visitor.g_builder, typ, func, params, "global_var_{glob.name}_mnh_ptr")
+                            vptr = LLVMBuildPointerCast(visitor.g_builder, vptr, get_type_pointer(glob._type), "global_var_{glob.name}")
+                        } else {
+                            var ctx_ptr = LLVMBuildPointerCast(visitor.g_builder, ctx_param, LLVMPointerType(types.t_int8, 0u), "")
+                            let coffset = glob.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                            var global_ptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, ctx_ptr, types.ConstI32(uint64(coffset)), "")
+                            global_ptr = LLVMBuildLoad2(visitor.g_builder, LLVMPointerType(types.t_int8, 0u), global_ptr, "")
+                            vptr = LLVMBuildGEP2(visitor.g_builder, types.t_int8, global_ptr, types.ConstI32(uint64(glob.stackTop)), "")
+                        }
+                        // register CMRES destination so init expressions that return by copy/move
+                        // write directly into the global variable's memory
+                        let usedCmres = visitor.make_call_to_cmres(glob.init, vptr)
+                        visit_expression(glob.init, adapter)
+                        if (!usedCmres) {
+                            visitor.build_copy(vptr, glob.init)
+                        }
                     }
                 }
             }
         }
+        LLVMBuildRetVoid(visitor.g_builder)
+        // terminate entry block with branch to body (entry only has allocas from at_function_entry)
+        LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
+        LLVMBuildBr(visitor.g_builder, body)
     }
-    LLVMBuildRetVoid(visitor.g_builder)
-    // terminate entry block with branch to body (entry only has allocas from at_function_entry)
-    LLVMPositionBuilderAtEnd(visitor.g_builder, entry)
-    LLVMBuildBr(visitor.g_builder, body)
-    visitor.adapter := null
     unsafe {
         delete visitor
     }

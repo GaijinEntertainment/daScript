@@ -79,8 +79,9 @@ struct public CapturedVariable {
 def public capture_block(expr : ExpressionPtr) : array<CapturedVariable> {
     //! Collect all captured variables in the expression.
     var astVisitor = new CaptureBlock()
-    var inscope adapter <- make_visitor(*astVisitor)
-    visit(expr, adapter)
+    make_visitor(*astVisitor) $(adapter) {
+        visit(expr, adapter)
+    }
     var res := [for (k, v in keys(astVisitor.captured), values(astVisitor.captured)); CapturedVariable(variable=k, expression=v) ]
     unsafe {
         delete astVisitor
@@ -113,8 +114,9 @@ def public collect_finally(expr : ExpressionPtr; alwaysFor : bool = false) {
     //! Returns array of ExprBlock? with all the blocks which have `finally` section
     //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletFinally(alwaysFor = alwaysFor)
-    var inscope adapter <- make_visitor(*astVisitor)
-    visit(expr, adapter)
+    make_visitor(*astVisitor) $(adapter) {
+        visit(expr, adapter)
+    }
     var res := [for (k in keys(astVisitor.blocks)); k ]
     unsafe {
         delete astVisitor
@@ -139,8 +141,9 @@ def public collect_labels(expr : ExpressionPtr) {
     //! Collect all labels in the expression. Returns array of integer with label indices
     //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletLabels()
-    var inscope adapter <- make_visitor(*astVisitor)
-    visit(expr, adapter)
+    make_visitor(*astVisitor) $(adapter) {
+        visit(expr, adapter)
+    }
     var res := [for (k in keys(astVisitor.labels)); k ]
     unsafe {
         delete astVisitor

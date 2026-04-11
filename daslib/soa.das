@@ -321,8 +321,9 @@ class CollectAndReplaceIteratorFields : AstVisitor {
 def collect_and_replace_iterator_fields(prefix : string; blk : ExpressionPtr) : array<string> {
     var names : array<string>
     var astVisitor = new CollectAndReplaceIteratorFields(prefix)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(blk, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(blk, astVisitorAdapter)
+    }
     for (n in keys(astVisitor.names)) {
         names |> push(n)
     }

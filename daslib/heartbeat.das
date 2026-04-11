@@ -88,8 +88,9 @@ class HeartbeatPass : AstPassMacro {
     //! Pass macro that instruments functions with heartbeat calls.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         var astVisitor = new AddHeartbeat()
-        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(prog, astVisitorAdapter)
+        make_visitor(*astVisitor) $(astVisitorAdapter) {
+            visit(prog, astVisitorAdapter)
+        }
         let result = astVisitor.astChanged
         unsafe {
             delete astVisitor

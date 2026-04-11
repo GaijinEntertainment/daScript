@@ -118,10 +118,11 @@ class VerifyCompletion : AstFunctionAnnotation {
     def override lint(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         var visited : table<Function?>
         var astVisitor = new ValidateCompletionVisitor()
-        var inscope adapter <- make_visitor(*astVisitor)
-        collect_call_tree(func, visited)
-        for (fun in visited |> keys()) {
-            visit(unsafe(reinterpret<FunctionPtr> fun), adapter)
+        make_visitor(*astVisitor) $(adapter) {
+            collect_call_tree(func, visited)
+            for (fun in visited |> keys()) {
+                visit(unsafe(reinterpret<FunctionPtr> fun), adapter)
+            }
         }
         unsafe {
             delete astVisitor
@@ -151,19 +152,20 @@ class JIT_LLVM : AstSimulateMacro {
     //! Simulate macro for LLVM JIT compilation.
     def lint_module(prog : Program?; var ctx : Context?) {
         var astVisitor = new ValidateShaderVisitor()
-        var inscope adapter <- make_visitor(*astVisitor)
-        prog |> for_each_module() $(mod) {
-            mod |> for_each_function("") $(f) {
-                if (f.flags.used) {
-                    visit(f, adapter)
+        make_visitor(*astVisitor) $(adapter) {
+            prog |> for_each_module() $(mod) {
+                mod |> for_each_function("") $(f) {
+                    if (f.flags.used) {
+                        visit(f, adapter)
+                    }
                 }
-            }
-            mod |> for_each_global() $(g) {
-                if (g.flags.used) {
-                    if (!g._type.isNoHeapType) {
-                        macro_error(compiling_program(), g.at, "global variable {g.name} requires heap")
-                    } elif (g.init != null) {
-                        visit(g.init, adapter)
+                mod |> for_each_global() $(g) {
+                    if (g.flags.used) {
+                        if (!g._type.isNoHeapType) {
+                            macro_error(compiling_program(), g.at, "global variable {g.name} requires heap")
+                        } elif (g.init != null) {
+                            visit(g.init, adapter)
+                        }
                     }
                 }
             }

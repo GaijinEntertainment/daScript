@@ -33,7 +33,7 @@ class LintVisitor : AstVisitor {
     //!   - LINT002: unused variable
     //!   - LINT003: variable can be made const (var→let)
     //!   - LINT004: underscore-prefixed variable is actually used
-    astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
+    astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
     noLint : bool = false
@@ -207,11 +207,10 @@ class LintVisitor : AstVisitor {
 def public paranoid(prog : ProgramPtr; compile_time_errors : bool) {
     //! Runs the paranoid lint visitor on the program to check for common coding issues.
     var astVisitor = new LintVisitor(compile_time_errors = compile_time_errors)
-    unsafe {
-        astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
+    make_visitor(*astVisitor) $(adapter) {
+        astVisitor.astVisitorAdapter = adapter
+        visit(prog, astVisitor.astVisitorAdapter)
     }
-    visit(prog, astVisitor.astVisitorAdapter)
-    astVisitor.astVisitorAdapter := null
     unsafe {
         delete astVisitor
     }
@@ -221,16 +220,15 @@ def public paranoid_collect(prog : ProgramPtr; var errors : array<string>) : int
     //! Runs the paranoid lint visitor and collects errors as strings.
     //! Returns the number of lint issues found.
     var astVisitor = new LintVisitor(compile_time_errors = false, collect_errors = true)
-    unsafe {
-        astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
+    make_visitor(*astVisitor) $(adapter) {
+        astVisitor.astVisitorAdapter = adapter
+        visit(prog, astVisitor.astVisitorAdapter)
     }
-    visit(prog, astVisitor.astVisitorAdapter)
     let count = length(astVisitor.errors)
     errors |> reserve(count)
     for (e in astVisitor.errors) {
         errors |> push(e)
     }
-    astVisitor.astVisitorAdapter := null
     unsafe {
         delete astVisitor
     }

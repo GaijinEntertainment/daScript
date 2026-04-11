@@ -198,8 +198,9 @@ The pass macro creates the visitor and walks the full program:
     class TraceCallsPass : AstPassMacro {
         def override apply(prog : ProgramPtr; mod : Module?) : bool {
             var astVisitor = new TraceCallsVisitor()
-            var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-            visit(prog, astVisitorAdapter)
+            make_visitor(*astVisitor) $ (astVisitorAdapter) {
+                visit(prog, astVisitorAdapter)
+            }
             let result = astVisitor.astChanged
             unsafe {
                 delete astVisitor
@@ -212,8 +213,8 @@ Key points:
 
 - **``new TraceCallsVisitor()``** allocates the visitor on the heap
   (macro code cannot use stack-allocated visitors).
-- **``make_visitor(*astVisitor)``** wraps it in a ``smart_ptr``
-  adapter for the ``visit`` function.
+- **``make_visitor(*astVisitor) $ (adapter) { ... }``** wraps it in an
+  adapter for the ``visit`` function, available inside the block.
 - **``visit(prog, astVisitorAdapter)``** walks the entire program — all
   modules, all functions.  Use ``visit(func, adapter)`` to walk a
   single function instead.

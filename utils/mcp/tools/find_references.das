@@ -444,11 +444,12 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
         // Step 2: walk AST to find all references
         let file_filter = all_modules ? "" : file
         var visitor = new RefVisitor(target, file_filter)
-        var inscope adapter <- make_visitor(*visitor)
-        if (all_modules) {
-            visit_modules(program, adapter)
-        } else {
-            visit(program, adapter)
+        make_visitor(*visitor) $(adapter) {
+            if (all_modules) {
+                visit_modules(program, adapter)
+            } else {
+                visit(program, adapter)
+            }
         }
         let result = format_references(visitor.refs, target)
         unsafe {

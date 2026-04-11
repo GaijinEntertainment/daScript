@@ -214,10 +214,10 @@ class NoPrintMacro : AstFunctionAnnotation {
 
         // Step 1: Create a visitor and adapt it for the visit() call
         var astVisitor = new NoPrintVisitor()
-        var inscope adapter <- make_visitor(*astVisitor)
-
-        // Step 2: Walk the function body
-        visit(func, adapter)
+        make_visitor(*astVisitor) $(adapter) {
+            // Step 2: Walk the function body
+            visit(func, adapter)
+        }
 
         // Step 3: Check the result
         if (astVisitor.found_print) {

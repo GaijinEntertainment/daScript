@@ -1162,7 +1162,7 @@ namespace das {
     }
 
 
-    struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
+    struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,false> {
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
         }
@@ -2259,8 +2259,13 @@ namespace das {
         }
     }
 
-    smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<VisitorAdapter>((char *)pClass,info,context);
+    void makeVisitor ( const void * pClass, const StructInfo * info,
+            const TBlock<void,VisitorAdapter*> & blk, Context * context, LineInfoArg * at ) {
+        auto adapter = new VisitorAdapter((char *)pClass,info,context);
+        vec4f args[1];
+        args[0] = cast<VisitorAdapter*>::from(adapter);
+        context->invoke(blk, args, nullptr, at);
+        delete adapter;
     }
 
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
@@ -2478,7 +2483,7 @@ namespace das {
         st->annotations.push_back(ann);
     }
 
-    void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void astVisit ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!program)
@@ -2486,7 +2491,7 @@ namespace das {
         program->visit(*adapter);
     }
 
-    void astVisitGenerics ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void astVisitGenerics ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!program)
@@ -2494,7 +2499,7 @@ namespace das {
         program->visit(*adapter, true);
     }
 
-    void astVisitWithSort ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, bool sortStructures, Context * context, LineInfoArg * line_info ) {
+    void astVisitWithSort ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, bool sortStructures, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!program)
@@ -2502,7 +2507,7 @@ namespace das {
         program->visit(*adapter, false, sortStructures);
     }
 
-    void astVisitModule ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter,
+    void astVisitModule ( smart_ptr_raw<Program> program, VisitorAdapter * adapter,
                           Module* module, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
@@ -2511,7 +2516,7 @@ namespace das {
         program->visitModule(*adapter, module);
     }
 
-    void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void astVisitModulesInOrder ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!program)
@@ -2519,7 +2524,7 @@ namespace das {
         program->visitModulesInOrder(*adapter);
     }
 
-    void astVisitFunction ( Function * func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void astVisitFunction ( Function * func, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!func)
@@ -2527,7 +2532,7 @@ namespace das {
         func->visit(*adapter);
     }
 
-    TypeDecl * astVisitTypeDecl ( TypeDecl * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    TypeDecl * astVisitTypeDecl ( TypeDecl * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!expr)
@@ -2538,15 +2543,15 @@ namespace das {
         return res;
     }
 
-    void visitEnumeration ( ProgramPtr program, Enumeration * enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg * ) {
+    void visitEnumeration ( ProgramPtr program, Enumeration * enumeration, VisitorAdapter * adapter, Context * , LineInfoArg * ) {
         program->visitEnumeration(*adapter, enumeration);
     }
 
-    void visitStructure ( ProgramPtr program, Structure * structure, smart_ptr_raw<VisitorAdapter> adapter, Context * , LineInfoArg *  ) {
+    void visitStructure ( ProgramPtr program, Structure * structure, VisitorAdapter * adapter, Context * , LineInfoArg *  ) {
         program->visitStructure(*adapter, structure);
     }
 
-    Expression * astVisitExpression ( Expression * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    Expression * astVisitExpression ( Expression * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!expr)
@@ -2555,7 +2560,7 @@ namespace das {
         return res;
     }
 
-    void astVisitBlockFinally ( ExprBlock * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
+    void astVisitBlockFinally ( ExprBlock * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
             context->throw_error_at(line_info, "adapter is required");
         if (!expr)
@@ -2568,7 +2573,7 @@ namespace das {
         addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
             SideEffects::modifyExternal, "makeVisitor")
-                ->args({"class","info","context"});
+                ->args({"class","info","blk","context","at"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(astVisit)>(*this, lib,  "visit",
             SideEffects::accessExternal, "astVisit")
                 ->args({"program","adapter","context","line"});
