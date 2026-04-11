@@ -6382,10 +6382,6 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     var inscope adapter = make_visitor(*visitor)
     visitor.adapter := adapter
 
-    // dummy Function with 0 arguments so get_context_param returns LLVMGetParam(ffunc, 0u)
-    var dummyFunc <- new Function(name := fn_name)
-    visitor.thisFunc = dummyFunc
-
     let globals_fn_type = LLVMFunctionType(types.t_void,
         array<LLVMTypeRef>(types.LLVMVoidPtrType())
     )
@@ -6401,7 +6397,13 @@ def public generate_globals_initialization_fn(ctx : Context?; prog : Program?;
     visitor.function_entry = entry
     LLVMPositionBuilderAtEnd(visitor.g_builder, body)
     let ctx_param = LLVMGetParam(globals_fn, 0u)
+
     ast_gc_guard() {
+
+        // dummy Function with 0 arguments so get_context_param returns LLVMGetParam(ffunc, 0u)
+        var dummyFunc <- new Function(name := fn_name)
+        visitor.thisFunc = dummyFunc
+
         prog |> for_each_module() $(mod) {
             mod |> for_each_global() $(glob) {
                 if (glob.init != null && glob.flags.used) {
