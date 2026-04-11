@@ -148,8 +148,9 @@ def private reverse_hits(var src : array<CursorHit>) : array<CursorHit> {
 //! `file` is a substring matched against ``FileInfo.name`` (use "" to match any file).
 def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col : int) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
-    var inscope adapter <- make_visitor(*visitor)
-    visit(program, adapter)
+    make_visitor(*visitor) $(adapter) {
+        visit(program, adapter)
+    }
     // visitor collects parent-first (depth-first pre-order), reverse for innermost-first
     var result <- reverse_hits(visitor.hits)
     unsafe {
@@ -163,8 +164,9 @@ def public find_at_cursor(program : smart_ptr<Program>; file : string; line, col
 def public find_at_cursor_in_function(func : FunctionPtr; file : string; line, col : int) : array<CursorHit> {
     var visitor = new CursorVisitor(file, line, col)
     visitor.currentFunc = func
-    var inscope adapter <- make_visitor(*visitor)
-    visit(func, adapter)
+    make_visitor(*visitor) $(adapter) {
+        visit(func, adapter)
+    }
     var result <- reverse_hits(visitor.hits)
     unsafe {
         delete visitor

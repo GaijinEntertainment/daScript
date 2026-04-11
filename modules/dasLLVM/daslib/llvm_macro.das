@@ -87,7 +87,6 @@ class JIT_LLVM : AstSimulateMacro {
         var funcs : array<FunctionPtr>
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
-        var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
 
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         assume debug_info = prog.policies.jit_debug_info
@@ -113,22 +112,24 @@ class JIT_LLVM : AstSimulateMacro {
         // Set global options
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
 
-        prog |> for_each_module() $(mod) {
-            mod |> for_each_function("") $(fun) {
-                let rqj = fun.moreFlags.requestJit
-                fun.moreFlags &= ~MoreFunctionFlags.requestJit
-                if (fun.flags.used && (jit_all_functions || rqj)) {
-                    if (!fun.moreFlags.requestNoJit) {
-                        disableJitVisitor.disable = false
-                        fun |> visit(disableJitVisitorAdapter)
-                        if (!disableJitVisitor.disable) {
-                            fun.moreFlags |= MoreFunctionFlags.requestJit
-                            funcs |> emplace(fun)
+        make_visitor(*disableJitVisitor) $(disableJitVisitorAdapter) {
+            prog |> for_each_module() $(mod) {
+                mod |> for_each_function("") $(fun) {
+                    let rqj = fun.moreFlags.requestJit
+                    fun.moreFlags &= ~MoreFunctionFlags.requestJit
+                    if (fun.flags.used && (jit_all_functions || rqj)) {
+                        if (!fun.moreFlags.requestNoJit) {
+                            disableJitVisitor.disable = false
+                            fun |> visit(disableJitVisitorAdapter)
+                            if (!disableJitVisitor.disable) {
+                                fun.moreFlags |= MoreFunctionFlags.requestJit
+                                funcs |> emplace(fun)
+                            } else {
+                                to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
+                            }
                         } else {
-                            to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
+                            disabled |> emplace(fun)
                         }
-                    } else {
-                        disabled |> emplace(fun)
                     }
                 }
             }
@@ -236,9 +237,10 @@ class JIT_LLVM : AstSimulateMacro {
             if (use_dll) {
                 assert(g_dynamic_lib_handle.handle != null)
                 var extern_resolver = new ResolveExternVisitor(g_dynamic_lib_handle, g_prim_t, ctx, clone(uids))
-                var inscope adapter_resolve = make_visitor(*extern_resolver)
-                for (fn in funcs) {
-                    visit(fn, adapter_resolve)
+                make_visitor(*extern_resolver) $(adapter_resolve) {
+                    for (fn in funcs) {
+                        visit(fn, adapter_resolve)
+                    }
                 }
             }
             if (!gen_exe) {

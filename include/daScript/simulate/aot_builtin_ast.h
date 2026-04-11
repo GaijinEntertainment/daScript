@@ -443,17 +443,18 @@ namespace das {
     DAS_API DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context );
     DAS_API Module * thisModule ( Context * context, LineInfoArg * lineinfo );
     DAS_API smart_ptr_raw<Program> thisProgram ( Context * context );
-    DAS_API void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
-    DAS_API void astVisitGenerics ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
-    DAS_API void astVisitModule ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter,
+    DAS_API void astVisit ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void astVisitGenerics ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void astVisitModule ( smart_ptr_raw<Program> program, VisitorAdapter * adapter,
                       Module* module, Context * context, LineInfoArg * line_info );
-    DAS_API void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
-    DAS_API void astVisitFunction ( Function * func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
-    DAS_API Expression * astVisitExpression ( Expression * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
-    DAS_API TypeDecl * astVisitTypeDecl ( TypeDecl * type, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info);
-    DAS_API void astVisitBlockFinally ( ExprBlock * expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void astVisitModulesInOrder ( smart_ptr_raw<Program> program, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void astVisitFunction ( Function * func, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
+    DAS_API Expression * astVisitExpression ( Expression * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
+    DAS_API TypeDecl * astVisitTypeDecl ( TypeDecl * type, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info);
+    DAS_API void astVisitBlockFinally ( ExprBlock * expr, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     DAS_API PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
-    DAS_API smart_ptr<VisitorAdapter> makeVisitor ( const void * pClass, const StructInfo * info, Context * context );
+    DAS_API void makeVisitor ( const void * pClass, const StructInfo * info,
+            const TBlock<void,VisitorAdapter*> & blk, Context * context, LineInfoArg * at );
     DAS_API void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * );
     DAS_API void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & newM, Context * context );
     DAS_API void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * );
@@ -504,8 +505,8 @@ namespace das {
     DAS_API void addBlockBlockAnnotation ( ExprBlock * block, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at );
     DAS_API void addAndApplyBlockAnnotation ( ExprBlock * blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
     DAS_API void addAndApplyStructAnnotation ( Structure * st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
-    DAS_API void visitEnumeration ( ProgramPtr program, Enumeration * enumeration, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
-    DAS_API void visitStructure ( ProgramPtr program, Structure * structure, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void visitEnumeration ( ProgramPtr program, Enumeration * enumeration, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
+    DAS_API void visitStructure ( ProgramPtr program, Structure * structure, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return value ? new TypeDecl(*value) : nullptr; }

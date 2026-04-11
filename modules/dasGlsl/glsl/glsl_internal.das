@@ -296,7 +296,7 @@ class GlslExport : AstVisitor {
     shaderType : ShaderType
     version : int = 0
     renames : array<tuple<name : string; repl : string>>
-    astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
+    astVisitorAdapter : VisitorAdapter?
     compute_local_size : int3
     caps : ShaderExportCaps
     inout_stub : string
@@ -1877,31 +1877,30 @@ def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType :
     var inout_decl = ""
     let st = build_string() $(var writer) {
         var astVisitor = new GlslExport(writer, shaderType, version, comp_loc_size, caps)
-        unsafe {
-            astVisitor.astVisitorAdapter <- make_visitor(*astVisitor)
-        }
-        collect_dependencies(fnMain) $(vfun, vvar) {
-            for (f in vfun) {
-                astVisitor.depFun[intptr(f)] = true
-            }
-            for (v in vvar) {
-                astVisitor.depVar[intptr(v)] = true
-            }
-            collect_used_types(vfun, vvar) $(onlyUsed) : void {
-                for (st in keys(onlyUsed.st)) {
-                    astVisitor.depStruct[intptr(st)] = true
-                    astVisitor.stnames["{st.name}"] = true
+        make_visitor(*astVisitor) $(adapter) {
+            astVisitor.astVisitorAdapter = adapter
+            collect_dependencies(fnMain) $(vfun, vvar) {
+                for (f in vfun) {
+                    astVisitor.depFun[intptr(f)] = true
                 }
-                for (en in keys(onlyUsed.en)) {
-                    astVisitor.depStruct[intptr(en)] = true
+                for (v in vvar) {
+                    astVisitor.depVar[intptr(v)] = true
                 }
-                visit_modules(compiling_program(), astVisitor.astVisitorAdapter)
+                collect_used_types(vfun, vvar) $(onlyUsed) : void {
+                    for (st in keys(onlyUsed.st)) {
+                        astVisitor.depStruct[intptr(st)] = true
+                        astVisitor.stnames["{st.name}"] = true
+                    }
+                    for (en in keys(onlyUsed.en)) {
+                        astVisitor.depStruct[intptr(en)] = true
+                    }
+                    visit_modules(compiling_program(), astVisitor.astVisitorAdapter)
+                }
             }
         }
         errors <- astVisitor.errors
         inout_stub = astVisitor.inout_stub
         inout_decl = astVisitor.inout_decl
-        astVisitor.astVisitorAdapter := null
         unsafe {
             delete astVisitor
         }

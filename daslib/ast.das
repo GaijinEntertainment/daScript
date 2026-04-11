@@ -702,16 +702,15 @@ def make_enumeration_annotation(name : string; var someClassPtr) : EnumerationAn
     }
 }
 
-def make_visitor(someClass) : smart_ptr<VisitorAdapter> {
+def make_visitor(someClass; blk : block<(var adapter : VisitorAdapter?) : void>) {
     static_if (typeinfo is_class(someClass)) {
         unsafe {
             let classPtr = addr(someClass)
             let classInfo = class_info(someClass)
-            return <- make_visitor(classPtr, classInfo)
+            make_visitor(classPtr, classInfo, blk)
         }
     } else {
         concept_assert(false, "can't make visitor of non-class")
-        return <- default<smart_ptr<VisitorAdpater>>
     }
 }
 

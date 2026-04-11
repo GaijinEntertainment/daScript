@@ -379,7 +379,7 @@ class private TemplateVisitor : AstVisitor {
     }
 }
 
-def visit_expression(var expr : Expression?&; var adapter : smart_ptr<VisitorAdapter>) {
+def visit_expression(var expr : Expression?&; var adapter : VisitorAdapter?) {
     //! Visits the expression with the given visitor adapter.
     unsafe {
         var newExpr = expr |> visit(adapter)
@@ -390,8 +390,9 @@ def visit_expression(var expr : Expression?&; var adapter : smart_ptr<VisitorAda
 def apply_template(var rules : Template; at : LineInfo; var expr : Expression?; forceAt : bool = true) : Expression? {
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit_expression(expr, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_expression(expr, astVisitorAdapter)
+    }
     if (forceAt) {
         expr |> force_at(at)
     }
@@ -401,7 +402,7 @@ def apply_template(var rules : Template; at : LineInfo; var expr : Expression?; 
     return expr
 }
 
-def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAdapter>) {
+def private visit_type(var typ : TypeDeclPtr&; var adapter : VisitorAdapter?) {
     //! Visits the type declaration with the given visitor adapter.
     unsafe {
         // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
@@ -416,8 +417,9 @@ def private visit_type(var typ : TypeDeclPtr&; var adapter : smart_ptr<VisitorAd
 def apply_template(var rules : Template; at : LineInfo; var typ : TypeDecl?; forceAt : bool = true) : TypeDeclPtr {
     //! Applies the template to the given expression. If `forceAt` is set, the resulting expression will have the same line info as 'at'.
     var astVisitor = new TemplateVisitor(unsafe(addr(rules)))
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit_type(typ, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_type(typ, astVisitorAdapter)
+    }
     /*
     if forceAt
         expr |> force_at(at)
@@ -600,8 +602,9 @@ def public remove_deref(varname : string; var expr : Expression?) {
     //! Removes dereferences of the variable `varname` from the expression.
     //! This is typically used when replacing 'workhorse' variable with constant.
     var astVisitor = new RemoveDerefVisitor(varname)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    expr |> visit(astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_expression(expr, astVisitorAdapter)
+    }
     unsafe {
         delete astVisitor
     }
@@ -975,8 +978,9 @@ def private apply_qrules(var expr : Expression?&) : ExprBlock? {
         blockFlags = ExprBlockFlags.isClosure
     )
     var astVisitor = new QRulesVisitor(eblk)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit_expression(expr, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_expression(expr, astVisitorAdapter)
+    }
     if (astVisitor.failed) {
         eblk = null
     }
@@ -999,8 +1003,9 @@ def private apply_function_qrules(var func : FunctionPtr) : ExprBlock? {
         blockFlags = ExprBlockFlags.isClosure
     )
     var astVisitor = new QRulesVisitor(eblk)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(func, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(func, astVisitorAdapter)
+    }
     if (astVisitor.failed) {
         eblk = null
     }
@@ -1023,24 +1028,23 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
         blockFlags = ExprBlockFlags.isClosure
     )
     var astVisitor = new QRulesVisitor(eblk)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-
-    var mod = template_structure._module
-    unsafe {
-        var ts = template_structure
-        var vis_structure <- reinterpret<Structure?>(ts)
-        prog.visit_structure(vis_structure, astVisitorAdapter)
-    }
-
-    if (!astVisitor.failed) {
-        for_each_function(mod, "", $(func){
-            return if (astVisitor.failed)
-            if (func.flags.isClassMethod) {
-                if (func.classParent == template_structure) {
-                    visit(func, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        var mod = template_structure._module
+        unsafe {
+            var ts = template_structure
+            var vis_structure <- reinterpret<Structure?>(ts)
+            prog.visit_structure(vis_structure, astVisitorAdapter)
+        }
+        if (!astVisitor.failed) {
+            for_each_function(mod, "", $(func){
+                return if (astVisitor.failed)
+                if (func.flags.isClassMethod) {
+                    if (func.classParent == template_structure) {
+                        visit(func, astVisitorAdapter)
+                    }
                 }
-            }
-        })
+            })
+        }
     }
 
     if (astVisitor.failed) {

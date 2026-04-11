@@ -525,8 +525,9 @@ The ``lint()`` method creates the visitor, adapts it with
 
    def override lint(...) : bool {
        var astVisitor = new NoPrintVisitor()
-       var inscope adapter <- make_visitor(*astVisitor)
-       visit(func, adapter)
+       make_visitor(*astVisitor) $ (adapter) {
+           visit(func, adapter)
+       }
        if (astVisitor.found_print) {
            errors := "function {string(func.name)} must not call builtin print"
            unsafe { delete astVisitor; }
@@ -536,9 +537,9 @@ The ``lint()`` method creates the visitor, adapts it with
        return true
    }
 
-* **``make_visitor(*astVisitor)``** — wraps the daslang visitor object
-  into an adapter that the C++ ``visit()`` function can call.  The
-  ``*`` dereferences the smart pointer.
+* **``make_visitor(*astVisitor) $ (adapter) { ... }``** — wraps the daslang visitor object
+  into an adapter that the C++ ``visit()`` function can call, available inside the block.
+  The ``*`` dereferences the smart pointer.
 * **``visit(func, adapter)``** — walks the function’s AST, calling
   the visitor’s ``preVisit*`` / ``visit*`` hooks at each node.
 * **Error reporting** uses the same pattern as ``verifyCall()`` —

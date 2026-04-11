@@ -432,19 +432,20 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
                                var funcs : array<FunctionPtr>; var uids : UidNodes?) {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids)
-    var inscope adapter_resolve = make_visitor(*extern_resolver)
-    ast_gc_guard() {
-        for (fn in funcs) {
-            visit(fn, adapter_resolve)
+    make_visitor(*extern_resolver) $(adapter_resolve) {
+        ast_gc_guard() {
+            for (fn in funcs) {
+                visit(fn, adapter_resolve)
+            }
         }
-    }
-    // Register [pinvoke] and [export] functions in tabMnLookup so they can be
-    // found by name at runtime (e.g. via invoke_in_context).
-    for (fn in funcs) {
-        if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
-            extern_resolver.uid.reset(fn)
-            extern_resolver.register_function(fn)
-            extern_resolver.uid.reset(null)
+        // Register [pinvoke] and [export] functions in tabMnLookup so they can be
+        // found by name at runtime (e.g. via invoke_in_context).
+        for (fn in funcs) {
+            if (!fn.flags.builtIn && (fn.moreFlags.pinvoke || fn.flags.exports)) {
+                extern_resolver.uid.reset(fn)
+                extern_resolver.register_function(fn)
+                extern_resolver.uid.reset(null)
+            }
         }
     }
     var result = extern_resolver.any_unimplemented

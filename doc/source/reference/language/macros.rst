@@ -689,14 +689,17 @@ The adapter then can be applied to a program via the ``visit`` function:
 .. code-block:: das
 
     var astVisitor = new PrintVisitor()
-    var astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(this_program(), astVisitorAdapter)
+    make_visitor(*astVisitor) $ (astVisitorAdapter) {
+        visit(this_program(), astVisitorAdapter)
+    }
 
 If an expression needs to be visited, and can potentially be fully substituted, the ``visit_expression`` function should be used:
 
 .. code-block:: das
 
-    expr <- visit_expression(expr,astVisitorAdapter)
+    make_visitor(*astVisitor) $ (astVisitorAdapter) {
+        expr <- visit_expression(expr,astVisitorAdapter)
+    }
 
 .. seealso::
 

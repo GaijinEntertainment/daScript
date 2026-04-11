@@ -746,8 +746,9 @@ def public perf_lint(prog : ProgramPtr; compile_time_errors : bool) : int {
     //! Runs the performance lint visitor on the compiled program.
     //! Returns the number of warnings found.
     var astVisitor = new PerfLintVisitor(compile_time_errors = compile_time_errors)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(prog, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(prog, astVisitorAdapter)
+    }
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
@@ -757,8 +758,9 @@ def public perf_lint_collect(prog : ProgramPtr; var warnings : array<string>) : 
     //! Runs the performance lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
     var astVisitor = new PerfLintVisitor(compile_time_errors = false, collect_warnings = true)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit(prog, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(prog, astVisitorAdapter)
+    }
     let count = astVisitor.warning_count
     warnings |> reserve(length(astVisitor.warnings))
     for (w in astVisitor.warnings) {

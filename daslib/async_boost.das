@@ -97,8 +97,9 @@ class AsyncMacro : AstFunctionAnnotation {
         var astVisitor = new CollectAndReplaceIteratorFields()
         astVisitor.voidRoutine = voidRoutine
         astVisitor.retType := retT
-        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit(func.body, astVisitorAdapter)
+        make_visitor(*astVisitor) $(astVisitorAdapter) {
+            visit(func.body, astVisitorAdapter)
+        }
         // gc handles TypeDecl lifetime
         unsafe {
             delete astVisitor

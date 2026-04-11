@@ -379,8 +379,10 @@ Smart pointers in AST code:
     var expr = new ExprConstInt(value=42)       // Expression is gc_node
     var fn = new ExprCall(at=expr.at, name:="foo")
 
-    // Smart pointer types (non-GC) — use inscope + <-
-    var inscope adapter <- make_visitor(*visitor)   // VisitorAdapter is smart_ptr
+    // Visitor adapter — use block-based make_visitor
+    make_visitor(*visitor) $ (adapter) {     // adapter alive inside the block
+        visit(program, adapter)
+    }
 
 The key properties of smart pointers:
 
@@ -394,7 +396,7 @@ declared with ``inscope`` to ensure automatic cleanup:
 
 .. code-block:: das
 
-    var inscope a <- make_visitor(*visitor)   // create — safe, no unsafe needed
+    var inscope a <- some_function()          // create — safe, no unsafe needed
     var inscope b <- a                        // move — safe, a becomes null
     unsafe {
         var inscope c <- some_function()      // move from function result — unsafe

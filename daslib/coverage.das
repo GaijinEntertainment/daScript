@@ -478,8 +478,9 @@ class CoveragePass : AstPassMacro {
         }
         add_module_require(mod, covModule, false)
         var astVisitor = new CoverageMacro()
-        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-        visit_module(prog, astVisitorAdapter, mod)
+        make_visitor(*astVisitor) $(astVisitorAdapter) {
+            visit_module(prog, astVisitorAdapter, mod)
+        }
         let result = astVisitor.astChanged
         if (result) {
             // generate [init] function that registers all instrumented lines with 0 hits

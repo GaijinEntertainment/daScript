@@ -1,0 +1,1 @@
+Visits the program AST including generic function instantiations. Unlike visit, which only walks non-generic functions, this also visits each instantiated generic, making it suitable for lint passes that need to check generated code.

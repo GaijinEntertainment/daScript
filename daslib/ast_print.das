@@ -1265,8 +1265,9 @@ def allExpr(arg : int) {
 def test {
     //! Self-test: visits this program's AST and prints it.
     var astVisitor = new PrintVisitor();
-    var astVisitorAdapter <- make_visitor(*astVisitor);
-    visit(this_program(), astVisitorAdapter);
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit(this_program(), astVisitorAdapter);
+    }
 
 /*
     // ast_typedecl
@@ -1292,30 +1293,34 @@ def test {
 def printAst(var prog : ProgramPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints the entire program AST to the given writer.
     var flags = new PrintVisitor(writer = writer);
-    var inscope adapter <- make_visitor(*flags)
-    visit(prog, adapter)
+    make_visitor(*flags) $(adapter) {
+        visit(prog, adapter)
+    }
 }
 
 [export]
 def printExpr(var expr : ExpressionPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints a single expression AST node to the given writer.
     var flags = new PrintVisitor(writer = writer);
-    var inscope adapter <- make_visitor(*flags)
-    visit(expr, adapter)
+    make_visitor(*flags) $(adapter) {
+        visit(expr, adapter)
+    }
 }
 
 [export]
 def printFunc(var func : FunctionPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints a single function AST node to the given writer.
     var flags = new PrintVisitor(writer = writer);
-    var inscope adapter <- make_visitor(*flags)
-    visit(func, adapter)
+    make_visitor(*flags) $(adapter) {
+        visit(func, adapter)
+    }
 }
 
 [export]
 def setFlags(var prog : ProgramPtr) {
     //! Visits the program AST to set printer flags before pretty-printing.
     var flags = new SetPrinterFlags();
-    var inscope adapter <- make_visitor(*flags)
-    visit(prog, adapter)
+    make_visitor(*flags) $(adapter) {
+        visit(prog, adapter)
+    }
 }

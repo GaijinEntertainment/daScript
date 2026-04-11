@@ -1118,7 +1118,7 @@ class public CppAot : AstVisitor {
     }
 */
 
-    adapter : smart_ptr<VisitorAdapter>
+    adapter : VisitorAdapter ?
 
     def str() {
         let maybe_nl = type_info |> empty() ? "" : "\n";
@@ -3761,8 +3761,9 @@ class public CppAot : AstVisitor {
 def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     //! Writes forward declarations and dependent type/function definitions for AOT output.
     let utm = new UseTypeMarker();
-    var inscope adapter <- make_visitor(*utm)
-    visit(program, adapter);
+    make_visitor(*utm) $(adapter) {
+        visit(program, adapter);
+    }
     let remUS = program._options  |> find_arg("remove_unused_symbols") ?as tBool ?? true;
     program.get_ptr() |> for_each_module_no_order($(pm) {
         if (pm.moduleFlags.fromExtraDependency) {
@@ -3894,8 +3895,9 @@ def public collectProgramUsedFunctions(program : ProgramPtr; all_modules : bool;
 def registerAotCpp(var logs : StringBuilderWriter?; program : ProgramPtr; var context : Context; cross_platform; headers, all_modules : bool = false) {
     let fnn = collectProgramUsedFunctions(program, all_modules, false);
     let visitor = new ArgsConverter(logs, cross_platform);
-    var inscope adapter_marker <- make_visitor(*visitor)
-    visit(program, adapter_marker);
+    make_visitor(*visitor) $(adapter_marker) {
+        visit(program, adapter_marker);
+    }
 
     var funInit = false;
     for (fn in fnn) {
@@ -4051,21 +4053,25 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
             write(writer, "namespace {program.thisNamespace} \{\n");
             build_string() $(tmp_writer) {
                 let marker_vis = new NoAotMarker();
-                var inscope adapter_marker <- make_visitor(*marker_vis)
-                visit(program, adapter_marker);
+                make_visitor(*marker_vis) $(adapter_marker) {
+                    visit(program, adapter_marker);
+                }
 
                 var coll = new BlockVariableCollector();
-                var inscope adapter_coll <- make_visitor(*coll)
-                visit(program, adapter_coll)
+                make_visitor(*coll) $(adapter_coll) {
+                    visit(program, adapter_coll)
+                }
 
                 // mark prologue
                 var pmarker = new PrologueMarker();
-                var inscope adapter_p <- make_visitor(*pmarker)
-                visit(program, adapter_p)
+                make_visitor(*pmarker) $(adapter_p) {
+                    visit(program, adapter_p)
+                }
 
                 var flags = new SetPrinterFlags();
-                var inscope flags_adapter <- make_visitor(*flags)
-                visit(program, flags_adapter)
+                make_visitor(*flags) $(flags_adapter) {
+                    visit(program, flags_adapter)
+                }
 
 
                 setAotHashes(program, *pctx)
@@ -4080,10 +4086,11 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                                             cross_platform = cop.cross_platform)
                 cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
                 cpp_aot.helper.cross_platform = cop.cross_platform;
-                var inscope adapter <- make_visitor(*cpp_aot)
-                cpp_aot.adapter := adapter
-                dumpDependencies(program, cpp_aot);
-                visit(program, cpp_aot.adapter, true)
+                make_visitor(*cpp_aot) $(adapter) {
+                    cpp_aot.adapter := adapter
+                    dumpDependencies(program, cpp_aot);
+                    visit(program, cpp_aot.adapter, true)
+                }
                 write(writer, "{cpp_aot.str()}");
                 delete cpp_aot.helper.helper
                 unsafe {
@@ -4125,20 +4132,24 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
         }
         build_string() $(tmp_writer) {
             let marker_vis = new NoAotMarker();
-            var inscope adapter_marker <- make_visitor(*marker_vis)
-            visit(program, adapter_marker);
+            make_visitor(*marker_vis) $(adapter_marker) {
+                visit(program, adapter_marker);
+            }
 
             var coll = new BlockVariableCollector();
-            var inscope adapter_coll <- make_visitor(*coll)
-            visit(program, adapter_coll)
+            make_visitor(*coll) $(adapter_coll) {
+                visit(program, adapter_coll)
+            }
 
             var pmarker = new PrologueMarker();
-            var inscope adapter_p <- make_visitor(*pmarker)
-            visit(program, adapter_p)
+            make_visitor(*pmarker) $(adapter_p) {
+                visit(program, adapter_p)
+            }
 
             var flags = new SetPrinterFlags();
-            var inscope flags_adapter <- make_visitor(*flags)
-            visit(program, flags_adapter)
+            make_visitor(*flags) $(flags_adapter) {
+                visit(program, flags_adapter)
+            }
 
             setAotHashes(program, *pctx)
 
@@ -4153,10 +4164,11 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                                         aot_filter_function = func_name)
             cpp_aot.helper.helper.rtti = program._options  |> find_arg("rtti") ?as tBool ?? false;
             cpp_aot.helper.cross_platform = cop.cross_platform;
-            var inscope adapter <- make_visitor(*cpp_aot)
-            cpp_aot.adapter := adapter
-            dumpDependencies(program, cpp_aot);
-            visit(program, cpp_aot.adapter, true)
+            make_visitor(*cpp_aot) $(adapter) {
+                cpp_aot.adapter := adapter
+                dumpDependencies(program, cpp_aot);
+                visit(program, cpp_aot.adapter, true)
+            }
             let full_output = cpp_aot.str()
             delete cpp_aot.helper.helper
             unsafe {

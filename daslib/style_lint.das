@@ -379,8 +379,9 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_con
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
     var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, postfix_conditionals = postfix_conditionals)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit_with_generics(prog, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_with_generics(prog, astVisitorAdapter)
+    }
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
@@ -390,8 +391,9 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; p
     //! Runs the style lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
     var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, postfix_conditionals = postfix_conditionals)
-    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
-    visit_with_generics(prog, astVisitorAdapter)
+    make_visitor(*astVisitor) $(astVisitorAdapter) {
+        visit_with_generics(prog, astVisitorAdapter)
+    }
     let count = astVisitor.warning_count
     warnings |> reserve(length(astVisitor.warnings))
     for (w in astVisitor.warnings) {
