@@ -267,7 +267,8 @@ namespace das {
         }
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
-            if ( auto tnode = trySimulate(context, rv, idx, new TypeDecl(Type::none), ofs) ) {
+            gc_local<TypeDecl> none = new TypeDecl(Type::none);
+            if ( auto tnode = trySimulate(context, rv, idx, none.ptr, ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_At>(at,
@@ -279,7 +280,8 @@ namespace das {
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & readType,
                                             ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             auto r2vType = readType->baseType;
-            if ( auto tnode = trySimulate(context, rv, idx, new TypeDecl(r2vType), ofs) ) {
+            gc_local<TypeDecl> r2vTypeDecl = new TypeDecl(r2vType);
+            if ( auto tnode = trySimulate(context, rv, idx, r2vTypeDecl.ptr, ofs) ) {
                 return tnode;
             } else {
                 return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,

@@ -572,6 +572,18 @@ namespace das {
         return false;
     }
 
+    struct GcCollectOnExit {
+        gc_guard & scope;
+        Program * prog = nullptr;
+        GcCollectOnExit(gc_guard & s) : scope(s) {}
+        GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
+        ~GcCollectOnExit() {
+            if ( !prog ) return;
+            prog->thisModule->gc_collect(&scope.guard_root);
+        }
+    };
+
+
     ProgramPtr parseDaScript ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
@@ -582,15 +594,7 @@ namespace das {
                               CodeOfPolicies policies ) {
         ProgramPtr program = make_smart<Program>();
         gc_guard parse_gc_scope;
-        struct GcCollectOnExit {
-            gc_guard & scope;
-            Program * prog;
-            GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
-            ~GcCollectOnExit() {
-                if ( !prog ) return;
-                prog->thisModule->gc_collect(&scope.guard_root);
-            }
-        } parse_gc_collect(parse_gc_scope, program.get());
+        GcCollectOnExit parse_gc_collect(parse_gc_scope, program.get());
         program->library.renameModule(program->thisModule.get(), moduleName);
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
@@ -1090,15 +1094,7 @@ namespace das {
                                 ModuleGroup & libGroup,
                                 CodeOfPolicies policies ) {
         gc_guard compile_gc_scope;
-        struct GcCollectOnExit {
-            gc_guard & scope;
-            Program * prog = nullptr;
-            GcCollectOnExit(gc_guard & s) : scope(s) {}
-            ~GcCollectOnExit() {
-                if ( !prog ) return;
-                prog->thisModule->gc_collect(&scope.guard_root);
-            }
-        } compile_gc_collect(compile_gc_scope);
+        GcCollectOnExit compile_gc_collect(compile_gc_scope);
         ReuseCacheGuard rcg;
         bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
