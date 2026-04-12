@@ -130,7 +130,7 @@ namespace das {
             lib.addBuiltInModule();
             addBuiltinDependency(lib, Module::require("rtti_core"));
             // sever
-            addAnnotation(make_smart<ServerAnnotation>(lib));
+            addAnnotation(new ServerAnnotation(lib));
             addExtern<DAS_BIND_FUN(makeServer)>(*this, lib,  "make_server",
                 SideEffects::modifyArgumentAndExternal, "makeServer")
                     ->args({"class","info","context"});

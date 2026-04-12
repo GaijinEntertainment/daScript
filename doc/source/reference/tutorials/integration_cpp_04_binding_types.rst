@@ -119,9 +119,9 @@ if type B contains type A as a field, register A first:
 
 .. code-block:: cpp
 
-   addAnnotation(make_smart<Vec2Annotation>(lib));   // Vec2 first
-   addAnnotation(make_smart<ColorAnnotation>(lib));
-   addAnnotation(make_smart<RectAnnotation>(lib));   // Rect uses Vec2
+   addAnnotation(new Vec2Annotation(lib));   // Vec2 first
+   addAnnotation(new ColorAnnotation(lib));
+   addAnnotation(new RectAnnotation(lib));   // Rect uses Vec2
 
 
 Returning bound types by value

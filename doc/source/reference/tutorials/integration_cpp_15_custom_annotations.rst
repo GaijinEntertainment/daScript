@@ -128,7 +128,7 @@ inference and can modify the struct:
            if (!st->findField("id")) {
                st->fields.emplace_back(
                    "id",                             // name
-                   make_smart<TypeDecl>(Type::tInt),  // type
+                   new TypeDecl(Type::tInt),           // type
                    nullptr,                          // no init
                    AnnotationArgumentList(),         // no ann
                    false,                            // no move
@@ -168,8 +168,8 @@ Register annotations in the module constructor:
 
 .. code-block:: cpp
 
-   addAnnotation(make_smart<LogCallsAnnotation>());
-   addAnnotation(make_smart<AddFieldAnnotation>());
+   addAnnotation(new LogCallsAnnotation());
+   addAnnotation(new AddFieldAnnotation());
 
 
 Using from daslang

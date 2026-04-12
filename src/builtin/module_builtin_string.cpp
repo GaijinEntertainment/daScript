@@ -884,7 +884,7 @@ namespace das
             lib.addBuiltInModule();
             // string builder writer
             addEnumeration(new EnumerationConversionResult());
-            addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
+            addAnnotation(new StringBuilderWriterAnnotation(lib));
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context","lineinfo"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",

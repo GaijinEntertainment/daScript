@@ -501,10 +501,10 @@ namespace das {
     DAS_API TypeInfoMacroPtr makeTypeInfoMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     DAS_API void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr _newM, Context * context, LineInfoArg * at );
     DAS_API void addFunctionFunctionAnnotation(Function * func, FunctionAnnotationPtr & ann, Context* context, LineInfoArg* at);
-    DAS_API void addAndApplyFunctionAnnotation ( Function * func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
+    DAS_API void addAndApplyFunctionAnnotation ( Function * func, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at );
     DAS_API void addBlockBlockAnnotation ( ExprBlock * block, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at );
-    DAS_API void addAndApplyBlockAnnotation ( ExprBlock * blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
-    DAS_API void addAndApplyStructAnnotation ( Structure * st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
+    DAS_API void addAndApplyBlockAnnotation ( ExprBlock * blk, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at );
+    DAS_API void addAndApplyStructAnnotation ( Structure * st, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at );
     DAS_API void visitEnumeration ( ProgramPtr program, Enumeration * enumeration, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     DAS_API void visitStructure ( ProgramPtr program, Structure * structure, VisitorAdapter * adapter, Context * context, LineInfoArg * line_info );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
@@ -530,7 +530,7 @@ namespace das {
     DAS_API bool builtin_hasField ( TypeDeclPtr ptr, const char * field, bool constant );
     DAS_API TypeDeclPtr builtin_fieldType ( TypeDeclPtr ptr, const char * field, bool constant );
     DAS_API Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *);
-    DAS_API smart_ptr_raw<Annotation> module_find_annotation ( const Module* module, const char *name );
+    DAS_API AnnotationPtr module_find_annotation ( const Module* module, const char *name );
     DAS_API TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name );
     DAS_API Function * findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
     DAS_API void ast_gc_guard ( const TBlock<void> & block, Context * context, LineInfoArg * at );
@@ -562,11 +562,11 @@ namespace das {
                                             const TBlock<void,char *,char*,TypeDecl *,uint32_t> & block, Context * context, LineInfoArg * at );
     DAS_API void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
     DAS_API TypeDeclPtr getUnderlyingValueType ( TypeDecl * type, Context * context, LineInfoArg * at );
-    DAS_API uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> type, char * name, Context * context, LineInfoArg * at );
+    DAS_API uint32_t getHandledTypeFieldOffset ( TypeAnnotationPtr type, char * name, Context * context, LineInfoArg * at );
     DAS_API void builtin_structure_for_each_field ( const BasicStructureAnnotation & ann,
                                         const TBlock<void,char *,char*,TypeDecl *,uint32_t> & block, Context * context, LineInfoArg * at );
-    DAS_API TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at );
-    DAS_API TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
+    DAS_API TypeInfo * getHandledTypeFieldType ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at );
+    DAS_API TypeDeclPtr getHandledTypeFieldTypeDecl ( TypeAnnotationPtr annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
     DAS_API TypeDeclPtr getHandledTypeIndexTypeDecl ( TypeAnnotation *annotation, Expression *src, Expression *idx, Context * context, LineInfoArg * at );
     DAS_API void* getVectorPtrAtIndex(void* vec, TypeDecl *type, int idx, Context * context, LineInfoArg * at);
     DAS_API int32_t getVectorLength(void* vec, TypeDecl * type, Context * context, LineInfoArg * at);

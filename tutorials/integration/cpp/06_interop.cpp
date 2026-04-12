@@ -195,7 +195,7 @@ public:
         lib.addBuiltInModule();
 
         // Register the Particle type
-        addAnnotation(make_smart<ParticleAnnotation>(lib));
+        addAnnotation(new ParticleAnnotation(lib));
         addExtern<DAS_BIND_FUN(make_particle), SimNode_ExtFuncCallAndCopyOrMove>(
             *this, lib, "make_particle",
             SideEffects::none, "make_particle")

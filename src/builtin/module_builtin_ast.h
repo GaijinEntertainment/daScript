@@ -146,7 +146,7 @@ namespace das {
     class Module_Ast : public Module {
     public:
         template <typename TT>
-        smart_ptr<TT> addExpressionAnnotation ( const smart_ptr<TT> & ann );
+        TT * addExpressionAnnotation ( TT * ann );
         Module_Ast();
         void registerFlags(ModuleLibrary & lib);
         void registerAdapterAnnotations(ModuleLibrary & lib);
@@ -340,7 +340,7 @@ namespace das {
     };
 
     template <typename TT>
-    smart_ptr<TT> Module_Ast::addExpressionAnnotation ( const smart_ptr<TT> & ann ) {
+    TT * Module_Ast::addExpressionAnnotation ( TT * ann ) {
         addAnnotation(ann);
         return ann;
     }

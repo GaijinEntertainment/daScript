@@ -295,7 +295,7 @@ namespace das {
             }
         }
         for (const auto &ann : pFn->annotations) {
-            auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+            auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
             if (fnAnn->isSpecialized()) {
                 string err;
                 if (!fnAnn->isCompatible(pFn, types, *ann, err)) {
@@ -1009,13 +1009,13 @@ namespace das {
             // if functions are identical, the one with more specialization annotations win
             int spF1 = 0;
             for (auto &ann : f1->annotations) {
-                auto fnA = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto fnA = static_cast<FunctionAnnotation*>(ann->annotation);
                 if (fnA->isSpecialized())
                     spF1++;
             }
             int spF2 = 0;
             for (auto &ann : f2->annotations) {
-                auto fnA = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto fnA = static_cast<FunctionAnnotation*>(ann->annotation);
                 if (fnA->isSpecialized())
                     spF2++;
             }
@@ -1348,7 +1348,7 @@ namespace das {
                         // perform generic_apply
                         for (auto &pA : clone->annotations) {
                             if (pA->annotation->rtti_isFunctionAnnotation()) {
-                                auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                                auto ann = static_cast<FunctionAnnotation*>(pA->annotation);
                                 string err;
                                 if (!ann->generic_apply(clone, *(program->thisModuleGroup), pA->arguments, err)) {
                                     error("Macro [" + pA->annotation->name + "] failed to generic_apply to a function " + clone->name + "\n",

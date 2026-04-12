@@ -1287,7 +1287,7 @@ namespace das {
         // infer
         expr->type = new TypeDecl(Type::tPointer);
         expr->type->firstType = new TypeDecl(Type::tHandle);
-        expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression").get();
+        expr->type->firstType->annotation = (TypeAnnotation *)Module::require("ast_core")->findAnnotation("Expression");
         // mark quote as noAot
         if (func) {
             if (!program->policies.aot_macros) {
@@ -5481,7 +5481,7 @@ namespace das {
         if (expr->func) {
             for (const auto &ann : expr->func->annotations) {
                 if (ann->annotation->rtti_isFunctionAnnotation()) {
-                    auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
                     string err;
                     auto fexpr = fnAnn->transformCall(expr, err);
                     if (!err.empty()) {

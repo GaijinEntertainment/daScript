@@ -3504,7 +3504,7 @@ namespace das
                     }
                 }
                 if ( ann.size()!=1 ) error("unresolved annotation '" + annName + "'", ch);
-                pt->annotation = (TypeAnnotation *) ann.back().get();
+                pt->annotation = (TypeAnnotation *) ann.back();
                 if ( !pt->annotation->rtti_isHandledTypeAnnotation() ) error("'" + annName + "' is not a handled type", ch);
                 return pt;
             };

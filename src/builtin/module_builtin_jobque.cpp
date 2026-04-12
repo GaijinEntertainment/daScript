@@ -575,17 +575,17 @@ namespace das {
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // types
-            addAnnotation(make_smart<JobStatusAnnotation>(lib));
-            auto cha = make_smart<ChannelAnnotation>(lib);
+            addAnnotation(new JobStatusAnnotation(lib));
+            auto cha = new ChannelAnnotation(lib);
             cha->from("JobStatus");
             addAnnotation(cha);
-            auto lbx = make_smart<LockBoxAnnotation>(lib);
+            auto lbx = new LockBoxAnnotation(lib);
             lbx->from("JobStatus");
             addAnnotation(lbx);
-            auto a32 = make_smart<AtomicAnnotation<int32_t>>("Atomic32",lib);
+            auto a32 = new AtomicAnnotation<int32_t>("Atomic32",lib);
             a32->from("JobStatus");
             addAnnotation(a32);
-            auto a64 = make_smart<AtomicAnnotation<int64_t>>("Atomic64",lib);
+            auto a64 = new AtomicAnnotation<int64_t>("Atomic64",lib);
             a64->from("JobStatus");
             addAnnotation(a64);
             // atomic 32

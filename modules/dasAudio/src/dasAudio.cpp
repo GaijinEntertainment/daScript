@@ -621,8 +621,8 @@ public:
         addConstant<int>(*this, "MA_SAMPLE_RATE", HRTF_SAMPLE_RATE);
         // reverb
         addEnumeration(new EnumerationI3DL2Preset());
-        addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));
-        addAnnotation(make_smart<I3DL2ReverbAnnotation>(lib));
+        addAnnotation(new I3DL2ReverbPropertiesAnnotation(lib));
+        addAnnotation(new I3DL2ReverbAnnotation(lib));
         addExtern<DAS_BIND_FUN(dasAudio_setSampleRate)>(*this, lib, "set_sample_rate",
             SideEffects::modifyArgumentAndExternal, "dasAudio_setSampleRate")->args({"reverb", "rate", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_setProperties)>(*this, lib, "set_properties",
@@ -634,8 +634,8 @@ public:
         addExtern<DAS_BIND_FUN(dasAudio_getReverbPreset),SimNode_ExtFuncCallRef>(*this, lib, "get_preset",
             SideEffects::modifyArgumentAndExternal, "dasAudio_getReverbPreset")->args({"preset", "context", "at"});
         // chorus
-        addAnnotation(make_smart<MaChorusConfigAnnotation>(lib));
-        addAnnotation(make_smart<MaChorusAnnotation>(lib));
+        addAnnotation(new MaChorusConfigAnnotation(lib));
+        addAnnotation(new MaChorusAnnotation(lib));
         addExtern<DAS_BIND_FUN(dasAudio_chorusInit)>(*this, lib, "chorus_init",
             SideEffects::modifyArgumentAndExternal, "dasAudio_chorusInit")->args({"chorus", "sample_rate", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_chorusProcess)>(*this, lib, "chorus_process",
@@ -658,8 +658,8 @@ public:
         addEnumeration(new Enumerationma_dither_mode());
         addEnumeration(new Enumerationma_result());
         // resampler
-        addAnnotation(make_smart<MAResamplerConfigAnnotation>(lib));
-        addAnnotation(make_smart<MAResamplerAnnotation>(lib));
+        addAnnotation(new MAResamplerConfigAnnotation(lib));
+        addAnnotation(new MAResamplerAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_resampler_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_resampler_config_init",
             SideEffects::none, "ma_resampler_config_init")->args({"format", "channels", "sampleRateIn", "sampleRateOut","algorithm"});
         addExtern<DAS_BIND_FUN(dasAudio_ma_resampler_init)>(*this, lib, "ma_resampler_init",
@@ -683,8 +683,8 @@ public:
         addExtern<DAS_BIND_FUN(dasAudio_disableLinearResamplerFiltering)>(*this, lib, "ma_resampler_disable_linear_filtering",
             SideEffects::modifyArgument, "dasAudio_disableLinearResamplerFiltering")->args({"config"});
         // channel converter
-        addAnnotation(make_smart<MAChannelConvertorConfigAnnotation>(lib));
-        addAnnotation(make_smart<MAChannelConverterAnnotation>(lib));
+        addAnnotation(new MAChannelConvertorConfigAnnotation(lib));
+        addAnnotation(new MAChannelConverterAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_channel_converter_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_channel_converter_config_init",
             SideEffects::none, "ma_channel_converter_config_init")->args({"format", "channelsIn", "channelsOut", "channelMapIn", "channelMapOut", "mixingMode"});
         addExtern<DAS_BIND_FUN(dasAudio_ma_channel_converter_init)>(*this, lib, "ma_channel_converter_init",
@@ -694,7 +694,7 @@ public:
         addExtern<DAS_BIND_FUN(ma_channel_converter_process_pcm_frames)>(*this, lib, "ma_channel_converter_process_pcm_frames",
             SideEffects::modifyArgument, "ma_channel_converter_process_pcm_frames")->args({"converter", "pFramesOut", "pFramesIn", "frameCount"});
         // volume mixer
-        addAnnotation(make_smart<MAVolumeMixerAnnotation>(lib));
+        addAnnotation(new MAVolumeMixerAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_volume_mixer_init)>(*this, lib, "ma_volume_mixer_init",
             SideEffects::modifyArgument, "ma_volume_mixer_init")->args({"mixer","nChannels"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_uninit)>(*this, lib, "ma_volume_mixer_uninit",
@@ -710,9 +710,9 @@ public:
         addExtern<DAS_BIND_FUN(ma_volume_mixer_process_pcm_frames)>(*this, lib, "ma_volume_mixer_process_pcm_frames",
             SideEffects::modifyArgument, "ma_volume_mixer_process_pcm_frames")->args({"mixer", "pFramesOut", "pFramesIn", "frameCount"});
         // sf2 voice
-        addAnnotation(make_smart<MASF2EnvelopeAnnotation>(lib));
-        addAnnotation(make_smart<MASF2BiquadAnnotation>(lib));
-        addAnnotation(make_smart<MASF2VoiceAnnotation>(lib));
+        addAnnotation(new MASF2EnvelopeAnnotation(lib));
+        addAnnotation(new MASF2BiquadAnnotation(lib));
+        addAnnotation(new MASF2VoiceAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_sf2_voice_init)>(*this, lib, "ma_sf2_voice_init",
             SideEffects::modifyArgument, "ma_sf2_voice_init")->args({"voice", "sample_rate"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_note_off)>(*this, lib, "ma_sf2_voice_note_off",
@@ -734,8 +734,8 @@ public:
         addExtern<DAS_BIND_FUN(ma_sf2_biquad_setup)>(*this, lib, "ma_sf2_biquad_setup",
             SideEffects::modifyArgument, "ma_sf2_biquad_setup")->args({"bq", "fc_normalized"});
         // decoder
-        addAnnotation(make_smart<MADecoderConfigAnnotation>(lib));
-        addAnnotation(make_smart<MADecoderAnnotation>(lib));
+        addAnnotation(new MADecoderConfigAnnotation(lib));
+        addAnnotation(new MADecoderAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_decoder_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_decoder_config_init",
             SideEffects::none, "ma_decoder_config_init")->args({"outputFormat", "outputChannels", "outputSampleRate"});
         addExtern<DAS_BIND_FUN(ma_decoder_config_init_default),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_decoder_config_init_default",
@@ -757,7 +757,7 @@ public:
         addExtern<DAS_BIND_FUN(ma_decoder_get_available_frames)>(*this, lib, "ma_decoder_get_available_frames",
             SideEffects::none, "ma_decoder_get_available_frames")->args({"decoder", "pAvailableFrames"});
         // limiter
-        addAnnotation(make_smart<MALimiterAnnotation>(lib));
+        addAnnotation(new MALimiterAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_limiter_init)>(*this, lib, "ma_limiter_init",
             SideEffects::modifyArgument, "ma_limiter_init")->args({"limiter", "threshold", "attack_time", "release_time", "sample_rate", "nChannels"});
         addExtern<DAS_BIND_FUN(ma_limiter_init_linear)>(*this, lib, "ma_limiter_init_linear",
@@ -769,7 +769,7 @@ public:
         addExtern<DAS_BIND_FUN(ma_limiter_uninit)>(*this, lib, "ma_limiter_uninit",
             SideEffects::modifyArgument, "ma_limiter_uninit")->args({"limiter"});
         // hrtf
-        addAnnotation(make_smart<MAHrtfAnnotation>(lib));
+        addAnnotation(new MAHrtfAnnotation(lib));
         addExtern<DAS_BIND_FUN(ma_hrtf_init)>(*this, lib, "ma_hrtf_init",
             SideEffects::modifyArgument, "ma_hrtf_init")->args({"hrtf", "sampleRate"});
         addExtern<DAS_BIND_FUN(ma_hrtf_process_frames)>(*this, lib, "ma_hrtf_process_frames",

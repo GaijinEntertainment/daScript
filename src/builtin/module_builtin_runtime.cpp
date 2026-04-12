@@ -139,9 +139,9 @@ namespace das
 
     FunctionPtr Function::setDeprecated(const string & message) {
         deprecated = true; // this is instead of apply above
-        AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();
+        AnnotationDeclarationPtr decl = new AnnotationDeclaration();
         decl->arguments.push_back(AnnotationArgument("message",message));
-        decl->annotation = make_smart<DeprecatedFunctionAnnotation>();
+        decl->annotation = new DeprecatedFunctionAnnotation();
         annotations.push_back(decl);
         return this;
     }
@@ -578,12 +578,12 @@ namespace das
         LogicOpNotAnnotation(const AnnotationDeclarationPtr & decl) : LogicOpAnnotation("!"), subexpr(decl) { }
         virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
             if ( !subexpr ) return false;
-            return !((FunctionAnnotation *)(subexpr->annotation.get()))->isCompatible(fun, types, *subexpr, errors);
+            return !((FunctionAnnotation *)(subexpr->annotation))->isCompatible(fun, types, *subexpr, errors);
         }
         virtual void appendToMangledName( const FunctionPtr & fun, const AnnotationDeclaration &, string & mangledName ) const override {
             if ( !subexpr ) return;
             string mna ;
-            ((FunctionAnnotation *)(subexpr->annotation.get()))->appendToMangledName(fun, *subexpr, mna);
+            ((FunctionAnnotation *)(subexpr->annotation))->appendToMangledName(fun, *subexpr, mna);
             mangledName = "!(" + mna + ")";
         }
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & ) const override {
@@ -595,7 +595,11 @@ namespace das
         virtual void serialize ( AstSerializer & ser ) override {
             ser << subexpr;
         }
-        AnnotationDeclarationPtr subexpr;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            Annotation::gc_collect(target, from);
+            if ( subexpr ) subexpr->gc_collect(target, from);
+        }
+        AnnotationDeclarationPtr subexpr = nullptr;
     };
 
     struct LogicOp2Annotation : LogicOpAnnotation {
@@ -606,12 +610,12 @@ namespace das
             if ( !left || !right ) return;
             string mna1, mna2;
             if ( left->annotation ) {
-                ((FunctionAnnotation *)(left->annotation.get()))->appendToMangledName(fun, *left, mna1);
+                ((FunctionAnnotation *)(left->annotation))->appendToMangledName(fun, *left, mna1);
             } else {
                 mna1 = "NULL";
             }
             if ( right->annotation ) {
-                ((FunctionAnnotation *)(right->annotation.get()))->appendToMangledName(fun, *right, mna2);
+                ((FunctionAnnotation *)(right->annotation))->appendToMangledName(fun, *right, mna2);
             } else {
                 mna2 = "NULL";
             }
@@ -636,7 +640,12 @@ namespace das
         virtual void serialize ( AstSerializer & ser ) override {
             ser << left << right;
         }
-        AnnotationDeclarationPtr left, right;
+        virtual void gc_collect ( gc_root * target, gc_root * from ) override {
+            Annotation::gc_collect(target, from);
+            if ( left ) left->gc_collect(target, from);
+            if ( right ) right->gc_collect(target, from);
+        }
+        AnnotationDeclarationPtr left = nullptr, right = nullptr;
     };
 
     struct LogicOpAndAnnotation : LogicOp2Annotation {
@@ -645,8 +654,8 @@ namespace das
             : LogicOp2Annotation("&&",arg0,arg1) { }
         virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
             if ( !left || !right ) return false;
-            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) &&
-                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+            return ((FunctionAnnotation *)(left->annotation))->isCompatible(fun, types, *left, errors) &&
+                ((FunctionAnnotation *)(right->annotation))->isCompatible(fun, types, *right, errors);
         }
     };
 
@@ -656,8 +665,8 @@ namespace das
             : LogicOp2Annotation("||",arg0,arg1) { }
         virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
             if ( !left || !right ) return false;
-            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) ||
-                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+            return ((FunctionAnnotation *)(left->annotation))->isCompatible(fun, types, *left, errors) ||
+                ((FunctionAnnotation *)(right->annotation))->isCompatible(fun, types, *right, errors);
         }
     };
 
@@ -667,27 +676,27 @@ namespace das
             : LogicOp2Annotation("^^",arg0,arg1) { }
         virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override {
             if ( !left || !right ) return false;
-            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) !=
-                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+            return ((FunctionAnnotation *)(left->annotation))->isCompatible(fun, types, *left, errors) !=
+                ((FunctionAnnotation *)(right->annotation))->isCompatible(fun, types, *right, errors);
         }
     };
 
     AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op, const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 ) {
         switch ( op ) {
-        case LogicAnnotationOp::Not:    return make_smart<LogicOpNotAnnotation>(arg0);
-        case LogicAnnotationOp::And:    return make_smart<LogicOpAndAnnotation>(arg0,arg1);
-        case LogicAnnotationOp::Or:     return make_smart<LogicOpOrAnnotation>(arg0,arg1);
-        case LogicAnnotationOp::Xor:    return make_smart<LogicOpXOrAnnotation>(arg0,arg1);
+        case LogicAnnotationOp::Not:    return new LogicOpNotAnnotation(arg0);
+        case LogicAnnotationOp::And:    return new LogicOpAndAnnotation(arg0,arg1);
+        case LogicAnnotationOp::Or:     return new LogicOpOrAnnotation(arg0,arg1);
+        case LogicAnnotationOp::Xor:    return new LogicOpXOrAnnotation(arg0,arg1);
         }
         return nullptr;
     }
 
     AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op ) {
         switch ( op ) {
-        case LogicAnnotationOp::Not:    return make_smart<LogicOpNotAnnotation>();
-        case LogicAnnotationOp::And:    return make_smart<LogicOpAndAnnotation>();
-        case LogicAnnotationOp::Or:     return make_smart<LogicOpOrAnnotation>();
-        case LogicAnnotationOp::Xor:    return make_smart<LogicOpXOrAnnotation>();
+        case LogicAnnotationOp::Not:    return new LogicOpNotAnnotation();
+        case LogicAnnotationOp::And:    return new LogicOpAndAnnotation();
+        case LogicAnnotationOp::Or:     return new LogicOpOrAnnotation();
+        case LogicAnnotationOp::Xor:    return new LogicOpXOrAnnotation();
         }
         return nullptr;
     }
@@ -1762,43 +1771,43 @@ namespace das
         // unescape macro
         addReaderMacro(new UnescapedStringMacro());
         // function annotations
-        addAnnotation(make_smart<CommentAnnotation>());
-        addAnnotation(make_smart<NoDefaultCtorAnnotation>());
-        addAnnotation(make_smart<MacroInterfaceAnnotation>());
-        addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
-        addAnnotation(make_smart<CppAlignmentAnnotation>());
-        addAnnotation(make_smart<SafeWhenUninitializedAnnotation>());
-        addAnnotation(make_smart<GenericFunctionAnnotation>());
-        addAnnotation(make_smart<MacroFunctionAnnotation>());
-        addAnnotation(make_smart<MacroFnFunctionAnnotation>());
-        addAnnotation(make_smart<HintFunctionAnnotation>());
-        addAnnotation(make_smart<RequestJitFunctionAnnotation>());
-        addAnnotation(make_smart<RequestNoJitFunctionAnnotation>());
-        addAnnotation(make_smart<RequestNoDiscardFunctionAnnotation>());
-        addAnnotation(make_smart<DeprecatedFunctionAnnotation>());
-        addAnnotation(make_smart<AliasCMRESFunctionAnnotation>());
-        addAnnotation(make_smart<NeverAliasCMRESFunctionAnnotation>());
-        addAnnotation(make_smart<ExportFunctionAnnotation>());
-        addAnnotation(make_smart<PInvokeFunctionAnnotation>());
-        addAnnotation(make_smart<NoLintFunctionAnnotation>());
-        addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
-        addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());
-        addAnnotation(make_smart<UnsafeOpFunctionAnnotation>());
-        addAnnotation(make_smart<UnsafeOutsideOfForFunctionAnnotation>());
-        addAnnotation(make_smart<UnsafeWhenNotCloneArray>());
-        addAnnotation(make_smart<NoAotFunctionAnnotation>());
-        addAnnotation(make_smart<InitFunctionAnnotation>());
-        addAnnotation(make_smart<FinalizeFunctionAnnotation>());
-        addAnnotation(make_smart<HybridFunctionAnnotation>());
-        addAnnotation(make_smart<UnsafeDerefFunctionAnnotation>());
-        addAnnotation(make_smart<MarkUsedFunctionAnnotation>());
-        addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
-        addAnnotation(make_smart<PersistentStructureAnnotation>());
-        addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
-        addAnnotation(make_smart<IsDimAnnotation>());
-        addAnnotation(make_smart<IsRefTypeAnnotation>());
-        addAnnotation(make_smart<HashBuilderAnnotation>(lib));
-        addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
+        addAnnotation(new CommentAnnotation());
+        addAnnotation(new NoDefaultCtorAnnotation());
+        addAnnotation(new MacroInterfaceAnnotation());
+        addAnnotation(new MarkFunctionOrBlockAnnotation());
+        addAnnotation(new CppAlignmentAnnotation());
+        addAnnotation(new SafeWhenUninitializedAnnotation());
+        addAnnotation(new GenericFunctionAnnotation());
+        addAnnotation(new MacroFunctionAnnotation());
+        addAnnotation(new MacroFnFunctionAnnotation());
+        addAnnotation(new HintFunctionAnnotation());
+        addAnnotation(new RequestJitFunctionAnnotation());
+        addAnnotation(new RequestNoJitFunctionAnnotation());
+        addAnnotation(new RequestNoDiscardFunctionAnnotation());
+        addAnnotation(new DeprecatedFunctionAnnotation());
+        addAnnotation(new AliasCMRESFunctionAnnotation());
+        addAnnotation(new NeverAliasCMRESFunctionAnnotation());
+        addAnnotation(new ExportFunctionAnnotation());
+        addAnnotation(new PInvokeFunctionAnnotation());
+        addAnnotation(new NoLintFunctionAnnotation());
+        addAnnotation(new SideEffectsFunctionAnnotation());
+        addAnnotation(new RunAtCompileTimeFunctionAnnotation());
+        addAnnotation(new UnsafeOpFunctionAnnotation());
+        addAnnotation(new UnsafeOutsideOfForFunctionAnnotation());
+        addAnnotation(new UnsafeWhenNotCloneArray());
+        addAnnotation(new NoAotFunctionAnnotation());
+        addAnnotation(new InitFunctionAnnotation());
+        addAnnotation(new FinalizeFunctionAnnotation());
+        addAnnotation(new HybridFunctionAnnotation());
+        addAnnotation(new UnsafeDerefFunctionAnnotation());
+        addAnnotation(new MarkUsedFunctionAnnotation());
+        addAnnotation(new LocalOnlyFunctionAnnotation());
+        addAnnotation(new PersistentStructureAnnotation());
+        addAnnotation(new IsYetAnotherVectorTemplateAnnotation());
+        addAnnotation(new IsDimAnnotation());
+        addAnnotation(new IsRefTypeAnnotation());
+        addAnnotation(new HashBuilderAnnotation(lib));
+        addAnnotation(new TypeFunctionFunctionAnnotation());
         // and call macro
         {
             auto newM = new MakeFunctionUnsafeCallMacro();
@@ -1811,7 +1820,7 @@ namespace das
             });
         }
         // string
-        addAnnotation(make_smart<DasStringTypeAnnotation>());
+        addAnnotation(new DasStringTypeAnnotation());
         // typeinfo macros
         addTypeInfoMacro(new ClassInfoMacro());
         // command line arguments

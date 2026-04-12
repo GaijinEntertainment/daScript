@@ -147,8 +147,8 @@ public:
         lib.addBuiltInModule();
 
         // --- Register types ---
-        addAnnotation(make_smart<CounterAnnotation>(lib));
-        addAnnotation(make_smart<StringBufferAnnotation>(lib));
+        addAnnotation(new CounterAnnotation(lib));
+        addAnnotation(new StringBufferAnnotation(lib));
 
         // --- Factory functions ---
         addExtern<DAS_BIND_FUN(make_counter), SimNode_ExtFuncCallAndCopyOrMove>(

@@ -224,9 +224,9 @@ public:
         lib.addBuiltInModule();
 
         // --- Register types ---
-        addAnnotation(make_smart<Vec3Annotation>(lib));
-        addAnnotation(make_smart<ColorAnnotation>(lib));
-        addAnnotation(make_smart<SafeColorAnnotation>(lib));
+        addAnnotation(new Vec3Annotation(lib));
+        addAnnotation(new ColorAnnotation(lib));
+        addAnnotation(new SafeColorAnnotation(lib));
 
         // --- Factory ---
         addExtern<DAS_BIND_FUN(make_vec3), SimNode_ExtFuncCallAndCopyOrMove>(

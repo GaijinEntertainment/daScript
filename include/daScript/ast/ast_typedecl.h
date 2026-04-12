@@ -18,10 +18,10 @@ namespace das {
     typedef Enumeration * EnumerationPtr;
 
     struct Annotation;
-    typedef smart_ptr<Annotation> AnnotationPtr;
+    typedef Annotation * AnnotationPtr;
 
     struct TypeAnnotation;
-    typedef smart_ptr<TypeAnnotation> TypeAnnotationPtr;
+    typedef TypeAnnotation * TypeAnnotationPtr;
 
     struct Expression;
     typedef Expression * ExpressionPtr;

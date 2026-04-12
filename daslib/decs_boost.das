@@ -605,10 +605,10 @@ class DecsEcsMacro : AstFunctionAnnotation {
             }
         }
         if (!req |> empty) {
-            var inscope decl <- new AnnotationDeclaration(uninitialized)
+            var decl = new AnnotationDeclaration(uninitialized)
             var ann = find_annotation("decs_boost", "REQUIRE")
             unsafe {
-                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+                decl.annotation = reinterpret<Annotation?>(ann)
             }
             for (rq in req) {
                 decl.arguments |> add_annotation_argument(rq, true)
@@ -616,10 +616,10 @@ class DecsEcsMacro : AstFunctionAnnotation {
             qblk.annotations |> emplace(decl)
         }
         if (!nreq |> empty) {
-            var inscope decl <- new AnnotationDeclaration(uninitialized)
+            var decl = new AnnotationDeclaration(uninitialized)
             var ann = find_annotation("decs_boost", "REQUIRE_NOT")
             unsafe {
-                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+                decl.annotation = reinterpret<Annotation?>(ann)
             }
             for (rq in nreq) {
                 decl.arguments |> add_annotation_argument(rq, true)

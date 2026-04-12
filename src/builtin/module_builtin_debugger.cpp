@@ -1306,10 +1306,10 @@ namespace debugger {
             lib.addBuiltInModule();
             addBuiltinDependency(lib, Module::require("rtti_core"), true);
             // annotations
-            addAnnotation(make_smart<PrologueAnnotation>(lib));
-            addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));
-            addAnnotation(make_smart<AstDataWalkerAnnotation>(lib));
-            addAnnotation(make_smart<AstStackWalkerAnnotation>(lib));
+            addAnnotation(new PrologueAnnotation(lib));
+            addAnnotation(new AstDebugAgentAnnotation(lib));
+            addAnnotation(new AstDataWalkerAnnotation(lib));
+            addAnnotation(new AstStackWalkerAnnotation(lib));
             // debug agent
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
                 SideEffects::modifyExternal, "makeDebugAgent")

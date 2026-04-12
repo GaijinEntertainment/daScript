@@ -157,7 +157,7 @@ namespace das {
         }
         rank += int(pFn->arguments.size() - types.size()) * 1000;
         for (const auto &ann : pFn->annotations) {
-            auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+            auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
             if (fnAnn->isSpecialized()) {
                 string err;
                 if (!fnAnn->isCompatible(pFn, types, *ann, err)) {
@@ -230,7 +230,7 @@ namespace das {
             }
         }
         for (const auto &ann : pFn->annotations) {
-            auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+            auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
             if (fnAnn->isSpecialized()) {
                 string err;
                 if (!fnAnn->isCompatible(pFn, types, *ann, err)) {

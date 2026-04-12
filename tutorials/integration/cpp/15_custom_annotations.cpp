@@ -119,8 +119,8 @@ public:
 
         // Register both annotations — scripts can now use
         // [log_calls] and [add_field]
-        addAnnotation(make_smart<LogCallsAnnotation>());
-        addAnnotation(make_smart<AddFieldAnnotation>());
+        addAnnotation(new LogCallsAnnotation());
+        addAnnotation(new AddFieldAnnotation());
     }
 };
 

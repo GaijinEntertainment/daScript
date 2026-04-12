@@ -183,7 +183,7 @@ namespace das
 
     void Module_BuiltIn::addRuntimeSort(ModuleLibrary & lib) {
         // annotation
-        addAnnotation(make_smart<BuiltinSortFunctionAnnotation>());
+        addAnnotation(new BuiltinSortFunctionAnnotation());
         // numeric
         ADD_NUMERIC_SORT(int32_t);
         ADD_NUMERIC_SORT(uint32_t);

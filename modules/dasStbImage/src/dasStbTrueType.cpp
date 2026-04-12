@@ -104,11 +104,11 @@ public:
         lib.addBuiltInModule();
 
         // ---- Struct annotations ----
-        addAnnotation(make_smart<StbttPackedCharAnnotation>(lib));
-        addAnnotation(make_smart<StbttAlignedQuadAnnotation>(lib));
-        addAnnotation(make_smart<StbttFontinfoAnnotation>(lib));
-        addAnnotation(make_smart<StbttPackContextAnnotation>(lib));
-        addAnnotation(make_smart<StbttVertexDasAnnotation>(lib));
+        addAnnotation(new StbttPackedCharAnnotation(lib));
+        addAnnotation(new StbttAlignedQuadAnnotation(lib));
+        addAnnotation(new StbttFontinfoAnnotation(lib));
+        addAnnotation(new StbttPackContextAnnotation(lib));
+        addAnnotation(new StbttVertexDasAnnotation(lib));
 
         // ---- Glyph shape constants ----
         addConstant<int>(*this, "STBTT_vmove", STBTT_vmove);

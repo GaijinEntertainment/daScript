@@ -1138,7 +1138,7 @@ class CppGenBind : AnyGenBind {
             swrite |> pop()
         }
         fprint(struct_class_file, "{st}\n")
-        fprint(struct_add_file, "auto ann_{struct_name} = make_smart<{dashing_name}_GeneratedAnnotation>(lib);\n")
+        fprint(struct_add_file, "auto ann_{struct_name} = new {dashing_name}_GeneratedAnnotation(lib);\n")
         fprint(struct_add_file, "addAnnotation(ann_{struct_name});\n")
         fprint(struct_postadd_file, "initRecAnnotation(ann_{struct_name},lib);\n")
     }
@@ -1590,7 +1590,7 @@ class CppGenBind : AnyGenBind {
                     continue
                 }
                 let kname = nsst2st?[k] ?? "MissingDummy"
-                fprint(dummy_add_file, "addAnnotation(make_smart<DummyTypeAnnotation>(\"{kname}\", \"{k}\", 1, 1));\n")
+                fprint(dummy_add_file, "addAnnotation(new DummyTypeAnnotation(\"{kname}\", \"{k}\", 1, 1));\n")
             }
         }
     }

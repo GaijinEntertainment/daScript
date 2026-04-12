@@ -54,7 +54,7 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
 
-        addAnnotation(make_smart<GameConfigAnnotation>(lib));
+        addAnnotation(new GameConfigAnnotation(lib));
         addCtorAndUsing<GameConfig>(*this, lib, "GameConfig", "GameConfig");
     }
 };

@@ -714,15 +714,15 @@ public:
         addEnumeration(new Enumerationxml_encoding());
         addEnumeration(new Enumerationxpath_value_type());
         // type annotations
-        addAnnotation(make_smart<XmlAttributeAnnotation>(lib));
-        addAnnotation(make_smart<XmlTextAnnotation>(lib));
-        addAnnotation(make_smart<XmlNodeAnnotation>(lib));
-        addAnnotation(make_smart<XPathNodeAnnotation>(lib));
-        addAnnotation(make_smart<XPathNodeSetAnnotation>(lib));
-        addAnnotation(make_smart<XPathQueryAnnotation>(lib));
-        addAnnotation(make_smart<XPathVariableSetAnnotation>(lib));
-        addAnnotation(make_smart<XmlDocumentAnnotation>(lib));
-        addAnnotation(make_smart<XmlParseResultAnnotation>(lib));
+        addAnnotation(new XmlAttributeAnnotation(lib));
+        addAnnotation(new XmlTextAnnotation(lib));
+        addAnnotation(new XmlNodeAnnotation(lib));
+        addAnnotation(new XPathNodeAnnotation(lib));
+        addAnnotation(new XPathNodeSetAnnotation(lib));
+        addAnnotation(new XPathQueryAnnotation(lib));
+        addAnnotation(new XPathVariableSetAnnotation(lib));
+        addAnnotation(new XmlDocumentAnnotation(lib));
+        addAnnotation(new XmlParseResultAnnotation(lib));
         // using declarations for lightweight handle types
         addCtorAndUsing<pugi::xml_document>(*this,lib,"xml_document","pugi::xml_document");
         addCtorAndUsing<pugi::xpath_node_set>(*this,lib,"xpath_node_set","pugi::xpath_node_set");

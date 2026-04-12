@@ -817,21 +817,21 @@ typedef ExprMakeBlockPtr = ast_core::ExprMakeBlock? aka ExprMakeBlockPtr
 
 .. _alias-FunctionAnnotationPtr:
 
-.. das:attribute:: FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
+.. das:attribute:: FunctionAnnotationPtr = FunctionAnnotation?
 
-typedef FunctionAnnotationPtr = smart_ptr<ast_core::FunctionAnnotation> aka FunctionAnnotationPtr
+typedef FunctionAnnotationPtr = ast_core::FunctionAnnotation? aka FunctionAnnotationPtr
 
 .. _alias-StructureAnnotationPtr:
 
-.. das:attribute:: StructureAnnotationPtr = smart_ptr<StructureAnnotation>
+.. das:attribute:: StructureAnnotationPtr = StructureAnnotation?
 
-typedef StructureAnnotationPtr = smart_ptr<ast_core::StructureAnnotation> aka StructureAnnotationPtr
+typedef StructureAnnotationPtr = ast_core::StructureAnnotation? aka StructureAnnotationPtr
 
 .. _alias-EnumerationAnnotationPtr:
 
-.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
+.. das:attribute:: EnumerationAnnotationPtr = EnumerationAnnotation?
 
-typedef EnumerationAnnotationPtr = smart_ptr<ast_core::EnumerationAnnotation> aka EnumerationAnnotationPtr
+typedef EnumerationAnnotationPtr = ast_core::EnumerationAnnotation? aka EnumerationAnnotationPtr
 
 .. _alias-PassMacroPtr:
 
@@ -951,19 +951,20 @@ Enumeration with all possible side effects of expression or function.
 Handled structures
 ++++++++++++++++++
 
-.. _handle-ast-ModuleLibrary:
+.. _handle-ast-ExprConstBitfield:
 
-.. das:attribute:: ModuleLibrary
+.. das:attribute:: ExprConstBitfield
 
- Object which holds list of `Module` and provides access to them.
+.. _function-ast__dot__rq_getValue_ExprConstBitfield:
+
+.. das:function:: ExprConstBitfield.getValue() : uint64
+
+Returns the constant value stored in this expression node.
 
 
+:Properties: * **getValue** : uint64
 
-.. _handle-ast-Expression:
-
-.. das:attribute:: Expression
-
-Any expression (base class).
+Holds bitfield constant (`Foo bar`).
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -976,6 +977,563 @@ Any expression (base class).
          * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBitfield, Type::tBitfield8, Type::tBitfield16, or Type::tBitfield64)
+
+         * **value** : bitfield<> - Value of the constant expression
+
+         * **bitfieldType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type declaration of the bitfield
+
+
+
+.. _handle-ast-ExprConstUInt3:
+
+.. das:attribute:: ExprConstUInt3
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt3:
+
+.. das:function:: ExprConstUInt3.getValue() : uint3
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint3
+
+Holds uint3 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt3)
+
+         * **value** : uint3 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprMove:
+
+.. das:attribute:: ExprMove
+
+Move operator (`expr1 <- expr2`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
+
+         * **arguments** : vector<Expression*> - Arguments (unused)
+
+         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
+
+         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
+
+         * **move_flags** :  :ref:`MoveFlags <alias-MoveFlags>` - Flags specific to move operation
+
+
+
+.. _handle-ast-ExprTag:
+
+.. das:attribute:: ExprTag
+
+Compilation time only tag expression, used for reification. For example $c(....).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The subexpression of the tag
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value of the tag
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the tag
+
+
+
+.. _handle-ast-ExprAscend:
+
+.. das:attribute:: ExprAscend
+
+New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=...]]`, but **NOT** `new Foo()`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being ascended (newed)
+
+         * **ascType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
+
+         * **stackTop** : uint - Location on the stack where the temp object is created, if necessary
+
+         * **ascendFlags** :  :ref:`ExprAscendFlags <alias-ExprAscendFlags>` - Flags specific to `ExprAscend` expressions
+
+
+
+.. _handle-ast-ExprMakeArray:
+
+.. das:attribute:: ExprMakeArray
+
+Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
+
+         * **stackTop** : uint - Stack top offset for the data, if applicable
+
+         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
+
+         * **recordType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the array elements
+
+         * **values** : vector<Expression*> - Array of expressions for the elements
+
+         * **gen2** : bool - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
+
+
+
+.. _handle-ast-ExprOp3:
+
+.. das:attribute:: ExprOp3
+
+Three operand operator (`cond ? expr1 : expr2`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
+
+         * **arguments** : vector<Expression*> - Arguments (unused)
+
+         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Condition expression
+
+         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
+
+         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
+
+
+
+.. _handle-ast-ExprConstFloat:
+
+.. das:attribute:: ExprConstFloat
+
+.. _function-ast__dot__rq_getValue_ExprConstFloat:
+
+.. das:function:: ExprConstFloat.getValue() : float
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : float
+
+Holds float constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat)
+
+         * **value** : float - Value of the constant expression
+
+
+
+.. _handle-ast-ExprSafeField:
+
+.. das:attribute:: ExprSafeField
+
+Safe field lookup (`foo?.bar`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
+
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
+
+         * **fieldIndex** : int - Index of the field in the type's field list
+
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Type annotation for the field
+
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
+
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
+
+         * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
+
+
+
+.. _handle-ast-ReaderMacro:
+
+.. das:attribute:: ReaderMacro
+
+Adapter for the `AstReaderMacro`.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
+
+
+
+.. _handle-ast-ExprSwizzle:
+
+.. das:attribute:: ExprSwizzle
+
+Vector swizzle operation (`vec.xxy` or `vec.y`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value being swizzled
+
+         * **mask** :  :ref:`das_string <handle-builtin-das_string>` - Swizzle mask
+
+         * **fields** : vector<uint8> - Swizzle fields
+
+         * **fieldFlags** :  :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>` - Flags specific to `ExprSwizzle` expressions
+
+
+
+.. _handle-ast-ExprSetInsert:
+
+.. das:attribute:: ExprSetInsert
+
+Set insert expression, i.e. ``tab |> insert(key)``.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the set-insert expression
+
+         * **arguments** : vector<Expression*> - Arguments of the set-insert expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the set-insert is used
+
+
+
+.. _handle-ast-ExprConstFloat4:
+
+.. das:attribute:: ExprConstFloat4
+
+.. _function-ast__dot__rq_getValue_ExprConstFloat4:
+
+.. das:function:: ExprConstFloat4.getValue() : float4
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : float4
+
+Holds float4 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat4)
+
+         * **value** : float4 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprMakeStruct:
+
+.. das:attribute:: ExprMakeStruct
+
+Make structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` -  Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
+
+         * **stackTop** : uint - Stack top offset for the data, if applicable
+
+         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
+
+         * **structs** : vector<MakeStruct*> - Array of structures being made
+
+         * **_block** :  :ref:`Expression <handle-ast-Expression>`? - Optional block expression to run after the struct is made
+
+         * **constructor** :  :ref:`Function <handle-ast-Function>`? - Constructor function to call, if any
+
+         * **makeStructFlags** :  :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>` - Flags specific to make-struct expressions
+
+
+
+.. _handle-ast-ExprNullCoalescing:
+
+.. das:attribute:: ExprNullCoalescing
+
+Null coalescing (`expr1 ?? default_value`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression being coalesced
+
+         * **unsafeDeref** : bool - If true, skip runtime null-pointer check
+
+         * **assumeNoAlias** : bool - Assume no aliasing occurs
+
+         * **defaultValue** :  :ref:`Expression <handle-ast-Expression>`? - Default value expression
+
+
+
+.. _handle-ast-ExprStaticAssert:
+
+.. das:attribute:: ExprStaticAssert
+
+Static assert expression (`static_assert(x<13)` or `static_assert(x<13, "x is too big")`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the static_assert expression
+
+         * **arguments** : vector<Expression*> - Arguments of the static_assert expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the static_assert is used
+
+
+
+.. _handle-ast-ExprSafeAt:
+
+.. das:attribute:: ExprSafeAt
+
+Safe index lookup (`expr?[expr1]`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being indexed
+
+         * **index** :  :ref:`Expression <handle-ast-Expression>`? - Index expression
+
+         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
+
+
+
+.. _handle-ast-ExprNew:
+
+.. das:attribute:: ExprNew
+
+New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the new expression
+
+         * **arguments** : vector<Expression*> - List of arguments passed to the constructor
+
+         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the constructor function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type expression for the type being constructed
+
+         * **initializer** : bool - Whether there is an initializer for the new expression, or it's just default construction
+
+
+
+.. _handle-ast-ExprPtr2Ref:
+
+.. das:attribute:: ExprPtr2Ref
+
+Pointer dereference (`*expr` or `deref(expr)`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression being dereferenced
+
+         * **unsafeDeref** : bool - If true, skip runtime null-pointer check
+
+         * **assumeNoAlias** : bool - If true, assume no aliasing occurs
 
 
 
@@ -1807,6 +2365,237 @@ Any type declaration.
 
 
 
+.. _handle-ast-ExprUnsafe:
+
+.. das:attribute:: ExprUnsafe
+
+Unsafe expression (`unsafe(addr(x))`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression that is marked as unsafe
+
+
+
+.. _handle-ast-ExprWhile:
+
+.. das:attribute:: ExprWhile
+
+While loop (`while expr {your; block; here;}`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **cond** :  :ref:`Expression <handle-ast-Expression>`? - The condition expression
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the while loop
+
+
+
+.. _handle-ast-CaptureEntry:
+
+.. das:attribute:: CaptureEntry
+
+Single entry in lambda capture.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the captured variable
+
+         * **mode** :  :ref:`CaptureMode <enum-ast-CaptureMode>` - How the variable is captured (by value, by reference, etc.)
+
+
+
+.. _handle-ast-EnumerationAnnotation:
+
+.. das:attribute:: EnumerationAnnotation
+
+Adapter for the `AstEnumerationAnnotation`.
+
+
+
+.. _handle-ast-ExprIsVariant:
+
+.. das:attribute:: ExprIsVariant
+
+Is expression (`foo is bar`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
+
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
+
+         * **fieldIndex** : int - Index of the field in the type's field list
+
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Type annotation for the field
+
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
+
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
+
+
+
+.. _handle-ast-ExprWith:
+
+.. das:attribute:: ExprWith
+
+With section (`with expr {your; block; here}`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **_with** :  :ref:`Expression <handle-ast-Expression>`? - The expression to be used as the context for the with block
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the with block
+
+
+
+.. _handle-ast-ExprTypeInfo:
+
+.. das:attribute:: ExprTypeInfo
+
+typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **trait** :  :ref:`das_string <handle-builtin-das_string>` - The trait name
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being queried for type information
+
+         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type expression being queried for type information
+
+         * **subtrait** :  :ref:`das_string <handle-builtin-das_string>` - The sub-trait name
+
+         * **extratrait** :  :ref:`das_string <handle-builtin-das_string>` - The extra trait name
+
+         * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? - The macro associated with the typeinfo expression
+
+
+
+.. _handle-ast-ExprConstInt:
+
+.. das:attribute:: ExprConstInt
+
+.. _function-ast__dot__rq_getValue_ExprConstInt:
+
+.. das:function:: ExprConstInt.getValue() : int
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : int
+
+Holds int constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt)
+
+         * **value** : int - Value of the constant expression
+
+
+
+.. _handle-ast-ExprFor:
+
+.. das:attribute:: ExprFor
+
+For loop (`for expr1 in expr2 {your; block; here;}`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **iterators** : vector<das_string> - Names of the iterator variables
+
+         * **iteratorsAka** : vector<das_string> - Aliases for the iterator variables
+
+         * **iteratorsAt** : vector<LineInfo> - Line information for each iterator
+
+         * **iteratorsTags** : vector<Expression*> - Tags associated with each iterator
+
+         * **iteratorsTupleExpansion** : vector<uint8> - Tuple expansion flags for iterators
+
+         * **iteratorVariables** : vector<Variable*> - Variables associated with each iterator
+
+         * **sources** : vector<Expression*> - Source expressions to iterate over
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the for loop
+
+         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Line information for visibility of the iterators
+
+         * **allowIteratorOptimization** : bool - Whether iterator optimization is allowed
+
+         * **canShadow** : bool - Whether shadowing is allowed, i.e. if the iterator names can shadow outer scope variables
+
+
+
 .. _handle-ast-Structure:
 
 .. das:attribute:: Structure
@@ -1838,6 +2627,1122 @@ Structure declaration.
 
 
 
+.. _handle-ast-ExprConstString:
+
+.. das:attribute:: ExprConstString
+
+Holds string constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tString)
+
+         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstInt8:
+
+.. das:attribute:: ExprConstInt8
+
+.. _function-ast__dot__rq_getValue_ExprConstInt8:
+
+.. das:function:: ExprConstInt8.getValue() : int8
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : int8
+
+Holds int8 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt8)
+
+         * **value** : int8 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprOp1:
+
+.. das:attribute:: ExprOp1
+
+Single operator expression (`+a` or `-a` or `!a` or `~a`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator (unused)
+
+         * **arguments** : vector<Expression*> - Arguments of the operator (unused)
+
+         * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function associated with the expression
+
+         * **stackTop** : uint - Stack top position if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - That one argument of the operator
+
+
+
+.. _handle-ast-ExprConstUInt2:
+
+.. das:attribute:: ExprConstUInt2
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt2:
+
+.. das:function:: ExprConstUInt2.getValue() : uint2
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint2
+
+Holds uint2 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt2)
+
+         * **value** : uint2 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConst:
+
+.. das:attribute:: ExprConst
+
+Compilation time constant expression base class
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
+
+
+
+.. _handle-ast-ExprCast:
+
+.. das:attribute:: ExprCast
+
+Any cast expression (`cast<int> a`, `upcast<Foo> b` or `reinterpret<Bar?> c`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being cast
+
+         * **castType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type to which the expression is being cast
+
+         * **castFlags** :  :ref:`ExprCastFlags <alias-ExprCastFlags>` - Flags specific to `ExprCast` expressions
+
+
+
+.. _handle-ast-ExprConstURange64:
+
+.. das:attribute:: ExprConstURange64
+
+.. _function-ast__dot__rq_getValue_ExprConstURange64:
+
+.. das:function:: ExprConstURange64.getValue() : urange64
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : urange64
+
+Holds urange64 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tURange64)
+
+         * **value** : urange64 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstInt2:
+
+.. das:attribute:: ExprConstInt2
+
+.. _function-ast__dot__rq_getValue_ExprConstInt2:
+
+.. das:function:: ExprConstInt2.getValue() : int2
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : int2
+
+Holds int2 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt2)
+
+         * **value** : int2 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprAssume:
+
+.. das:attribute:: ExprAssume
+
+Assume expression (`assume name = expr`) or (`typedef name = type`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **alias** :  :ref:`das_string <handle-builtin-das_string>` - The alias name for the assume expression
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being aliased, if specified
+
+         * **assumeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type being assumed, if specified
+
+
+
+.. _handle-ast-ExprDebug:
+
+.. das:attribute:: ExprDebug
+
+Debug expression (`debug(x)` or `debug(x,"x=")`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the debug expression
+
+         * **arguments** : vector<Expression*> - Arguments of the debug expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the debug is used
+
+
+
+.. _handle-ast-ExprFakeLineInfo:
+
+.. das:attribute:: ExprFakeLineInfo
+
+.. _function-ast__dot__rq_getValue_ExprFakeLineInfo:
+
+.. das:function:: ExprFakeLineInfo.getValue() : void?
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : void?
+
+Compilation time only fake lineinfo expression. Will simulate as current file and line `LineInfo`.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeLineInfo)
+
+         * **value** : void? - Pointer to the LineInfo, as void?
+
+
+
+.. _handle-ast-ExprAssert:
+
+.. das:attribute:: ExprAssert
+
+Assert expression (`assert(x<13)`, or `assert(x<13, "x is too big")`, or `verify(foo()!=0)`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the asserted expression
+
+         * **arguments** : vector<Expression*> - Arguments of the assert expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the assert is used
+
+         * **isVerify** : bool - Whether the assert is a verify expression (verify expressions have to have sideeffects, assert expressions cant)
+
+
+
+.. _handle-ast-ExprClone:
+
+.. das:attribute:: ExprClone
+
+Clone operator (`expr1 := expr2`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
+
+         * **arguments** : vector<Expression*> - Arguments (unused)
+
+         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
+
+         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
+
+
+
+.. _handle-ast-ExprConstUInt:
+
+.. das:attribute:: ExprConstUInt
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt:
+
+.. das:function:: ExprConstUInt.getValue() : uint
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint
+
+Holds uint constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt)
+
+         * **value** : uint - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstDouble:
+
+.. das:attribute:: ExprConstDouble
+
+.. _function-ast__dot__rq_getValue_ExprConstDouble:
+
+.. das:function:: ExprConstDouble.getValue() : double
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : double
+
+Holds double constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tDouble)
+
+         * **value** : double - Value of the constant expression
+
+
+
+.. _handle-ast-ExprAddr:
+
+.. das:attribute:: ExprAddr
+
+Function address (`@@foobarfunc` or `@@foobarfunc<(int;int):bool>`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **target** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function being referenced
+
+         * **funcType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the function being referenced
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being referenced (if resolved)
+
+
+
+.. _handle-ast-ExprOp:
+
+.. das:attribute:: ExprOp
+
+ Compilation time only base class for any operator.
+
+
+
+.. _handle-ast-StructureAnnotation:
+
+.. das:attribute:: StructureAnnotation
+
+ Adapter for the `AstStructureAnnotation`.
+
+
+
+.. _handle-ast-ExternalFnBase:
+
+.. das:attribute:: ExternalFnBase
+
+Base class for external function bindings.
+Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
+
+:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
+
+         * **arguments** : vector<Variable*> - Arguments of the function
+
+         * **result** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Result type of the function
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression of the function (null just about every time for the external functions)
+
+         * **index** : int - Index of the function in the 'Context'
+
+         * **totalStackSize** : uint - Stack size required for this function
+
+         * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
+
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+
+         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
+
+         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
+
+         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
+
+         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
+
+         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
+
+         * **inferStack** : vector<InferHistory> - Inference history
+
+         * **fromGeneric** :  :ref:`Function <handle-ast-Function>`? - If this function was instantiated from a generic function, pointer to the generic function
+
+         * **hash** : uint64 - Hash of the function signature
+
+         * **aotHash** : uint64 - Hash of the function signature for AOT purposes
+
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
+
+
+
+.. _handle-ast-ExprConstUInt16:
+
+.. das:attribute:: ExprConstUInt16
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt16:
+
+.. das:function:: ExprConstUInt16.getValue() : uint16
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint16
+
+Holds uint16 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt16)
+
+         * **value** : uint16 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstRange:
+
+.. das:attribute:: ExprConstRange
+
+.. _function-ast__dot__rq_getValue_ExprConstRange:
+
+.. das:function:: ExprConstRange.getValue() : range
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : range
+
+Holds range constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange)
+
+         * **value** : range - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstUInt4:
+
+.. das:attribute:: ExprConstUInt4
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt4:
+
+.. das:function:: ExprConstUInt4.getValue() : uint4
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint4
+
+Holds uint4 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt4)
+
+         * **value** : uint4 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstFloat2:
+
+.. das:attribute:: ExprConstFloat2
+
+.. _function-ast__dot__rq_getValue_ExprConstFloat2:
+
+.. das:function:: ExprConstFloat2.getValue() : float2
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : float2
+
+Holds float2 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat2)
+
+         * **value** : float2 - Value of the constant expression
+
+
+
+.. _handle-ast-FunctionAnnotation:
+
+.. das:attribute:: FunctionAnnotation
+
+ Adapter for the `AstFunctionAnnotation`.
+
+
+
+.. _handle-ast-ExprAsVariant:
+
+.. das:attribute:: ExprAsVariant
+
+As expression (`foo as bar`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
+
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
+
+         * **fieldIndex** : int - Index of the field in the type's field list
+
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Type annotation for the field
+
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
+
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
+
+
+
+.. _handle-ast-ExprConstRange64:
+
+.. das:attribute:: ExprConstRange64
+
+.. _function-ast__dot__rq_getValue_ExprConstRange64:
+
+.. das:function:: ExprConstRange64.getValue() : range64
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : range64
+
+Holds range64 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange64)
+
+         * **value** : range64 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprInvoke:
+
+.. das:attribute:: ExprInvoke
+
+.. _function-ast__dot__rq_isCopyOrMove_ExprInvoke:
+
+.. das:function:: ExprInvoke.isCopyOrMove() : bool
+
+Returns whether the given invoke expression requires a copy or move of a reference type.
+
+
+:Properties: * **isCopyOrMove** : bool
+
+Invoke expression (`invoke(fn)` or `invoke(lamb, arg1, arg2, ...)`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the invoke expression
+
+         * **arguments** : vector<Expression*> - Arguments of the invoke expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the invoke is used
+
+         * **stackTop** : uint - Stack top for invoke, if applicable
+
+         * **doesNotNeedSp** : bool - Does not need stack pointer
+
+         * **isInvokeMethod** : bool - Is invoke of class method
+
+         * **cmresAlias** : bool - If true, then CMRES aliasing is allowed for this invoke (and stack will be allocated)
+
+
+
+.. _handle-ast-ExprConstFloat3:
+
+.. das:attribute:: ExprConstFloat3
+
+.. _function-ast__dot__rq_getValue_ExprConstFloat3:
+
+.. das:function:: ExprConstFloat3.getValue() : float3
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : float3
+
+Holds float3 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat3)
+
+         * **value** : float3 - Value of the constant expression
+
+
+
+.. _handle-ast-SimulateMacro:
+
+.. das:attribute:: SimulateMacro
+
+Adapter for the `AstSimulateMacro`.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro.
+
+
+
+.. _handle-ast-ExprConstPtr:
+
+.. das:attribute:: ExprConstPtr
+
+.. _function-ast__dot__rq_getValue_ExprConstPtr:
+
+.. das:function:: ExprConstPtr.getValue() : void?
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : void?
+
+Null (`null`). Technically can be any other pointer, but it is used for nullptr.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
+
+         * **value** : void? - Pointer value. Typically this is 'null' constant, so the value is zero.
+
+
+
+.. _handle-ast-VisitorAdapter:
+
+.. das:attribute:: VisitorAdapter
+
+ Adapter for the `AstVisitor` interface.
+
+
+
+.. _handle-ast-PassMacro:
+
+.. das:attribute:: PassMacro
+
+Adapter for the `AstPassMacro`.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+
+
+.. _handle-ast-ExprConstInt3:
+
+.. das:attribute:: ExprConstInt3
+
+.. _function-ast__dot__rq_getValue_ExprConstInt3:
+
+.. das:function:: ExprConstInt3.getValue() : int3
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : int3
+
+Holds int3 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt3)
+
+         * **value** : int3 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprConstUInt8:
+
+.. das:attribute:: ExprConstUInt8
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt8:
+
+.. das:function:: ExprConstUInt8.getValue() : uint8
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint8
+
+Holds uint8 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt8)
+
+         * **value** : uint8 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprOp2:
+
+.. das:attribute:: ExprOp2
+
+Two operand operator (`expr1 + expr2`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
+
+         * **arguments** : vector<Expression*> - Arguments (unused)
+
+         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
+
+         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
+
+
+
+.. _handle-ast-ExprFakeContext:
+
+.. das:attribute:: ExprFakeContext
+
+Compilation time only fake context expression. Will simulate as current evaluation `Context`.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeContext)
+
+
+
+.. _handle-ast-ExprMakeVariant:
+
+.. das:attribute:: ExprMakeVariant
+
+Make variant expression (`[YourVariant variantName=expr1]`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
+
+         * **stackTop** : uint - Stack top offset for the data, if applicable
+
+         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
+
+         * **variants** : vector<MakeFieldDecl*> - Array of variants being made
+
+
+
+.. _handle-ast-ExprReader:
+
+.. das:attribute:: ExprReader
+
+Compilation time only expression which holds temporary information for the `AstReaderMacro`.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **macro** :  :ref:`ReaderMacro <handle-ast-ReaderMacro>`? - Macro which is attached to the context parser.
+
+         * **sequence** :  :ref:`das_string <handle-builtin-das_string>` - Sequence of characters being read.
+
+
+
+.. _handle-ast-ExprLooksLikeCall:
+
+.. das:attribute:: ExprLooksLikeCall
+
+Anything which looks like call (`call(expr1,expr2)`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call
+
+         * **arguments** : vector<Expression*> - List of arguments passed to the call
+
+         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+
+
+.. _handle-ast-TypeMacro:
+
+.. das:attribute:: TypeMacro
+
+Compilation time only structure which holds live information about type macro.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+
+
 .. _handle-ast-FieldDeclaration:
 
 .. das:attribute:: FieldDeclaration
@@ -1860,45 +3765,498 @@ Structure field declaration.
 
 
 
-.. _handle-ast-EnumEntry:
+.. _handle-ast-ExprField:
 
-.. das:attribute:: EnumEntry
+.. das:attribute:: ExprField
 
-Entry in the enumeration.
+.. _function-ast__dot__rq_field_ExprField:
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration entry
+.. das:function:: ExprField.field() : FieldDeclaration?
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration entry
-
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration entry in the source code
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value of the enumeration entry (typicall 'ExprConst' derivative)
+Returns a pointer to the named field of a structure, or null if the field does not exist or the type is not a structure.
 
 
+:Properties: * **field** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>`?
 
-.. _handle-ast-Enumeration:
+Field lookup (`foo.bar`)
 
-.. das:attribute:: Enumeration
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-Enumeration declaration.
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration declaration in the source code
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **list** : vector<EnumEntry> - List of entries in the enumeration
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this enumeration belongs to
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
 
-         * **external** : bool - Whether this enumeration is external (defined on the C++ side)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Enumeration underlying type (int8, int16, int, or int64)
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
 
-         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this enumeration
+         * **fieldIndex** : int - Index of the field in the type's field list
 
-         * **isPrivate** : bool - Is this enumeration private (not visible from outside the module)
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Type annotation for the field
+
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
+
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
+
+
+
+.. _handle-ast-ExprAt:
+
+.. das:attribute:: ExprAt
+
+Index lookup (`expr[expr1]`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being indexed
+
+         * **index** :  :ref:`Expression <handle-ast-Expression>`? - Index expression
+
+         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
+
+
+
+.. _handle-ast-ModuleLibrary:
+
+.. das:attribute:: ModuleLibrary
+
+ Object which holds list of `Module` and provides access to them.
+
+
+
+.. _handle-ast-ExprMakeLocal:
+
+.. das:attribute:: ExprMakeLocal
+
+Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprMakeStruct`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
+
+         * **stackTop** : uint - Stack top offset for the data, if applicable
+
+         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
+
+         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
+
+
+
+.. _handle-ast-ExprStringBuilder:
+
+.. das:attribute:: ExprStringBuilder
+
+String builder expression ("blah{blah1}blah2").
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **elements** : vector<Expression*> - List of expressions that make up the string builder (literals and expressions)
+
+         * **stringBuilderFlags** :  :ref:`StringBuilderFlags <alias-StringBuilderFlags>` - Flags specific to string builder expressions
+
+
+
+.. _handle-ast-VariantMacro:
+
+.. das:attribute:: VariantMacro
+
+Adapter for the `AstVariantMacro`.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+
+
+.. _handle-ast-BuiltInFunction:
+
+.. das:attribute:: BuiltInFunction
+
+Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
+
+:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
+
+         * **arguments** : vector<Variable*> - Arguments of the function
+
+         * **result** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Result type of the function
+
+         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression of the function (null just about every time for the builtins)
+
+         * **index** : int - Index of the function in the 'Context'
+
+         * **totalStackSize** : uint - Stack size required for this function
+
+         * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
+
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+
+         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
+
+         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
+
+         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
+
+         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
+
+         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
+
+         * **inferStack** : vector<InferHistory> - Inference history
+
+         * **fromGeneric** :  :ref:`Function <handle-ast-Function>`? - If this function was instantiated from a generic function, pointer to the generic function
+
+         * **hash** : uint64 - Hash of the function signature
+
+         * **aotHash** : uint64 - Hash of the function signature for AOT purposes
+
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
+
+
+
+.. _handle-ast-ExprDelete:
+
+.. das:attribute:: ExprDelete
+
+Delete expression (`delete blah`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being deleted
+
+         * **sizeexpr** :  :ref:`Expression <handle-ast-Expression>`? - The size expression for deleting classes. This one determines how big instance is to be deleted.
+
+         * **native** : bool - True if the delete is native, and not to be expanded at compilation time.
+
+
+
+.. _handle-ast-ExprIfThenElse:
+
+.. das:attribute:: ExprIfThenElse
+
+If-then-else expression (`if expr1 {your; block; here;} else {your; block; here;}`) including `static_if`'s.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **cond** :  :ref:`Expression <handle-ast-Expression>`? - The condition expression
+
+         * **if_true** :  :ref:`Expression <handle-ast-Expression>`? - The 'then' block expression
+
+         * **if_false** :  :ref:`Expression <handle-ast-Expression>`? - The 'else' block expression
+
+         * **if_flags** :  :ref:`IfFlags <alias-IfFlags>` - Flags specific to if-then-else expressions
+
+
+
+.. _handle-ast-ExprBreak:
+
+.. das:attribute:: ExprBreak
+
+Break expression (`break`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+
+
+.. _handle-ast-ExprCopy:
+
+.. das:attribute:: ExprCopy
+
+Copy operator (`expr1 = expr2`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
+
+         * **arguments** : vector<Expression*> - Arguments (unused)
+
+         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+
+         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
+
+         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
+
+         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
+
+         * **copy_flags** :  :ref:`CopyFlags <alias-CopyFlags>` - Flags specific to copy operation
+
+
+
+.. _handle-ast-ExprIs:
+
+.. das:attribute:: ExprIs
+
+Is expression for variants and such (`expr is Foo`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being checked
+
+         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being checked against
+
+
+
+.. _handle-ast-ExprConstEnumeration:
+
+.. das:attribute:: ExprConstEnumeration
+
+Holds enumeration constant, both type and entry (`Foo bar`).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tEnumeration, Type::tEnumeration8, Type::tEnumeration16, or Type::tEnumeration64)
+
+         * **enumType** :  :ref:`Enumeration <handle-ast-Enumeration>`? - Enumeration type declaration
+
+         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
+
+
+
+.. _handle-ast-ExprKeyExists:
+
+.. das:attribute:: ExprKeyExists
+
+Key exists expression (`key_exists(tab,key)`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the key-exists expression
+
+         * **arguments** : vector<Expression*> - Arguments of the key-exists expression
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the key-exists is used
+
+
+
+.. _handle-ast-ExprMemZero:
+
+.. das:attribute:: ExprMemZero
+
+Memzero (`memzero(expr)`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the memzero call
+
+         * **arguments** : vector<Expression*> - Arguments of the memzero call
+
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the memzero is used
+
+
+
+.. _handle-ast-Variable:
+
+.. das:attribute:: Variable
+
+.. _function-ast__dot__rq_isAccessUnused_Variable:
+
+.. das:function:: Variable.isAccessUnused() : bool
+
+Returns whether the given variable is never accessed in the code.
+
+
+.. _function-ast__dot__rq_getMangledNameHash_Variable:
+
+.. das:function:: Variable.getMangledNameHash() : uint64
+
+Returns the mangled name hash of the given function.
+
+
+:Properties: * **isAccessUnused** : bool
+
+             * **getMangledNameHash** : uint64
+
+Variable declaration.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the variable
+
+         * **_aka** :  :ref:`das_string <handle-builtin-das_string>` - Alternative name of the variable
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the variable
+
+         * **init** :  :ref:`Expression <handle-ast-Expression>`? - Initializer expression for the variable, if any
+
+         * **source** :  :ref:`Expression <handle-ast-Expression>`? - If its an iterator variable for the for loop, source expression being iterated over
+
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the variable declaration in the source code
+
+         * **index** : int - Index of the variable in the global variable list (for global variables)
+
+         * **stackTop** : uint - Stack top offset for local variables
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this variable belongs to
+
+         * **initStackSize** : uint - Stack size required to evaluate the initializer expression (for global variables)
+
+         * **flags** :  :ref:`VariableFlags <alias-VariableFlags>` - Variable flags
+
+         * **access_flags** :  :ref:`VariableAccessFlags <alias-VariableAccessFlags>` - Variable access flags
+
+         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - Annotations attached to this variable
+
+
+
+.. _handle-ast-ExprSafeAsVariant:
+
+.. das:attribute:: ExprSafeAsVariant
+
+Safe as expression (`foo? as bar`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
+
+         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
+
+         * **fieldIndex** : int - Index of the field in the type's field list
+
+         * **annotation** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? - Type annotation for the field
+
+         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
+
+         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
+
+         * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
 
 
 
@@ -1975,182 +4333,145 @@ Function declaration.
 
 
 
-.. _handle-ast-BuiltInFunction:
+.. _handle-ast-ExprQuote:
 
-.. das:attribute:: BuiltInFunction
+.. das:attribute:: ExprQuote
 
-Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
+Compilation time expression which holds its subexpressions but does not infer them (`quote() <| x+5`)
 
-:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
-         * **arguments** : vector<Variable*> - Arguments of the function
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **result** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Result type of the function
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression of the function (null just about every time for the builtins)
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **index** : int - Index of the function in the 'Context'
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **totalStackSize** : uint - Stack size required for this function
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the query expression
 
-         * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
+         * **arguments** : vector<Expression*> - Arguments of the query expression
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
-         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the query is used
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
 
-         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
 
-         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
+.. _handle-ast-Expression:
 
-         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
+.. das:attribute:: Expression
 
-         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
+Any expression (base class).
 
-         * **inferStack** : vector<InferHistory> - Inference history
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **fromGeneric** :  :ref:`Function <handle-ast-Function>`? - If this function was instantiated from a generic function, pointer to the generic function
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
-         * **hash** : uint64 - Hash of the function signature
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **aotHash** : uint64 - Hash of the function signature for AOT purposes
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
 
-.. _handle-ast-ExternalFnBase:
 
-.. das:attribute:: ExternalFnBase
+.. _handle-ast-ExprConstInt16:
 
-Base class for external function bindings.
-Bindings for the 'BuiltInFunction', which is used for the builtin (bound) functions in Daslang.
+.. das:attribute:: ExprConstInt16
 
-:Fields: * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this function
+.. _function-ast__dot__rq_getValue_ExprConstInt16:
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function
+.. das:function:: ExprConstInt16.getValue() : int16
 
-         * **arguments** : vector<Variable*> - Arguments of the function
+Returns the constant value stored in this expression node.
 
-         * **result** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Result type of the function
 
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression of the function (null just about every time for the external functions)
+:Properties: * **getValue** : int16
 
-         * **index** : int - Index of the function in the 'Context'
+Holds int16 constant.
 
-         * **totalStackSize** : uint - Stack size required for this function
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **totalGenLabel** : int - Number of generated labels in the jump table (for the generator)
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-         * **atDecl** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function declaration in the source code
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this function belongs to
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **classParent** :  :ref:`Structure <handle-ast-Structure>`? - Parent structure if this is a method
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **flags** :  :ref:`FunctionFlags <alias-FunctionFlags>` - Function flags
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt16)
 
-         * **moreFlags** :  :ref:`MoreFunctionFlags <alias-MoreFunctionFlags>` - More function flags
+         * **value** : int16 - Value of the constant expression
 
-         * **sideEffectFlags** :  :ref:`FunctionSideEffectFlags <alias-FunctionSideEffectFlags>` - Function side effect flags
 
-         * **inferStack** : vector<InferHistory> - Inference history
 
-         * **fromGeneric** :  :ref:`Function <handle-ast-Function>`? - If this function was instantiated from a generic function, pointer to the generic function
+.. _handle-ast-ExprErase:
 
-         * **hash** : uint64 - Hash of the function signature
+.. das:attribute:: ExprErase
 
-         * **aotHash** : uint64 - Hash of the function signature for AOT purposes
+Erase expression (`erase(tab,key)`)
 
-         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ function name.
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-.. _handle-ast-InferHistory:
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-.. das:attribute:: InferHistory
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-Generic function infer history.
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the erase expression
 
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being inferred
+         * **arguments** : vector<Expression*> - Arguments of the erase expression
 
+         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
 
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the erase is used
 
-.. _handle-ast-Variable:
 
-.. das:attribute:: Variable
 
-.. _function-ast__dot__rq_isAccessUnused_Variable:
+.. _handle-ast-ExprConstInt64:
 
-.. das:function:: Variable.isAccessUnused() : bool
+.. das:attribute:: ExprConstInt64
 
-Returns whether the given variable is never accessed in the code.
+.. _function-ast__dot__rq_getValue_ExprConstInt64:
 
+.. das:function:: ExprConstInt64.getValue() : int64
 
-.. _function-ast__dot__rq_getMangledNameHash_Variable:
+Returns the constant value stored in this expression node.
 
-.. das:function:: Variable.getMangledNameHash() : uint64
 
-Returns the mangled name hash of the given function.
+:Properties: * **getValue** : int64
 
+Holds int64 constant.
 
-:Properties: * **isAccessUnused** : bool
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-             * **getMangledNameHash** : uint64
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
 
-Variable declaration.
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
 
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the variable
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
 
-         * **_aka** :  :ref:`das_string <handle-builtin-das_string>` - Alternative name of the variable
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
 
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the variable
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **init** :  :ref:`Expression <handle-ast-Expression>`? - Initializer expression for the variable, if any
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt64)
 
-         * **source** :  :ref:`Expression <handle-ast-Expression>`? - If its an iterator variable for the for loop, source expression being iterated over
-
-         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the variable declaration in the source code
-
-         * **index** : int - Index of the variable in the global variable list (for global variables)
-
-         * **stackTop** : uint - Stack top offset for local variables
-
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this variable belongs to
-
-         * **initStackSize** : uint - Stack size required to evaluate the initializer expression (for global variables)
-
-         * **flags** :  :ref:`VariableFlags <alias-VariableFlags>` - Variable flags
-
-         * **access_flags** :  :ref:`VariableAccessFlags <alias-VariableAccessFlags>` - Variable access flags
-
-         * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` - Annotations attached to this variable
-
-
-
-.. _handle-ast-AstContext:
-
-.. das:attribute:: AstContext
-
-Lexical context for the particular expression.
-
-:Fields: * **func** :  :ref:`Function <handle-ast-Function>`? - Function this expression belongs to
-
-         * **_loop** : vector<Expression*> - Loop stack
-
-         * **blocks** : vector<Expression*> - Stack of active blocks
-
-         * **scopes** : vector<Expression*> - Stack of active scopes
-
-         * **_with** : vector<Expression*> - Stack of active 'with' expressions
+         * **value** : int64 - Value of the constant expression
 
 
 
@@ -2202,37 +4523,11 @@ Any block expression, including regular blocks and all types of closures.
 
 
 
-.. _handle-ast-ExprLet:
+.. _handle-ast-ExprVar:
 
-.. das:attribute:: ExprLet
+.. das:attribute:: ExprVar
 
-Local variable declaration (`let v = expr;`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **variables** : vector<Variable*> - List of variables being declared in this `let` expression
-
-         * **atInit** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the initializer expression in source code
-
-         * **letFlags** :  :ref:`ExprLetFlags <alias-ExprLetFlags>` - Properties of the `ExprLet` object.
-
-
-
-.. _handle-ast-ExprStringBuilder:
-
-.. das:attribute:: ExprStringBuilder
-
-String builder expression ("blah{blah1}blah2").
+Variable access (`foo`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -2246,35 +4541,23 @@ String builder expression ("blah{blah1}blah2").
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **elements** : vector<Expression*> - List of expressions that make up the string builder (literals and expressions)
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the variable
 
-         * **stringBuilderFlags** :  :ref:`StringBuilderFlags <alias-StringBuilderFlags>` - Flags specific to string builder expressions
+         * **variable** :  :ref:`Variable <handle-ast-Variable>`? - The variable being accessed
 
+         * **pBlock** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - The block in which the variable is accessed (if any)
 
+         * **argumentIndex** : int - The argument index of the variable (if variable is an argument of a function or a block)
 
-.. _handle-ast-MakeFieldDecl:
-
-.. das:attribute:: MakeFieldDecl
-
-Part of `ExprMakeStruct`, declares single field (`a = expr` or `a <- expr` etc)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being assigned
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Initializer expression for the field
-
-         * **tag** :  :ref:`Expression <handle-ast-Expression>`? - Tag associated with the field, if any
-
-         * **flags** :  :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>` - Flags specific to this field declaration
+         * **varFlags** :  :ref:`ExprVarFlags <alias-ExprVarFlags>` - The flags of the variable
 
 
 
-.. _handle-ast-ExprNamedCall:
+.. _handle-ast-ExprYield:
 
-.. das:attribute:: ExprNamedCall
+.. das:attribute:: ExprYield
 
-Named call (`call([argname1=expr1, argname2=expr2])`).
+Yield expression (`yield foo` or `yield <- bar`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -2288,49 +4571,25 @@ Named call (`call([argname1=expr1, argname2=expr2])`).
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the named call
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being yielded (never empty)
 
-         * **nonNamedArguments** : vector<Expression*> - Non-named arguments passed to the call
-
-         * **arguments** :  :ref:`MakeStruct <handle-ast-MakeStruct>`? - Named arguments passed to the call
-
-         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
+         * **returnFlags** :  :ref:`ExprYieldFlags <alias-ExprYieldFlags>` - Yield flags
 
 
 
-.. _handle-ast-ExprLooksLikeCall:
+.. _handle-ast-CommentReader:
 
-.. das:attribute:: ExprLooksLikeCall
+.. das:attribute:: CommentReader
 
-Anything which looks like call (`call(expr1,expr2)`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call
-
-         * **arguments** : vector<Expression*> - List of arguments passed to the call
-
-         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+ Adapter for the `AstCommentReader`.
 
 
 
-.. _handle-ast-ExprCallFunc:
+.. _handle-ast-ExprGoto:
 
-.. das:attribute:: ExprCallFunc
+.. das:attribute:: ExprGoto
 
-Actual function call (`func(expr1,...)`).
+Goto expression (`goto label 13`, `goto x`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -2344,25 +4603,50 @@ Actual function call (`func(expr1,...)`).
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the called function
+         * **labelName** : int - Label to go to, if specified
 
-         * **arguments** : vector<Expression*> - Arguments passed to the function
-
-         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression evaluating to label to go to, if specified
 
 
 
-.. _handle-ast-ExprNew:
+.. _handle-ast-TypeInfoMacro:
 
-.. das:attribute:: ExprNew
+.. das:attribute:: TypeInfoMacro
 
-New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
+Compilation time only structure which holds live information about typeinfo expression for the specific macro.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the macro
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - The module where the macro is defined
+
+
+
+.. _handle-ast-CallMacro:
+
+.. das:attribute:: CallMacro
+
+Adapter for the `AstCallMacro`.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
+
+
+
+.. _handle-ast-ExprConstInt4:
+
+.. das:attribute:: ExprConstInt4
+
+.. _function-ast__dot__rq_getValue_ExprConstInt4:
+
+.. das:function:: ExprConstInt4.getValue() : int4
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : int4
+
+Holds int4 constant.
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -2376,21 +4660,289 @@ New expression (`new Foo`, `new Bar(expr1..)`, but **NOT** `new [[Foo ...]]`)
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the new expression
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt4)
 
-         * **arguments** : vector<Expression*> - List of arguments passed to the constructor
+         * **value** : int4 - Value of the constant expression
 
-         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the constructor function being called, if resolved
+.. _handle-ast-ExprContinue:
 
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
+.. das:attribute:: ExprContinue
 
-         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type expression for the type being constructed
+Continue expression (`continue`)
 
-         * **initializer** : bool - Whether there is an initializer for the new expression, or it's just default construction
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+
+
+.. _handle-ast-ExprConstBool:
+
+.. das:attribute:: ExprConstBool
+
+.. _function-ast__dot__rq_getValue_ExprConstBool:
+
+.. das:function:: ExprConstBool.getValue() : bool
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : bool
+
+Holds bool constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBool)
+
+         * **value** : bool - Value of the constant expression
+
+
+
+.. _handle-ast-InferHistory:
+
+.. das:attribute:: InferHistory
+
+Generic function infer history.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the function in the source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being inferred
+
+
+
+.. _handle-ast-ExprMakeGenerator:
+
+.. das:attribute:: ExprMakeGenerator
+
+Generator closure (`generator<int>` or `generator<Foo&>`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
+
+         * **arguments** : vector<Expression*> - Arguments passed to the generator
+
+         * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure
+
+         * **iterType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Iterator type, i.e. type of values produced by the generated iterator
+
+         * **_capture** : vector<CaptureEntry> - List of captured variables
+
+
+
+.. _handle-ast-ExprReturn:
+
+.. das:attribute:: ExprReturn
+
+Return expression (`return` or `return foo`, or `return <- foo`)
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being returned (if any)
+
+         * **returnFlags** :  :ref:`ExprReturnFlags <alias-ExprReturnFlags>` - Return flags
+
+         * **stackTop** : uint - Stack top position if temporary variable allocation is needed
+
+         * **refStackTop** : uint - Reference stack top position if temporary variable allocation is needed
+
+         * **returnFunc** :  :ref:`Function <handle-ast-Function>`? - Function associated with the return expression
+
+         * **_block** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - Block associated with the return expression
+
+
+
+.. _handle-ast-ExprMakeBlock:
+
+.. das:attribute:: ExprMakeBlock
+
+Any closure. Holds block as well as capture information in `CaptureEntry`.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **_capture** : vector<CaptureEntry> - List of captured variables
+
+         * **_block** :  :ref:`Expression <handle-ast-Expression>`? - The block expression
+
+         * **stackTop** : uint - Stack top for the block
+
+         * **mmFlags** :  :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>` - Expression generation flags
+
+         * **aotFunctorName** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
+
+
+
+.. _handle-ast-ForLoopMacro:
+
+.. das:attribute:: ForLoopMacro
+
+Adapter for the 'AstForLoopMacro'.
+
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
+
+
+
+.. _handle-ast-AstContext:
+
+.. das:attribute:: AstContext
+
+Lexical context for the particular expression.
+
+:Fields: * **func** :  :ref:`Function <handle-ast-Function>`? - Function this expression belongs to
+
+         * **_loop** : vector<Expression*> - Loop stack
+
+         * **blocks** : vector<Expression*> - Stack of active blocks
+
+         * **scopes** : vector<Expression*> - Stack of active scopes
+
+         * **_with** : vector<Expression*> - Stack of active 'with' expressions
+
+
+
+.. _handle-ast-ExprCallMacro:
+
+.. das:attribute:: ExprCallMacro
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Compilation time only expression which holds temporary information for the `AstCallMacro`.
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Location of the expression in source code
+
+         * **__rtti** : string - Type of the expression
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression generation flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression flags
+
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Expression print flags
+
+         * **arguments** : vector<Expression*> - Name of the macro being called
+
+         * **argumentsFailedToInfer** : bool - List of argument expressions
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - If the arguments failed to infer their types
+
+         * **inFunction** :  :ref:`Function <handle-ast-Function>`? - Location of the expression in source code
+
+         * **macro** :  :ref:`CallMacro <handle-ast-CallMacro>`? - Call macro, if resolved
+
+
+
+.. _handle-ast-ExprConstUInt64:
+
+.. das:attribute:: ExprConstUInt64
+
+.. _function-ast__dot__rq_getValue_ExprConstUInt64:
+
+.. das:function:: ExprConstUInt64.getValue() : uint64
+
+Returns the constant value stored in this expression node.
+
+
+:Properties: * **getValue** : uint64
+
+Holds uint64 constant.
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt64)
+
+         * **value** : uint64 - Value of the constant expression
+
+
+
+.. _handle-ast-ExprArrayComprehension:
+
+.. das:attribute:: ExprArrayComprehension
+
+Array comprehension (`[for (x in 0..3); x]`, `[iterator for (y in range(100)); x*2; where (x!=13)]]` for arrays or generators accordingly).
+
+:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+
+         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+
+         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+
+         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+
+         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
+
+         * **exprFor** :  :ref:`Expression <handle-ast-Expression>`? - The 'for' expression
+
+         * **exprWhere** :  :ref:`Expression <handle-ast-Expression>`? - The 'where' expression
+
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The subexpression
+
+         * **generatorSyntax** : bool - If generator syntax is used (i.e. `[iterator for ...]` instead of `[for]`)
+
+         * **tableSyntax** : bool - If table syntax is used (i.e. `{for ...}` instead of `[for]`)
 
 
 
@@ -2432,414 +4984,6 @@ Anything which looks like call (`call(expr1,expr2)`).
 
 
 
-.. _handle-ast-ExprPtr2Ref:
-
-.. das:attribute:: ExprPtr2Ref
-
-Pointer dereference (`*expr` or `deref(expr)`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression being dereferenced
-
-         * **unsafeDeref** : bool - If true, skip runtime null-pointer check
-
-         * **assumeNoAlias** : bool - If true, assume no aliasing occurs
-
-
-
-.. _handle-ast-ExprNullCoalescing:
-
-.. das:attribute:: ExprNullCoalescing
-
-Null coalescing (`expr1 ?? default_value`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression being coalesced
-
-         * **unsafeDeref** : bool - If true, skip runtime null-pointer check
-
-         * **assumeNoAlias** : bool - Assume no aliasing occurs
-
-         * **defaultValue** :  :ref:`Expression <handle-ast-Expression>`? - Default value expression
-
-
-
-.. _handle-ast-ExprAt:
-
-.. das:attribute:: ExprAt
-
-Index lookup (`expr[expr1]`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being indexed
-
-         * **index** :  :ref:`Expression <handle-ast-Expression>`? - Index expression
-
-         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
-
-
-
-.. _handle-ast-ExprSafeAt:
-
-.. das:attribute:: ExprSafeAt
-
-Safe index lookup (`expr?[expr1]`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being indexed
-
-         * **index** :  :ref:`Expression <handle-ast-Expression>`? - Index expression
-
-         * **atFlags** :  :ref:`ExprAtFlags <alias-ExprAtFlags>` - Flags specific to `ExprAt` expressions
-
-
-
-.. _handle-ast-ExprIs:
-
-.. das:attribute:: ExprIs
-
-Is expression for variants and such (`expr is Foo`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being checked
-
-         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being checked against
-
-
-
-.. _handle-ast-ExprOp:
-
-.. das:attribute:: ExprOp
-
- Compilation time only base class for any operator.
-
-
-
-.. _handle-ast-ExprOp2:
-
-.. das:attribute:: ExprOp2
-
-Two operand operator (`expr1 + expr2`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
-
-         * **arguments** : vector<Expression*> - Arguments (unused)
-
-         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
-
-         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
-
-
-
-.. _handle-ast-ExprOp3:
-
-.. das:attribute:: ExprOp3
-
-Three operand operator (`cond ? expr1 : expr2`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
-
-         * **arguments** : vector<Expression*> - Arguments (unused)
-
-         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Condition expression
-
-         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
-
-         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
-
-
-
-.. _handle-ast-ExprCopy:
-
-.. das:attribute:: ExprCopy
-
-Copy operator (`expr1 = expr2`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
-
-         * **arguments** : vector<Expression*> - Arguments (unused)
-
-         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
-
-         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
-
-         * **copy_flags** :  :ref:`CopyFlags <alias-CopyFlags>` - Flags specific to copy operation
-
-
-
-.. _handle-ast-ExprMove:
-
-.. das:attribute:: ExprMove
-
-Move operator (`expr1 <- expr2`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
-
-         * **arguments** : vector<Expression*> - Arguments (unused)
-
-         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
-
-         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
-
-         * **move_flags** :  :ref:`MoveFlags <alias-MoveFlags>` - Flags specific to move operation
-
-
-
-.. _handle-ast-ExprClone:
-
-.. das:attribute:: ExprClone
-
-Clone operator (`expr1 := expr2`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the call (unused)
-
-         * **arguments** : vector<Expression*> - Arguments (unused)
-
-         * **argumentsFailedToInfer** : bool - If arguments failed to infer their types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being called, if resolved
-
-         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **left** :  :ref:`Expression <handle-ast-Expression>`? - Left operand expression
-
-         * **right** :  :ref:`Expression <handle-ast-Expression>`? - Right operand expression
-
-
-
-.. _handle-ast-ExprWith:
-
-.. das:attribute:: ExprWith
-
-With section (`with expr {your; block; here}`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **_with** :  :ref:`Expression <handle-ast-Expression>`? - The expression to be used as the context for the with block
-
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the with block
-
-
-
-.. _handle-ast-ExprAssume:
-
-.. das:attribute:: ExprAssume
-
-Assume expression (`assume name = expr`) or (`typedef name = type`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **alias** :  :ref:`das_string <handle-builtin-das_string>` - The alias name for the assume expression
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being aliased, if specified
-
-         * **assumeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type being assumed, if specified
-
-
-
-.. _handle-ast-ExprWhile:
-
-.. das:attribute:: ExprWhile
-
-While loop (`while expr {your; block; here;}`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **cond** :  :ref:`Expression <handle-ast-Expression>`? - The condition expression
-
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the while loop
-
-
-
 .. _handle-ast-ExprTryCatch:
 
 .. das:attribute:: ExprTryCatch
@@ -2864,39 +5008,11 @@ Try-recover expression (`try {your; block; here;} recover {your; recover; here;}
 
 
 
-.. _handle-ast-ExprIfThenElse:
+.. _handle-ast-ExprTypeDecl:
 
-.. das:attribute:: ExprIfThenElse
+.. das:attribute:: ExprTypeDecl
 
-If-then-else expression (`if expr1 {your; block; here;} else {your; block; here;}`) including `static_if`'s.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **cond** :  :ref:`Expression <handle-ast-Expression>`? - The condition expression
-
-         * **if_true** :  :ref:`Expression <handle-ast-Expression>`? - The 'then' block expression
-
-         * **if_false** :  :ref:`Expression <handle-ast-Expression>`? - The 'else' block expression
-
-         * **if_flags** :  :ref:`IfFlags <alias-IfFlags>` - Flags specific to if-then-else expressions
-
-
-
-.. _handle-ast-ExprFor:
-
-.. das:attribute:: ExprFor
-
-For loop (`for expr1 in expr2 {your; block; here;}`)
+typedecl() expression (`typedecl(1+2)`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -2910,155 +5026,7 @@ For loop (`for expr1 in expr2 {your; block; here;}`)
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **iterators** : vector<das_string> - Names of the iterator variables
-
-         * **iteratorsAka** : vector<das_string> - Aliases for the iterator variables
-
-         * **iteratorsAt** : vector<LineInfo> - Line information for each iterator
-
-         * **iteratorsTags** : vector<Expression*> - Tags associated with each iterator
-
-         * **iteratorsTupleExpansion** : vector<uint8> - Tuple expansion flags for iterators
-
-         * **iteratorVariables** : vector<Variable*> - Variables associated with each iterator
-
-         * **sources** : vector<Expression*> - Source expressions to iterate over
-
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - The body of the for loop
-
-         * **visibility** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Line information for visibility of the iterators
-
-         * **allowIteratorOptimization** : bool - Whether iterator optimization is allowed
-
-         * **canShadow** : bool - Whether shadowing is allowed, i.e. if the iterator names can shadow outer scope variables
-
-
-
-.. _handle-ast-ExprMakeLocal:
-
-.. das:attribute:: ExprMakeLocal
-
-Any make expression (`ExprMakeBlock`, `ExprMakeTuple`, `ExprMakeVariant`, `ExprMakeStruct`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
-
-         * **stackTop** : uint - Stack top offset for the data, if applicable
-
-         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
-
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
-
-
-
-.. _handle-ast-ExprMakeStruct:
-
-.. das:attribute:: ExprMakeStruct
-
-Make structure expression (`[[YourStruct v1=expr1elem1, v2=expr2elem1, ...; v1=expr1elem2, ...  ]]`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` -  Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
-
-         * **stackTop** : uint - Stack top offset for the data, if applicable
-
-         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
-
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
-
-         * **structs** : vector<MakeStruct*> - Array of structures being made
-
-         * **_block** :  :ref:`Expression <handle-ast-Expression>`? - Optional block expression to run after the struct is made
-
-         * **constructor** :  :ref:`Function <handle-ast-Function>`? - Constructor function to call, if any
-
-         * **makeStructFlags** :  :ref:`ExprMakeStructFlags <alias-ExprMakeStructFlags>` - Flags specific to make-struct expressions
-
-
-
-.. _handle-ast-ExprMakeVariant:
-
-.. das:attribute:: ExprMakeVariant
-
-Make variant expression (`[YourVariant variantName=expr1]`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
-
-         * **stackTop** : uint - Stack top offset for the data, if applicable
-
-         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
-
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
-
-         * **variants** : vector<MakeFieldDecl*> - Array of variants being made
-
-
-
-.. _handle-ast-ExprMakeArray:
-
-.. das:attribute:: ExprMakeArray
-
-Make array expression (`[[auto 1;2;3]]` or `[{auto "foo";"bar"}]` for static and dynamic arrays accordingly).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **makeType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
-
-         * **stackTop** : uint - Stack top offset for the data, if applicable
-
-         * **extraOffset** : uint - Extra offset for the data, if applicable. If part of the larger initialization, extra offset is that
-
-         * **makeFlags** :  :ref:`ExprMakeLocalFlags <alias-ExprMakeLocalFlags>` - Flags specific to make-local expressions
-
-         * **recordType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the array elements
-
-         * **values** : vector<Expression*> - Array of expressions for the elements
-
-         * **gen2** : bool - If gen2 syntax is used (i.e. `[...]` instead of `[[...]]`)
+         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type expression being queried for type information
 
 
 
@@ -3098,53 +5066,21 @@ Make tuple expression (`[[auto f1,f2,f3]]`)
 
 
 
-.. _handle-ast-ExprArrayComprehension:
+.. _handle-ast-CaptureMacro:
 
-.. das:attribute:: ExprArrayComprehension
+.. das:attribute:: CaptureMacro
 
-Array comprehension (`[for (x in 0..3); x]`, `[iterator for (y in range(100)); x*2; where (x!=13)]]` for arrays or generators accordingly).
+Adapter for the `AstCaptureMacro`.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **exprFor** :  :ref:`Expression <handle-ast-Expression>`? - The 'for' expression
-
-         * **exprWhere** :  :ref:`Expression <handle-ast-Expression>`? - The 'where' expression
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The subexpression
-
-         * **generatorSyntax** : bool - If generator syntax is used (i.e. `[iterator for ...]` instead of `[for]`)
-
-         * **tableSyntax** : bool - If table syntax is used (i.e. `{for ...}` instead of `[for]`)
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
 
 
 
-.. _handle-ast-TypeInfoMacro:
+.. _handle-ast-ExprLet:
 
-.. das:attribute:: TypeInfoMacro
+.. das:attribute:: ExprLet
 
-Compilation time only structure which holds live information about typeinfo expression for the specific macro.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the macro
-
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - The module where the macro is defined
-
-
-
-.. _handle-ast-ExprTypeInfo:
-
-.. das:attribute:: ExprTypeInfo
-
-typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
+Local variable declaration (`let v = expr;`).
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -3158,25 +5094,19 @@ typeinfo() expression (`typeinfo dim(a)`, `typeinfois_ref_type<int&>()`)
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **trait** :  :ref:`das_string <handle-builtin-das_string>` - The trait name
+         * **variables** : vector<Variable*> - List of variables being declared in this `let` expression
 
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being queried for type information
+         * **atInit** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the initializer expression in source code
 
-         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type expression being queried for type information
-
-         * **subtrait** :  :ref:`das_string <handle-builtin-das_string>` - The sub-trait name
-
-         * **extratrait** :  :ref:`das_string <handle-builtin-das_string>` - The extra trait name
-
-         * **macro** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? - The macro associated with the typeinfo expression
+         * **letFlags** :  :ref:`ExprLetFlags <alias-ExprLetFlags>` - Properties of the `ExprLet` object.
 
 
 
-.. _handle-ast-ExprTypeDecl:
+.. _handle-ast-ExprNamedCall:
 
-.. das:attribute:: ExprTypeDecl
+.. das:attribute:: ExprNamedCall
 
-typedecl() expression (`typedecl(1+2)`)
+Named call (`call([argname1=expr1, argname2=expr2])`).
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -3190,39 +5120,21 @@ typedecl() expression (`typedecl(1+2)`)
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **typeexpr** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - The type expression being queried for type information
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the named call
+
+         * **nonNamedArguments** : vector<Expression*> - Non-named arguments passed to the call
+
+         * **arguments** :  :ref:`MakeStruct <handle-ast-MakeStruct>`? - Named arguments passed to the call
+
+         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
 
 
 
-.. _handle-ast-ExprLabel:
+.. _handle-ast-ExprCallFunc:
 
-.. das:attribute:: ExprLabel
+.. das:attribute:: ExprCallFunc
 
-Label (`label 13:`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **labelName** : int - The label name
-
-         * **comment** :  :ref:`das_string <handle-builtin-das_string>` - The label comment
-
-
-
-.. _handle-ast-ExprGoto:
-
-.. das:attribute:: ExprGoto
-
-Goto expression (`goto label 13`, `goto x`)
+Actual function call (`func(expr1,...)`).
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -3236,9 +5148,17 @@ Goto expression (`goto label 13`, `goto x`)
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **labelName** : int - Label to go to, if specified
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the called function
 
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Expression evaluating to label to go to, if specified
+         * **arguments** : vector<Expression*> - Arguments passed to the function
+
+         * **argumentsFailedToInfer** : bool - Whether any arguments failed to infer their types
+
+         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+
+         * **func** :  :ref:`Function <handle-ast-Function>`? - Pointer to the function being called, if resolved
+
+         * **stackTop** : uint - Stack top at the point of call, if temporary variable allocation is needed
 
 
 
@@ -3261,269 +5181,6 @@ Compilation time only structure which holds reference to value conversion for th
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
          * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The sub-expression being converted from reference to value
-
-
-
-.. _handle-ast-ExprRef2Ptr:
-
-.. das:attribute:: ExprRef2Ptr
-
-Addr expresion (`addr(expr)`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The sub-expression being converted from pointer to reference
-
-
-
-.. _handle-ast-ExprAddr:
-
-.. das:attribute:: ExprAddr
-
-Function address (`@@foobarfunc` or `@@foobarfunc<(int;int):bool>`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **target** :  :ref:`das_string <handle-builtin-das_string>` - Name of the function being referenced
-
-         * **funcType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the function being referenced
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function being referenced (if resolved)
-
-
-
-.. _handle-ast-ExprAssert:
-
-.. das:attribute:: ExprAssert
-
-Assert expression (`assert(x<13)`, or `assert(x<13, "x is too big")`, or `verify(foo()!=0)`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the asserted expression
-
-         * **arguments** : vector<Expression*> - Arguments of the assert expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the assert is used
-
-         * **isVerify** : bool - Whether the assert is a verify expression (verify expressions have to have sideeffects, assert expressions cant)
-
-
-
-.. _handle-ast-ExprQuote:
-
-.. das:attribute:: ExprQuote
-
-Compilation time expression which holds its subexpressions but does not infer them (`quote() <| x+5`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the query expression
-
-         * **arguments** : vector<Expression*> - Arguments of the query expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the query is used
-
-
-
-.. _handle-ast-ExprStaticAssert:
-
-.. das:attribute:: ExprStaticAssert
-
-Static assert expression (`static_assert(x<13)` or `static_assert(x<13, "x is too big")`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the static_assert expression
-
-         * **arguments** : vector<Expression*> - Arguments of the static_assert expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the static_assert is used
-
-
-
-.. _handle-ast-ExprDebug:
-
-.. das:attribute:: ExprDebug
-
-Debug expression (`debug(x)` or `debug(x,"x=")`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the debug expression
-
-         * **arguments** : vector<Expression*> - Arguments of the debug expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the debug is used
-
-
-
-.. _handle-ast-ExprInvoke:
-
-.. das:attribute:: ExprInvoke
-
-.. _function-ast__dot__rq_isCopyOrMove_ExprInvoke:
-
-.. das:function:: ExprInvoke.isCopyOrMove() : bool
-
-Returns whether the given invoke expression requires a copy or move of a reference type.
-
-
-:Properties: * **isCopyOrMove** : bool
-
-Invoke expression (`invoke(fn)` or `invoke(lamb, arg1, arg2, ...)`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the invoke expression
-
-         * **arguments** : vector<Expression*> - Arguments of the invoke expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the invoke is used
-
-         * **stackTop** : uint - Stack top for invoke, if applicable
-
-         * **doesNotNeedSp** : bool - Does not need stack pointer
-
-         * **isInvokeMethod** : bool - Is invoke of class method
-
-         * **cmresAlias** : bool - If true, then CMRES aliasing is allowed for this invoke (and stack will be allocated)
-
-
-
-.. _handle-ast-ExprErase:
-
-.. das:attribute:: ExprErase
-
-Erase expression (`erase(tab,key)`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the erase expression
-
-         * **arguments** : vector<Expression*> - Arguments of the erase expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the erase is used
-
-
-
-.. _handle-ast-ExprSetInsert:
-
-.. das:attribute:: ExprSetInsert
-
-Set insert expression, i.e. ``tab |> insert(key)``.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the set-insert expression
-
-         * **arguments** : vector<Expression*> - Arguments of the set-insert expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the set-insert is used
 
 
 
@@ -3555,39 +5212,27 @@ Find expression (`find(tab,key) <| { your; block; here; }`)
 
 
 
-.. _handle-ast-ExprKeyExists:
+.. _handle-ast-EnumEntry:
 
-.. das:attribute:: ExprKeyExists
+.. das:attribute:: EnumEntry
 
-Key exists expression (`key_exists(tab,key)`)
+Entry in the enumeration.
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration entry
 
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration entry
 
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration entry in the source code
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the key-exists expression
-
-         * **arguments** : vector<Expression*> - Arguments of the key-exists expression
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the key-exists is used
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value of the enumeration entry (typicall 'ExprConst' derivative)
 
 
 
-.. _handle-ast-ExprAscend:
+.. _handle-ast-ExprLabel:
 
-.. das:attribute:: ExprAscend
+.. das:attribute:: ExprLabel
 
-New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=...]]`, but **NOT** `new Foo()`)
+Label (`label 13:`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -3601,1069 +5246,9 @@ New expression for ExprMakeLocal (`new [[Foo fld=val,...]]` or `new [[Foo() fld=
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being ascended (newed)
+         * **labelName** : int - The label name
 
-         * **ascType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type being made
-
-         * **stackTop** : uint - Location on the stack where the temp object is created, if necessary
-
-         * **ascendFlags** :  :ref:`ExprAscendFlags <alias-ExprAscendFlags>` - Flags specific to `ExprAscend` expressions
-
-
-
-.. _handle-ast-ExprCast:
-
-.. das:attribute:: ExprCast
-
-Any cast expression (`cast<int> a`, `upcast<Foo> b` or `reinterpret<Bar?> c`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression being cast
-
-         * **castType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type to which the expression is being cast
-
-         * **castFlags** :  :ref:`ExprCastFlags <alias-ExprCastFlags>` - Flags specific to `ExprCast` expressions
-
-
-
-.. _handle-ast-ExprDelete:
-
-.. das:attribute:: ExprDelete
-
-Delete expression (`delete blah`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being deleted
-
-         * **sizeexpr** :  :ref:`Expression <handle-ast-Expression>`? - The size expression for deleting classes. This one determines how big instance is to be deleted.
-
-         * **native** : bool - True if the delete is native, and not to be expanded at compilation time.
-
-
-
-.. _handle-ast-ExprVar:
-
-.. das:attribute:: ExprVar
-
-Variable access (`foo`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - The name of the variable
-
-         * **variable** :  :ref:`Variable <handle-ast-Variable>`? - The variable being accessed
-
-         * **pBlock** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - The block in which the variable is accessed (if any)
-
-         * **argumentIndex** : int - The argument index of the variable (if variable is an argument of a function or a block)
-
-         * **varFlags** :  :ref:`ExprVarFlags <alias-ExprVarFlags>` - The flags of the variable
-
-
-
-.. _handle-ast-ExprTag:
-
-.. das:attribute:: ExprTag
-
-Compilation time only tag expression, used for reification. For example $c(....).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The subexpression of the tag
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value of the tag
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the tag
-
-
-
-.. _handle-ast-ExprSwizzle:
-
-.. das:attribute:: ExprSwizzle
-
-Vector swizzle operation (`vec.xxy` or `vec.y`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Value being swizzled
-
-         * **mask** :  :ref:`das_string <handle-builtin-das_string>` - Swizzle mask
-
-         * **fields** : vector<uint8> - Swizzle fields
-
-         * **fieldFlags** :  :ref:`ExprSwizzleFieldFlags <alias-ExprSwizzleFieldFlags>` - Flags specific to `ExprSwizzle` expressions
-
-
-
-.. _handle-ast-ExprField:
-
-.. das:attribute:: ExprField
-
-.. _function-ast__dot__rq_field_ExprField:
-
-.. das:function:: ExprField.field() : FieldDeclaration?
-
-Returns a pointer to the named field of a structure, or null if the field does not exist or the type is not a structure.
-
-
-:Properties: * **field** :  :ref:`FieldDeclaration <handle-ast-FieldDeclaration>`?
-
-Field lookup (`foo.bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
-
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
-
-         * **fieldIndex** : int - Index of the field in the type's field list
-
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
-
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
-
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
-
-
-
-.. _handle-ast-ExprSafeField:
-
-.. das:attribute:: ExprSafeField
-
-Safe field lookup (`foo?.bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
-
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
-
-         * **fieldIndex** : int - Index of the field in the type's field list
-
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
-
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
-
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
-
-         * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
-
-
-
-.. _handle-ast-ExprIsVariant:
-
-.. das:attribute:: ExprIsVariant
-
-Is expression (`foo is bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
-
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
-
-         * **fieldIndex** : int - Index of the field in the type's field list
-
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
-
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
-
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
-
-
-
-.. _handle-ast-ExprAsVariant:
-
-.. das:attribute:: ExprAsVariant
-
-As expression (`foo as bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
-
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
-
-         * **fieldIndex** : int - Index of the field in the type's field list
-
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
-
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
-
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
-
-
-
-.. _handle-ast-ExprSafeAsVariant:
-
-.. das:attribute:: ExprSafeAsVariant
-
-Safe as expression (`foo? as bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Subexpression whose field is being accessed
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being accessed
-
-         * **atField** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the field access in source code
-
-         * **fieldIndex** : int - Index of the field in the type's field list
-
-         * **annotation** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> - Type annotation for the field
-
-         * **derefFlags** :  :ref:`ExprFieldDerefFlags <alias-ExprFieldDerefFlags>` - Flags for dereferencing operations
-
-         * **fieldFlags** :  :ref:`ExprFieldFieldFlags <alias-ExprFieldFieldFlags>` - Flags specific to field access expressions
-
-         * **skipQQ** : bool - If true the subexpression is already a pointer and no additional dereference is needed
-
-
-
-.. _handle-ast-ExprOp1:
-
-.. das:attribute:: ExprOp1
-
-Single operator expression (`+a` or `-a` or `!a` or `~a`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator (unused)
-
-         * **arguments** : vector<Expression*> - Arguments of the operator (unused)
-
-         * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **func** :  :ref:`Function <handle-ast-Function>`? - Function associated with the expression
-
-         * **stackTop** : uint - Stack top position if temporary variable allocation is needed
-
-         * **op** :  :ref:`das_string <handle-builtin-das_string>` - Name of the operator
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - That one argument of the operator
-
-
-
-.. _handle-ast-ExprReturn:
-
-.. das:attribute:: ExprReturn
-
-Return expression (`return` or `return foo`, or `return <- foo`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being returned (if any)
-
-         * **returnFlags** :  :ref:`ExprReturnFlags <alias-ExprReturnFlags>` - Return flags
-
-         * **stackTop** : uint - Stack top position if temporary variable allocation is needed
-
-         * **refStackTop** : uint - Reference stack top position if temporary variable allocation is needed
-
-         * **returnFunc** :  :ref:`Function <handle-ast-Function>`? - Function associated with the return expression
-
-         * **_block** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? - Block associated with the return expression
-
-
-
-.. _handle-ast-ExprYield:
-
-.. das:attribute:: ExprYield
-
-Yield expression (`yield foo` or `yield <- bar`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The expression being yielded (never empty)
-
-         * **returnFlags** :  :ref:`ExprYieldFlags <alias-ExprYieldFlags>` - Yield flags
-
-
-
-.. _handle-ast-ExprBreak:
-
-.. das:attribute:: ExprBreak
-
-Break expression (`break`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-
-
-.. _handle-ast-ExprContinue:
-
-.. das:attribute:: ExprContinue
-
-Continue expression (`continue`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-
-
-.. _handle-ast-ExprConst:
-
-.. das:attribute:: ExprConst
-
-Compilation time constant expression base class
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
-
-
-
-.. _handle-ast-ExprFakeContext:
-
-.. das:attribute:: ExprFakeContext
-
-Compilation time only fake context expression. Will simulate as current evaluation `Context`.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeContext)
-
-
-
-.. _handle-ast-ExprFakeLineInfo:
-
-.. das:attribute:: ExprFakeLineInfo
-
-.. _function-ast__dot__rq_getValue_ExprFakeLineInfo:
-
-.. das:function:: ExprFakeLineInfo.getValue() : void?
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : void?
-
-Compilation time only fake lineinfo expression. Will simulate as current file and line `LineInfo`.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::fakeLineInfo)
-
-         * **value** : void? - Pointer to the LineInfo, as void?
-
-
-
-.. _handle-ast-ExprConstPtr:
-
-.. das:attribute:: ExprConstPtr
-
-.. _function-ast__dot__rq_getValue_ExprConstPtr:
-
-.. das:function:: ExprConstPtr.getValue() : void?
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : void?
-
-Null (`null`). Technically can be any other pointer, but it is used for nullptr.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression
-
-         * **value** : void? - Pointer value. Typically this is 'null' constant, so the value is zero.
-
-
-
-.. _handle-ast-ExprConstInt8:
-
-.. das:attribute:: ExprConstInt8
-
-.. _function-ast__dot__rq_getValue_ExprConstInt8:
-
-.. das:function:: ExprConstInt8.getValue() : int8
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int8
-
-Holds int8 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt8)
-
-         * **value** : int8 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt16:
-
-.. das:attribute:: ExprConstInt16
-
-.. _function-ast__dot__rq_getValue_ExprConstInt16:
-
-.. das:function:: ExprConstInt16.getValue() : int16
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int16
-
-Holds int16 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt16)
-
-         * **value** : int16 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt64:
-
-.. das:attribute:: ExprConstInt64
-
-.. _function-ast__dot__rq_getValue_ExprConstInt64:
-
-.. das:function:: ExprConstInt64.getValue() : int64
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int64
-
-Holds int64 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt64)
-
-         * **value** : int64 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt:
-
-.. das:attribute:: ExprConstInt
-
-.. _function-ast__dot__rq_getValue_ExprConstInt:
-
-.. das:function:: ExprConstInt.getValue() : int
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int
-
-Holds int constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt)
-
-         * **value** : int - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt2:
-
-.. das:attribute:: ExprConstInt2
-
-.. _function-ast__dot__rq_getValue_ExprConstInt2:
-
-.. das:function:: ExprConstInt2.getValue() : int2
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int2
-
-Holds int2 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt2)
-
-         * **value** : int2 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt3:
-
-.. das:attribute:: ExprConstInt3
-
-.. _function-ast__dot__rq_getValue_ExprConstInt3:
-
-.. das:function:: ExprConstInt3.getValue() : int3
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int3
-
-Holds int3 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt3)
-
-         * **value** : int3 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstInt4:
-
-.. das:attribute:: ExprConstInt4
-
-.. _function-ast__dot__rq_getValue_ExprConstInt4:
-
-.. das:function:: ExprConstInt4.getValue() : int4
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : int4
-
-Holds int4 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tInt4)
-
-         * **value** : int4 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt8:
-
-.. das:attribute:: ExprConstUInt8
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt8:
-
-.. das:function:: ExprConstUInt8.getValue() : uint8
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint8
-
-Holds uint8 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt8)
-
-         * **value** : uint8 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt16:
-
-.. das:attribute:: ExprConstUInt16
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt16:
-
-.. das:function:: ExprConstUInt16.getValue() : uint16
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint16
-
-Holds uint16 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt16)
-
-         * **value** : uint16 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt64:
-
-.. das:attribute:: ExprConstUInt64
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt64:
-
-.. das:function:: ExprConstUInt64.getValue() : uint64
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint64
-
-Holds uint64 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt64)
-
-         * **value** : uint64 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt:
-
-.. das:attribute:: ExprConstUInt
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt:
-
-.. das:function:: ExprConstUInt.getValue() : uint
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint
-
-Holds uint constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt)
-
-         * **value** : uint - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt2:
-
-.. das:attribute:: ExprConstUInt2
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt2:
-
-.. das:function:: ExprConstUInt2.getValue() : uint2
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint2
-
-Holds uint2 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt2)
-
-         * **value** : uint2 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt3:
-
-.. das:attribute:: ExprConstUInt3
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt3:
-
-.. das:function:: ExprConstUInt3.getValue() : uint3
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint3
-
-Holds uint3 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt3)
-
-         * **value** : uint3 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstUInt4:
-
-.. das:attribute:: ExprConstUInt4
-
-.. _function-ast__dot__rq_getValue_ExprConstUInt4:
-
-.. das:function:: ExprConstUInt4.getValue() : uint4
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint4
-
-Holds uint4 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tUInt4)
-
-         * **value** : uint4 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstRange:
-
-.. das:attribute:: ExprConstRange
-
-.. _function-ast__dot__rq_getValue_ExprConstRange:
-
-.. das:function:: ExprConstRange.getValue() : range
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : range
-
-Holds range constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange)
-
-         * **value** : range - Value of the constant expression
+         * **comment** :  :ref:`das_string <handle-builtin-das_string>` - The label comment
 
 
 
@@ -4700,20 +5285,11 @@ Holds urange constant.
 
 
 
-.. _handle-ast-ExprConstRange64:
+.. _handle-ast-ExprRef2Ptr:
 
-.. das:attribute:: ExprConstRange64
+.. das:attribute:: ExprRef2Ptr
 
-.. _function-ast__dot__rq_getValue_ExprConstRange64:
-
-.. das:function:: ExprConstRange64.getValue() : range64
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : range64
-
-Holds range64 constant.
+Addr expresion (`addr(expr)`)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
@@ -4727,627 +5303,51 @@ Holds range64 constant.
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tRange64)
-
-         * **value** : range64 - Value of the constant expression
+         * **subexpr** :  :ref:`Expression <handle-ast-Expression>`? - The sub-expression being converted from pointer to reference
 
 
 
-.. _handle-ast-ExprConstURange64:
+.. _handle-ast-MakeFieldDecl:
 
-.. das:attribute:: ExprConstURange64
+.. das:attribute:: MakeFieldDecl
 
-.. _function-ast__dot__rq_getValue_ExprConstURange64:
-
-.. das:function:: ExprConstURange64.getValue() : urange64
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : urange64
-
-Holds urange64 constant.
+Part of `ExprMakeStruct`, declares single field (`a = expr` or `a <- expr` etc)
 
 :Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
 
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
+         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the field being assigned
 
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
+         * **value** :  :ref:`Expression <handle-ast-Expression>`? - Initializer expression for the field
 
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
+         * **tag** :  :ref:`Expression <handle-ast-Expression>`? - Tag associated with the field, if any
 
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
+         * **flags** :  :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>` - Flags specific to this field declaration
 
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tURange64)
 
-         * **value** : urange64 - Value of the constant expression
+.. _handle-ast-Enumeration:
 
+.. das:attribute:: Enumeration
 
+Enumeration declaration.
 
-.. _handle-ast-ExprConstFloat:
+:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the enumeration
 
-.. das:attribute:: ExprConstFloat
+         * **cppName** :  :ref:`das_string <handle-builtin-das_string>` - C++ name of the enumeration
 
-.. _function-ast__dot__rq_getValue_ExprConstFloat:
+         * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enumeration declaration in the source code
 
-.. das:function:: ExprConstFloat.getValue() : float
+         * **list** : vector<EnumEntry> - List of entries in the enumeration
 
-Returns the constant value stored in this expression node.
+         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module this enumeration belongs to
 
+         * **external** : bool - Whether this enumeration is external (defined on the C++ side)
 
-:Properties: * **getValue** : float
+         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Enumeration underlying type (int8, int16, int, or int64)
 
-Holds float constant.
+         * **annotations** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` - Annotations attached to this enumeration
 
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat)
-
-         * **value** : float - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstFloat2:
-
-.. das:attribute:: ExprConstFloat2
-
-.. _function-ast__dot__rq_getValue_ExprConstFloat2:
-
-.. das:function:: ExprConstFloat2.getValue() : float2
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : float2
-
-Holds float2 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat2)
-
-         * **value** : float2 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstFloat3:
-
-.. das:attribute:: ExprConstFloat3
-
-.. _function-ast__dot__rq_getValue_ExprConstFloat3:
-
-.. das:function:: ExprConstFloat3.getValue() : float3
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : float3
-
-Holds float3 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat3)
-
-         * **value** : float3 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstFloat4:
-
-.. das:attribute:: ExprConstFloat4
-
-.. _function-ast__dot__rq_getValue_ExprConstFloat4:
-
-.. das:function:: ExprConstFloat4.getValue() : float4
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : float4
-
-Holds float4 constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tFloat4)
-
-         * **value** : float4 - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstDouble:
-
-.. das:attribute:: ExprConstDouble
-
-.. _function-ast__dot__rq_getValue_ExprConstDouble:
-
-.. das:function:: ExprConstDouble.getValue() : double
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : double
-
-Holds double constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tDouble)
-
-         * **value** : double - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstBool:
-
-.. das:attribute:: ExprConstBool
-
-.. _function-ast__dot__rq_getValue_ExprConstBool:
-
-.. das:function:: ExprConstBool.getValue() : bool
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : bool
-
-Holds bool constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBool)
-
-         * **value** : bool - Value of the constant expression
-
-
-
-.. _handle-ast-CaptureEntry:
-
-.. das:attribute:: CaptureEntry
-
-Single entry in lambda capture.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the captured variable
-
-         * **mode** :  :ref:`CaptureMode <enum-ast-CaptureMode>` - How the variable is captured (by value, by reference, etc.)
-
-
-
-.. _handle-ast-ExprMakeBlock:
-
-.. das:attribute:: ExprMakeBlock
-
-Any closure. Holds block as well as capture information in `CaptureEntry`.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **_capture** : vector<CaptureEntry> - List of captured variables
-
-         * **_block** :  :ref:`Expression <handle-ast-Expression>`? - The block expression
-
-         * **stackTop** : uint - Stack top for the block
-
-         * **mmFlags** :  :ref:`ExprMakeBlockFlags <alias-ExprMakeBlockFlags>` - Expression generation flags
-
-         * **aotFunctorName** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
-
-
-
-.. _handle-ast-ExprMakeGenerator:
-
-.. das:attribute:: ExprMakeGenerator
-
-Generator closure (`generator<int>` or `generator<Foo&>`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the AOT functor (if applicable)
-
-         * **arguments** : vector<Expression*> - Arguments passed to the generator
-
-         * **argumentsFailedToInfer** : bool - Whether arguments failed to infer
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure
-
-         * **iterType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Iterator type, i.e. type of values produced by the generated iterator
-
-         * **_capture** : vector<CaptureEntry> - List of captured variables
-
-
-
-.. _handle-ast-ExprMemZero:
-
-.. das:attribute:: ExprMemZero
-
-Memzero (`memzero(expr)`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the memzero call
-
-         * **arguments** : vector<Expression*> - Arguments of the memzero call
-
-         * **argumentsFailedToInfer** : bool - Whether the arguments failed to infer types
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the enclosure where the memzero is used
-
-
-
-.. _handle-ast-ExprConstEnumeration:
-
-.. das:attribute:: ExprConstEnumeration
-
-Holds enumeration constant, both type and entry (`Foo bar`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tEnumeration, Type::tEnumeration8, Type::tEnumeration16, or Type::tEnumeration64)
-
-         * **enumType** :  :ref:`Enumeration <handle-ast-Enumeration>`? - Enumeration type declaration
-
-         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
-
-
-
-.. _handle-ast-ExprConstBitfield:
-
-.. das:attribute:: ExprConstBitfield
-
-.. _function-ast__dot__rq_getValue_ExprConstBitfield:
-
-.. das:function:: ExprConstBitfield.getValue() : uint64
-
-Returns the constant value stored in this expression node.
-
-
-:Properties: * **getValue** : uint64
-
-Holds bitfield constant (`Foo bar`).
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tBitfield, Type::tBitfield8, Type::tBitfield16, or Type::tBitfield64)
-
-         * **value** : bitfield<> - Value of the constant expression
-
-         * **bitfieldType** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type declaration of the bitfield
-
-
-
-.. _handle-ast-ExprConstString:
-
-.. das:attribute:: ExprConstString
-
-Holds string constant.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **baseType** :  :ref:`Type <enum-rtti-Type>` - Base type of the constant expression (Type::tString)
-
-         * **value** :  :ref:`das_string <handle-builtin-das_string>` - Value of the constant expression
-
-
-
-.. _handle-ast-ExprUnsafe:
-
-.. das:attribute:: ExprUnsafe
-
-Unsafe expression (`unsafe(addr(x))`)
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **body** :  :ref:`Expression <handle-ast-Expression>`? - Body expression that is marked as unsafe
-
-
-
-.. _handle-ast-VisitorAdapter:
-
-.. das:attribute:: VisitorAdapter
-
- Adapter for the `AstVisitor` interface.
-
-
-
-.. _handle-ast-FunctionAnnotation:
-
-.. das:attribute:: FunctionAnnotation
-
- Adapter for the `AstFunctionAnnotation`.
-
-
-
-.. _handle-ast-StructureAnnotation:
-
-.. das:attribute:: StructureAnnotation
-
- Adapter for the `AstStructureAnnotation`.
-
-
-
-.. _handle-ast-EnumerationAnnotation:
-
-.. das:attribute:: EnumerationAnnotation
-
-Adapter for the `AstEnumerationAnnotation`.
-
-
-
-.. _handle-ast-PassMacro:
-
-.. das:attribute:: PassMacro
-
-Adapter for the `AstPassMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-
-
-.. _handle-ast-ReaderMacro:
-
-.. das:attribute:: ReaderMacro
-
-Adapter for the `AstReaderMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
-
-
-
-.. _handle-ast-CommentReader:
-
-.. das:attribute:: CommentReader
-
- Adapter for the `AstCommentReader`.
-
-
-
-.. _handle-ast-CallMacro:
-
-.. das:attribute:: CallMacro
-
-Adapter for the `AstCallMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-         * **_module** :  :ref:`Module <handle-rtti-Module>`? - Module where the macro is defined
-
-
-
-.. _handle-ast-VariantMacro:
-
-.. das:attribute:: VariantMacro
-
-Adapter for the `AstVariantMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-
-
-.. _handle-ast-ForLoopMacro:
-
-.. das:attribute:: ForLoopMacro
-
-Adapter for the 'AstForLoopMacro'.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-
-
-.. _handle-ast-CaptureMacro:
-
-.. das:attribute:: CaptureMacro
-
-Adapter for the `AstCaptureMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-
-
-.. _handle-ast-TypeMacro:
-
-.. das:attribute:: TypeMacro
-
-Compilation time only structure which holds live information about type macro.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro
-
-
-
-.. _handle-ast-SimulateMacro:
-
-.. das:attribute:: SimulateMacro
-
-Adapter for the `AstSimulateMacro`.
-
-:Fields: * **name** :  :ref:`das_string <handle-builtin-das_string>` - Name of the macro.
-
-
-
-.. _handle-ast-ExprReader:
-
-.. das:attribute:: ExprReader
-
-Compilation time only expression which holds temporary information for the `AstReaderMacro`.
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the expression in source code
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Type of the expression
-
-         * **__rtti** : string - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Expression generation flags
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
-
-         * **macro** :  :ref:`ReaderMacro <handle-ast-ReaderMacro>`? - Macro which is attached to the context parser.
-
-         * **sequence** :  :ref:`das_string <handle-builtin-das_string>` - Sequence of characters being read.
-
-
-
-.. _handle-ast-ExprCallMacro:
-
-.. das:attribute:: ExprCallMacro
-
-:Fields: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Compilation time only expression which holds temporary information for the `AstCallMacro`.
-
-         * **_type** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? - Location of the expression in source code
-
-         * **__rtti** : string - Type of the expression
-
-         * **genFlags** :  :ref:`ExprGenFlags <alias-ExprGenFlags>` - Runtime type information of the class of the expression (i.e "ExprConstant", "ExprCall", etc)
-
-         * **flags** :  :ref:`ExprFlags <alias-ExprFlags>` - Expression generation flags
-
-         * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression flags
-
-         * **name** :  :ref:`das_string <handle-builtin-das_string>` - Expression print flags
-
-         * **arguments** : vector<Expression*> - Name of the macro being called
-
-         * **argumentsFailedToInfer** : bool - List of argument expressions
-
-         * **atEnclosure** :  :ref:`LineInfo <handle-rtti-LineInfo>` - If the arguments failed to infer their types
-
-         * **inFunction** :  :ref:`Function <handle-ast-Function>`? - Location of the expression in source code
-
-         * **macro** :  :ref:`CallMacro <handle-ast-CallMacro>`? - Call macro, if resolved
+         * **isPrivate** : bool - Is this enumeration private (not visible from outside the module)
 
 
 
@@ -5683,7 +5683,7 @@ Adapter generation
 ++++++++++++++++++
 
   *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x29a>`
-  *  :ref:`make_block_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_block_annotation (name: string; class: void?; info: StructInfo const?) : FunctionAnnotation? <function-ast_make_block_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_block_type (blk: ExprBlock?) : TypeDecl? <function-ast_make_block_type_ExprBlock_q_>`
   *  :ref:`make_call_macro (name: string; class: void?; info: StructInfo const?) : CallMacro? <function-ast_make_call_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2ec>`
@@ -5694,11 +5694,11 @@ Adapter generation
   *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2de>`
   *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\>; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_>`
   *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2b6>`
-  *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : EnumerationAnnotation? <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : ForLoopMacro? <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x324>`
   *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x28c>`
-  *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : FunctionAnnotation? <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\>; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_>`
   *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\>; blk: TypeDecl?; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__TypeDecl_q__LineInfo>`
   *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : PassMacro? <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
@@ -5710,7 +5710,7 @@ Adapter generation
   *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_>`
   *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_>`
   *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x2a8>`
-  *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : StructureAnnotation? <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\>; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__TypeDecl_q__const_ref_>`
   *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x33e>`
   *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : TypeMacro? <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
@@ -5738,7 +5738,7 @@ def make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnot
 
 .. _function-ast_make_block_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_block_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<FunctionAnnotation>
+.. das:function:: make_block_annotation(name: string; class: void?; info: StructInfo const?) : FunctionAnnotation?
 
 ----
 
@@ -5854,7 +5854,7 @@ def make_enumeration_annotation (name: string; var someClassPtr: auto) : Enumera
 
 .. _function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_enumeration_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<EnumerationAnnotation>
+.. das:function:: make_enumeration_annotation(name: string; class: void?; info: StructInfo const?) : EnumerationAnnotation?
 
 ----
 
@@ -5897,7 +5897,7 @@ def make_function_annotation (name: string; var someClassPtr: auto) : FunctionAn
 
 .. _function-ast_make_function_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_function_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<FunctionAnnotation>
+.. das:function:: make_function_annotation(name: string; class: void?; info: StructInfo const?) : FunctionAnnotation?
 
 ----
 
@@ -6028,7 +6028,7 @@ def make_structure_annotation (name: string; var someClassPtr: auto) : Structure
 
 .. _function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_structure_annotation(name: string; class: void?; info: StructInfo const?) : smart_ptr<StructureAnnotation>
+.. das:function:: make_structure_annotation(name: string; class: void?; info: StructInfo const?) : StructureAnnotation?
 
 ----
 
@@ -6142,17 +6142,17 @@ def make_visitor (someClass: auto; blk: block<(var adapter:VisitorAdapter?):void
 Adapter application
 +++++++++++++++++++
 
-  *  :ref:`add_block_annotation (block: ExprBlock?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
-  *  :ref:`add_block_annotation (block: ExprBlock?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_block_annotation (block: ExprBlock?; annotation: FunctionAnnotation?&) <function-ast_add_block_annotation_ExprBlock_q__FunctionAnnotation_q__ref_>`
+  *  :ref:`add_block_annotation (block: ExprBlock?; annotation: AnnotationDeclaration?&) <function-ast_add_block_annotation_ExprBlock_q__AnnotationDeclaration_q__ref_>`
   *  :ref:`add_call_macro (module: Module?; annotation: CallMacro?) <function-ast_add_call_macro_Module_q__CallMacro_q_>`
   *  :ref:`add_capture_macro (module: Module?; annotation: CaptureMacro?) <function-ast_add_capture_macro_Module_q__CaptureMacro_q_>`
   *  :ref:`add_comment_reader (module: Module?; reader: CommentReader?) <function-ast_add_comment_reader_Module_q__CommentReader_q_>`
   *  :ref:`add_dirty_infer_macro (module: Module?; annotation: PassMacro?) <function-ast_add_dirty_infer_macro_Module_q__PassMacro_q_>`
-  *  :ref:`add_enumeration_annotation (module: Module?; annotation: smart_ptr\<EnumerationAnnotation\>&) <function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_>`
+  *  :ref:`add_enumeration_annotation (module: Module?; annotation: EnumerationAnnotation?&) <function-ast_add_enumeration_annotation_Module_q__EnumerationAnnotation_q__ref_>`
   *  :ref:`add_for_loop_macro (module: Module?; annotation: ForLoopMacro?) <function-ast_add_for_loop_macro_Module_q__ForLoopMacro_q_>`
-  *  :ref:`add_function_annotation (function: Function?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_Function_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
-  *  :ref:`add_function_annotation (module: Module?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_Module_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
-  *  :ref:`add_function_annotation (function: Function?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_function_annotation_Function_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_function_annotation (function: Function?; annotation: FunctionAnnotation?&) <function-ast_add_function_annotation_Function_q__FunctionAnnotation_q__ref_>`
+  *  :ref:`add_function_annotation (module: Module?; annotation: FunctionAnnotation?&) <function-ast_add_function_annotation_Module_q__FunctionAnnotation_q__ref_>`
+  *  :ref:`add_function_annotation (function: Function?; annotation: AnnotationDeclaration?&) <function-ast_add_function_annotation_Function_q__AnnotationDeclaration_q__ref_>`
   *  :ref:`add_global_lint_macro (module: Module?; annotation: PassMacro?) <function-ast_add_global_lint_macro_Module_q__PassMacro_q_>`
   *  :ref:`add_infer_macro (module: Module?; annotation: PassMacro?) <function-ast_add_infer_macro_Module_q__PassMacro_q_>`
   *  :ref:`add_lint_macro (module: Module?; annotation: PassMacro?) <function-ast_add_lint_macro_Module_q__PassMacro_q_>`
@@ -6179,9 +6179,9 @@ Adapter application
   *  :ref:`add_optimization_macro (module: Module?; annotation: PassMacro?) <function-ast_add_optimization_macro_Module_q__PassMacro_q_>`
   *  :ref:`add_reader_macro (module: Module?; annotation: ReaderMacro?) <function-ast_add_reader_macro_Module_q__ReaderMacro_q_>`
   *  :ref:`add_simulate_macro (module: Module?; annotation: SimulateMacro?) <function-ast_add_simulate_macro_Module_q__SimulateMacro_q_>`
-  *  :ref:`add_structure_annotation (structure: Structure?; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_StructureAnnotation_gr__ref_>`
-  *  :ref:`add_structure_annotation (module: Module?; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_Module_q__smart_ptr_ls_StructureAnnotation_gr__ref_>`
-  *  :ref:`add_structure_annotation (structure: Structure?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
+  *  :ref:`add_structure_annotation (structure: Structure?; annotation: StructureAnnotation?&) <function-ast_add_structure_annotation_Structure_q__StructureAnnotation_q__ref_>`
+  *  :ref:`add_structure_annotation (module: Module?; annotation: StructureAnnotation?&) <function-ast_add_structure_annotation_Module_q__StructureAnnotation_q__ref_>`
+  *  :ref:`add_structure_annotation (structure: Structure?; annotation: AnnotationDeclaration?&) <function-ast_add_structure_annotation_Structure_q__AnnotationDeclaration_q__ref_>`
   *  :ref:`add_type_macro (module: Module?; annotation: TypeMacro?) <function-ast_add_type_macro_Module_q__TypeMacro_q_>`
   *  :ref:`add_typeinfo_macro (module: Module?; annotation: TypeInfoMacro?) <function-ast_add_typeinfo_macro_Module_q__TypeInfoMacro_q_>`
   *  :ref:`add_variant_macro (module: Module?; annotation: VariantMacro?) <function-ast_add_variant_macro_Module_q__VariantMacro_q_>`
@@ -6190,20 +6190,20 @@ Adapter application
 add_block_annotation
 ^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_FunctionAnnotation_gr__ref_:
+.. _function-ast_add_block_annotation_ExprBlock_q__FunctionAnnotation_q__ref_:
 
-.. das:function:: add_block_annotation(block: ExprBlock?; annotation: smart_ptr<FunctionAnnotation>&)
+.. das:function:: add_block_annotation(block: ExprBlock?; annotation: FunctionAnnotation?&)
 
-Adds an annotation declaration to a block.
+Attaches a function annotation to an expression block.
 
 
 :Arguments: * **block** :  :ref:`ExprBlock <handle-ast-ExprBlock>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>\ & implicit
+            * **annotation** :  :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`?\ & implicit
 
-.. _function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
+.. _function-ast_add_block_annotation_ExprBlock_q__AnnotationDeclaration_q__ref_:
 
-.. das:function:: add_block_annotation(block: ExprBlock?; annotation: smart_ptr<AnnotationDeclaration>&)
+.. das:function:: add_block_annotation(block: ExprBlock?; annotation: AnnotationDeclaration?&)
 
 ----
 
@@ -6251,16 +6251,16 @@ Adds an AstPassMacro adapter to the dirty inference pass.
 
             * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
-.. _function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_:
+.. _function-ast_add_enumeration_annotation_Module_q__EnumerationAnnotation_q__ref_:
 
-.. das:function:: add_enumeration_annotation(module: Module?; annotation: smart_ptr<EnumerationAnnotation>&)
+.. das:function:: add_enumeration_annotation(module: Module?; annotation: EnumerationAnnotation?&)
 
-Adds an annotation to an enumeration and calls apply if applicable.
+Registers an enumeration annotation with the given module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>`>\ & implicit
+            * **annotation** :  :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>`?\ & implicit
 
 .. _function-ast_add_for_loop_macro_Module_q__ForLoopMacro_q_:
 
@@ -6277,23 +6277,24 @@ Adds an AstForLoopMacro to the specified module.
 add_function_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_function_annotation_Function_q__smart_ptr_ls_FunctionAnnotation_gr__ref_:
+.. _function-ast_add_function_annotation_Function_q__FunctionAnnotation_q__ref_:
 
-.. das:function:: add_function_annotation(function: Function?; annotation: smart_ptr<FunctionAnnotation>&)
+.. das:function:: add_function_annotation(function: Function?; annotation: FunctionAnnotation?&)
 
-Attaches a function annotation to the specified function. The annotation is moved from the provided smart pointer.
+Attaches a function annotation to a function and calls the annotation's ``apply`` method.
+
 
 :Arguments: * **function** :  :ref:`Function <handle-ast-Function>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`>\ & implicit
+            * **annotation** :  :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>`?\ & implicit
 
-.. _function-ast_add_function_annotation_Module_q__smart_ptr_ls_FunctionAnnotation_gr__ref_:
+.. _function-ast_add_function_annotation_Module_q__FunctionAnnotation_q__ref_:
 
-.. das:function:: add_function_annotation(module: Module?; annotation: smart_ptr<FunctionAnnotation>&)
+.. das:function:: add_function_annotation(module: Module?; annotation: FunctionAnnotation?&)
 
-.. _function-ast_add_function_annotation_Function_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
+.. _function-ast_add_function_annotation_Function_q__AnnotationDeclaration_q__ref_:
 
-.. das:function:: add_function_annotation(function: Function?; annotation: smart_ptr<AnnotationDeclaration>&)
+.. das:function:: add_function_annotation(function: Function?; annotation: AnnotationDeclaration?&)
 
 ----
 
@@ -6570,23 +6571,24 @@ Adds an AstSimulateMacro adapter to the specified module.
 add_structure_annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. _function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_StructureAnnotation_gr__ref_:
+.. _function-ast_add_structure_annotation_Structure_q__StructureAnnotation_q__ref_:
 
-.. das:function:: add_structure_annotation(structure: Structure?; annotation: smart_ptr<StructureAnnotation>&)
+.. das:function:: add_structure_annotation(structure: Structure?; annotation: StructureAnnotation?&)
 
-Attaches a structure annotation to the specified structure. The annotation is moved from the provided smart pointer.
+Attaches a structure annotation to a structure and calls the annotation's ``touch`` method.
+
 
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`>\ & implicit
+            * **annotation** :  :ref:`StructureAnnotation <handle-ast-StructureAnnotation>`?\ & implicit
 
-.. _function-ast_add_structure_annotation_Module_q__smart_ptr_ls_StructureAnnotation_gr__ref_:
+.. _function-ast_add_structure_annotation_Module_q__StructureAnnotation_q__ref_:
 
-.. das:function:: add_structure_annotation(module: Module?; annotation: smart_ptr<StructureAnnotation>&)
+.. das:function:: add_structure_annotation(module: Module?; annotation: StructureAnnotation?&)
 
-.. _function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_:
+.. _function-ast_add_structure_annotation_Structure_q__AnnotationDeclaration_q__ref_:
 
-.. das:function:: add_structure_annotation(structure: Structure?; annotation: smart_ptr<AnnotationDeclaration>&)
+.. das:function:: add_structure_annotation(structure: Structure?; annotation: AnnotationDeclaration?&)
 
 ----
 
@@ -7557,7 +7559,7 @@ Size and offset
 
   *  :ref:`any_array_size (array: void?) : int <function-ast_any_array_size_void_q_>`
   *  :ref:`any_table_size (table: void?) : int <function-ast_any_table_size_void_q_>`
-  *  :ref:`get_handled_type_field_offset (type: smart_ptr\<TypeAnnotation\>; field: string) : uint <function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__string>`
+  *  :ref:`get_handled_type_field_offset (type: TypeAnnotation?; field: string) : uint <function-ast_get_handled_type_field_offset_TypeAnnotation_q__string>`
   *  :ref:`get_tuple_field_offset (typle: TypeDecl?; index: int) : int <function-ast_get_tuple_field_offset_TypeDecl_q__int>`
   *  :ref:`get_variant_field_offset (variant: TypeDecl?; index: int) : int <function-ast_get_variant_field_offset_TypeDecl_q__int>`
 
@@ -7579,14 +7581,14 @@ Returns the size of a table from a pointer to a `table<>` object.
 
 :Arguments: * **table** : void? implicit
 
-.. _function-ast_get_handled_type_field_offset_smart_ptr_ls_TypeAnnotation_gr__string:
+.. _function-ast_get_handled_type_field_offset_TypeAnnotation_q__string:
 
-.. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation>; field: string) : uint
+.. das:function:: get_handled_type_field_offset(type: TypeAnnotation?; field: string) : uint
 
-Returns the byte offset of a field in a ManagedStructure handled type.
+Returns the byte offset of a field within a handled (C++-bound) type annotation.
 
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
+:Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
             * **field** : string implicit
 
@@ -7811,8 +7813,8 @@ Properties
   *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation?; stg: StringBuilderWriter?; call: ExprCallFunc?) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__StringBuilderWriter_q__ExprCallFunc_q_>`
   *  :ref:`get_function_aot_hash (fun: Function const?) : uint64 <function-ast_get_function_aot_hash_Function_const_q_>`
   *  :ref:`get_function_hash_by_id (fun: Function?; id: int; pctx: void?) : uint64 <function-ast_get_function_hash_by_id_Function_q__int_void_q_>`
-  *  :ref:`get_handled_type_field_type (type: smart_ptr\<TypeAnnotation\>; field: string) : TypeInfo? <function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__string>`
-  *  :ref:`get_handled_type_field_type_declaration (type: smart_ptr\<TypeAnnotation\>; field: string; isConst: bool) : TypeDecl? <function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__string_bool>`
+  *  :ref:`get_handled_type_field_type (type: TypeAnnotation?; field: string) : TypeInfo? <function-ast_get_handled_type_field_type_TypeAnnotation_q__string>`
+  *  :ref:`get_handled_type_field_type_declaration (type: TypeAnnotation?; field: string; isConst: bool) : TypeDecl? <function-ast_get_handled_type_field_type_declaration_TypeAnnotation_q__string_bool>`
   *  :ref:`get_handled_type_index_type_declaration (type: TypeAnnotation?; src: Expression?; idx: Expression?) : TypeDecl? <function-ast_get_handled_type_index_type_declaration_TypeAnnotation_q__Expression_q__Expression_q_>`
   *  :ref:`get_struct_aot_prefix (ann: StructureAnnotation?; structure: Structure?; args: AnnotationArgumentList; stg: StringBuilderWriter?) <function-ast_get_struct_aot_prefix_StructureAnnotation_q__Structure_q__AnnotationArgumentList_StringBuilderWriter_q_>`
   *  :ref:`get_structure_alias (structure: Structure?; aliasName: string) : TypeDecl? <function-ast_get_structure_alias_Structure_q__string>`
@@ -7959,25 +7961,25 @@ Returns the hash of a function given its unique identifier.
 
             * **pctx** : void? implicit
 
-.. _function-ast_get_handled_type_field_type_smart_ptr_ls_TypeAnnotation_gr__string:
+.. _function-ast_get_handled_type_field_type_TypeAnnotation_q__string:
 
-.. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation>; field: string) : TypeInfo?
+.. das:function:: get_handled_type_field_type(type: TypeAnnotation?; field: string) : TypeInfo?
 
-Returns the type of a field in a ManagedStructure handled type.
+Returns the runtime type information for a field within a handled (C++-bound) type annotation.
 
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
+:Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
             * **field** : string implicit
 
-.. _function-ast_get_handled_type_field_type_declaration_smart_ptr_ls_TypeAnnotation_gr__string_bool:
+.. _function-ast_get_handled_type_field_type_declaration_TypeAnnotation_q__string_bool:
 
-.. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation>; field: string; isConst: bool) : TypeDecl?
+.. das:function:: get_handled_type_field_type_declaration(type: TypeAnnotation?; field: string; isConst: bool) : TypeDecl?
 
-Returns the type declaration of a field in a ManagedStructure handled type.
+Returns the type declaration for a field within a handled (C++-bound) type annotation, optionally as const.
 
 
-:Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`> implicit
+:Arguments: * **type** :  :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>`? implicit
 
             * **field** : string implicit
 
@@ -8178,14 +8180,14 @@ Updates the alias map for the specified type during inference.
 Module queries
 ++++++++++++++
 
-  *  :ref:`module_find_annotation (module: Module const?; name: string) : smart_ptr\<Annotation\> <function-ast_module_find_annotation_Module_const_q__string>`
+  *  :ref:`module_find_annotation (module: Module const?; name: string) : Annotation? <function-ast_module_find_annotation_Module_const_q__string>`
   *  :ref:`module_find_structure (program: Module const?; name: string) : Structure? <function-ast_module_find_structure_Module_const_q__string>`
   *  :ref:`module_find_type_annotation (module: Module const?; name: string) : TypeAnnotation? <function-ast_module_find_type_annotation_Module_const_q__string>`
   *  :ref:`not_inferred (function: Function?) <function-ast_not_inferred_Function_q_>`
 
 .. _function-ast_module_find_annotation_Module_const_q__string:
 
-.. das:function:: module_find_annotation(module: Module const?; name: string) : smart_ptr<Annotation>
+.. das:function:: module_find_annotation(module: Module const?; name: string) : Annotation?
 
 Finds an annotation by name in the specified module.
 

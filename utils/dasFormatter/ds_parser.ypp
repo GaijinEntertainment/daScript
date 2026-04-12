@@ -150,7 +150,7 @@
 %destructor { delete $$; } <pExpression>
 %destructor { delete $$; } <aa>
 %destructor { delete $$; } <aaList>
-%destructor { delete $$; } <fa>
+%destructor { /* gc owns AnnotationDeclaration */ } <fa>
 %destructor { delete $$; } <faList>
 %destructor { /* gc owns MakeStruct */ } <pMakeStruct>
 %destructor { /* $$->delRef(); // if enum rule returns, module already has the link */ } <pEnum>
@@ -1114,7 +1114,7 @@ annotation_declaration
         $$ = $ann;
     }
     |   '!'[nott] annotation_declaration[ann] {
-        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
                 CompilationError::invalid_annotation); }
         $$ = new AnnotationDeclaration();
@@ -1122,10 +1122,10 @@ annotation_declaration
         $$->annotation = newLogicAnnotation(LogicAnnotationOp::Not,$ann,nullptr);
     }
     |   annotation_declaration[ann] ANDAND[andd] annotation_declaration[ann2] {
-        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
                 CompilationError::invalid_annotation); }
-        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
                 CompilationError::invalid_annotation); }
         $$ = new AnnotationDeclaration();
@@ -1133,10 +1133,10 @@ annotation_declaration
         $$->annotation = newLogicAnnotation(LogicAnnotationOp::And,$ann,$ann2);
     }
     |   annotation_declaration[ann] OROR[andd] annotation_declaration[ann2] {
-        if ( !$ann->annotation || !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+        if ( !$ann->annotation || !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
                 CompilationError::invalid_annotation); }
-        if ( !$ann2->annotation || !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+        if ( !$ann2->annotation || !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
                 CompilationError::invalid_annotation); }
         $$ = new AnnotationDeclaration();
@@ -1144,10 +1144,10 @@ annotation_declaration
         $$->annotation = newLogicAnnotation(LogicAnnotationOp::Or,$ann,$ann2);
     }
     |   annotation_declaration[ann] XORXOR[andd] annotation_declaration[ann2] {
-        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
                 CompilationError::invalid_annotation); }
-        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
                 CompilationError::invalid_annotation); }
         $$ = new AnnotationDeclaration();
