@@ -313,8 +313,8 @@ namespace das {
         addEnumeration(new EnumerationSideEffects());
         addEnumeration(new EnumerationCaptureMode());
         // THE MAGNIFICENT TWO
-        addTypeInfoMacro(make_smart<AstTypeDeclMacro>());
-        addTypeInfoMacro(make_smart<AstFunctionMacro>());
+        addTypeInfoMacro(new AstTypeDeclMacro());
+        addTypeInfoMacro(new AstFunctionMacro());
     }
 
     void Module_Ast::registerMacroExpressions(ModuleLibrary & lib){

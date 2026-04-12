@@ -493,7 +493,7 @@ namespace das {
 
     void AstSerializer::findExternal ( TypeInfoMacro * & ptr ) {
         auto [mod, mangledName] = readModuleAndName();
-        ptr = mod->findTypeInfoMacro(mangledName).get();
+        ptr = mod->findTypeInfoMacro(mangledName);
         SERIALIZER_VERIFYF(ptr!=nullptr, "variable '%s' is not found", mangledName.c_str());
     }
 

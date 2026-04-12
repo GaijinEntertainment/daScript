@@ -442,25 +442,25 @@ namespace das {
 
     void for_each_variant_macro ( Module * mod, const TBlock<void,VariantMacroPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->variantMacros ) {
-            das_invoke<void>::invoke<VariantMacroPtr>(context,at,block,td);
+            das_invoke<void>::invoke<VariantMacroPtr>(context,at,block,td.get());
         }
     }
 
     void for_each_for_loop_macro ( Module * mod, const TBlock<void,ForLoopMacroPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->forLoopMacros ) {
-            das_invoke<void>::invoke<ForLoopMacroPtr>(context,at,block,td);
+            das_invoke<void>::invoke<ForLoopMacroPtr>(context,at,block,td.get());
         }
     }
 
     void for_each_typeinfo_macro ( Module * mod, const TBlock<void,TypeInfoMacroPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->typeInfoMacros ) {
-            das_invoke<void>::invoke<TypeInfoMacroPtr>(context,at,block,td.second);
+            das_invoke<void>::invoke<TypeInfoMacroPtr>(context,at,block,td.second.get());
         }
     }
 
     void for_each_typemacro ( Module * mod, const TBlock<void,TypeMacroPtr> & block, Context * context, LineInfoArg * at ) {
         for ( auto & td : mod->typeMacros ) {
-            das_invoke<void>::invoke<TypeMacroPtr>(context,at,block,td.second);
+            das_invoke<void>::invoke<TypeMacroPtr>(context,at,block,td.second.get());
         }
     }
 

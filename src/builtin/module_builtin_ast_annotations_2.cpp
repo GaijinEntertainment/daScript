@@ -218,9 +218,9 @@ namespace das {
         }
     };
 
-    struct AstTypeInfoMacroAnnotation : ManagedStructureAnnotation<TypeInfoMacro,false,true> {
+    struct AstTypeInfoMacroAnnotation : ManagedStructureAnnotation<TypeInfoMacro,false,false> {
         AstTypeInfoMacroAnnotation(ModuleLibrary & ml)
-            :  ManagedStructureAnnotation<TypeInfoMacro,false,true> ("TypeInfoMacro", ml) {
+            :  ManagedStructureAnnotation<TypeInfoMacro,false,false> ("TypeInfoMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }

@@ -732,7 +732,7 @@ expr_reader
             das2_yyerror(scanner,"expecting ~ after the reader macro", tokAt(scanner,@mark),
                 CompilationError::syntax_error);
         } else {
-            yyextra->g_ReaderMacro = macros.back().get();
+            yyextra->g_ReaderMacro = macros.back();
             yyextra->g_ReaderExpr = new ExprReader(tokAt(scanner,@loc),yyextra->g_ReaderMacro);
             yyclearin ;
             das2_yybegin_reader(scanner);
