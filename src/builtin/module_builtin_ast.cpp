@@ -65,6 +65,42 @@ namespace das {
         return module->addTypeFunction(kwd, true);
     }
 
+    bool isCppKeyword ( const char * str ) {
+        static das_hash_set<string> cpp_kw = {
+            "alignas","alignof","and","and_eq","asm","atomic_cancel","atomic_commit","atomic_noexcept","auto"
+            ,"bitand","bitor","bool","break","case","catch","char","char8_t","char16_t","char32_t","class"
+            ,"compl","concept","const","consteval","constexpr","constinit","const_cast","continue","co_await"
+            ,"co_return","co_yield","decltype","default","delete","do","double","dynamic_cast","else","enum"
+            ,"explicit","export","extern","false","float","for","friend","goto","if","inline","int","long"
+            ,"mutable","namespace","new","noexcept","not","not_eq","nullptr","operator","or","or_eq","private"
+            ,"protected","public","reflexpr","register","reinterpret_cast","requires","return","short","signed"
+            ,"sizeof","static","static_assert","static_cast","struct","switch","synchronized","template","this"
+            ,"thread_local","throw","true","try","typedef","typeid","typename","union","unsigned","using"
+            ,"virtual","void","volatile","wchar_t","while","xor","xor_eq"
+            ,"override","final","import","module","transaction_safe","transaction_safe_dynamic","super"
+        };
+        if ( !str ) return false;
+        return cpp_kw.find(str) != cpp_kw.end();
+    }
+
+    bool isDasKeyword ( const char * str ) {
+        static das_hash_set<string> das_kw = {
+            "include","capture","for","while","if","static_if","elif","static_elif","else","finally"
+            ,"def","with","aka","assume","let","var","uninitialized","struct","class","enum","try"
+            ,"recover","typedef","typedecl","label","goto","module","public","options","operator"
+            ,"require","block","function","lambda","generator","tuple","variant","const","continue"
+            ,"where","cast","upcast","pass","reinterpret","override","sealed","template","abstract"
+            ,"expect","table","array","fixed_array","default","iterator","in","implicit","explicit"
+            ,"shared","private","smart_ptr","unsafe","inscope","static","as","is","deref","addr"
+            ,"null","return","yield","break","typeinfo","type","new","delete","true","false","auto"
+            ,"bool","void","string","range64","urange64","range","urange","int","int8","int16","int64"
+            ,"int2","int3","int4","uint","bitfield","uint8","uint16","uint64","uint2","uint3","uint4"
+            ,"double","float","float2","float3","float4"
+        };
+        if ( !str ) return false;
+        return das_kw.find(str) != das_kw.end();
+    }
+
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
         vec4f args[1];
@@ -1532,6 +1568,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(findCompilingFunctionByMangledNameHash)>(*this, lib,  "find_compiling_function_by_mangled_name_hash",
             SideEffects::accessExternal, "findCompilingFunctionByMangledNameHash")
                 ->args({"moduleName","mangledNameHash","context","at"});
+        addExtern<DAS_BIND_FUN(isCppKeyword)>(*this, lib, "is_cpp_keyword",
+            SideEffects::none, "isCppKeyword")
+                ->args({"str"});
+        addExtern<DAS_BIND_FUN(isDasKeyword)>(*this, lib, "is_das_keyword",
+            SideEffects::none, "isDasKeyword")
+                ->args({"str"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
