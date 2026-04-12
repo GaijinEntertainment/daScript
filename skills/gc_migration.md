@@ -16,10 +16,15 @@ The following AST types changed from `smart_ptr<T>` (reference-counted) to `gc_n
 | `Variable` | `smart_ptr<Variable>` | `Variable*` | `Variable?` (alias `VariablePtr`) |
 | `MakeFieldDecl` | `smart_ptr<MakeFieldDecl>` | `MakeFieldDecl*` | `MakeFieldDecl?` (alias `MakeFieldDeclPtr`) |
 | `MakeStruct` | `smart_ptr<MakeStruct>` | `MakeStruct*` | — |
+| `Annotation` (all subclasses) | `smart_ptr<Annotation>` | `Annotation*` | `Annotation?` (alias `AnnotationPtr`) |
+| `AnnotationDeclaration` | `smart_ptr<AnnotationDeclaration>` | `AnnotationDeclaration*` | `AnnotationDeclaration?` (alias `AnnotationDeclarationPtr`) |
+| `FunctionAnnotation` | `smart_ptr<FunctionAnnotation>` | `FunctionAnnotation*` | `FunctionAnnotation?` (alias `FunctionAnnotationPtr`) |
+| `StructureAnnotation` | `smart_ptr<StructureAnnotation>` | `StructureAnnotation*` | `StructureAnnotation?` (alias `StructureAnnotationPtr`) |
+| `EnumerationAnnotation` | `smart_ptr<EnumerationAnnotation>` | `EnumerationAnnotation*` | `EnumerationAnnotation?` (alias `EnumerationAnnotationPtr`) |
+| `TypeAnnotation` | `smart_ptr<TypeAnnotation>` | `TypeAnnotation*` | `TypeAnnotation?` (alias `TypeAnnotationPtr`) |
 
 **NOT migrated** (still smart_ptr):
 - `ProgramPtr = smart_ptr<Program>`
-- `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`
 - `VisitorAdapterPtr` (from `make_visitor`)
 - `smart_ptr<Context>`
 
@@ -42,8 +47,13 @@ This is the main section for migrating user/module `.das` code.
 | `var inscope x <- typeinfo ast_typedecl(type<T>)` | `var x = typeinfo ast_typedecl(type<T>)` | |
 | `var inscope x : array<ExpressionPtr>` | `var x : array<ExpressionPtr>` | No `inscope` for arrays of gc types |
 | `var inscope x : array<VariablePtr>` | `var x : array<VariablePtr>` | |
+| `var inscope ann <- make_function_annotation(...)` | `var ann = make_function_annotation(...)` | Returns raw pointer now |
+| `var inscope ann <- make_structure_annotation(...)` | `var ann = make_structure_annotation(...)` | |
+| `var inscope ann <- make_block_annotation(...)` | `var ann = make_block_annotation(...)` | |
+| `var inscope ann <- make_enumeration_annotation(...)` | `var ann = make_enumeration_annotation(...)` | |
+| `var inscope decl <- new AnnotationDeclaration(...)` | `var decl = new AnnotationDeclaration(...)` | |
 
-**Rule of thumb:** If the type is a gc_node pointer (`ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`) or an array/table of one, remove `inscope` and change `<-` to `=`. Exception: `clone_function` and `qmacro_function` still use `<-` because they return via move semantics on the daScript side.
+**Rule of thumb:** If the type is a gc_node pointer (`ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`, `AnnotationDeclarationPtr`, `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`) or an array/table of one, remove `inscope` and change `<-` to `=`. Exception: `clone_function` and `qmacro_function` still use `<-` because they return via move semantics on the daScript side.
 
 **Still needs `var inscope <-`:** `make_visitor(...)` returns `smart_ptr<VisitorAdapter>` — keep `var inscope adapter <- make_visitor(*v)`.
 
@@ -56,6 +66,8 @@ This is the main section for migrating user/module `.das` code.
 | `return <- qmacro(...)` | `return qmacro(...)` |
 | `return <- new ExprConstInt(...)` | `return new ExprConstInt(...)` |
 | `return <- fun` (in visitor `visitFunction`) | `return <- fun` — **keep** (visitor returns use move) |
+| `return <- make_function_annotation(...)` | `return make_function_annotation(...)` | |
+| `return <- FunctionAnnotationPtr()` | `return null` | |
 
 **Rule:** Remove `<-` from `return` when returning gc_node pointers. Exception: visitor `visitFunction`/`visitExprXxx` methods that return the node back — these still use `return <- fun` because the visitor adapter binding expects move semantics.
 
@@ -161,6 +173,19 @@ TypeDecl's `enumType` field changed from `Enumeration*` (already raw) to... it's
 |---|---|
 | `enumType = enu.get_ptr()` | `enumType = enu` |
 
+### Annotation pointer assignment in .das
+
+| Before | After |
+|---|---|
+| `decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)` | `unsafe { decl.annotation = reinterpret<Annotation?>(ann); }` |
+| `decl.annotation := reinterpret<smart_ptr<Annotation>> ann` | `decl.annotation = reinterpret<Annotation?>(ann)` |
+| `var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> ptr)` | `var ann = unsafe(reinterpret<TypeAnnotation?> ptr)` |
+| `typedef FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>` | `typedef FunctionAnnotationPtr = FunctionAnnotation?` |
+| `typedef AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>` | `typedef AnnotationDeclarationPtr = AnnotationDeclaration?` |
+| `foo : smart_ptr<Annotation>` (parameter) | `foo : Annotation?` |
+
+**Duplicate overload removal:** When `smart_ptr<Annotation>` and `Annotation?` become the same type, overloads accepting both are duplicates. Remove the `smart_ptr` variant (e.g., `operator is FunctionAnnotation(foo : smart_ptr<Annotation>)`).
+
 ### build_string pipe syntax
 
 Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var w) { ... }` (dropping the `<|`). Both work, but the codebase standardized on the shorter form.
@@ -178,6 +203,8 @@ Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var 
 | `make_smart<Enumeration>(name)` | `new Enumeration(name)` |
 | `make_smart<Variable>()` | `new Variable()` |
 | `make_smart<MakeFieldDecl>(...)` | `new MakeFieldDecl(...)` |
+| `make_smart<XxxAnnotation>(...)` | `new XxxAnnotation(...)` | Any Annotation subclass |
+| `make_smart<AnnotationDeclaration>()` | `new AnnotationDeclaration()` |
 
 ### Smart pointer operations
 
@@ -198,6 +225,10 @@ Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var 
 | `const TypeDeclPtr &` (param) | `TypeDeclPtr` (by value — it's a pointer) |
 | `smart_ptr<Expression> &` | `ExpressionPtr &` or `Expression * &` |
 | `smart_ptr_raw<TypeDecl>` | `TypeDecl *` (remove `.marshal()` calls) |
+| `const AnnotationPtr &` (param) | `AnnotationPtr` (by value — it's a pointer) |
+| `smart_ptr_raw<AnnotationDeclaration>` | `AnnotationDeclarationPtr` (raw pointer) |
+| `smart_ptr_raw<TypeAnnotation>` | `TypeAnnotationPtr` (raw pointer) |
+| `static_pointer_cast<FunctionAnnotation>(x)` | `static_cast<FunctionAnnotation*>(x)` |
 
 ### Containers
 
@@ -206,6 +237,7 @@ Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var 
 | `safebox<TypeDecl>` | `safebox<TypeDecl, TypeDeclPtr>` |
 | `safebox<Structure>` | `safebox<Structure, StructurePtr>` |
 | `safebox<Enumeration>` | `safebox<Enumeration, EnumerationPtr>` |
+| `safebox<Annotation>` | `das_hash_map<uint64_t, Annotation*>` — no safebox, plain hash map for lookup |
 
 ### Parser (.ypp files)
 
@@ -213,6 +245,17 @@ Some code changed `build_string() <| $(var w) { ... }` to `build_string() $(var 
 2. Change `%destructor` for migrated types to no-ops: `{ /* gc owns T */ }`
 3. Remove explicit `delete` of gc_node types in error recovery paths
 4. Edit only `.ypp` files — CMake regenerates `.cpp` via bison
+
+### Annotation gc_collect overrides
+
+`Annotation` (via `BasicAnnotation`) is a gc_node. The base `Annotation::gc_collect` does `gc_assign(target)` to move itself to the module root. **Any subclass that overrides `gc_collect` MUST call `Annotation::gc_collect(target, from)` first**, otherwise the annotation stays on the thread root and gets swept during `Module::Initialize`. This applies to:
+
+- `BasicStructureAnnotation::gc_collect` — walks field TypeDecl children
+- `ManagedVectorAnnotation::gc_collect` — walks `vecType`
+- `ManagedValueAnnotation::gc_collect` — walks `valueType`
+- Any custom TypeAnnotation subclass with TypeDecl or gc_node fields
+
+Similarly, any AST node that stores an `AnnotationPtr` or `TypeAnnotationPtr` field must walk it in `gc_collect`. Example: `ExprField::annotation`, `TypeDecl::annotation`, `AnnotationDeclaration::annotation`.
 
 ### Serializer
 
@@ -288,16 +331,22 @@ After migrating `.das` code:
 
 ```bash
 # In .das files — find smart_ptr usage for migrated types
-grep -rn "smart_ptr<Expr\|smart_ptr<Function\|smart_ptr<Structure\|smart_ptr<Enumeration\|smart_ptr<Variable\|smart_ptr<MakeFieldDecl\|smart_ptr<MakeStruct\|smart_ptr<TypeDecl" *.das
+grep -rn "smart_ptr<Expr\|smart_ptr<Function\|smart_ptr<Structure\|smart_ptr<Enumeration\|smart_ptr<Variable\|smart_ptr<MakeFieldDecl\|smart_ptr<MakeStruct\|smart_ptr<TypeDecl\|smart_ptr<Annotation\|smart_ptr<FunctionAnnotation\|smart_ptr<StructureAnnotation\|smart_ptr<EnumerationAnnotation\|smart_ptr<TypeAnnotation" *.das
 
 # Find inscope with migrated types
-grep -rn "var inscope.*ExpressionPtr\|var inscope.*TypeDeclPtr\|var inscope.*FunctionPtr\|var inscope.*StructurePtr\|var inscope.*EnumerationPtr\|var inscope.*VariablePtr\|var inscope.*MakeFieldDeclPtr" *.das
+grep -rn "var inscope.*ExpressionPtr\|var inscope.*TypeDeclPtr\|var inscope.*FunctionPtr\|var inscope.*StructurePtr\|var inscope.*EnumerationPtr\|var inscope.*VariablePtr\|var inscope.*MakeFieldDeclPtr\|var inscope.*AnnotationDeclarationPtr\|var inscope.*FunctionAnnotationPtr\|var inscope.*StructureAnnotationPtr\|var inscope.*EnumerationAnnotationPtr" *.das
+
+# Find inscope with annotation creation
+grep -rn "var inscope.*<-.*make_function_annotation\|var inscope.*<-.*make_structure_annotation\|var inscope.*<-.*make_block_annotation\|var inscope.*<-.*make_enumeration_annotation\|var inscope.*<-.*new AnnotationDeclaration" *.das
+
+# Find reinterpret<smart_ptr<Annotation>> patterns (old annotation assignment)
+grep -rn "reinterpret<smart_ptr<Annotation>\|reinterpret<smart_ptr<TypeAnnotation>" *.das
 
 # Find inscope with new/clone/qmacro for migrated types
 grep -rn "var inscope.*<-.*new Expr\|var inscope.*<-.*clone_expression\|var inscope.*<-.*clone_type\|var inscope.*<-.*qmacro\|var inscope.*<-.*new TypeDecl\|var inscope.*<-.*new Function\|var inscope.*<-.*new Variable" *.das
 
 # Find return <- for migrated types
-grep -rn "return <- .*qmacro\|return <- .*new Expr\|return <- .*clone_expression\|return <- default<ExpressionPtr>\|return <- .*new TypeDecl" *.das
+grep -rn "return <- .*qmacro\|return <- .*new Expr\|return <- .*clone_expression\|return <- default<ExpressionPtr>\|return <- .*new TypeDecl\|return <- .*make_function_annotation\|return <- .*FunctionAnnotationPtr" *.das
 
 # Find move_new for migrated types
 grep -rn "move_new\|move <|" *.das
@@ -307,4 +356,13 @@ grep -rn "get_ptr(" *.das
 
 # In C++ files — find make_smart for migrated types
 grep -rn "make_smart<TypeDecl>\|make_smart<Expr\|make_smart<Function>\|make_smart<Structure>\|make_smart<Enumeration>\|make_smart<Variable>\|make_smart<MakeFieldDecl>\|make_smart<MakeStruct>" *.cpp *.h
+
+# In C++ files — find make_smart for annotation types
+grep -rn "make_smart<.*Annotation" *.cpp *.h
+
+# In C++ files — find static_pointer_cast for annotation types
+grep -rn "static_pointer_cast<.*Annotation" *.cpp *.h
+
+# In C++ files — find smart_ptr_raw for annotation types
+grep -rn "smart_ptr_raw<.*Annotation" *.cpp *.h
 ```

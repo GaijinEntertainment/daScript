@@ -790,9 +790,9 @@ namespace das {
             addFunctionCommonConversion<int3, float3>(*this,lib);
             addFunctionCommonConversion<int4, float4>(*this,lib);
             // structure annotations
-            addAnnotation(make_smart<float4x4_ann>(lib));
-            addAnnotation(make_smart<float3x4_ann>(lib));
-            addAnnotation(make_smart<float3x3_ann>(lib));
+            addAnnotation(new float4x4_ann(lib));
+            addAnnotation(new float3x4_ann(lib));
+            addAnnotation(new float3x3_ann(lib));
             // c-tor
             addFunction ( new MatrixCTorFn< SimNode_MatrixCtor<float3x3>,float3x3 >("float3x3",lib) );
             addFunction ( new MatrixCTorFn< SimNode_MatrixCtor<float3x4>,float3x4 >("float3x4",lib) );

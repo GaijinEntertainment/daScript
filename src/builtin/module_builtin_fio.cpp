@@ -80,7 +80,7 @@ namespace das {
     }
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
-        addAnnotation(make_smart<TimeAnnotation>(lib));
+        addAnnotation(new TimeAnnotation(lib));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
@@ -1202,8 +1202,8 @@ namespace das {
             lib.addBuiltInModule();
             addBuiltinDependency(lib, Module::require("strings"));
             // type
-            addAnnotation(make_smart<DummyTypeAnnotation>("FILE", "FILE", 16, 16));
-            addAnnotation(make_smart<FStatAnnotation>(lib));
+            addAnnotation(new DummyTypeAnnotation("FILE", "FILE", 16, 16));
+            addAnnotation(new FStatAnnotation(lib));
             // seek constants
             addConstant<int32_t>(*this, "seek_set", SEEK_SET);
             addConstant<int32_t>(*this, "seek_cur", SEEK_CUR);
@@ -1355,7 +1355,7 @@ namespace das {
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});
             // filesystem operations (C++17 <filesystem>)
-            addAnnotation(make_smart<DiskSpaceInfoAnnotation>(lib));
+            addAnnotation(new DiskSpaceInfoAnnotation(lib));
             // path manipulation
             addExtern<DAS_BIND_FUN(builtin_fs_extension)>(*this, lib, "extension",
                 SideEffects::none, "builtin_fs_extension")

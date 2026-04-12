@@ -52,7 +52,7 @@ The first module registers a type and several constants:
            ModuleLibrary lib(this);
            lib.addBuiltInModule();
 
-           addAnnotation(make_smart<Vec2Annotation>(lib));
+           addAnnotation(new Vec2Annotation(lib));
 
            addExtern<DAS_BIND_FUN(make_vec2),
                      SimNode_ExtFuncCallAndCopyOrMove>(

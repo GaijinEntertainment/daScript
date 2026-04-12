@@ -2335,7 +2335,7 @@ namespace das {
     }
 
     EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<EnumerationAnnotationAdapter>(name,(char *)pClass,info,context);
+        return new EnumerationAnnotationAdapter(name,(char *)pClass,info,context);
     }
 
     void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
@@ -2360,7 +2360,7 @@ namespace das {
     }
 
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<StructureAnnotationAdapter>(name,(char *)pClass,info,context);
+        return new StructureAnnotationAdapter(name,(char *)pClass,info,context);
     }
 
     void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
@@ -2379,17 +2379,17 @@ namespace das {
             context->throw_error_at(at, "annotation %s failed to apply to structure %s",
                 ann->name.c_str(), st->name.c_str());
         }
-        auto annDecl = make_smart<AnnotationDeclaration>();
+        auto annDecl = new AnnotationDeclaration();
         annDecl->annotation = ann;
         st->annotations.push_back(annDecl);
     }
 
     FunctionAnnotationPtr makeBlockAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<BlockAnnotationAdapter>(name,(char *)pClass,info,context);
+        return new BlockAnnotationAdapter(name,(char *)pClass,info,context);
     }
 
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<FunctionAnnotationAdapter>(name,(char *)pClass,info,context);
+        return new FunctionAnnotationAdapter(name,(char *)pClass,info,context);
     }
 
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at ) {
@@ -2408,7 +2408,7 @@ namespace das {
             context->throw_error_at(at, "annotation %s failed to apply to function %s",
                 ann->name.c_str(), func->name.c_str());
         }
-        auto annDecl = make_smart<AnnotationDeclaration>();
+        auto annDecl = new AnnotationDeclaration();
         annDecl->annotation = ann;
         func->annotations.push_back(annDecl);
     }
@@ -2421,18 +2421,18 @@ namespace das {
             context->throw_error_at(at, "annotation %s failed to apply to block %s",
                 ann->name.c_str(), blk->at.describe().c_str());
         }
-        auto annDecl = make_smart<AnnotationDeclaration>();
+        auto annDecl = new AnnotationDeclaration();
         annDecl->annotation = ann;
         blk->annotations.push_back(annDecl);
     }
 
-    void addAndApplyFunctionAnnotation ( Function * func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at ) {
+    void addAndApplyFunctionAnnotation ( Function * func, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at ) {
         string err;
         if (!ann->annotation->rtti_isFunctionAnnotation()) {
             context->throw_error_at(at, "annotation %s failed to apply to function %s, not a FunctionAnnotation",
                 ann->annotation->name.c_str(), func->name.c_str());
         }
-        auto fAnn = (FunctionAnnotation*)ann->annotation.get();
+        auto fAnn = (FunctionAnnotation*)ann->annotation;
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !fAnn->apply(func, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to function %s",
@@ -2441,13 +2441,13 @@ namespace das {
         func->annotations.push_back(ann);
     }
 
-    void addAndApplyBlockAnnotation ( ExprBlock * blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at ) {
+    void addAndApplyBlockAnnotation ( ExprBlock * blk, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at ) {
         string err;
         if (!ann->annotation->rtti_isFunctionAnnotation()) {
             context->throw_error_at(at, "annotation %s failed to apply to block %s, not a FunctionAnnotation",
                 ann->annotation->name.c_str(), blk->at.describe().c_str());
         }
-        auto fAnn = (FunctionAnnotation*)ann->annotation.get();
+        auto fAnn = (FunctionAnnotation*)ann->annotation;
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !fAnn->apply(blk, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to block %s",
@@ -2456,13 +2456,13 @@ namespace das {
         blk->annotations.push_back(ann);
     }
 
-    void addAndApplyStructAnnotation ( Structure * st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at ) {
+    void addAndApplyStructAnnotation ( Structure * st, AnnotationDeclarationPtr & ann, Context * context, LineInfoArg * at ) {
         string err;
         if (!ann->annotation->rtti_isStructureAnnotation()) {
             context->throw_error_at(at, "annotation %s failed to apply to struct %s, not a StructureAnnotation",
                 ann->annotation->name.c_str(), st->name.c_str());
         }
-        auto stAnn = (StructureAnnotation*)ann->annotation.get();
+        auto stAnn = (StructureAnnotation*)ann->annotation;
         auto program = daScriptEnvironment::getBound()->g_Program;
         if ( !stAnn->touch(st, *program->thisModuleGroup, ann->arguments, err) ) {
             context->throw_error_at(at, "annotation %s failed to apply to struct %s",
@@ -2558,7 +2558,7 @@ namespace das {
 
     void Module_Ast::registerAdapterAnnotations(ModuleLibrary & lib) {
         // visitor
-        addAnnotation(make_smart<AstVisitorAdapterAnnotation>(lib));
+        addAnnotation(new AstVisitorAdapterAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeVisitor)>(*this, lib,  "make_visitor",
             SideEffects::modifyExternal, "makeVisitor")
                 ->args({"class","info","blk","context","at"})->unsafeOperation = true;
@@ -2596,7 +2596,7 @@ namespace das {
             SideEffects::accessExternal, "astVisitBlockFinally")
                 ->args({"expression","adapter","context","line"});
         // function annotation
-        addAnnotation(make_smart<AstFunctionAnnotationAnnotation>(lib));
+        addAnnotation(new AstFunctionAnnotationAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeFunctionAnnotation)>(*this, lib,  "make_function_annotation",
             SideEffects::modifyExternal, "makeFunctionAnnotation")
                 ->args({"name","class","info","context"});
@@ -2620,7 +2620,7 @@ namespace das {
             SideEffects::modifyExternal, "addAndApplyBlockAnnotation")
                 ->args({"block","annotation","context","at"});
         // structure annotation
-        addAnnotation(make_smart<AstStructureAnnotationAnnotation>(lib));
+        addAnnotation(new AstStructureAnnotationAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeStructureAnnotation)>(*this, lib,  "make_structure_annotation",
             SideEffects::modifyExternal, "makeStructureAnnotation")
                 ->args({"name","class","info","context"});
@@ -2634,7 +2634,7 @@ namespace das {
             SideEffects::modifyExternal, "addAndApplyStructAnnotation")
                 ->args({"structure","annotation","context","at"});
         // enumeration annotation
-        addAnnotation(make_smart<AstEnumerationAnnotationAnnotation>(lib));
+        addAnnotation(new AstEnumerationAnnotationAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeEnumerationAnnotation)>(*this, lib,  "make_enumeration_annotation",
             SideEffects::modifyExternal, "makeEnumerationAnnotation")
                 ->args({"name","class","info","context"});
@@ -2645,7 +2645,7 @@ namespace das {
             SideEffects::modifyExternal, "addEnumerationEntry")
                 ->args({"enum","name"});
         // pass macro
-        addAnnotation(make_smart<AstPassMacroAnnotation>(lib));
+        addAnnotation(new AstPassMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makePassMacro)>(*this, lib,  "make_pass_macro",
             SideEffects::modifyExternal, "makePassMacro")
                 ->args({"name","class","info","context"});
@@ -2667,7 +2667,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleOptimizationMacro")
                 ->args({"module","annotation","context"});
         // reader macro
-        addAnnotation(make_smart<AstReaderMacroAnnotation>(lib));
+        addAnnotation(new AstReaderMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeReaderMacro)>(*this, lib,  "make_reader_macro",
             SideEffects::modifyExternal, "makeReaderMacro")
                 ->args({"name","class","info","context"});
@@ -2675,7 +2675,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleReaderMacro")
                 ->args({"module","annotation","context","at"});
         // comment reader
-        addAnnotation(make_smart<AstCommentReaderAnnotation>(lib));
+        addAnnotation(new AstCommentReaderAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeCommentReader)>(*this, lib,  "make_comment_reader",
             SideEffects::modifyExternal, "makeCommentReader")
                 ->args({"class","info","context"});
@@ -2683,7 +2683,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleCommentReader")
                 ->args({"module","reader","context","at"});
         // call macro
-        addAnnotation(make_smart<AstCallMacroAnnotation>(lib));
+        addAnnotation(new AstCallMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeCallMacro)>(*this, lib,  "make_call_macro",
             SideEffects::modifyExternal, "makeCallMacro")
                 ->args({"name","class","info","context"});
@@ -2701,7 +2701,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleTypeInfoMacro")
                 ->args({"module","annotation","context","at"});
         // variant macro
-        addAnnotation(make_smart<AstVariantMacroAnnotation>(lib));
+        addAnnotation(new AstVariantMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeVariantMacro)>(*this, lib,  "make_variant_macro",
             SideEffects::modifyExternal, "makeVariantMacro")
                 ->args({"name","class","info","context"});
@@ -2709,7 +2709,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleVariantMacro")
                 ->args({"module","annotation","context"});
         // for loop macro
-        addAnnotation(make_smart<AstForLoopMacroAnnotation>(lib));
+        addAnnotation(new AstForLoopMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeForLoopMacro)>(*this, lib,  "make_for_loop_macro",
             SideEffects::modifyExternal, "makeForLoopMacro")
                 ->args({"name","class","info","context"});
@@ -2717,7 +2717,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleForLoopMacro")
                 ->args({"module","annotation","context"});
         // capture macro
-        addAnnotation(make_smart<AstCaptureMacroAnnotation>(lib));
+        addAnnotation(new AstCaptureMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeCaptureMacro)>(*this, lib,  "make_capture_macro",
             SideEffects::modifyExternal, "makeCaptureMacro")
                 ->args({"name","class","info","context"});
@@ -2725,7 +2725,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleCaptureMacro")
                 ->args({"module","annotation","context"});
         // type macro
-        addAnnotation(make_smart<AstTypeMacroAnnotation>(lib));
+        addAnnotation(new AstTypeMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeTypeMacro)>(*this, lib,  "make_type_macro",
             SideEffects::modifyExternal, "makeTypeMacro")
                 ->args({"name","class","info","context"});
@@ -2733,7 +2733,7 @@ namespace das {
             SideEffects::modifyExternal, "addModuleTypeMacro")
                 ->args({"module","annotation","context","at"});
         // simulate macro macro
-        addAnnotation(make_smart<AstSimulateMacroAnnotation>(lib));
+        addAnnotation(new AstSimulateMacroAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeSimulateMacro)>(*this, lib,  "make_simulate_macro",
             SideEffects::modifyExternal, "makeSimulateMacro")
                 ->args({"name","class","info","context"});

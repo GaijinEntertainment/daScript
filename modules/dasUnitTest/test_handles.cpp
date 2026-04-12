@@ -514,27 +514,27 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // constant
     addConstant(*this, "UNIT_TEST_CONSTANT", 0x12345678);
     // structure annotations
-    addAnnotation(make_smart<CheckRange>());
+    addAnnotation(new CheckRange());
     // dummy type example
-    addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
+    addAnnotation(new DummyTypeAnnotation("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
-    addAnnotation(make_smart<TestObjectNotNullPtrAnnotation>(lib));
-    addAnnotation(make_smart<TestObjectNotLocalAnnotation>(lib));
-    auto fooann = make_smart<TestObjectFooAnnotation>(lib);
+    addAnnotation(new TestObjectNotNullPtrAnnotation(lib));
+    addAnnotation(new TestObjectNotLocalAnnotation(lib));
+    auto fooann = new TestObjectFooAnnotation(lib);
     addAnnotation(fooann);
     initRecAnnotation(fooann,lib);
-    addAnnotation(make_smart<TestObjectBarAnnotation>(lib));
+    addAnnotation(new TestObjectBarAnnotation(lib));
     // smart object recursive type
-    auto tosa = make_smart<TestObjectSmartAnnotation>(lib);
+    auto tosa = new TestObjectSmartAnnotation(lib);
     addAnnotation(tosa);
     initRecAnnotation(tosa, lib);
     // events
-    addAnnotation(make_smart<EventRegistrator>());
+    addAnnotation(new EventRegistrator());
     // test
-    addAnnotation(make_smart<TestFunctionAnnotation>());
+    addAnnotation(new TestFunctionAnnotation());
     // point3 array
     addAlias(typeFactory<Point3>::make(lib));
-    addVectorAnnotation<Point3Array>(this,lib,make_smart<Point3ArrayAnnotation>(lib));
+    addVectorAnnotation<Point3Array>(this,lib,new Point3ArrayAnnotation(lib));
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");
@@ -601,8 +601,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "CheckEidHint");
     auto ceid = addExtern<DAS_BIND_FUN(CheckEid)>(*this, lib,
         "CheckEid", SideEffects::none, "CheckEid");
-    auto ceid_decl = make_smart<AnnotationDeclaration>();
-    ceid_decl->annotation = make_smart<CheckEidFunctionAnnotation>();
+    auto ceid_decl = new AnnotationDeclaration();
+    ceid_decl->annotation = new CheckEidFunctionAnnotation();
     ceid->annotations.push_back(ceid_decl);
     // register CheckEid2 functoins and macro
     addExtern<DAS_BIND_FUN(CheckEidHint)>(*this, lib, "CheckEid2",
@@ -650,9 +650,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(tableMojo)>(*this, lib, "tableMojo",
         SideEffects::modifyExternal, "tableMojo");
     // BigEntityId
-    addAnnotation(make_smart<BigEntityIdAnnotation>(lib));
+    addAnnotation(new BigEntityIdAnnotation(lib));
     // EntityId
-    addAnnotation(make_smart<EntityIdAnnotation>(lib));
+    addAnnotation(new EntityIdAnnotation(lib));
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
         SideEffects::none, "make_invalid_id");
     addExtern<DAS_BIND_FUN(eidToInt)>(*this, lib, "int",
@@ -660,7 +660,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(intToEid)>(*this, lib, "EntityId",
         SideEffects::none, "intToEid");
     // FancyClass
-    addAnnotation(make_smart<FancyClassAnnotation>(lib));
+    addAnnotation(new FancyClassAnnotation(lib));
     addCtorAndUsing<FancyClass>(*this,lib,"FancyClass","FancyClass");
     addCtorAndUsing<FancyClass,int32_t,int32_t>(*this,lib,"FancyClass","FancyClass");
     addExtern<DAS_BIND_FUN(deleteFancyClass)>(*this, lib, "deleteFancyClass",
@@ -673,12 +673,12 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(test_abi_lambda_and_function)>(*this, lib, "test_abi_lambda_and_function",
         SideEffects::invokeAndAccessExternal, "test_abi_lambda_and_function");
     // SceneNodeId
-    addAnnotation(make_smart<SceneNodeIdAnnotation>(lib));
+    addAnnotation(new SceneNodeIdAnnotation(lib));
     addExtern<DAS_BIND_FUN(__create_scene_node)>(*this, lib, "__create_scene_node",
         SideEffects::none, "__create_scene_node");
     // byte code interpreter
     addEnumeration(new EnumerationOpCode());
-    addAnnotation(make_smart<ByteCodeAnnotation>(lib));
+    addAnnotation(new ByteCodeAnnotation(lib));
     addExtern<DAS_BIND_FUN(evalByteCode)>(*this, lib, "evalByteCode",
         SideEffects::modifyArgumentAndAccessExternal, "evalByteCode");
     // and verify

@@ -213,15 +213,13 @@ namespace das {
         return found ? found : Module::require(name);
     }
 
-    smart_ptr_raw<Annotation> module_find_annotation ( const Module* module, const char *name ) {
-        auto ann = module->findAnnotation(name);
-        ann->addRef();
-        return ann;
+    AnnotationPtr module_find_annotation ( const Module* module, const char *name ) {
+        return module->findAnnotation(name);
     }
 
     TypeAnnotation* module_find_type_annotation ( const Module* module, const char *name ) {
         auto ann = module->findAnnotation(name);
-        return static_cast<TypeAnnotation*>(ann.get());
+        return static_cast<TypeAnnotation*>(ann);
     }
 
     Function * findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
@@ -670,7 +668,7 @@ namespace das {
         if ( !expr ) return nullptr;
         if ( !daScriptEnvironment::getBound() ) context->throw_error_at(at, "expecting bound environment");
         auto mod = Module::require("ast_core");
-        return mod->findAnnotation(expr->__rtti).get();
+        return mod->findAnnotation(expr->__rtti);
     }
 
     void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at ) {
@@ -686,13 +684,13 @@ namespace das {
         return type->annotation->makeValueType();
     }
 
-    TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
+    TypeInfo * getHandledTypeFieldType ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
         return annotation->getFieldType(name);
     }
 
-    TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at ) {
+    TypeDeclPtr getHandledTypeFieldTypeDecl ( TypeAnnotationPtr annotation, char * name, bool isConst, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
         return annotation->makeFieldType(name,isConst);
@@ -756,7 +754,7 @@ namespace das {
         return (int) apply_to_vec(vec, type->describe(), get_size);
     }
 
-    uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
+    uint32_t getHandledTypeFieldOffset ( TypeAnnotationPtr annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
         return annotation->getFieldOffset(name);

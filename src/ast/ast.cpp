@@ -684,7 +684,7 @@ namespace das {
     AnnotationList cloneAnnotationList ( const AnnotationList & list ) {
         AnnotationList clist;
         for ( auto & ann : list ) {
-            auto decl = make_smart<AnnotationDeclaration>();
+            auto decl = new AnnotationDeclaration();
             decl->annotation = ann->annotation;
             decl->arguments = ann->arguments;
             decl->at = ann->at;
@@ -791,7 +791,7 @@ namespace das {
         }
         for ( auto & ann : annotations ) {
             if (ann->annotation && ann->annotation->rtti_isFunctionAnnotation() ) {
-                auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto fna = static_cast<FunctionAnnotation*>(ann->annotation);
                 string mname;
                 fna->appendToMangledName((Function *)this, *ann, mname);
                 if ( !mname.empty() ) {
@@ -849,7 +849,7 @@ namespace das {
     bool Function::isGeneric() const {
         for ( const auto & ann : annotations ) {
             if (ann->annotation) {
-                auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto fna = static_cast<FunctionAnnotation*>(ann->annotation);
                 if (fna->isGeneric()) {
                     return true;
                 }
@@ -866,7 +866,7 @@ namespace das {
     string Function::getAotArgumentPrefix(ExprCallFunc * call, int argIndex) const {
         for ( auto & ann : annotations ) {
             if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto pAnn = static_cast<FunctionAnnotation*>(ann->annotation);
                 return pAnn->aotArgumentPrefix(call, argIndex);
             }
         }
@@ -876,7 +876,7 @@ namespace das {
     string Function::getAotArgumentSuffix(ExprCallFunc * call, int argIndex) const {
         for ( auto & ann : annotations ) {
             if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto pAnn = static_cast<FunctionAnnotation*>(ann->annotation);
                 return pAnn->aotArgumentSuffix(call, argIndex);
             }
         }
@@ -886,7 +886,7 @@ namespace das {
     string Function::getAotName(ExprCallFunc * call) const {
         for ( auto & ann : annotations ) {
             if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                auto pAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                auto pAnn = static_cast<FunctionAnnotation*>(ann->annotation);
                 return pAnn->aotName(call);
             }
         }
@@ -3022,7 +3022,7 @@ namespace das {
 
     bool Program::addStructureHandle ( const StructurePtr & st, const TypeAnnotationPtr & ann, const AnnotationArgumentList & arg ) {
         if ( ann->rtti_isStructureTypeAnnotation() ) {
-            auto annotation = static_pointer_cast<StructureTypeAnnotation>(ann->clone());
+            auto annotation = static_cast<StructureTypeAnnotation*>(ann->clone());
             annotation->name = st->name;
             string err;
             if ( annotation->create(st,arg,err) ) {
@@ -3078,7 +3078,7 @@ namespace das {
             if ( handles.size()==1 ) {
                 if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
                     auto pTD = new TypeDecl(Type::tHandle);
-                    pTD->annotation = static_cast<TypeAnnotation *>(handles.back().get());
+                    pTD->annotation = static_cast<TypeAnnotation *>(handles.back());
                     pTD->at = at;
                     return pTD;
                 } else {

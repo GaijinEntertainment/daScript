@@ -137,28 +137,6 @@ namespace das {
         return 0;
     }
 
-    static void gc_print_stack_trace() {
-#if DAS_CRASH_HANDLER_PLATFORM_SUPPORTED && defined(_WIN32)
-        {
-            CONTEXT ctx;
-            RtlCaptureContext(&ctx);
-            print_stack_trace(&ctx);
-        }
-#elif DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
-        {
-            void * frames[64];
-            int nframes = backtrace(frames, 64);
-            char ** symbols = backtrace_symbols(frames, nframes);
-            if ( symbols ) {
-                for ( int i = 0; i < nframes; i++ ) {
-                    DAS_FATAL_LOG("  [%d] %s\n", i, symbols[i]);
-                }
-                free(symbols);
-            }
-        }
-#endif
-    }
-
     static void gc_check_break ( uint64_t id ) {
         if ( gc_break_on_id == 0 ) {
             static bool once = true;
@@ -166,7 +144,6 @@ namespace das {
         }
         if ( gc_break_on_id && id == gc_break_on_id ) {
             DAS_FATAL_LOG("gc_node break: id=%" PRIu64 "\n", id);
-            gc_print_stack_trace();
             os_debug_break();
         }
     }
@@ -249,7 +226,6 @@ namespace das {
 #if DAS_GC_DEBUG
             if ( !gc_owner->gc_collecting ) {
                 DAS_FATAL_LOG("gc_node id=%" PRIu64 " deleted outside of gc_sweep\n", gc_id);
-                gc_print_stack_trace();
                 DAS_ASSERTF(false, "gc_node id=%" PRIu64 " deleted outside of gc_sweep", gc_id);
             }
 #endif

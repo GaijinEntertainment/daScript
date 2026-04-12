@@ -175,7 +175,6 @@ namespace das {
         AstSerializer & operator << ( EnumerationPtr & enum_type );
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
         AstSerializer & operator << ( TypeAnnotationPtr & type_anno );
-        AstSerializer & operator << ( TypeAnnotation * & type_anno );
         AstSerializer & operator << ( VariablePtr & var );
         AstSerializer & operator << ( Function::AliasInfo & alias_info );
         AstSerializer & operator << ( InferHistory & history );

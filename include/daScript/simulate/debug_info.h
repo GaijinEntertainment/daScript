@@ -1,5 +1,7 @@
 #pragma once
 
+#include "daScript/misc/gc_node.h"
+
 namespace das
 {
 
@@ -102,8 +104,9 @@ namespace das
     struct TypeAnnotation;
     struct EnumInfo;
 
-    struct BasicAnnotation : ptr_ref_count {
+    struct BasicAnnotation : gc_node {
         BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
+        virtual ~BasicAnnotation() {}
         string      name;
         string      cppName;
     };

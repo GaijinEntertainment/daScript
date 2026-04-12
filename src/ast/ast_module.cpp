@@ -118,7 +118,7 @@ namespace das {
             for ( auto pm = bound->modules; pm!=nullptr; pm=pm->next ) {
                 if ( pm->name == moduleName ) {
                     if ( auto annT = pm->findAnnotation(annName) ) {
-                        resolve = (TypeAnnotation *) annT.get();
+                        resolve = (TypeAnnotation *) annT;
                     }
                     break;
                 }
@@ -333,9 +333,9 @@ namespace das {
             if ( td ) td->gc_collect(target, from);
         });
         // collect types in handle/annotation types
-        handleTypes.foreach([&](auto & ann) {
-            ann->gc_collect(target, from);
-        });
+        for ( auto & [key, ann] : handleTypes ) {
+            if ( ann ) ann->gc_collect(target, from);
+        }
         // collect types in structures (full recursive walk via virtual gc_collect)
         structures.foreach([&](auto & st) {
             st->gc_collect(target, from);
@@ -390,17 +390,24 @@ namespace das {
         }
     }
 
-    void Module::registerAnnotation ( const AnnotationPtr & ptr ) {
-        if ( handleTypes.find(ptr->name)==nullptr ) {
-            handleTypes.insert(ptr->name, ptr);
+    void Module::registerAnnotation ( AnnotationPtr ptr ) {
+        auto key = hash64z(ptr->name.c_str());
+        if ( handleTypes.find(key)==handleTypes.end() ) {
             ptr->module = this;
+            handleTypes[key] = ptr;
         }
     }
 
-    bool Module::addAnnotation ( const AnnotationPtr & ptr, bool canFail ) {
-        auto pptr = handleTypes.find(ptr->name);
-        if ( pptr==ptr || handleTypes.insert(ptr->name, ptr)  ) {
+    bool Module::addAnnotation ( AnnotationPtr ptr, bool canFail ) {
+        auto key = hash64z(ptr->name.c_str());
+        auto it = handleTypes.find(key);
+        if ( it!=handleTypes.end() && it->second==ptr ) {
             ptr->seal(this);
+            return true;
+        }
+        if ( it==handleTypes.end() ) {
+            ptr->seal(this);
+            handleTypes[key] = ptr;
             return true;
         } else {
             if ( !canFail ) {
@@ -649,7 +656,8 @@ namespace das {
     }
 
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
-        return handleTypes.find(na);
+        auto it = handleTypes.find(hash64z(na.c_str()));
+        return it != handleTypes.end() ? it->second : nullptr;
     }
 
     ReaderMacro * Module::findReaderMacro ( const string & na ) const {
@@ -716,9 +724,9 @@ namespace das {
         auto ptm = program->thisModule.get();
         if ( ptm->macroContext ) {
             swap ( target->macroContext, ptm->macroContext );
-            ptm->handleTypes.foreach([&](auto fna){
+            for ( auto & [key, fna] : ptm->handleTypes ) {
                 target->addAnnotation(fna);
-            });
+            }
         }
         for (auto & m : ptm->simulateMacros) target->simulateMacros.push_back(std::move(m));
         for (auto & m : ptm->captureMacros) target->captureMacros.push_back(std::move(m));
@@ -797,12 +805,12 @@ namespace das {
             });
         }
         if ( flags & VerifyBuiltinFlags::verifyHandleTypes ) {
-            handleTypes.foreach([&](auto annPtr){
+            for ( auto & [key, annPtr] : handleTypes ) {
                 if ( !isValidBuiltinName(annPtr->name) ) {
                     DAS_FATAL_LOG("%s - annotation has incorrect name. expecting snake_case\n", annPtr->name.c_str());
                     failed = true;
                 }
-            });
+            }
         }
         if ( flags & VerifyBuiltinFlags::verifyGlobals ) {
             globals.foreach([&](auto var){
@@ -1128,7 +1136,7 @@ namespace das {
             }
 #endif
             if ( handles.back()->rtti_isHandledTypeAnnotation() ) {
-                t->annotation = static_cast<TypeAnnotation*>(handles.back().get());
+                t->annotation = static_cast<TypeAnnotation*>(handles.back());
             } else {
                 DAS_FATAL_ERROR("makeHandleType(%s) failed, not a handle type\n", name.c_str());
                 return nullptr;

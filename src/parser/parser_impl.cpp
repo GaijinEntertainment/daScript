@@ -152,7 +152,7 @@ namespace das {
     Annotation * findAnnotation ( yyscan_t scanner, const string & name, const LineInfo & at ) {
         auto ann = yyextra->g_Program->findAnnotation(name);
         if ( ann.size()==1 ) {
-            return ann.back().get();
+            return ann.back();
         } else if ( ann.size()==0 ) {
             das_yyerror(scanner,"annotation " + name + " not found", at, CompilationError::annotation_not_found );
             return nullptr;
@@ -169,7 +169,7 @@ namespace das {
                 auto pA = *itA;
                 if ( pA->annotation ) {
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                        auto ann = static_cast<FunctionAnnotation*>(pA->annotation);
                         string err;
                         if ( !ann->apply(func, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
@@ -420,7 +420,7 @@ namespace das {
                 for ( auto & ad : pparent->annotations ) {
                     if ( ad->inherited ) {
                         if ( ad->annotation->rtti_isStructureAnnotation() ) {
-                            annLextra.push_back(make_smart<AnnotationDeclaration>(*ad));
+                            annLextra.push_back(new AnnotationDeclaration(*ad));
                         }
                     }
                 }
@@ -437,7 +437,7 @@ namespace das {
                 for ( auto pA : *annL ) {
                     if ( pA->annotation ) {
                         if ( pA->annotation->rtti_isStructureAnnotation() ) {
-                            auto ann = static_pointer_cast<StructureAnnotation>(pA->annotation);
+                            auto ann = static_cast<StructureAnnotation*>(pA->annotation);
                             string err;
                             if ( !ann->touch(pStruct, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                                 das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to the structure " + pStruct->name + "\n" + err,
@@ -449,7 +449,7 @@ namespace das {
                                     CompilationError::invalid_annotation);
                             } else {
                                 if ( !yyextra->g_Program->addStructureHandle(pStruct,
-                                    static_pointer_cast<StructureTypeAnnotation>(pA->annotation), pA->arguments) ) {
+                                    static_cast<StructureTypeAnnotation*>(pA->annotation), pA->arguments) ) {
                                         das_yyerror(scanner,"handled structure is already defined "+pStruct->name, loc,
                                         CompilationError::structure_already_declared);
                                 } else {
@@ -495,7 +495,7 @@ namespace das {
             for ( auto pA : *annL ) {
                 if ( pA->annotation ) {
                     if ( pA->annotation->rtti_isEnumerationAnnotation() ) {
-                        auto ann = static_pointer_cast<EnumerationAnnotation>(pA->annotation);
+                        auto ann = static_cast<EnumerationAnnotation*>(pA->annotation);
                         string err;
                         if ( !ann->touch(pEnum, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to finalize the enumeration " + pEnum->name + "\n" + err, atannL,
@@ -922,7 +922,7 @@ namespace das {
             for ( auto pA : *annL ) {
                 if ( pA->annotation ) {
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
-                        auto ann = static_pointer_cast<FunctionAnnotation>(pA->annotation);
+                        auto ann = static_cast<FunctionAnnotation*>(pA->annotation);
                         string err;
                         if ( !ann->apply(closure, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to the block\n" + err, annLAt,

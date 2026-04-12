@@ -402,7 +402,7 @@ namespace das
         }
         for ( auto & ann : annotations ) {
             if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                auto fann = (FunctionAnnotation *)(ann->annotation.get());
+                auto fann = (FunctionAnnotation *)(ann->annotation);
                 string err;
                 auto node = fann->simulate(&context, (Function*)this, ann->arguments, err);
                 if ( !node ) {
@@ -3428,7 +3428,7 @@ namespace das
                     return;
                 auto & gfun = context.functions[pfun->index];
                 for ( const auto & an : pfun->annotations ) {
-                    auto fna = static_pointer_cast<FunctionAnnotation>(an->annotation);
+                    auto fna = static_cast<FunctionAnnotation*>(an->annotation);
                     if (!fna->simulate(&context, &gfun)) {
                         error("function " + pfun->describe() + " annotation " + fna->name + " simulation failed", "", "",
                             LineInfo(), CompilationError::cant_initialize);
@@ -3503,7 +3503,7 @@ namespace das
                 DAS_ASSERT(pfn);
                 for ( auto & ann : pfn->annotations ) {
                     if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                        auto fna = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                        auto fna = static_cast<FunctionAnnotation*>(ann->annotation);
                         if ( fna->name=="init" ) {
                             initSort.addNode(initFn->mangledNameHash, ann->arguments);
                             break;
@@ -3586,7 +3586,7 @@ namespace das
             Function *func = indexToFunction[i];
             for (auto &ann : func->annotations) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                    auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    auto fann = static_cast<FunctionAnnotation*>(ann->annotation);
                     fann->complete(&context, func);
                 }
             }
@@ -3600,7 +3600,7 @@ namespace das
             pm->structures.foreach([&](auto st){
                 for ( auto & ann : st->annotations ) {
                     if ( ann->annotation->rtti_isStructureAnnotation() ) {
-                        auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                        auto sann = static_cast<StructureAnnotation*>(ann->annotation);
                         sann->complete(&context, st);
                     }
                 }

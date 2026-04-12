@@ -13,12 +13,12 @@ namespace das {
 
     AstSerializer::AstSerializer ( SerializationStorage * storage, bool isWriting ) {
         astModule = Module::require("ast_core");
-        astModule->handleTypes.foreach([&](const AnnotationPtr & annotation) {
+        for ( auto & [key, annotation] : astModule->handleTypes ) {
             if ( starts_with(annotation->name,"Expr") ) {
                 uint32_t hash = hash_tag(annotation->name.c_str());
-                rttiHash2Annotation[hash] = annotation.get();
+                rttiHash2Annotation[hash] = annotation;
             }
-        });
+        }
         writing = isWriting;
         buffer = storage;
     }
@@ -618,7 +618,7 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( AnnotationDeclarationPtr & annotation_decl ) {
         dtag(HASH_TAG("AnnotationDeclarationPtr"));
-        if ( !writing ) annotation_decl = make_smart<AnnotationDeclaration>();
+        if ( !writing ) annotation_decl = new AnnotationDeclaration();
         annotation_decl->serialize(*this);
         return *this;
     }
@@ -679,7 +679,7 @@ namespace das {
                     ser << moduleNameHash;
                     auto mod = ser.moduleLibrary->findModuleByMangledNameHash(moduleNameHash);
                     SERIALIZER_VERIFYF(mod!=nullptr, "module '%llu' is not found", moduleNameHash);
-                    anno = mod->findAnnotation(name).get();
+                    anno = mod->findAnnotation(name);
                     SERIALIZER_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
                 }
             }
@@ -931,16 +931,9 @@ namespace das {
 
     // Note for review: this is the usual downward serialization, no need to backpatch
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
-        AnnotationPtr a = static_pointer_cast<Annotation>(type_anno);
+        AnnotationPtr a = static_cast<Annotation*>(type_anno);
         *this << a;
-        type_anno = static_pointer_cast<TypeAnnotation>(a);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
-        TypeAnnotationPtr t = type_anno;
-        *this << t;
-        type_anno = t.get();
+        type_anno = static_cast<TypeAnnotation*>(a);
         return *this;
     }
 
@@ -1228,7 +1221,6 @@ namespace das {
     void AnnotationDeclaration::serialize ( AstSerializer & ser ) {
         ser.dtag(HASH_TAG("AnnotationDeclaration"));
         ser << annotation << arguments << at << flags;
-        ptr_ref_count::serialize(ser);
     }
 
     void ptr_ref_count::serialize ( AstSerializer & ser ) {
@@ -1888,14 +1880,15 @@ namespace das {
                 daScriptEnvironment::getBound()->g_Program = program;
                 program->finalizeAnnotations();
 
-            // collect TypeDecl nodes onto module root
-                this_mod->gc_collect(gc_root::gc_get_active_root());
-
                 if ( is_macro_module ) {
                     auto time0 = ref_time_ticks();
                     reinstantiateMacroModuleState(ser, program);
                     ser.totMacroTime += get_time_usec(time0);
                 }
+
+            // collect TypeDecl nodes onto module root
+                this_mod->gc_collect(gc_root::gc_get_active_root());
+
             // unbind the module from the program
                 program->thisModule.release();
             } else {
@@ -2183,6 +2176,30 @@ namespace das {
         ser << name << nameHash << moduleFlags;
         ser << annotationData << requireModule;
         ser << aliasTypes     << enumerations;
+        /*
+        // serialize handleTypes (annotation lookup table)
+        if ( ser.writing ) {
+            uint64_t htSize = handleTypes.size();
+            ser << htSize;
+            for ( auto & [key, ann] : handleTypes ) {
+                ser << key;
+                AnnotationPtr a = ann;
+                ser << a;
+            }
+        } else {
+            uint64_t htSize = 0;
+            ser << htSize;
+            for ( uint64_t i = 0; i < htSize; i++ ) {
+                uint64_t key = 0;
+                ser << key;
+                AnnotationPtr a = nullptr;
+                ser << a;
+                if ( a ) {
+                    handleTypes[key] = a;
+                }
+            }
+        }
+        */
         ser << keywords;
         ser << typeFunctions;
         serializeGlobals(ser, globals); // globals require insertion in the same order

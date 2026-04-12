@@ -1131,7 +1131,7 @@ public:
         addEnumeration(new Enumeration_http_method());
         addEnumeration(new Enumeration_http_status());
         // client
-        addAnnotation(make_smart<WebSocketClientAnnotation>(lib));
+        addAnnotation(new WebSocketClientAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeWebSocketClient)> (*this, lib, "make_web_socket_client",
             SideEffects::worstDefault, "makeWebSocketClient")
                 ->args({"class","info","context"});
@@ -1155,15 +1155,15 @@ public:
             SideEffects::worstDefault,"das_wsc_tick")
 	            ->args({"self"});
         // server
-        addAnnotation(make_smart<WebSocketServerAnnotation>(lib));
-        addAnnotation(make_smart<WebSocketChannelAnnotation>(lib));
-        addAnnotation(make_smart<HttpMessageAnnotation>(lib));
-        addAnnotation(make_smart<HttpRequestAnnotation>(lib));
-        addAnnotation(make_smart<HttpResponseAnnotation>(lib));
+        addAnnotation(new WebSocketServerAnnotation(lib));
+        addAnnotation(new WebSocketChannelAnnotation(lib));
+        addAnnotation(new HttpMessageAnnotation(lib));
+        addAnnotation(new HttpRequestAnnotation(lib));
+        addAnnotation(new HttpResponseAnnotation(lib));
         addExtern<DAS_BIND_FUN(das_http_response_content_length)>(*this, lib, ".`content_length",
             SideEffects::none, "das_http_response_content_length")
                 ->args({"self"});
-        addAnnotation(make_smart<HttpContextAnnotation>(lib));
+        addAnnotation(new HttpContextAnnotation(lib));
         addExtern<DAS_BIND_FUN(makeWebSocketServer)> (*this, lib, "make_web_socket_server",
             SideEffects::worstDefault, "makeWebSocketServer")
                 ->args({"port","https_port","pathToCert","class","info","context","at"});
@@ -1405,7 +1405,7 @@ public:
             SideEffects::worstDefault, "das_req_REQUEST_CB_S")
                 ->args({"request","on_body","on_complete","context","at"});
         // Server-side SSE
-        addAnnotation(make_smart<HttpResponseWriterAnnotation>(lib));
+        addAnnotation(new HttpResponseWriterAnnotation(lib));
         addExtern<DAS_BIND_FUN(das_wss_sse)> (*this, lib, "SSE",
             SideEffects::worstDefault, "das_wss_sse")
                 ->args({"server","url","lambda","context","at"})->unsafeOperation = true;

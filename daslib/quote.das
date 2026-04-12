@@ -70,8 +70,8 @@ def public clone(var a : dasvector`LineInfo; b : array<LineInfoInitData>) {
     }
 }
 
-def public clone(var args : rtti::AnnotationList; var nargs : array<smart_ptr<rtti::AnnotationDeclaration>>) {
-    //! Clones an array of AnnotationDeclaration smart pointers into an AnnotationList.
+def public clone(var args : rtti::AnnotationList; var nargs : array<rtti::AnnotationDeclaration?>) {
+    //! Clones an array of AnnotationDeclaration pointers into an AnnotationList.
     _::clear(args)
     for (narg in nargs) {
         _::emplace(args, narg)

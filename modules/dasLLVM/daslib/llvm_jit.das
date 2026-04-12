@@ -3336,7 +3336,7 @@ class public LlvmJitVisitor : AstVisitor {
         var field_offset : int
         if (expr.makeType.isHandle) {
             var pann = expr.makeType.annotation
-            var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> pann)
+            var ann = unsafe(reinterpret<TypeAnnotation?> pann)
             field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
         } else {
             var field = find_structure_field(expr.makeType.structType, string(decl.name))
@@ -3368,7 +3368,7 @@ class public LlvmJitVisitor : AstVisitor {
         var field_type : TypeDeclPtr
         if (expr.makeType.isHandle) {
             var pann = expr.makeType.annotation
-            var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> pann)
+            var ann = unsafe(reinterpret<TypeAnnotation?> pann)
             field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
             field_type = get_handled_type_field_type_declaration(ann, string(decl.name), false)
         } else {

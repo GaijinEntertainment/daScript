@@ -596,7 +596,7 @@ namespace das {
                 string message = "";
                 for ( auto & ann : expr->func->annotations ) {
                     if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                        auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                        auto fnAnn = static_cast<FunctionAnnotation*>(ann->annotation);
                         if ( fnAnn->name=="deprecated" ) {
                             for ( auto & arg : ann->arguments ) {
                                 if ( arg.name=="message" && arg.type==Type::tString ) {
@@ -613,7 +613,7 @@ namespace das {
             for ( const auto & annDecl : expr->func->annotations ) {
                 auto ann = annDecl->annotation;
                 if ( ann->rtti_isFunctionAnnotation() ) {
-                    auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann);
+                    auto fnAnn = static_cast<FunctionAnnotation*>(ann);
                     string err;
                     if ( !fnAnn->verifyCall(expr, annDecl->arguments, program->options, err) ) {
                         program->error("call annotated by " + fnAnn->name + " failed", err, "",
@@ -897,7 +897,7 @@ namespace das {
             }
             for ( auto & ann : fn->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
-                    auto fann = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                    auto fann = static_cast<FunctionAnnotation*>(ann->annotation);
                     string err;
                     if ( !fann->lint(fn, *program->thisModuleGroup, ann->arguments, program->options, err) ) {
                         program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::annotation_failed );

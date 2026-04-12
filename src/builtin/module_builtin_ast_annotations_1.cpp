@@ -333,29 +333,29 @@ namespace das {
         // flags
         registerFlags(lib);
         // modules
-        addAnnotation(make_smart<AstModuleLibraryAnnotation>(lib));
+        addAnnotation(new AstModuleLibraryAnnotation(lib));
         // AST TYPES (due to a lot of xrefs we declare everyone as recursive type)
-        auto exa = make_smart<AstExprAnnotation<Expression>>("Expression",lib);
+        auto exa = new AstExprAnnotation<Expression>("Expression",lib);
         addAnnotation(exa);
-        auto tda = make_smart<AstTypeDeclAnnnotation>(lib);
+        auto tda = new AstTypeDeclAnnnotation(lib);
         addAnnotation(tda);
-        auto sta = make_smart<AstStructureAnnotation>(lib);
+        auto sta = new AstStructureAnnotation(lib);
         addAnnotation(sta);
-        auto fta = make_smart<AstFieldDeclarationAnnotation>(lib);
+        auto fta = new AstFieldDeclarationAnnotation(lib);
         addAnnotation(fta);
-        auto ene = make_smart<AstEnumEntryAnnotation>(lib);
+        auto ene = new AstEnumEntryAnnotation(lib);
         addAnnotation(ene);
-        auto ena = make_smart<AstEnumerationAnnotation>(lib);
+        auto ena = new AstEnumerationAnnotation(lib);
         addAnnotation(ena);
-        auto fna = make_smart<AstFunctionAnnotation<Function>>("Function", lib);
+        auto fna = new AstFunctionAnnotation<Function>("Function", lib);
         addAnnotation(fna);
-        auto bfn = make_smart<AstBuiltInFunctionAnnotation>(lib);
+        auto bfn = new AstBuiltInFunctionAnnotation(lib);
         addAnnotation(bfn);
-        auto extfn = make_smart<AstExternalFnBaseAnnotation>(lib);
+        auto extfn = new AstExternalFnBaseAnnotation(lib);
         addAnnotation(extfn);
-        auto iha = make_smart<AstInferHistoryAnnotation>(lib);
+        auto iha = new AstInferHistoryAnnotation(lib);
         addAnnotation(iha);
-        auto vaa = make_smart<AstVariableAnnotation>(lib);
+        auto vaa = new AstVariableAnnotation(lib);
         addAnnotation(vaa);
         initRecAnnotation(tda, lib);
         initRecAnnotation(sta, lib);
@@ -369,9 +369,9 @@ namespace das {
         initRecAnnotation(iha, lib);
         initRecAnnotation(vaa, lib);
         // misc
-        addAnnotation(make_smart<AstContextAnnotation>(lib));
+        addAnnotation(new AstContextAnnotation(lib));
         // expressions (in order of inheritance)
-        addExpressionAnnotation(make_smart<AstExprBlockAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprLetAnnotation>(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprBlockAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprLetAnnotation(lib))->from("Expression");
     }
 }

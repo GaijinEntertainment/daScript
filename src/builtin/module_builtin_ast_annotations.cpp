@@ -318,7 +318,7 @@ namespace das {
     }
 
     void Module_Ast::registerMacroExpressions(ModuleLibrary & lib){
-        addExpressionAnnotation(make_smart<AstExprReaderAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprCallMacroAnnotation>(lib))->from("ExprLooksLikeCall");
+        addExpressionAnnotation(new AstExprReaderAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprCallMacroAnnotation(lib))->from("ExprLooksLikeCall");
     }
 }

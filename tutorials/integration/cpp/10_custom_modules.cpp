@@ -90,7 +90,7 @@ public:
         lib.addBuiltInModule();
 
         // --- Type ---
-        addAnnotation(make_smart<Vec2Annotation>(lib));
+        addAnnotation(new Vec2Annotation(lib));
 
         // --- Factory ---
         addExtern<DAS_BIND_FUN(make_vec2), SimNode_ExtFuncCallAndCopyOrMove>(

@@ -321,7 +321,7 @@ def getVectorOffset(var st : TokenStream; ident : string; var result : Result) :
 
 def getHandleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<int; TypeInfo> {
     unsafe {
-        var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> result.tinfo.annotation)
+        var ann = unsafe(reinterpret<TypeAnnotation?> result.tinfo.annotation)
         if (ann == null) {
             return (-1, TypeInfo(uninitialized))
         }

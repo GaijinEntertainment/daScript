@@ -165,9 +165,9 @@ public:
 
         // --- Register type annotations ---
         // Order matters: Vec2 must come before Rect (which uses Vec2).
-        addAnnotation(make_smart<Vec2Annotation>(lib));
-        addAnnotation(make_smart<ColorAnnotation>(lib));
-        addAnnotation(make_smart<RectAnnotation>(lib));
+        addAnnotation(new Vec2Annotation(lib));
+        addAnnotation(new ColorAnnotation(lib));
+        addAnnotation(new RectAnnotation(lib));
 
         // --- Bind functions that take/return bound types ---
         // The typeFactory<> created by MAKE_TYPE_FACTORY lets addExtern

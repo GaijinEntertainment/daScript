@@ -122,7 +122,7 @@ public:
         ModuleLibrary lib(this);
         lib.addBuiltInModule();
 
-        addAnnotation(make_smart<EntityAnnotation>(lib));
+        addAnnotation(new EntityAnnotation(lib));
 
         // Factory returning smart_ptr<Entity>
         addExtern<DAS_BIND_FUN(make_entity)>(*this, lib, "make_entity",

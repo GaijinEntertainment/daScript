@@ -21,7 +21,7 @@ require strings
 require daslib/strings_boost
 
 //! Smart pointer type alias for AnnotationDeclaration.
-typedef AnnotationDeclarationPtr = smart_ptr<AnnotationDeclaration>
+typedef AnnotationDeclarationPtr = AnnotationDeclaration?
 
 def isVectorType(typ : Type) {
     //! Returns true if `typ` is a vector type (int/uint/float 2/3/4, range, urange).
@@ -271,7 +271,7 @@ def private apply_tag_annotation(tag : string; var ann : FunctionAnnotationPtr) 
     }
     for (func in funcs) {
         {
-            var inscope tagAnn := ann
+            var tagAnn = ann
             add_function_annotation(func, tagAnn)
         }
     }
@@ -279,7 +279,7 @@ def private apply_tag_annotation(tag : string; var ann : FunctionAnnotationPtr) 
 
 def setup_tag_annotation(name, tag : string; var classPtr) {
     //! Creates and registers a function annotation associated with a tag.
-    var inscope ann <- make_function_annotation(name, classPtr)
+    var ann = make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
 }
@@ -664,21 +664,10 @@ def operator is FunctionAnnotation(foo : Annotation?) {
     return foo.isFunctionAnnotation
 }
 
-def operator is FunctionAnnotation(foo : smart_ptr<Annotation>) {
-    //! Returns true if the smart_ptr annotation is a function annotation.
-    return foo.isFunctionAnnotation
-}
-
 def operator as FunctionAnnotation(foo : Annotation?) {
     //! Casts an Annotation pointer to FunctionAnnotation pointer after verification.
     verify(foo is FunctionAnnotation)
     return unsafe(reinterpret<FunctionAnnotation?>(foo));
-}
-
-def operator as FunctionAnnotation(foo : smart_ptr<Annotation>) {
-    //! Casts a smart_ptr Annotation to FunctionAnnotation pointer after verification.
-    verify(foo is FunctionAnnotation)
-    return unsafe(reinterpret<FunctionAnnotation?>(foo.get_ptr()));
 }
 
 
@@ -692,21 +681,10 @@ def operator is StructureAnnotation(foo : Annotation?) {
     return foo.isStructureAnnotation
 }
 
-def operator is StructureAnnotation(foo : smart_ptr<Annotation>) {
-    //! Returns true if the smart_ptr annotation is a structure annotation.
-    return foo.isStructureAnnotation
-}
-
 def operator as StructureAnnotation(foo : Annotation?) {
     //! Casts an Annotation pointer to StructureAnnotation pointer after verification.
     verify(foo is StructureAnnotation)
     return unsafe(reinterpret<StructureAnnotation?>(foo));
-}
-
-def operator as StructureAnnotation(foo : smart_ptr<Annotation>) {
-    //! Casts a smart_ptr Annotation to StructureAnnotation pointer after verification.
-    verify(foo is StructureAnnotation)
-    return unsafe(reinterpret<StructureAnnotation?>(foo.get_ptr()));
 }
 
 def private walk_and_convert_array(data : uint8 const?; info : TypeDeclPtr; at : LineInfo) : Expression? {
@@ -971,8 +949,8 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
     //! Creates an AnnotationDeclaration with the specified arguments from the given annotation.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- new AnnotationDeclaration(uninitialized)
-    decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
+    var decl = new AnnotationDeclaration(uninitialized)
+    unsafe { decl.annotation = reinterpret<Annotation?>(ann); }
     for (argP in args) {
         let argName & = argP.argname
         let arg & = argP.argvalue
@@ -988,23 +966,23 @@ def append_annotation(mod_name, ann_name : string; args : array< tuple<argname :
             panic("Invalid rtti value {arg} for annotation argument {argName}")
         }
     }
-    return <- decl
+    return decl
 }
 
 def append_annotation(mod_name, ann_name : string) {
     //! Creates an AnnotationDeclaration from the given module and annotation name.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- new AnnotationDeclaration(uninitialized)
-    decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
-    return <- decl
+    var decl = new AnnotationDeclaration(uninitialized)
+    unsafe { decl.annotation = reinterpret<Annotation?>(ann); }
+    return decl
 }
 
 def append_annotation(var func : FunctionPtr; mod_name, ann_name : string) {
     //! Appends an annotation to a function by module and annotation name.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name)
+    var decl = append_annotation(mod_name, ann_name)
     add_function_annotation(func, decl)
 }
 
@@ -1012,7 +990,7 @@ def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string) {
     //! Appends an annotation to an expression block by module and annotation name.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name)
+    var decl = append_annotation(mod_name, ann_name)
     add_block_annotation(blk, decl)
 }
 
@@ -1020,7 +998,7 @@ def append_annotation(var st : Structure?; mod_name, ann_name : string) {
     //! Appends an annotation to a structure by module and annotation name.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name)
+    var decl = append_annotation(mod_name, ann_name)
     add_structure_annotation(st, decl)
 }
 
@@ -1028,7 +1006,7 @@ def append_annotation(var func : FunctionPtr; mod_name, ann_name : string; args 
     //! Appends an annotation with arguments to a function.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name, args)
+    var decl = append_annotation(mod_name, ann_name, args)
     add_function_annotation(func, decl)
 }
 
@@ -1036,7 +1014,7 @@ def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string; args : 
     //! Appends an annotation with arguments to an expression block.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name, args)
+    var decl = append_annotation(mod_name, ann_name, args)
     add_block_annotation(blk, decl)
 }
 
@@ -1044,7 +1022,7 @@ def append_annotation(var st : Structure?; mod_name, ann_name : string; args : a
     //! Appends an annotation with arguments to a structure.
     var ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
-    var inscope decl <- append_annotation(mod_name, ann_name, args)
+    var decl = append_annotation(mod_name, ann_name, args)
     add_structure_annotation(st, decl)
 }
 

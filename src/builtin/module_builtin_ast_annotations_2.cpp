@@ -247,40 +247,40 @@ namespace das {
 
     void Module_Ast::registerAnnotations2(ModuleLibrary & lib) {
         // continued expressions (in order of inheritance)
-        addExpressionAnnotation(make_smart<AstExprStringBuilderAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstMakeFieldDeclAnnotation>(lib));
-        addExpressionAnnotation(make_smart<AstMakeStructAnnotation>(lib));
-        addExpressionAnnotation(make_smart<AstExprNamedCallAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprLooksLikeCallAnnotation<ExprLooksLikeCall>>("ExprLooksLikeCall",lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprCallFuncAnnotation<ExprCallFunc>>("ExprCallFunc",lib))->from("ExprLooksLikeCall");
-        addExpressionAnnotation(make_smart<AstExprNewAnnotation>(lib))->from("ExprCallFunc");
-        addExpressionAnnotation(make_smart<AstExprCallAnnotation>(lib))->from("ExprCallFunc");
-        addExpressionAnnotation(make_smart<AstExprPtr2RefAnnotation<ExprPtr2Ref>>("ExprPtr2Ref",lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprNullCoalescingAnnotation>(lib))->from("ExprPtr2Ref");
-        addExpressionAnnotation(make_smart<AstExprAtAnnotation<ExprAt>>("ExprAt",lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprAtAnnotation<ExprSafeAt>>("ExprSafeAt",lib))->from("ExprAt");
-        addExpressionAnnotation(make_smart<AstExprIsAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprAnnotation<ExprOp>>("ExprOp",lib))->from("ExprCallFunc");
-        addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprOp2>>("ExprOp2",lib))->from("ExprOp");
-        addExpressionAnnotation(make_smart<AstExprOp3Annotation>(lib))->from("ExprOp");
-        addExpressionAnnotation(make_smart<AstExprCopyAnnotation>(lib))->from("ExprOp2");
-        addExpressionAnnotation(make_smart<AstExprMoveAnnotation>(lib))->from("ExprOp2");
-        addExpressionAnnotation(make_smart<AstExprOp2Annotation<ExprClone>>("ExprClone",lib))->from("ExprOp2");
-        addExpressionAnnotation(make_smart<AstExprWithAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprAssumeAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprWhileAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprTryCatchAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprIfThenElseAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprForAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprMakeLocalAnnotation<ExprMakeLocal>>("ExprMakeLocal",lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprMakeStructAnnotation>(lib))->from("ExprMakeLocal");
-        addExpressionAnnotation(make_smart<AstExprMakeVariantAnnotation>(lib))->from("ExprMakeLocal");
-        addExpressionAnnotation(make_smart<AstExprMakeArrayAnnotation<ExprMakeArray>>("ExprMakeArray",lib))->from("ExprMakeLocal");
-        addExpressionAnnotation(make_smart<AstExprMakeTupleAnnotation>(lib))->from("ExprMakeArray");
-        addExpressionAnnotation(make_smart<AstExprArrayComprehensionAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstTypeInfoMacroAnnotation>(lib));
-        addExpressionAnnotation(make_smart<AstExprTypeInfoAnnotation>(lib))->from("Expression");
-        addExpressionAnnotation(make_smart<AstExprTypeDeclAnnotation>(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprStringBuilderAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstMakeFieldDeclAnnotation(lib));
+        addExpressionAnnotation(new AstMakeStructAnnotation(lib));
+        addExpressionAnnotation(new AstExprNamedCallAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprLooksLikeCallAnnotation<ExprLooksLikeCall>("ExprLooksLikeCall",lib))->from("Expression");
+        addExpressionAnnotation(new AstExprCallFuncAnnotation<ExprCallFunc>("ExprCallFunc",lib))->from("ExprLooksLikeCall");
+        addExpressionAnnotation(new AstExprNewAnnotation(lib))->from("ExprCallFunc");
+        addExpressionAnnotation(new AstExprCallAnnotation(lib))->from("ExprCallFunc");
+        addExpressionAnnotation(new AstExprPtr2RefAnnotation<ExprPtr2Ref>("ExprPtr2Ref",lib))->from("Expression");
+        addExpressionAnnotation(new AstExprNullCoalescingAnnotation(lib))->from("ExprPtr2Ref");
+        addExpressionAnnotation(new AstExprAtAnnotation<ExprAt>("ExprAt",lib))->from("Expression");
+        addExpressionAnnotation(new AstExprAtAnnotation<ExprSafeAt>("ExprSafeAt",lib))->from("ExprAt");
+        addExpressionAnnotation(new AstExprIsAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprAnnotation<ExprOp>("ExprOp",lib))->from("ExprCallFunc");
+        addExpressionAnnotation(new AstExprOp2Annotation<ExprOp2>("ExprOp2",lib))->from("ExprOp");
+        addExpressionAnnotation(new AstExprOp3Annotation(lib))->from("ExprOp");
+        addExpressionAnnotation(new AstExprCopyAnnotation(lib))->from("ExprOp2");
+        addExpressionAnnotation(new AstExprMoveAnnotation(lib))->from("ExprOp2");
+        addExpressionAnnotation(new AstExprOp2Annotation<ExprClone>("ExprClone",lib))->from("ExprOp2");
+        addExpressionAnnotation(new AstExprWithAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprAssumeAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprWhileAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprTryCatchAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprIfThenElseAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprForAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprMakeLocalAnnotation<ExprMakeLocal>("ExprMakeLocal",lib))->from("Expression");
+        addExpressionAnnotation(new AstExprMakeStructAnnotation(lib))->from("ExprMakeLocal");
+        addExpressionAnnotation(new AstExprMakeVariantAnnotation(lib))->from("ExprMakeLocal");
+        addExpressionAnnotation(new AstExprMakeArrayAnnotation<ExprMakeArray>("ExprMakeArray",lib))->from("ExprMakeLocal");
+        addExpressionAnnotation(new AstExprMakeTupleAnnotation(lib))->from("ExprMakeArray");
+        addExpressionAnnotation(new AstExprArrayComprehensionAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstTypeInfoMacroAnnotation(lib));
+        addExpressionAnnotation(new AstExprTypeInfoAnnotation(lib))->from("Expression");
+        addExpressionAnnotation(new AstExprTypeDeclAnnotation(lib))->from("Expression");
 
         // make struct each
         addExtern<DAS_BIND_FUN(das_vector_each<MakeStruct>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",

@@ -326,9 +326,9 @@ public:
         lib.addBuiltInModule();
 
         // Annotations
-        addAnnotation(make_smart<BeforeReloadAnnotation>());
-        addAnnotation(make_smart<AfterReloadAnnotation>());
-        addAnnotation(make_smart<BeforeUpdateAnnotation>());
+        addAnnotation(new BeforeReloadAnnotation());
+        addAnnotation(new AfterReloadAnnotation());
+        addAnnotation(new BeforeUpdateAnnotation());
 
         // Mode
         addExtern<DAS_BIND_FUN(live_is_live_mode)>(*this, lib, "is_live_mode",

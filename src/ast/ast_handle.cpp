@@ -9,11 +9,11 @@ namespace das {
         auto chA = mod->findAnnotation(child);
         DAS_VERIFYF(chA,"missing child annotation");
         DAS_VERIFYF(chA->rtti_isBasicStructureAnnotation(),"expecting basic structure annotation");
-        auto bsaCh = (BasicStructureAnnotation *) chA.get();
+        auto bsaCh = (BasicStructureAnnotation *) chA;
         for ( auto parent : parents ) {
             auto chP = mod->findAnnotation(parent);
             DAS_VERIFYF(chP,"missing parent annotation");
-            bsaCh->parents.push_back((TypeAnnotation *)chP.get());
+            bsaCh->parents.push_back((TypeAnnotation *)chP);
         }
     }
 
@@ -242,19 +242,19 @@ namespace das {
     }
 
     void BasicStructureAnnotation::from ( const char * parentName ) {
-        from((BasicStructureAnnotation*)(this->module->findAnnotation(parentName).get()));
+        from((BasicStructureAnnotation*)(this->module->findAnnotation(parentName)));
     }
 
     void Program::validateAotCpp ( TextWriter & logs, Context & ) {
         library.foreach([&](Module * mod) -> bool {
             if ( mod->builtIn ) {
                 logs << "// validating " << mod->name << "\n";
-                mod->handleTypes.foreach([&](auto tp){
+                for ( auto & [key, tp] : mod->handleTypes ) {
                     if ( tp->rtti_isBasicStructureAnnotation() ) {
-                        auto bs = static_pointer_cast<BasicStructureAnnotation>(tp);
+                        auto bs = static_cast<BasicStructureAnnotation*>(tp);
                         if ( !bs->validationNeverFails ) {
                             auto cppt = new TypeDecl(Type::tHandle);
-                            cppt->annotation = bs.get();
+                            cppt->annotation = bs;
                             auto cppn = describeCppType(cppt);
                             logs << "//\t" << cppn << " aka " << tp->name << "\n";
                             for ( const auto & flp : bs->fields ) {
@@ -268,7 +268,7 @@ namespace das {
                             }
                         }
                     }
-                });
+                }
                 mod->enumerations.foreach([&](auto tp){
                     auto cppt = new TypeDecl(tp);
                     auto cppn = describeCppType(cppt);

@@ -142,7 +142,7 @@ The most common helper for binding C++ structs (POD or non-POD):
    };
 
    // In module constructor:
-   addAnnotation(make_smart<ObjectAnnotation>(lib));
+   addAnnotation(new ObjectAnnotation(lib));
 
 Key points:
 
@@ -169,7 +169,7 @@ Exposes an opaque type with no accessible fields:
 
 .. code-block:: cpp
 
-   addAnnotation(make_smart<DummyTypeAnnotation>(
+   addAnnotation(new DummyTypeAnnotation(
        "OpaqueHandle", "OpaqueHandle", sizeof(OpaqueHandle),
        alignof(OpaqueHandle)));
 
@@ -184,7 +184,7 @@ Exposes ``std::vector<T>`` with automatic ``push``, ``pop``, ``clear``,
 
 .. code-block:: cpp
 
-   addAnnotation(make_smart<ManagedVectorAnnotation<int32_t>>(
+   addAnnotation(new ManagedVectorAnnotation<int32_t>(
        "IntVector", lib));
 
 

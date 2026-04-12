@@ -479,10 +479,10 @@ void das_module_bind_enumeration ( das_module * mod, das_enumeration * en ) {
 }
 
 das_structure * das_structure_make ( das_module_group * lib, const char * name, const char * cppname, int sz, int al ) {
-    auto st = make_smart<CStructureAnnotation>(name,cppname,(ModuleLibrary *)lib);
+    auto st = new CStructureAnnotation(name,cppname,(ModuleLibrary *)lib);
     st->sizeOf = sz;
     st->alignOf = al;
-    return (das_structure *) st.orphan();
+    return (das_structure *) st;
 }
 
 void das_structure_add_field ( das_structure * st, das_module * mod, das_module_group * lib,  const char * name, const char * cppname, int offset, const char * tname ) {

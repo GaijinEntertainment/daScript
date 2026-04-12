@@ -307,7 +307,7 @@ namespace das
         LineInfo        atField;
         Structure::FieldDeclarationRef fieldRef;
         int             fieldIndex = -1;
-        TypeAnnotationPtr annotation;
+        TypeAnnotationPtr annotation = nullptr;
         union {
             struct {
                 bool        unsafeDeref : 1;

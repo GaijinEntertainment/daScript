@@ -360,7 +360,7 @@ extern "C" {
         Annotation *result = nullptr;
         Module::foreach([&](Module * module) -> bool {
             if ( module->name != moduleName ) return true;
-            result = module->findAnnotation(annName).get();
+            result = module->findAnnotation(annName);
             return false;
         });
         if (!result) {

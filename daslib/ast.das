@@ -21,9 +21,9 @@ typedef FunctionPtr = Function?
 typedef VariablePtr = Variable?
 typedef MakeFieldDeclPtr = MakeFieldDecl?
 typedef ExprMakeBlockPtr = ExprMakeBlock?
-typedef FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
-typedef StructureAnnotationPtr = smart_ptr<StructureAnnotation>
-typedef EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
+typedef FunctionAnnotationPtr = FunctionAnnotation?
+typedef StructureAnnotationPtr = StructureAnnotation?
+typedef EnumerationAnnotationPtr = EnumerationAnnotation?
 typedef PassMacroPtr = PassMacro?
 typedef VariantMacroPtr = VariantMacro?
 typedef ReaderMacroPtr = ReaderMacro?
@@ -653,10 +653,10 @@ def make_function_annotation(name : string; var someClassPtr) : FunctionAnnotati
     static_if (typeinfo is_pointer(someClassPtr) && typeinfo is_class(*someClassPtr)) {
         gc_root_AstFunctionAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return <- make_function_annotation(name, someClassPtr, classInfo)
+        return make_function_annotation(name, someClassPtr, classInfo)
     } else {
         concept_assert(false, "expecting pointer to class")
-        return <- FunctionAnnotationPtr()
+        return null
     }
 }
 
@@ -667,10 +667,10 @@ def make_block_annotation(name : string; var someClassPtr) : FunctionAnnotationP
     static_if (typeinfo is_pointer(someClassPtr) && typeinfo is_class(*someClassPtr)) {
         gc_root_AstBlockAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return <- make_block_annotation(name, someClassPtr, classInfo)
+        return make_block_annotation(name, someClassPtr, classInfo)
     } else {
         concept_assert(false, "expecting pointer to class")
-        return <- FunctionAnnotationPtr()
+        return null
     }
 }
 
@@ -681,10 +681,10 @@ def make_structure_annotation(name : string; var someClassPtr) : StructureAnnota
     static_if (typeinfo is_pointer(someClassPtr) && typeinfo is_class(*someClassPtr)) {
         gc_root_AstStructureAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return <- make_structure_annotation(name, someClassPtr, classInfo)
+        return make_structure_annotation(name, someClassPtr, classInfo)
     } else {
         concept_assert(false, "expecting pointer to class")
-        return <- StructureAnnotationPtr()
+        return null
     }
 }
 
@@ -695,10 +695,10 @@ def make_enumeration_annotation(name : string; var someClassPtr) : EnumerationAn
     static_if (typeinfo is_pointer(someClassPtr) && typeinfo is_class(*someClassPtr)) {
         gc_root_AstEnumerationAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return <- make_enumeration_annotation(name, someClassPtr, classInfo)
+        return make_enumeration_annotation(name, someClassPtr, classInfo)
     } else {
         concept_assert(false, "expecting pointer to class")
-        return <- EnumerationAnnotationPtr()
+        return null
     }
 }
 
@@ -853,31 +853,31 @@ def make_simulate_macro(name : string; var someClassPtr) : SimulateMacroPtr {
 
 [macro_function]
 def add_new_block_annotation(name : string; var someClassPtr) {
-    var inscope ann <- make_block_annotation(name, someClassPtr)
+    var ann = make_block_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_function_annotation(name : string; var someClassPtr) {
-    var inscope ann <- make_function_annotation(name, someClassPtr)
+    var ann = make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_contract_annotation(name : string; var someClassPtr) {
-    var inscope ann <- make_function_annotation(name, someClassPtr)
+    var ann = make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_structure_annotation(name : string; var someClassPtr) {
-    var inscope ann <- make_structure_annotation(name, someClassPtr)
+    var ann = make_structure_annotation(name, someClassPtr)
     this_module() |> add_structure_annotation(ann)
 }
 
 [macro_function]
 def add_new_enumeration_annotation(name : string; var someClassPtr) {
-    var inscope ann <- make_enumeration_annotation(name, someClassPtr)
+    var ann = make_enumeration_annotation(name, someClassPtr)
     this_module() |> add_enumeration_annotation(ann)
 }
 

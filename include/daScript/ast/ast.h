@@ -37,7 +37,7 @@ namespace das
     typedef smart_ptr<Program> ProgramPtr;
 
     struct FunctionAnnotation;
-    typedef smart_ptr<FunctionAnnotation> FunctionAnnotationPtr;
+    typedef FunctionAnnotation * FunctionAnnotationPtr;
 
     struct Expression;
     typedef Expression * ExpressionPtr;
@@ -71,7 +71,7 @@ namespace das
 
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
-    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+    typedef AnnotationDeclaration * AnnotationDeclarationPtr;
 
     enum class LogicAnnotationOp { And, Or, Xor, Not };
     AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
@@ -137,12 +137,12 @@ namespace das
         string getMangledName() const;
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         virtual void serialize( AstSerializer & ) { }
-        virtual void gc_collect ( gc_root * /*target*/, gc_root * /*from*/ ) { }
+        virtual void gc_collect ( gc_root * target, gc_root * from );
         Module *    module = nullptr;
     };
 
-    struct DAS_API AnnotationDeclaration : ptr_ref_count {
-        AnnotationPtr           annotation;
+    struct DAS_API AnnotationDeclaration : gc_node {
+        AnnotationPtr           annotation = nullptr;
         AnnotationArgumentList  arguments;
         LineInfo                at;
         union {
@@ -153,6 +153,7 @@ namespace das
         };
         string getMangledName() const;
         void serialize( AstSerializer & ser );
+        virtual void gc_collect ( gc_root * target, gc_root * from );
     };
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
@@ -605,7 +606,7 @@ namespace das
         virtual void aotBody   ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotSuffix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
     };
-    typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
+    typedef StructureAnnotation * StructureAnnotationPtr;
 
     struct EnumerationAnnotation : Annotation {
         EnumerationAnnotation ( const string & n ) : Annotation(n) {}
@@ -613,7 +614,7 @@ namespace das
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
     };
-    typedef smart_ptr<EnumerationAnnotation> EnumerationAnnotationPtr;
+    typedef EnumerationAnnotation * EnumerationAnnotationPtr;
 
 
     // annotated structure
@@ -632,7 +633,7 @@ namespace das
             return true;
         }
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-            smart_ptr<StructureTypeAnnotation> cp =  p ? static_pointer_cast<StructureTypeAnnotation>(p) : make_smart<StructureTypeAnnotation>(name);
+            StructureTypeAnnotation * cp =  p ? static_cast<StructureTypeAnnotation*>(p) : new StructureTypeAnnotation(name);
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
@@ -1155,8 +1156,8 @@ namespace das
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool replaceFunction ( const FunctionPtr & fn );
         bool addGeneric ( const FunctionPtr & fn, bool canFail = false );
-        bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
-        void registerAnnotation ( const AnnotationPtr & ptr );
+        bool addAnnotation ( AnnotationPtr ptr, bool canFail = false );
+        void registerAnnotation ( AnnotationPtr ptr );
         bool addTypeInfoMacro ( TypeInfoMacro * ptr, bool canFail = false );
         bool addReaderMacro ( ReaderMacro * ptr, bool canFail = false );
         bool addTypeMacro ( TypeMacro * ptr, bool canFail = false );
@@ -1205,7 +1206,7 @@ namespace das
         void gc_collect ( gc_root * from = nullptr );  // move reachable TypeDecl from 'from' root to module_gc_root
     public:
         template <typename RecAnn>
-        void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
+        void initRecAnnotation ( RecAnn * rec, ModuleLibrary & lib ) {
             rec->mlib = &lib;
             rec->init();
             rec->mlib = nullptr;
@@ -1230,7 +1231,7 @@ namespace das
     public:
         smart_ptr<Context>                          macroContext;
         safebox<TypeDecl, TypeDeclPtr>                           aliasTypes;
-        safebox<Annotation>                         handleTypes;
+        das_hash_map<uint64_t, Annotation *>            handleTypes;
         safebox<Structure, StructurePtr>             structures;
         safebox<Enumeration, EnumerationPtr>        enumerations;
         safebox<Variable, VariablePtr>              globals;
