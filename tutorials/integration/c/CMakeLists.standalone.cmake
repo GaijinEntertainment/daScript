@@ -98,6 +98,9 @@ DAS_C_TUTORIAL(integration_c_06 "${TUT_DIR}/06_sandbox.c")
 DAS_C_TUTORIAL(integration_c_07 "${TUT_DIR}/07_context_variables.c")
 DAS_C_TUTORIAL(integration_c_08 "${TUT_DIR}/08_serialization.c")
 DAS_C_TUTORIAL(integration_c_10 "${TUT_DIR}/10_threading.c")
+DAS_C_TUTORIAL(integration_c_11 "${TUT_DIR}/11_type_introspection.c")
+DAS_C_TUTORIAL(integration_c_12 "${TUT_DIR}/12_ecs.c")
+DAS_C_TUTORIAL(integration_c_13 "${TUT_DIR}/13_shared_module.c")
 
 ###########################################################
 # Tutorial 09 — AOT (C)

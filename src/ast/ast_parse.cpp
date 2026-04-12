@@ -572,6 +572,64 @@ namespace das {
         return false;
     }
 
+    bool detectOptionLogRequire ( const char * text, uint32_t length ) {
+        // search for `options log_require` outside of comments and strings
+        bool in_single_line_comment = false;
+        bool in_multi_line_comment = false;
+        bool in_string = false;
+        for (uint32_t i = 0; i < length; ++i) {
+            if (in_string) {
+                if (text[i] == '\\' && i + 1 < length) {
+                    ++i;
+                } else if (text[i] == '"') {
+                    in_string = false;
+                }
+                continue;
+            }
+            if (in_single_line_comment) {
+                if (text[i] == '\n') {
+                    in_single_line_comment = false;
+                }
+                continue;
+            }
+            if (in_multi_line_comment) {
+                if (text[i] == '*' && i + 1 < length && text[i + 1] == '/') {
+                    in_multi_line_comment = false;
+                    ++i;
+                }
+                continue;
+            }
+            if (text[i] == '"') {
+                in_string = true;
+                continue;
+            }
+            if (text[i] == '/' && i + 1 < length) {
+                if (text[i + 1] == '/') {
+                    in_single_line_comment = true;
+                    ++i;
+                    continue;
+                } else if (text[i + 1] == '*') {
+                    in_multi_line_comment = true;
+                    ++i;
+                    continue;
+                }
+            }
+            // check for options\s+log_require
+            if (text[i] == 'o' && i + 7 < length && text[i + 1] == 'p' && text[i + 2] == 't' && text[i + 3] == 'i' && text[i + 4] == 'o' && text[i + 5] == 'n' && text[i + 6] == 's' && isspace(text[i + 7]) ) {
+                i += 7;
+                while (i < length && isspace(text[i])) {
+                    ++i;
+                }
+                if (i + 11 < length && text[i] == 'l' && text[i + 1] == 'o' && text[i + 2] == 'g' && text[i + 3] == '_'
+                    && text[i + 4] == 'r' && text[i + 5] == 'e' && text[i + 6] == 'q' && text[i + 7] == 'u'
+                    && text[i + 8] == 'i' && text[i + 9] == 'r' && text[i + 10] == 'e' && !isalnum(text[i + 11]) && text[i + 11] != '_') {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
@@ -1088,6 +1146,23 @@ namespace das {
         return hash_blockz64(reinterpret_cast<const uint8_t *>(relPath.c_str()));
     }
 
+    void logRequireDependencyGraph ( const string & fileName,
+                                    const FileAccessPtr & access,
+                                    string & modName,
+                                    ModuleGroup & libGroup,
+                                    TextWriter & logs ) {
+        TextWriter tw;
+        vector<ModuleInfo> req;
+        vector<MissingRecord> missing;
+        vector<RequireRecord> circular, notAllowed;
+        vector<FileInfo *> chain;
+        das_set<string> dependencies;
+        das_hash_map<string, NamelessModuleReq> namelessReq;
+        vector<NamelessMismatch> namelessMismatches;
+        getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain, dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, false);
+        logs << "module dependency graph:\n" << tw.str();
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
@@ -1219,16 +1294,7 @@ namespace das {
                     res->allocateStack(logs,true,false);
             }
             if ( res->options.getBoolOption("log_require",false) ) {
-                TextWriter tw;
-                req.clear();
-                missing.clear();
-                circular.clear();
-                notAllowed.clear();
-                dependencies.clear();
-                namelessReq.clear();
-                namelessMismatches.clear();
-                getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain, dependencies, namelessReq, namelessMismatches, libGroup, &tw, 1, false);
-                logs << "module dependency graph:\n" << tw.str();
+                logRequireDependencyGraph(fileName, access, modName, libGroup, logs);
             }
             if ( !res->failed() ) {
                 res->thisNamespace = "_anon_" + to_string(normalizedPathHash(fileName, getDasRoot()));
@@ -1253,8 +1319,17 @@ namespace das {
             dependencies.clear();
             namelessReq.clear();
             namelessMismatches.clear();
-            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
+            auto res = reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
                                         req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies);
+            if ( auto fi = access->getFileInfo(fileName) ) {
+                const char * src = nullptr;
+                uint32_t len = 0;
+                fi->getSourceAndLength(src, len);
+                if ( src && detectOptionLogRequire(src, len) ) {
+                    logRequireDependencyGraph(fileName, access, modName, libGroup, logs);
+                }
+            }
+            return res;
         }
     }
 }
