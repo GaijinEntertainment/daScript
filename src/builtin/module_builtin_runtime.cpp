@@ -1760,7 +1760,7 @@ namespace das
         // printer flags
         addAlias(makePrintFlags());
         // unescape macro
-        addReaderMacro(make_smart<UnescapedStringMacro>());
+        addReaderMacro(new UnescapedStringMacro());
         // function annotations
         addAnnotation(make_smart<CommentAnnotation>());
         addAnnotation(make_smart<NoDefaultCtorAnnotation>());
@@ -1801,10 +1801,11 @@ namespace das
         addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
         // and call macro
         {
-            CallMacroPtr newM = make_smart<MakeFunctionUnsafeCallMacro>();
+            auto newM = new MakeFunctionUnsafeCallMacro();
+            ownedCallMacros.push_back(unique_ptr<CallMacro>(newM));
             addCallMacro(newM->name, [this, newM](const LineInfo & at) -> ExprLooksLikeCall * {
                 auto ecm = new ExprCallMacro(at, newM->name);
-                ecm->macro = newM.get();
+                ecm->macro = newM;
                 newM->module = this;
                 return ecm;
             });
@@ -1812,7 +1813,7 @@ namespace das
         // string
         addAnnotation(make_smart<DasStringTypeAnnotation>());
         // typeinfo macros
-        addTypeInfoMacro(make_smart<ClassInfoMacro>());
+        addTypeInfoMacro(new ClassInfoMacro());
         // command line arguments
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")

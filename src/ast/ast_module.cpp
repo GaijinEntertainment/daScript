@@ -410,8 +410,8 @@ namespace das {
         }
     }
 
-    bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
-        if ( typeInfoMacros.insert(make_pair(ptr->name, ptr)).second ) {
+    bool Module::addTypeInfoMacro ( TypeInfoMacro * ptr, bool canFail ) {
+        if ( typeInfoMacros.insert(make_pair(ptr->name, unique_ptr<TypeInfoMacro>(ptr))).second ) {
             ptr->seal(this);
             return true;
         } else {
@@ -422,8 +422,8 @@ namespace das {
         }
     }
 
-    bool Module::addTypeMacro ( const TypeMacroPtr & ptr, bool canFail ) {
-        if ( typeMacros.insert(make_pair(ptr->name, ptr)).second ) {
+    bool Module::addTypeMacro ( TypeMacro * ptr, bool canFail ) {
+        if ( typeMacros.insert(make_pair(ptr->name, unique_ptr<TypeMacro>(ptr))).second ) {
             return true;
         } else {
             if ( !canFail ) {
@@ -433,8 +433,8 @@ namespace das {
         }
     }
 
-    bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
-        if ( readMacros.insert(make_pair(ptr->name, ptr)).second ) {
+    bool Module::addReaderMacro ( ReaderMacro * ptr, bool canFail ) {
+        if ( readMacros.insert(make_pair(ptr->name, unique_ptr<ReaderMacro>(ptr))).second ) {
             ptr->seal(this);
             return true;
         } else {
@@ -445,14 +445,14 @@ namespace das {
         }
     }
 
-    bool Module::addCommentReader ( const CommentReaderPtr & ptr, bool canFail ) {
+    bool Module::addCommentReader ( CommentReader * ptr, bool canFail ) {
         if ( commentReader ) {
             if ( !canFail ) {
                 DAS_FATAL_ERROR("can't add 2nd comment reader to module %s\n", name.c_str() );
             }
             return false;
         }
-        commentReader = ptr;
+        commentReader.reset(ptr);
         return true;
     }
 
@@ -652,14 +652,14 @@ namespace das {
         return handleTypes.find(na);
     }
 
-    ReaderMacroPtr Module::findReaderMacro ( const string & na ) const {
+    ReaderMacro * Module::findReaderMacro ( const string & na ) const {
         auto it = readMacros.find(na);
-        return it != readMacros.end() ? it->second : nullptr;
+        return it != readMacros.end() ? it->second.get() : nullptr;
     }
 
-    TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {
+    TypeInfoMacro * Module::findTypeInfoMacro ( const string & na ) const {
         auto it = typeInfoMacros.find(na);
-        return it != typeInfoMacros.end() ? it->second : nullptr;
+        return it != typeInfoMacros.end() ? it->second.get() : nullptr;
     }
 
     EnumerationPtr Module::findEnumByMangledNameHash ( uint64_t hash ) const {
@@ -720,22 +720,23 @@ namespace das {
                 target->addAnnotation(fna);
             });
         }
-        target->simulateMacros.insert(target->simulateMacros.end(), ptm->simulateMacros.begin(), ptm->simulateMacros.end());
-        target->captureMacros.insert(target->captureMacros.end(), ptm->captureMacros.begin(), ptm->captureMacros.end());
-        target->forLoopMacros.insert(target->forLoopMacros.end(), ptm->forLoopMacros.begin(), ptm->forLoopMacros.end());
-        target->variantMacros.insert(target->variantMacros.end(), ptm->variantMacros.begin(), ptm->variantMacros.end());
-        target->macros.insert(target->macros.end(), ptm->macros.begin(), ptm->macros.end());
-        target->inferMacros.insert(target->inferMacros.end(), ptm->inferMacros.begin(), ptm->inferMacros.end());
-        target->optimizationMacros.insert(target->optimizationMacros.end(), ptm->optimizationMacros.begin(), ptm->optimizationMacros.end());
-        target->lintMacros.insert(target->lintMacros.end(), ptm->lintMacros.begin(), ptm->lintMacros.end());
-        target->globalLintMacros.insert(target->globalLintMacros.end(), ptm->globalLintMacros.begin(), ptm->globalLintMacros.end());
+        for (auto & m : ptm->simulateMacros) target->simulateMacros.push_back(std::move(m));
+        for (auto & m : ptm->captureMacros) target->captureMacros.push_back(std::move(m));
+        for (auto & m : ptm->forLoopMacros) target->forLoopMacros.push_back(std::move(m));
+        for (auto & m : ptm->variantMacros) target->variantMacros.push_back(std::move(m));
+        for (auto & m : ptm->macros) target->macros.push_back(std::move(m));
+        for (auto & m : ptm->inferMacros) target->inferMacros.push_back(std::move(m));
+        for (auto & m : ptm->optimizationMacros) target->optimizationMacros.push_back(std::move(m));
+        for (auto & m : ptm->lintMacros) target->lintMacros.push_back(std::move(m));
+        for (auto & m : ptm->globalLintMacros) target->globalLintMacros.push_back(std::move(m));
         for ( auto & rm : ptm->readMacros ) {
-            target->addReaderMacro(rm.second);
+            rm.second->seal(target);
+            target->readMacros[rm.first] = std::move(rm.second);
         }
         for ( auto & tm : ptm->typeMacros ) {
-            target->addTypeMacro(tm.second);
+            target->typeMacros[tm.first] = std::move(tm.second);
         }
-        target->commentReader = ptm->commentReader;
+        target->commentReader = std::move(ptm->commentReader);
         for ( auto & op : ptm->options) {
             DAS_ASSERTF(target->options.find(op.first)==target->options.end(),"duplicate option %s", op.first.c_str());
             target->options[op.first] = op.second;
@@ -997,8 +998,8 @@ namespace das {
         return ptr;
     }
 
-    vector<TypeInfoMacroPtr> ModuleLibrary::findTypeInfoMacro ( const string & name, Module * inWhichModule ) const {
-        vector<TypeInfoMacroPtr> ptr;
+    vector<TypeInfoMacro*> ModuleLibrary::findTypeInfoMacro ( const string & name, Module * inWhichModule ) const {
+        vector<TypeInfoMacro*> ptr;
         string moduleName, annName;
         splitTypeName(name, moduleName, annName);
         if ( moduleName!="_" && moduleName!="__") {

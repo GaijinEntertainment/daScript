@@ -1504,7 +1504,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false,true> {
+    struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false,false> {
         AstPassMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("PassMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1553,7 +1553,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false,true> {
+    struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false,false> {
         AstVariantMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VariantMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1580,7 +1580,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstForLoopMacroAnnotation : ManagedStructureAnnotation<ForLoopMacro,false,true> {
+    struct AstForLoopMacroAnnotation : ManagedStructureAnnotation<ForLoopMacro,false,false> {
         AstForLoopMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ForLoopMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1641,14 +1641,14 @@ namespace das {
         Context *   context;
     };
 
-    struct AstCaptureMacroAnnotation : ManagedStructureAnnotation<CaptureMacro,false,true> {
+    struct AstCaptureMacroAnnotation : ManagedStructureAnnotation<CaptureMacro,false,false> {
         AstCaptureMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CaptureMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
 
-    struct AstTypeMacroAnnotation : ManagedStructureAnnotation<TypeMacro,false,true> {
+    struct AstTypeMacroAnnotation : ManagedStructureAnnotation<TypeMacro,false,false> {
         AstTypeMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("TypeMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1686,7 +1686,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstSimulateMacroAnnotation : ManagedStructureAnnotation<SimulateMacro,false,true> {
+    struct AstSimulateMacroAnnotation : ManagedStructureAnnotation<SimulateMacro,false,false> {
         AstSimulateMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("SimulateMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -1736,7 +1736,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,true> {
+    struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,false> {
         AstReaderMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ReaderMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -2104,7 +2104,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstCommentReaderAnnotation : ManagedStructureAnnotation<CommentReader,false,true> {
+    struct AstCommentReaderAnnotation : ManagedStructureAnnotation<CommentReader,false,false> {
         AstCommentReaderAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CommentReader", ml) {
         }
@@ -2159,7 +2159,7 @@ namespace das {
         Context *   context;
     };
 
-    struct AstCallMacroAnnotation : ManagedStructureAnnotation<CallMacro,false,true> {
+    struct AstCallMacroAnnotation : ManagedStructureAnnotation<CallMacro,false,false> {
         AstCallMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CallMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -2200,29 +2200,27 @@ namespace das {
     };
 
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<ReaderMacroAdapter>(name,(char *)pClass,info,context);
+        return new ReaderMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleReaderMacro ( Module * module, ReaderMacroPtr & _newM, Context * context, LineInfoArg * at ) {
-        ReaderMacroPtr newM = das::move(_newM);
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr newM, Context * context, LineInfoArg * at ) {
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_at(at, "can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
     }
 
     CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<CommentReaderAdapter>((char *)pClass,info,context);
+        return new CommentReaderAdapter((char *)pClass,info,context);
     }
 
-    void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context, LineInfoArg * at ) {
-        CommentReaderPtr newM = das::move(_newM);
+    void addModuleCommentReader ( Module * module, CommentReaderPtr newM, Context * context, LineInfoArg * at ) {
         if ( !module->addCommentReader(newM, true) ) {
             context->throw_error_at(at, "can't add comment reader to module %s", module->name.c_str());
         }
     }
 
     CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<CallMacroAdapter>(name,(char *)pClass,info,context);
+        return new CallMacroAdapter(name,(char *)pClass,info,context);
     }
 
     CallMacro *findModuleCallMacro ( Module * module, const char *name, Context * /*context*/, LineInfoArg * at ) {
@@ -2232,11 +2230,11 @@ namespace das {
         return res;
     }
 
-    void addModuleCallMacro ( Module * module, CallMacroPtr & _newM, Context * context, LineInfoArg * at ) {
-        CallMacroPtr newM = das::move(_newM);
+    void addModuleCallMacro ( Module * module, CallMacroPtr newM, Context * context, LineInfoArg * at ) {
+        module->ownedCallMacros.push_back(unique_ptr<CallMacro>(newM));
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
-            ecm->macro = newM.get();
+            ecm->macro = newM;
             newM->module = module;
             return ecm;
         }) ) {
@@ -2249,11 +2247,10 @@ namespace das {
     }
 
     TypeInfoMacroPtr makeTypeInfoMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<TypeInfoMacroAdapter>(name,(char *)pClass,info,context);
+        return new TypeInfoMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context, LineInfoArg * at ) {
-        TypeInfoMacroPtr newM = das::move(_newM);
+    void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr newM, Context * context, LineInfoArg * at ) {
         if ( ! module->addTypeInfoMacro(newM,true) ) {
             context->throw_error_at(at, "can't add type info macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -2269,81 +2266,72 @@ namespace das {
     }
 
     PassMacroPtr makePassMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<PassMacroAdapter>(name,(char *)pClass,info,context);
+        return new PassMacroAdapter(name,(char *)pClass,info,context);
     }
 
     VariantMacroPtr makeVariantMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<VariantMacroAdapter>(name,(char *)pClass,info,context);
+        return new VariantMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleVariantMacro ( Module * module, VariantMacroPtr & _newM, Context * ) {
-        VariantMacroPtr newM = das::move(_newM);
-        module->variantMacros.push_back(newM);
+    void addModuleVariantMacro ( Module * module, VariantMacroPtr newM, Context * ) {
+        module->variantMacros.push_back(unique_ptr<VariantMacro>(newM));
     }
 
     ForLoopMacroPtr makeForLoopMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<ForLoopMacroAdapter>(name,(char *)pClass,info,context);
+        return new ForLoopMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * ) {
-        ForLoopMacroPtr newM = das::move(_newM);
-        module->forLoopMacros.push_back(newM);
+    void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr newM, Context * ) {
+        module->forLoopMacros.push_back(unique_ptr<ForLoopMacro>(newM));
     }
 
     CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<CaptureMacroAdapter>(name,(char *)pClass,info,context);
+        return new CaptureMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * ) {
-        CaptureMacroPtr newM = das::move(_newM);
-        module->captureMacros.push_back(newM);
+    void addModuleCaptureMacro ( Module * module, CaptureMacroPtr newM, Context * ) {
+        module->captureMacros.push_back(unique_ptr<CaptureMacro>(newM));
     }
 
     TypeMacroPtr makeTypeMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<TypeMacroAdapter>(name,(char *)pClass,info,context);
+        return new TypeMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleTypeMacro ( Module * module, TypeMacroPtr & _newM, Context * ctx, LineInfoArg * at ) {
-        auto it = module->typeMacros.find(_newM->name);
+    void addModuleTypeMacro ( Module * module, TypeMacroPtr newM, Context * ctx, LineInfoArg * at ) {
+        auto it = module->typeMacros.find(newM->name);
         if ( it != module->typeMacros.end() ) {
-            ctx->throw_error_at(at, "type macro %s already exists in module %s", _newM->name.c_str(), module->name.c_str());
+            ctx->throw_error_at(at, "type macro %s already exists in module %s", newM->name.c_str(), module->name.c_str());
         }
-        string name = _newM->name;
-        module->typeMacros[name] = das::move(_newM);
+        string name = newM->name;
+        module->typeMacros[name] = unique_ptr<TypeMacro>(newM);
     }
 
     SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<SimulateMacroAdapter>(name,(char *)pClass,info,context);
+        return new SimulateMacroAdapter(name,(char *)pClass,info,context);
     }
 
-    void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * ) {
-        SimulateMacroPtr newM = das::move(_newM);
-        module->simulateMacros.push_back(newM);
+    void addModuleSimulateMacro ( Module * module, SimulateMacroPtr newM, Context * ) {
+        module->simulateMacros.push_back(unique_ptr<SimulateMacro>(newM));
     }
 
-    void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = das::move(_newM);
-        module->macros.push_back(newM);
+    void addModuleInferMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->macros.push_back(unique_ptr<PassMacro>(newM));
     }
 
-    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = das::move(_newM);
-        module->inferMacros.push_back(newM);
+    void addModuleInferDirtyMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->inferMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
-    void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = das::move(_newM);
-        module->lintMacros.push_back(newM);
+    void addModuleLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->lintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
-    void addModuleGlobalLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = das::move(_newM);
-        module->globalLintMacros.push_back(newM);
+    void addModuleGlobalLintMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->globalLintMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
-    void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = das::move(_newM);
-        module->optimizationMacros.push_back(newM);
+    void addModuleOptimizationMacro ( Module * module, PassMacroPtr newM, Context * ) {
+        module->optimizationMacros.push_back(unique_ptr<PassMacro>(newM));
     }
 
     EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context ) {

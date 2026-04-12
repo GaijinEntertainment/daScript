@@ -8,7 +8,7 @@ namespace das
 
     struct DAS_API ExprReader : Expression {
         ExprReader () { __rtti = "ExprReader"; }
-        ExprReader ( const LineInfo & a, const ReaderMacroPtr & rm )
+        ExprReader ( const LineInfo & a, ReaderMacro * rm )
             : Expression(a), macro(rm) { __rtti = "ExprReader"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;

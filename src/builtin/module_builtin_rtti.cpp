@@ -1537,7 +1537,7 @@ namespace das {
             addConstant<uint32_t>(*this, "FUNCINFO_SHUTDOWN", uint32_t(FuncInfo::flag_shutdown));
             addConstant<uint32_t>(*this, "FUNCINFO_LATE_INIT", uint32_t(FuncInfo::flag_late_init));
             // macros
-            addTypeInfoMacro(make_smart<RttiTypeInfoMacro>());
+            addTypeInfoMacro(new RttiTypeInfoMacro());
             // ctors
             addUsing<ModuleGroup>(*this, lib, "ModuleGroup");
             // functions

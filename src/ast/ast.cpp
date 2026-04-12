@@ -2926,8 +2926,8 @@ namespace das {
 
     // program
 
-    vector<ReaderMacroPtr> Program::getReaderMacro ( const string & name ) const {
-        vector<ReaderMacroPtr> macros;
+    vector<ReaderMacro*> Program::getReaderMacro ( const string & name ) const {
+        vector<ReaderMacro*> macros;
         string moduleName, markupName;
         splitTypeName(name, moduleName, markupName);
         auto tmod = thisModule.get();
@@ -2935,7 +2935,7 @@ namespace das {
             if ( thisModule->isVisibleDirectly(mod) && mod!=tmod ) {
                 auto it = mod->readMacros.find(markupName);
                 if ( it != mod->readMacros.end() ) {
-                    macros.push_back(it->second);
+                    macros.push_back(it->second.get());
                 }
             }
             return true;
@@ -2960,7 +2960,7 @@ namespace das {
         return library.findAnnotation(name,thisModule.get());
     }
 
-    vector<TypeInfoMacroPtr> Program::findTypeInfoMacro ( const string & name ) const {
+    vector<TypeInfoMacro*> Program::findTypeInfoMacro ( const string & name ) const {
         return library.findTypeInfoMacro(name,thisModule.get());
     }
 

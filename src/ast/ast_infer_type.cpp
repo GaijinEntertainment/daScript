@@ -2441,7 +2441,7 @@ namespace das {
                     error("typeinfo(" + expr->trait + " ...) is undefined, " + describeType(expr->typeexpr), "", "",
                           expr->at, CompilationError::typeinfo_undefined);
                 } else {
-                    expr->macro = mtis.back().get();
+                    expr->macro = mtis.back();
                     string errors;
                     auto cexpr = expr->macro->getAstChange(expr, errors);
                     if (cexpr) {

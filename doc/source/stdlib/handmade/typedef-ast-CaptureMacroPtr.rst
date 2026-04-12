@@ -1,1 +1,1 @@
-Smart pointer to a `CaptureMacro` object. Used for registering and managing custom lambda capture macros.
+Pointer to a `CaptureMacro` object. Used for registering and managing custom lambda capture macros.

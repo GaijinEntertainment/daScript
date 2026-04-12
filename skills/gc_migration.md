@@ -20,7 +20,6 @@ The following AST types changed from `smart_ptr<T>` (reference-counted) to `gc_n
 **NOT migrated** (still smart_ptr):
 - `ProgramPtr = smart_ptr<Program>`
 - `FunctionAnnotationPtr`, `StructureAnnotationPtr`, `EnumerationAnnotationPtr`
-- `PassMacroPtr`, `VariantMacroPtr`, `ReaderMacroPtr`, `CallMacroPtr`, etc.
 - `VisitorAdapterPtr` (from `make_visitor`)
 - `smart_ptr<Context>`
 
