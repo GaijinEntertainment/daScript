@@ -585,6 +585,8 @@ namespace das {
     DAS_API void for_each_structure_alias ( Structure * structure, const TBlock<void,TypeDecl *> & block, Context * context, LineInfoArg * at );
     DAS_API TypeDeclPtr get_structure_alias ( Structure * structure, const char * aliasName, Context * context, LineInfoArg * at );
     DAS_API Function * findCompilingFunctionByMangledNameHash(char * module_name, uint64_t mnh, Context * context, LineInfoArg * at);
+    DAS_API bool isCppKeyword ( const char * str );
+    DAS_API bool isDasKeyword ( const char * str );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
