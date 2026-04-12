@@ -122,6 +122,7 @@ build all C tutorials directly against the SDK — see
    tutorials/integration_c_10_threading.rst
    tutorials/integration_c_11_type_introspection.rst
    tutorials/integration_c_12_ecs.rst
+   tutorials/integration_c_13_shared_module.rst
 
 .. _tutorials_integration_cpp:
 
