@@ -835,63 +835,63 @@ typedef EnumerationAnnotationPtr = smart_ptr<ast_core::EnumerationAnnotation> ak
 
 .. _alias-PassMacroPtr:
 
-.. das:attribute:: PassMacroPtr = smart_ptr<PassMacro>
+.. das:attribute:: PassMacroPtr = PassMacro?
 
-typedef PassMacroPtr = smart_ptr<ast_core::PassMacro> aka PassMacroPtr
+typedef PassMacroPtr = ast_core::PassMacro? aka PassMacroPtr
 
 .. _alias-VariantMacroPtr:
 
-.. das:attribute:: VariantMacroPtr = smart_ptr<VariantMacro>
+.. das:attribute:: VariantMacroPtr = VariantMacro?
 
-typedef VariantMacroPtr = smart_ptr<ast_core::VariantMacro> aka VariantMacroPtr
+typedef VariantMacroPtr = ast_core::VariantMacro? aka VariantMacroPtr
 
 .. _alias-ReaderMacroPtr:
 
-.. das:attribute:: ReaderMacroPtr = smart_ptr<ReaderMacro>
+.. das:attribute:: ReaderMacroPtr = ReaderMacro?
 
-typedef ReaderMacroPtr = smart_ptr<ast_core::ReaderMacro> aka ReaderMacroPtr
+typedef ReaderMacroPtr = ast_core::ReaderMacro? aka ReaderMacroPtr
 
 .. _alias-CommentReaderPtr:
 
-.. das:attribute:: CommentReaderPtr = smart_ptr<CommentReader>
+.. das:attribute:: CommentReaderPtr = CommentReader?
 
-typedef CommentReaderPtr = smart_ptr<ast_core::CommentReader> aka CommentReaderPtr
+typedef CommentReaderPtr = ast_core::CommentReader? aka CommentReaderPtr
 
 .. _alias-CallMacroPtr:
 
-.. das:attribute:: CallMacroPtr = smart_ptr<CallMacro>
+.. das:attribute:: CallMacroPtr = CallMacro?
 
-typedef CallMacroPtr = smart_ptr<ast_core::CallMacro> aka CallMacroPtr
+typedef CallMacroPtr = ast_core::CallMacro? aka CallMacroPtr
 
 .. _alias-TypeInfoMacroPtr:
 
-.. das:attribute:: TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
+.. das:attribute:: TypeInfoMacroPtr = TypeInfoMacro?
 
-typedef TypeInfoMacroPtr = smart_ptr<ast_core::TypeInfoMacro> aka TypeInfoMacroPtr
+typedef TypeInfoMacroPtr = ast_core::TypeInfoMacro? aka TypeInfoMacroPtr
 
 .. _alias-ForLoopMacroPtr:
 
-.. das:attribute:: ForLoopMacroPtr = smart_ptr<ForLoopMacro>
+.. das:attribute:: ForLoopMacroPtr = ForLoopMacro?
 
-typedef ForLoopMacroPtr = smart_ptr<ast_core::ForLoopMacro> aka ForLoopMacroPtr
+typedef ForLoopMacroPtr = ast_core::ForLoopMacro? aka ForLoopMacroPtr
 
 .. _alias-CaptureMacroPtr:
 
-.. das:attribute:: CaptureMacroPtr = smart_ptr<CaptureMacro>
+.. das:attribute:: CaptureMacroPtr = CaptureMacro?
 
-typedef CaptureMacroPtr = smart_ptr<ast_core::CaptureMacro> aka CaptureMacroPtr
+typedef CaptureMacroPtr = ast_core::CaptureMacro? aka CaptureMacroPtr
 
 .. _alias-TypeMacroPtr:
 
-.. das:attribute:: TypeMacroPtr = smart_ptr<TypeMacro>
+.. das:attribute:: TypeMacroPtr = TypeMacro?
 
-typedef TypeMacroPtr = smart_ptr<ast_core::TypeMacro> aka TypeMacroPtr
+typedef TypeMacroPtr = ast_core::TypeMacro? aka TypeMacroPtr
 
 .. _alias-SimulateMacroPtr:
 
-.. das:attribute:: SimulateMacroPtr = smart_ptr<SimulateMacro>
+.. das:attribute:: SimulateMacroPtr = SimulateMacro?
 
-typedef SimulateMacroPtr = smart_ptr<ast_core::SimulateMacro> aka SimulateMacroPtr
+typedef SimulateMacroPtr = ast_core::SimulateMacro? aka SimulateMacroPtr
 
 
 ++++++++++++
@@ -5315,7 +5315,7 @@ Compilation time only expression which holds temporary information for the `AstR
 
          * **printFlags** :  :ref:`ExprPrintFlags <alias-ExprPrintFlags>` - Expression print flags
 
-         * **macro** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>`> - Macro which is attached to the context parser.
+         * **macro** :  :ref:`ReaderMacro <handle-ast-ReaderMacro>`? - Macro which is attached to the context parser.
 
          * **sequence** :  :ref:`das_string <handle-builtin-das_string>` - Sequence of characters being read.
 
@@ -5685,40 +5685,40 @@ Adapter generation
   *  :ref:`make_block_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_block_annotation_string_auto_0x29a>`
   *  :ref:`make_block_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_block_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_block_type (blk: ExprBlock?) : TypeDecl? <function-ast_make_block_type_ExprBlock_q_>`
-  *  :ref:`make_call_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CallMacro\> <function-ast_make_call_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_call_macro (name: string; class: void?; info: StructInfo const?) : CallMacro? <function-ast_make_call_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_call_macro (name: string; var someClassPtr: auto) : CallMacroPtr <function-ast_make_call_macro_string_auto_0x2ec>`
-  *  :ref:`make_capture_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<CaptureMacro\> <function-ast_make_capture_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_capture_macro (name: string; class: void?; info: StructInfo const?) : CaptureMacro? <function-ast_make_capture_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_capture_macro (name: string; var someClassPtr: auto) : CaptureMacroPtr <function-ast_make_capture_macro_string_auto_0x332>`
   *  :ref:`make_clone_structure (structure: Structure?) : Function? <function-ast_make_clone_structure_Structure_q_>`
-  *  :ref:`make_comment_reader (class: void?; info: StructInfo const?) : smart_ptr\<CommentReader\> <function-ast_make_comment_reader_void_q__StructInfo_const_q_>`
+  *  :ref:`make_comment_reader (class: void?; info: StructInfo const?) : CommentReader? <function-ast_make_comment_reader_void_q__StructInfo_const_q_>`
   *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2de>`
   *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\>; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_>`
   *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2b6>`
   *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<EnumerationAnnotation\> <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ForLoopMacro\> <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : ForLoopMacro? <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x324>`
   *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x28c>`
   *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<FunctionAnnotation\> <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\>; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_>`
   *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\>; blk: TypeDecl?; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__TypeDecl_q__LineInfo>`
-  *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<PassMacro\> <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : PassMacro? <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x308>`
   *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2d0>`
-  *  :ref:`make_reader_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<ReaderMacro\> <function-ast_make_reader_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_reader_macro (name: string; class: void?; info: StructInfo const?) : ReaderMacro? <function-ast_make_reader_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x34b>`
-  *  :ref:`make_simulate_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<SimulateMacro\> <function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_simulate_macro (name: string; class: void?; info: StructInfo const?) : SimulateMacro? <function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_>`
   *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_>`
   *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x2a8>`
   *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : smart_ptr\<StructureAnnotation\> <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\>; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__TypeDecl_q__const_ref_>`
   *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x33e>`
-  *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeMacro\> <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_typeinfo_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<TypeInfoMacro\> <function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : TypeMacro? <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_typeinfo_macro (name: string; class: void?; info: StructInfo const?) : TypeInfoMacro? <function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2fa>`
   *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; var: Variable?) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_>`
   *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x316>`
-  *  :ref:`make_variant_macro (name: string; class: void?; info: StructInfo const?) : smart_ptr\<VariantMacro\> <function-ast_make_variant_macro_string_void_q__StructInfo_const_q_>`
+  *  :ref:`make_variant_macro (name: string; class: void?; info: StructInfo const?) : VariantMacro? <function-ast_make_variant_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_visitor (someClass: auto; blk: block\<(var adapter:VisitorAdapter?):void\>) : auto <function-ast_make_visitor_auto_block_ls_var_adapter_c_VisitorAdapter_q__c_void_gr__0x2c1>`
   *  :ref:`make_visitor (class: void?; info: StructInfo const?; blk: block\<(VisitorAdapter?):void\>) <function-ast_make_visitor_void_q__StructInfo_const_q__block_ls_VisitorAdapter_q__c_void_gr_>`
 
@@ -5757,7 +5757,7 @@ make_call_macro
 
 .. _function-ast_make_call_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_call_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<CallMacro>
+.. das:function:: make_call_macro(name: string; class: void?; info: StructInfo const?) : CallMacro?
 
 Creates an adapter for the AstCallMacro interface.
 
@@ -5780,7 +5780,7 @@ make_capture_macro
 
 .. _function-ast_make_capture_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_capture_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<CaptureMacro>
+.. das:function:: make_capture_macro(name: string; class: void?; info: StructInfo const?) : CaptureMacro?
 
 Creates an adapter for the AstCaptureMacro interface.
 
@@ -5812,7 +5812,7 @@ make_comment_reader
 
 .. _function-ast_make_comment_reader_void_q__StructInfo_const_q_:
 
-.. das:function:: make_comment_reader(class: void?; info: StructInfo const?) : smart_ptr<CommentReader>
+.. das:function:: make_comment_reader(class: void?; info: StructInfo const?) : CommentReader?
 
 Creates an adapter for the AstCommentReader interface.
 
@@ -5864,7 +5864,7 @@ make_for_loop_macro
 
 .. _function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_for_loop_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<ForLoopMacro>
+.. das:function:: make_for_loop_macro(name: string; class: void?; info: StructInfo const?) : ForLoopMacro?
 
 Creates an adapter for the AstForLoopMacro interface.
 
@@ -5931,7 +5931,7 @@ make_pass_macro
 
 .. _function-ast_make_pass_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_pass_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<PassMacro>
+.. das:function:: make_pass_macro(name: string; class: void?; info: StructInfo const?) : PassMacro?
 
 Creates an adapter for the AstPassMacro interface.
 
@@ -5964,7 +5964,7 @@ def make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr
 
 .. _function-ast_make_reader_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_reader_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<ReaderMacro>
+.. das:function:: make_reader_macro(name: string; class: void?; info: StructInfo const?) : ReaderMacro?
 
 ----
 
@@ -5984,7 +5984,7 @@ def make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPt
 
 .. _function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_simulate_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<SimulateMacro>
+.. das:function:: make_simulate_macro(name: string; class: void?; info: StructInfo const?) : SimulateMacro?
 
 ----
 
@@ -6061,7 +6061,7 @@ def make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr
 
 .. _function-ast_make_type_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_type_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<TypeMacro>
+.. das:function:: make_type_macro(name: string; class: void?; info: StructInfo const?) : TypeMacro?
 
 ----
 
@@ -6071,7 +6071,7 @@ make_typeinfo_macro
 
 .. _function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_typeinfo_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<TypeInfoMacro>
+.. das:function:: make_typeinfo_macro(name: string; class: void?; info: StructInfo const?) : TypeInfoMacro?
 
 Creates an adapter for the AstTypeInfoMacro interface.
 
@@ -6115,7 +6115,7 @@ def make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr
 
 .. _function-ast_make_variant_macro_string_void_q__StructInfo_const_q_:
 
-.. das:function:: make_variant_macro(name: string; class: void?; info: StructInfo const?) : smart_ptr<VariantMacro>
+.. das:function:: make_variant_macro(name: string; class: void?; info: StructInfo const?) : VariantMacro?
 
 ----
 
@@ -6144,18 +6144,18 @@ Adapter application
 
   *  :ref:`add_block_annotation (block: ExprBlock?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
   *  :ref:`add_block_annotation (block: ExprBlock?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_block_annotation_ExprBlock_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
-  *  :ref:`add_call_macro (module: Module?; annotation: smart_ptr\<CallMacro\>&) <function-ast_add_call_macro_Module_q__smart_ptr_ls_CallMacro_gr__ref_>`
-  *  :ref:`add_capture_macro (module: Module?; annotation: smart_ptr\<CaptureMacro\>&) <function-ast_add_capture_macro_Module_q__smart_ptr_ls_CaptureMacro_gr__ref_>`
-  *  :ref:`add_comment_reader (module: Module?; reader: smart_ptr\<CommentReader\>&) <function-ast_add_comment_reader_Module_q__smart_ptr_ls_CommentReader_gr__ref_>`
-  *  :ref:`add_dirty_infer_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_dirty_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_call_macro (module: Module?; annotation: CallMacro?) <function-ast_add_call_macro_Module_q__CallMacro_q_>`
+  *  :ref:`add_capture_macro (module: Module?; annotation: CaptureMacro?) <function-ast_add_capture_macro_Module_q__CaptureMacro_q_>`
+  *  :ref:`add_comment_reader (module: Module?; reader: CommentReader?) <function-ast_add_comment_reader_Module_q__CommentReader_q_>`
+  *  :ref:`add_dirty_infer_macro (module: Module?; annotation: PassMacro?) <function-ast_add_dirty_infer_macro_Module_q__PassMacro_q_>`
   *  :ref:`add_enumeration_annotation (module: Module?; annotation: smart_ptr\<EnumerationAnnotation\>&) <function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_>`
-  *  :ref:`add_for_loop_macro (module: Module?; annotation: smart_ptr\<ForLoopMacro\>&) <function-ast_add_for_loop_macro_Module_q__smart_ptr_ls_ForLoopMacro_gr__ref_>`
+  *  :ref:`add_for_loop_macro (module: Module?; annotation: ForLoopMacro?) <function-ast_add_for_loop_macro_Module_q__ForLoopMacro_q_>`
   *  :ref:`add_function_annotation (function: Function?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_Function_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
   *  :ref:`add_function_annotation (module: Module?; annotation: smart_ptr\<FunctionAnnotation\>&) <function-ast_add_function_annotation_Module_q__smart_ptr_ls_FunctionAnnotation_gr__ref_>`
   *  :ref:`add_function_annotation (function: Function?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_function_annotation_Function_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
-  *  :ref:`add_global_lint_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_global_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
-  *  :ref:`add_infer_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
-  *  :ref:`add_lint_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
+  *  :ref:`add_global_lint_macro (module: Module?; annotation: PassMacro?) <function-ast_add_global_lint_macro_Module_q__PassMacro_q_>`
+  *  :ref:`add_infer_macro (module: Module?; annotation: PassMacro?) <function-ast_add_infer_macro_Module_q__PassMacro_q_>`
+  *  :ref:`add_lint_macro (module: Module?; annotation: PassMacro?) <function-ast_add_lint_macro_Module_q__PassMacro_q_>`
   *  :ref:`add_module_option (module: Module?; option: string; type: Type) <function-ast_add_module_option_Module_q__string_Type>`
   *  :ref:`add_new_block_annotation (name: string; var someClassPtr: auto) : auto <function-ast_add_new_block_annotation_string_auto_0x357>`
   *  :ref:`add_new_call_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_call_macro_string_auto_0x39e>`
@@ -6176,15 +6176,15 @@ Adapter application
   *  :ref:`add_new_type_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_type_macro_string_auto_0x387>`
   *  :ref:`add_new_typeinfo_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_typeinfo_macro_string_auto_0x3a4>`
   *  :ref:`add_new_variant_macro (name: string; var someClassPtr: auto) : auto <function-ast_add_new_variant_macro_string_auto_0x375>`
-  *  :ref:`add_optimization_macro (module: Module?; annotation: smart_ptr\<PassMacro\>&) <function-ast_add_optimization_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_>`
-  *  :ref:`add_reader_macro (module: Module?; annotation: smart_ptr\<ReaderMacro\>&) <function-ast_add_reader_macro_Module_q__smart_ptr_ls_ReaderMacro_gr__ref_>`
-  *  :ref:`add_simulate_macro (module: Module?; annotation: smart_ptr\<SimulateMacro\>&) <function-ast_add_simulate_macro_Module_q__smart_ptr_ls_SimulateMacro_gr__ref_>`
+  *  :ref:`add_optimization_macro (module: Module?; annotation: PassMacro?) <function-ast_add_optimization_macro_Module_q__PassMacro_q_>`
+  *  :ref:`add_reader_macro (module: Module?; annotation: ReaderMacro?) <function-ast_add_reader_macro_Module_q__ReaderMacro_q_>`
+  *  :ref:`add_simulate_macro (module: Module?; annotation: SimulateMacro?) <function-ast_add_simulate_macro_Module_q__SimulateMacro_q_>`
   *  :ref:`add_structure_annotation (structure: Structure?; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_StructureAnnotation_gr__ref_>`
   *  :ref:`add_structure_annotation (module: Module?; annotation: smart_ptr\<StructureAnnotation\>&) <function-ast_add_structure_annotation_Module_q__smart_ptr_ls_StructureAnnotation_gr__ref_>`
   *  :ref:`add_structure_annotation (structure: Structure?; annotation: smart_ptr\<AnnotationDeclaration\>&) <function-ast_add_structure_annotation_Structure_q__smart_ptr_ls_AnnotationDeclaration_gr__ref_>`
-  *  :ref:`add_type_macro (module: Module?; annotation: smart_ptr\<TypeMacro\>&) <function-ast_add_type_macro_Module_q__smart_ptr_ls_TypeMacro_gr__ref_>`
-  *  :ref:`add_typeinfo_macro (module: Module?; annotation: smart_ptr\<TypeInfoMacro\>&) <function-ast_add_typeinfo_macro_Module_q__smart_ptr_ls_TypeInfoMacro_gr__ref_>`
-  *  :ref:`add_variant_macro (module: Module?; annotation: smart_ptr\<VariantMacro\>&) <function-ast_add_variant_macro_Module_q__smart_ptr_ls_VariantMacro_gr__ref_>`
+  *  :ref:`add_type_macro (module: Module?; annotation: TypeMacro?) <function-ast_add_type_macro_Module_q__TypeMacro_q_>`
+  *  :ref:`add_typeinfo_macro (module: Module?; annotation: TypeInfoMacro?) <function-ast_add_typeinfo_macro_Module_q__TypeInfoMacro_q_>`
+  *  :ref:`add_variant_macro (module: Module?; annotation: VariantMacro?) <function-ast_add_variant_macro_Module_q__VariantMacro_q_>`
 
 
 add_block_annotation
@@ -6207,49 +6207,49 @@ Adds an annotation declaration to a block.
 
 ----
 
-.. _function-ast_add_call_macro_Module_q__smart_ptr_ls_CallMacro_gr__ref_:
+.. _function-ast_add_call_macro_Module_q__CallMacro_q_:
 
-.. das:function:: add_call_macro(module: Module?; annotation: smart_ptr<CallMacro>&)
+.. das:function:: add_call_macro(module: Module?; annotation: CallMacro?)
 
 Adds an AstCallMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`CallMacro <handle-ast-CallMacro>`>\ & implicit
+            * **annotation** :  :ref:`CallMacro <handle-ast-CallMacro>`? implicit
 
-.. _function-ast_add_capture_macro_Module_q__smart_ptr_ls_CaptureMacro_gr__ref_:
+.. _function-ast_add_capture_macro_Module_q__CaptureMacro_q_:
 
-.. das:function:: add_capture_macro(module: Module?; annotation: smart_ptr<CaptureMacro>&)
+.. das:function:: add_capture_macro(module: Module?; annotation: CaptureMacro?)
 
 Adds an AstCaptureMacro to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`CaptureMacro <handle-ast-CaptureMacro>`>\ & implicit
+            * **annotation** :  :ref:`CaptureMacro <handle-ast-CaptureMacro>`? implicit
 
-.. _function-ast_add_comment_reader_Module_q__smart_ptr_ls_CommentReader_gr__ref_:
+.. _function-ast_add_comment_reader_Module_q__CommentReader_q_:
 
-.. das:function:: add_comment_reader(module: Module?; reader: smart_ptr<CommentReader>&)
+.. das:function:: add_comment_reader(module: Module?; reader: CommentReader?)
 
 Adds an AstCommentReader adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **reader** : smart_ptr< :ref:`CommentReader <handle-ast-CommentReader>`>\ & implicit
+            * **reader** :  :ref:`CommentReader <handle-ast-CommentReader>`? implicit
 
-.. _function-ast_add_dirty_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
+.. _function-ast_add_dirty_infer_macro_Module_q__PassMacro_q_:
 
-.. das:function:: add_dirty_infer_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
+.. das:function:: add_dirty_infer_macro(module: Module?; annotation: PassMacro?)
 
 Adds an AstPassMacro adapter to the dirty inference pass.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
+            * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
 .. _function-ast_add_enumeration_annotation_Module_q__smart_ptr_ls_EnumerationAnnotation_gr__ref_:
 
@@ -6262,16 +6262,16 @@ Adds an annotation to an enumeration and calls apply if applicable.
 
             * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>`>\ & implicit
 
-.. _function-ast_add_for_loop_macro_Module_q__smart_ptr_ls_ForLoopMacro_gr__ref_:
+.. _function-ast_add_for_loop_macro_Module_q__ForLoopMacro_q_:
 
-.. das:function:: add_for_loop_macro(module: Module?; annotation: smart_ptr<ForLoopMacro>&)
+.. das:function:: add_for_loop_macro(module: Module?; annotation: ForLoopMacro?)
 
 Adds an AstForLoopMacro to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`>\ & implicit
+            * **annotation** :  :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`? implicit
 
 
 add_function_annotation
@@ -6297,38 +6297,38 @@ Attaches a function annotation to the specified function. The annotation is move
 
 ----
 
-.. _function-ast_add_global_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
+.. _function-ast_add_global_lint_macro_Module_q__PassMacro_q_:
 
-.. das:function:: add_global_lint_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
+.. das:function:: add_global_lint_macro(module: Module?; annotation: PassMacro?)
 
 Adds an AstPassMacro adapter to the global lint pass.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
+            * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
-.. _function-ast_add_infer_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
+.. _function-ast_add_infer_macro_Module_q__PassMacro_q_:
 
-.. das:function:: add_infer_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
+.. das:function:: add_infer_macro(module: Module?; annotation: PassMacro?)
 
 Adds an AstPassMacro adapter to the type inference pass.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
+            * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
-.. _function-ast_add_lint_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
+.. _function-ast_add_lint_macro_Module_q__PassMacro_q_:
 
-.. das:function:: add_lint_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
+.. das:function:: add_lint_macro(module: Module?; annotation: PassMacro?)
 
 Adds an AstPassMacro adapter to the lint pass of the current module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
+            * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
 .. _function-ast_add_module_option_Module_q__string_Type:
 
@@ -6533,38 +6533,38 @@ def add_new_variant_macro (name: string; var someClassPtr: auto) : auto
 
             * **someClassPtr** : auto
 
-.. _function-ast_add_optimization_macro_Module_q__smart_ptr_ls_PassMacro_gr__ref_:
+.. _function-ast_add_optimization_macro_Module_q__PassMacro_q_:
 
-.. das:function:: add_optimization_macro(module: Module?; annotation: smart_ptr<PassMacro>&)
+.. das:function:: add_optimization_macro(module: Module?; annotation: PassMacro?)
 
 Adds an AstPassMacro adapter to the optimization pass of a specific module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>`>\ & implicit
+            * **annotation** :  :ref:`PassMacro <handle-ast-PassMacro>`? implicit
 
-.. _function-ast_add_reader_macro_Module_q__smart_ptr_ls_ReaderMacro_gr__ref_:
+.. _function-ast_add_reader_macro_Module_q__ReaderMacro_q_:
 
-.. das:function:: add_reader_macro(module: Module?; annotation: smart_ptr<ReaderMacro>&)
+.. das:function:: add_reader_macro(module: Module?; annotation: ReaderMacro?)
 
 Adds an AstReaderMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>`>\ & implicit
+            * **annotation** :  :ref:`ReaderMacro <handle-ast-ReaderMacro>`? implicit
 
-.. _function-ast_add_simulate_macro_Module_q__smart_ptr_ls_SimulateMacro_gr__ref_:
+.. _function-ast_add_simulate_macro_Module_q__SimulateMacro_q_:
 
-.. das:function:: add_simulate_macro(module: Module?; annotation: smart_ptr<SimulateMacro>&)
+.. das:function:: add_simulate_macro(module: Module?; annotation: SimulateMacro?)
 
 Adds an AstSimulateMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`SimulateMacro <handle-ast-SimulateMacro>`>\ & implicit
+            * **annotation** :  :ref:`SimulateMacro <handle-ast-SimulateMacro>`? implicit
 
 
 add_structure_annotation
@@ -6590,38 +6590,38 @@ Attaches a structure annotation to the specified structure. The annotation is mo
 
 ----
 
-.. _function-ast_add_type_macro_Module_q__smart_ptr_ls_TypeMacro_gr__ref_:
+.. _function-ast_add_type_macro_Module_q__TypeMacro_q_:
 
-.. das:function:: add_type_macro(module: Module?; annotation: smart_ptr<TypeMacro>&)
+.. das:function:: add_type_macro(module: Module?; annotation: TypeMacro?)
 
 Adds an AstTypeMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>\ & implicit
+            * **annotation** :  :ref:`TypeMacro <handle-ast-TypeMacro>`? implicit
 
-.. _function-ast_add_typeinfo_macro_Module_q__smart_ptr_ls_TypeInfoMacro_gr__ref_:
+.. _function-ast_add_typeinfo_macro_Module_q__TypeInfoMacro_q_:
 
-.. das:function:: add_typeinfo_macro(module: Module?; annotation: smart_ptr<TypeInfoMacro>&)
+.. das:function:: add_typeinfo_macro(module: Module?; annotation: TypeInfoMacro?)
 
 Adds an AstTypeInfoMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>\ & implicit
+            * **annotation** :  :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`? implicit
 
-.. _function-ast_add_variant_macro_Module_q__smart_ptr_ls_VariantMacro_gr__ref_:
+.. _function-ast_add_variant_macro_Module_q__VariantMacro_q_:
 
-.. das:function:: add_variant_macro(module: Module?; annotation: smart_ptr<VariantMacro>&)
+.. das:function:: add_variant_macro(module: Module?; annotation: VariantMacro?)
 
 Adds an AstVariantMacro adapter to the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **annotation** : smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>`>\ & implicit
+            * **annotation** :  :ref:`VariantMacro <handle-ast-VariantMacro>`? implicit
 
 
 +++++++++++++++++++++++++
@@ -7125,7 +7125,7 @@ Iterating
   *  :ref:`for_each_enumeration (module: Module?; block: block\<(Enumeration?):void\>) <function-ast_for_each_enumeration_Module_q__block_ls_Enumeration_q__c_void_gr_>`
   *  :ref:`for_each_enumeration (mod: Module?; blk: block\<(var en:EnumerationPtr):void\>) : auto <function-ast_for_each_enumeration_Module_q__block_ls_var_en_c_EnumerationPtr_c_void_gr_>`
   *  :ref:`for_each_field (annotation: BasicStructureAnnotation; block: block\<(string;string;TypeDecl?;uint):void\>) <function-ast_for_each_field_BasicStructureAnnotation_block_ls_string;string;TypeDecl_q_;uint_c_void_gr_>`
-  *  :ref:`for_each_for_loop_macro (module: Module?; block: block\<(smart_ptr\<ForLoopMacro\>):void\>) <function-ast_for_each_for_loop_macro_Module_q__block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_for_loop_macro (module: Module?; block: block\<(ForLoopMacro?):void\>) <function-ast_for_each_for_loop_macro_Module_q__block_ls_ForLoopMacro_q__c_void_gr_>`
   *  :ref:`for_each_function (module: Module?; name: string; block: block\<(Function?):void\>) <function-ast_for_each_function_Module_q__string_block_ls_Function_q__c_void_gr_>`
   *  :ref:`for_each_function (mod: Module?; name: string; blk: block\<(var func:FunctionPtr):void\>) : auto <function-ast_for_each_function_Module_q__string_block_ls_var_func_c_FunctionPtr_c_void_gr_>`
   *  :ref:`for_each_generic (module: Module?; name: string; block: block\<(Function?):void\>) <function-ast_for_each_generic_Module_q__string_block_ls_Function_q__c_void_gr_>`
@@ -7141,9 +7141,9 @@ Iterating
   *  :ref:`for_each_structure_alias (structure: Structure?; block: block\<(TypeDecl?):void\>) <function-ast_for_each_structure_alias_Structure_q__block_ls_TypeDecl_q__c_void_gr_>`
   *  :ref:`for_each_typedef (module: Module?; block: block\<(string#;TypeDecl?):void\>) <function-ast_for_each_typedef_Module_q__block_ls_string_hh_;TypeDecl_q__c_void_gr_>`
   *  :ref:`for_each_typedef (mod: Module?; blk: block\<(name:string#;var value:TypeDeclPtr):void\>) : auto <function-ast_for_each_typedef_Module_q__block_ls_name_c_string_hh_;var_value_c_TypeDeclPtr_c_void_gr_>`
-  *  :ref:`for_each_typeinfo_macro (module: Module?; block: block\<(smart_ptr\<TypeInfoMacro\>):void\>) <function-ast_for_each_typeinfo_macro_Module_q__block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_>`
-  *  :ref:`for_each_typemacro (module: Module?; block: block\<(smart_ptr\<TypeMacro\>):void\>) <function-ast_for_each_typemacro_Module_q__block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_>`
-  *  :ref:`for_each_variant_macro (module: Module?; block: block\<(smart_ptr\<VariantMacro\>):void\>) <function-ast_for_each_variant_macro_Module_q__block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_>`
+  *  :ref:`for_each_typeinfo_macro (module: Module?; block: block\<(TypeInfoMacro?):void\>) <function-ast_for_each_typeinfo_macro_Module_q__block_ls_TypeInfoMacro_q__c_void_gr_>`
+  *  :ref:`for_each_typemacro (module: Module?; block: block\<(TypeMacro?):void\>) <function-ast_for_each_typemacro_Module_q__block_ls_TypeMacro_q__c_void_gr_>`
+  *  :ref:`for_each_variant_macro (module: Module?; block: block\<(VariantMacro?):void\>) <function-ast_for_each_variant_macro_Module_q__block_ls_VariantMacro_q__c_void_gr_>`
 
 .. _function-ast_any_array_foreach_void_q__int_block_ls_void_q__c_void_gr_:
 
@@ -7226,16 +7226,16 @@ Iterates through every field in a BuiltinStructure handled type.
 
             * **block** : block<(string;string; :ref:`TypeDecl <handle-ast-TypeDecl>`?;uint):void> implicit
 
-.. _function-ast_for_each_for_loop_macro_Module_q__block_ls_smart_ptr_ls_ForLoopMacro_gr__c_void_gr_:
+.. _function-ast_for_each_for_loop_macro_Module_q__block_ls_ForLoopMacro_q__c_void_gr_:
 
-.. das:function:: for_each_for_loop_macro(module: Module?; block: block<(smart_ptr<ForLoopMacro>):void>)
+.. das:function:: for_each_for_loop_macro(module: Module?; block: block<(ForLoopMacro?):void>)
 
 Iterates through every for-loop macro in the specified module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`>):void> implicit
+            * **block** : block<( :ref:`ForLoopMacro <handle-ast-ForLoopMacro>`?):void> implicit
 
 
 for_each_function
@@ -7396,38 +7396,38 @@ Iterates through every typedef in the specified module.
 
 ----
 
-.. _function-ast_for_each_typeinfo_macro_Module_q__block_ls_smart_ptr_ls_TypeInfoMacro_gr__c_void_gr_:
+.. _function-ast_for_each_typeinfo_macro_Module_q__block_ls_TypeInfoMacro_q__c_void_gr_:
 
-.. das:function:: for_each_typeinfo_macro(module: Module?; block: block<(smart_ptr<TypeInfoMacro>):void>)
+.. das:function:: for_each_typeinfo_macro(module: Module?; block: block<(TypeInfoMacro?):void>)
 
 Iterates through each typeinfo macro in the given module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`>):void> implicit
+            * **block** : block<( :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>`?):void> implicit
 
-.. _function-ast_for_each_typemacro_Module_q__block_ls_smart_ptr_ls_TypeMacro_gr__c_void_gr_:
+.. _function-ast_for_each_typemacro_Module_q__block_ls_TypeMacro_q__c_void_gr_:
 
-.. das:function:: for_each_typemacro(module: Module?; block: block<(smart_ptr<TypeMacro>):void>)
+.. das:function:: for_each_typemacro(module: Module?; block: block<(TypeMacro?):void>)
 
 Iterates over all type macros registered in the given module, invoking the provided block for each one.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`TypeMacro <handle-ast-TypeMacro>`>):void> implicit
+            * **block** : block<( :ref:`TypeMacro <handle-ast-TypeMacro>`?):void> implicit
 
-.. _function-ast_for_each_variant_macro_Module_q__block_ls_smart_ptr_ls_VariantMacro_gr__c_void_gr_:
+.. _function-ast_for_each_variant_macro_Module_q__block_ls_VariantMacro_q__c_void_gr_:
 
-.. das:function:: for_each_variant_macro(module: Module?; block: block<(smart_ptr<VariantMacro>):void>)
+.. das:function:: for_each_variant_macro(module: Module?; block: block<(VariantMacro?):void>)
 
 Iterates through each variant macro in the given module.
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>`? implicit
 
-            * **block** : block<(smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>`>):void> implicit
+            * **block** : block<( :ref:`VariantMacro <handle-ast-VariantMacro>`?):void> implicit
 
 
 +++++++
