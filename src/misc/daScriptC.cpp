@@ -510,6 +510,8 @@ char * das_allocate_string ( das_context * context, char * str ) {
 
 int    das_argument_int ( vec4f arg ) { return cast<int>::to(arg); }
 unsigned int   das_argument_uint ( vec4f arg ) { return cast<unsigned int>::to(arg); }
+long long das_argument_int64 ( vec4f arg ) { return cast<long long>::to(arg); }
+unsigned long long das_argument_uint64 ( vec4f arg ) { return cast<unsigned long long>::to(arg); }
 int    das_argument_bool ( vec4f arg ) { return cast<bool>::to(arg) ? 1 : 0; }
 float  das_argument_float ( vec4f arg ) { return cast<float>::to(arg); }
 double  das_argument_double ( vec4f arg ) { return cast<double>::to(arg); }
