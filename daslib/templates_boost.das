@@ -1030,11 +1030,8 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
     var astVisitor = new QRulesVisitor(eblk)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         var mod = template_structure._module
-        unsafe {
-            var ts = template_structure
-            var vis_structure <- ts
-            prog.visit_structure(vis_structure, astVisitorAdapter)
-        }
+        var vis_structure = template_structure
+        prog.visit_structure(vis_structure, astVisitorAdapter)
         if (!astVisitor.failed) {
             for_each_function(mod, "", $(func){
                 return if (astVisitor.failed)
