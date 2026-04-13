@@ -905,31 +905,31 @@ namespace das {
 
 // debugInfoHelper
 
-    TypeInfo * makeTypeInfo ( smart_ptr<DebugInfoHelper> helper, TypeInfo * info, const TypeDeclPtr & type ) {
+    TypeInfo * makeTypeInfo ( DebugInfoHelper * helper, TypeInfo * info, const TypeDeclPtr & type ) {
         return helper->makeTypeInfo(info, type);
     }
 
-    VarInfo * makeVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, Variable *var ) {
+    VarInfo * makeVariableDebugInfo ( DebugInfoHelper * helper, Variable *var ) {
         return helper->makeVariableDebugInfo(*var);
     }
 
-    VarInfo * makeStructVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st, const Structure::FieldDeclaration * var ) {
+    VarInfo * makeStructVariableDebugInfo ( DebugInfoHelper * helper, const Structure * st, const Structure::FieldDeclaration * var ) {
         return helper->makeVariableDebugInfo(*st, *var);
     }
 
-    StructInfo * makeStructureDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st ) {
+    StructInfo * makeStructureDebugInfo ( DebugInfoHelper * helper, const Structure * st ) {
         return helper->makeStructureDebugInfo(*st);
     }
 
-    FuncInfo * makeFunctionDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Function * fn ) {
+    FuncInfo * makeFunctionDebugInfo ( DebugInfoHelper * helper, const Function * fn ) {
         return helper->makeFunctionDebugInfo(*fn);
     }
 
-    EnumInfo * makeEnumDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Enumeration * en ) {
+    EnumInfo * makeEnumDebugInfo ( DebugInfoHelper * helper, const Enumeration * en ) {
         return helper->makeEnumDebugInfo(*en);
     }
 
-    FuncInfo * makeInvokeableTypeDebugInfo ( smart_ptr<DebugInfoHelper> helper, TypeDeclPtr blk, const LineInfo & at ) {
+    FuncInfo * makeInvokeableTypeDebugInfo ( DebugInfoHelper * helper, TypeDeclPtr blk, const LineInfo & at ) {
         return helper->makeInvokeableTypeDebugInfo(blk, at);
     }
 
@@ -946,32 +946,32 @@ namespace das {
         }
     }
 
-    void debug_helper_iter_structs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
+    void debug_helper_iter_structs(DebugInfoHelper * helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at) {
         call_each(ordered(helper->smn2s), block, context, at);
     }
 
-    void debug_helper_iter_types(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at) {
+    void debug_helper_iter_types(DebugInfoHelper * helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at) {
         call_each(ordered(helper->tmn2t), block, context, at);
     }
 
-    void debug_helper_iter_vars(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at) {
+    void debug_helper_iter_vars(DebugInfoHelper * helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at) {
         call_each(ordered(helper->vmn2v), block, context, at);
     }
 
-    void debug_helper_iter_funcs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at) {
+    void debug_helper_iter_funcs(DebugInfoHelper * helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at) {
         call_each(ordered(helper->fmn2f), block, context, at);
     }
 
-    void debug_helper_iter_enums(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at) {
+    void debug_helper_iter_enums(DebugInfoHelper * helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at) {
         call_each(ordered(helper->emn2e), block, context, at);
     }
 
-    const char *debug_helper_find_type_cppname(const smart_ptr<DebugInfoHelper> &helper, TypeInfo *info, Context * context, LineInfoArg * at) {
+    const char *debug_helper_find_type_cppname(DebugInfoHelper * helper, TypeInfo *info, Context * context, LineInfoArg * at) {
         DAS_ASSERT(helper->t2cppTypeName.find(info) != helper->t2cppTypeName.end());
         return context->allocateString(helper->t2cppTypeName.find(info)->second, at);
     }
 
-    const char *debug_helper_find_struct_cppname(const smart_ptr<DebugInfoHelper> &helper, StructInfo *info, Context * context, LineInfoArg * at) {
+    const char *debug_helper_find_struct_cppname(DebugInfoHelper * helper, StructInfo *info, Context * context, LineInfoArg * at) {
         DAS_ASSERT(helper->s2cppTypeName.find(info) != helper->s2cppTypeName.end());
         return context->allocateString(helper->s2cppTypeName.find(info)->second, at);
     }

@@ -58,11 +58,11 @@ then call ``walk_data`` with a pointer and ``TypeInfo``:
 .. code-block:: das
 
     var walker = new ScalarPrinter()
-    var inscope adapter <- make_data_walker(walker)
-
     var x = 42
-    unsafe {
-        adapter |> walk_data(addr(x), typeinfo rtti_typeinfo(x))
+    make_data_walker(walker) $(adapter) {
+        unsafe {
+            adapter |> walk_data(addr(x), typeinfo rtti_typeinfo(x))
+        }
     }
 
 ``typeinfo rtti_typeinfo(variable)`` is a compile-time intrinsic that
@@ -294,11 +294,13 @@ The ``to_json`` helper wraps the walk in ``build_string``:
 
     def to_json(var value; tinfo : TypeInfo) : string {
         var walker = new JsonWalker()
-        var inscope adapter <- make_data_walker(walker)
-        let res = build_string() $(var writer) {
-            unsafe {
-                walker.writer = addr(writer)
-                adapter |> walk_data(addr(value), tinfo)
+        var res : string
+        make_data_walker(walker) $(adapter) {
+            res = build_string() $(var writer) {
+                unsafe {
+                    walker.writer = addr(writer)
+                    adapter |> walk_data(addr(value), tinfo)
+                }
             }
         }
         unsafe { delete walker }

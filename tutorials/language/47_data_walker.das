@@ -18,7 +18,7 @@
 //   - Override before/after callbacks for containers (structures, arrays, etc.)
 //   - All canVisit methods default to true — override to prune traversal
 //   - Scalar callbacks receive mutable references — values can be modified
-//   - walk_data takes a smart_ptr<DataWalker> adapter, a data pointer, and TypeInfo
+//   - walk_data takes a DataWalker? adapter, a data pointer, and TypeInfo
 //
 // Run: daslang.exe tutorials/language/47_data_walker.das
 
@@ -58,32 +58,32 @@ def demo_scalar_types() {
 
     // Step 1: create the walker and its adapter
     var walker = new ScalarPrinter()
-    var inscope adapter <- make_data_walker(walker)
+    make_data_walker(walker) $(adapter) {
+        // Step 2: walk various scalar values
+        // typeinfo rtti_typeinfo(var) returns the TypeInfo for any variable
+        var x = 42
+        print("Walking int 42:\n")
+        unsafe {
+            adapter |> walk_data(addr(x), typeinfo rtti_typeinfo(x))
+        }
 
-    // Step 2: walk various scalar values
-    // typeinfo rtti_typeinfo(var) returns the TypeInfo for any variable
-    var x = 42
-    print("Walking int 42:\n")
-    unsafe {
-        adapter |> walk_data(addr(x), typeinfo rtti_typeinfo(x))
-    }
+        var f = 3.14
+        print("Walking float 3.14:\n")
+        unsafe {
+            adapter |> walk_data(addr(f), typeinfo rtti_typeinfo(f))
+        }
 
-    var f = 3.14
-    print("Walking float 3.14:\n")
-    unsafe {
-        adapter |> walk_data(addr(f), typeinfo rtti_typeinfo(f))
-    }
+        var s = "hello"
+        print("Walking string \"hello\":\n")
+        unsafe {
+            adapter |> walk_data(addr(s), typeinfo rtti_typeinfo(s))
+        }
 
-    var s = "hello"
-    print("Walking string \"hello\":\n")
-    unsafe {
-        adapter |> walk_data(addr(s), typeinfo rtti_typeinfo(s))
-    }
-
-    var b = true
-    print("Walking bool true:\n")
-    unsafe {
-        adapter |> walk_data(addr(b), typeinfo rtti_typeinfo(b))
+        var b = true
+        print("Walking bool true:\n")
+        unsafe {
+            adapter |> walk_data(addr(b), typeinfo rtti_typeinfo(b))
+        }
     }
 
     unsafe {
@@ -159,12 +159,12 @@ def demo_structures() {
     print("\n=== Section 2: Structures ===\n")
 
     var walker = new StructPrinter()
-    var inscope adapter <- make_data_walker(walker)
-
-    var player = Player(name = "Alice", health = 100, pos = Vec3(x = 1.0, y = 2.5, z = -3.0))
-    print("Walking Player:\n")
-    unsafe {
-        adapter |> walk_data(addr(player), typeinfo rtti_typeinfo(player))
+    make_data_walker(walker) $(adapter) {
+        var player = Player(name = "Alice", health = 100, pos = Vec3(x = 1.0, y = 2.5, z = -3.0))
+        print("Walking Player:\n")
+        unsafe {
+            adapter |> walk_data(addr(player), typeinfo rtti_typeinfo(player))
+        }
     }
 
     unsafe {
@@ -255,21 +255,21 @@ def demo_arrays_and_tables() {
     print("\n=== Section 3: Arrays and tables ===\n")
 
     var walker = new ContainerPrinter()
-    var inscope adapter <- make_data_walker(walker)
+    make_data_walker(walker) $(adapter) {
+        var nums = [10, 20, 30, 40, 50]
+        print("Walking array<int>:\n")
+        unsafe {
+            adapter |> walk_data(addr(nums), typeinfo rtti_typeinfo(nums))
+        }
 
-    var nums = [10, 20, 30, 40, 50]
-    print("Walking array<int>:\n")
-    unsafe {
-        adapter |> walk_data(addr(nums), typeinfo rtti_typeinfo(nums))
-    }
-
-    var scores : table<string; int>
-    scores |> insert("Alice", 95)
-    scores |> insert("Bob", 87)
-    scores |> insert("Charlie", 72)
-    print("\nWalking table<string;int>:\n")
-    unsafe {
-        adapter |> walk_data(addr(scores), typeinfo rtti_typeinfo(scores))
+        var scores : table<string; int>
+        scores |> insert("Alice", 95)
+        scores |> insert("Bob", 87)
+        scores |> insert("Charlie", 72)
+        print("\nWalking table<string;int>:\n")
+        unsafe {
+            adapter |> walk_data(addr(scores), typeinfo rtti_typeinfo(scores))
+        }
     }
 
     unsafe {
@@ -344,24 +344,24 @@ def demo_tuples_and_variants() {
     print("\n=== Section 4: Tuples and variants ===\n")
 
     var walker = new TupleVariantPrinter()
-    var inscope adapter <- make_data_walker(walker)
+    make_data_walker(walker) $(adapter) {
+        var t = ("hello", 42, 3.14)
+        print("Walking tuple<string;int;float>:\n")
+        unsafe {
+            adapter |> walk_data(addr(t), typeinfo rtti_typeinfo(t))
+        }
 
-    var t = ("hello", 42, 3.14)
-    print("Walking tuple<string;int;float>:\n")
-    unsafe {
-        adapter |> walk_data(addr(t), typeinfo rtti_typeinfo(t))
-    }
+        var ok_result = Result(ok = 42)
+        print("\nWalking variant (ok=42):\n")
+        unsafe {
+            adapter |> walk_data(addr(ok_result), typeinfo rtti_typeinfo(ok_result))
+        }
 
-    var ok_result = Result(ok = 42)
-    print("\nWalking variant (ok=42):\n")
-    unsafe {
-        adapter |> walk_data(addr(ok_result), typeinfo rtti_typeinfo(ok_result))
-    }
-
-    var err_result = Result(err = "not found")
-    print("\nWalking variant (err=\"not found\"):\n")
-    unsafe {
-        adapter |> walk_data(addr(err_result), typeinfo rtti_typeinfo(err_result))
+        var err_result = Result(err = "not found")
+        print("\nWalking variant (err=\"not found\"):\n")
+        unsafe {
+            adapter |> walk_data(addr(err_result), typeinfo rtti_typeinfo(err_result))
+        }
     }
 
     unsafe {
@@ -427,18 +427,18 @@ def demo_enums_and_bitfields() {
     print("\n=== Section 5: Enumerations and bitfields ===\n")
 
     var walker = new EnumBitfieldPrinter()
-    var inscope adapter <- make_data_walker(walker)
+    make_data_walker(walker) $(adapter) {
+        var color = Color.Green
+        print("Walking enum Color.Green:\n")
+        unsafe {
+            adapter |> walk_data(addr(color), typeinfo rtti_typeinfo(color))
+        }
 
-    var color = Color.Green
-    print("Walking enum Color.Green:\n")
-    unsafe {
-        adapter |> walk_data(addr(color), typeinfo rtti_typeinfo(color))
-    }
-
-    var perms : Permissions = Permissions.readable | Permissions.executable
-    print("Walking bitfield (readable | executable):\n")
-    unsafe {
-        adapter |> walk_data(addr(perms), typeinfo rtti_typeinfo(perms))
+        var perms : Permissions = Permissions.readable | Permissions.executable
+        print("Walking bitfield (readable | executable):\n")
+        unsafe {
+            adapter |> walk_data(addr(perms), typeinfo rtti_typeinfo(perms))
+        }
     }
 
     unsafe {
@@ -631,12 +631,14 @@ class JsonWalker : DapiDataWalker {
 
 def to_json(var value; tinfo : TypeInfo) : string {
     var walker = new JsonWalker()
-    var inscope adapter <- make_data_walker(walker)
-    let res = build_string() $(var writer) {
-        unsafe {
-            walker.writer = addr(writer)
-            adapter |> walk_data(addr(value), tinfo)
-            walker.writer = null
+    var res : string
+    make_data_walker(walker) $(adapter) {
+        res = build_string() $(var writer) {
+            unsafe {
+                walker.writer = addr(writer)
+                adapter |> walk_data(addr(value), tinfo)
+                walker.writer = null
+            }
         }
     }
     unsafe {
@@ -731,17 +733,17 @@ def demo_filtering() {
 
     var walker = new FilteringWalker()
     walker.skipStructName = "Secret"
-    var inscope adapter <- make_data_walker(walker)
+    make_data_walker(walker) $(adapter) {
+        var record = PublicRecord(
+            title = "Performance Review",
+            secret = Secret(classified = "top-secret", code = 42),
+            score = 95
+        )
 
-    var record = PublicRecord(
-        title = "Performance Review",
-        secret = Secret(classified = "top-secret", code = 42),
-        score = 95
-    )
-
-    print("Walking PublicRecord (Secret fields skipped):\n")
-    unsafe {
-        adapter |> walk_data(addr(record), typeinfo rtti_typeinfo(record))
+        print("Walking PublicRecord (Secret fields skipped):\n")
+        unsafe {
+            adapter |> walk_data(addr(record), typeinfo rtti_typeinfo(record))
+        }
     }
 
     unsafe {
@@ -786,10 +788,10 @@ def demo_mutation() {
     print("Before clamping: x={particle.x} y={particle.y} z={particle.z} alpha={particle.alpha}\n")
 
     var walker = new FloatClamper()
-    var inscope adapter <- make_data_walker(walker)
-
-    unsafe {
-        adapter |> walk_data(addr(particle), typeinfo rtti_typeinfo(particle))
+    make_data_walker(walker) $(adapter) {
+        unsafe {
+            adapter |> walk_data(addr(particle), typeinfo rtti_typeinfo(particle))
+        }
     }
 
     print("After clamping:  x={particle.x} y={particle.y} z={particle.z} alpha={particle.alpha}\n")

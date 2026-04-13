@@ -594,8 +594,11 @@ class public AotDebugInfoHelper {
     //! Helper for generating debug type and variable information in AOT C++ output.
     private info2Name  = new DebugVarCache()
     private info2TypeName = new DebugVarCache()
-    helper : smart_ptr<DebugInfoHelper> <- new DebugInfoHelper(uninitialized);
+    helper : DebugInfoHelper? = new DebugInfoHelper(uninitialized)
     cross_platform : bool = false
+    def operator delete {
+        unsafe { delete helper; }
+    }
 
     def writeDim(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
         if (info.dimSize > 0u) {
@@ -4092,8 +4095,8 @@ def public run_aot(prog : Program?; var pctx : Context?; cop : CodeOfPolicies) :
                     visit(program, cpp_aot.adapter, true)
                 }
                 write(writer, "{cpp_aot.str()}");
-                delete cpp_aot.helper.helper
                 unsafe {
+                    delete cpp_aot.helper.helper
                     delete cpp_aot.collector
                     delete cpp_aot
                 }
@@ -4170,8 +4173,8 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
                 visit(program, cpp_aot.adapter, true)
             }
             let full_output = cpp_aot.str()
-            delete cpp_aot.helper.helper
             unsafe {
+                delete cpp_aot.helper.helper
                 delete cpp_aot.collector
                 delete cpp_aot
             }

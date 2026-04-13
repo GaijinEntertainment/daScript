@@ -1628,12 +1628,12 @@ namespace das
         char * sp = stack.ap();
         ssw << "CALL STACK (sp=" << (stack.top() - stack.ap())
             << ",sptr=0x" << HEX  << intptr_t(sp) << DEC << "):\n";
-        auto walker = make_smart<StackWalkerTextWriter> ( ssw, this );
-        walker->showArguments = showArguments;
-        walker->showLocalVariables =  showLocalVariables;
-        walker->showOutOfScope = showOutOfScope;
-        walker->stackTopOnly = stackTopOnly;
-        dapiStackWalk ( walker, *this, at ? *at : LineInfo() );
+        StackWalkerTextWriter walker ( ssw, this );
+        walker.showArguments = showArguments;
+        walker.showLocalVariables =  showLocalVariables;
+        walker.showOutOfScope = showOutOfScope;
+        walker.stackTopOnly = stackTopOnly;
+        dapiStackWalk ( &walker, *this, at ? *at : LineInfo() );
         ssw << "\n";
     #else
         ssw << "\nCALL STACK TRACKING DISABLED:\n\n";
