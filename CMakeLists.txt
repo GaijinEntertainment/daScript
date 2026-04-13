@@ -724,6 +724,7 @@ src/simulate/debug_print.cpp
 
 SET(RUNTIME_EXTRA_SRC
     src/ast/ast.cpp
+    src/ast/ast_function.cpp
     src/ast/ast_aot_cpp.cpp
     src/ast/ast_interop.cpp
     src/ast/ast_tls.cpp

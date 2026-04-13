@@ -691,7 +691,7 @@ namespace das {
     string das_to_cppCTypeString ( Type t );
     string aotModuleName ( Module * pm  );
     string aotStructName ( Structure * st );
-    string DAS_RT_API describeCppTypeEx ( const smart_ptr_raw<TypeDecl> & type,
+    string DAS_RT_API describeCppTypeEx ( const TypeDecl *type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
                             CpptSkipConst skipConst,

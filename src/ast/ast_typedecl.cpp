@@ -3930,6 +3930,16 @@ namespace das
         {   Type::tVariant,     "Variant"  }
     };
 
+    string aotModuleName ( Module * pm  ) {
+        if ( pm->name.empty() ) {
+            return "";
+        } else if ( pm->name=="$" ) {
+            return "_builtin_";
+        } else {
+            return pm->name;
+        }
+    }
+
     string das_to_cppString ( Type t ) {
         return g_cppTypeTable.find(t);
     }
