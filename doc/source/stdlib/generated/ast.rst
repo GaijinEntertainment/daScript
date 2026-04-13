@@ -5692,31 +5692,31 @@ Adapter generation
   *  :ref:`make_clone_structure (structure: Structure?) : Function? <function-ast_make_clone_structure_Structure_q_>`
   *  :ref:`make_comment_reader (class: void?; info: StructInfo const?) : CommentReader? <function-ast_make_comment_reader_void_q__StructInfo_const_q_>`
   *  :ref:`make_comment_reader (name: string; var someClassPtr: auto) : CommentReaderPtr <function-ast_make_comment_reader_string_auto_0x2de>`
-  *  :ref:`make_enum_debug_info (helper: smart_ptr\<DebugInfoHelper\>; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_>`
+  *  :ref:`make_enum_debug_info (helper: DebugInfoHelper?; en: Enumeration const?) : EnumInfo? <function-ast_make_enum_debug_info_DebugInfoHelper_q__Enumeration_const_q_>`
   *  :ref:`make_enumeration_annotation (name: string; var someClassPtr: auto) : EnumerationAnnotationPtr <function-ast_make_enumeration_annotation_string_auto_0x2b6>`
   *  :ref:`make_enumeration_annotation (name: string; class: void?; info: StructInfo const?) : EnumerationAnnotation? <function-ast_make_enumeration_annotation_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; class: void?; info: StructInfo const?) : ForLoopMacro? <function-ast_make_for_loop_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_for_loop_macro (name: string; var someClassPtr: auto) : ForLoopMacroPtr <function-ast_make_for_loop_macro_string_auto_0x324>`
   *  :ref:`make_function_annotation (name: string; var someClassPtr: auto) : FunctionAnnotationPtr <function-ast_make_function_annotation_string_auto_0x28c>`
   *  :ref:`make_function_annotation (name: string; class: void?; info: StructInfo const?) : FunctionAnnotation? <function-ast_make_function_annotation_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_function_debug_info (helper: smart_ptr\<DebugInfoHelper\>; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_>`
-  *  :ref:`make_invokable_type_debug_info (helper: smart_ptr\<DebugInfoHelper\>; blk: TypeDecl?; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__TypeDecl_q__LineInfo>`
+  *  :ref:`make_function_debug_info (helper: DebugInfoHelper?; fn: Function const?) : FuncInfo? <function-ast_make_function_debug_info_DebugInfoHelper_q__Function_const_q_>`
+  *  :ref:`make_invokable_type_debug_info (helper: DebugInfoHelper?; blk: TypeDecl?; at: LineInfo) : FuncInfo? <function-ast_make_invokable_type_debug_info_DebugInfoHelper_q__TypeDecl_q__LineInfo>`
   *  :ref:`make_pass_macro (name: string; class: void?; info: StructInfo const?) : PassMacro? <function-ast_make_pass_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_pass_macro (name: string; var someClassPtr: auto) : PassMacroPtr <function-ast_make_pass_macro_string_auto_0x308>`
   *  :ref:`make_reader_macro (name: string; var someClassPtr: auto) : ReaderMacroPtr <function-ast_make_reader_macro_string_auto_0x2d0>`
   *  :ref:`make_reader_macro (name: string; class: void?; info: StructInfo const?) : ReaderMacro? <function-ast_make_reader_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPtr <function-ast_make_simulate_macro_string_auto_0x34b>`
   *  :ref:`make_simulate_macro (name: string; class: void?; info: StructInfo const?) : SimulateMacro? <function-ast_make_simulate_macro_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_struct_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_>`
-  *  :ref:`make_struct_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_>`
+  *  :ref:`make_struct_debug_info (helper: DebugInfoHelper?; st: Structure const?) : StructInfo? <function-ast_make_struct_debug_info_DebugInfoHelper_q__Structure_const_q_>`
+  *  :ref:`make_struct_variable_debug_info (helper: DebugInfoHelper?; st: Structure const?; var: FieldDeclaration const?) : VarInfo? <function-ast_make_struct_variable_debug_info_DebugInfoHelper_q__Structure_const_q__FieldDeclaration_const_q_>`
   *  :ref:`make_structure_annotation (name: string; var someClassPtr: auto) : StructureAnnotationPtr <function-ast_make_structure_annotation_string_auto_0x2a8>`
   *  :ref:`make_structure_annotation (name: string; class: void?; info: StructInfo const?) : StructureAnnotation? <function-ast_make_structure_annotation_string_void_q__StructInfo_const_q_>`
-  *  :ref:`make_type_info (helper: smart_ptr\<DebugInfoHelper\>; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo? <function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__TypeDecl_q__const_ref_>`
+  *  :ref:`make_type_info (helper: DebugInfoHelper?; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo? <function-ast_make_type_info_DebugInfoHelper_q__TypeInfo_q__TypeDecl_q__const_ref_>`
   *  :ref:`make_type_macro (name: string; var someClassPtr: auto) : TypeMacroPtr <function-ast_make_type_macro_string_auto_0x33e>`
   *  :ref:`make_type_macro (name: string; class: void?; info: StructInfo const?) : TypeMacro? <function-ast_make_type_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_typeinfo_macro (name: string; class: void?; info: StructInfo const?) : TypeInfoMacro? <function-ast_make_typeinfo_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_typeinfo_macro (name: string; var someClassPtr: auto) : TypeInfoMacroPtr <function-ast_make_typeinfo_macro_string_auto_0x2fa>`
-  *  :ref:`make_variable_debug_info (helper: smart_ptr\<DebugInfoHelper\>; var: Variable?) : VarInfo? <function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_>`
+  *  :ref:`make_variable_debug_info (helper: DebugInfoHelper?; var: Variable?) : VarInfo? <function-ast_make_variable_debug_info_DebugInfoHelper_q__Variable_q_>`
   *  :ref:`make_variant_macro (name: string; var someClassPtr: auto) : VariantMacroPtr <function-ast_make_variant_macro_string_auto_0x316>`
   *  :ref:`make_variant_macro (name: string; class: void?; info: StructInfo const?) : VariantMacro? <function-ast_make_variant_macro_string_void_q__StructInfo_const_q_>`
   *  :ref:`make_visitor (someClass: auto; blk: block\<(var adapter:VisitorAdapter?):void\>) : auto <function-ast_make_visitor_auto_block_ls_var_adapter_c_VisitorAdapter_q__c_void_gr__0x2c1>`
@@ -5827,14 +5827,14 @@ Creates an adapter for the AstCommentReader interface.
 
 ----
 
-.. _function-ast_make_enum_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Enumeration_const_q_:
+.. _function-ast_make_enum_debug_info_DebugInfoHelper_q__Enumeration_const_q_:
 
-.. das:function:: make_enum_debug_info(helper: smart_ptr<DebugInfoHelper>; en: Enumeration const?) : EnumInfo?
+.. das:function:: make_enum_debug_info(helper: DebugInfoHelper?; en: Enumeration const?) : EnumInfo?
 
 Generates an EnumInfo for the specified enumeration using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **en** :  :ref:`Enumeration <handle-ast-Enumeration>`? implicit
 
@@ -5901,25 +5901,25 @@ def make_function_annotation (name: string; var someClassPtr: auto) : FunctionAn
 
 ----
 
-.. _function-ast_make_function_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Function_const_q_:
+.. _function-ast_make_function_debug_info_DebugInfoHelper_q__Function_const_q_:
 
-.. das:function:: make_function_debug_info(helper: smart_ptr<DebugInfoHelper>; fn: Function const?) : FuncInfo?
+.. das:function:: make_function_debug_info(helper: DebugInfoHelper?; fn: Function const?) : FuncInfo?
 
 Generates a FuncInfo for the specified function using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **fn** :  :ref:`Function <handle-ast-Function>`? implicit
 
-.. _function-ast_make_invokable_type_debug_info_smart_ptr_ls_DebugInfoHelper_gr__TypeDecl_q__LineInfo:
+.. _function-ast_make_invokable_type_debug_info_DebugInfoHelper_q__TypeDecl_q__LineInfo:
 
-.. das:function:: make_invokable_type_debug_info(helper: smart_ptr<DebugInfoHelper>; blk: TypeDecl?; at: LineInfo) : FuncInfo?
+.. das:function:: make_invokable_type_debug_info(helper: DebugInfoHelper?; blk: TypeDecl?; at: LineInfo) : FuncInfo?
 
 Generates a FuncInfo for an invokable type such as a lambda or block using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** :  :ref:`TypeDecl <handle-ast-TypeDecl>`? implicit
 
@@ -5988,25 +5988,25 @@ def make_simulate_macro (name: string; var someClassPtr: auto) : SimulateMacroPt
 
 ----
 
-.. _function-ast_make_struct_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q_:
+.. _function-ast_make_struct_debug_info_DebugInfoHelper_q__Structure_const_q_:
 
-.. das:function:: make_struct_debug_info(helper: smart_ptr<DebugInfoHelper>; st: Structure const?) : StructInfo?
+.. das:function:: make_struct_debug_info(helper: DebugInfoHelper?; st: Structure const?) : StructInfo?
 
 Generates a StructInfo for the specified structure using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **st** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
-.. _function-ast_make_struct_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Structure_const_q__FieldDeclaration_const_q_:
+.. _function-ast_make_struct_variable_debug_info_DebugInfoHelper_q__Structure_const_q__FieldDeclaration_const_q_:
 
-.. das:function:: make_struct_variable_debug_info(helper: smart_ptr<DebugInfoHelper>; st: Structure const?; var: FieldDeclaration const?) : VarInfo?
+.. das:function:: make_struct_variable_debug_info(helper: DebugInfoHelper?; st: Structure const?; var: FieldDeclaration const?) : VarInfo?
 
 Generates a VariableInfo for a structure field using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **st** :  :ref:`Structure <handle-ast-Structure>`? implicit
 
@@ -6032,14 +6032,14 @@ def make_structure_annotation (name: string; var someClassPtr: auto) : Structure
 
 ----
 
-.. _function-ast_make_type_info_smart_ptr_ls_DebugInfoHelper_gr__TypeInfo_q__TypeDecl_q__const_ref_:
+.. _function-ast_make_type_info_DebugInfoHelper_q__TypeInfo_q__TypeDecl_q__const_ref_:
 
-.. das:function:: make_type_info(helper: smart_ptr<DebugInfoHelper>; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo?
+.. das:function:: make_type_info(helper: DebugInfoHelper?; info: TypeInfo?; type: TypeDecl? const&) : TypeInfo?
 
 Generates a TypeInfo for the specified type using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
@@ -6088,14 +6088,14 @@ Creates an adapter for the AstTypeInfoMacro interface.
 
 ----
 
-.. _function-ast_make_variable_debug_info_smart_ptr_ls_DebugInfoHelper_gr__Variable_q_:
+.. _function-ast_make_variable_debug_info_DebugInfoHelper_q__Variable_q_:
 
-.. das:function:: make_variable_debug_info(helper: smart_ptr<DebugInfoHelper>; var: Variable?) : VarInfo?
+.. das:function:: make_variable_debug_info(helper: DebugInfoHelper?; var: Variable?) : VarInfo?
 
 Generates a VariableInfo for the specified variable using the given DebugInfoHelper.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **var** :  :ref:`Variable <handle-ast-Variable>`? implicit
 
@@ -7822,6 +7822,8 @@ Properties
   *  :ref:`get_vector_length (vec: void?; type: TypeDecl?) : int <function-ast_get_vector_length_void_q__TypeDecl_q_>`
   *  :ref:`get_vector_ptr_at_index (vec: void?; type: TypeDecl?; idx: int) : void? <function-ast_get_vector_ptr_at_index_void_q__TypeDecl_q__int>`
   *  :ref:`has_field (type: TypeDecl?; fieldName: string; constant: bool) : bool <function-ast_has_field_TypeDecl_q__string_bool>`
+  *  :ref:`is_cpp_keyword (str: string) : bool <function-ast_is_cpp_keyword_string>`
+  *  :ref:`is_das_keyword (str: string) : bool <function-ast_is_das_keyword_string>`
   *  :ref:`is_expr_const (expression: Expression?) : bool <function-ast_is_expr_const_Expression_q_>`
   *  :ref:`is_expr_like_call (expression: Expression?) : bool <function-ast_is_expr_like_call_Expression_q_>`
   *  :ref:`is_same_type (argType: TypeDecl?; passType: TypeDecl?; refMatters: bool; constMatters: bool; temporaryMatters: bool; allowSubstitute: bool) : bool <function-ast_is_same_type_TypeDecl_q__TypeDecl_q__bool_bool_bool_bool>`
@@ -8070,6 +8072,24 @@ Returns true if a structure, variant, tuple, handled type, or pointer to any of 
 
             * **constant** : bool
 
+.. _function-ast_is_cpp_keyword_string:
+
+.. das:function:: is_cpp_keyword(str: string) : bool
+
+Returns true if the string is a reserved C++ keyword (including contextual keywords like override and final).
+
+
+:Arguments: * **str** : string implicit
+
+.. _function-ast_is_das_keyword_string:
+
+.. das:function:: is_das_keyword(str: string) : bool
+
+Returns true if the string is a built-in daScript language keyword.
+
+
+:Arguments: * **str** : string implicit
+
 .. _function-ast_is_expr_const_Expression_q_:
 
 .. das:function:: is_expr_const(expression: Expression?) : bool
@@ -8232,88 +8252,88 @@ Marks a function as modified by a macro so that it will be inferred again.
 Debug info helpers
 ++++++++++++++++++
 
-  *  :ref:`debug_helper_find_struct_cppname (helper: smart_ptr\<DebugInfoHelper\> const&; struct_info: StructInfo?) : string <function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__StructInfo_q_>`
-  *  :ref:`debug_helper_find_type_cppname (helper: smart_ptr\<DebugInfoHelper\> const&; type_info: TypeInfo?) : string <function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__TypeInfo_q_>`
-  *  :ref:`debug_helper_iter_enums (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;EnumInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_funcs (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;FuncInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_structs (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;StructInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_types (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;TypeInfo_q__c_void_gr_>`
-  *  :ref:`debug_helper_iter_vars (helper: smart_ptr\<DebugInfoHelper\>; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;VarInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_find_struct_cppname (helper: DebugInfoHelper?; struct_info: StructInfo?) : string <function-ast_debug_helper_find_struct_cppname_DebugInfoHelper_q__StructInfo_q_>`
+  *  :ref:`debug_helper_find_type_cppname (helper: DebugInfoHelper?; type_info: TypeInfo?) : string <function-ast_debug_helper_find_type_cppname_DebugInfoHelper_q__TypeInfo_q_>`
+  *  :ref:`debug_helper_iter_enums (helper: DebugInfoHelper?; blk: block\<(string;EnumInfo?):void\>) <function-ast_debug_helper_iter_enums_DebugInfoHelper_q__block_ls_string;EnumInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_funcs (helper: DebugInfoHelper?; blk: block\<(string;FuncInfo?):void\>) <function-ast_debug_helper_iter_funcs_DebugInfoHelper_q__block_ls_string;FuncInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_structs (helper: DebugInfoHelper?; blk: block\<(string;StructInfo?):void\>) <function-ast_debug_helper_iter_structs_DebugInfoHelper_q__block_ls_string;StructInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_types (helper: DebugInfoHelper?; blk: block\<(string;TypeInfo?):void\>) <function-ast_debug_helper_iter_types_DebugInfoHelper_q__block_ls_string;TypeInfo_q__c_void_gr_>`
+  *  :ref:`debug_helper_iter_vars (helper: DebugInfoHelper?; blk: block\<(string;VarInfo?):void\>) <function-ast_debug_helper_iter_vars_DebugInfoHelper_q__block_ls_string;VarInfo_q__c_void_gr_>`
 
-.. _function-ast_debug_helper_find_struct_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__StructInfo_q_:
+.. _function-ast_debug_helper_find_struct_cppname_DebugInfoHelper_q__StructInfo_q_:
 
-.. das:function:: debug_helper_find_struct_cppname(helper: smart_ptr<DebugInfoHelper> const&; struct_info: StructInfo?) : string
+.. das:function:: debug_helper_find_struct_cppname(helper: DebugInfoHelper?; struct_info: StructInfo?) : string
 
 Finds a structure in the DebugInfoHelper and returns its C++ name.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`>\ & implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **struct_info** :  :ref:`StructInfo <handle-rtti-StructInfo>`? implicit
 
-.. _function-ast_debug_helper_find_type_cppname_smart_ptr_ls_DebugInfoHelper_gr__const_ref__TypeInfo_q_:
+.. _function-ast_debug_helper_find_type_cppname_DebugInfoHelper_q__TypeInfo_q_:
 
-.. das:function:: debug_helper_find_type_cppname(helper: smart_ptr<DebugInfoHelper> const&; type_info: TypeInfo?) : string
+.. das:function:: debug_helper_find_type_cppname(helper: DebugInfoHelper?; type_info: TypeInfo?) : string
 
 Finds a type in the DebugInfoHelper and returns its C++ name.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`>\ & implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **type_info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`? implicit
 
-.. _function-ast_debug_helper_iter_enums_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;EnumInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_enums_DebugInfoHelper_q__block_ls_string;EnumInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_enums(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;EnumInfo?):void>)
+.. das:function:: debug_helper_iter_enums(helper: DebugInfoHelper?; blk: block<(string;EnumInfo?):void>)
 
 Iterates through all enumerations in the DebugInfoHelper, invoking the provided block for each one.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** : block<(string; :ref:`EnumInfo <handle-rtti-EnumInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_funcs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;FuncInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_funcs_DebugInfoHelper_q__block_ls_string;FuncInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_funcs(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;FuncInfo?):void>)
+.. das:function:: debug_helper_iter_funcs(helper: DebugInfoHelper?; blk: block<(string;FuncInfo?):void>)
 
 Iterates through all functions in the DebugInfoHelper, invoking the provided block for each one.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** : block<(string; :ref:`FuncInfo <handle-rtti-FuncInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_structs_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;StructInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_structs_DebugInfoHelper_q__block_ls_string;StructInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_structs(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;StructInfo?):void>)
+.. das:function:: debug_helper_iter_structs(helper: DebugInfoHelper?; blk: block<(string;StructInfo?):void>)
 
 Iterates through all structures in the DebugInfoHelper, invoking the provided block for each one.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** : block<(string; :ref:`StructInfo <handle-rtti-StructInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_types_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;TypeInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_types_DebugInfoHelper_q__block_ls_string;TypeInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_types(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;TypeInfo?):void>)
+.. das:function:: debug_helper_iter_types(helper: DebugInfoHelper?; blk: block<(string;TypeInfo?):void>)
 
 Iterates through all types in the DebugInfoHelper, invoking the provided block for each one.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** : block<(string; :ref:`TypeInfo <handle-rtti-TypeInfo>`?):void> implicit
 
-.. _function-ast_debug_helper_iter_vars_smart_ptr_ls_DebugInfoHelper_gr__block_ls_string;VarInfo_q__c_void_gr_:
+.. _function-ast_debug_helper_iter_vars_DebugInfoHelper_q__block_ls_string;VarInfo_q__c_void_gr_:
 
-.. das:function:: debug_helper_iter_vars(helper: smart_ptr<DebugInfoHelper>; blk: block<(string;VarInfo?):void>)
+.. das:function:: debug_helper_iter_vars(helper: DebugInfoHelper?; blk: block<(string;VarInfo?):void>)
 
 Iterates through all variables in the DebugInfoHelper, invoking the provided block for each one.
 
 
-:Arguments: * **helper** : smart_ptr< :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`> implicit
+:Arguments: * **helper** :  :ref:`DebugInfoHelper <handle-rtti-DebugInfoHelper>`? implicit
 
             * **blk** : block<(string; :ref:`VarInfo <handle-rtti-VarInfo>`?):void> implicit
 

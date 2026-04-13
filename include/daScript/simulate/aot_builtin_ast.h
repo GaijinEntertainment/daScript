@@ -67,24 +67,24 @@ namespace das {
     DAS_API TypeDeclPtr makeBlockType(ExprBlock *blk);
     // Note: it will be removed once DebugInfoHelper rewritten in das
 
-    DAS_API TypeInfo * makeTypeInfo ( smart_ptr<DebugInfoHelper> helper, TypeInfo * info, const TypeDeclPtr & type );
-    DAS_API VarInfo * makeVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, Variable *var );
-    DAS_API VarInfo * makeStructVariableDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st, const Structure::FieldDeclaration * var );
-    DAS_API StructInfo * makeStructureDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Structure * st );
-    DAS_API FuncInfo * makeFunctionDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Function * fn );
-    DAS_API EnumInfo * makeEnumDebugInfo ( smart_ptr<DebugInfoHelper> helper, const Enumeration * en );
-    DAS_API FuncInfo * makeInvokeableTypeDebugInfo ( smart_ptr<DebugInfoHelper> helper, TypeDeclPtr blk, const LineInfo & at );
+    DAS_API TypeInfo * makeTypeInfo ( DebugInfoHelper * helper, TypeInfo * info, const TypeDeclPtr & type );
+    DAS_API VarInfo * makeVariableDebugInfo ( DebugInfoHelper * helper, Variable *var );
+    DAS_API VarInfo * makeStructVariableDebugInfo ( DebugInfoHelper * helper, const Structure * st, const Structure::FieldDeclaration * var );
+    DAS_API StructInfo * makeStructureDebugInfo ( DebugInfoHelper * helper, const Structure * st );
+    DAS_API FuncInfo * makeFunctionDebugInfo ( DebugInfoHelper * helper, const Function * fn );
+    DAS_API EnumInfo * makeEnumDebugInfo ( DebugInfoHelper * helper, const Enumeration * en );
+    DAS_API FuncInfo * makeInvokeableTypeDebugInfo ( DebugInfoHelper * helper, TypeDeclPtr blk, const LineInfo & at );
 
     template <typename T>
     using DebugBlockT = TBlock<void,const char *, T>;
 
-    DAS_API void debug_helper_iter_structs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at);
-    DAS_API void debug_helper_iter_types(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at);
-    DAS_API void debug_helper_iter_vars(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at);
-    DAS_API void debug_helper_iter_funcs(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at);
-    DAS_API void debug_helper_iter_enums(smart_ptr<DebugInfoHelper> helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at);
-    DAS_API const char *debug_helper_find_type_cppname(const smart_ptr<DebugInfoHelper> &helper, TypeInfo *info, Context * context, LineInfoArg * at);
-    DAS_API const char *debug_helper_find_struct_cppname(const smart_ptr<DebugInfoHelper> &helper, StructInfo *info, Context * context, LineInfoArg * at);
+    DAS_API void debug_helper_iter_structs(DebugInfoHelper * helper, const DebugBlockT<StructInfo*> & block, Context * context, LineInfoArg * at);
+    DAS_API void debug_helper_iter_types(DebugInfoHelper * helper, const DebugBlockT<TypeInfo*> & block, Context * context, LineInfoArg * at);
+    DAS_API void debug_helper_iter_vars(DebugInfoHelper * helper, const DebugBlockT<VarInfo*> & block, Context * context, LineInfoArg * at);
+    DAS_API void debug_helper_iter_funcs(DebugInfoHelper * helper, const DebugBlockT<FuncInfo*> & block, Context * context, LineInfoArg * at);
+    DAS_API void debug_helper_iter_enums(DebugInfoHelper * helper, const DebugBlockT<EnumInfo*> & block, Context * context, LineInfoArg * at);
+    DAS_API const char *debug_helper_find_type_cppname(DebugInfoHelper * helper, TypeInfo *info, Context * context, LineInfoArg * at);
+    DAS_API const char *debug_helper_find_struct_cppname(DebugInfoHelper * helper, StructInfo *info, Context * context, LineInfoArg * at);
     DAS_API bool macro_aot_infix(TypeInfoMacro *macro, StringBuilderWriter *ss, ExpressionPtr expr);
     DAS_API FileInfo *clone_file_info(const char *name, int tabSize, Context * context, LineInfoArg * at);
     DAS_API void for_each_module_function(Module *module, const TBlock<void,FunctionPtr> &blk, Context * context, LineInfoArg * at);

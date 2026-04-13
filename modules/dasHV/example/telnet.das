@@ -28,9 +28,9 @@ class TelnetServer : Server {
     }
     def restart {
         if (_server != null) {
-            var inscope session : smart_ptr<NetworkServer>
+            var session : NetworkServer?
             self->save(session)
-            gc0_save_smart_ptr("telnet-session", session)
+            gc0_save_ptr("telnet-session", session)
         }
     }
     def override onData(msg : uint8?; size : int) {
@@ -82,7 +82,7 @@ def main {
     let port = 9000
     var telnet = new TelnetServer()
     telnet->make_server_adapter()
-    var inscope session : smart_ptr<NetworkServer> <- unsafe(reinterpret<smart_ptr<NetworkServer>>(gc0_restore_smart_ptr("telnet-session")))
+    var session : NetworkServer? = unsafe(reinterpret<NetworkServer?>(gc0_restore_ptr("telnet-session")))
     if (session != null) {
         print("restoring server after restart\n")
         telnet->restore(session)

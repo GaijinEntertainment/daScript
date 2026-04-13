@@ -1472,7 +1472,7 @@ namespace das
         string name;
     };
 
-    class DAS_API DebugInfoHelper : public ptr_ref_count {
+    class DAS_API DebugInfoHelper {
     public:
         DebugInfoHelper () { debugInfo = make_shared<DebugInfoAllocator>(); }
         DebugInfoHelper ( const shared_ptr<DebugInfoAllocator> & di ) : debugInfo(di) {}

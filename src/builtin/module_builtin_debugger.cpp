@@ -780,8 +780,13 @@ namespace debugger {
         }
     };
 
-    StackWalkerPtr makeStackWalker ( const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<StackWalkerAdapter>((char *)pClass,info,context);
+    void makeStackWalker ( const void * pClass, const StructInfo * info,
+            const TBlock<void, StackWalker *> & blk, Context * context, LineInfoArg * at ) {
+        auto adapter = new StackWalkerAdapter((char *)pClass,info,context);
+        vec4f args[1];
+        args[0] = cast<StackWalker *>::from(adapter);
+        context->invoke(blk, args, nullptr, at);
+        delete adapter;
     }
 
     DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context ) {
@@ -814,8 +819,13 @@ namespace debugger {
         context.stackWalk(&lineInfo, true, true);
     }
 
-    DataWalkerPtr makeDataWalker ( const void * pClass, const StructInfo * info, Context * context ) {
-        return make_smart<DataWalkerAdapter>((char *)pClass,info,context);
+    void makeDataWalker ( const void * pClass, const StructInfo * info,
+            const TBlock<void, DataWalker *> & blk, Context * context, LineInfoArg * at ) {
+        auto adapter = new DataWalkerAdapter((char *)pClass,info,context);
+        vec4f args[1];
+        args[0] = cast<DataWalker *>::from(adapter);
+        context->invoke(blk, args, nullptr, at);
+        delete adapter;
     }
 
     void dapiWalkData ( DataWalkerPtr walker, void * data, const TypeInfo & info ) {
@@ -1387,8 +1397,8 @@ namespace debugger {
                     ->args({"command"});
             // data walker
             addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
-                SideEffects::modifyExternal, "makeDataWalker")
-                    ->args({"class","info","context"});
+                SideEffects::modifyExternal|SideEffects::invoke, "makeDataWalker")
+                    ->args({"class","info","block","context","at"});
             addExtern<DAS_BIND_FUN(dapiWalkData)>(*this, lib,  "walk_data",
                 SideEffects::modifyExternal, "dapiWalkData")
                     ->args({"walker","data","info"});
@@ -1400,8 +1410,8 @@ namespace debugger {
                     ->args({"walker","data","struct_info"});
             // stack walker
             addExtern<DAS_BIND_FUN(makeStackWalker)>(*this, lib,  "make_stack_walker",
-                SideEffects::modifyExternal, "makeStackWalker")
-                    ->args({"class","info","context"});
+                SideEffects::modifyExternal|SideEffects::invoke, "makeStackWalker")
+                    ->args({"class","info","block","context","at"});
             addExtern<DAS_BIND_FUN(dapiStackWalk)>(*this, lib,  "walk_stack",
                 SideEffects::modifyExternal, "dapiStackWalk")
                     ->args({"walker","context","line"});

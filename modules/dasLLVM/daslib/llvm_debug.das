@@ -89,23 +89,20 @@ class SampleStackWalker : DapiStackWalker {
 }
 
 class ContextStateAgent : DapiDebugAgent {
-    walker_adapter : smart_ptr<StackWalker>
     walker : SampleStackWalker?
     def ContextStateAgent {
         walker = new SampleStackWalker()
-        unsafe {
-            walker_adapter <- make_stack_walker(walker)
-        }
     }
     def operator delete {
         unsafe {
-            delete walker_adapter
             delete walker
         }
     }
     def override onCollect(var ctx : Context; at : LineInfo) {
         walker.ctxid = unsafe(addr(ctx))
-        walk_stack(walker_adapter, ctx, at)
+        make_stack_walker(walker) $(adapter) {
+            walk_stack(adapter, ctx, at)
+        }
     }
 }
 

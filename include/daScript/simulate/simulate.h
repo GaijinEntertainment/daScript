@@ -295,7 +295,7 @@ namespace das
         virtual bool onAfterCall ( Prologue * ) { return true; }
         virtual void onCorruptStack ( Prologue * ) { }
     };
-    typedef smart_ptr<StackWalker> StackWalkerPtr;
+    typedef StackWalker * StackWalkerPtr;
 
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
     int32_t dapiStackDepth ( Context & context );
