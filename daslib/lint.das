@@ -33,10 +33,12 @@ class LintVisitor : AstVisitor {
     //!   - LINT002: unused variable
     //!   - LINT003: variable can be made const (var→let)
     //!   - LINT004: underscore-prefixed variable is actually used
+    //!   - LINT005: redundant reinterpret<T>(x) where T matches source type
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
     noLint : bool = false
+    genericDepth : int = 0
     // collection mode — when true, errors are appended to `errors` instead of error()
     collect_errors : bool = false
     errors : array<string>
@@ -78,6 +80,9 @@ class LintVisitor : AstVisitor {
     }
     def override preVisitFunction(fun : FunctionPtr) : void {
         noLint = false
+        if (fun.fromGeneric != null || fun.flags.generated) {
+            genericDepth++
+        }
         if (fun.moreFlags.isTemplate) {
             noLint = true
             return
@@ -91,6 +96,9 @@ class LintVisitor : AstVisitor {
     }
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         noLint = false
+        if (fun.fromGeneric != null || fun.flags.generated) {
+            genericDepth--
+        }
         return <- fun
     }
     def override preVisitExprBlock(blk : ExprBlock?) : void {
@@ -135,6 +143,23 @@ class LintVisitor : AstVisitor {
             exprForTerminator |> push(intptr(expr))
         }
     }
+    // --- LINT005: redundant reinterpret cast ---
+
+    def override preVisitExprCast(expr : ExprCast?) : void {
+        if (noLint || genericDepth > 0) {
+            return
+        }
+        if (!expr.castFlags.reinterpretCast) {
+            return
+        }
+        if (expr.subexpr == null || expr.subexpr._type == null || expr.castType == null) {
+            return
+        }
+        if (is_same_type(expr.castType, expr.subexpr._type, false, false, false, false)) {
+            self->lint_error("LINT005: redundant reinterpret cast; target type is the same as source type", expr.at)
+        }
+    }
+
     def override preVisitExprForVariable(expr : ExprFor?; v : VariablePtr; last : bool) : void {
         if (expr.canShadow) {
             return

@@ -414,7 +414,7 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_tool(
         "lint",
-        "Run lint and performance checks on daScript file(s). Combines paranoid lint (unused variables, const suggestions, unreachable code, naming) with performance lint (PERF001-009: string concat in loops, character_at misuse, push without reserve, unnecessary string/get_ptr conversions, redundant move-return). Supports single file, comma-separated list, or glob pattern.",
+        "Run lint and performance checks on daScript file(s). Combines paranoid lint (unused variables, const suggestions, unreachable code, naming, redundant reinterpret casts) with performance lint (PERF001-012: string concat in loops, character_at misuse, push without reserve, unnecessary string/get_ptr conversions, redundant move-return, string(das_string) in strings functions) and style lint (STYLE001-011: pipe/block syntax, rtti is, if true, decl-then-assign). Supports single file, comma-separated list, or glob pattern.",
         {
             "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern"),
             "project" => PROJECT_PROP

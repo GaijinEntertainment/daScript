@@ -24,6 +24,7 @@ module perf_lint shared private
 //!   PERF009 — redundant move-init variable immediately returned
 //!   PERF010 — unnecessary get_ptr() for null comparison
 //!   PERF011 — unnecessary get_ptr() for field access
+//!   PERF012 — string(das_string) passed to strings module function
 
 require daslib/ast_boost
 require strings
@@ -652,6 +653,15 @@ class PerfLintVisitor : AstVisitor {
                 if (rv != null && self->is_defined_outside_loop(rv) && !reserved_paths |> has_value(self->make_path_key(rv, path))) {
                     let fname = string(expr.func.fromGeneric.name)
                     self->perf_warning("PERF006: {fname} in loop without prior reserve() may cause repeated reallocations; consider reserve() before the loop", expr.at)
+                }
+            }
+        }
+        // PERF012: string(das_string) passed to strings module function
+        if (expr.func._module.name == "strings" && expr.func.name != "string") {
+            for (arg in expr.arguments) {
+                if (self->is_string_of_das_string(arg)) {
+                    self->perf_warning("PERF012: string(das_string) passed to strings function; use peek(das_string) instead", expr.at)
+                    break
                 }
             }
         }
