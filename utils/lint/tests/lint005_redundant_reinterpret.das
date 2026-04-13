@@ -14,8 +14,9 @@ def bad_redundant_reinterpret(var x : int?) : int? {
     return unsafe(reinterpret<int?>(x))
 }
 
-// bad: reinterpret to same const pointer type (1 warning)
-def bad_redundant_const(x : int const?) : int const? {
+// good: reinterpret to same const pointer type (not caught — outer const from param read
+// makes types differ; acceptable false negative to avoid flagging const-stripping casts)
+def good_same_const(x : int const?) : int const? {
     return unsafe(reinterpret<int const?>(x))
 }
 

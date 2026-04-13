@@ -199,8 +199,15 @@ class ImplementsMacro : AstStructureAnnotation {
         // now, for the methods
         let skipl = length(iface_name) + 1
         for (fld in st.fields) {
-            if (string(fld.name) |> starts_with("{iface_name}`")) {
-                let method_name = string(fld.name) |> slice(skipl)
+            var fld_starts_with_iface = false
+            var method_name : string
+            peek(fld.name) $(fld_name) {
+                fld_starts_with_iface = fld_name |> starts_with("{iface_name}`")
+                if (fld_starts_with_iface) {
+                    method_name = fld_name |> slice(skipl)
+                }
+            }
+            if (fld_starts_with_iface) {
                 var found = false
                 for (cm in cls.fields) {
                     if (cm.name == method_name) {

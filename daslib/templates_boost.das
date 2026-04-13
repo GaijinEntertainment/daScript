@@ -1032,7 +1032,7 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
         var mod = template_structure._module
         unsafe {
             var ts = template_structure
-            var vis_structure <- reinterpret<Structure?>(ts)
+            var vis_structure <- ts
             prog.visit_structure(vis_structure, astVisitorAdapter)
         }
         if (!astVisitor.failed) {

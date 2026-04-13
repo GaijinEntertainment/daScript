@@ -155,7 +155,10 @@ class LintVisitor : AstVisitor {
         if (expr.subexpr == null || expr.subexpr._type == null || expr.castType == null) {
             return
         }
-        if (is_same_type(expr.castType, expr.subexpr._type, false, false, false, false)) {
+        if (expr.castType.isVoidPointer != expr.subexpr._type.isVoidPointer) {
+            return
+        }
+        if (is_same_type(expr.castType, expr.subexpr._type, false, true, true, false)) {
             self->lint_error("LINT005: redundant reinterpret cast; target type is the same as source type", expr.at)
         }
     }

@@ -633,8 +633,7 @@ def private fold_where_select(argIndex : int; var topValue : Expression?; var bl
     var eWhere = calls[0]._0
     var eSelect = calls[1]._0
     var iterType = clone_type(eWhere.arguments[0]._type.firstType)
-    var whereCond : Expression?
-    whereCond = fold_linq_cond(eWhere.arguments[1], "it")
+    var whereCond = fold_linq_cond(eWhere.arguments[1], "it")
     var selectExpr : Expression?
     if (eSelect != null) {
         selectExpr = fold_linq_cond(eSelect.arguments[1], "it")
@@ -649,8 +648,7 @@ def private fold_where_select(argIndex : int; var topValue : Expression?; var bl
 def private fold_where(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
     //! folds where + select into a single comprehension
     var eWhere = calls[0]._0
-    var whereCond : Expression?
-    whereCond = fold_linq_cond(eWhere.arguments[1], "it")
+    var whereCond = fold_linq_cond(eWhere.arguments[1], "it")
     var comprehension = qmacro([for (it in $e(topValue)); it; where $e(whereCond)])
     return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
@@ -659,8 +657,7 @@ def private fold_where(argIndex : int; var topValue : Expression?; var blk : Exp
 def private fold_select(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
     //! folds select into a single comprehension
     var eSelect = calls[0]._0
-    var selectExpr : Expression?
-    selectExpr = fold_linq_cond(eSelect.arguments[1], "it")
+    var selectExpr = fold_linq_cond(eSelect.arguments[1], "it")
     var comprehension = qmacro([for (it in $e(topValue)); $e(selectExpr)])
     return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
 }
@@ -723,7 +720,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
     if (calls |> length == 0) {
         return null
     }
-    var topExpr = clone_expression(unsafe(reinterpret<Expression?>(top)))
+    var topExpr = clone_expression(top)
     var topExprType = clone_type(top._type)
     var topValue = qmacro(source)
     var argIndex = 0

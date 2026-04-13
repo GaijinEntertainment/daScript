@@ -62,9 +62,7 @@ def public collect_used_types(vfun : array<Function?>; vvar : array<Variable?>; 
     var astVisitor = new TypeVisitor()
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         for (f in vfun) {
-            unsafe {
-                visit(reinterpret<FunctionPtr> f, astVisitorAdapter)
-            }
+            visit(f, astVisitorAdapter)
         }
     }
     for (v in vvar) {
