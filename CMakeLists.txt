@@ -728,6 +728,7 @@ SET(RUNTIME_EXTRA_SRC
     src/ast/ast_interop.cpp
     src/ast/ast_tls.cpp
     src/ast/ast_visitor.cpp
+    src/ast/ast_function.cpp
     src/ast/ast_typedecl.cpp
     src/ast/ast_match.cpp
     src/ast/ast_module.cpp

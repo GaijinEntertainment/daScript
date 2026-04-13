@@ -519,13 +519,8 @@ namespace das
 
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
-<<<<<<< HEAD
-    struct DAS_API ExprSequence : ExprOp2 {
-        ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
-=======
     struct DAS_RT_API ExprSequence : ExprOp2 {
-        ExprSequence ( const LineInfo & a, const ExpressionPtr & l, const ExpressionPtr & r )
->>>>>>> 72bb0a2f4 (help windows DAS_RT_API)
+        ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, ",", l, r) { __rtti = "ExprSequence"; }
         virtual bool rtti_isSequence() const override { return true; }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;

@@ -684,6 +684,20 @@ namespace das {
     enum class CpptSkipConst { no, yes };
     enum class CpptRedundantConst { no, yes };
     enum class ChooseSmartPtr { no, yes };
+    enum CpptUseAlias { no, yes };
+
+    string aotSuffixNameEx ( const string & funcName, const char * suffix );
+    string das_to_cppString ( Type t );
+    string das_to_cppCTypeString ( Type t );
+    string aotModuleName ( Module * pm  );
+    string aotStructName ( Structure * st );
+    string DAS_RT_API describeCppTypeEx ( const smart_ptr_raw<TypeDecl> & type,
+                            CpptSubstitureRef substituteRef,
+                            CpptSkipRef skipRef,
+                            CpptSkipConst skipConst,
+                            CpptRedundantConst redundantConst,
+                            CpptUseAlias useAlias,
+                            ChooseSmartPtr chooseSmartPtr);
 
     string DAS_RT_API describeCppType(const TypeDecl * type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
