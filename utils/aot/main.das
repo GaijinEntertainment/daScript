@@ -165,7 +165,7 @@ def main() {
             ast_gc_guard() {
                 let res = aot(aot_in, false, cross_platform, cop)
                 if (res |> empty()) {
-                    to_log(LOG_INFO, "Failed to compile `{aot_in}` in standalone.\n")
+                    to_log(LOG_ERROR, "Failed to compile `{aot_in}` in standalone.\n")
                     result = false
                 } else {
                     let written = write_result(res, aot_out, "Aot", force_overwrite)
@@ -178,7 +178,7 @@ def main() {
             ast_gc_guard() {
                 let res = aot(aot_in, false, cross_platform, cop)
                 if (res |> empty()) {
-                    to_log(LOG_INFO, "Failed to compile `{aot_in}` in aotlib.\n")
+                    to_log(LOG_ERROR, "Failed to compile `{aot_in}` in aotlib.\n")
                     result = false
                 } else {
                     let written = write_result(res, aot_out, "Aot library", force_overwrite)
@@ -191,13 +191,15 @@ def main() {
             ast_gc_guard() {
                 let is_ok = standalone_aot(ctx_in, ctx_out, cross_platform, false, cop)
                 if (!is_ok && !quiet) {
-                    to_log(LOG_INFO, "Failed to compile `{ctx_in}` in standalone.\n")
+                    to_log(LOG_ERROR, "Failed to compile `{ctx_in}` in standalone.\n")
                 }
                 result = is_ok && result
             }
         }
     }
-    unsafe {
-        fio::exit(result ? 0 : -1)
+    if (!result) {
+        // Doing exit() may cause SIFO on complex files
+        // with init, so return as usual if everything is ok.
+        unsafe(fio::exit(-1))
     }
 }
