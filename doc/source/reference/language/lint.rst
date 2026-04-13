@@ -13,7 +13,7 @@ Lint Tools
 
 daslang provides three complementary lint passes that detect issues at compile time:
 
-- **Paranoid lint** (``daslib/lint``) — unused variables, variables that can be ``let``, unreachable code
+- **Paranoid lint** (``daslib/lint``) — unreachable code, unused variables, variables that can be ``let``, underscore naming, redundant reinterpret casts
 - **Performance lint** (``daslib/perf_lint``) — performance anti-patterns (error code ``40217``)
 - **Style lint** (``daslib/style_lint``) — non-idiomatic patterns (error code ``40218``)
 
@@ -93,6 +93,89 @@ an implementation detail, not something users need to worry about.
 **Closures are excluded.** Code inside closures (blocks, lambdas) is not checked
 for loop-related performance patterns, since the closure may be called outside
 the loop context.
+
+.. _paranoid_lint:
+
+--------------
+Paranoid rules
+--------------
+
+.. index::
+    single: lint
+
+LINT001 — unreachable code
+===========================
+
+Code after a ``return`` or ``panic()`` in the same block is unreachable and
+will never execute.
+
+.. code-block:: das
+
+    def foo() {
+        return 1
+        print("never reached\n")            // LINT001
+    }
+
+LINT002 — unused variable
+==========================
+
+A declared variable is never read. Prefix the name with an underscore
+(``_x``) to suppress the warning, or remove the variable entirely.
+
+.. code-block:: das
+
+    def foo() {
+        var x = 5                           // LINT002 — x is never used
+        return 1
+    }
+
+LINT003 — variable can be ``let``
+==================================
+
+A ``var`` variable is never mutated. Declare it with ``let`` instead.
+
+.. code-block:: das
+
+    // Bad
+    var x = 5                               // LINT003
+    return x
+
+    // Good
+    let x = 5
+    return x
+
+LINT004 — underscore-prefixed variable is used
+================================================
+
+A variable named ``_x`` is conventionally unused. If it is actually accessed,
+rename it without the underscore prefix.
+
+.. code-block:: das
+
+    def foo(_x : int) : int {
+        return _x                           // LINT004
+    }
+
+LINT005 — redundant ``reinterpret`` cast
+=========================================
+
+``reinterpret<T>(x)`` where ``T`` is the same type as ``x`` is a no-op.
+Remove the cast.
+
+The rule skips casts that strip ``const`` or ``temporary`` modifiers (those
+serve a purpose) and casts between ``void?`` and typed pointers. It also
+skips generic instantiations and compiler-generated functions.
+
+.. code-block:: das
+
+    // Bad — x is already int?
+    var y = unsafe(reinterpret<int?>(x))    // LINT005
+
+    // Good
+    var y = x
+
+    // Good — strips const (not flagged)
+    var y = unsafe(reinterpret<int?>(const_ptr))
 
 .. _perf_lint:
 
@@ -303,6 +386,25 @@ first to access a field is unnecessary.
     // Good — direct field access
     let name = expr.__rtti
 
+PERF012 — ``string(das_string)`` passed to strings function
+=============================================================
+
+Wrapping a ``das_string`` in ``string()`` before passing to a function from
+the ``strings`` module allocates a temporary string unnecessarily. Use
+``peek(das_string)`` instead, which provides a zero-allocation read-only
+string reference.
+
+.. code-block:: das
+
+    // Bad — allocates a temporary string
+    let pos = find(string(name), "foo")         // PERF012
+
+    // Good — zero allocation
+    var pos = -1
+    peek(name) $(s) {
+        pos = find(s, "foo")
+    }
+
 .. _style_lint:
 
 -----------
@@ -421,6 +523,32 @@ block (lexical scope) instead.
     {
         print("always\n")
     }
+
+STYLE011 — variable declaration followed by immediate assignment
+=================================================================
+
+A ``var`` declaration with no initializer immediately followed by an
+assignment to that variable should be combined into a single declaration
+with initialization.
+
+The rule excludes ``var inscope`` (needs separate declaration for cleanup
+semantics), compiler-generated variables, and generic instantiations.
+
+.. code-block:: das
+
+    // Bad — split declaration and init
+    var x : int
+    x = 5                                       // STYLE011
+
+    // Good — combined
+    var x = 5
+
+    // Bad — clone on next line
+    var s : string
+    s := src                                    // STYLE011
+
+    // Good — combined
+    var s := src
 
 -----
 Tests
