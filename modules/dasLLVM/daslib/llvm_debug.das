@@ -7,7 +7,6 @@ options no_aot = true
 module llvm_debug shared private
 
 require daslib/debugger
-require llvm
 require llvm/daslib/llvm_boost
 
 def report_to_debugger(var ctx : Context; category, name : string; value : auto(TT)) {

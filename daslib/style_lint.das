@@ -19,6 +19,7 @@ module style_lint shared private
 //!   STYLE005 — single-statement if can use postfix conditional (configurable, off by default)
 //!   STYLE006 — string(__rtti) comparison should use `is` operator
 //!   STYLE010 — if (true) should be a bare block
+//!   STYLE011 — variable declaration followed by immediate assignment
 
 require daslib/ast_boost
 require strings
@@ -39,6 +40,8 @@ class StyleLintVisitor : AstVisitor {
     reported_locations : array<uint64>
     // current function (for inferStack reporting)
     @do_not_delete current_function : Function?
+    // STYLE011: track uninitialized variables from most recent ExprLet
+    @do_not_delete pending_uninit_vars : array<Variable?>
 
     def StyleLintVisitor() {
         pass
@@ -342,6 +345,45 @@ class StyleLintVisitor : AstVisitor {
                     }
                 }
             }
+        }
+    }
+
+    // --- STYLE011: variable declaration followed by immediate assignment ---
+
+    def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
+        if (v.init == null && !v.flags.generated && !v.flags.inScope && (current_function == null || current_function.fromGeneric == null)) {
+            pending_uninit_vars |> push(v)
+        }
+    }
+
+    def find_assign_var(expr : Expression?) : Variable? {
+        var inner = expr
+        if (inner is ExprRef2Value) {
+            inner = (inner as ExprRef2Value.subexpr)
+        }
+        return null if (inner == null || !(inner is ExprVar))
+        return (inner as ExprVar.variable)
+    }
+
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+        if (length(pending_uninit_vars) > 0) {
+            if (expr is ExprCopy) {
+                let v = self->find_assign_var((expr as ExprCopy).left)
+                if (v != null && pending_uninit_vars |> has_value(v)) {
+                    self->style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                }
+            } elif (expr is ExprClone) {
+                let v = self->find_assign_var((expr as ExprClone).left)
+                if (v != null && pending_uninit_vars |> has_value(v)) {
+                    self->style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                }
+            } elif (expr is ExprMove) {
+                let v = self->find_assign_var((expr as ExprMove).left)
+                if (v != null && pending_uninit_vars |> has_value(v)) {
+                    self->style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                }
+            }
+            pending_uninit_vars |> resize(0)
         }
     }
 

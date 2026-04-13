@@ -261,7 +261,7 @@ class StandaloneContextGen : CppAot {
         for (pfun in fnn) {
             let needInline = that == pfun._module;
             if (needInline) {
-                inline_fns.push(describeCppFunc(unsafe(reinterpret<FunctionPtr>(pfun)), collector, true, needInline));
+                inline_fns.push(describeCppFunc(pfun, collector, true, needInline));
                 used_functions.insert(aotFuncName(pfun));
             }
         }

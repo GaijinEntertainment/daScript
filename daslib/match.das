@@ -504,10 +504,34 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
 
 [macro_function]
 def is_match_call(wth : Expression?; name : string) {
-    return (wth is ExprCall) && (
-            (wth as ExprCall).name == "match_{name}" ||
-            string((wth as ExprCall).name).starts_with("__::match`match_{name}") ||
-            (wth as ExprCall).name == "match::match_{name}")
+    if (!(wth is ExprCall)) {
+        return false
+    }
+    let ecall = wth as ExprCall
+    if (ecall.name == "match_{name}" || ecall.name == "match::match_{name}") {
+        return true
+    }
+    var res = false
+    peek(ecall.name) $(call_name) {
+        res = call_name |> starts_with("__::match`match_{name}")
+    }
+    return res
+}
+
+[macro_function]
+def is_to_array_move_call(wth : Expression?) {
+    if (!(wth is ExprCall)) {
+        return false
+    }
+    let ecall = wth as ExprCall
+    if (ecall.name == "to_array_move") {
+        return true
+    }
+    var res = false
+    peek(ecall.name) $(call_name) {
+        res = call_name |> starts_with("__::builtin`to_array_move")
+    }
+    return res
 }
 
 [macro_function]
@@ -539,7 +563,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return match_type(what, wth as ExprCall, access, to)
     } elif (wth |> is_match_call("expr")) {
         return match_expr(what, wth as ExprCall, access, to)
-    } elif ((wth is ExprCall) && ((wth as ExprCall).name == "to_array_move" || string((wth as ExprCall).name).starts_with("__::builtin`to_array_move"))) {
+    } elif (wth |> is_to_array_move_call) {
         var cll = wth as ExprCall
         if (length(cll.arguments) != 1) {
             to.errors |> match_error("to_array_move expects 1 argument", cll.at)

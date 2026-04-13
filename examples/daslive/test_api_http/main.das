@@ -73,7 +73,9 @@ def test_pause_unpause() {
     print("--- POST /pause and /unpause ---\n")
     POST("http://localhost:{live_api_port}/pause", "") $(resp) {
         check("pause returns 200", int(resp.status_code) == int(http_status.OK))
-        check("pause returns paused:true", find(string(resp.body), "true") >= 0)
+        peek(resp.body) $(body) {
+            check("pause returns paused:true", find(body, "true") >= 0)
+        }
     }
     // Verify via status
     GET("http://localhost:{live_api_port}/status") $(resp) {
@@ -116,7 +118,9 @@ def test_command_errors() {
     // Unknown command
     POST("http://localhost:{live_api_port}/command", "\{\"name\": \"nonexistent\"}") $(resp) {
         check("unknown command returns 200", int(resp.status_code) == int(http_status.OK))
-        check("unknown command has error", find(string(resp.body), "error") >= 0)
+        peek(resp.body) $(body) {
+            check("unknown command has error", find(body, "error") >= 0)
+        }
     }
 }
 

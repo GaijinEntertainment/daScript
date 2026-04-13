@@ -340,8 +340,7 @@ def main {
 
     // Tuple matching
     print("tuple matching:\n")
-    var t0 : tuple<int; string>
-    t0 = (0, "zero")
+    var t0 = (0, "zero")
     print("  (0,zero) -> {classify_pair(t0)}\n")
     t0 = (1, "xyz")
     print("  (1,xyz) -> {classify_pair(t0)}\n")
@@ -352,8 +351,7 @@ def main {
 
     // Variant matching
     print("variant matching:\n")
-    var v : Value
-    v = Value(i = 42)
+    var v : Value = Value(i = 42)
     print("  int -> {describe_value(v)}\n")
     v = Value(f = 3.14)
     print("  float -> {describe_value(v)}\n")
@@ -381,8 +379,7 @@ def main {
 
     // Array matching
     print("array matching:\n")
-    var sa : int[3]
-    sa = fixed_array<int>(0, 0, 0)
+    var sa = fixed_array<int>(0, 0, 0)
     print("  [0,0,0] -> {classify_static_arr(sa)}\n")
     sa = fixed_array<int>(1, 5, 9)
     print("  [1,5,9] -> {classify_static_arr(sa)}\n")

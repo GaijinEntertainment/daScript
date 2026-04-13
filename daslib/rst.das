@@ -309,7 +309,9 @@ def describe_type_short(td : TypeDeclPtr) {
                         if (at.flags.removeConstant) {
                             w |> write("var ")
                         }
-                        w |> write(string(an))
+                        peek(an) $(an_str) {
+                            w |> write(an_str)
+                        }
                         w |> write(":")
                         w |> write(describe_type_short(at))
                     }
@@ -1349,14 +1351,16 @@ def document_classes(doc_file : file; mods : array<Module?>) {
 
             let staticFieldPrefix = "{value.name}`"
             for_each_global(mod) $(gVar) {
-                if (!gVar.flags.private_variable && string(gVar.name).starts_with(staticFieldPrefix)) {
+                peek(gVar.name) $(gvar_name) {
+                if (!gVar.flags.private_variable && gvar_name |> starts_with(staticFieldPrefix)) {
                     var line : array<string>
-                    push(line, "{value.name}.{string(gVar.name).slice(length(staticFieldPrefix))}")
+                    push(line, "{value.name}.{gvar_name |> slice(length(staticFieldPrefix))}")
                     push(line, describe_type(gVar._type))
                     if (hasValues) {
                         push(line, gVar.init != null ? describe(gVar.init) : "")
                     }
                     emplace(fields, line)
+                }
                 }
             }
 
@@ -1528,7 +1532,11 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
             return
         }
         // Skip property functions (handled below)
-        if (string(func.name) |> starts_with(".`")) {
+        var isPropertyFunc = false
+        peek(func.name) $(fn_name) {
+            isPropertyFunc = fn_name |> starts_with(".`")
+        }
+        if (isPropertyFunc) {
             return
         }
         if (!func.moreFlags.isStaticClassMethod) {
@@ -1778,7 +1786,11 @@ def document_annotations(doc_file : file; mods : array<Module?>; var hook = Docs
             if (!value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
                 return
             }
-            if (string(value.name) |> starts_with("dasvector`")) {
+            var isDasVector = false
+            peek(value.name) $(val_name) {
+                isDasVector = val_name |> starts_with("dasvector`")
+            }
+            if (isDasVector) {
                 return
             }
             document_annotation(doc_file, mod, value)

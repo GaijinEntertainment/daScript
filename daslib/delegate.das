@@ -43,9 +43,9 @@ def private get_arg_name(funcType : TypeDeclPtr; index : int) : string {
 def private build_invoke_call(at : LineInfo; var targetExpr : ExpressionPtr; funcType : TypeDeclPtr) : ExpressionPtr {
     //! Builds  invoke(target, arg0, arg1, ...)  as an ExprInvoke (special node for lambda/function calls).
     var call = new ExprInvoke(at = at, name := "invoke")
-    (call as ExprInvoke).arguments |> emplace(targetExpr)
+    call.arguments |> emplace(targetExpr)
     for (i in range(length(funcType.argTypes))) {
-        (call as ExprInvoke).arguments |> emplace_new <| new ExprVar(at = at, name := get_arg_name(funcType, i))
+        call.arguments |> emplace_new <| new ExprVar(at = at, name := get_arg_name(funcType, i))
     }
     return call
 }

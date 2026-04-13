@@ -372,7 +372,11 @@ def qm_convert_local_function(var expr : Expression?) : Expression? {
     if (ea.func == null || !ea.func.flags.generated) {
         return null
     }
-    if (find(string(ea.func.name), "`function") < 0) {
+    var found_function = false
+    peek(ea.func.name) $(fn) {
+        found_function = find(fn, "`function") >= 0
+    }
+    if (!found_function) {
         return null
     }
     let fn = ea.func

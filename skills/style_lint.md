@@ -22,6 +22,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE003 | `foo() $() { ... }` | Remove redundant `$()`; use `foo() { ... }` |
 | STYLE005 | `if (cond) { return val }` | Use `return val if (cond)` (configurable, off by default) |
 | STYLE006 | `string(x.__rtti) == "ExprFoo"` | Use `x is ExprFoo` |
+| STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -37,6 +38,7 @@ The `<|` pipe and `$()` are desugared during parsing — in the compiled AST, `f
 
 - **STYLE005:** `ExprIfThenElse` with no `if_false`, single-statement body that is `ExprReturn`/`ExprBreak`/`ExprContinue`. Skips already-postfix forms by checking `ifte.at.line != stmt.at.line`.
 - **STYLE006:** `ExprOp2("==")` where one side is `string(x.__rtti)` pattern.
+- **STYLE011:** Tracks uninitialized variables from `preVisitExprLetVariable` (excluding `generated` and `inScope`). In `preVisitExprBlockExpression`, checks if the next statement is `ExprCopy`/`ExprClone`/`ExprMove` whose left side references a tracked variable.
 
 ## How to Add a New Rule
 

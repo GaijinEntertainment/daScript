@@ -37,7 +37,7 @@ def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<F
     }
     visited |> insert(fun)
     call_graph |> push(fun)
-    unsafe(reinterpret<FunctionPtr> fun) |> get_use_functions() $(f) {
+    fun |> get_use_functions() $(f) {
         check_recursive(at, f, call_graph, visited)
     }
     call_graph |> pop()
@@ -121,7 +121,7 @@ class VerifyCompletion : AstFunctionAnnotation {
         make_visitor(*astVisitor) $(adapter) {
             collect_call_tree(func, visited)
             for (fun in visited |> keys()) {
-                visit(unsafe(reinterpret<FunctionPtr> fun), adapter)
+                visit(fun, adapter)
             }
         }
         unsafe {

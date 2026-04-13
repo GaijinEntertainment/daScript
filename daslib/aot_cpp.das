@@ -444,7 +444,7 @@ class NoAotMarker : AstVisitor {
     def override visitFunction(var that : FunctionPtr) : FunctionPtr {
         var tmp := func
         func = null;
-        return <- unsafe(reinterpret<FunctionPtr>(tmp));
+        return <- tmp;
     }
     // any expression
     def override preVisitExpression(expr : ExpressionPtr) {
@@ -1399,7 +1399,7 @@ class public CppAot : AstVisitor {
         return "_temp_make_local_{expr.at.line:d}_{expr.at.column:d}_{local_temp_names |> get_value(expr):d}";
     }
     def override preVisitExprBlock(var blk : ExprBlock?) {
-        push(scopes, blk as ExprBlock);
+        push(scopes, blk);
         blk.blockFlags |= ExprBlockFlags.finallyBeforeBody;
         if (blk.blockFlags.inTheLoop) {
             blk.blockFlags |= ExprBlockFlags.finallyDisabled;
@@ -1708,7 +1708,9 @@ class public CppAot : AstVisitor {
             write(*ss, ",*__context__,nullptr)");
         } else {
             if (that.op == "+++" || that.op == "---") {
-                write(*ss, slice(string(that.op), 0, 2));
+                peek(that.op) $(op) {
+                    write(*ss, slice(op, 0, 2));
+                }
             }
             if (!noBracket(that) && !that.subexpr.printFlags.bottomLevel) {
                 write(*ss, ")");
@@ -2353,7 +2355,9 @@ class public CppAot : AstVisitor {
         if (c.value.empty()) {
             write(*ss, "nullptr");
         } else {
-            write(*ss, "((char *) \"{escape(string(c.value))}\")");
+            peek(c.value) $(sv) {
+                write(*ss, "((char *) \"{escape(sv)}\")");
+            }
         }
         return c;
     }
@@ -3184,7 +3188,7 @@ class public CppAot : AstVisitor {
         }
         if (call.name == "debug") {
             assume argType = call.arguments[0]._type;
-            let info = helper.helper |> make_type_info(unsafe(reinterpret<TypeInfo?>(null)), argType);
+            let info = helper.helper |> make_type_info(null, argType);
             write(*ss, "das_debug(__context__,&{typeInfoName(info)},__FILE__,__LINE__,");
             let maybe_ref = ((argType.isRefType && !argType.flags.ref) ? "&" : "")
             write(*ss, "cast<{describeCppType(argType,DescribeConfig(cross_platform=cross_platform))}{maybe_ref}>::from(");
@@ -3612,8 +3616,10 @@ class public CppAot : AstVisitor {
                 let efn = call.func as ExternalFnBase;
                 write(*ss, ").{efn.cppName}())");
             } else {
-                assert(starts_with(string(call.func.name), ".`"));
-                write(*ss, ").{aotFieldName(string(call.func.name).chop(2, length(call.func.name)))}())");    // we skip .` part of the deal
+                peek(call.func.name) $(fn) {
+                    assert(starts_with(fn, ".`"));
+                    write(*ss, ").{aotFieldName(fn.chop(2, length(fn)))}())");    // we skip .` part of the deal
+                }
             }
             if (call.func.result.isString) {
                 write(*ss, "))");  // c-cast const char * etc string casts to char * or char * const
