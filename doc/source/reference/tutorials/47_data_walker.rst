@@ -405,7 +405,7 @@ Quick reference
 
 =================================================  ====================================================
 ``DapiDataWalker``                                 Base class — subclass and override callbacks
-``make_data_walker(walker)``                       Wrap class instance into ``smart_ptr<DataWalker>``
+``make_data_walker(walker)``                       Wrap class instance into ``DataWalker?``
 ``walk_data(adapter, ptr, typeinfo)``              Walk data at ``ptr`` using RTTI ``TypeInfo``
 ``typeinfo rtti_typeinfo(var)``                    Get ``TypeInfo`` for any variable (compile-time)
 ``unsafe { addr(var) }``                           Get ``void?`` pointer to a variable

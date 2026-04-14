@@ -114,7 +114,6 @@ MACRO(SETUP_LIB_DEFINITIONS _target)
         $<$<CONFIG:Release>:DAS_FUSION=2 DAS_DEBUGGER=0>
         $<$<CONFIG:MinSizeRel>:DAS_FUSION=1 DAS_DEBUGGER=0>
         $<$<CONFIG:RelWithDebInfo>:DAS_FUSION=1>
-        $<$<CONFIG:RelWithDebInfo>:DAS_SMART_PTR_DEBUG=1>
     )
 ENDMACRO()
 

@@ -515,9 +515,7 @@ void print_help() {
         << "    -dry-run    compile and simulate script without execution\n"
         << "    -compile-only compile script without simulation and execution\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
-#if DAS_SMART_PTR_ID
         << "    -track-smart-ptr <id> track smart pointer with id\n"
-#endif
         << "    -linear-stack-allocator  disable scoped stack allocator\n"
         << "    -das-wait-debugger wait for debugger to attach\n"
         << "    -das-profiler enable profiler\n"
@@ -539,9 +537,7 @@ void print_help() {
   #define MAIN_FUNC_NAME main
 #endif
 
-#if DAS_SMART_PTR_TRACKER
 #include <inttypes.h>
-#endif
 
 namespace das {
     extern AotListBase impl_aot_ast_boost;
@@ -709,7 +705,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     print_help();
                     return -1;
                 }
-#if DAS_SMART_PTR_ID
                 uint64_t id = 0;
                 if ( sscanf(argv[i+1], "%" PRIx64, &id)!=1 ) {
                     printf("expecting smart pointer id, got %s\n", argv[i+1]);
@@ -718,10 +713,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 ptr_ref_count::ref_count_track = id;
                 i += 1;
                 printf("tracking %" PRIx64 " aka %" PRIu64 "\n", id, id);
-#else
-                printf("smart ptr id tracking is disabled\n");
-                return -1;
-#endif
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
             } else if ( cmd=="-linear-stack-allocator") {
@@ -796,25 +787,12 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // and done
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
-#if DAS_SMART_PTR_TRACKER
     if ( g_smart_ptr_total!=0 ) {
         TextPrinter tp;
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
-#if DAS_SMART_PTR_ID
-        tp << "leaked ids:";
-        vector<uint64_t> ids;
-        for ( auto it : ptr_ref_count::ref_count_ids ) {
-            ids.push_back(it);
-        }
-        std::sort(ids.begin(), ids.end());
-        for ( auto it : ids ) {
-            tp << " " << HEX << it << DEC;
-        }
-        tp << "\n";
-#endif
+        ptr_ref_count::DumpTrackPtr();
         exit(1);
     }
-#endif
     return failedFiles;
 }
 

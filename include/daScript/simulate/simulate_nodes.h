@@ -554,9 +554,6 @@ namespace das {
             DAS_PROFILE_NODE
             auto res = new TT();
             res->addRef();
-#if DAS_ENABLE_SMART_PTR_TRACKING
-            Context::sptrAllocations.push_back(res);
-#endif
             return (char *) res;
         }
         virtual SimNode * visit ( SimVisitor & vis ) override;
