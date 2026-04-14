@@ -59,7 +59,7 @@ class UnrollMacro : AstFunctionAnnotation {
             errors := "can only unroll for loop with range"
             return null
         }
-        let euc = unsafe(reinterpret<ExprConstRange?> efor.sources[0])
+        let euc = efor.sources[0] as ExprConstRange
         let van = "{efor.iterators[0]}"
         var nblk = new ExprBlock(at = call.at)
         for (i in euc.value) {

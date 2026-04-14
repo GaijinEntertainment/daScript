@@ -4204,7 +4204,9 @@ Variable declaration.
 
          * **init** :  :ref:`Expression <handle-ast-Expression>`? - Initializer expression for the variable, if any
 
-         * **source** :  :ref:`Expression <handle-ast-Expression>`? - If its an iterator variable for the for loop, source expression being iterated over
+         * **source** :  :ref:`Expression <handle-ast-Expression>`? - Source variable this variable was cloned from (weak reference, not owned).
+
+         * **loop_source** :  :ref:`Expression <handle-ast-Expression>`? - If its an iterator variable for the for loop, source expression being iterated over
 
          * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` - Location of the variable declaration in the source code
 

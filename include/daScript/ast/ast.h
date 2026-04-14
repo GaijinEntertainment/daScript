@@ -138,6 +138,7 @@ namespace das
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         virtual void serialize( AstSerializer & ) { }
         virtual void gc_collect ( gc_root * target, gc_root * from );
+        virtual void visitTypeDecls ( const function<void(TypeDecl *)> & ) {}
         Module *    module = nullptr;
     };
 
@@ -354,6 +355,7 @@ namespace das
         TypeDeclPtr     type = nullptr;
         ExpressionPtr   init = nullptr;
         ExpressionPtr   source = nullptr;     // if its interator variable, this is where the source is
+        Expression *    loop_source = nullptr; // weak ref to ExprFor::sources[i], used for read/write propagation
         LineInfo        at;
         int             index = -1;
         uint32_t        stackTop = 0;
@@ -1509,6 +1511,7 @@ namespace das
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        aot_macros = false;                 // enables aot of macro code (like 'qmacro_block')
         bool        paranoid_validation = false;        // todo
+        bool        validate_ast = false;               // validate AST after compilation (uniqueness, etc.)
         bool        cross_platform = false;             // aot supports platform independent mode
         string      aot_result;                         // Path where to store cpp-result of aot
     // End aot config
@@ -1697,6 +1700,7 @@ namespace das
         void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
+        void validateAst();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
         bool inScopePodAnalysis(TextWriter & logs);
         void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
@@ -1774,6 +1778,7 @@ namespace das
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
         bool                        folding = false;
+        bool                        visitBuiltinFunctions = false;
         bool                        reportingInferErrors = false;
         uint64_t                    initSemanticHashWithDep = 0;
         union {

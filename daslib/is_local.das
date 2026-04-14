@@ -47,8 +47,8 @@ def is_shared_expr(expr : ExpressionPtr) {
         if (evar.variable.flags.global_shared) {
             return true
         }
-        if (evar.variable.source != null) {
-            return is_shared_expr(evar.variable.source)
+        if (evar.variable.loop_source != null) {
+            return is_shared_expr(evar.variable.loop_source)
         }
         return false
     } elif (expr is ExprCall) {

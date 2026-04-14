@@ -983,12 +983,11 @@ def private apply_qrules(var expr : Expression?&) : ExprBlock? {
     }
     if (astVisitor.failed) {
         eblk = null
+    } else {
+        let annot_rules =  ("rules", RttiValue(tBool = true))
+        eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
-    unsafe {
-        delete astVisitor
-    }
-    let annot_rules =  ("rules", RttiValue(tBool = true))
-    eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
+    unsafe { delete astVisitor; }
     return eblk
 }
 
@@ -1008,12 +1007,11 @@ def private apply_function_qrules(var func : FunctionPtr) : ExprBlock? {
     }
     if (astVisitor.failed) {
         eblk = null
+    } else {
+        let annot_rules =  ("rules", RttiValue(tBool = true))
+        eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
-    unsafe {
-        delete astVisitor
-    }
-    let annot_rules =  ("rules", RttiValue(tBool = true))
-    eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
+    unsafe { delete astVisitor; }
     return eblk
 }
 
@@ -1046,12 +1044,11 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
 
     if (astVisitor.failed) {
         eblk = null
+    } else {
+        let annot_rules =  ("rules", RttiValue(tBool = true))
+        eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
-    unsafe {
-        delete astVisitor
-    }
-    let annot_rules =  ("rules", RttiValue(tBool = true))
-    eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
+    unsafe { delete astVisitor; }
     return eblk
 }
 
@@ -1178,7 +1175,7 @@ def public apply_qmacro_function(fname : string; var expr : Expression?; blk : b
     for (arg in qblk.arguments) {
         func.arguments |> emplace_new <| clone_variable(arg)
     }
-    func.result := qblk.returnType
+    func.result = clone_type(qblk.returnType)
     qblk.arguments |> clear
     qblk.blockFlags ^= ExprBlockFlags.isClosure
     func.body = qblk

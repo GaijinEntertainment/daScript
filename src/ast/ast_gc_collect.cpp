@@ -42,6 +42,7 @@ namespace das {
         if ( type ) type->gc_collect(target, from);
         if ( init ) init->gc_collect(target, from);
         if ( source ) source->gc_collect(target, from);
+        // note: loop_source is a weak pointer to ExprFor::sources[i], not owned
     }
 
     void Enumeration::gc_collect ( gc_root * target, gc_root * from ) {

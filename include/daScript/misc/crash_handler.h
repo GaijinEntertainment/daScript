@@ -289,6 +289,34 @@ namespace das {
         return {fp, sp};
     }
 
+    // Resolve symbols, print with demangling, filter interesting frames, call extra_info.
+    inline void print_backtrace_frames(void **pcs, CrashFrame *frameInfo, int nframes) {
+        if (nframes <= 0) return;
+        CrashFrame collectedFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
+        int frameCount = 0;
+        fprintf(stderr, "Stack trace:\n");
+        char **symbols = backtrace_symbols(pcs, nframes);
+        if (symbols) {
+            for (int i = 0; i < nframes; i++) {
+                char *d = demangle(symbols[i]);
+                fprintf(stderr, "  [%2d] %s\n", i, d ? d : symbols[i]);
+                if (g_crash_handler_frame_filter && d
+                        && g_crash_handler_frame_filter(d)
+                        && frameCount < DAS_CRASH_HANDLER_MAX_STACK_FRAMES) {
+                    collectedFrames[frameCount++] = frameInfo[i];
+                }
+                free(d);
+            }
+            free(symbols);
+        } else {
+            backtrace_symbols_fd(pcs, nframes, STDERR_FILENO);
+        }
+        fflush(stderr);
+        if (g_crash_handler_extra_info && frameCount > 0) {
+            g_crash_handler_extra_info(collectedFrames, frameCount);
+        }
+    }
+
     inline void crash_signal_handler(int sig, siginfo_t *info, void *ucontext_ptr) {
         fprintf(stderr, "\nCRASH: %s (signal %d)", signal_to_string(sig), sig);
         if (info->si_addr)
@@ -317,38 +345,7 @@ namespace das {
             }
         }
 
-        // Use FP walk PCs for symbol resolution — works even with SA_ONSTACK.
-        // Fall back to backtrace() if no frame pointers (e.g. -fomit-frame-pointer on Linux).
-        void *btFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
-        void **frames = fpCount > 0 ? fpPCs : btFrames;
-        bool interesting[DAS_CRASH_HANDLER_MAX_STACK_FRAMES] = {};
-        int nframes = fpCount;
-
-        int frameCount = 0;
-        CrashFrame collectedFrames[DAS_CRASH_HANDLER_MAX_STACK_FRAMES];
-
-        if (nframes > 0) {
-            fprintf(stderr, "Stack trace:\n");
-            char **symbols = backtrace_symbols(frames, nframes);
-            if (symbols) {
-                for (int i = 0; i < nframes; i++) {
-                    char *d = demangle(symbols[i]);
-                    fprintf(stderr, "  [%2d] %s\n", i, symbols[i]);
-                    if (g_crash_handler_frame_filter && d) {
-                        collectedFrames[frameCount++] = fpFrames[i];
-                    }
-                    free(d);
-                }
-                free(symbols);
-            } else {
-                backtrace_symbols_fd(frames, nframes, STDERR_FILENO);
-            }
-        }
-        fflush(stderr);
-
-        if (g_crash_handler_extra_info && fpCount > 0) {
-            g_crash_handler_extra_info(collectedFrames, frameCount);
-        }
+        print_backtrace_frames(fpPCs, fpFrames, fpCount);
 
         signal(sig, SIG_DFL);
         raise(sig);
@@ -381,6 +378,41 @@ namespace das {
 #endif
 
 #undef DAS_CRASH_HANDLER_MAX_STACK_FRAMES
+
+    // Print stack trace from the current location (for diagnostics, not crash handling).
+#if !DAS_CRASH_HANDLER_PLATFORM_SUPPORTED
+    inline void print_current_stack_trace() {}
+#elif defined(_WIN32)
+    inline void print_current_stack_trace() {
+        CONTEXT ctx;
+        RtlCaptureContext(&ctx);
+        print_stack_trace(&ctx);
+        fflush(stderr);
+    }
+#elif (defined(__linux__) || defined(__APPLE__)) && !defined(__EMSCRIPTEN__)
+    inline void print_current_stack_trace() {
+        enum { MAX_FRAMES = 64 };
+        void *pcs[MAX_FRAMES];
+        CrashFrame frameInfo[MAX_FRAMES];
+        int nframes = 0;
+        uintptr_t fp = (uintptr_t)__builtin_frame_address(0);
+        uintptr_t sp = (uintptr_t)&fp;
+        for (int i = 0; i < MAX_FRAMES && fp != 0; i++) {
+            uintptr_t *frame_words = (uintptr_t *)fp;
+            uintptr_t saved_fp = strip_pac(frame_words[0]);
+            uintptr_t ret_pc   = strip_pac(frame_words[1]);
+            if (saved_fp == 0 || ret_pc == 0) break;
+            pcs[nframes] = (void *)ret_pc;
+            frameInfo[nframes].frameRbp = fp;
+            frameInfo[nframes].frameRsp = sp;
+            nframes++;
+            if (saved_fp <= fp) break;
+            sp = fp + 2 * sizeof(uintptr_t);
+            fp = saved_fp;
+        }
+        print_backtrace_frames(pcs, frameInfo, nframes);
+    }
+#endif
 
     // Das-aware crash handler: installs SEH/signal handler + das stack walk callback.
     // Defined in project_specific_crash_handler.cpp.

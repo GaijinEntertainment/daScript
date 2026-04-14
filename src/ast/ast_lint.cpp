@@ -445,6 +445,13 @@ namespace das {
             Visitor::preVisit(expr);
             // macro generated invisible variable
             // DAS_ASSERT(expr->visibility.line);
+            for ( size_t i=0, sz=expr->iteratorVariables.size(); i<sz; i++ ) {
+                auto & var = expr->iteratorVariables[i];
+                if (!isValidVarName(var->name)) {
+                    program->error("invalid variable name '" + var->name + "'", "", "",
+                        var->at, CompilationError::invalid_name );
+                }
+            }
         }
         virtual void preVisit(ExprDelete * expr) override {
             Visitor::preVisit(expr);

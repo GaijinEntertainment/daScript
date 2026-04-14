@@ -271,6 +271,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(type)>("_type","type");
             addField<DAS_BIND_MANAGED_FIELD(init)>("init");
             addField<DAS_BIND_MANAGED_FIELD(source)>("source");
+            addField<DAS_BIND_MANAGED_FIELD(loop_source)>("loop_source");
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(index)>("index");
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");

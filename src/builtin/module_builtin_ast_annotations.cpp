@@ -223,7 +223,7 @@ namespace das {
         }
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
-            return (char *) typeExpr;
+            return (char *) new TypeDecl(*typeExpr);
         }
         TypeDecl *  typeExpr;   // requires RTTI
         char *      descr;
