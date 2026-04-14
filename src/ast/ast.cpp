@@ -3446,7 +3446,7 @@ namespace das {
         // generics
         if ( visitGenerics ) {
             thatModule->generics.foreach([&](auto & fn){
-                if ( !fn->builtIn ) {
+                if ( !fn->builtIn || visitBuiltinFunctions ) {
                     auto nfn = fn->visit(vis);
                     if ( fn != nfn ) {
                         thatModule->generics.replace(fn->getMangledName(), nfn);
@@ -3458,7 +3458,7 @@ namespace das {
         }
         // functions
         thatModule->functions.foreach([&](auto & fn){
-            if ( !fn->builtIn ) {
+            if ( !fn->builtIn || visitBuiltinFunctions ) {
                 if ( vis.canVisitFunction(fn) ) {
                     auto nfn = fn->visit(vis);
                     if ( fn != nfn ) {

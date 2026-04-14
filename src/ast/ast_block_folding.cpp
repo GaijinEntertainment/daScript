@@ -36,6 +36,7 @@ namespace das {
         virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
 
     protected:
+        // note: loop_source is set during type inference (ast_infer_type.cpp)
         virtual ExpressionPtr visit ( ExprRef2Value * expr ) override {
             if ( expr->subexpr->rtti_isCast() ) {
                 reportFolding();

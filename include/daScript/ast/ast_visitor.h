@@ -104,10 +104,10 @@ namespace das {
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) { return that; }
         virtual void visitGlobalLetBody ( Program * prog ) {}
         // STRING BUILDER
-        virtual void preVisit ( ExprStringBuilder * expr ) {}
+        virtual void preVisit ( ExprStringBuilder * expr ) { preVisitExpression(expr); }
         virtual void preVisitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) {}
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) { return expr; }
-        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return expr; }
+        virtual ExpressionPtr visit ( ExprStringBuilder * expr ) { return visitExpression(expr); }
         // NEW
         virtual void preVisitNewArg ( ExprNew * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) { return arg; }

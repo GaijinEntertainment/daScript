@@ -144,6 +144,7 @@ namespace das {
         }
         if ( gc_break_on_id && id == gc_break_on_id ) {
             DAS_FATAL_LOG("gc_node break: id=%" PRIu64 "\n", id);
+            print_current_stack_trace();
             os_debug_break();
         }
     }

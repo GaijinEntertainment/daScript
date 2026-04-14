@@ -653,6 +653,7 @@ src/ast/ast_unused.cpp
 src/ast/ast_annotations.cpp
 src/ast/ast_export.cpp
 src/ast/ast_parse.cpp
+src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
 src/ast/dyn_modules.cpp

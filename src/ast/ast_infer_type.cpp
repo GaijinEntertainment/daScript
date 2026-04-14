@@ -4583,7 +4583,7 @@ namespace das {
             }
             pVar->type->constant |= src->type->isConst();
             pVar->type->temporary |= src->type->isTemp();
-            pVar->source = src;
+            pVar->loop_source = src;
             pVar->can_shadow = expr->canShadow;
             for (auto &al : assume) {
                 if (al.expr->alias == pVar->name) {
@@ -5335,7 +5335,7 @@ namespace das {
                       expr->at, CompilationError::invalid_cast);
                 return Visitor::visit(expr);
             }
-            auto ecast = new ExprCast(expr->at, expr->clone(), expr->aliasSubstitution);
+            auto ecast = new ExprCast(expr->at, expr->clone(), new TypeDecl(*expr->aliasSubstitution));
             ecast->reinterpret = true;
             ecast->alwaysSafe = true;
             expr->aliasSubstitution = nullptr;

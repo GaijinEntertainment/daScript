@@ -141,8 +141,8 @@ namespace das {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->r2cr = true;
-                if ( var->variable->source ) {
-                    propagateRead(var->variable->source);
+                if ( var->variable->loop_source ) {
+                    propagateRead(var->variable->loop_source);
                 }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
                        || expr->rtti_isAsVariant() || expr->rtti_isIsVariant()
@@ -195,8 +195,8 @@ namespace das {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->write = true;
-                if ( var->variable->source ) {
-                    propagateWrite(var->variable->source);
+                if ( var->variable->loop_source ) {
+                    propagateWrite(var->variable->loop_source);
                 }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
                        || expr->rtti_isAsVariant() || expr->rtti_isSafeAsVariant() ) {
@@ -248,8 +248,8 @@ namespace das {
             if ( expr->rtti_isVar() ) {
                 auto var = (ExprVar *) expr;
                 var->write = true;
-                if ( var->variable->source ) {
-                    propagateWrite(var->variable->source);    /// this went to variable, we done via copy or move
+                if ( var->variable->loop_source ) {
+                    propagateWrite(var->variable->loop_source);    /// this went to variable, we done via copy or move
                 }
             } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
                        || expr->rtti_isAsVariant() || expr->rtti_isSafeAsVariant() ) {

@@ -1171,7 +1171,8 @@ namespace das {
         gc_guard compile_gc_scope;
         GcCollectOnExit compile_gc_collect(compile_gc_scope);
         ReuseCacheGuard rcg;
-        bool exportAll = policies.export_all;
+        bool exportAll = policies.export_all || policies.validate_ast;
+        if ( policies.validate_ast ) policies.rtti = true;
         auto time0 = ref_time_ticks();
         *totParse = 0;
         *totInfer = 0;
@@ -1299,6 +1300,7 @@ namespace das {
             if ( !res->failed() ) {
                 res->thisNamespace = "_anon_" + to_string(normalizedPathHash(fileName, getDasRoot()));
             }
+            res->validateAst();
             if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
                 auto totT = get_time_usec(time0);
                 logs << "compiler took " << (totT  / 1000000.) << ", " << fileName << "\n"

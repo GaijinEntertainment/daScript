@@ -110,6 +110,12 @@ namespace das
                 if ( fp.second.constDecl ) fp.second.constDecl->gc_collect(target, from);
             }
         }
+        virtual void visitTypeDecls ( const function<void(TypeDecl *)> & callback ) override {
+            for ( auto & fp : fields ) {
+                if ( fp.second.decl ) callback(fp.second.decl);
+                if ( fp.second.constDecl ) callback(fp.second.constDecl);
+            }
+        }
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, const TypeDeclPtr & pT);
         virtual void walk(DataWalker & walker, void * data) override;
         void updateTypeInfo() const;
@@ -517,6 +523,9 @@ namespace das
             Annotation::gc_collect(target, from);
             if ( vecType ) vecType->gc_collect(target, from);
         }
+        virtual void visitTypeDecls ( const function<void(TypeDecl *)> & callback ) override {
+            if ( vecType ) callback(vecType);
+        }
         TypeDeclPtr                vecType = nullptr;
         DebugInfoHelper            helpA;
         TypeInfo *                 ati = nullptr;
@@ -805,6 +814,9 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override {
             Annotation::gc_collect(target, from);
             if ( valueType ) valueType->gc_collect(target, from);
+        }
+        virtual void visitTypeDecls ( const function<void(TypeDecl *)> & callback ) override {
+            if ( valueType ) callback(valueType);
         }
         TypeDeclPtr valueType = nullptr;
     };
