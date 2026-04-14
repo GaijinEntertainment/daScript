@@ -1112,6 +1112,7 @@ namespace das {
    // Reader
 
     ExpressionPtr ExprReader::visit(Visitor & vis) {
+        if ( !vis.canVisitReader(this) ) return this;
         vis.preVisit(this);
         return vis.visit(this);
     }
@@ -1127,6 +1128,7 @@ namespace das {
     // Label
 
     ExpressionPtr ExprLabel::visit(Visitor & vis) {
+        if ( !vis.canVisitLabel(this) ) return this;
         vis.preVisit(this);
         return vis.visit(this);
     }

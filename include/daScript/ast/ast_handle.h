@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
+#include "daScript/ast/ast_simulate.h"
 #include "daScript/simulate/interop.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
@@ -465,29 +466,29 @@ namespace das
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_AtStdVector>(at,
-                                                               rv->simulate(context),
-                                                               idx->simulate(context),
+                                                               simulateExpression(context, rv),
+                                                               simulateExpression(context, idx),
                                                                ofs);
         }
         virtual SimNode * simulateGetAtR2V ( Context & context, const LineInfo & at, const TypeDeclPtr & type,
                                             ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             if ( type->isHandle() ) {
                 auto expr = context.code->makeNode<SimNode_AtStdVector>(at,
-                                                                rv->simulate(context),
-                                                                idx->simulate(context),
+                                                                simulateExpression(context, rv),
+                                                                simulateExpression(context, idx),
                                                                 ofs);
-                return ExprRef2Value::GetR2V(context, at, type, expr);
+                return GetR2V(context, at, type, expr);
             } else {
                 return context.code->makeValueNode<SimNode_AtStdVectorR2V>(type->baseType,
                                                                 at,
-                                                                rv->simulate(context),
-                                                                idx->simulate(context),
+                                                                simulateExpression(context, rv),
+                                                                simulateExpression(context, idx),
                                                                 ofs);
             }
         }
 
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
-            auto rv = src->simulate(context);
+            auto rv = simulateExpression(context, src);
             return context.code->makeNode<SimNode_AnyIterator<VectorType,StdVectorIterator<VectorType>>>(at, rv);
         }
         virtual void walk ( DataWalker & walker, void * vec ) override {

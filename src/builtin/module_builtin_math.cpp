@@ -5,6 +5,7 @@
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_policy_types.h"
+#include "daScript/ast/ast_simulate.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/aot_builtin_math.h"
@@ -258,7 +259,7 @@ namespace das {
                     return nullptr;
                 }
                 uint32_t stride = sizeof(float)*ColC;
-                auto tnode = subexpr->trySimulate(context, idxC*stride + ofs, r2vType);
+                auto tnode = trySimulateExpression(context, subexpr, idxC*stride + ofs, r2vType);
                 if ( tnode ) {
                     return tnode;
                 }
@@ -272,8 +273,8 @@ namespace das {
                 return tnode;
             } else {
                 return context.code->makeNode<SimNode_At>(at,
-                                                          rv->simulate(context),
-                                                          idx->simulate(context),
+                                                          simulateExpression(context, rv),
+                                                          simulateExpression(context, idx),
                                                           uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
             }
         }
@@ -285,8 +286,8 @@ namespace das {
                 return tnode;
             } else {
                 return context.code->makeValueNode<SimNode_AtR2V>(  r2vType, at,
-                                                                    rv->simulate(context),
-                                                                    idx->simulate(context),
+                                                                    simulateExpression(context, rv),
+                                                                    simulateExpression(context, idx),
                                                                     uint32_t(sizeof(float)*ColC), ofs, RowC, "matrix[index]");
             }
         }

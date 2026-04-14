@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_simulate.h"
 #include "daScript/simulate/debug_print.h"
 
 /*
@@ -299,7 +300,7 @@ namespace das {
     vec4f FoldingVisitor::eval ( Expression * expr, bool & failed ) {
         ctx.restart();
         ctx.thisProgram = program;
-        auto node = expr->simulate(ctx);
+        auto node = simulateExpression(ctx, expr);
         ctx.restart();
         auto fb = program->folding;
         vec4f result = ctx.evalWithCatch(node);

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "daScript/simulate/simulate.h"
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/safebox.h"
 #include "daScript/misc/vectypes.h"
@@ -649,8 +648,6 @@ namespace das
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const;
         static ExpressionPtr autoDereference ( ExpressionPtr expr );
-        virtual SimNode * simulate (Context & /*context*/ ) const { DAS_ASSERT(0); return nullptr; };
-        virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const;
         virtual void markNoDiscard() { }
         virtual bool rtti_isAssume() const { return false; }
         virtual bool rtti_isSequence() const { return false; }
@@ -766,7 +763,6 @@ namespace das
         ExprConst ( ) : baseType(Type::none) { __rtti = "ExprConst"; }
         ExprConst ( Type t ) : baseType(t) { __rtti = "ExprConst"; }
         ExprConst ( const LineInfo & a, Type t ) : Expression(a), baseType(t) { __rtti = "ExprConst"; }
-        virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
