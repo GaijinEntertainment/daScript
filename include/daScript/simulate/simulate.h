@@ -361,7 +361,7 @@ namespace das
 
         __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at ) {
             auto aptr = heap->impl_allocateIterator(size, iterName);
-            if ( !aptr ) throw_out_of_memory(true, size + 16, at);
+            if ( !aptr ) throw_out_of_memory(false, size + 16, at);
             if ( instrumentAllocations ) onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
             return aptr;
         }
@@ -373,14 +373,14 @@ namespace das
 
         __forceinline char * allocate ( uint32_t size, const LineInfo * at = nullptr ) {
             auto aptr = heap->impl_allocate(size);
-            if ( !aptr && size ) throw_out_of_memory(true, size, at);
+            if ( !aptr && size ) throw_out_of_memory(false, size, at);
             if ( instrumentAllocations ) onAllocate(aptr, size, at ? *at : LineInfo());
             return aptr;
         }
 
         __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at ) {
             auto aptr = heap->impl_reallocate(ptr, oldSize, size);
-            if ( !aptr && size ) throw_out_of_memory(true, size, at);
+            if ( !aptr && size ) throw_out_of_memory(false, size, at);
             if ( instrumentAllocations ) onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
             return aptr;
         }
