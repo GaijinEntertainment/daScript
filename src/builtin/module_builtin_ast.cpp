@@ -739,13 +739,7 @@ namespace das {
 
     template <typename F>
     static auto apply_to_vec(void* vec, string_view tstr, F apply) {
-        if (tstr == "smart_ptr<ast::Expression>") {
-            return apply(static_cast<vector<Expression *>*>(vec));
-        } else if (tstr == "smart_ptr<ast::Variable>") {
-            return apply(static_cast<vector<Variable *>*>(vec));
-        } else if (tstr == "smart_ptr<ast::TypeDecl>") {
-            return apply(static_cast<vector<TypeDecl *>*>(vec));
-        } else if (tstr == "string") {
+        if (tstr == "string") {
             return apply(static_cast<vector<const char *>*>(vec));
         } else if (tstr == "$::das_string") {
             return apply(static_cast<vector<string>*>(vec));
@@ -757,8 +751,6 @@ namespace das {
             return apply(static_cast<vector<uint8_t>*>(vec));
         } else if (tstr == "tuple<uint;uint>") {
             return apply(static_cast<vector<pair<unsigned int, unsigned int>>*>(vec));
-        } else if (tstr == "smart_ptr<rtti::AnnotationDeclaration>") {
-            return apply(static_cast<vector<smart_ptr<AnnotationDeclaration>>*>(vec));
         } else if (tstr == "rtti_core::AnnotationArgument") {
             return apply(static_cast<vector<AnnotationArgument>*>(vec));
         } else if (tstr == "rtti_core::LineInfo") {

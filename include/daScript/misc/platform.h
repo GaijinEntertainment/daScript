@@ -465,27 +465,6 @@ private:
     #endif
 #endif
 
-#if DAS_SMART_PTR_DEBUG==1
-    #define DAS_SMART_PTR_TRACKER   1
-    #define DAS_SMART_PTR_MAGIC     1
-    #define DAS_SMART_PTR_ID        1
-#endif
-
-#ifndef DAS_SMART_PTR_TRACKER
-    #ifdef DAS_NO_ASSERTIONS
-        #define DAS_SMART_PTR_TRACKER   0
-    #else
-        #define DAS_SMART_PTR_TRACKER   1
-    #endif
-#endif
-
-#ifndef DAS_SMART_PTR_MAGIC
-    #ifdef DAS_NO_ASSERTIONS
-        #define DAS_SMART_PTR_MAGIC     0
-    #else
-        #define DAS_SMART_PTR_MAGIC     1
-    #endif
-#endif
 
 // if -funsafe-math-optimizations or -freciprocal-math is used, this flat needs to be 0
 // unfortunately, it's not possible to detect this flag in the preprocessor

@@ -4,17 +4,13 @@
 
 #include <signal.h>
 
-#if DAS_SMART_PTR_ID
-    uint64_t das::ptr_ref_count::ref_count_total = 0;
-    uint64_t das::ptr_ref_count::ref_count_track = 0;
-    uint64_t das::ptr_ref_count::ref_count_track_destructor = 0;
-    das::das_set<uint64_t> das::ptr_ref_count::ref_count_ids;
-    das::mutex             das::ptr_ref_count::ref_count_mutex;
-#endif
+uint64_t               das::ptr_ref_count::ref_count_total = 0;
+uint64_t               das::ptr_ref_count::ref_count_track = 0;
+uint64_t               das::ptr_ref_count::ref_count_track_destructor = 0;
+das::ptr_ref_count *   das::ptr_ref_count::ref_count_head = nullptr;
+das::mutex             das::ptr_ref_count::ref_count_mutex;
 
-#if DAS_SMART_PTR_TRACKER
-    DAS_API das::atomic<uint64_t> das::g_smart_ptr_total {0};
-#endif
+DAS_API das::atomic<uint64_t> das::g_smart_ptr_total {0};
 
 DAS_API void os_debug_break()
 {

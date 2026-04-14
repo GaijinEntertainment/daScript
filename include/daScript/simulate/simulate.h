@@ -20,10 +20,6 @@ namespace das
 
     #define DAS_CALL_METHOD(mname)              DAS_BIND_FUN(mname::invoke)
 
-    #ifndef DAS_ENABLE_SMART_PTR_TRACKING
-    #define DAS_ENABLE_SMART_PTR_TRACKING   0
-    #endif
-
     #ifndef DAS_ENABLE_STACK_WALK
     #define DAS_ENABLE_STACK_WALK   1
     #endif
@@ -299,7 +295,6 @@ namespace das
 
     void dapiStackWalk ( StackWalkerPtr walker, Context & context, const LineInfo & at );
     int32_t dapiStackDepth ( Context & context );
-    void dumpTrackingLeaks();
     void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
     void dapiSimulateContext ( Context & ctx );
     void dapiUserCommand ( const char * command );
@@ -883,9 +878,6 @@ namespace das
     public:
         int32_t         fnDepth = 0;
     public:
-#if DAS_ENABLE_SMART_PTR_TRACKING
-        static vector<smart_ptr<ptr_ref_count>> sptrAllocations;
-#endif
         // It's better to use shared memory + finalize for things like this.
         struct JitContext {
             void *shared_lib;

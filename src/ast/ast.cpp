@@ -3038,6 +3038,7 @@ namespace das {
     }
 
     Program::Program() {
+        ref_count_magic = TRACK_PTR_PROGRAM;
         thisModule = make_unique<ModuleDas>();
         library.addBuiltInModule();
         library.addModule(thisModule.get());

@@ -967,6 +967,7 @@ namespace das
     }
 
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
+        ref_count_magic = TRACK_PTR_CONTEXT;
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();
         debugInfo = make_shared<DebugInfoAllocator>();
@@ -1177,6 +1178,7 @@ namespace das
 
     Context::Context(const Context & ctx, const CopyOptions & opts)
         : stack(opts.stackSize ? opts.stackSize : ctx.stack.size()) {
+        ref_count_magic = TRACK_PTR_CONTEXT;
         verySafeContext = ctx.verySafeContext;
         persistent = ctx.persistent;
         gcEnabled = ctx.gcEnabled;
