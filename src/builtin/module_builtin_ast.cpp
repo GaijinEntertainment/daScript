@@ -6,7 +6,7 @@
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
-#include "daScript/ast/ast_visitor.h"
+#include "daScript/ast/ast_simulate.h"
 #include "daScript/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
@@ -616,7 +616,7 @@ namespace das {
     float4 evalSingleExpression ( ExpressionPtr expr, bool & ok ) {
         ok = true;
         das::Context ctx;
-        auto node = expr->simulate(ctx);
+        auto node = simulateExpression(ctx, expr);
         ctx.restart();
         vec4f result = ctx.evalWithCatch(node);
         if ( ctx.getException() ) ok = false;

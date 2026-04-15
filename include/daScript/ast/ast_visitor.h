@@ -42,6 +42,8 @@ namespace das {
         virtual bool canVisitCall ( ExprCall * expr ) { return true; }
         virtual bool canVisitNamedCall ( ExprNamedCall * /*expr*/ ) { return true; }
         virtual bool canVisitLooksLikeCall ( ExprLooksLikeCall * /*expr*/ ) { return true; }
+        virtual bool canVisitLabel ( ExprLabel * ) { return true; }
+        virtual bool canVisitReader ( ExprReader * ) { return true; }
         // WHOLE PROGRAM
         virtual void preVisitProgram ( Program * prog ) {}
         virtual void visitProgram ( Program * prog ) {}

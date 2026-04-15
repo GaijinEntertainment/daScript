@@ -1,3 +1,4 @@
+#include "daScript/ast/ast_simulate.h"
 #include "daScript/misc/platform.h"
 
 #include "module_builtin_rtti.h"
@@ -533,9 +534,9 @@ namespace das {
         virtual SimNode * simulateGetAt ( Context & context, const LineInfo & at, const TypeDeclPtr &,
                                          ExpressionPtr rv, ExpressionPtr idx, uint32_t ofs ) const override {
             return context.code->makeNode<SimNode_DebugInfoAtField<ST>>(at,
-                                                                                rv->simulate(context),
-                                                                                idx->simulate(context),
-                                                                                ofs);
+                                                                        simulateExpression(context, rv),
+                                                                        simulateExpression(context, idx),
+                                                                        ofs);
         }
         virtual bool isIterable ( ) const override {
             return true;
@@ -544,7 +545,7 @@ namespace das {
             return new TypeDecl(*fieldType);
         }
         virtual SimNode * simulateGetIterator ( Context & context, const LineInfo & at, ExpressionPtr src ) const override {
-            auto rv = src->simulate(context);
+            auto rv = simulateExpression(context, src);
             return context.code->makeNode<SimNode_AnyIterator<ST,DebugInfoIterator<VT,ST>>>(at, rv);
         }
         virtual void gc_collect ( gc_root * target, gc_root * from ) override {
