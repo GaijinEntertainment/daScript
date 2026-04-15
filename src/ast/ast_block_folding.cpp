@@ -30,10 +30,10 @@ namespace das {
     public:
         using PassVisitor::PassVisitor;
 
-        virtual bool canVisitStructure ( Structure * st ) override { return false; }
-        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
-        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
+        virtual bool canVisitStructure ( Structure * /*st*/ ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * /*en*/ ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * /*var*/ ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * /*fun*/, const VariablePtr & /*var*/, Expression * /*init*/ ) override { return false; }
 
     protected:
         // note: loop_source is set during type inference (ast_infer_type.cpp)
@@ -153,15 +153,15 @@ namespace das {
     public:
         using PassVisitor::PassVisitor;
 
-        virtual bool canVisitStructure ( Structure * st ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * fun ) override { return false; }
-        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
-        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
-        virtual bool canVisitExpr ( ExprTypeInfo * expr, Expression * subexpr ) override { return false; }
-        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override { return false; }
-        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * expr ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
-        virtual bool canVisitNamedCall ( ExprNamedCall * expr ) override { return false; }
+        virtual bool canVisitStructure ( Structure * /*st*/ ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * /*fun*/ ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * /*en*/ ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * /*var*/ ) override { return false; }
+        virtual bool canVisitExpr ( ExprTypeInfo * /*expr*/, Expression * /*subexpr*/ ) override { return false; }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct * /*expr*/, Expression * /*blk*/ ) override { return false; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * /*expr*/ ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * /*fun*/, const VariablePtr & /*var*/, Expression * /*init*/ ) override { return false; }
+        virtual bool canVisitNamedCall ( ExprNamedCall * /*expr*/ ) override { return false; }
 
     protected:
         das_set<int32_t> labels;
@@ -294,11 +294,11 @@ namespace das {
     public:
         using PassVisitor::PassVisitor;
 
-        virtual bool canVisitStructure ( Structure * st ) override { return false; }
-        virtual bool canVisitGlobalVariable ( Variable * fun ) override { return false; }
-        virtual bool canVisitEnumeration ( Enumeration * en ) override { return false; }
-        virtual bool canVisitStructureFieldInit ( Structure * var ) override { return false; }
-        virtual bool canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) override { return false; }
+        virtual bool canVisitStructure ( Structure * /*st*/ ) override { return false; }
+        virtual bool canVisitGlobalVariable ( Variable * /*fun*/ ) override { return false; }
+        virtual bool canVisitEnumeration ( Enumeration * /*en*/ ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * /*var*/ ) override { return false; }
+        virtual bool canVisitArgumentInit ( Function * /*fun*/, const VariablePtr & /*var*/, Expression * /*init*/ ) override { return false; }
 
     protected:
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {

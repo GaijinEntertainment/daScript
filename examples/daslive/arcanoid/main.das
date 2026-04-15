@@ -1312,12 +1312,14 @@ def draw_hud() {
 
 // --- Lifecycle ---
 
+var asch : AudioSystemChannels
+
 [export]
 def init() {
     live_create_window("Arcanoid", 1024, 768)
     create_gl_objects()
     if (!audio_initialized) {
-        audio_system_create()
+        asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
     }
@@ -1488,16 +1490,35 @@ def update() {
 
 [export]
 def shutdown() {
+    print("Shutting down...\n")
     strudel_shutdown()
+    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
     delete_gl_objects()
     live_destroy_window()
 }
 
+var max_frame_limit = 0
+
+def parse_args() {
+    let args <- get_command_line_arguments()
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--max-frames") {
+            max_frame_limit = to_int(args[i + 1])
+        }
+    }
+}
+
 [export]
 def main() {
+    parse_args()
     init()
+    var frame_count = 0
     while (!exit_requested()) {
         update()
+        frame_count ++
+        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
+            break
+        }
     }
     shutdown()
 }

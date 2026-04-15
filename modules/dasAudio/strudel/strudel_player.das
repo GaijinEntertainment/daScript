@@ -470,11 +470,12 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
     }
     pcm_box |> join()
-    pcm_box |> release()
+    unsafe(lock_box_remove(pcm_box))
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     unset_status_update(g_sid)
     clear_status(status_box)
-    status_box |> release()
+    status_box |> join()
+    unsafe(lock_box_remove(status_box))
 }
 
 // Spawn strudel thread. Captures bank/sf2 pointers from main thread.
@@ -487,13 +488,10 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     // create playback time lockbox
     if (g_playback_box == null) {
         g_playback_box = unsafe(lock_box_create())
-        g_playback_box |> add_ref()
     }
     // create channels
     g_cmd_channel = unsafe(channel_create())
-    g_cmd_channel |> add_ref()
     g_done_channel = unsafe(channel_create())
-    g_done_channel |> add_ref()
     // create PCM stream on main thread (audio globals are initialized here)
     let thread_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     // capture shared resources from main thread
@@ -503,9 +501,6 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     var cmd_ch = g_cmd_channel
     var done_ch = g_done_channel
     var pb_box = g_playback_box
-    pb_box |> add_ref()
-    cmd_ch |> add_ref()
-    done_ch |> add_ref()
     let wt = g_wall_time
     let cps = g_cps
     let la = g_look_ahead
@@ -537,22 +532,36 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
 }
 
 def public strudel_shutdown() {
-    if (g_cmd_channel == null) {
-        return
-    }
-    g_cmd_channel |> push(new StrudelCommand(shutdown = true))
-    var got_done = false
-    while (!got_done) {
-        _builtin_channel_pop(g_done_channel) $(data) {
-            if (data != null) {
-                got_done = true
+    if (g_cmd_channel != null) {
+        g_cmd_channel |> push(new StrudelCommand(shutdown = true))
+        var got_done = false
+        while (!got_done) {
+            _builtin_channel_pop(g_done_channel) $(data) {
+                if (data != null) {
+                    got_done = true
+                }
             }
         }
+        // command channel
+        unsafe(channel_remove(g_cmd_channel))
+        g_cmd_channel = null
+        // done channel
+        unsafe(channel_remove(g_done_channel))
+        g_done_channel = null
+        // player box
+        unsafe(lock_box_remove(g_playback_box))
+        g_playback_box = null
     }
-    g_cmd_channel |> release()
-    g_cmd_channel = null
-    g_done_channel |> release()
-    g_done_channel = null
+    // status box (main-thread mode: created in strudel_create_channel)
+    if (g_tick_status_box != null) {
+        unset_status_update(g_sid)
+        clear_status(g_tick_status_box)
+        var tick_ptr = g_tick_status_box
+        g_tick_status_box |> release()
+        tick_ptr |> join()
+        unsafe(lock_box_remove(tick_ptr))
+        g_tick_status_box = null
+    }
 }
 
 // --- Persistence ---

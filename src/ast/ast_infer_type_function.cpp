@@ -886,7 +886,7 @@ namespace das {
             bool less = false;
             bool more = false;
             for (size_t d = 0; d != d1; ++d) {
-                TypeDeclPtr t1Arg, t2Arg;
+                TypeDeclPtr t1Arg = nullptr, t2Arg = nullptr;
                 if (t1->dimExpr[d]->rtti_isTypeDecl()) {
                     t1Arg = static_cast<ExprTypeDecl*>(t1->dimExpr[d])->typeexpr;
                 }

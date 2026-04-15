@@ -20,10 +20,10 @@ namespace das {
     template <typename TT>
     struct AddReleaseGuard {
         AddReleaseGuard ( TT * tt, Context * c, LineInfoArg * a ) : t(tt), at(a), context(c) {
-            t->addRef();
+            t->addRef(a);
         }
         ~AddReleaseGuard () {
-            if ( int ref = t->releaseRef() ) {
+            if ( int ref = t->releaseRef(at) ) {
                 context->throw_error_at(at, "synch primitive deleted while being used (ref=%i)", ref);
             }
         }
@@ -40,6 +40,8 @@ namespace das {
     void LockBox::set ( void * data, TypeInfo * ti, Context * context ) {
         lock_guard<mutex> guard(mCompleteMutex);
         box = Feature(data,ti,context);
+        box.fOwner = this;
+        box.fOwnerTrackId = mTrackId;
         mCond.notify_all();
     }
 
@@ -51,6 +53,8 @@ namespace das {
     void LockBox::fill ( void * data, TypeInfo * ti, Context * context ) {
         lock_guard<mutex> guard(mCompleteMutex);
         box = Feature(data,ti,context);
+        box.fOwner = this;
+        box.fOwnerTrackId = mTrackId;
         mRemaining = 1;
         mCond.notify_all();
     }
@@ -83,6 +87,8 @@ namespace das {
     void Channel::push ( void * data, TypeInfo * ti, Context * context ) {
         lock_guard<mutex> guard(mCompleteMutex);
         pipe.emplace_back(data, ti, context!=owner ? context : nullptr);
+        pipe.back().fOwner = this;
+        pipe.back().fOwnerTrackId = mTrackId;
         mCond.notify_all();  // notify_one??
     }
 
@@ -91,6 +97,8 @@ namespace das {
         auto pushCtx = context!=owner ? context : nullptr;
         for ( int i=0; i!=count; ++i ) {
             pipe.emplace_back(data[i], ti, pushCtx);
+            pipe.back().fOwner = this;
+            pipe.back().fOwnerTrackId = mTrackId;
         }
         mCond.notify_all();  // notify_one??
     }
@@ -262,16 +270,17 @@ namespace das {
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
     }
 
-    Channel * channelCreate( Context * context, LineInfoArg * ) {
+    Channel * channelCreate( Context * context, LineInfoArg * at ) {
         Channel * ch = new Channel(context);
-        ch->addRef();
+        if ( at ) ch->mCreatedAt = at->describe();
+        ch->addRef(at);
         return ch;
     }
 
     void channelRemove( Channel * & ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "channelRemove: channel is null");
         if (!ch->isValid()) context->throw_error_at(at, "channel is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "channel being deleted while being used");
+        if (ch->releaseRef(at)) context->throw_error_at(at, "channel being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -312,16 +321,17 @@ namespace das {
     mutex              g_jobQueMutex;
     shared_ptr<JobQue> g_jobQue;
 
-    LockBox * lockBoxCreate( Context *, LineInfoArg * ) {
+    LockBox * lockBoxCreate( Context *, LineInfoArg * at ) {
         LockBox * ch = new LockBox();
-        ch->addRef();
+        if ( at ) ch->mCreatedAt = at->describe();
+        ch->addRef(at);
         return ch;
     }
 
     void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "lockBoxRemove: lock box is null");
         if (!ch->isValid()) context->throw_error_at(at, "lock box is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "lock box being deleted while being used");
+        if (ch->releaseRef(at)) context->throw_error_at(at, "lock box being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -396,10 +406,6 @@ namespace das {
         virtual void walk(DataWalker & walker, void * data) override {
             BasicStructureAnnotation::walk(walker, data);
             auto ch = (AtomicTT<TT> *) data;
-            if ( !ch->isValid() ) {
-                walker.invalidData();
-                return;
-            }
             TypeInfo info;
             memset(&info, 0, sizeof(TypeInfo));
             info.type = sizeof(TT)==4 ? Type::tInt : Type::tInt64;
@@ -510,12 +516,12 @@ namespace das {
 
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "jobStatusAddRef: status is null");
-        status->addRef();
+        status->addRef(at);
     }
 
     void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "jobStatusReleaseRef: status is null");
-        status->releaseRef();
+        status->releaseRef(at);
         status = nullptr;
     }
 
@@ -527,16 +533,17 @@ namespace das {
         context->invoke(block,args,nullptr,lineInfo);
     }
 
-    JobStatus * jobStatusCreate( Context *, LineInfoArg * ) {
+    JobStatus * jobStatusCreate( Context *, LineInfoArg * at ) {
         JobStatus * ch = new JobStatus();
-        ch->addRef();
+        if ( at ) ch->mCreatedAt = at->describe();
+        ch->addRef(at);
         return ch;
     }
 
     void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "jobStatusRemove: job status is null");
         if (!ch->isValid()) context->throw_error_at(at, "job status is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "job status being deleted while being used");
+        if (ch->releaseRef(at)) context->throw_error_at(at, "job status being deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -553,7 +560,7 @@ namespace das {
 
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "notifyAndReleaseJob: status is null");
-        if ( !status->NotifyAndRelease() ) context->throw_error_at(at, "notifyAndReleaseJob: nothing to notify");
+        if ( !status->NotifyAndRelease(at) ) context->throw_error_at(at, "notifyAndReleaseJob: nothing to notify");
         status = nullptr;
     }
 
@@ -583,10 +590,8 @@ namespace das {
             lbx->from("JobStatus");
             addAnnotation(lbx);
             auto a32 = new AtomicAnnotation<int32_t>("Atomic32",lib);
-            a32->from("JobStatus");
             addAnnotation(a32);
             auto a64 = new AtomicAnnotation<int64_t>("Atomic64",lib);
-            a64->from("JobStatus");
             addAnnotation(a64);
             // atomic 32
             addExtern<DAS_BIND_FUN(atomicCreate<int32_t>)>(*this, lib, "atomic32_create",

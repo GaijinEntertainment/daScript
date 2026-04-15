@@ -122,8 +122,9 @@ namespace das {
         uint32_t    stackSize = 0;
     };
 
-    class DAS_API AnyHeapAllocator : public ptr_ref_count {
+    class DAS_API AnyHeapAllocator {
     public:
+        virtual ~AnyHeapAllocator() = default;
         virtual bool breakOnFree ( void *, uint32_t ) { return false; }
         virtual char * impl_allocate ( uint32_t ) = 0;
         virtual void impl_free ( char *, uint32_t ) = 0;

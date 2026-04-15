@@ -103,6 +103,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/style_lint.md` | Adding new style lint rules to `daslib/style_lint.das` |
 | `skills/gc_migration.md` | Migrating `.das` or C++ code from `smart_ptr<T>` to gc_node for AST types (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl) |
 | `skills/version_update.md` | Bumping the daslang version number (all files that need updating) |
+| `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Feature leaks using the tracking system (`--track-job-status`, `DumpJobQueLeaks`, refcount tracing) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.

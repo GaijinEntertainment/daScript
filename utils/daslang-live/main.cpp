@@ -13,6 +13,7 @@
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/ast/dyn_modules.h"
 #include "daScript/misc/crash_handler.h"
+#include "daScript/misc/job_que.h"
 #include <sys/stat.h>
 
 #if defined(_WIN32) && defined(_DEBUG)
@@ -158,7 +159,6 @@ struct CompileResult {
     ProgramPtr program;
     ContextPtr ctx;
     FileAccessPtr access;
-    ModuleGroup moduleGroup;
     string errors;  // non-empty if compile/simulate failed
 };
 
@@ -176,7 +176,8 @@ static CompileResult compile_script(const string & fn) {
     policies.ignore_shared_modules = true;
     policies.rtti = true;
 
-    result.program = compileDaScript(fn, result.access, tout, result.moduleGroup, policies);
+    ModuleGroup moduleGroup;
+    result.program = compileDaScript(fn, result.access, tout, moduleGroup, policies);
     if (!result.program) {
         result.errors = "failed to compile " + fn;
         tout << "ERROR: " << result.errors << "\n";
@@ -710,6 +711,7 @@ int main(int argc, char * argv[]) {
     int result = run_lifecycle(scriptFile);
 
     Module::Shutdown();
+    JobStatus::DumpJobQueLeaks();
     release_single_instance();
     return result;
 }

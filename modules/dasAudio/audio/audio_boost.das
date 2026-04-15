@@ -825,7 +825,6 @@ def command_processor {
                     ch.source->append_temporary(samples)
                 }
             }
-            box |> release()
         } elif (cmd is pause) {
             let pcmd = cmd as pause
             g_sid_2_channel |> get(pcmd.sid) $(var ch : AudioChannel?&) {
@@ -1005,14 +1004,19 @@ def finalize_mixer {
     }
 }
 
-def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?; next_sid : Atomic64?> {
+tuple public AudioSystemChannels {
+    command : Channel ?
+    collect : Channel ?
+    next_sid : Atomic64 ?
+}
+
+def public audio_system_create(collect : bool = false) : AudioSystemChannels {
     //! Low-level: creates the audio system. Prefer with_audio_system.
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
     channel |> add_ref()
     g_command_channel = channel
     g_sound_sid = atomic64_create()
-    g_sound_sid |> add_ref()
     var collectChannel : Channel?
     if (collect) {
         collectChannel = unsafe(channel_create())
@@ -1031,8 +1035,6 @@ def public audio_system_finalize(var channel, collectChannel : Channel?&; var ne
     g_command_channel |> release
     channel |> join
     unsafe(channel_remove(channel))
-    next_sid |> release
-    g_sound_sid |> join
     unsafe(atomic64_remove(g_sound_sid))
     if (g_collect_channel != null) {
         g_collect_channel |> release
@@ -1203,7 +1205,6 @@ def public append_box_to_pcm(sid : SID; box : LockBox?; var samples : array<floa
     //! append samples from lock box to PCM stream. Box is grabbed and released on audio thread.
     //! samples buffer must outlive the grab — caller keeps it alive until box.isReady.
     _builtin_lockbox_fill(box, unsafe(addr(samples)))
-    box |> add_ref
     push_cmd <| new AudioCommand(append_box_pcm = (sid, unsafe(reinterpret<void?>(box))))
     return sid
 }
@@ -1400,11 +1401,5 @@ def public set_sound_sid(next_sid : void?) {
     if (sid == g_sound_sid) {
         return
     }
-    if (g_sound_sid != null) {
-        g_sound_sid |> release
-    }
     g_sound_sid = sid
-    if (g_sound_sid != null) {
-        g_sound_sid |> add_ref
-    }
 }

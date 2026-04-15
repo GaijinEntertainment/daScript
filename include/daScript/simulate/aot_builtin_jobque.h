@@ -8,34 +8,38 @@
 
 namespace das {
 
-    struct Feature {
+    struct DAS_API Feature {
+        // tracking
+        uint64_t            fTrackId = 0;
+        Feature *           fTrackNext = nullptr;
+        Feature *           fTrackPrev = nullptr;
+        string              fCreatedAt;
+        JobStatus *         fOwner = nullptr;
+        uint64_t            fOwnerTrackId = 0;
+        static Feature *    sTrackHead;
+        static mutex        sTrackMutex;
+        static void DumpFeatures();
+        void trackInsert();
+        void trackRemove();
+        // data
         void *              data = nullptr;
         TypeInfo *          type = nullptr;
         Context *           from = nullptr;
         shared_ptr<Context> fromShared;
-        Feature() {}
-        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti) {
-            setFrom(c);
-        }
-        __forceinline void setFrom ( Context * c ) {
-            from = c;
-            if ( c && c->sharedPtrContext ) {
-                fromShared = c->shared_from_this();
-            } else {
-                fromShared.reset();
-            }
-        }
-        __forceinline void clear() {
-            data = nullptr;
-            type = nullptr;
-            from = nullptr;
-            fromShared.reset();
-        }
+        Feature();
+        Feature ( void * d, TypeInfo * ti, Context * c );
+        ~Feature();
+        Feature ( const Feature & f );
+        Feature ( Feature && f );
+        Feature & operator = ( const Feature & f );
+        Feature & operator = ( Feature && f );
+        void setFrom ( Context * c );
+        void clear();
     };
 
     class LockBox : public JobStatus {
     public:
-        LockBox() {}
+        LockBox() { mTrackMagic = TRACK_LOCKBOX; }
         virtual ~LockBox();
         void set ( void * data, TypeInfo * ti, Context * context );
         void get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
@@ -55,7 +59,7 @@ namespace das {
     };
 
     template <typename TT>
-    class AtomicTT : public JobStatus {
+    class AtomicTT {
     public:
         TT inc () { return ++ value; }
         TT dec () { return -- value; }
@@ -72,8 +76,8 @@ namespace das {
 
     class DAS_API Channel : public JobStatus {
     public:
-        Channel( Context * ctx ) : owner(ctx) {}
-        Channel( Context * ctx, int count) : owner(ctx) { mRemaining = count; }
+        Channel( Context * ctx ) : owner(ctx) { mTrackMagic = TRACK_CHANNEL; }
+        Channel( Context * ctx, int count) : owner(ctx) { mTrackMagic = TRACK_CHANNEL; mRemaining = count; }
         virtual ~Channel();
         void push ( void * data, TypeInfo * ti, Context * context );
         void pushBatch ( void ** data, int count, TypeInfo * ti, Context * context );
@@ -174,56 +178,44 @@ namespace das {
     AtomicTT<TT> * atomicCreate( Context *, LineInfoArg * ) {
         auto ch = new AtomicTT<TT>();
         ch->set(0);
-        ch->addRef();
         return ch;
     }
 
     template <typename TT>
     void atomicRemove( AtomicTT<TT> * & ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "atomicRemove: atomic is null");
-        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
-        if (ch->releaseRef()) context->throw_error_at(at, "atomic being deleted while being used");
         delete ch;
         ch = nullptr;
     }
 
     template <typename TT>
     void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
-        using TAtomic = AtomicTT<TT>;
-        TAtomic ch;
+        AtomicTT<TT> ch;
         ch.set(0);
-        ch.addRef();
-        das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
-        if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "atomic box being deleted while being used");
-        }
+        das::das_invoke<void>::invoke<AtomicTT<TT> *>(context, at, blk, &ch);
     }
 
     template <typename TT>
     TT atomicGet ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "atomic is null");
-        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
         return ch->get();
     }
 
     template <typename TT>
     void atomicSet ( AtomicTT<TT> * ch, TT val, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "atomic is null");
-        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
         ch->set(val);
     }
 
     template <typename TT>
     TT atomicInc ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "atomic is null");
-        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
         return ch->inc();
     }
 
     template <typename TT>
     TT atomicDec ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "atomic is null");
-        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
         return ch->dec();
     }
 }

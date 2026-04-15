@@ -97,10 +97,12 @@ def cmd_unpause(input : JsonValue?) : JsonValue? {
 
 // --- daslang-live mode ---
 
+var asch : AudioSystemChannels
+
 [export]
 def init() {
     if (get_audio_command_channel() == null) {
-        audio_system_create()
+        asch = audio_system_create()
     }
     if (!strudel_has_sf2()) {
         let sf2_path = find_sf2()
@@ -123,7 +125,9 @@ def update() {
 
 [export]
 def shutdown() {
-    pass
+    print("Shutting down...\n")
+    strudel_shutdown()
+    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
 }
 
 // --- standalone mode (daslang.exe) ---

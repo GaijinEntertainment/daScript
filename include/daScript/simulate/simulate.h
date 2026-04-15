@@ -799,8 +799,8 @@ namespace das
             }
         }
     public:
-        smart_ptr<StringHeapAllocator>  stringHeap;
-        smart_ptr<AnyHeapAllocator>     heap;
+        unique_ptr<StringHeapAllocator>  stringHeap;
+        unique_ptr<AnyHeapAllocator>     heap;
         shared_ptr<ConstStringAllocator> constStringHeap;
         shared_ptr<NodeAllocator>       code;
         shared_ptr<DebugInfoAllocator>  debugInfo;

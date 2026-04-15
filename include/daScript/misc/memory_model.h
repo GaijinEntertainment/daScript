@@ -368,7 +368,7 @@ namespace das {
         HeapChunk * next;
     };
 
-    class DAS_API LinearChunkAllocator : public ptr_ref_count {
+    class DAS_API LinearChunkAllocator {
         enum { default_initial_size = 65536 };
     public:
         LinearChunkAllocator() { }
