@@ -43,6 +43,7 @@ struct Scheduler {
     startTime    : double = 0.0lf   // wall-clock time when playback started
     lastQueryEnd : double = 0.0lf   // cycle position of last query end
     voices       : array<Voice?>    // pre-rendered sample/oscillator voices
+    osc_voices   : array<OscVoice> // streaming oscillator voices
     mixer        : ma_volume_mixer  // reused across ticks
     mixer_ready  : bool = false
     // SF2 real-time voice pool
@@ -254,6 +255,18 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
     }
 }
 
+// Render all active streaming oscillator voices into the output buffer.
+def private osc_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
+    var i = length(sched.osc_voices) - 1
+    while (i >= 0) {
+        osc_render_chunk(sched.osc_voices[i], output, chunkFrames)
+        if (sched.osc_voices[i].finished) {
+            sched.osc_voices |> erase(i)
+        }
+        i --
+    }
+}
+
 // Tick the scheduler: query pattern for new events, render them,
 // mix all active voices into a fixed-size stereo buffer.
 //
@@ -275,41 +288,51 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
             if (h.has_whole && abs(h.whole.start - h.part.start) < 0.0001lf && h.whole.start < spawnEnd) {
                 let durCycles = h.whole.stop - h.whole.start
                 let durSec = float(durCycles / sched.cps)
+                let cutGroup = h.value.cut
+                let onsetCycle = h.whole.start
+                let onsetWall = sched.startTime + onsetCycle / sched.cps
+                let offsetSec = float(onsetWall - wall_time)
+                // cut groups: kill voices in all pools
+                if (cutGroup != 0) {
+                    var k = length(sched.voices) - 1
+                    while (k >= 0) {
+                        if (sched.voices[k].cut == cutGroup) {
+                            unsafe { delete sched.voices[k]; }
+                            sched.voices |> erase(k)
+                        }
+                        k --
+                    }
+                    var ko = length(sched.osc_voices) - 1
+                    while (ko >= 0) {
+                        if (sched.osc_voices[ko].cut == cutGroup) {
+                            sched.osc_voices |> erase(ko)
+                        }
+                        ko --
+                    }
+                }
                 // SF2 path: spawn real-time voices
                 if (h.value.sf2_program >= 0 && sched.sf2 != null) {
-                    // cut groups: also kill pre-rendered voices in same group
-                    let cutGroup = h.value.cut
-                    if (cutGroup != 0) {
-                        var k = length(sched.voices) - 1
-                        while (k >= 0) {
-                            if (sched.voices[k].cut == cutGroup) {
-                                unsafe { delete sched.voices[k]; }
-                                sched.voices |> erase(k)
-                            }
-                            k --
-                        }
-                    }
                     sf2_spawn_voices(sched, h.value, durSec)
+                } elif (to_osc_type(h.value.s) != OscType.osc_unknown) {
+                    // streaming oscillator path
+                    let offsetFrames = max(int(offsetSec * float(SAMPLE_RATE)), 0)
+                    sched.osc_voices |> push(OscVoice(
+                        osc_type = to_osc_type(h.value.s),
+                        freq = note_to_freq(h.value.note),
+                        duration = durSec,
+                        attack = h.value.attack,
+                        decay = h.value.decay,
+                        sustain = h.value.sustain,
+                        release_sec = h.value.release,
+                        gain = h.value.gain * h.value.velocity,
+                        pan = h.value.pan * 2.0 - 1.0,
+                        cut = cutGroup,
+                        offset_frames = offsetFrames
+                    ))
                 } else {
-                    // sample/oscillator path: pre-render to buffer
+                    // sample/drum path: pre-render to buffer
                     var stereo <- render_event_stereo(h.value, durSec, bank)
-                    // calculate how many samples into the chunk this onset falls
-                    let onsetCycle = h.whole.start
-                    let onsetWall = sched.startTime + onsetCycle / sched.cps
-                    let offsetSec = float(onsetWall - wall_time)
                     let offsetSamples = max(int(offsetSec * float(SAMPLE_RATE)) * 2, 0) // stereo offset
-                    // cut groups: kill existing voices in same group
-                    let cutGroup = h.value.cut
-                    if (cutGroup != 0) {
-                        var k = length(sched.voices) - 1
-                        while (k >= 0) {
-                            if (sched.voices[k].cut == cutGroup) {
-                                unsafe { delete sched.voices[k]; }
-                                sched.voices |> erase(k)
-                            }
-                            k --
-                        }
-                    }
                     sched.voices |> push(new Voice(
                         samples <- stereo,
                         position = -offsetSamples,
@@ -369,6 +392,9 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
 
     // render SF2 real-time voices into the same output buffer
     sf2_render_voices(sched, output, chunkFrames)
+
+    // render streaming oscillator voices into the same output buffer
+    osc_render_voices(sched, output, chunkFrames)
 
     return <- output
 }

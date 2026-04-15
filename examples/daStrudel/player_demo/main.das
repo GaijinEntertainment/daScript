@@ -6,7 +6,7 @@ require audio/audio_boost
 require audio/audio_wav
 require strudel/strudel
 require strudel/strudel_player
-require daslib/fioy
+require daslib/fio
 
 [export]
 def main() {

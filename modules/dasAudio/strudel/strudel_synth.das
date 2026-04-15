@@ -144,6 +144,24 @@ def to_osc_type(sound : string) : OscType {
     return OscType.osc_unknown
 }
 
+// Streaming oscillator voice — renders per-chunk instead of pre-rendering the full duration.
+struct OscVoice {
+    osc_type        : OscType = OscType.osc_sine
+    freq            : float = 440.0
+    phase           : float = 0.0       // oscillator phase [0,1)
+    duration        : float = 1.0       // total note duration in seconds
+    attack          : float = 0.001
+    decay           : float = 0.05
+    sustain         : float = 1.0
+    release_sec     : float = 0.1
+    samples_elapsed : int = 0           // samples rendered so far
+    finished        : bool = false
+    gain            : float = 1.0       // event.gain * event.velocity
+    pan             : float = 0.0       // -1=left, 0=center, 1=right
+    cut             : int = 0           // cut group
+    offset_frames   : int = 0           // sub-chunk onset delay (frames)
+}
+
 def render_oscillator(sound : string; duration : float; freq : float; gain : float; event : Event) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
@@ -187,6 +205,80 @@ def render_oscillator(sound : string; duration : float; freq : float; gain : flo
         }
     }
     return <- samples
+}
+
+// Render one chunk of an oscillator voice directly into the output buffer (additive).
+// Applies gain and pan inline — no intermediate buffer needed.
+def osc_render_chunk(var voice : OscVoice; var output : array<float>; chunkFrames : int) {
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let phaseInc = voice.freq * iSr
+    let tp = float(TWO_PI)
+    // pan law matching volume_mixer.h ma_volume_mixer_pan_lr
+    let pan = clamp(voice.pan, -1.0, 1.0)
+    let angle = (pan + 1.0) * 0.25 * float(TWO_PI / 2.0)
+    let lGain = voice.gain * cos(angle)
+    let rGain = voice.gain * sin(angle)
+    // consume sub-chunk onset offset
+    if (voice.offset_frames >= chunkFrames) {
+        voice.offset_frames -= chunkFrames
+        return
+    }
+    let startFrame = voice.offset_frames
+    voice.offset_frames = 0
+    let att = voice.attack
+    let dec = voice.decay
+    let sus = voice.sustain
+    let rel = voice.release_sec
+    let dur = voice.duration
+    if (voice.osc_type == OscType.osc_sine) {
+        for (f in range(startFrame, chunkFrames)) {
+            let t = float(voice.samples_elapsed) * iSr
+            let env = adsr(t, att, dec, sus, rel, dur)
+            if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
+            let sample = sin(voice.phase * tp) * env
+            output[f * 2]     += sample * lGain
+            output[f * 2 + 1] += sample * rGain
+            voice.phase += phaseInc
+            voice.phase -= floor(voice.phase)
+            voice.samples_elapsed ++
+        }
+    } elif (voice.osc_type == OscType.osc_sawtooth) {
+        for (f in range(startFrame, chunkFrames)) {
+            let t = float(voice.samples_elapsed) * iSr
+            let env = adsr(t, att, dec, sus, rel, dur)
+            if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
+            let sample = (voice.phase * 2.0 - 1.0) * env
+            output[f * 2]     += sample * lGain
+            output[f * 2 + 1] += sample * rGain
+            voice.phase += phaseInc
+            voice.phase -= floor(voice.phase)
+            voice.samples_elapsed ++
+        }
+    } elif (voice.osc_type == OscType.osc_square) {
+        for (f in range(startFrame, chunkFrames)) {
+            let t = float(voice.samples_elapsed) * iSr
+            let env = adsr(t, att, dec, sus, rel, dur)
+            if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
+            let sample = (voice.phase < 0.5 ? 1.0 : -1.0) * env
+            output[f * 2]     += sample * lGain
+            output[f * 2 + 1] += sample * rGain
+            voice.phase += phaseInc
+            voice.phase -= floor(voice.phase)
+            voice.samples_elapsed ++
+        }
+    } elif (voice.osc_type == OscType.osc_triangle) {
+        for (f in range(startFrame, chunkFrames)) {
+            let t = float(voice.samples_elapsed) * iSr
+            let env = adsr(t, att, dec, sus, rel, dur)
+            if (env <= 0.001 && t >= dur) { voice.finished = true; break; }
+            let sample = (abs(voice.phase * 4.0 - 2.0) - 1.0) * env
+            output[f * 2]     += sample * lGain
+            output[f * 2 + 1] += sample * rGain
+            voice.phase += phaseInc
+            voice.phase -= floor(voice.phase)
+            voice.samples_elapsed ++
+        }
+    }
 }
 
 // ─── Main render entry point ───
