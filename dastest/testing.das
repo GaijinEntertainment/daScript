@@ -153,6 +153,24 @@ def equal(tb : Asserter?; a; b; msg = "") : bool {
     return false
 }
 
+def equal(tb : Asserter?; a, b : array<auto(TT)>; msg = "") : bool {
+    if (length(a) != length(b)) {
+        tb->errorAt(!empty(msg) ? msg : "array lengths differ", get_line_info(1))
+        tb->errorAt("\texpected length: {length(a)}", get_line_info(1))
+        tb->errorAt("\tgot length: {length(b)}", get_line_info(1))
+        return false
+    }
+    for (i in range(length(a))) {
+        if (!_::equal(tb, a[i], b[i])) {
+            tb->errorAt(!empty(msg) ? msg : "arrays differ at [{i}]", get_line_info(1))
+            tb->errorAt("\texpected[{i}]: {a[i]}", get_line_info(1))
+            tb->errorAt("\tgot[{i}]: {b[i]}", get_line_info(1))
+            return false
+        }
+    }
+    return true
+}
+
 [sideeffects]
 def accept(tb : Asserter?; value) {
     pass
