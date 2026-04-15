@@ -396,7 +396,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
 #else
 
-        bool verifyCallCorrect( const FunctionPtr & fun, const AnnotationArgumentList & args, string & err ) {
+        bool verifyCallCorrect( const FunctionPtr & fun, const AnnotationArgumentList & /*args*/, string & err ) {
             if ( fun->arguments.size() >= MAX_WRAPPER_ARGUMENTS ) {
                 err = "function has too many arguments for the current wrapper config";
                 return false;
@@ -533,7 +533,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             }
             return newCallExpr;
         }
-        virtual SimNode * simulate ( Context * context, Function * fun, const AnnotationArgumentList & args, string & err ) override {
+        virtual SimNode * simulate ( Context * /*context*/, Function * fun, const AnnotationArgumentList & /*args*/, string & /*err*/ ) override {
             if (is_in_completion()) return nullptr;
             DAS_FATAL_ERROR("Should be unreachable. We handled it in transformCall. Failed on: %s.", fun->name.c_str());
             // // All validation is in apply(). This path is only reached for late/opengl functions.

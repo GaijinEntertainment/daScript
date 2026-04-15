@@ -3435,7 +3435,6 @@ namespace das {
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             if ( call->name=="invoke" ) {
-                auto argType = arg->type;
                 if ( arg->type->isRefType() ) {
                     if ( needsArgPass(arg) ) {
                         ss << ")";
@@ -4240,7 +4239,7 @@ namespace das {
                     var->init = var->init->visit(*this);
                     var->init = visitGlobalLetInit(var, var->init);
                 }
-                auto varn = visitGlobalLet(var);
+                visitGlobalLet(var);
             }
             tab --;
             ss << "}\n";

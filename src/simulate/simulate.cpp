@@ -981,11 +981,11 @@ namespace das
         gcEnabled = options.getBoolOption("gc", false);
         persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( persistent ) {
-            heap = make_smart<PersistentHeapAllocator>();
-            stringHeap = make_smart<PersistentStringAllocator>();
+            heap = make_unique<PersistentHeapAllocator>();
+            stringHeap = make_unique<PersistentStringAllocator>();
         } else {
-            heap = make_smart<LinearHeapAllocator>();
-            stringHeap = make_smart<LinearStringAllocator>();
+            heap = make_unique<LinearHeapAllocator>();
+            stringHeap = make_unique<LinearStringAllocator>();
         }
         heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
         heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
@@ -1191,11 +1191,11 @@ namespace das
         category.value = opts.category;
         ownStack = (ctx.stack.size() != 0);
         if ( persistent ) {
-            heap = make_smart<PersistentHeapAllocator>();
-            stringHeap = make_smart<PersistentStringAllocator>();
+            heap = make_unique<PersistentHeapAllocator>();
+            stringHeap = make_unique<PersistentStringAllocator>();
         } else {
-            heap = make_smart<LinearHeapAllocator>();
-            stringHeap = make_smart<LinearStringAllocator>();
+            heap = make_unique<LinearHeapAllocator>();
+            stringHeap = make_unique<LinearStringAllocator>();
         }
         // heap
         heap->setInitialSize(ctx.heap->getInitialSize());

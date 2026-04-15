@@ -8,6 +8,7 @@
 #include "../dasFormatter/fmt.h"
 #include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/misc/crash_handler.h"
+#include "daScript/misc/job_que.h"
 #if defined(_WIN32) && defined(_DEBUG)
 #include <crtdbg.h>
 #endif
@@ -516,6 +517,7 @@ void print_help() {
         << "    -compile-only compile script without simulation and execution\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
         << "    -track-smart-ptr <id> track smart pointer with id\n"
+        << "    -track-job-status <id> track JobStatus/Channel/LockBox with id\n"
         << "    -linear-stack-allocator  disable scoped stack allocator\n"
         << "    -das-wait-debugger wait for debugger to attach\n"
         << "    -das-profiler enable profiler\n"
@@ -713,6 +715,20 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 ptr_ref_count::ref_count_track = id;
                 i += 1;
                 printf("tracking %" PRIx64 " aka %" PRIu64 "\n", id, id);
+            } else if ( cmd=="-track-job-status" ) {
+                if ( i+1 > argc ) {
+                    printf("expecting job status id\n");
+                    print_help();
+                    return -1;
+                }
+                uint64_t id = 0;
+                if ( sscanf(argv[i+1], "%" PRIu64, &id)!=1 ) {
+                    printf("expecting job status id, got %s\n", argv[i+1]);
+                    return -1;
+                }
+                g_jobque_track_id.store(id);
+                i += 1;
+                printf("tracking JobStatus #%" PRIu64 "\n", id);
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
             } else if ( cmd=="-linear-stack-allocator") {
@@ -787,6 +803,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // and done
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
+    JobStatus::DumpJobQueLeaks();
     if ( g_smart_ptr_total!=0 ) {
         TextPrinter tp;
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";

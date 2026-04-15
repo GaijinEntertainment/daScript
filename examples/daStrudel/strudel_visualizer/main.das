@@ -182,6 +182,8 @@ def cmd_debug(input : JsonValue?) : JsonValue? {
 
 // --- Lifecycle ---
 
+var asch : AudioSystemChannels
+
 [export]
 def init() {
     live_create_window("daStrudel Visualizer", 1280, 720)
@@ -197,7 +199,7 @@ def init() {
     upload_font_texture(font)
     // audio
     if (get_audio_command_channel() == null) {
-        audio_system_create()
+        asch = audio_system_create()
     }
     // load SF2 soundfont
     if (USE_SF2) {
@@ -407,6 +409,9 @@ def update() {
 
 [export]
 def shutdown() {
+    print("Shutting down...\n")
+    strudel_shutdown()
+    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
     delete render_states
     delete audio_analyses
     delete drum_panel_states
@@ -417,11 +422,28 @@ def shutdown() {
 
 // --- Standalone mode ---
 
+var max_frame_limit = 0
+
+def parse_args() {
+    let args <- get_command_line_arguments()
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--max-frames") {
+            max_frame_limit = to_int(args[i + 1])
+        }
+    }
+}
+
 [export]
 def main() {
+    parse_args()
     init()
+    var frame_count = 0
     while (!exit_requested()) {
         update()
+        frame_count ++
+        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
+            break
+        }
     }
     shutdown()
 }

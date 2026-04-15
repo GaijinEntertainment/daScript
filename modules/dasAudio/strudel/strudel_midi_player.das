@@ -911,10 +911,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
         to_log(0, "midi {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak utilization\n")
     }
     pcm_box |> join()
-    pcm_box |> release()
+    unsafe(lock_box_remove(pcm_box))
     unset_status_update(sid)
     clear_status(status_box)
-    status_box |> release()
+    status_box |> join()
+    unsafe(lock_box_remove(status_box))
     unsafe {
         set_audio_thread_command_channel(null)
     }
@@ -949,9 +950,7 @@ def public midi_init() {
         g_midi_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     }
     g_midi_cmd_channel = unsafe(channel_create())
-    g_midi_cmd_channel |> add_ref()
     g_midi_done_channel = unsafe(channel_create())
-    g_midi_done_channel |> add_ref()
     let sid = g_midi_sid
     var cmd_ch = g_midi_cmd_channel
     var done_ch = g_midi_done_channel
@@ -1079,9 +1078,9 @@ def public midi_shutdown() {
             }
         }
     }
-    g_midi_cmd_channel |> release()
+    unsafe(channel_remove(g_midi_cmd_channel))
     g_midi_cmd_channel = null
-    g_midi_done_channel |> release()
+    unsafe(channel_remove(g_midi_done_channel))
     g_midi_done_channel = null
     g_midi_running = false
 }

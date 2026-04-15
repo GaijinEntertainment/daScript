@@ -640,7 +640,7 @@ namespace das {
                         auto fidx = efield->value->type->bitFieldIndex(efield->name);
                         if (fidx != -1) {
                             reportAstChanged();
-                            auto mask = new ExprConstBitfield(efield->at, 1ul << fidx);
+                            auto mask = new ExprConstBitfield(efield->at, uint64_t(1) << uint64_t(fidx));
                             mask->bitfieldType = new TypeDecl(*efield->value->type);
                             auto call = new ExprCall(efield->at, "__bit_set");
                             call->arguments.push_back(value->clone());

@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/smart_ptr.h"
+#include "daScript/misc/job_que.h"
 
 #include <signal.h>
 
@@ -11,6 +12,12 @@ das::ptr_ref_count *   das::ptr_ref_count::ref_count_head = nullptr;
 das::mutex             das::ptr_ref_count::ref_count_mutex;
 
 DAS_API das::atomic<uint64_t> das::g_smart_ptr_total {0};
+
+// JobStatus / Feature tracking
+DAS_API das::atomic<uint64_t> das::g_jobque_track_total {0};
+DAS_API das::atomic<uint64_t> das::g_jobque_track_id {0};
+das::JobStatus *    das::JobStatus::sTrackHead = nullptr;
+das::mutex          das::JobStatus::sTrackMutex;
 
 DAS_API void os_debug_break()
 {

@@ -1301,6 +1301,7 @@ namespace debugger {
 #endif
 
     void track_insane_pointer ( void * ptr, Context * ctx ) {
+        ptr;
 #if DAS_TRACK_INSANE_POINTER
         das_track_insane_pointer(ptr);
 #else

@@ -486,7 +486,6 @@ namespace das
         for ( const auto & decl : variants ) {
             auto fieldVariant = makeType->findArgumentIndex(decl->name);
             DAS_ASSERT(fieldVariant!=-1 && "should have failed in type infer otherwise");
-            auto fieldType = makeType->argTypes[fieldVariant];
             if ( decl->value->rtti_isMakeLocal() ) {
                 auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
                 uint32_t offset =  extraOffset + index*stride + fieldOffset;
@@ -3228,11 +3227,11 @@ namespace das
         context.gcEnabled = options.getBoolOption("gc", false);
         context.debugger = getDebugger();
         if ( context.persistent ) {
-            context.heap = make_smart<PersistentHeapAllocator>();
-            context.stringHeap = make_smart<PersistentStringAllocator>();
+            context.heap = make_unique<PersistentHeapAllocator>();
+            context.stringHeap = make_unique<PersistentStringAllocator>();
         } else {
-            context.heap = make_smart<LinearHeapAllocator>();
-            context.stringHeap = make_smart<LinearStringAllocator>();
+            context.heap = make_unique<LinearHeapAllocator>();
+            context.stringHeap = make_unique<LinearStringAllocator>();
         }
         context.heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
         context.heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
