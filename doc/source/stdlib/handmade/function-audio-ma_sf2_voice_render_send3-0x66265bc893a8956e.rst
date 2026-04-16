@@ -1,0 +1,1 @@
+Render SF2 voice samples into four separate output buffers (dry, reverb, chorus, and delay sends) simultaneously, applying the corresponding gain to each send.

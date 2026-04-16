@@ -12,8 +12,9 @@ require math
 // A sample: interleaved float data + channel count.
 [safe_when_uninitialized]
 struct Sample {
-    data     : array<float>   // interleaved PCM
-    channels : int = 1
+    data        : array<float>   // interleaved PCM
+    channels    : int = 1
+    sample_rate : int = 48000
 }
 
 // A sample bank: sound name → array of variations.
@@ -35,6 +36,7 @@ def load_audio_file(path : string) : Sample {
         return <- result
     }
     result.channels = int(decoder.outputChannels)
+    result.sample_rate = int(decoder.outputSampleRate)
     let totalFrames = int(ma_decoder_get_length_in_pcm_frames(decoder))
     if (totalFrames > 0) {
         result.data |> resize(totalFrames * result.channels)
@@ -54,22 +56,30 @@ def is_audio_file(name : string) : bool {
 }
 
 // Load a single sound from a directory of audio files.
+// Files are sorted alphabetically to match strudel sample indexing.
 def load_sound(path : string; name : string; var bank : SampleBank) {
-    var variations : array<Sample>
+    var files : array<string>
     dir(path) $(file) {
         if (file == "." || file == "..") {
             return
         }
         if (is_audio_file(file)) {
-            var sample <- load_audio_file("{path}/{file}")
-            if (length(sample.data) > 0) {
-                variations |> emplace <| sample
-            }
+            files |> push(file)
+        }
+    }
+    sort(files)
+    var variations : array<Sample>
+    for (file in files) {
+        var sample <- load_audio_file("{path}/{file}")
+        if (length(sample.data) > 0) {
+            variations |> emplace <| sample
         }
     }
     if (length(variations) > 0) {
         let soundName = to_lower(name)
         bank.sounds[soundName] <- variations
+    } else {
+        to_log(LOG_WARNING, "load_sound: no audio files found in '{path}' for '{name}'\n")
     }
 }
 
@@ -116,6 +126,7 @@ def load_audio_memory(data : array<uint8>) : Sample {
         return <- result
     }
     result.channels = int(decoder.outputChannels)
+    result.sample_rate = int(decoder.outputSampleRate)
     let totalFrames = int(ma_decoder_get_length_in_pcm_frames(decoder))
     if (totalFrames > 0) {
         result.data |> resize(totalFrames * result.channels)
@@ -154,11 +165,12 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
         }
         // resample: source rate * speed → target rate (MA_SAMPLE_RATE)
         // e.g. speed=2.0 means play at double speed = half the output frames
+        let srcRate = variations[idx].sample_rate
         var resampler : ma_resampler
         var resampler_config <- ma_resampler_config_init(
             ma_format.ma_format_f32,
             srcChannels,
-            uint(float(MA_SAMPLE_RATE) * abs(speed)),
+            uint(float(srcRate) * abs(speed)),
             uint(MA_SAMPLE_RATE),
             ma_resample_algorithm.ma_resample_algorithm_linear
         )

@@ -6,7 +6,32 @@
 #include "reverb.h"
 #include "chorus.h"
 
+// AOT-visible declarations for global-scope functions called from namespace das
+float das_ma_sf2_biquad_tick ( ma_sf2_biquad * bq, float input );
+
 namespace das {
+    // pull global-scope functions into namespace das for AOT-generated code
+    using ::ma_volume_mixer_init;
+    using ::ma_volume_mixer_set_pan;
+    using ::ma_volume_mixer_set_pan_immediate;
+    using ::ma_volume_mixer_set_linear_pan;
+    using ::ma_volume_mixer_process_pcm_frames;
+    using ::ma_sf2_biquad_setup;
+    using ::ma_sf2_biquad_setup_hpf;
+    using ::das_ma_sf2_biquad_tick;
+    using ::ma_sf2_voice_init;
+    using ::ma_sf2_voice_note_off;
+    using ::ma_sf2_voice_end_quick;
+    using ::ma_sf2_voice_render;
+    using ::ma_sf2_voice_render_send;
+    using ::ma_sf2_voice_render_send2;
+    using ::ma_sf2_voice_render_send3;
+    using ::ma_sf2_voice_is_finished;
+    using ::ma_sf2_envelope_init;
+    using ::ma_sf2_envelope_start;
+    using ::ma_sf2_envelope_tick;
+    using ::ma_sf2_envelope_release;
+
     bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context );
     void dasAudio_finalize ( void );
     MA_API ma_result dasAudio_ma_resampler_init(const ma_resampler_config* pConfig, ma_resampler* pResampler);
@@ -32,4 +57,9 @@ namespace das {
     void dasAudio_chorusProcess ( ma_chorus * chorus, float * input, float * output, int nSamples, Context * context, LineInfoArg * at );
     void dasAudio_chorusSetConfig ( ma_chorus * chorus, const ma_chorus_config & config, Context * context, LineInfoArg * at );
     ma_chorus_config dasAudio_chorusConfigDefault ( );
+
+    void dasAudio_delayInit ( ma_delay * d, int sample_rate, float delay_time_sec, float feedback, Context * context, LineInfoArg * at );
+    void dasAudio_delayUninit ( ma_delay * d, Context * context, LineInfoArg * at );
+    void dasAudio_delaySetParams ( ma_delay * d, int sample_rate, float delay_time_sec, float feedback, Context * context, LineInfoArg * at );
+    void dasAudio_delayProcess ( ma_delay * d, float * input, float * output, int nFrames, Context * context, LineInfoArg * at );
 }

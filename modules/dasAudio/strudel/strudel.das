@@ -10,4 +10,5 @@ require strudel/strudel_synth public
 require strudel/strudel_samples public
 require strudel/strudel_scheduler public
 require strudel/strudel_mini public
+require strudel/strudel_scales public
 require strudel/strudel_midi public

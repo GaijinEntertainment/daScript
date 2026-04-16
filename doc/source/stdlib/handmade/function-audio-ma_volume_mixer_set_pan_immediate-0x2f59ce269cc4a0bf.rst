@@ -1,0 +1,1 @@
+Set the stereo pan position on the volume mixer immediately without any smoothing or interpolation, where -1.0 is full left and 1.0 is full right.

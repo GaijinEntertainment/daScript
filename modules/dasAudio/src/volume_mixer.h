@@ -14,6 +14,7 @@ struct ma_volume_mixer {
     float dpan;
     float tpan;
     uint32_t nChannels;
+    bool linearPan;     // when true, pan=0 is unity (no cos/sin attenuation). matches WebAudio StereoPannerNode behavior where pan is only applied when explicitly set.
 };
 
 void ma_volume_mixer_init ( ma_volume_mixer * mixer, uint32_t nChannels );
@@ -22,6 +23,8 @@ void ma_volume_mixer_set_channels ( ma_volume_mixer * mixer, uint32_t nChannels 
 void ma_volume_mixer_set_volume ( ma_volume_mixer * mixer, float volume );
 void ma_volume_mixer_set_volume_over_time ( ma_volume_mixer * mixer, float volume, uint64_t nFrames );
 void ma_volume_mixer_set_pan ( ma_volume_mixer * mixer, float pan );
+void ma_volume_mixer_set_pan_immediate ( ma_volume_mixer * mixer, float pan );
+void ma_volume_mixer_set_linear_pan ( ma_volume_mixer * mixer, bool linearPan );
 void ma_volume_mixer_process_pcm_frames ( ma_volume_mixer * mixer, float * InFrames, float * OutFrames, uint64_t nFrames );
 
 // look-ahead limiter
@@ -44,10 +47,15 @@ void ma_limiter_uninit ( ma_limiter * );
 
 #ifdef MINIAUDIO_IMPLEMENTATION
 
+void ma_volume_mixer_set_linear_pan ( ma_volume_mixer * mixer, bool linearPan ) {
+    mixer->linearPan = linearPan;
+}
+
 void ma_volume_mixer_init ( ma_volume_mixer * mixer, uint32_t nChannels ) {
     mixer->volume = 1.0f;
     mixer->dvolume = 0.0f;
     mixer->tvolume = 1.0f;
+    mixer->linearPan = true;
     mixer->pan = 0.0f;
     mixer->dpan = 0.0f;
     mixer->tpan = 0.0f;
@@ -80,6 +88,12 @@ void ma_volume_mixer_set_pan ( ma_volume_mixer * mixer, float pan ) {
     }
 }
 
+void ma_volume_mixer_set_pan_immediate ( ma_volume_mixer * mixer, float pan ) {
+    mixer->pan = pan;
+    mixer->dpan = 0.0f;
+    mixer->tpan = pan;
+}
+
 void ma_volume_mixer_set_volume_over_time ( ma_volume_mixer * mixer, float volume, uint64_t nFrames ) {
     mixer->dvolume = (volume - mixer->volume) / float(nFrames);
     mixer->tvolume = volume;
@@ -95,11 +109,23 @@ static inline void ma_volume_mixer_advance_pan ( ma_volume_mixer * mixer ) {
     }
 }
 
-static inline void ma_volume_mixer_pan_lr ( float pan, float volume, float & volumeL, float & volumeR ) {
+static inline void ma_volume_mixer_pan_lr ( float pan, float volume, float & volumeL, float & volumeR, bool linearPan = false ) {
     pan = ma_max(ma_min(pan,1.0f),-1.0f);
-    float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
-    volumeL = volume * cosf(angle);
-    volumeR = volume * sinf(angle);
+    if ( linearPan ) {
+        // linear pan: pan=0 is unity, pan=-1 is full left, pan=1 is full right
+        // matches WebAudio behavior where no pan node means unity passthrough
+        if ( pan <= 0.0f ) {
+            volumeL = volume;
+            volumeR = volume * (1.0f + pan);
+        } else {
+            volumeL = volume * (1.0f - pan);
+            volumeR = volume;
+        }
+    } else {
+        float angle = (pan + 1.0f) * 0.25f * 3.14159265358979323846f;
+        volumeL = volume * cosf(angle);
+        volumeR = volume * sinf(angle);
+    }
 }
 
 void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float * InFrames, float * OutFrames, uint64_t nFrames ) {
@@ -112,7 +138,7 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
     } else if ( nChannels==2 ) {
         if ( mixer->dpan == 0.0f ) {
             float volumeL, volumeR;
-            ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+            ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR, mixer->linearPan);
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
@@ -120,7 +146,7 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
         } else {
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 float volumeL, volumeR;
-                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR, mixer->linearPan);
                 OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
                 ma_volume_mixer_advance_pan(mixer);
@@ -155,7 +181,7 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
     } else if ( nChannels==2 ) {
         if ( mixer->dpan == 0.0f ) {
             float volumeL, volumeR;
-            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR);
+            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR, mixer->linearPan);
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 OutFrames[i*2+0] += InFrames[i*2+0] * volume * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volume * volumeR;
@@ -164,7 +190,7 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
         } else {
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 float volumeL, volumeR;
-                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR, mixer->linearPan);
                 OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
                 volume = ma_max(volume+dvolume,tvolume);
@@ -204,7 +230,7 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
     } else if ( nChannels==2 ) {
         if ( mixer->dpan == 0.0f ) {
             float volumeL, volumeR;
-            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR);
+            ma_volume_mixer_pan_lr(mixer->pan, 1.0f, volumeL, volumeR, mixer->linearPan);
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 OutFrames[i*2+0] += InFrames[i*2+0] * volume * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volume * volumeR;
@@ -213,7 +239,7 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
         } else {
             for ( uint64_t i=0; i!=nFrames; ++i ) {
                 float volumeL, volumeR;
-                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR);
+                ma_volume_mixer_pan_lr(mixer->pan, volume, volumeL, volumeR, mixer->linearPan);
                 OutFrames[i*2+0] += InFrames[i*2+0] * volumeL;
                 OutFrames[i*2+1] += InFrames[i*2+1] * volumeR;
                 volume = ma_min(volume+dvolume,tvolume);

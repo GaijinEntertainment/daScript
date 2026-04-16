@@ -1,0 +1,1 @@
+Enable or disable linear panning mode on the volume mixer. When enabled, pan uses linear gain curves; when disabled, it uses equal-power (constant-power) panning.
