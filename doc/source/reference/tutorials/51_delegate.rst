@@ -260,4 +260,6 @@ API summary
 
     Previous tutorial: :ref:`tutorial_soa`
 
+    Next tutorial: :ref:`tutorial_clargs`
+
     :ref:`tutorial_lambdas`, :ref:`tutorial_function_pointers`, :ref:`tutorial_blocks`

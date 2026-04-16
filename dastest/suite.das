@@ -13,6 +13,7 @@ require daslib/json_boost
 require daslib/defer
 require math
 
+require dastest_clargs
 require log
 require testing
 require suite_result public
@@ -33,8 +34,8 @@ struct SuiteCtx {
     compile_only : bool = false
     use_aot : bool = false
     cov_path : string = ""
-    debugger : bool = false    // --debugger: set cop.debugger so context.debugger is truthy, exercising _Debug SimNode variants
-    keep_alive : bool = false  // --keep-alive: set cop.keep_alive so _KeepAlive SimNode variants get dispatched
+    debugger : bool = false
+    keep_alive : bool = false
 
     // Testing-related options.
     testNames : array<string>
@@ -61,59 +62,42 @@ struct Benchmark {
 }
 
 
-def createSuiteCtx() : SuiteCtx {
-    return <- SuiteCtx(get_command_line_arguments())
-}
-
-
-def private collect_target_names(key : string, args : array<string>; var names : array<string>) {
-    for (i in range(length(args) - 1)) {
-        if (args[i] == key) {
-            names |> push <| args[i + 1]
-        }
-    }
-}
-
-
-def private collect_tests_names(args : array<string>; var names : array<string>) {
-    collect_target_names("--test-names", args, names)
-}
-
-
-def private collect_bench_names(args : array<string>; var names : array<string>) {
-    collect_target_names("--bench-names", args, names)
-}
-
-
 def get_str_arg(args : array<string>; name : string; def_val : string) : string {
     let idx = find_index(args, name)
     return idx >= 0 && idx + 1 < length(args) ? args[idx + 1] : def_val
 }
 
 
-def SuiteCtx(args : array<string>) : SuiteCtx {
+def SuiteCtx(args : DastestArgs) : SuiteCtx {
     var ctx <- SuiteCtx()
     let at = get_line_info()
-    ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
-    ctx.verbose = args |> has_value("--verbose")
-    ctx.uriPaths = args |> has_value("--uri-paths")
-    ctx.projectPath = args |> get_str_arg("--test-project", "")
-    ctx.compile_only = args |> has_value("--compile-only")
-    ctx.use_aot = args |> has_value("--use-aot") || is_in_aot()
-    ctx.cov_path = args |> get_str_arg("--cov-path", "")
-    ctx.debugger = args |> has_value("--debugger")
-    ctx.keep_alive = args |> has_value("--keep-alive")
-    collect_tests_names(args, ctx.testNames)
 
-    ctx.bench_enabled = args |> has_value("--bench")
-    collect_bench_names(args, ctx.bench_names)
-    let bench_format = args |> get_str_arg("--bench-format", "")
+    // TODO: maybe just store DastestArgs inside the context?
+    // That would involve more diff, so maybe after the initial safer replacement?
+
+    // TODO: fix this somehow?
+    // Maybe include the das_root into command info?
+    let raw_args := get_command_line_arguments()
+    ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : raw_args[1])
+
+    ctx.verbose = args.verbose
+    ctx.uriPaths = args.uri_paths
+    ctx.projectPath = args.test_project
+    ctx.compile_only = args.compile_only
+    ctx.use_aot = args.use_aot || is_in_aot()
+    ctx.cov_path = args.cov_path
+    ctx.testNames := args.test_names
+    ctx.bench_names := args.bench_names
+    ctx.bench_enabled = args.bench
+    ctx.keep_alive = args.keep_alive
+    ctx.debugger = args.debugger
+    let bench_format = args.bench_format
     if (bench_format == "go") {
         ctx.bench_format = BenchmarkOutputFormat.go_export
     } elif (bench_format == "json") {
         ctx.bench_format = BenchmarkOutputFormat.json
     }
-    ctx.bench_count  = to_int(args.get_str_arg("--count", "1"))
+    ctx.bench_count = args.count
 
     return <- ctx
 }
