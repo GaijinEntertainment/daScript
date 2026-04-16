@@ -471,6 +471,90 @@ def public strudel_tick() {
     }
 }
 
+// Offline tick: same as strudel_tick but without audio driver.
+// Does not require audio system or PCM channel — renders into g_master_pcm,
+// advances g_wall_time. Call in a tight loop for offline WAV rendering.
+def public strudel_tick_offline() {
+    let t0 = ref_time_ticks()
+    let CHUNK_SEC = g_chunk_seconds
+    let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
+    // prepare master output
+    g_master_pcm |> resize(chunkSamples)
+    for (s in g_master_pcm) {
+        s = 0.0
+    }
+    // master mixer — linear pan (no cos/sin attenuation at center)
+    var mixer : ma_volume_mixer
+    ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
+    // tick all active tracks
+    for (i in range(length(g_tracks))) {
+        var track = g_tracks[i]
+        if (track == null) {
+            continue
+        }
+        // sync tempo
+        if (track.sched.cps != g_cps) {
+            track.sched.lastQueryEnd = g_wall_time * g_cps
+            track.sched.cps = g_cps
+        }
+        tick(track.sched, track.pat, g_bank, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+        // mix scheduler output into master with track gain
+        if (length(track.sched.output) > 0 && track.gain > 0.001) {
+            // copy to per-track PCM for visualizer access
+            if (i < length(g_track_pcm)) {
+                g_track_pcm[i] := track.sched.output
+            }
+            ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
+            let nFrames = uint64(min(length(track.sched.output), chunkSamples) / 2)
+            unsafe {
+                ma_volume_mixer_process_pcm_frames(
+                    addr(mixer),
+                    addr(track.sched.output[0]),
+                    addr(g_master_pcm[0]),
+                    nFrames
+                )
+            }
+        }
+        // update fade envelope
+        if (track.fade_speed > 0.0) {
+            if (track.gain < track.target_gain) {
+                track.gain = min(track.gain + track.fade_speed * float(CHUNK_SEC), track.target_gain)
+            } elif (track.gain > track.target_gain) {
+                track.gain = max(track.gain - track.fade_speed * float(CHUNK_SEC), track.target_gain)
+            }
+            if (abs(track.gain - track.target_gain) < 0.001) {
+                track.gain = track.target_gain
+                track.fade_speed = 0.0
+            }
+        }
+        // remove faded-out tracks
+        if (track.gain <= 0.001 && track.target_gain <= 0.001 && track.fade_speed == 0.0) {
+            shutdown_scheduler(track.sched)
+            unsafe { delete g_tracks[i]; }
+            g_tracks[i] = null
+        }
+    }
+    let chunkFrames = int(float(CHUNK_SEC) * float(SAMPLE_RATE))
+    g_wall_samples += int64(chunkFrames)
+    g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
+    ma_volume_mixer_uninit(unsafe(addr(mixer)))
+    // tick timing
+    let chunk_usec = double(get_time_usec(t0))
+    g_tick_total_time += chunk_usec / 1000.lf
+    g_tick_total_samples += uint64(chunkSamples / 2)
+    if (chunk_usec > g_tick_max_chunk_usec) { g_tick_max_chunk_usec = chunk_usec; }
+    // memory tracking
+    let mem_heap_cur = heap_bytes_allocated()
+    let mem_str_cur = string_heap_bytes_allocated()
+    g_mem_heap_max = max(g_mem_heap_max, mem_heap_cur)
+    g_mem_str_max = max(g_mem_str_max, mem_str_cur)
+    g_mem_tick_count ++
+    let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
+    if (g_debug_memory && g_mem_tick_count % mem_log_interval == 0) {
+        to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {g_mem_heap_max/1024ul}kb / str {g_mem_str_max/1024ul}kb)\n")
+    }
+}
+
 // --- Threaded mode ---
 
 // Blocking multi-track tick loop. Call from your strudel_main on the thread.
