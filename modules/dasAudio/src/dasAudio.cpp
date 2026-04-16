@@ -46,6 +46,11 @@
 #define HRTF_SAMPLE_RATE 48000
 #endif
 
+// Non-static wrapper for ma_sf2_biquad_tick (static in sf2_voice.h)
+float das_ma_sf2_biquad_tick ( ma_sf2_biquad * bq, float input ) {
+    return ma_sf2_biquad_tick(bq, input);
+}
+
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -69,6 +74,8 @@ MAKE_TYPE_FACTORY(ma_sf2_voice,ma_sf2_voice);
 
 MAKE_TYPE_FACTORY(ma_chorus_config,ma_chorus_config);
 MAKE_TYPE_FACTORY(ma_chorus,ma_chorus);
+
+MAKE_TYPE_FACTORY(ma_delay,ma_delay);
 
 DAS_BASE_BIND_ENUM ( ma_format, ma_format, \
     ma_format_unknown, \
@@ -445,6 +452,12 @@ struct MASF2BiquadAnnotation : ManagedStructureAnnotation<ma_sf2_biquad> {
     MASF2BiquadAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("ma_sf2_biquad", mlib, "ma_sf2_biquad") {
         addField<DAS_BIND_MANAGED_FIELD(q_inv)>("q_inv","q_inv");
+        addField<DAS_BIND_MANAGED_FIELD(a0)>("a0","a0");
+        addField<DAS_BIND_MANAGED_FIELD(a1)>("a1","a1");
+        addField<DAS_BIND_MANAGED_FIELD(b1)>("b1","b1");
+        addField<DAS_BIND_MANAGED_FIELD(b2)>("b2","b2");
+        addField<DAS_BIND_MANAGED_FIELD(z1)>("z1","z1");
+        addField<DAS_BIND_MANAGED_FIELD(z2)>("z2","z2");
         addField<DAS_BIND_MANAGED_FIELD(active)>("active","active");
     }
 };
@@ -600,6 +613,52 @@ I3DL2ReverbProperties & dasAudio_getReverbPreset ( I3DL2Preset preset, Context *
     return ReverbPresets[preset];
 }
 
+// ─── Delay (miniaudio ma_delay) ───
+
+struct MaDelayAnnotation : ManagedStructureAnnotation<ma_delay,true,true> {
+    MaDelayAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_delay", mlib, "ma_delay") {
+    }
+};
+
+// Init a stereo delay with given delay time and feedback (decay).
+// Allocates the internal buffer on the heap.
+void dasAudio_delayInit ( ma_delay * d, int sample_rate, float delay_time_sec, float feedback, Context * context, LineInfoArg * at ) {
+    if ( !d ) context->throw_error_at(at,"delay is null");
+    ma_uint32 delayInFrames = (ma_uint32)(delay_time_sec * sample_rate);
+    if ( delayInFrames < 1 ) delayInFrames = 1;
+    auto config = ma_delay_config_init(2, sample_rate, delayInFrames, feedback);
+    config.wet = 1.0f;  // output the delayed signal
+    config.dry = 1.0f;  // feed input into the delay buffer
+    config.delayStart = MA_TRUE;  // delay the start (echo mode)
+    auto result = ma_delay_init(&config, nullptr, d);
+    if ( result != MA_SUCCESS ) context->throw_error_at(at,"ma_delay_init failed");
+}
+
+void dasAudio_delayUninit ( ma_delay * d, Context * context, LineInfoArg * at ) {
+    if ( !d ) context->throw_error_at(at,"delay is null");
+    ma_delay_uninit(d, nullptr);
+}
+
+// Re-init with new delay time (requires free + realloc of internal buffer).
+void dasAudio_delaySetParams ( ma_delay * d, int sample_rate, float delay_time_sec, float feedback, Context * context, LineInfoArg * at ) {
+    if ( !d ) context->throw_error_at(at,"delay is null");
+    ma_delay_uninit(d, nullptr);
+    ma_uint32 delayInFrames = (ma_uint32)(delay_time_sec * sample_rate);
+    if ( delayInFrames < 1 ) delayInFrames = 1;
+    auto config = ma_delay_config_init(2, sample_rate, delayInFrames, feedback);
+    config.wet = 1.0f;
+    config.dry = 1.0f;
+    config.delayStart = MA_TRUE;
+    auto result = ma_delay_init(&config, nullptr, d);
+    if ( result != MA_SUCCESS ) context->throw_error_at(at,"ma_delay_init failed (set_params)");
+}
+
+void dasAudio_delayProcess ( ma_delay * d, float * input, float * output, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !d ) context->throw_error_at(at,"delay is null");
+    ma_delay_process_pcm_frames(d, output, input, nFrames);
+}
+
 void dasAudio_disableLinearResamplerFiltering ( ma_resampler_config * config ) {
     config->linear.lpfOrder = 0;
 }
@@ -644,6 +703,16 @@ public:
             SideEffects::modifyArgumentAndExternal, "dasAudio_chorusSetConfig")->args({"chorus", "config", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_chorusConfigDefault),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "chorus_config_default",
             SideEffects::none, "dasAudio_chorusConfigDefault");
+        // delay
+        addAnnotation(new MaDelayAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_delayInit)>(*this, lib, "delay_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_delayInit")->args({"delay", "sample_rate", "delay_time_sec", "feedback", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_delayUninit)>(*this, lib, "delay_uninit",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_delayUninit")->args({"delay", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_delaySetParams)>(*this, lib, "delay_set_params",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_delaySetParams")->args({"delay", "sample_rate", "delay_time_sec", "feedback", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_delayProcess)>(*this, lib, "delay_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_delayProcess")->args({"delay", "input", "output", "nFrames", "context", "at"});
         // mixer
         addExtern<DAS_BIND_FUN(dasAudio_init)>(*this, lib, "sound_initalize",
             SideEffects::modifyExternal, "dasAudio_init")->args({"mixer", "rate", "channels","context"});
@@ -707,6 +776,10 @@ public:
             SideEffects::modifyArgument, "ma_volume_mixer_set_volume_over_time")->args({"mixer", "volume", "nFrames"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_set_pan)>(*this, lib, "ma_volume_mixer_set_pan",
             SideEffects::modifyArgument, "ma_volume_mixer_set_pan")->args({"mixer", "pan"});
+        addExtern<DAS_BIND_FUN(ma_volume_mixer_set_pan_immediate)>(*this, lib, "ma_volume_mixer_set_pan_immediate",
+            SideEffects::modifyArgument, "ma_volume_mixer_set_pan_immediate")->args({"mixer", "pan"});
+        addExtern<DAS_BIND_FUN(ma_volume_mixer_set_linear_pan)>(*this, lib, "ma_volume_mixer_set_linear_pan",
+            SideEffects::modifyArgument, "ma_volume_mixer_set_linear_pan")->args({"mixer", "linearPan"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_process_pcm_frames)>(*this, lib, "ma_volume_mixer_process_pcm_frames",
             SideEffects::modifyArgument, "ma_volume_mixer_process_pcm_frames")->args({"mixer", "pFramesOut", "pFramesIn", "frameCount"});
         // sf2 voice
@@ -725,6 +798,8 @@ public:
             SideEffects::modifyArgument, "ma_sf2_voice_render_send")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "output_offset", "frame_count", "dry_gain", "wet_gain"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_render_send2)>(*this, lib, "ma_sf2_voice_render_send2",
             SideEffects::modifyArgument, "ma_sf2_voice_render_send2")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "chorus_output", "output_offset", "frame_count", "dry_gain", "reverb_gain", "chorus_gain"});
+        addExtern<DAS_BIND_FUN(ma_sf2_voice_render_send3)>(*this, lib, "ma_sf2_voice_render_send3",
+            SideEffects::modifyArgument, "ma_sf2_voice_render_send3")->args({"voice", "sample_data", "sample_data_len", "dry_output", "reverb_output", "chorus_output", "delay_output", "output_offset", "frame_count", "dry_gain", "reverb_gain", "chorus_gain", "delay_gain"});
         addExtern<DAS_BIND_FUN(ma_sf2_voice_is_finished)>(*this, lib, "ma_sf2_voice_is_finished",
             SideEffects::none, "ma_sf2_voice_is_finished")->args({"voice"});
         addExtern<DAS_BIND_FUN(ma_sf2_envelope_init)>(*this, lib, "ma_sf2_envelope_init",
@@ -733,6 +808,10 @@ public:
             SideEffects::modifyArgument, "ma_sf2_envelope_start")->args({"env", "sample_rate"});
         addExtern<DAS_BIND_FUN(ma_sf2_biquad_setup)>(*this, lib, "ma_sf2_biquad_setup",
             SideEffects::modifyArgument, "ma_sf2_biquad_setup")->args({"bq", "fc_normalized"});
+        addExtern<DAS_BIND_FUN(ma_sf2_biquad_setup_hpf)>(*this, lib, "ma_sf2_biquad_setup_hpf",
+            SideEffects::modifyArgument, "ma_sf2_biquad_setup_hpf")->args({"bq", "fc_normalized"});
+        addExtern<DAS_BIND_FUN(das_ma_sf2_biquad_tick)>(*this, lib, "ma_sf2_biquad_tick",
+            SideEffects::modifyArgument, "das_ma_sf2_biquad_tick")->args({"bq", "input"});
         // decoder
         addAnnotation(new MADecoderConfigAnnotation(lib));
         addAnnotation(new MADecoderAnnotation(lib));

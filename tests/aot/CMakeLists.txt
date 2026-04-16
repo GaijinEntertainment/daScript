@@ -131,6 +131,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         modules/dasAudio/strudel/strudel_scheduler.das
         modules/dasAudio/strudel/strudel_sf2.das
         modules/dasAudio/strudel/strudel_sf2_voice.das
+        modules/dasAudio/strudel/strudel_scales.das
         modules/dasAudio/strudel/strudel_midi.das
         modules/dasAudio/strudel/strudel_midi_player.das
         modules/dasAudio/strudel/strudel_player.das
@@ -153,6 +154,17 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_sf2.das
         tests/strudel/test_sf2_voice.das
         tests/strudel/test_sf2_modulators.das
+        tests/strudel/test_combinators.das
+        tests/strudel/test_delay.das
+        tests/strudel/test_integration.das
+        tests/strudel/test_memory.das
+        tests/strudel/test_orbits.das
+        tests/strudel/test_reverb.das
+        tests/strudel/test_scales.das
+        tests/strudel/test_setters.das
+        tests/strudel/test_signals.das
+        tests/strudel/test_synthesis.das
+        tests/strudel/test_vowel.das
     )
 ENDIF()
 

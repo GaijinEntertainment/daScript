@@ -1,0 +1,1 @@
+Miniaudio stereo delay effect with an internal ring buffer for storing delayed samples.

@@ -58,6 +58,7 @@ var private g_tracks : array<StrudelTrack?>
 var private g_look_ahead : float = 0.1
 var private g_chunk_seconds : float = 0.05
 var private g_tick_status_box : LockBox?  // buffer level feedback for strudel_tick
+var private g_tick_pcm_box : LockBox?    // lock box for append_box_to_pcm in main-thread mode
 
 // Per-track PCM output (populated by strudel_tick, main-thread mode only)
 var public g_track_pcm : array<array<float>>
@@ -65,6 +66,14 @@ var public g_master_pcm : array<float>
 
 // Rolling vis index — bumped by strudel_add_track, read by visualizer combinators
 var public g_vis_index : int = 0
+
+// --- Memory tracking ---
+var private g_debug_memory : bool = false
+var private g_mem_heap_baseline : uint64 = 0ul
+var private g_mem_str_baseline : uint64 = 0ul
+var private g_mem_heap_max : uint64 = 0ul
+var private g_mem_str_max : uint64 = 0ul
+var private g_mem_tick_count : int = 0  // for periodic logging in main-thread mode
 
 struct AudioChunk {
     samples : array<float>
@@ -180,6 +189,68 @@ def public strudel_set_look_ahead(look_ahead : float) {
     g_look_ahead = look_ahead
 }
 
+def public strudel_debug_memory(enabled : bool) {
+    g_debug_memory = enabled
+}
+
+// Reset memory baseline to current heap state. Call after all one-time setup
+// (audio stream, pattern, tracks) so only growth during playback is measured.
+def public strudel_reset_memory_baseline() {
+    g_mem_heap_baseline = heap_bytes_allocated()
+    g_mem_str_baseline = string_heap_bytes_allocated()
+    g_mem_heap_max = g_mem_heap_baseline
+    g_mem_str_max = g_mem_str_baseline
+    g_mem_tick_count = 0
+}
+
+def public strudel_debug_sample_peaks() {
+    for (name in keys(g_bank.sounds)) {
+        var samples <- render_sample(g_bank, name, 0, 1.0)
+        var peak = 0.0
+        for (i in range(length(samples))) {
+            peak = max(peak, abs(samples[i]))
+        }
+        to_log(0, "sample '{name}': {length(samples)} samples, peak={peak}\n")
+        delete samples
+    }
+}
+
+def public strudel_debug_master_peak() {
+    if (length(g_master_pcm) > 0) {
+        var peak = 0.0
+        for (i in range(length(g_master_pcm))) {
+            peak = max(peak, abs(g_master_pcm[i]))
+        }
+        if (peak > 0.001) {
+            to_log(0, "master pcm peak={peak}\n")
+        }
+    }
+}
+
+def public strudel_debug_output_peak() {
+    for (i in range(length(g_tracks))) {
+        var track = g_tracks[i]
+        if (track != null && length(track.sched.output) > 0) {
+            var peak = 0.0
+            for (j in range(length(track.sched.output))) {
+                peak = max(peak, abs(track.sched.output[j]))
+            }
+            if (peak > 0.001) {
+                to_log(0, "track {i}: output peak={peak}\n")
+            }
+        }
+    }
+}
+
+def public strudel_debug_voices() {
+    for (i in range(length(g_tracks))) {
+        var track = g_tracks[i]
+        if (track != null) {
+            to_log(0, "track {i}: voices={length(track.sched.voices)} osc={length(track.sched.osc_voices)}\n")
+        }
+    }
+}
+
 // --- Track management ---
 
 // Add a track. Returns its index (matches g_vis_index for visualizer combinators).
@@ -210,6 +281,7 @@ def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
 // Remove a track by index (sets slot to null).
 def public strudel_remove_track(idx : int) {
     if (idx >= 0 && idx < length(g_tracks) && g_tracks[idx] != null) {
+        shutdown_scheduler(g_tracks[idx].sched)
         unsafe { delete g_tracks[idx]; }
         g_tracks[idx] = null
     }
@@ -280,6 +352,13 @@ def public strudel_create_channel() {
         g_tick_status_box = unsafe(lock_box_create())
         g_tick_status_box |> add_ref()
         set_status_update(g_sid, g_tick_status_box)
+        g_tick_pcm_box = unsafe(lock_box_create())
+        // memory tracking baseline
+        g_mem_heap_baseline = heap_bytes_allocated()
+        g_mem_str_baseline = string_heap_bytes_allocated()
+        g_mem_heap_max = g_mem_heap_baseline
+        g_mem_str_max = g_mem_str_baseline
+        g_mem_tick_count = 0
     }
 }
 
@@ -287,6 +366,10 @@ def public strudel_create_channel() {
 // Call from your render loop. Self-regulating: skips when audio buffer has enough data.
 def public strudel_tick() {
     if (g_sid == 0ul) {
+        return
+    }
+    // wait for previous pcm box to be consumed before overwriting the buffer
+    if (g_tick_pcm_box != null && !g_tick_pcm_box.isReady) {
         return
     }
     // check buffer level — skip if we're ahead enough
@@ -306,7 +389,7 @@ def public strudel_tick() {
     for (s in g_master_pcm) {
         s = 0.0
     }
-    // master mixer (static-like, init once)
+    // master mixer — linear pan (no cos/sin attenuation at center)
     var mixer : ma_volume_mixer
     ma_volume_mixer_init(unsafe(addr(mixer)), 2u)
     // tick all active tracks
@@ -320,22 +403,19 @@ def public strudel_tick() {
             track.sched.lastQueryEnd = g_wall_time * g_cps
             track.sched.cps = g_cps
         }
-        var chunk <- tick(track.sched, track.pat, g_bank, g_wall_time, float(CHUNK_SEC), g_look_ahead)
-        // store per-track PCM
-        if (i < length(g_track_pcm)) {
-            g_track_pcm[i] <- chunk
-        } else {
-            delete chunk
-            continue
-        }
-        // mix into master with track gain
-        if (length(g_track_pcm[i]) > 0 && track.gain > 0.001) {
+        tick(track.sched, track.pat, g_bank, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+        // mix scheduler output into master with track gain
+        if (length(track.sched.output) > 0 && track.gain > 0.001) {
+            // copy to per-track PCM for visualizer access
+            if (i < length(g_track_pcm)) {
+                g_track_pcm[i] := track.sched.output
+            }
             ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
-            let nFrames = uint64(min(length(g_track_pcm[i]), chunkSamples) / 2)
+            let nFrames = uint64(min(length(track.sched.output), chunkSamples) / 2)
             unsafe {
                 ma_volume_mixer_process_pcm_frames(
                     addr(mixer),
-                    addr(g_track_pcm[i][0]),
+                    addr(track.sched.output[0]),
                     addr(g_master_pcm[0]),
                     nFrames
                 )
@@ -355,18 +435,29 @@ def public strudel_tick() {
         }
         // remove faded-out tracks
         if (track.gain <= 0.001 && track.target_gain <= 0.001 && track.fade_speed == 0.0) {
+            shutdown_scheduler(track.sched)
             unsafe { delete g_tracks[i]; }
             g_tracks[i] = null
         }
     }
-    // submit audio
+    // submit audio via lock box (no allocation — reuses g_master_pcm buffer)
     if (length(g_master_pcm) > 0) {
-        append_to_pcm(g_sid, g_master_pcm)
+        append_box_to_pcm(g_sid, g_tick_pcm_box, g_master_pcm)
     }
     let chunkFrames = int(float(CHUNK_SEC) * float(SAMPLE_RATE))
     g_wall_samples += int64(chunkFrames)
     g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
+    // memory tracking
+    let mem_heap_cur = heap_bytes_allocated()
+    let mem_str_cur = string_heap_bytes_allocated()
+    g_mem_heap_max = max(g_mem_heap_max, mem_heap_cur)
+    g_mem_str_max = max(g_mem_str_max, mem_str_cur)
+    g_mem_tick_count ++
+    let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
+    if (g_debug_memory && g_mem_tick_count % mem_log_interval == 0) {
+        to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {g_mem_heap_max/1024ul}kb / str {g_mem_str_max/1024ul}kb)\n")
+    }
 }
 
 // --- Threaded mode ---
@@ -386,6 +477,13 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
     var output : array<float>
     output |> resize(chunkSamples)
+    // memory tracking
+    let mem_heap_base = heap_bytes_allocated()
+    let mem_str_base = string_heap_bytes_allocated()
+    var mem_heap_max = mem_heap_base
+    var mem_str_max = mem_str_base
+    let mem_log_interval = max(int(1.0 / CHUNK_SEC), 1)
+    var mem_tick_count = 0
     while (strudel_process_commands(cmd_fn)) {
         if (!pcm_box.isReady) {
             sleep(1u)
@@ -406,21 +504,20 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
                 track.sched.lastQueryEnd = g_wall_time * g_cps
                 track.sched.cps = g_cps
             }
-            var chunk <- tick(track.sched, track.pat, *g_bank_ptr, g_wall_time, float(CHUNK_SEC), g_look_ahead)
+            tick(track.sched, track.pat, *g_bank_ptr, g_wall_time, float(CHUNK_SEC), g_look_ahead)
             // mix into output with track gain
-            if (length(chunk) > 0 && track.gain > 0.001) {
+            if (length(track.sched.output) > 0 && track.gain > 0.001) {
                 ma_volume_mixer_set_volume(unsafe(addr(mixer)), track.gain)
-                let nFrames = uint64(min(length(chunk), length(output)) / 2)
+                let nFrames = uint64(min(length(track.sched.output), length(output)) / 2)
                 unsafe {
                     ma_volume_mixer_process_pcm_frames(
                         addr(mixer),
-                        addr(chunk[0]),
+                        addr(track.sched.output[0]),
                         addr(output[0]),
                         nFrames
                     )
                 }
             }
-            delete chunk
             // update fade envelope
             if (track.fade_speed > 0.0) {
                 if (track.gain < track.target_gain) {
@@ -435,6 +532,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
             }
             // remove faded-out tracks
             if (track.gain <= 0.001 && track.target_gain <= 0.001 && track.fade_speed == 0.0) {
+                shutdown_scheduler(track.sched)
                 unsafe { delete g_tracks[i]; }
                 g_tracks[i] = null
             }
@@ -462,12 +560,26 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         } elif (que_len >= LOW_WATERMARK) {
             sleep(10u)
         }
+        // memory tracking
+        let mem_heap_cur = heap_bytes_allocated()
+        let mem_str_cur = string_heap_bytes_allocated()
+        mem_heap_max = max(mem_heap_max, mem_heap_cur)
+        mem_str_max = max(mem_str_max, mem_str_cur)
+        mem_tick_count ++
+        if (g_debug_memory && mem_tick_count % mem_log_interval == 0) {
+            to_log(0, "strudel mem: heap {mem_heap_cur/1024ul}kb / str {mem_str_cur/1024ul}kb (max heap {mem_heap_max/1024ul}kb / str {mem_str_max/1024ul}kb)\n")
+        }
     }
     if (total_samples > 0ul) {
         let SPEED = total_time / double(total_samples)
         let SPEED_OF_LIGHT = 1000.lf / 48000.lf
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
-        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+        let delta_heap = int64(mem_heap_max) - int64(mem_heap_base)
+        let delta_str = int64(mem_str_max) - int64(mem_str_base)
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% util, heap {mem_heap_max/1024ul}kb (delta {delta_heap}), str {mem_str_max/1024ul}kb (delta {delta_str})\n")
+        if (delta_heap > 0l || delta_str > 0l) {
+            to_log(0, "strudel WARNING: potential memory leak detected (delta heap={delta_heap}, str={delta_str})\n")
+        }
     }
     pcm_box |> join()
     unsafe(lock_box_remove(pcm_box))
@@ -552,6 +664,12 @@ def public strudel_shutdown() {
         unsafe(lock_box_remove(g_playback_box))
         g_playback_box = null
     }
+    // pcm box (main-thread mode)
+    if (g_tick_pcm_box != null) {
+        g_tick_pcm_box |> join()
+        unsafe(lock_box_remove(g_tick_pcm_box))
+        g_tick_pcm_box = null
+    }
     // status box (main-thread mode: created in strudel_create_channel)
     if (g_tick_status_box != null) {
         unset_status_update(g_sid)
@@ -561,6 +679,30 @@ def public strudel_shutdown() {
         tick_ptr |> join()
         unsafe(lock_box_remove(tick_ptr))
         g_tick_status_box = null
+    }
+    // release tracks and buffers before measuring memory
+    for (i in range(length(g_tracks))) {
+        if (g_tracks[i] != null) {
+            shutdown_scheduler(g_tracks[i].sched)
+            unsafe { delete g_tracks[i]; }
+            g_tracks[i] = null
+        }
+    }
+    delete g_tracks
+    delete g_track_pcm
+    delete g_master_pcm
+    g_sid = 0ul
+    // memory stats (main-thread mode)
+    if (g_mem_heap_baseline > 0ul) {
+        let mem_heap_now = heap_bytes_allocated()
+        let mem_str_now = string_heap_bytes_allocated()
+        let leak_heap = int64(mem_heap_now) - int64(g_mem_heap_baseline)
+        let leak_str = int64(mem_str_now) - int64(g_mem_str_baseline)
+        to_log(0, "strudel mem: heap {int(mem_heap_now)/1024}kb (peak {int(g_mem_heap_max)/1024}kb, leak {leak_heap/1024l}kb), str {int(mem_str_now)/1024}kb (leak {leak_str/1024l}kb)\n")
+        if (leak_heap > 65536l || leak_str > 0l) {
+            to_log(0, "strudel WARNING: potential memory leak detected (heap={leak_heap}, str={leak_str})\n")
+        }
+        g_mem_heap_baseline = 0ul
     }
 }
 

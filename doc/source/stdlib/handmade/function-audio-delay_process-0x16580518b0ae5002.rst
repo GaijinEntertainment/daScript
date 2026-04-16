@@ -1,0 +1,1 @@
+Process interleaved stereo frames through the delay effect, reading from the input buffer and writing the wet/dry mixed result to the output buffer for the specified number of frames.

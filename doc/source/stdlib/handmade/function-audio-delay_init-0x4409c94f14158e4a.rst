@@ -1,0 +1,1 @@
+Initialize a stereo delay effect with the given sample rate, delay time in seconds, and feedback (decay) amount, allocating the internal ring buffer.

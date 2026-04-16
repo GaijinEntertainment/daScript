@@ -476,6 +476,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
     output |> resize(chunkSamples)
     if (!state.mixer_ready) {
         ma_volume_mixer_init(unsafe(addr(state.mixer)), 2u)
+        ma_volume_mixer_set_linear_pan(unsafe(addr(state.mixer)), false)
         state.mixer_ready = true
     }
     let iSr = 1.0 / float(SAMPLE_RATE)

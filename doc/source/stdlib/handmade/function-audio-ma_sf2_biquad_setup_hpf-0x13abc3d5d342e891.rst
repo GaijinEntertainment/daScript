@@ -1,0 +1,1 @@
+Configure the SF2 biquad filter as a high-pass filter at the given normalized cutoff frequency (0.0 to 0.5 of sample rate).

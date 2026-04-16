@@ -1,0 +1,1 @@
+Process one sample through the SF2 biquad filter and return the filtered output value.

@@ -57,6 +57,7 @@ struct ma_sf2_biquad {
 };
 
 void ma_sf2_biquad_setup ( ma_sf2_biquad * bq, float fc_normalized );
+void ma_sf2_biquad_setup_hpf ( ma_sf2_biquad * bq, float fc_normalized );
 
 // ─── Voice ───
 
@@ -127,6 +128,12 @@ void ma_sf2_voice_render_send2 ( ma_sf2_voice * voice, const short * sample_data
                                  float * dry_output, float * reverb_output, float * chorus_output,
                                  int output_offset, int frame_count,
                                  float dry_gain, float reverb_gain, float chorus_gain );
+// Render voice, split output into dry + reverb + chorus + delay send buffers (additive).
+void ma_sf2_voice_render_send3 ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                 float * dry_output, float * reverb_output, float * chorus_output, float * delay_output,
+                                 int output_offset, int frame_count,
+                                 float dry_gain, float reverb_gain, float chorus_gain, float delay_gain );
+int  ma_sf2_voice_is_finished ( const ma_sf2_voice * voice );
 
 // ─── Implementation ───
 
@@ -285,6 +292,26 @@ void ma_sf2_biquad_setup ( ma_sf2_biquad * bq, float fc_normalized ) {
     double norm = 1.0 / (1.0 + K * bq->q_inv + KK);
     bq->a0 = KK * norm;
     bq->a1 = 2.0 * bq->a0;
+    bq->b1 = 2.0 * (KK - 1.0) * norm;
+    bq->b2 = (1.0 - K * bq->q_inv + KK) * norm;
+}
+
+// High-pass biquad: same transposed direct form II, different numerator coefficients.
+void ma_sf2_biquad_setup_hpf ( ma_sf2_biquad * bq, float fc_normalized ) {
+    if ( fc_normalized <= 0.001f ) {
+        bq->active = 0;
+        return;
+    }
+    if ( fc_normalized >= 0.499f ) {
+        bq->active = 0;
+        return;
+    }
+    bq->active = 1;
+    double K = tan(MA_PI * (double)fc_normalized);
+    double KK = K * K;
+    double norm = 1.0 / (1.0 + K * bq->q_inv + KK);
+    bq->a0 = norm;              // HPF: 1*norm (not KK*norm)
+    bq->a1 = -2.0 * norm;       // HPF: -2*norm (not 2*KK*norm)
     bq->b1 = 2.0 * (KK - 1.0) * norm;
     bq->b2 = (1.0 - K * bq->q_inv + KK) * norm;
 }
@@ -572,6 +599,23 @@ void ma_sf2_voice_render_send2 ( ma_sf2_voice * voice, const short * sample_data
         dry_output[output_offset + i]    += temp[i] * dry_gain;
         reverb_output[output_offset + i] += temp[i] * reverb_gain;
         chorus_output[output_offset + i] += temp[i] * chorus_gain;
+    }
+}
+
+void ma_sf2_voice_render_send3 ( ma_sf2_voice * voice, const short * sample_data, int sample_data_len,
+                                 float * dry_output, float * reverb_output, float * chorus_output, float * delay_output,
+                                 int output_offset, int frame_count,
+                                 float dry_gain, float reverb_gain, float chorus_gain, float delay_gain ) {
+    float temp[9600];
+    const int n = frame_count * 2;
+    if ( n > 9600 ) return;
+    for ( int i = 0; i < n; i++ ) temp[i] = 0.0f;
+    ma_sf2_voice_render(voice, sample_data, sample_data_len, temp, 0, frame_count);
+    for ( int i = 0; i < n; i++ ) {
+        dry_output[output_offset + i]    += temp[i] * dry_gain;
+        reverb_output[output_offset + i] += temp[i] * reverb_gain;
+        chorus_output[output_offset + i] += temp[i] * chorus_gain;
+        delay_output[output_offset + i]  += temp[i] * delay_gain;
     }
 }
 

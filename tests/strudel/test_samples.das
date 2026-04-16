@@ -13,7 +13,7 @@ let MEDIA = "{get_das_root()}/examples/media"
 
 def read_file_bytes(path : string) : array<uint8> {
     var result : array<uint8>
-    fopen(path, "rb") <| $(f) {
+    fopen(path, "rb") $(f) {
         if (f != null) {
             let st = fstat(f)
             if (st.is_valid) {

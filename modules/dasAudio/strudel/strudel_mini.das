@@ -131,8 +131,8 @@ def tokenize(input : string) : array<Token> {
 // Grammar:
 //   pattern   = stack_expr
 //   stack_expr = seq_expr ("," seq_expr)*
-//   seq_expr  = element+
-//   element   = atom_expr modifier*
+//   seq_expr  = (element | "_")+   — "_" extends previous element's duration
+//   element   = atom_expr modifier* ("@" NUMBER)?
 //   atom_expr = WORD | NUMBER | "~" | "[" pattern "]" | "<" seq_expr+ ">"
 //   modifier  = "*" NUMBER | "/" NUMBER | "!" NUMBER | "?" NUMBER?
 
@@ -188,18 +188,42 @@ def parse_pattern(var p : Parser) : Pattern {
     return <- stack(layers)
 }
 
-// parse_seq → element+ → fastcat
+// parse_seq → element+ → fastcat (or weighted_fastcat if _ or @ used)
 def parse_seq(var p : Parser) : Pattern {
     var elements : array<Pattern>
-    while (is_element_start(p)) {
+    var weights : array<float>
+    var has_weights = false
+    while (is_element_start(p) || (peek(p).kind == TokenKind.WORD && peek(p).text == "_")) {
+        // underscore = elongation: extends previous element's weight
+        if (peek(p).kind == TokenKind.WORD && peek(p).text == "_") {
+            advance(p)
+            if (length(weights) > 0) {
+                weights[length(weights) - 1] += 1.0
+                has_weights = true
+            }
+            continue
+        }
         var elem <- parse_element(p)
+        var w = 1.0
+        // @N after element = weight
+        if (!at_end(p) && peek(p).kind == TokenKind.AT) {
+            advance(p)
+            if (!at_end(p) && peek(p).kind == TokenKind.NUMBER) {
+                w = to_float(advance(p).text)
+                has_weights = true
+            }
+        }
         elements |> emplace <| elem
+        weights |> push(w)
     }
     if (length(elements) == 0) {
         return <- silence()
     }
     if (length(elements) == 1) {
         return <- elements[0]
+    }
+    if (has_weights) {
+        return <- weighted_fastcat(elements, weights)
     }
     return <- fastcat(elements)
 }
@@ -256,7 +280,7 @@ def parse_atom(var p : Parser) : Pattern {
         // check if it's a note name like c3, eb4, fs2
         let midi = parse_note_name(tok.text)
         if (midi >= 0.0) {
-            return <- pure(Event(s = "sine", note = midi, gain = 0.3, attack = 0.01, release = 0.2))
+            return <- pure(Event(s = "sine", note = midi, attack = 0.01, release = 0.2))
         }
         return <- atom(tok.text)
     } elif (tok.kind == TokenKind.NUMBER) {
@@ -385,6 +409,66 @@ def s(notation : string) : Pattern {
     var p = Parser()
     p.tokens <- tokens
     return <- parse_pattern(p)
+}
+
+// Parse mini-notation as numeric values (note field holds the number).
+// n("<2 16>") → pattern alternating 2.0 and 16.0 per cycle.
+// Useful as patternified parameter: slow(pat, n("<2 16>"))
+def n(notation : string) : Pattern {
+    return <- s(notation)
+}
+
+// pat |> set_vowel("a") — static vowel, or
+// pat |> set_vowel("<a e i o u>") — cycling vowel from mini-notation.
+// Single token (no spaces, brackets, or angle brackets) → static fmap.
+// Otherwise → parse as mini-notation pattern, sample at each event's onset.
+def set_vowel(var pat : Pattern; notation : string) : Pattern {
+    // detect mini-notation: contains space, <, >, [, ], *, or comma
+    var is_pattern = false
+    for (ch in notation) {
+        if (ch == ' ' || ch == '<' || ch == '>' || ch == '[' || ch == ']' || ch == '*' || ch == ',') {
+            is_pattern = true
+            break
+        }
+    }
+    if (!is_pattern) {
+        // static vowel — simple fmap
+        let v = notation
+        return fmap(pat, @capture(= v) (e : Event) : Event {
+            var r = e; r.vowel = v; return r
+        })
+    }
+    // mini-notation pattern — parse and combineWithStr
+    let vowel_pat <- s(notation)
+    return combineWithStr(pat, vowel_pat, @(e : Event; val : string) : Event {
+        var r = e; r.vowel = val; return r
+    })
+}
+
+// pat |> set_vowel(s("<a e i o u>") |> slow(5.0lf)) — set vowel from a pre-built pattern.
+// Use when the vowel pattern needs transforms (slow, fast, rev) before applying.
+def set_vowel(var pat : Pattern; var vowel_pat : Pattern) : Pattern {
+    return combineWithStr(pat, vowel_pat, @(e : Event; val : string) : Event {
+        var r = e; r.vowel = val; return r
+    })
+}
+
+// pat |> set_s("<supersaw sawtooth>") — strudel-style .s() with mini-notation.
+// Single token → static set_sound. Mini-notation → parse and sample at onset.
+def set_s(var pat : Pattern; notation : string) : Pattern {
+    // detect mini-notation: contains space, <, >, [, ], *, or comma
+    var is_pattern = false
+    for (ch in notation) {
+        if (ch == ' ' || ch == '<' || ch == '>' || ch == '[' || ch == ']' || ch == '*' || ch == ',') {
+            is_pattern = true
+            break
+        }
+    }
+    if (!is_pattern) {
+        return set_sound(pat, notation)
+    }
+    let sound_pat <- s(notation)
+    return set_sound(pat, sound_pat)
 }
 
 // Parse mini-notation for note patterns.
