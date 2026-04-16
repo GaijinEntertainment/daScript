@@ -48,27 +48,81 @@ def adsr(t, attack, decay, sustain, release, duration : float) : float {
     return 0.0
 }
 
+// ─── Drum Room (convolution reverb baked into rendered buffer) ───
+
+// Apply convolution reverb to a mono buffer. amount=0.0 is dry, 1.0 is full wet.
+// Uses a synthetic impulse response (noise with exponential decay + lowpass sweep).
+def apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : float = 0.4) {
+    if (amount <= 0.0) {
+        return
+    }
+    let n = length(samples)
+    // Create a short convolution reverb for the drum room
+    // decay=0.4s gives a nice small room, lpFreqStart=12kHz→lpFreqEnd=2kHz darkens the tail
+    var rev = new ConvolutionReverb
+    conv_reverb_init(rev, SAMPLE_RATE, decay_sec, 12000.0, 2000.0, 0.005)
+    // Process mono → mono
+    var wet : array<float>
+    wet |> resize(n)
+    unsafe {
+        conv_reverb_process_mono(rev, addr(samples[0]), addr(wet[0]), n)
+    }
+    conv_reverb_uninit(rev)
+    unsafe { delete rev; }
+    // Mix wet into dry
+    for (i in range(n)) {
+        samples[i] += wet[i] * amount
+    }
+    delete wet
+}
+
+// Add a single slapback echo at a given delay (in seconds) with given gain.
+def apply_slapback(var samples : array<float>; delay_sec : float = 0.035; echo_gain : float = 0.4) {
+    let delay_samples = int(delay_sec * float(SAMPLE_RATE))
+    let n = length(samples)
+    for (i in range(delay_samples, n)) {
+        samples[i] += samples[i - delay_samples] * echo_gain
+    }
+}
+
 // ─── Drum Synthesis ───
 
-// Kick drum: sine with pitch sweep 150Hz→55Hz, fast exponential decay
+// Kick drum: 808-style — fast pitch sweep (~6ms), noise click transient, soft waveshaping
 def render_bd(duration : float; gain : float) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
     var phase = 0.0
+    var seed = 22222u
     let iSr = 1.0 / float(SAMPLE_RATE)
     let tp = float(TWO_PI)
+    // bandpass for subtle beater click
+    var attack_bp = BiquadState()
+    biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
+    // rimshot-style snap for beater attack
+    var snap_bp = BiquadState()
+    biquad_bandpass(snap_bp, 800.0, 0.8, float(SAMPLE_RATE))
     for (i in range(nsamples)) {
         let t = float(i) * iSr
-        let env = exp(-t * 15.0)
-        let freq = 55.0 + 95.0 * exp(-t * 30.0)
+        // --- body: sine with very fast pitch sweep ---
+        let freq = 58.0 + 80.0 * exp(-t * 300.0)
         phase += tp * freq * iSr
-        samples[i] = sin(phase) * env * gain
+        let osc = sin(phase)
+        // clean sine body
+        let body = osc * exp(-t * 10.0) * 1.1
+        // --- beater click at 1.5kHz ---
+        let n = noise(seed)
+        let click = biquad_process(attack_bp, n) * exp(-t * 250.0) * 0.25
+        // --- rimshot-style snap, a third longer than actual rimshot ---
+        let impulse = biquad_process(snap_bp, n) * exp(-t * 40.0) * 1.05
+        // combine
+        samples[i] = (body + click + impulse) * gain
     }
+    apply_room(samples, 0.15)
     return <- samples
 }
 
-// Snare: noise burst + sine at 180Hz, medium decay
+// Snare: tonal body (~220Hz) + high-passed noise (snare wires) + room
 def render_sd(duration : float; gain : float) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
@@ -76,51 +130,363 @@ def render_sd(duration : float; gain : float) : array<float> {
     var phase = 0.0
     var seed = 12345u
     let iSr = 1.0 / float(SAMPLE_RATE)
-    let phaseInc = float(TWO_PI) * 180.0 * iSr
+    let tp = float(TWO_PI)
+    // snare wires: HPF at 1.5kHz to get the sizzle
+    var wire_hpf = BiquadState()
+    biquad_highpass(wire_hpf, 1500.0, float(SAMPLE_RATE))
+    var phase2 = 0.0
     for (i in range(nsamples)) {
         let t = float(i) * iSr
-        let env = exp(-t * 20.0)
-        let tone = sin(phase) * 0.4
-        phase += phaseInc
-        let n = noise(seed) * 0.6
-        samples[i] = (tone + n) * env * gain
+        // two tonal bodies — batter head (~220Hz) and resonant head (~330Hz)
+        let freq1 = 220.0 + 60.0 * exp(-t * 200.0)
+        phase += tp * freq1 * iSr
+        let freq2 = 330.0 + 40.0 * exp(-t * 200.0)
+        phase2 += tp * freq2 * iSr
+        let tone = (sin(phase) * 0.5 + sin(phase2) * 0.1) * exp(-t * 12.0)
+        // snare wires: HPF'd noise, longer decay than tone
+        let n = noise(seed)
+        let wires = biquad_process(wire_hpf, n) * exp(-t * 10.0) * 0.5
+        // initial stick hit: broadband impulse
+        let hit = n * exp(-t * 150.0) * 0.4
+        samples[i] = (tone + wires + hit) * gain
     }
+    apply_room(samples, 0.05, 0.5)
     return <- samples
 }
 
-// Hi-hat: high-pass noise, very short decay
+// Hi-hat: metallic oscillator bank + tonal body + room
 def render_hh(duration : float; gain : float) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
-    var samples : array<float>
-    samples |> resize(nsamples)
-    var seed = 67890u
-    var prev = 0.0
+    var samples <- render_metallic(duration, gain * 0.7, 18.0)
+    // add tonal component (~200Hz) like SF2 — the "bell" of the hi-hat
+    var phase = 0.0
     let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    let inc = tp * 180.0 * iSr
     for (i in range(nsamples)) {
         let t = float(i) * iSr
-        let env = exp(-t * 60.0)
-        let n = noise(seed)
-        let hp = n - prev
-        prev = n
-        samples[i] = hp * env * gain
+        phase += inc
+        samples[i] += sin(phase) * exp(-t * 30.0) * gain * 0.25
     }
+    apply_room(samples, 0.1)
     return <- samples
 }
 
-// Clap: noise burst with slight resonance, short decay
+// Clap: sharp noise burst through bandpass (~1.1kHz) + long room tail
 def render_cp(duration : float; gain : float) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
     var seed = 11111u
     let iSr = 1.0 / float(SAMPLE_RATE)
+    var bpf = BiquadState()
+    biquad_bandpass(bpf, 1100.0, 2.0, float(SAMPLE_RATE))
     for (i in range(nsamples)) {
         let t = float(i) * iSr
-        let env1 = exp(-t * 40.0)
-        let env2 = exp(-t * 15.0) * 0.7
-        let env = max(env1, env2)
-        samples[i] = noise(seed) * env * gain
+        // sharp attack + medium decay
+        let env = exp(-t * 29.0)
+        let n = noise(seed)
+        let main = biquad_process(bpf, n) * 2.8
+        let bright = n * exp(-t * 40.0) * 0.25  // metallic edge
+        samples[i] = (main + bright) * env * gain
     }
+    apply_room(samples, 0.15, 1.0)
+    return <- samples
+}
+
+// ─── Biquad Filter ───
+
+struct BiquadState {
+    x1 : float = 0.0
+    x2 : float = 0.0
+    y1 : float = 0.0
+    y2 : float = 0.0
+    a0 : float = 1.0
+    a1 : float = 0.0
+    a2 : float = 0.0
+    b1 : float = 0.0
+    b2 : float = 0.0
+}
+
+def biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
+    let w0 = float(TWO_PI) * freq / sample_rate
+    let cs = cos(w0)
+    let sn = sin(w0)
+    let alpha = sn / (2.0 * 0.707)  // Q = 0.707 (Butterworth)
+    let norm = 1.0 / (1.0 + alpha)
+    bq.a0 = (1.0 + cs) * 0.5 * norm
+    bq.a1 = -(1.0 + cs) * norm
+    bq.a2 = bq.a0
+    bq.b1 = -2.0 * cs * norm
+    bq.b2 = (1.0 - alpha) * norm
+}
+
+def biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
+    let w0 = float(TWO_PI) * freq / sample_rate
+    let cs = cos(w0)
+    let sn = sin(w0)
+    let alpha = sn / (2.0 * q)
+    let norm = 1.0 / (1.0 + alpha)
+    bq.a0 = alpha * norm
+    bq.a1 = 0.0
+    bq.a2 = -alpha * norm
+    bq.b1 = -2.0 * cs * norm
+    bq.b2 = (1.0 - alpha) * norm
+}
+
+def biquad_process(var bq : BiquadState; x : float) : float {
+    let y = bq.a0 * x + bq.a1 * bq.x1 + bq.a2 * bq.x2 - bq.b1 * bq.y1 - bq.b2 * bq.y2
+    bq.x2 = bq.x1
+    bq.x1 = x
+    bq.y2 = bq.y1
+    bq.y1 = y
+    return y
+}
+
+// ─── Metallic Oscillator Bank (808-style hi-hat/cymbal) ───
+
+// 6 square-wave oscillators at inharmonic ratios produce metallic timbre.
+// Used by hi-hat, ride, crash, and tambourine.
+let HH_FREQS = fixed_array(205.3, 304.4, 369.6, 522.7, 540.0, 800.0)
+
+def render_metallic(duration : float; gain : float; decay_rate : float; hpf_freq : float = 5000.0; noise_mix : float = 0.3) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phases : float[6]
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    // two bandpass stages at ~3.4kHz and ~7.1kHz (808 circuit) + HPF
+    var bp1 = BiquadState()
+    biquad_bandpass(bp1, 3400.0, 1.5, float(SAMPLE_RATE))
+    var bp2 = BiquadState()
+    biquad_bandpass(bp2, 7100.0, 2.0, float(SAMPLE_RATE))
+    var hpf = BiquadState()
+    biquad_highpass(hpf, hpf_freq, float(SAMPLE_RATE))
+    var seed = 67890u
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        let env = exp(-t * decay_rate)
+        var mix = 0.0
+        for (j in range(6)) {
+            phases[j] += tp * HH_FREQS[j] * iSr
+            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)  // square wave
+        }
+        mix *= (1.0 / 6.0)
+        // filter through bandpass stages (parallel, like 808 circuit)
+        let filtered = biquad_process(bp1, mix) + biquad_process(bp2, mix) * 0.8
+        // add noise for body
+        let n = noise(seed) * noise_mix
+        // HPF the combined signal
+        let out = biquad_process(hpf, filtered + n)
+        samples[i] = out * env * gain * 2.5  // boost to compensate for filtering
+    }
+    return <- samples
+}
+
+// ─── Additional Drum Synthesis ───
+
+// Open hi-hat: same metallic oscillator bank, much longer decay
+def render_oh(duration : float; gain : float) : array<float> {
+    var samples <- render_metallic(duration, gain, 8.0)
+    apply_room(samples, 0.1)
+    return <- samples
+}
+
+// Tom: same layered approach as BD — body + beater click + impulse + room
+def render_tom(duration : float; gain : float; base_freq : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phase = 0.0
+    var seed = 33333u
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    var attack_bp = BiquadState()
+    biquad_bandpass(attack_bp, 1500.0, 1.5, float(SAMPLE_RATE))
+    var impulse_lp = BiquadState()
+    biquad_bandpass(impulse_lp, 1200.0, 0.5, float(SAMPLE_RATE))
+    var phase2 = 0.0
+    var phase3 = 0.0
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        // body: sine with fast pitch sweep
+        let freq = base_freq + base_freq * 1.2 * exp(-t * 200.0)
+        phase += tp * freq * iSr
+        // second partial: drumhead overtone at ~1.6x (inharmonic)
+        let freq2 = base_freq * 1.6 + base_freq * 0.45 * exp(-t * 200.0)
+        phase2 += tp * freq2 * iSr
+        // third partial: higher drumhead mode at ~2.5x, faster decay
+        let freq3 = base_freq * 1.9 + base_freq * 0.14 * exp(-t * 200.0)
+        phase3 += tp * freq3 * iSr
+        // resonant head arrives ~15ms after batter head — creates distinct 2nd peak
+        let p2_onset = 0.045
+        let p2_env = t > p2_onset ? exp(-(t - p2_onset) * 10.0) : 0.0
+        let body = (sin(phase) * 0.7 * exp(-t * 8.0) + sin(phase2) * 0.25 * p2_env + sin(phase3) * 0.2 * exp(-t * 12.0))
+        // beater click
+        let n = noise(seed)
+        let click = biquad_process(attack_bp, n) * exp(-t * 250.0) * 0.3
+        // stick impulse
+        let impulse = biquad_process(impulse_lp, n) * exp(-t * 200.0) * 0.8
+        samples[i] = (body + click + impulse) * gain
+    }
+    apply_room(samples, 0.05, 0.7)
+    return <- samples
+}
+
+// Ride cymbal: bell tone (~350Hz) + metallic shimmer, long sustain
+def render_ride(duration : float; gain : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phases : float[6]
+    var bell_phase1 = 0.0
+    var bell_phase2 = 0.0
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    var hpf = BiquadState()
+    biquad_highpass(hpf, 200.0, float(SAMPLE_RATE))
+    let bell_inc1 = tp * 340.0 * iSr
+    let bell_inc2 = tp * 387.0 * iSr
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        // bell tone: two inharmonic frequencies (~340 + ~387 Hz), long sustain
+        bell_phase1 += bell_inc1
+        bell_phase2 += bell_inc2
+        let bell = (sin(bell_phase1) * 0.5 + sin(bell_phase2) * 0.4) * exp(-t * 15.0)
+        // metallic shimmer: oscillator bank through HPF, faster decay
+        var mix = 0.0
+        for (j in range(6)) {
+            phases[j] += tp * HH_FREQS[j] * iSr
+            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)
+        }
+        mix *= (1.0 / 6.0)
+        let shimmer = biquad_process(hpf, mix) * exp(-t * 3.0) * 0.25
+        samples[i] = (bell + shimmer) * gain * 0.33
+    }
+    apply_room(samples, 0.10, 0.3)
+    return <- samples
+}
+
+// Crash cymbal: bell tone (~490Hz) + metallic wash, medium-fast decay
+def render_crash(duration : float; gain : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phases : float[6]
+    var bell_phase1 = 0.0
+    var bell_phase2 = 0.0
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    var hpf = BiquadState()
+    biquad_highpass(hpf, 4000.0, float(SAMPLE_RATE))
+    let bell_inc1 = tp * 180.0 * iSr
+    let bell_inc2 = tp * 248.0 * iSr
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        // bell tone: short attack, medium decay
+        bell_phase1 += bell_inc1
+        bell_phase2 += bell_inc2
+        let bell = (sin(bell_phase1) * 0.25 + sin(bell_phase2) * 0.15) * exp(-t * 8.0)
+        // metallic wash: shimmer with faster decay than ride
+        var mix = 0.0
+        for (j in range(6)) {
+            phases[j] += tp * HH_FREQS[j] * iSr
+            mix += (sin(phases[j]) >= 0.0 ? 1.0 : -1.0)
+        }
+        mix *= (1.0 / 6.0)
+        let shimmer = biquad_process(hpf, mix) * exp(-t * 4.0) * 0.8
+        samples[i] = (bell + shimmer) * gain * 0.5
+    }
+    apply_room(samples, 0.1, 0.2)
+    return <- samples
+}
+
+// Rimshot: woody thud (~200Hz) + high click (~1200Hz) + noise snap
+def render_rimshot(duration : float; gain : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phase1 = 0.0
+    var seed = 44444u
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    let inc1 = tp * 200.0 * iSr
+    var snap_bp = BiquadState()
+    biquad_bandpass(snap_bp, 800.0, 0.8, float(SAMPLE_RATE))
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        let n = noise(seed)
+        // sharp filtered noise snap — the main sound
+        let snap = biquad_process(snap_bp, n) * exp(-t * 60.0) * 1.8
+        // very short tonal ping for pitch
+        phase1 += inc1
+        let body = sin(phase1) * exp(-t * 80.0) * 0.6
+        // high transient click
+        let click = n * exp(-t * 400.0) * 0.8
+        samples[i] = (snap + body + click) * gain
+    }
+    apply_room(samples, 0.1, 0.7)
+    return <- samples
+}
+
+// Cowbell: two square waves at 540 Hz and 800 Hz through bandpass
+def render_cowbell(duration : float; gain : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var phase1 = 0.0
+    var phase2 = 0.0
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    let tp = float(TWO_PI)
+    let inc1 = tp * 375.0 * iSr
+    let inc2 = tp * 504.0 * iSr
+    var bpf = BiquadState()
+    biquad_bandpass(bpf, 850.0, 4.0, float(SAMPLE_RATE))
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        phase1 += inc1
+        phase2 += inc2
+        let sq1 = sin(phase1) >= 0.0 ? 1.0 : -1.0
+        let sq2 = sin(phase2) >= 0.0 ? 1.0 : -1.0
+        // first strike: both tones
+        let hit1 = biquad_process(bpf, (sq1 + sq2) * 0.5) * exp(-t * 20.0)
+        // second strike: higher tone only, ~8ms later
+        let onset2 = 0.008
+        let hit2 = t > onset2 ? sq2 * exp(-(t - onset2) * 40.0) * 0.4 : 0.0
+        samples[i] = (hit1 + hit2) * gain * 0.5
+    }
+    apply_room(samples, 0.1, 0.3)
+    return <- samples
+}
+
+// Tambourine: high-pass noise with narrow band peaks for jingle
+def render_tambourine(duration : float; gain : float) : array<float> {
+    let nsamples = int(duration * float(SAMPLE_RATE))
+    var samples : array<float>
+    samples |> resize(nsamples)
+    var seed = 55555u
+    let iSr = 1.0 / float(SAMPLE_RATE)
+    var hpf = BiquadState()
+    biquad_highpass(hpf, 6300.0, float(SAMPLE_RATE))
+    var bp1 = BiquadState()
+    biquad_bandpass(bp1, 3800.0, 8.0, float(SAMPLE_RATE))
+    var bp2 = BiquadState()
+    biquad_bandpass(bp2, 8800.0, 8.0, float(SAMPLE_RATE))
+    for (i in range(nsamples)) {
+        let t = float(i) * iSr
+        let env = exp(-t * 15.0)
+        let n = noise(seed)
+        let hp = biquad_process(hpf, n)
+        let jingle = biquad_process(bp1, n) * 0.3 + biquad_process(bp2, n) * 0.3
+        // two hits: initial strike + delayed jingle at ~30ms
+        let onset2 = 0.2
+        let env2 = t > onset2 ? exp(-(t - onset2) * 20.0) : 0.0
+        let hit1 = (hp * 0.4 + jingle) * env * 0.65
+        let hit2 = (hp * 0.3 + jingle * 0.7) * env2 * 0.3
+        samples[i] = (hit1 + hit2) * gain
+    }
+    apply_room(samples, 0.5)
     return <- samples
 }
 
@@ -667,10 +1033,26 @@ def render_event_stereo(event : Event; duration_sec : float) : array<float> {
         mono <- render_bd(duration_sec, 1.0)
     } elif (s == "sd") {
         mono <- render_sd(duration_sec, 1.0)
-    } elif (s == "hh") {
+    } elif (s == "hh" || s == "hh_pedal") {
         mono <- render_hh(duration_sec, 1.0)
+    } elif (s == "oh" || s == "hh_open") {
+        mono <- render_oh(duration_sec, 1.0)
     } elif (s == "cp") {
         mono <- render_cp(duration_sec, 1.0)
+    } elif (s == "tom_low") {
+        mono <- render_tom(duration_sec, 1.0, 80.0)
+    } elif (s == "tom_high") {
+        mono <- render_tom(duration_sec, 1.0, 175.0)
+    } elif (s == "ride" || s == "ride_bell") {
+        mono <- render_ride(duration_sec, 1.0)
+    } elif (s == "crash") {
+        mono <- render_crash(duration_sec, 1.0)
+    } elif (s == "sidestick") {
+        mono <- render_rimshot(duration_sec, 1.0)
+    } elif (s == "cowbell" || s == "cb") {
+        mono <- render_cowbell(duration_sec, 1.0)
+    } elif (s == "tambourine" || s == "tamb") {
+        mono <- render_tambourine(duration_sec, 1.0)
     } else {
         mono |> resize(int(duration_sec * float(SAMPLE_RATE)))
     }

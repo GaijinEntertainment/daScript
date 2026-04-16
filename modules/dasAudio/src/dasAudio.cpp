@@ -40,6 +40,9 @@
 #define MA_CHORUS_IMPLEMENTATION
 #include "chorus.h"
 
+#define CONVOLUTION_REVERB_IMPLEMENTATION
+#include "convolution_reverb.h"
+
 #include "dasAudio.h"
 
 #ifndef HRTF_SAMPLE_RATE
@@ -213,6 +216,7 @@ MAKE_TYPE_FACTORY(I3DL2Reverb,I3DL2Reverb);
 
 
 MAKE_TYPE_FACTORY(ma_hrtf,ma_hrtf);
+MAKE_TYPE_FACTORY(ConvolutionReverb,ConvolutionReverb);
 
 namespace das {
 
@@ -613,6 +617,46 @@ I3DL2ReverbProperties & dasAudio_getReverbPreset ( I3DL2Preset preset, Context *
     return ReverbPresets[preset];
 }
 
+// ─── Convolution Reverb ───
+
+struct ConvolutionReverbAnnotation : ManagedStructureAnnotation<ConvolutionReverb,true,true> {
+    ConvolutionReverbAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ConvolutionReverb", mlib, "ConvolutionReverb") {
+        addField<DAS_BIND_MANAGED_FIELD(decayTime)>("decayTime","decayTime");
+        addField<DAS_BIND_MANAGED_FIELD(lpFreqStart)>("lpFreqStart","lpFreqStart");
+        addField<DAS_BIND_MANAGED_FIELD(lpFreqEnd)>("lpFreqEnd","lpFreqEnd");
+        addField<DAS_BIND_MANAGED_FIELD(fadeIn)>("fadeIn","fadeIn");
+        addField<DAS_BIND_MANAGED_FIELD(sampleRate)>("sampleRate","sampleRate");
+        addField<DAS_BIND_MANAGED_FIELD(fft_size)>("fft_size","fft_size");
+        addField<DAS_BIND_MANAGED_FIELD(ir_length)>("ir_length","ir_length");
+        addField<DAS_BIND_MANAGED_FIELD(num_partitions)>("num_partitions","num_partitions");
+    }
+};
+
+void dasAudio_convReverbInit ( ConvolutionReverb * rev, int sample_rate, float decay_time,
+                                float lp_freq_start, float lp_freq_end, float fade_in,
+                                Context * context, LineInfoArg * at ) {
+    if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
+    conv_reverb_init(rev, (uint32_t)sample_rate, decay_time, lp_freq_start, lp_freq_end, fade_in);
+}
+
+void dasAudio_convReverbProcess ( ConvolutionReverb * rev, float * input, float * output, int nFrames,
+                                   Context * context, LineInfoArg * at ) {
+    if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
+    conv_reverb_process(rev, input, output, (uint32_t)nFrames);
+}
+
+void dasAudio_convReverbProcessMono ( ConvolutionReverb * rev, float * input, float * output, int nSamples,
+                                       Context * context, LineInfoArg * at ) {
+    if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
+    conv_reverb_process_mono(rev, input, output, (uint32_t)nSamples);
+}
+
+void dasAudio_convReverbUninit ( ConvolutionReverb * rev, Context * context, LineInfoArg * at ) {
+    if ( !rev ) context->throw_error_at(at,"convolution reverb is null");
+    conv_reverb_uninit(rev);
+}
+
 // ─── Delay (miniaudio ma_delay) ───
 
 struct MaDelayAnnotation : ManagedStructureAnnotation<ma_delay,true,true> {
@@ -692,6 +736,25 @@ public:
             SideEffects::modifyArgumentAndExternal, "dasAudio_processMono")->args({"reverb", "input", "output", "nSamples", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_getReverbPreset),SimNode_ExtFuncCallRef>(*this, lib, "get_preset",
             SideEffects::modifyArgumentAndExternal, "dasAudio_getReverbPreset")->args({"preset", "context", "at"});
+        // convolution reverb
+        addAnnotation(new ConvolutionReverbAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_convReverbInit)>(*this, lib, "conv_reverb_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbInit")
+                ->args({"reverb", "sample_rate", "decay_time", "lp_freq_start", "lp_freq_end", "fade_in", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_convReverbProcess)>(*this, lib, "conv_reverb_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbProcess")
+                ->args({"reverb", "input", "output", "nFrames", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_convReverbProcessMono)>(*this, lib, "conv_reverb_process_mono",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbProcessMono")
+                ->args({"reverb", "input", "output", "nSamples", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_convReverbUninit)>(*this, lib, "conv_reverb_uninit",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_convReverbUninit")
+                ->args({"reverb", "context", "at"});
+        addExtern<DAS_BIND_FUN(conv_reverb_set_max_ir)>(*this, lib, "conv_reverb_set_max_ir",
+            SideEffects::modifyExternal, "conv_reverb_set_max_ir")
+                ->args({"seconds"});
+        addExtern<DAS_BIND_FUN(conv_reverb_get_max_ir)>(*this, lib, "conv_reverb_get_max_ir",
+            SideEffects::accessGlobal, "conv_reverb_get_max_ir");
         // chorus
         addAnnotation(new MaChorusConfigAnnotation(lib));
         addAnnotation(new MaChorusAnnotation(lib));

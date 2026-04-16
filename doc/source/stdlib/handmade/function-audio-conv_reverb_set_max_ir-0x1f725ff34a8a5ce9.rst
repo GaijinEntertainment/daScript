@@ -1,0 +1,1 @@
+Set the maximum impulse response length in seconds (default 8.0). Affects newly created reverbs only. Lower values reduce CPU cost; higher values allow longer reverb tails. The IR is capped at ``min(decayTime * 1.5, max_ir)``.

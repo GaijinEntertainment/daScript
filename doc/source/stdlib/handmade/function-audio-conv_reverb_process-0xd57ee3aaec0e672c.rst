@@ -1,0 +1,1 @@
+Process interleaved stereo audio through the convolution reverb. Input is downmixed to mono, then convolved with separate L/R impulse responses for stereo decorrelation. Output is interleaved stereo. ``nFrames`` is the number of stereo frames (not samples).

@@ -44,7 +44,7 @@ struct StrudelSF2Meta {
 // Orbits are created on demand when a voice with that orbit index is spawned.
 [safe_when_uninitialized]
 struct OrbitBus {
-    reverb            : I3DL2Reverb?
+    reverb            : ConvolutionReverb?
     delay_proc        : ma_delay?
     reverb_send_buf   : array<float>
     reverb_out_buf    : array<float>
@@ -96,13 +96,12 @@ def private ensure_orbit(var sched : Scheduler; orbit : int) {
 }
 
 // Initialize reverb on an orbit bus.
-def private init_orbit_reverb(var bus : OrbitBus) {
+def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
     if (bus.reverb == null) {
-        bus.reverb = new I3DL2Reverb
-        set_sample_rate(bus.reverb, float(SAMPLE_RATE))
-        let props = get_preset(I3DL2Preset.Bathroom)
-        set_properties(bus.reverb, props)
-        bus.current_roomsize = -1.0
+        let rs = clamp(roomsize, 0.1, 10.0)
+        bus.reverb = new ConvolutionReverb
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.01)
+        bus.current_roomsize = rs
     }
 }
 
@@ -113,9 +112,9 @@ def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
         return
     }
     bus.current_roomsize = rs
-    var props = get_preset(I3DL2Preset.Bathroom)
-    props.flDecayTime = rs
-    set_properties(bus.reverb, props)
+    // Reinitialize with new decay time
+    conv_reverb_uninit(bus.reverb)
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.01)
 }
 
 // Initialize delay on an orbit bus.
@@ -488,20 +487,13 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
         if (bus == null) {
             continue
         }
-        // Always process reverb when it exists — internal delay lines need to decay
+        // Always process reverb when it exists — convolver needs continuous input
         if (bus.reverb != null) {
             for (s in range(chunkSamples)) {
                 bus.reverb_out_buf[s] = 0.0
             }
             unsafe {
-                process_stereo(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
-            }
-            // Swap L/R reverb output to match expected spatial image.
-            // I3DL2 Hadamard decorrelation produces the mirror of ConvolverNode's random-noise IR.
-            for (f in range(chunkFrames)) {
-                let tmp = bus.reverb_out_buf[f * 2]
-                bus.reverb_out_buf[f * 2] = bus.reverb_out_buf[f * 2 + 1]
-                bus.reverb_out_buf[f * 2 + 1] = tmp
+                conv_reverb_process(bus.reverb, addr(bus.reverb_send_buf[0]), addr(bus.reverb_out_buf[0]), chunkFrames)
             }
             for (s in range(chunkSamples)) {
                 output[s] += bus.reverb_out_buf[s]
@@ -709,7 +701,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
 }
 
 // Accessors for orbit bus effects (for tests and backwards compat).
-def get_orbit_reverb(var sched : Scheduler; orbit : int = 0) : I3DL2Reverb? {
+def get_orbit_reverb(var sched : Scheduler; orbit : int = 0) : ConvolutionReverb? {
     if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
         return sched.orbit_buses[orbit].reverb
     }
@@ -732,6 +724,7 @@ def shutdown_scheduler(var sched : Scheduler) {
                 unsafe { delete bus.delay_proc; }
             }
             if (bus.reverb != null) {
+                conv_reverb_uninit(bus.reverb)
                 unsafe { delete bus.reverb; }
             }
         }
