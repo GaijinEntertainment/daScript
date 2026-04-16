@@ -76,8 +76,9 @@ var private g_mem_str_max : uint64 = 0ul
 var private g_mem_tick_count : int = 0  // for periodic logging in main-thread mode
 
 // --- Tick timing ---
-var private g_tick_total_time : double = 0.lf   // total tick time in ms
-var private g_tick_total_samples : uint64 = 0ul // total samples rendered
+var private g_tick_total_time : double = 0.lf       // total tick time in ms
+var private g_tick_total_samples : uint64 = 0ul     // total samples rendered
+var private g_tick_max_chunk_usec : double = 0.lf   // peak chunk time in usec
 
 struct AudioChunk {
     samples : array<float>
@@ -269,9 +270,9 @@ def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
     track.sched.cps = g_cps
     track.sched.lastQueryEnd = g_wall_time * g_cps
     track.sched.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
+    init_chorus(track.sched)
     if (g_sf2 != null) {
         init_reverb(track.sched)
-        init_chorus(track.sched)
     }
     // ensure per-track PCM arrays are big enough
     while (length(g_track_pcm) <= idx) {
@@ -454,8 +455,10 @@ def public strudel_tick() {
     g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
     // tick timing
-    g_tick_total_time += double(get_time_usec(t0)) / 1000.lf
+    let chunk_usec = double(get_time_usec(t0))
+    g_tick_total_time += chunk_usec / 1000.lf
     g_tick_total_samples += uint64(chunkSamples / 2)
+    if (chunk_usec > g_tick_max_chunk_usec) { g_tick_max_chunk_usec = chunk_usec; }
     // memory tracking
     let mem_heap_cur = heap_bytes_allocated()
     let mem_str_cur = string_heap_bytes_allocated()
@@ -477,6 +480,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
     let LOW_WATERMARK = 2
     var total_time = 0.lf
     var total_samples = 0ul
+    var max_chunk_usec = 0.0lf
     var status_box <- unsafe(lock_box_create())
     set_status_update(g_sid, status_box)
     var pcm_box <- unsafe(lock_box_create())
@@ -549,8 +553,10 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         if (length(output) > 0) {
             append_box_to_pcm(g_sid, pcm_box, output)
         }
-        total_time += double(get_time_usec(t0)) / 1000.lf
+        let chunk_usec = double(get_time_usec(t0))
+        total_time += chunk_usec / 1000.lf
         total_samples += uint64(chunkSamples / 2)
+        if (chunk_usec > max_chunk_usec) { max_chunk_usec = chunk_usec; }
         let chunkFrames = chunkSamples / 2
         g_wall_samples += int64(chunkFrames)
         g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
@@ -582,9 +588,11 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let SPEED = total_time / double(total_samples)
         let SPEED_OF_LIGHT = 1000.lf / 48000.lf
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+        let chunk_budget_usec = double(CHUNK_SEC) * 1000000.lf
+        let MAX_UTIL = int(max_chunk_usec / chunk_budget_usec * 1000.lf)
         let delta_heap = int64(mem_heap_max) - int64(mem_heap_base)
         let delta_str = int64(mem_str_max) - int64(mem_str_base)
-        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% util, heap {mem_heap_max/1024ul}kb (delta {delta_heap}), str {mem_str_max/1024ul}kb (delta {delta_str})\n")
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak util, heap {mem_heap_max/1024ul}kb (delta {delta_heap}), str {mem_str_max/1024ul}kb (delta {delta_str})\n")
         if (delta_heap > 0l || delta_str > 0l) {
             to_log(0, "strudel WARNING: potential memory leak detected (delta heap={delta_heap}, str={delta_str})\n")
         }
@@ -705,10 +713,13 @@ def public strudel_shutdown() {
         let SPEED = g_tick_total_time / double(g_tick_total_samples)
         let SPEED_OF_LIGHT = 1000.lf / 48000.lf
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
-        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+        let chunk_budget_usec = double(g_chunk_seconds) * 1000000.lf
+        let MAX_UTIL = int(g_tick_max_chunk_usec / chunk_budget_usec * 1000.lf)
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak utilization\n")
     }
     g_tick_total_time = 0.lf
     g_tick_total_samples = 0ul
+    g_tick_max_chunk_usec = 0.lf
     // memory stats (main-thread mode)
     if (g_mem_heap_baseline > 0ul) {
         let mem_heap_now = heap_bytes_allocated()

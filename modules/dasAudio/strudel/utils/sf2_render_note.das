@@ -68,8 +68,9 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
         return
     }
 
-    let zones = sf2_find_zones(sf2, preset_idx, key, velocity)
+    var zones <- sf2_find_zones(sf2, preset_idx, key, velocity)
     if (length(zones) == 0) {
+        delete zones
         print("  no zones for preset={program} key={key} vel={velocity}\n")
         return
     }
@@ -132,4 +133,5 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
 
     write_wav(output_path, output, [sample_rate = uint(sample_rate)])
     print("  rendered bank={bank} prog={program} key={key} vel={velocity} dur={duration}s -> {output_path} ({length(voices)} voices)\n")
+    delete zones
 }

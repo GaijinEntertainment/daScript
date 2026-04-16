@@ -295,8 +295,9 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
     if (preset_idx < 0) {
         return
     }
-    let zones = sf2_find_zones(*state.sf2, preset_idx, note, velocity)
+    var zones <- sf2_find_zones(*state.sf2, preset_idx, note, velocity)
     if (length(zones) == 0) {
+        delete zones
         return
     }
     // kill existing voice on same channel+note (re-trigger)
@@ -333,6 +334,7 @@ def private sf2_note_on(var state : MidiPlaybackState; ch, note, velocity : int)
             g_sf2_meta |> emplace(SF2VoiceMeta(channel = ch, note = note, exclusive_class = excl, reverb_send = rsend, chorus_send = csend, atten_state <- atten_state))
         }
     }
+    delete zones
 }
 
 // Recalculate attenuation for all active SF2 voices on a channel.

@@ -539,6 +539,38 @@ def set_sf2_bank(var pat : Pattern; bank : int) : Pattern {
     return <- fmap(pat, fn)
 }
 
+// pat |> set_sf2_expression(0.5) — set SF2 expression CC11 (0.0–1.0)
+def set_sf2_expression(var pat : Pattern; v : float) : Pattern {
+    let fn <- @capture(= v) (e : Event) : Event {
+        var r = e; r.sf2_expression = v; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_sf2_mod_wheel(0.5) — set SF2 mod wheel CC1 (0.0–1.0, vibrato depth)
+def set_sf2_mod_wheel(var pat : Pattern; v : float) : Pattern {
+    let fn <- @capture(= v) (e : Event) : Event {
+        var r = e; r.sf2_mod_wheel = v; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_sf2_pitch_bend(0.6) — set SF2 pitch bend (0.0–1.0, 0.5 = center)
+def set_sf2_pitch_bend(var pat : Pattern; v : float) : Pattern {
+    let fn <- @capture(= v) (e : Event) : Event {
+        var r = e; r.sf2_pitch_bend = v; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_chorus(0.5) — set chorus send amount (0.0–1.0)
+def set_chorus(var pat : Pattern; c : float) : Pattern {
+    let fn <- @capture(= c) (e : Event) : Event {
+        var r = e; r.chorus = c; return r
+    }
+    return <- fmap(pat, fn)
+}
+
 // pat |> set_lpq(5.0) — set low-pass filter resonance
 def set_lpq(var pat : Pattern; q : float) : Pattern {
     let fn <- @capture(= q) (e : Event) : Event {
@@ -1100,6 +1132,34 @@ def set_fm(var pat : Pattern; var mod_pat : Pattern) : Pattern {
 def set_fmh(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
         var r = e; r.fmh = val; return r
+    })
+}
+
+// pat |> set_chorus(signal_pattern) — modulate chorus send with a signal
+def set_chorus(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.chorus = val; return r
+    })
+}
+
+// pat |> set_sf2_expression(signal_pattern) — modulate SF2 expression with a signal
+def set_sf2_expression(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.sf2_expression = val; return r
+    })
+}
+
+// pat |> set_sf2_mod_wheel(signal_pattern) — modulate SF2 mod wheel with a signal
+def set_sf2_mod_wheel(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.sf2_mod_wheel = val; return r
+    })
+}
+
+// pat |> set_sf2_pitch_bend(signal_pattern) — modulate SF2 pitch bend with a signal
+def set_sf2_pitch_bend(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.sf2_pitch_bend = val; return r
     })
 }
 

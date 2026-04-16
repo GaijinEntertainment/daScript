@@ -32,6 +32,10 @@ struct Event {
     fm      : float = 0.0       // FM synthesis modulation depth
     fmh     : float = 1.0       // FM harmonicity ratio (modulator freq / carrier freq)
     vowel   : string = ""      // vowel formant filter ("a", "e", "i", "o", "u", etc.)
-    sf2_program : int = -1      // SF2 GM program number (-1 = not SF2, use sample/oscillator)
-    sf2_bank    : int = 0       // SF2 bank (0 = melodic, 128 = percussion)
+    chorus  : float = 0.0       // chorus send amount 0.0–1.0
+    sf2_program    : int = -1   // SF2 GM program number (-1 = not SF2, use sample/oscillator)
+    sf2_bank       : int = 0    // SF2 bank (0 = melodic, 128 = percussion)
+    sf2_expression : float = -1.0 // SF2 expression CC11 (0.0–1.0, -1 = use default)
+    sf2_mod_wheel  : float = -1.0 // SF2 mod wheel CC1 (0.0–1.0, -1 = use default)
+    sf2_pitch_bend : float = -1.0 // SF2 pitch bend (0.0–1.0 where 0.5 = center, -1 = use default)
 }

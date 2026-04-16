@@ -11,10 +11,12 @@ require audio/audio_boost
 require daslib/fio
 require strings
 
+var public default_feature_duration = 10.0
+
 // Parse --duration N and --track-memory from command line args.
 // Returns (duration_seconds, track_memory).
 def parse_feature_args() : tuple<float; bool> {
-    var duration = 10.0
+    var duration = default_feature_duration
     var track_memory = false
     let args <- get_command_line_arguments()
     var i = 0
@@ -36,7 +38,7 @@ def parse_feature_args() : tuple<float; bool> {
 // Uses main-thread mode (strudel_create_channel + strudel_tick) so we stay in
 // one context — memory tracking sees everything.
 // Optional setup block runs after channel creation (for loading samples, etc.).
-def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $() {}) {
+def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $ {}) {
     let args = parse_feature_args()
     let duration = args._0
     let track_memory = args._1
@@ -47,17 +49,25 @@ def play_feature_cps(var pat : Pattern; cps : double = 0.5lf; setup : block = $(
         invoke(setup)
         strudel_add_track(pat)
         strudel_reset_memory_baseline()  // baseline after all setup; shutdown frees before measuring
+        if (track_memory) {
+            to_log(0, "=== HEAP BEFORE PLAYBACK ===\n")
+            heap_report()
+        }
         let t0 = ref_time_ticks()
         while (float(get_time_usec(t0)) / 1000000.0 < duration) {
             strudel_tick()
             sleep(5u)
         }
         strudel_shutdown()
+        if (track_memory) {
+            to_log(0, "=== HEAP AFTER SHUTDOWN ===\n")
+            heap_report()
+        }
     }
 }
 
 // Same as play_feature_cps but takes BPM (converts to cps = bpm / 60 / 2).
-def play_feature(var pat : Pattern; bpm : double = 120.0lf; setup : block = $() {}) {
+def play_feature(var pat : Pattern; bpm : double = 120.0lf; setup : block = $ {}) {
     play_feature_cps(pat, bpm / 120.0lf, setup)
 }
 
