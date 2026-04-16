@@ -75,6 +75,10 @@ var private g_mem_heap_max : uint64 = 0ul
 var private g_mem_str_max : uint64 = 0ul
 var private g_mem_tick_count : int = 0  // for periodic logging in main-thread mode
 
+// --- Tick timing ---
+var private g_tick_total_time : double = 0.lf   // total tick time in ms
+var private g_tick_total_samples : uint64 = 0ul // total samples rendered
+
 struct AudioChunk {
     samples : array<float>
 }
@@ -382,6 +386,7 @@ def public strudel_tick() {
             return
         }
     }
+    let t0 = ref_time_ticks()
     let CHUNK_SEC = g_chunk_seconds
     let chunkSamples = int(float(CHUNK_SEC) * float(SAMPLE_RATE)) * 2
     // prepare master output
@@ -448,6 +453,9 @@ def public strudel_tick() {
     g_wall_samples += int64(chunkFrames)
     g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
     ma_volume_mixer_uninit(unsafe(addr(mixer)))
+    // tick timing
+    g_tick_total_time += double(get_time_usec(t0)) / 1000.lf
+    g_tick_total_samples += uint64(chunkSamples / 2)
     // memory tracking
     let mem_heap_cur = heap_bytes_allocated()
     let mem_str_cur = string_heap_bytes_allocated()
@@ -692,6 +700,15 @@ def public strudel_shutdown() {
     delete g_track_pcm
     delete g_master_pcm
     g_sid = 0ul
+    // utilization stats
+    if (g_tick_total_samples > 0ul) {
+        let SPEED = g_tick_total_time / double(g_tick_total_samples)
+        let SPEED_OF_LIGHT = 1000.lf / 48000.lf
+        let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
+        to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+    }
+    g_tick_total_time = 0.lf
+    g_tick_total_samples = 0ul
     // memory stats (main-thread mode)
     if (g_mem_heap_baseline > 0ul) {
         let mem_heap_now = heap_bytes_allocated()

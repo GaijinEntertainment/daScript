@@ -69,16 +69,50 @@ def gm_preset(program : int) : GmPreset {
 def render_drum_hit(note : int; velocity : float) : array<float> {
     let gain = velocity
     if (note == 35 || note == 36) {
-        return <- render_bd(0.2, gain)
+        return <- render_bd(0.5, gain)
+    } elif (note == 37) {
+        return <- render_rimshot(0.15, gain)
     } elif (note == 38 || note == 40) {
-        return <- render_sd(0.15, gain)
-    } elif (note == 42 || note == 44 || note == 46) {
-        return <- render_hh(0.05, gain)
-    } elif (note == 39 || note == 49 || note == 51 || note == 52 || note == 57) {
-        return <- render_cp(0.1, gain)
+        return <- render_sd(0.5, gain)
+    } elif (note == 39) {
+        return <- render_cp(0.5, gain)
+    } elif (note == 41) {
+        return <- render_tom(0.5, gain, 80.0)      // low floor tom
+    } elif (note == 42) {
+        return <- render_hh(0.5, gain)              // closed hh
+    } elif (note == 43) {
+        return <- render_tom(0.45, gain, 100.0)     // high floor tom
+    } elif (note == 44) {
+        return <- render_hh(0.3, gain)              // pedal hh
+    } elif (note == 45) {
+        return <- render_tom(0.4, gain, 135.0)      // low tom
+    } elif (note == 46) {
+        return <- render_oh(0.6, gain)              // open hh
+    } elif (note == 47) {
+        return <- render_tom(0.35, gain, 155.0)     // low-mid tom
+    } elif (note == 48) {
+        return <- render_tom(0.35, gain, 175.0)     // hi-mid tom
+    } elif (note == 49) {
+        return <- render_crash(1.5, gain)           // crash 1
+    } elif (note == 50) {
+        return <- render_tom(0.3, gain, 200.0)      // high tom
+    } elif (note == 51) {
+        return <- render_ride(1.5, gain)            // ride 1
+    } elif (note == 52) {
+        return <- render_crash(1.2, gain)           // chinese cymbal
+    } elif (note == 53) {
+        return <- render_ride(1.0, gain * 0.8)      // ride bell
+    } elif (note == 54) {
+        return <- render_tambourine(0.4, gain)
+    } elif (note == 55) {
+        return <- render_crash(0.8, gain)           // splash
+    } elif (note == 56) {
+        return <- render_cowbell(0.25, gain)
+    } elif (note == 57) {
+        return <- render_crash(1.5, gain)           // crash 2
     }
     // fallback: short noise burst
-    return <- render_hh(0.04, gain * 0.5)
+    return <- render_hh(0.1, gain * 0.5)
 }
 
 // ─── GM Drum Note → Sample Bank Name ───
@@ -87,14 +121,17 @@ def gm_drum_name(note : int) : string {
     if (note == 35 || note == 36) { return "bd"; }
     if (note == 37) { return "sidestick"; }
     if (note == 38 || note == 40) { return "sd"; }
+    if (note == 39) { return "cp"; }
+    if (note == 41 || note == 43) { return "tom_low"; }
     if (note == 42) { return "hh"; }
     if (note == 44) { return "hh_pedal"; }
+    if (note == 45 || note == 47 || note == 48 || note == 50) { return "tom_high"; }
     if (note == 46) { return "hh_open"; }
-    if (note == 43) { return "tom_low"; }
-    if (note == 45 || note == 47) { return "tom_high"; }
-    if (note == 49 || note == 52 || note == 55 || note == 57) { return "cp"; }
+    if (note == 49 || note == 52 || note == 55 || note == 57) { return "crash"; }
     if (note == 51) { return "ride"; }
     if (note == 53) { return "ride_bell"; }
+    if (note == 54) { return "tambourine"; }
+    if (note == 56) { return "cowbell"; }
     return ""
 }
 
@@ -244,7 +281,7 @@ struct SF2VoiceMeta {
 }
 
 var private g_sf2_meta : array<SF2VoiceMeta>  // parallel to state.csf2_voices
-var private g_reverb : I3DL2Reverb?
+var private g_reverb : ConvolutionReverb?
 var private g_reverb_send_buf : array<float>  // interleaved stereo reverb send bus
 var private g_reverb_out_buf : array<float>   // reverb output
 var private g_chorus : ma_chorus?
@@ -667,7 +704,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             g_reverb_out_buf[s] = 0.0
         }
         unsafe {
-            process_stereo(g_reverb, addr(g_reverb_send_buf[0]), addr(g_reverb_out_buf[0]), chunkFrames)
+            conv_reverb_process(g_reverb, addr(g_reverb_send_buf[0]), addr(g_reverb_out_buf[0]), chunkFrames)
         }
         for (s in range(buf_samples)) {
             output[s] += g_reverb_out_buf[s]
@@ -755,11 +792,9 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     var status_box <- unsafe(lock_box_create())
     set_status_update(sid, status_box)
     var pcm_box <- unsafe(lock_box_create())
-    // initialize reverb
-    g_reverb = new I3DL2Reverb
-    set_sample_rate(g_reverb, float(SAMPLE_RATE))
-    let reverb_props = get_preset(I3DL2Preset.ConcertHall)
-    set_properties(g_reverb, reverb_props)
+    // initialize reverb (convolution: 2s decay, 15kHz→1kHz lowpass sweep)
+    g_reverb = new ConvolutionReverb
+    conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)
     // initialize chorus
     g_chorus = new ma_chorus
     chorus_init(g_chorus, float(SAMPLE_RATE))
@@ -923,6 +958,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     cmd_channel |> release()
     unsafe {
         if (g_reverb != null) {
+            conv_reverb_uninit(g_reverb)
             delete g_reverb
         }
         if (g_chorus != null) {
@@ -1093,10 +1129,8 @@ def public midi_is_playing() : bool {
 // Initialize reverb + chorus for offline rendering (midi_tick without midi_init/thread).
 def public midi_init_reverb() {
     if (g_reverb == null) {
-        g_reverb = new I3DL2Reverb
-        set_sample_rate(g_reverb, float(SAMPLE_RATE))
-        let props = get_preset(I3DL2Preset.ConcertHall)
-        set_properties(g_reverb, props)
+        g_reverb = new ConvolutionReverb
+        conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)
     }
     if (g_chorus == null) {
         g_chorus = new ma_chorus
