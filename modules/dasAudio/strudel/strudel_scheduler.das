@@ -21,9 +21,10 @@ struct Voice {
     cut : int = 0            // cut group (0 = no cut)
     gain : float = 0.8       // volume for this voice
     pan : float = 0.0        // pan for this voice (-1=left, 0=center, 1=right)
-    reverb_send : float = 0.0 // reverb send amount from Event.room (0.0–1.0)
-    delay_send : float = 0.0  // delay send amount from Event.delay_amount (0.0–1.0)
-    orbit : int = 0           // effect bus routing
+    reverb_send : float = 0.0  // reverb send amount from Event.room (0.0–1.0)
+    chorus_send : float = 0.0  // chorus send amount from Event.chorus (0.0–1.0)
+    delay_send : float = 0.0   // delay send amount from Event.delay_amount (0.0–1.0)
+    orbit : int = 0            // effect bus routing
 }
 
 // Per-voice metadata for SF2 voices (not stored in the C ma_sf2_voice struct).
@@ -149,7 +150,7 @@ def init_reverb(var sched : Scheduler) {
     init_orbit_reverb(*sched.orbit_buses[0])
 }
 
-// Initialize chorus on the scheduler (SF2-only, not orbit-routed).
+// Initialize chorus on the scheduler (not orbit-routed).
 def init_chorus(var sched : Scheduler) {
     if (sched.chorus == null) {
         sched.chorus = new ma_chorus
@@ -183,6 +184,9 @@ def private setup_orbit_for_event(var sched : Scheduler; event : Event) {
             update_orbit_delay_params(*bus, event.delaytime, event.delayfeedback)
         }
     }
+    if (event.chorus > 0.0) {
+        init_chorus(sched)
+    }
 }
 
 // Spawn SF2 voices for an event onset.
@@ -193,8 +197,9 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
     if (preset_idx < 0) {
         return
     }
-    let zones = sf2_find_zones(*sched.sf2, preset_idx, note, velocity)
+    var zones <- sf2_find_zones(*sched.sf2, preset_idx, note, velocity)
     if (length(zones) == 0) {
+        delete zones
         return
     }
     let preset = sched.sf2.presets[preset_idx]
@@ -204,6 +209,10 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
     var atten_state = SF2VoiceAttenState()
     var cc_defaults : int[128]
     sf2_default_cc_values(cc_defaults)
+    // per-event CC overrides from pattern combinators
+    if (event.sf2_expression >= 0.0) { cc_defaults[11] = clamp(int(event.sf2_expression * 127.0), 0, 127); }
+    if (event.sf2_mod_wheel >= 0.0)  { cc_defaults[1]  = clamp(int(event.sf2_mod_wheel * 127.0), 0, 127); }
+    if (event.sf2_pitch_bend >= 0.0) { cc_defaults[127] = clamp(int(event.sf2_pitch_bend * 16383.0), 0, 16383); }
     for (z in zones) {
         var pzone : SF2Zone const?
         for (pz in preset.zones) {
@@ -215,6 +224,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
         }
         let excl = sf2_get_exclusive_class(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
         var voice : ma_sf2_voice
+        delete atten_state.atten_mods  // free previous iteration's mods (<- is memcpy+memzero, not finalize)
         if (sf2_create_c_voice(*sched.sf2, z.x, z.y, pzone, preset.global_zone, note, velocity, 0, cc_defaults, voice, atten_state)) {
             // exclusive class: quick-kill existing SF2 voices with same class
             if (excl > 0) {
@@ -233,7 +243,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
                 }
             }
             let rsend = sf2_get_reverb_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
-            let csend = sf2_get_chorus_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
+            let csend = max(sf2_get_chorus_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone), event.chorus)
             sched.sf2_voices |> push(voice)
             sched.sf2_meta |> push(StrudelSF2Meta(
                 note = note,
@@ -248,6 +258,8 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
             ))
         }
     }
+    delete atten_state.atten_mods
+    delete zones
 }
 
 // Get the reverb send buffer for a given orbit. Returns empty array ref if no reverb on that orbit.
@@ -273,18 +285,6 @@ def private get_orbit_delay_send(var sched : Scheduler; orbit : int) : array<flo
 def private sf2_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
     if (length(sched.sf2_voices) == 0 || sched.sf2 == null) {
         return
-    }
-    let buf_samples = chunkFrames * 2
-    // prepare chorus send bus (SF2-only, self-contained)
-    var has_chorus_send = false
-    if (sched.chorus != null) {
-        if (length(sched.chorus_send_buf) < buf_samples) {
-            sched.chorus_send_buf |> resize(buf_samples)
-            sched.chorus_out_buf |> resize(buf_samples)
-        }
-        for (s in range(buf_samples)) {
-            sched.chorus_send_buf[s] = 0.0
-        }
     }
     var si = length(sched.sf2_voices) - 1
     while (si >= 0) {
@@ -372,7 +372,6 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
                             )
                         }
                     }
-                    if (chorus_send > 0.001) { has_chorus_send = true; }
                 } else {
                     unsafe {
                         ma_sf2_voice_render(
@@ -404,22 +403,11 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
         }
         si --
     }
-    // process chorus send bus and mix into output (SF2-only)
-    if (has_chorus_send && sched.chorus != null) {
-        for (s in range(buf_samples)) {
-            sched.chorus_out_buf[s] = 0.0
-        }
-        unsafe {
-            chorus_process(sched.chorus, addr(sched.chorus_send_buf[0]), addr(sched.chorus_out_buf[0]), chunkFrames)
-        }
-        for (s in range(buf_samples)) {
-            output[s] += sched.chorus_out_buf[s]
-        }
-    }
 }
 
 // Render all active streaming oscillator voices into the output buffer.
 // Sends accumulate into per-orbit bus buffers based on each voice's orbit.
+// Chorus send accumulates into the scheduler-level chorus_send_buf.
 def private osc_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
     var i = length(sched.osc_voices) - 1
     while (i >= 0) {
@@ -432,19 +420,19 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
         if (sched.osc_voices[i].delay_send > 0.0) {
             delay_buf = get_orbit_delay_send(sched, orb)
         }
-        // osc_render_chunk needs non-null array refs — use empty statics if no bus
+        // osc_render_chunk needs non-null array refs — use empty locals if no bus
         if (reverb_buf != null && delay_buf != null) {
-            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, *delay_buf, chunkFrames)
+            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, *delay_buf, sched.chorus_send_buf, chunkFrames)
         } elif (reverb_buf != null) {
             var empty : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, empty, chunkFrames)
+            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, empty, sched.chorus_send_buf, chunkFrames)
         } elif (delay_buf != null) {
             var empty : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, empty, *delay_buf, chunkFrames)
+            osc_render_chunk(sched.osc_voices[i], output, empty, *delay_buf, sched.chorus_send_buf, chunkFrames)
         } else {
             var empty1 : array<float>
             var empty2 : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, empty1, empty2, chunkFrames)
+            osc_render_chunk(sched.osc_voices[i], output, empty1, empty2, sched.chorus_send_buf, chunkFrames)
         }
         if (sched.osc_voices[i].finished) {
             sched.osc_voices |> erase(i)
@@ -476,6 +464,16 @@ def private prepare_orbit_buses(var sched : Scheduler; chunkSamples : int) {
             for (s in range(chunkSamples)) {
                 bus.delay_send_buf[s] = 0.0
             }
+        }
+    }
+    // chorus is scheduler-level (not per-orbit)
+    if (sched.chorus != null) {
+        if (length(sched.chorus_send_buf) < chunkSamples) {
+            sched.chorus_send_buf |> resize(chunkSamples)
+            sched.chorus_out_buf |> resize(chunkSamples)
+        }
+        for (s in range(chunkSamples)) {
+            sched.chorus_send_buf[s] = 0.0
         }
     }
 }
@@ -511,6 +509,34 @@ def private process_orbit_buses(var sched : Scheduler; var output : array<float>
                 output[s] += bus.delay_out_buf[s]
             }
         }
+    }
+}
+
+// Process chorus send bus and mix into output (all voice types).
+def private process_chorus(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
+    if (sched.chorus == null) {
+        return
+    }
+    let buf_samples = chunkFrames * 2
+    // check if anything was sent to chorus
+    var has_send = false
+    for (s in range(buf_samples)) {
+        if (abs(sched.chorus_send_buf[s]) > 0.00001) {
+            has_send = true
+            break
+        }
+    }
+    if (!has_send) {
+        return
+    }
+    for (s in range(buf_samples)) {
+        sched.chorus_out_buf[s] = 0.0
+    }
+    unsafe {
+        chorus_process(sched.chorus, addr(sched.chorus_send_buf[0]), addr(sched.chorus_out_buf[0]), chunkFrames)
+    }
+    for (s in range(buf_samples)) {
+        output[s] += sched.chorus_out_buf[s]
     }
 }
 
@@ -578,6 +604,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                         fm_depth = h.value.fm,
                         fm_harmonicity = h.value.fmh,
                         reverb_send = h.value.room,
+                        chorus_send = h.value.chorus,
                         delay_send = h.value.delay_amount,
                         orbit = h.value.orbit
                     )
@@ -600,6 +627,7 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                         gain = h.value.gain * h.value.velocity,
                         pan = h.value.pan * 2.0 - 1.0,
                         reverb_send = h.value.room,
+                        chorus_send = h.value.chorus,
                         delay_send = h.value.delay_amount,
                         orbit = h.value.orbit
                     ))
@@ -677,6 +705,20 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     (*delay_buf)[di + 1] += voice.samples[si + 1] * dR
                 }
             }
+            // chorus send for pre-rendered voices
+            if (voice.chorus_send > 0.0 && sched.chorus != null && length(sched.chorus_send_buf) >= chunkSamples) {
+                let pan = clamp(voice.pan, -1.0, 1.0)
+                let angle = (pan + 1.0) * 0.25 * float(TWO_PI / 2.0)
+                let cL = voice.gain * voice.chorus_send * cos(angle)
+                let cR = voice.gain * voice.chorus_send * sin(angle)
+                let nf = count / 2
+                for (f in range(nf)) {
+                    let si = srcStart + f * 2
+                    let di = dstStart + f * 2
+                    sched.chorus_send_buf[di]     += voice.samples[si]     * cL
+                    sched.chorus_send_buf[di + 1] += voice.samples[si + 1] * cR
+                }
+            }
         }
         voice.position += chunkSamples
         if (voice.position >= voiceLen) {
@@ -696,6 +738,9 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
 
     // process all orbit bus effects and mix into output
     process_orbit_buses(sched, sched.output, chunkFrames)
+
+    // process chorus send bus and mix into output (all voice types)
+    process_chorus(sched, sched.output, chunkFrames)
 
     // output stays in sched.output — caller reads it directly
 }

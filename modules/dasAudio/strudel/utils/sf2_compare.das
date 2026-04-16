@@ -157,8 +157,9 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
         return
     }
 
-    let zones = sf2_find_zones(sf2, preset_idx, key, velocity)
+    var zones <- sf2_find_zones(sf2, preset_idx, key, velocity)
     if (length(zones) == 0) {
+        delete zones
         return
     }
 
@@ -215,6 +216,7 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
         }
         frame += frames
     }
+    delete zones
 }
 
 // ─── Output ───

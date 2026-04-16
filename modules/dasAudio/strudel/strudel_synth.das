@@ -733,6 +733,8 @@ struct OscVoice {
     white_seed : uint = 12345u
     // reverb send
     reverb_send : float = 0.0   // reverb send amount from Event.room (0.0–1.0)
+    // chorus send
+    chorus_send : float = 0.0   // chorus send amount from Event.chorus (0.0–1.0)
     // delay send
     delay_send : float = 0.0    // delay send amount from Event.delay_amount (0.0–1.0)
     // orbit
@@ -769,7 +771,7 @@ def osc_voice_init_filters(var voice : OscVoice; lpf, hpf, lpq, hpq : float) {
 // Common invariants are hoisted; FM, filter, and send checks remain
 // (they're simple booleans — acceptable for the interpreter).
 
-def private osc_chunk_sine(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
+def private osc_chunk_sine(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -790,12 +792,13 @@ def private osc_chunk_sine(var voice : OscVoice; var output : array<float>; var 
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.phase += phaseInc; voice.phase -= floor(voice.phase)
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_sawtooth(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
+def private osc_chunk_sawtooth(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -818,12 +821,13 @@ def private osc_chunk_sawtooth(var voice : OscVoice; var output : array<float>; 
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.phase += phaseInc; voice.phase -= floor(voice.phase)
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_square(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
+def private osc_chunk_square(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -846,12 +850,13 @@ def private osc_chunk_square(var voice : OscVoice; var output : array<float>; va
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.phase += phaseInc; voice.phase -= floor(voice.phase)
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_triangle(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
+def private osc_chunk_triangle(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -874,12 +879,13 @@ def private osc_chunk_triangle(var voice : OscVoice; var output : array<float>; 
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.phase += phaseInc; voice.phase -= floor(voice.phase)
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_supersaw(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
+def private osc_chunk_supersaw(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm : bool; fmScale, fmModPhaseInc : float) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     let gainAdj = 1.0 / sqrt(float(SUPERSAW_VOICES))
@@ -930,12 +936,13 @@ def private osc_chunk_supersaw(var voice : OscVoice; var output : array<float>; 
         output[f * 2 + 1] += sampleR * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sampleL * sendL; reverb_send_buf[f * 2 + 1] += sampleR * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sampleL * delaySendL; delay_send_buf[f * 2 + 1] += sampleR * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sampleL * chorusSendL; chorus_send_buf[f * 2 + 1] += sampleR * chorusSendR; }
         voice.phase += phaseInc; voice.phase -= floor(voice.phase)
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_pink_noise(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel : bool) {
+def private osc_chunk_pink_noise(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel : bool) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -950,11 +957,12 @@ def private osc_chunk_pink_noise(var voice : OscVoice; var output : array<float>
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.samples_elapsed ++
     }
 }
 
-def private osc_chunk_white_noise(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; startFrame, chunkFrames : int; iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR : float; hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel : bool) {
+def private osc_chunk_white_noise(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; startFrame, chunkFrames : int; iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR : float; hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel : bool) {
     let att = voice.attack; let dec = voice.decay; let sus = voice.sustain
     let rel = voice.release_sec; let dur = voice.duration
     for (f in range(startFrame, chunkFrames)) {
@@ -969,13 +977,14 @@ def private osc_chunk_white_noise(var voice : OscVoice; var output : array<float
         output[f * 2 + 1] += sample * rGain
         if (hasSend) { reverb_send_buf[f * 2] += sample * sendL; reverb_send_buf[f * 2 + 1] += sample * sendR; }
         if (hasDelaySend) { delay_send_buf[f * 2] += sample * delaySendL; delay_send_buf[f * 2 + 1] += sample * delaySendR; }
+        if (hasChorusSend) { chorus_send_buf[f * 2] += sample * chorusSendL; chorus_send_buf[f * 2 + 1] += sample * chorusSendR; }
         voice.samples_elapsed ++
     }
 }
 
 // Render one chunk of an oscillator voice directly into the output buffer (additive).
 // Dispatches to per-type loop with invariants hoisted out.
-def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; chunkFrames : int) {
+def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; chunkFrames : int) {
     // consume sub-chunk onset offset
     if (voice.offset_frames >= chunkFrames) {
         voice.offset_frames -= chunkFrames
@@ -997,6 +1006,9 @@ def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb
     let hasDelaySend = voice.delay_send > 0.0 && length(delay_send_buf) >= chunkFrames * 2
     let delaySendL = lGain * voice.delay_send
     let delaySendR = rGain * voice.delay_send
+    let hasChorusSend = voice.chorus_send > 0.0 && length(chorus_send_buf) >= chunkFrames * 2
+    let chorusSendL = lGain * voice.chorus_send
+    let chorusSendR = rGain * voice.chorus_send
     let hasLpf = voice.lpf_biquad.active != 0
     let hasHpf = voice.hpf_biquad.active != 0
     let hasVowel = voice.vowel_filter.active
@@ -1004,19 +1016,19 @@ def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb
     let fmScale = voice.fm_depth / tp
     let fmModPhaseInc = voice.freq * voice.fm_harmonicity * iSr
     if (voice.osc_type == OscType.osc_sine) {
-        osc_chunk_sine(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
+        osc_chunk_sine(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
     } elif (voice.osc_type == OscType.osc_sawtooth) {
-        osc_chunk_sawtooth(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
+        osc_chunk_sawtooth(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
     } elif (voice.osc_type == OscType.osc_square) {
-        osc_chunk_square(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
+        osc_chunk_square(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
     } elif (voice.osc_type == OscType.osc_triangle) {
-        osc_chunk_triangle(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
+        osc_chunk_triangle(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
     } elif (voice.osc_type == OscType.osc_supersaw) {
-        osc_chunk_supersaw(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
+        osc_chunk_supersaw(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, phaseInc, tp, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel, hasFm, fmScale, fmModPhaseInc)
     } elif (voice.osc_type == OscType.osc_pink_noise) {
-        osc_chunk_pink_noise(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel)
+        osc_chunk_pink_noise(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel)
     } elif (voice.osc_type == OscType.osc_white_noise) {
-        osc_chunk_white_noise(voice, output, reverb_send_buf, delay_send_buf, startFrame, chunkFrames, iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, hasSend, hasDelaySend, hasLpf, hasHpf, hasVowel)
+        osc_chunk_white_noise(voice, output, reverb_send_buf, delay_send_buf, chorus_send_buf, startFrame, chunkFrames, iSr, lGain, rGain, sendL, sendR, delaySendL, delaySendR, chorusSendL, chorusSendR, hasSend, hasDelaySend, hasChorusSend, hasLpf, hasHpf, hasVowel)
     }
 }
 

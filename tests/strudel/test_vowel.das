@@ -292,7 +292,8 @@ def test_osc_voice_vowel_renders(t : T?) {
     output |> resize(chunkFrames * 2)
     var reverb_buf : array<float>
     var delay_buf : array<float>
-    osc_render_chunk(voice, output, reverb_buf, delay_buf, chunkFrames)
+    var chorus_buf : array<float>
+    osc_render_chunk(voice, output, reverb_buf, delay_buf, chorus_buf, chunkFrames)
     var maxAbs = 0.0
     for (sv in output) {
         maxAbs = max(maxAbs, abs(sv))
@@ -309,6 +310,7 @@ def test_osc_voice_vowel_vs_no_vowel(t : T?) {
     output_vowel |> resize(chunkFrames * 2)
     var reverb_buf : array<float>
     var delay_buf : array<float>
+    var chorus_buf : array<float>
     var voice_plain = OscVoice(
         osc_type = OscType.osc_sawtooth,
         freq = 220.0,
@@ -316,7 +318,7 @@ def test_osc_voice_vowel_vs_no_vowel(t : T?) {
         gain = 0.8,
         pan = 0.0
     )
-    osc_render_chunk(voice_plain, output_plain, reverb_buf, delay_buf, chunkFrames)
+    osc_render_chunk(voice_plain, output_plain, reverb_buf, delay_buf, chorus_buf, chunkFrames)
     var voice_vowel = OscVoice(
         osc_type = OscType.osc_sawtooth,
         freq = 220.0,
@@ -325,7 +327,7 @@ def test_osc_voice_vowel_vs_no_vowel(t : T?) {
         pan = 0.0
     )
     vowel_filter_init(voice_vowel.vowel_filter, "a")
-    osc_render_chunk(voice_vowel, output_vowel, reverb_buf, delay_buf, chunkFrames)
+    osc_render_chunk(voice_vowel, output_vowel, reverb_buf, delay_buf, chorus_buf, chunkFrames)
     var diff_energy = 0.0
     for (i in range(chunkFrames * 2)) {
         let d = output_vowel[i] - output_plain[i]
