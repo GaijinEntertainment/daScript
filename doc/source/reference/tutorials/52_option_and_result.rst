@@ -325,4 +325,6 @@ Result<T, E>
 
     Previous tutorial: :ref:`tutorial_delegate`
 
+    Next tutorial: :ref:`tutorial_clargs`
+
     :ref:`tutorial_error_handling`, :ref:`tutorial_generics`, :ref:`tutorial_pattern_matching`
