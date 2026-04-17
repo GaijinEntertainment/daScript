@@ -339,13 +339,16 @@ int das_aot_main ( int argc, char * argv[] ) {
     return compiled ? 0 : -1;
 }
 
-bool compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, bool compileOnly, const char * introFile = nullptr ) {
+// returns process exit code:
+//   0 on success
+//   non-zero from int main, or 1 on compile/simulate/verify/exception failure
+int compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, bool compileOnly, const char * introFile = nullptr ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
         access->setFileInfo("____intro____", das::move(fileInfo));
     }
-    bool success = false;
+    int exitCode = 1;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
     if ( debuggerRequired ) {
@@ -395,7 +398,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
             if ( outputProgramCode )
                 tout << *program << "\n";
             if ( compileOnly )
-                return true;
+                return 0;
 
             auto pctx = SimulateWithErrReport(program, tout);
             // Check for compiler leaks (TypeDecl nodes left on thread root after compile+simulate)
@@ -407,17 +410,19 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
                 }
             }
             if ( !pctx ) {
-                success = false;
+                exitCode = 1;
             } else if ( program->thisModule->isModule ) {
                 tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else if ( dryRun ) {
-                success = true;
+                exitCode = 0;
                 tout << "dry run: " << fn << "\n";
             } else {
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
                 das::vector<SimFunction *> fnMVec;
                 for ( auto fnAS : fnVec ) {
-                    if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
+                    if ( verifyCall<void>(fnAS->debugInfo, dummyGroup)
+                      || verifyCall<bool>(fnAS->debugInfo, dummyGroup)
+                      || verifyCall<int32_t>(fnAS->debugInfo, dummyGroup) ) {
                         fnMVec.push_back(fnAS);
                     }
                 }
@@ -429,17 +434,25 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
                         tout << "\t" << fnAS->mangledName << "\n";
                     }
                 } else {
-                    success = true;
+                    exitCode = 0;
                     auto fnTest = fnMVec.back();
                     pctx->restart();
+                    vec4f res;
                     if ( debuggerRequired ) {
-                        pctx->eval(fnTest, nullptr);
+                        res = pctx->eval(fnTest, nullptr);
                     } else {
-                        pctx->evalWithCatch(fnTest, nullptr);
+                        res = pctx->evalWithCatch(fnTest, nullptr);
                     }
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
-                        success = false;
+                        exitCode = 1;
+                    } else if ( fnTest->debugInfo && fnTest->debugInfo->result ) {
+                        auto resType = fnTest->debugInfo->result->type;
+                        if ( resType == Type::tInt ) {
+                            exitCode = cast<int32_t>::to(res);
+                        } else if ( resType == Type::tBool ) {
+                            exitCode = cast<bool>::to(res) ? 0 : -1;
+                        }
                     }
                     // Check for app leaks (TypeDecl nodes created during execution)
                     {
@@ -453,7 +466,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
             }
         }
     }
-    return success;
+    return exitCode;
 }
 
 // Deduces project_root for dyn modules.
@@ -788,7 +801,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return format::run(formatter.value(), files);
     }
     // compile and run
-    int failedFiles = 0;
+    int exitCode = 0;
     if (!aotResult.empty() && files.size() > 1) {
         printf("Aotting more than 1 file is not supported yet.\n");
         return -1;
@@ -796,8 +809,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
 
     for ( auto & fn : files ) {
         replace(fn, "_dasroot_", getDasRoot());
-        if (!compile_and_run(fn, mainName, outputProgramCode, dryRun, compileOnly)) {
-            failedFiles++;
+        int rc = compile_and_run(fn, mainName, outputProgramCode, dryRun, compileOnly);
+        if ( rc != 0 ) {
+            exitCode = rc;
         }
     }
     // and done
@@ -810,7 +824,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         ptr_ref_count::DumpTrackPtr();
         exit(1);
     }
-    return failedFiles;
+    return exitCode;
 }
 
 #if defined(_WIN32)
