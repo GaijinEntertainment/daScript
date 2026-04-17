@@ -1,0 +1,1 @@
+Opens the file at ``name`` with the given ``mode`` (e.g. ``"r"``, ``"w"``, ``"rb"``, ``"a+"``) and returns a file handle, or ``null`` if the file cannot be opened. Throws if ``name`` is null or if ``mode`` is not a valid fopen mode string (first char must be ``r``/``w``/``a``; remaining chars limited to ``+``/``b``/``t``/``x``).
