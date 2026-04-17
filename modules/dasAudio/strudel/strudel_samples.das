@@ -149,8 +149,10 @@ def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank)
 }
 
 // Render a sample with speed control via miniaudio resampler + channel converter.
+// begin/end_pos are normalized slice bounds (0.0–1.0) — striate, chop, loop_at use these.
 // Returns interleaved stereo, no gain/pan applied.
-def render_sample(bank : SampleBank; name : string; variation : int; speed : float) : array<float> {
+def render_sample(bank : SampleBank; name : string; variation : int; speed : float;
+                  begin : float = 0.0; end_pos : float = 1.0) : array<float> {
     var stereo : array<float>
     bank.sounds |> get(name) $(variations) {
         if (length(variations) == 0) {
@@ -161,6 +163,15 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
         let srcLen = length(variations[idx].data)
         let srcFrames = srcLen / int(srcChannels)
         if (srcFrames == 0) {
+            return
+        }
+        // clamp begin/end to [0,1], compute slice frame range
+        let b = clamp(begin, 0.0, 1.0)
+        let e = clamp(end_pos, 0.0, 1.0)
+        let sliceStart = int(b * float(srcFrames))
+        let sliceStop = min(srcFrames, max(sliceStart + 1, int(e * float(srcFrames))))
+        let sliceFrames = sliceStop - sliceStart
+        if (sliceFrames <= 0) {
             return
         }
         // resample: source rate * speed → target rate (MA_SAMPLE_RATE)
@@ -175,14 +186,14 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
             ma_resample_algorithm.ma_resample_algorithm_linear
         )
         ma_resampler_init(unsafe(addr(resampler_config)), unsafe(addr(resampler)))
-        var outFrames = uint64(ma_resampler_get_expected_output_frame_count(unsafe(addr(resampler)), uint64(srcFrames)))
+        var outFrames = uint64(ma_resampler_get_expected_output_frame_count(unsafe(addr(resampler)), uint64(sliceFrames)))
         var resampled : array<float>
         resampled |> resize(int(outFrames) * int(srcChannels))
-        var inFrames = uint64(srcFrames)
+        var inFrames = uint64(sliceFrames)
         unsafe {
             ma_resampler_process_pcm_frames(
                 addr(resampler),
-                addr(variations[idx].data[0]),
+                addr(variations[idx].data[sliceStart * int(srcChannels)]),
                 addr(inFrames),
                 addr(resampled[0]),
                 addr(outFrames)

@@ -18,6 +18,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- s("square") |> set_note(48.0) |> set_attack(0.01) |> set_decay(0.15) |> set_sustain(0.6) |> set_release(0.2) |> set_lpf(1500.0)
+    let pat <- s("square") |> note(48.0) |> attack(0.01) |> decay(0.15) |> sustain(0.6) |> release(0.2) |> lpf(1500.0)
     play_feature_cps(pat, 0.5lf)
 }

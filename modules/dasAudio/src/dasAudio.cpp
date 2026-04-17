@@ -43,6 +43,18 @@
 #define CONVOLUTION_REVERB_IMPLEMENTATION
 #include "convolution_reverb.h"
 
+#define MA_EFFECTS_IMPLEMENTATION
+#include "effects.h"
+
+#define MA_PHASER_IMPLEMENTATION
+#include "phaser.h"
+
+#define MA_TREMOLO_IMPLEMENTATION
+#include "tremolo.h"
+
+#define MA_COMPRESSOR_IMPLEMENTATION
+#include "compressor.h"
+
 #include "dasAudio.h"
 
 #ifndef HRTF_SAMPLE_RATE
@@ -79,6 +91,15 @@ MAKE_TYPE_FACTORY(ma_chorus_config,ma_chorus_config);
 MAKE_TYPE_FACTORY(ma_chorus,ma_chorus);
 
 MAKE_TYPE_FACTORY(ma_delay,ma_delay);
+
+MAKE_TYPE_FACTORY(ma_bitcrush,ma_bitcrush);
+MAKE_TYPE_FACTORY(ma_waveshaper,ma_waveshaper);
+MAKE_TYPE_FACTORY(ma_djfilter,ma_djfilter);
+MAKE_TYPE_FACTORY(ma_bandpass,ma_bandpass);
+
+MAKE_TYPE_FACTORY(ma_phaser,ma_phaser);
+MAKE_TYPE_FACTORY(ma_tremolo,ma_tremolo);
+MAKE_TYPE_FACTORY(ma_compressor,ma_compressor);
 
 DAS_BASE_BIND_ENUM ( ma_format, ma_format, \
     ma_format_unknown, \
@@ -570,6 +591,141 @@ ma_chorus_config dasAudio_chorusConfigDefault ( ) {
     return ma_chorus_config_default();
 }
 
+// ─── Effects (bitcrush, waveshaper, djfilter, bandpass) ───
+
+struct MaBitcrushAnnotation : ManagedStructureAnnotation<ma_bitcrush,true,true> {
+    MaBitcrushAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_bitcrush", mlib, "ma_bitcrush") {
+        addField<DAS_BIND_MANAGED_FIELD(bits)>("bits","bits");
+        addField<DAS_BIND_MANAGED_FIELD(coarse)>("coarse","coarse");
+    }
+};
+
+struct MaWaveshaperAnnotation : ManagedStructureAnnotation<ma_waveshaper,true,true> {
+    MaWaveshaperAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_waveshaper", mlib, "ma_waveshaper") {
+        addField<DAS_BIND_MANAGED_FIELD(drive)>("drive","drive");
+    }
+};
+
+struct MaDjfilterAnnotation : ManagedStructureAnnotation<ma_djfilter,true,true> {
+    MaDjfilterAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_djfilter", mlib, "ma_djfilter") {
+        addField<DAS_BIND_MANAGED_FIELD(position)>("position","position");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
+struct MaBandpassAnnotation : ManagedStructureAnnotation<ma_bandpass,true,true> {
+    MaBandpassAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_bandpass", mlib, "ma_bandpass") {
+        addField<DAS_BIND_MANAGED_FIELD(freq)>("freq","freq");
+        addField<DAS_BIND_MANAGED_FIELD(q)>("q","q");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
+void dasAudio_bitcrushInit ( ma_bitcrush * bc, Context * context, LineInfoArg * at ) {
+    if ( !bc ) context->throw_error_at(at,"bitcrush is null");
+    ma_bitcrush_init(bc);
+}
+void dasAudio_bitcrushProcess ( ma_bitcrush * bc, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !bc ) context->throw_error_at(at,"bitcrush is null");
+    ma_bitcrush_process(bc, buf, nFrames);
+}
+
+void dasAudio_waveshaperInit ( ma_waveshaper * ws, Context * context, LineInfoArg * at ) {
+    if ( !ws ) context->throw_error_at(at,"waveshaper is null");
+    ma_waveshaper_init(ws);
+}
+void dasAudio_waveshaperProcess ( ma_waveshaper * ws, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !ws ) context->throw_error_at(at,"waveshaper is null");
+    ma_waveshaper_process(ws, buf, nFrames);
+}
+
+void dasAudio_djfilterInit ( ma_djfilter * dj, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !dj ) context->throw_error_at(at,"djfilter is null");
+    ma_djfilter_init(dj, sample_rate);
+}
+void dasAudio_djfilterProcess ( ma_djfilter * dj, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !dj ) context->throw_error_at(at,"djfilter is null");
+    ma_djfilter_process(dj, buf, nFrames);
+}
+
+void dasAudio_bandpassInit ( ma_bandpass * bp, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !bp ) context->throw_error_at(at,"bandpass is null");
+    ma_bandpass_init(bp, sample_rate);
+}
+void dasAudio_bandpassSetup ( ma_bandpass * bp, float freq, float q, Context * context, LineInfoArg * at ) {
+    if ( !bp ) context->throw_error_at(at,"bandpass is null");
+    ma_bandpass_setup(bp, freq, q);
+}
+void dasAudio_bandpassProcess ( ma_bandpass * bp, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !bp ) context->throw_error_at(at,"bandpass is null");
+    ma_bandpass_process(bp, buf, nFrames);
+}
+
+// ─── Phaser / Tremolo / Compressor ───
+
+struct MaPhaserAnnotation : ManagedStructureAnnotation<ma_phaser,true,true> {
+    MaPhaserAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_phaser", mlib, "ma_phaser") {
+        addField<DAS_BIND_MANAGED_FIELD(rate)>("rate","rate");
+        addField<DAS_BIND_MANAGED_FIELD(depth)>("depth","depth");
+        addField<DAS_BIND_MANAGED_FIELD(center)>("center","center");
+        addField<DAS_BIND_MANAGED_FIELD(sweep)>("sweep","sweep");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
+struct MaTremoloAnnotation : ManagedStructureAnnotation<ma_tremolo,true,true> {
+    MaTremoloAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_tremolo", mlib, "ma_tremolo") {
+        addField<DAS_BIND_MANAGED_FIELD(rate)>("rate","rate");
+        addField<DAS_BIND_MANAGED_FIELD(depth)>("depth","depth");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
+struct MaCompressorAnnotation : ManagedStructureAnnotation<ma_compressor,true,true> {
+    MaCompressorAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_compressor", mlib, "ma_compressor") {
+        addField<DAS_BIND_MANAGED_FIELD(threshold_db)>("threshold_db","threshold_db");
+        addField<DAS_BIND_MANAGED_FIELD(ratio)>("ratio","ratio");
+        addField<DAS_BIND_MANAGED_FIELD(knee_db)>("knee_db","knee_db");
+        addField<DAS_BIND_MANAGED_FIELD(attack)>("attack","attack");
+        addField<DAS_BIND_MANAGED_FIELD(release)>("release","release");
+        addField<DAS_BIND_MANAGED_FIELD(sample_rate)>("sample_rate","sample_rate");
+    }
+};
+
+void dasAudio_phaserInit ( ma_phaser * ph, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !ph ) context->throw_error_at(at,"phaser is null");
+    ma_phaser_init(ph, sample_rate);
+}
+void dasAudio_phaserProcess ( ma_phaser * ph, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !ph ) context->throw_error_at(at,"phaser is null");
+    ma_phaser_process(ph, buf, nFrames);
+}
+
+void dasAudio_tremoloInit ( ma_tremolo * tr, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !tr ) context->throw_error_at(at,"tremolo is null");
+    ma_tremolo_init(tr, sample_rate);
+}
+void dasAudio_tremoloProcess ( ma_tremolo * tr, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !tr ) context->throw_error_at(at,"tremolo is null");
+    ma_tremolo_process(tr, buf, nFrames);
+}
+
+void dasAudio_compressorInit ( ma_compressor * c, float sample_rate, Context * context, LineInfoArg * at ) {
+    if ( !c ) context->throw_error_at(at,"compressor is null");
+    ma_compressor_init(c, sample_rate);
+}
+void dasAudio_compressorProcess ( ma_compressor * c, float * buf, int nFrames, Context * context, LineInfoArg * at ) {
+    if ( !c ) context->throw_error_at(at,"compressor is null");
+    ma_compressor_process(c, buf, nFrames);
+}
+
 struct MAHrtfAnnotation : ManagedStructureAnnotation<ma_hrtf> {
     MAHrtfAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("ma_hrtf", mlib, "ma_hrtf") {
@@ -766,6 +922,45 @@ public:
             SideEffects::modifyArgumentAndExternal, "dasAudio_chorusSetConfig")->args({"chorus", "config", "context", "at"});
         addExtern<DAS_BIND_FUN(dasAudio_chorusConfigDefault),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "chorus_config_default",
             SideEffects::none, "dasAudio_chorusConfigDefault");
+        // effects (bitcrush, waveshaper, djfilter, bandpass)
+        addAnnotation(new MaBitcrushAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_bitcrushInit)>(*this, lib, "bitcrush_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_bitcrushInit")->args({"bc", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_bitcrushProcess)>(*this, lib, "bitcrush_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_bitcrushProcess")->args({"bc", "buf", "nFrames", "context", "at"});
+        addAnnotation(new MaWaveshaperAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_waveshaperInit)>(*this, lib, "waveshaper_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_waveshaperInit")->args({"ws", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_waveshaperProcess)>(*this, lib, "waveshaper_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_waveshaperProcess")->args({"ws", "buf", "nFrames", "context", "at"});
+        addAnnotation(new MaDjfilterAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_djfilterInit)>(*this, lib, "djfilter_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_djfilterInit")->args({"dj", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_djfilterProcess)>(*this, lib, "djfilter_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_djfilterProcess")->args({"dj", "buf", "nFrames", "context", "at"});
+        addAnnotation(new MaBandpassAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_bandpassInit)>(*this, lib, "bandpass_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_bandpassInit")->args({"bp", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_bandpassSetup)>(*this, lib, "bandpass_setup",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_bandpassSetup")->args({"bp", "freq", "q", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_bandpassProcess)>(*this, lib, "bandpass_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_bandpassProcess")->args({"bp", "buf", "nFrames", "context", "at"});
+        // phaser / tremolo / compressor
+        addAnnotation(new MaPhaserAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_phaserInit)>(*this, lib, "phaser_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_phaserInit")->args({"ph", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_phaserProcess)>(*this, lib, "phaser_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_phaserProcess")->args({"ph", "buf", "nFrames", "context", "at"});
+        addAnnotation(new MaTremoloAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_tremoloInit)>(*this, lib, "tremolo_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_tremoloInit")->args({"tr", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_tremoloProcess)>(*this, lib, "tremolo_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_tremoloProcess")->args({"tr", "buf", "nFrames", "context", "at"});
+        addAnnotation(new MaCompressorAnnotation(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_compressorInit)>(*this, lib, "compressor_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_compressorInit")->args({"c", "sample_rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_compressorProcess)>(*this, lib, "compressor_process",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_compressorProcess")->args({"c", "buf", "nFrames", "context", "at"});
         // delay
         addAnnotation(new MaDelayAnnotation(lib));
         addExtern<DAS_BIND_FUN(dasAudio_delayInit)>(*this, lib, "delay_init",

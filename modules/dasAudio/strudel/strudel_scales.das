@@ -49,12 +49,12 @@ def private get_scale_intervals(scale_type : string) : array<int> {
 }
 
 // Parse root note from scale string prefix.
-// Supports: "C", "C4", "Eb", "Eb4", "Fs", "Fs3", etc.
-// Returns MIDI note number. Default octave is 4 if not specified.
+// Supports: "C", "C3", "Eb", "Eb4", "Fs", "Fs3", etc.
+// Returns MIDI note number. Default octave is 3.
 def private parse_scale_root(root_str : string) : int {
     let n = length(root_str)
     if (n == 0) {
-        return 60  // default C4
+        return 48  // default C3
     }
     var semitone = -1
     peek_data(root_str) $(bytes) {
@@ -68,9 +68,9 @@ def private parse_scale_root(root_str : string) : int {
         elif (ch == 'B' || ch == 'b') { semitone = 11; }
     }
     if (semitone < 0) {
-        return 60  // fallback C4
+        return 48  // fallback C3
     }
-    var octave = 4  // default octave
+    var octave = 3  // default octave
     var idx = 1
     if (n > 1) {
         peek_data(root_str) $(bytes) {
@@ -108,12 +108,12 @@ def private normalize_scale_type(raw : string) : string {
 }
 
 // Parse a scale definition string "Root:Type" or "Root:Mod:Type" → (root_midi, scale_type).
-// Examples: "C4:major" → (60, "major"), "C4:minor:pentatonic" → (60, "minor_pentatonic")
-// If no colon, treats entire string as type with C4 root.
+// Examples: "C4:major" → (60, "major"), "D:pentatonic" → (50, "pentatonic") using default oct=3.
+// If no colon, treats entire string as type with C3 root.
 def private parse_scale_def(scale_def : string) : tuple<int; string> {
     let colon_pos = find(scale_def, ":")
     if (colon_pos < 0) {
-        return tuple(60, scale_def)
+        return tuple(48, scale_def)
     }
     let root_str = slice(scale_def, 0, colon_pos)
     let type_str = normalize_scale_type(slice(scale_def, colon_pos + 1))
@@ -175,3 +175,8 @@ def get_scale_intervals_by_name(scale_type : string) : array<int> {
 def parse_root(root_str : string) : int {
     return parse_scale_root(root_str)
 }
+
+// ─── Alias ───
+
+// scale("C4:major") — alias for set_scale
+def scale(var pat : Pattern; scale_def : string) : Pattern { return <- set_scale(pat, scale_def); }

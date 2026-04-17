@@ -20,6 +20,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- note_pattern("c3,e3,g3", "sawtooth") |> set_sustain(1.0) |> set_lpf(signal_sine() |> signal_range(200.0, 3000.0) |> slow(4.0lf)) |> set_gain(0.3)
+    let pat <- note("c3,e3,g3", "sawtooth") |> sustain(1.0) |> lpf(sine() |> range(200.0, 3000.0) |> slow(4.0lf)) |> gain(0.3)
     play_feature_cps(pat, 0.5lf)
 }

@@ -28,6 +28,7 @@ struct Voice {
 }
 
 // Per-voice metadata for SF2 voices (not stored in the C ma_sf2_voice struct).
+[safe_when_uninitialized]
 struct StrudelSF2Meta {
     note             : int = 0       // MIDI note (for re-trigger matching)
     note_off_sample  : int = -1      // sample position to fire note-off (-1 = don't auto note-off)
@@ -39,6 +40,8 @@ struct StrudelSF2Meta {
     cut              : int = 0       // strudel cut group
     gain             : float = 1.0   // event gain * velocity (applied as attenuation scale)
     orbit            : int = 0       // effect bus routing
+    @safe_when_uninitialized fx : VoiceFX  // per-voice audio effects
+    pan              : float = 0.0   // stereo pan (-1..1) used when fx routes through temp buffer
 }
 
 // Per-orbit effect bus. Each orbit has independent reverb + delay instances.
@@ -79,6 +82,8 @@ struct Scheduler {
     chorus          : ma_chorus?
     chorus_send_buf : array<float>
     chorus_out_buf  : array<float>
+    // Shared scratch buffer for per-voice FX processing (sized per-tick)
+    voice_fx_buf    : array<float>
 }
 
 // Convert wall-clock time to cycle position.
@@ -101,7 +106,7 @@ def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
     if (bus.reverb == null) {
         let rs = clamp(roomsize, 0.1, 10.0)
         bus.reverb = new ConvolutionReverb
-        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.01)
+        conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
         bus.current_roomsize = rs
     }
 }
@@ -115,7 +120,7 @@ def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
     bus.current_roomsize = rs
     // Reinitialize with new decay time
     conv_reverb_uninit(bus.reverb)
-    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.01)
+    conv_reverb_init(bus.reverb, SAMPLE_RATE, rs, 15000.0, 1000.0, 0.1)
 }
 
 // Initialize delay on an orbit bus.
@@ -245,7 +250,7 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
             let rsend = sf2_get_reverb_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone)
             let csend = max(sf2_get_chorus_send(*sched.sf2, z.x, z.y, pzone, preset.global_zone), event.chorus)
             sched.sf2_voices |> push(voice)
-            sched.sf2_meta |> push(StrudelSF2Meta(
+            var meta = StrudelSF2Meta(
                 note = note,
                 note_off_sample = note_off_sample,
                 reverb_send = rsend,
@@ -254,8 +259,11 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
                 exclusive_class = excl,
                 cut = cutGroup,
                 gain = eventGain,
-                orbit = event.orbit
-            ))
+                orbit = event.orbit,
+                pan = event.pan * 2.0 - 1.0
+            )
+            fx_init_from_event(meta.fx, event, float(SAMPLE_RATE))
+            sched.sf2_meta |> push(meta)
         }
     }
     delete atten_state.atten_mods
@@ -299,7 +307,40 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
             let chorus_send = meta.chorus_send
             let delay_send_amt = meta.delay_send
             let has_sends = reverb_send > 0.001 || chorus_send > 0.001 || delay_send_amt > 0.001
-            if (has_sends) {
+            if (meta.fx.active) {
+                // FX path: render dry into scratch, apply effects, then mix post-FX
+                // into output + sends. Uses the same temp buffer as osc voices.
+                let chunkSamples = chunkFrames * 2
+                if (length(sched.voice_fx_buf) < chunkSamples) {
+                    sched.voice_fx_buf |> resize(chunkSamples)
+                }
+                for (s in range(chunkSamples)) {
+                    sched.voice_fx_buf[s] = 0.0
+                }
+                unsafe {
+                    ma_sf2_voice_render(
+                        addr(sched.sf2_voices[si]),
+                        addr(sched.sf2.sample_data[0]),
+                        length(sched.sf2.sample_data),
+                        addr(sched.voice_fx_buf[0]),
+                        0, chunkFrames
+                    )
+                }
+                fx_apply(sched.sf2_meta[si].fx, sched.voice_fx_buf, chunkFrames)
+                var reverb_buf = get_orbit_reverb_send(sched, meta.orbit)
+                var delay_buf = get_orbit_delay_send(sched, meta.orbit)
+                let mix_reverb = reverb_buf != null && reverb_send > 0.001
+                let mix_delay  = delay_buf != null && delay_send_amt > 0.001
+                let mix_chorus = sched.chorus != null && chorus_send > 0.001 && length(sched.chorus_send_buf) >= chunkSamples
+                let dry_gain = has_sends ? max(0.0, 1.0 - reverb_send - chorus_send) : 1.0
+                for (s in range(chunkSamples)) {
+                    let v = sched.voice_fx_buf[s]
+                    output[s] += v * dry_gain
+                    if (mix_reverb) { (*reverb_buf)[s] += v * reverb_send; }
+                    if (mix_delay)  { (*delay_buf)[s]  += v * delay_send_amt; }
+                    if (mix_chorus) { sched.chorus_send_buf[s] += v * chorus_send; }
+                }
+            } elif (has_sends) {
                 var reverb_buf = get_orbit_reverb_send(sched, meta.orbit)
                 var delay_buf = get_orbit_delay_send(sched, meta.orbit)
                 let has_reverb = reverb_buf != null && reverb_send > 0.001
@@ -408,10 +449,14 @@ def private sf2_render_voices(var sched : Scheduler; var output : array<float>; 
 // Render all active streaming oscillator voices into the output buffer.
 // Sends accumulate into per-orbit bus buffers based on each voice's orbit.
 // Chorus send accumulates into the scheduler-level chorus_send_buf.
+// When a voice has active FX, render dry (no sends) into voice_fx_buf,
+// apply effects, then mix post-FX into output + sends.
 def private osc_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
+    let chunkSamples = chunkFrames * 2
     var i = length(sched.osc_voices) - 1
     while (i >= 0) {
         let orb = sched.osc_voices[i].orbit
+        let has_fx = sched.osc_voices[i].fx.active
         var reverb_buf : array<float>?
         var delay_buf : array<float>?
         if (sched.osc_voices[i].reverb_send > 0.0) {
@@ -420,19 +465,47 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
         if (sched.osc_voices[i].delay_send > 0.0) {
             delay_buf = get_orbit_delay_send(sched, orb)
         }
-        // osc_render_chunk needs non-null array refs — use empty locals if no bus
-        if (reverb_buf != null && delay_buf != null) {
-            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, *delay_buf, sched.chorus_send_buf, chunkFrames)
-        } elif (reverb_buf != null) {
-            var empty : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, empty, sched.chorus_send_buf, chunkFrames)
-        } elif (delay_buf != null) {
-            var empty : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, empty, *delay_buf, sched.chorus_send_buf, chunkFrames)
-        } else {
+        if (has_fx) {
+            // route through scratch buffer: render dry (no sends), apply FX, mix into output + sends
+            if (length(sched.voice_fx_buf) < chunkSamples) {
+                sched.voice_fx_buf |> resize(chunkSamples)
+            }
+            for (s in range(chunkSamples)) {
+                sched.voice_fx_buf[s] = 0.0
+            }
             var empty1 : array<float>
             var empty2 : array<float>
-            osc_render_chunk(sched.osc_voices[i], output, empty1, empty2, sched.chorus_send_buf, chunkFrames)
+            var empty3 : array<float>
+            osc_render_chunk(sched.osc_voices[i], sched.voice_fx_buf, empty1, empty2, empty3, chunkFrames)
+            fx_apply(sched.osc_voices[i].fx, sched.voice_fx_buf, chunkFrames)
+            let rev_send = sched.osc_voices[i].reverb_send
+            let del_send = sched.osc_voices[i].delay_send
+            let cho_send = sched.osc_voices[i].chorus_send
+            let mix_reverb = reverb_buf != null && rev_send > 0.0
+            let mix_delay  = delay_buf != null && del_send > 0.0
+            let mix_chorus = sched.chorus != null && cho_send > 0.0 && length(sched.chorus_send_buf) >= chunkSamples
+            for (s in range(chunkSamples)) {
+                let v = sched.voice_fx_buf[s]
+                output[s] += v
+                if (mix_reverb) { (*reverb_buf)[s] += v * rev_send; }
+                if (mix_delay)  { (*delay_buf)[s]  += v * del_send; }
+                if (mix_chorus) { sched.chorus_send_buf[s] += v * cho_send; }
+            }
+        } else {
+            // osc_render_chunk needs non-null array refs — use empty locals if no bus
+            if (reverb_buf != null && delay_buf != null) {
+                osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, *delay_buf, sched.chorus_send_buf, chunkFrames)
+            } elif (reverb_buf != null) {
+                var empty : array<float>
+                osc_render_chunk(sched.osc_voices[i], output, *reverb_buf, empty, sched.chorus_send_buf, chunkFrames)
+            } elif (delay_buf != null) {
+                var empty : array<float>
+                osc_render_chunk(sched.osc_voices[i], output, empty, *delay_buf, sched.chorus_send_buf, chunkFrames)
+            } else {
+                var empty1 : array<float>
+                var empty2 : array<float>
+                osc_render_chunk(sched.osc_voices[i], output, empty1, empty2, sched.chorus_send_buf, chunkFrames)
+            }
         }
         if (sched.osc_voices[i].finished) {
             sched.osc_voices |> erase(i)
@@ -615,10 +688,14 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     if (oscType == OscType.osc_supersaw) {
                         osc_voice_init_supersaw(oscv)
                     }
+                    fx_init_from_event(oscv.fx, h.value, float(SAMPLE_RATE))
                     sched.osc_voices |> push(oscv)
                 } else {
                     // sample/drum path: pre-render to buffer
                     var stereo <- render_event_stereo(h.value, durSec, bank)
+                    // per-voice effects (crush/coarse/shape/djf/bpf) are applied
+                    // once post-render; state is local to this call
+                    fx_apply_to_samples(h.value, stereo, float(SAMPLE_RATE))
                     let offsetSamples = max(int(offsetSec * float(SAMPLE_RATE)) * 2, 0)
                     sched.voices |> push(new Voice(
                         samples <- stereo,

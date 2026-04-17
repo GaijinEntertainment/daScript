@@ -21,9 +21,9 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- stack([
-      note_pattern("c4 _ _ e4 g4") |> set_sustain(1.0), // elongation with _
-      note_pattern("c4@3 e4 g4") |> set_sustain(1.0)    // same rhythm via @weight
+    let pat <- stack([
+      note("c4 _ _ e4 g4") |> sustain(1.0), // elongation with _
+      note("c4@3 e4 g4") |> sustain(1.0)    // same rhythm via @weight
     ])
     play_feature_cps(pat, 0.5lf)
 }

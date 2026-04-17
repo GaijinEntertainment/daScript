@@ -18,6 +18,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- note_pattern("c3", "sine") |> set_fm(5.0) |> set_fmh(1.4) |> set_attack(0.01) |> set_decay(0.2) |> set_release(0.3)
+    let pat <- note("c3", "sine") |> fm(5.0) |> fmh(1.4) |> attack(0.01) |> decay(0.2) |> release(0.3)
     play_feature_cps(pat, 0.5lf)
 }

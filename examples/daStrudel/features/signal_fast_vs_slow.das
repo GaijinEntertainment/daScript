@@ -15,7 +15,7 @@ require feature_common
 
 [export]
 def main() {
-    var lpf_sig <- signal_sine() |> signal_range(200.0, 4000.0) |> slow(n("<2 16>"))
-    var pat <- atom("sawtooth") |> set_note(48.0) |> set_sustain(1.0) |> set_lpf(lpf_sig)
+    let lpf_sig <- sine() |> range(200.0, 4000.0) |> slow(n("<2 16>"))
+    let pat <- atom("sawtooth") |> note(48.0) |> sustain(1.0) |> lpf(lpf_sig)
     play_feature_cps(pat, 0.5lf)
 }

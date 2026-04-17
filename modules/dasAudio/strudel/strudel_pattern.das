@@ -218,9 +218,7 @@ def degrade(var pat : Pattern; prob : float) : Pattern {
         var result : array<Hap>
         var haps <- pat(span)
         for (h in haps) {
-            let seed = uint(h.whole.start * 10000.0lf)
-            let hash = (seed * 2654435761u) >> 16u
-            let r = float(hash % 1000u) / 1000.0
+            let r = strudel_hash01(h.whole.start, 0)
             if (r >= prob) {
                 result |> push(h)
             }
@@ -413,6 +411,144 @@ def set_fm(var pat : Pattern; f : float) : Pattern {
 def set_fmh(var pat : Pattern; f : float) : Pattern {
     let fn <- @capture(= f) (e : Event) : Event {
         var ev = e; ev.fmh = f; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+// ─── Sample Region & Audio Effects ───
+
+def set_begin(var pat : Pattern; b : float) : Pattern {
+    let fn <- @capture(= b) (e : Event) : Event {
+        var r = e; r.begin = b; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_end(var pat : Pattern; e_val : float) : Pattern {
+    let fn <- @capture(= e_val) (e : Event) : Event {
+        var r = e; r.end_pos = e_val; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_crush(var pat : Pattern; c : float) : Pattern {
+    let fn <- @capture(= c) (e : Event) : Event {
+        var r = e; r.crush = c; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_coarse(var pat : Pattern; c : int) : Pattern {
+    let fn <- @capture(= c) (e : Event) : Event {
+        var r = e; r.coarse = c; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_shape(var pat : Pattern; s : float) : Pattern {
+    let fn <- @capture(= s) (e : Event) : Event {
+        var r = e; r.shape = s; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_djf(var pat : Pattern; d : float) : Pattern {
+    let fn <- @capture(= d) (e : Event) : Event {
+        var r = e; r.djf = d; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_bpf(var pat : Pattern; freq : float) : Pattern {
+    let fn <- @capture(= freq) (e : Event) : Event {
+        var r = e; r.bpf = freq; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_bpq(var pat : Pattern; q : float) : Pattern {
+    let fn <- @capture(= q) (e : Event) : Event {
+        var r = e; r.bpq = q; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// Phaser: rate in Hz (0 disables). Modulates a single notch biquad.
+def set_phaser(var pat : Pattern; r : float) : Pattern {
+    let fn <- @capture(= r) (e : Event) : Event {
+        var ev = e; ev.phaser = r; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_phaserdepth(var pat : Pattern; d : float) : Pattern {
+    let fn <- @capture(= d) (e : Event) : Event {
+        var ev = e; ev.phaserdepth = d; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_phasercenter(var pat : Pattern; c : float) : Pattern {
+    let fn <- @capture(= c) (e : Event) : Event {
+        var ev = e; ev.phasercenter = c; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_phasersweep(var pat : Pattern; s : float) : Pattern {
+    let fn <- @capture(= s) (e : Event) : Event {
+        var ev = e; ev.phasersweep = s; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+// Tremolo: rate in Hz (0 disables), amplitude modulation.
+def set_tremolo(var pat : Pattern; r : float) : Pattern {
+    let fn <- @capture(= r) (e : Event) : Event {
+        var ev = e; ev.tremolo = r; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_tremolodepth(var pat : Pattern; d : float) : Pattern {
+    let fn <- @capture(= d) (e : Event) : Event {
+        var ev = e; ev.tremolodepth = d; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+// Compressor: threshold in dB (>=0 = bypass). Negative values activate.
+def set_compressor(var pat : Pattern; thr_db : float) : Pattern {
+    let fn <- @capture(= thr_db) (e : Event) : Event {
+        var ev = e; ev.compressor = thr_db; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_compressor_ratio(var pat : Pattern; ratio : float) : Pattern {
+    let fn <- @capture(= ratio) (e : Event) : Event {
+        var ev = e; ev.compressor_ratio = ratio; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_compressor_knee(var pat : Pattern; knee : float) : Pattern {
+    let fn <- @capture(= knee) (e : Event) : Event {
+        var ev = e; ev.compressor_knee = knee; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_compressor_attack(var pat : Pattern; a : float) : Pattern {
+    let fn <- @capture(= a) (e : Event) : Event {
+        var ev = e; ev.compressor_attack = a; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
+def set_compressor_release(var pat : Pattern; r : float) : Pattern {
+    let fn <- @capture(= r) (e : Event) : Event {
+        var ev = e; ev.compressor_release = r; return ev
     }
     return <- fmap(pat, fn)
 }
@@ -703,9 +839,7 @@ def degrade_keep(var pat : Pattern; prob : float) : Pattern {
         var inscope haps = pat(span)
         for (h in haps) {
             if (h.has_whole) {
-                let seed = uint(h.whole.start * 10000.0lf)
-                let hash = (seed * 2654435761u) >> 16u
-                let r = float(hash % 1000u) / 1000.0
+                let r = strudel_hash01(h.whole.start, 0)
                 if (r >= cn) {
                     result |> push(h) // nolint:PERF006
                 }
@@ -723,9 +857,7 @@ def degrade_drop(var pat : Pattern; prob : float) : Pattern {
         var inscope haps = pat(span)
         for (h in haps) {
             if (h.has_whole) {
-                let seed = uint(h.whole.start * 10000.0lf)
-                let hash = (seed * 2654435761u) >> 16u
-                let r = float(hash % 1000u) / 1000.0
+                let r = strudel_hash01(h.whole.start, 0)
                 if (r < cn) {
                     result |> push(h) // nolint:PERF006
                 }
@@ -943,8 +1075,8 @@ def signal_perlin() : Pattern {
         let i = int(floor(t))
         let frac = float(t - floor(t))
         // hash integer cycle to pseudo-random value 0..1
-        let h0 = float((uint(i) * 2654435761u) & 0xFFFFu) / 65535.0
-        let h1 = float((uint(i + 1) * 2654435761u) & 0xFFFFu) / 65535.0
+        let h0 = strudel_hash01(double(i), 0)
+        let h1 = strudel_hash01(double(i + 1), 0)
         // smootherstep: 6t^5 - 15t^4 + 10t^3
         let u = frac * frac * frac * (frac * (frac * 6.0 - 15.0) + 10.0)
         return h0 + (h1 - h0) * u
@@ -1163,6 +1295,116 @@ def set_sf2_pitch_bend(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     })
 }
 
+// ─── Pattern-modulated sample region & effects setters ───
+
+def set_begin(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.begin = val; return r
+    })
+}
+
+def set_end(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.end_pos = val; return r
+    })
+}
+
+def set_crush(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.crush = val; return r
+    })
+}
+
+def set_shape(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.shape = val; return r
+    })
+}
+
+def set_djf(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.djf = val; return r
+    })
+}
+
+def set_bpf(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.bpf = val; return r
+    })
+}
+
+def set_bpq(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.bpq = val; return r
+    })
+}
+
+def set_phaser(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.phaser = val; return r
+    })
+}
+
+def set_phaserdepth(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.phaserdepth = val; return r
+    })
+}
+
+def set_phasercenter(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.phasercenter = val; return r
+    })
+}
+
+def set_phasersweep(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.phasersweep = val; return r
+    })
+}
+
+def set_tremolo(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.tremolo = val; return r
+    })
+}
+
+def set_tremolodepth(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.tremolodepth = val; return r
+    })
+}
+
+def set_compressor(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.compressor = val; return r
+    })
+}
+
+def set_compressor_ratio(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.compressor_ratio = val; return r
+    })
+}
+
+def set_compressor_knee(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.compressor_knee = val; return r
+    })
+}
+
+def set_compressor_attack(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.compressor_attack = val; return r
+    })
+}
+
+def set_compressor_release(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.compressor_release = val; return r
+    })
+}
+
 // ─── String-valued combineWith (for vowel, etc.) ───
 
 // Like combineWith but samples a string value from the value pattern's event.s field.
@@ -1225,3 +1467,918 @@ def euclid(var pat : Pattern; k, n : int) : Pattern {
         return <- result
     }
 }
+
+// ─── Additional Combinators ───
+
+// Play forward on even cycles, reversed on odd cycles.
+def palindrome(var pat : Pattern) : Pattern {
+    return @capture(<- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            if (cycle % 2 == 0) {
+                var haps <- pat(sub)
+                for (h in haps) {
+                    result |> push(h) // nolint:PERF006
+                }
+                delete haps
+            } else {
+                // mirror within cycle
+                let cyc = floor(sub.start)
+                let relStart = sub.start - cyc
+                let relStop = sub.stop - cyc
+                let mirStart = 1.0lf - relStop
+                let mirStop = 1.0lf - relStart
+                let mirSpan = TimeSpan(start = mirStart + cyc, stop = mirStop + cyc)
+                var haps <- pat(mirSpan)
+                for (h in haps) {
+                    let hCycle = floor(h.whole.start)
+                    let wStart = h.whole.start - hCycle
+                    let wStop = h.whole.stop - hCycle
+                    let pStart = h.part.start - hCycle
+                    let pStop = h.part.stop - hCycle
+                    result |> push(Hap( // nolint:PERF006
+                        whole = TimeSpan(start = 1.0lf - wStop + hCycle, stop = 1.0lf - wStart + hCycle),
+                        part = TimeSpan(start = 1.0lf - pStop + hCycle, stop = 1.0lf - pStart + hCycle),
+                        has_whole = h.has_whole,
+                        value = h.value
+                    ))
+                }
+                delete haps
+            }
+        }
+        return <- result
+    }
+}
+
+// Stack original + transformed copy.
+// superimpose(pat, @(x) => fast(x, 2.0lf)) — layer faster copy on top
+def superimpose(var pat : Pattern; transform : PatternTransform) : Pattern {
+    var transformed <- invoke(transform, pat)
+    var layers : array<Pattern>
+    layers |> emplace <| pat
+    layers |> emplace <| transformed
+    return <- stack(layers)
+}
+
+// Repeat events with time offset and gain decay.
+// echo(pat, 3, 0.25, 0.5) — 3 echoes, 0.25 cycles apart, each 50% quieter
+def echo(var pat : Pattern; times : int; time : double; feedback : float) : Pattern {
+    // Build gain table and offsets, then query pat once per span and duplicate haps
+    var gains : array<float>
+    var offsets : array<double>
+    gains |> reserve(times)
+    offsets |> reserve(times)
+    gains |> push(1.0)       // original at full gain
+    offsets |> push(0.0lf)   // original at zero offset
+    var current_gain = feedback
+    for (i in range(1, times)) {
+        gains |> push(current_gain)
+        offsets |> push(time * double(i))
+        current_gain *= feedback
+    }
+    let n = length(gains)
+    return @capture(= n, <- gains, <- offsets, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        for (layer in range(n)) {
+            let off = offsets[layer]
+            let g = gains[layer]
+            // Echoes play LATER than original: query pat at (span - off), emit at (hap + off)
+            let innerSpan = TimeSpan(start = span.start - off, stop = span.stop - off)
+            var haps <- pat(innerSpan)
+            for (h in haps) {
+                var ev = h.value
+                ev.gain = ev.gain * g
+                result |> push(Hap( // nolint:PERF006
+                    whole = TimeSpan(start = h.whole.start + off, stop = h.whole.stop + off),
+                    part = TimeSpan(start = h.part.start + off, stop = h.part.stop + off),
+                    has_whole = h.has_whole,
+                    value = ev
+                ))
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// stut — alias for echo with reordered parameters (times, feedback, time).
+def stut(var pat : Pattern; times : int; feedback : float; time : double) : Pattern {
+    return <- echo(pat, times, time, feedback)
+}
+
+// Repeat each event n times within its timespan.
+def ply(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var haps <- pat(span)
+        for (h in haps) {
+            if (!h.has_whole) {
+                result |> push(h) // nolint:PERF006
+                continue
+            }
+            let dur = (h.whole.stop - h.whole.start) / nf
+            for (i in range(n)) {
+                let subStart = h.whole.start + dur * double(i)
+                let subStop = subStart + dur
+                let pStart = max(subStart, h.part.start)
+                let pStop = min(subStop, h.part.stop)
+                if (pStart < pStop) {
+                    result |> push(Hap(
+                        whole = TimeSpan(start = subStart, stop = subStop),
+                        part = TimeSpan(start = pStart, stop = pStop),
+                        has_whole = true,
+                        value = h.value
+                    ))
+                }
+            }
+        }
+        delete haps
+        return <- result
+    }
+}
+
+// Shift pattern left by 1/n each cycle.
+// iter(pat, 4) — cycle 0: original, cycle 1: shifted 1/4, cycle 2: shifted 2/4, etc.
+def iter(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            var shift = double(cycle % n) / nf
+            if (shift < 0.0lf) {
+                shift += 1.0lf
+            }
+            let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
+            var haps <- pat(innerSpan)
+            for (h in haps) {
+                result |> push(Hap( // nolint:PERF006
+                    whole = TimeSpan(start = h.whole.start - shift, stop = h.whole.stop - shift),
+                    part = TimeSpan(start = h.part.start - shift, stop = h.part.stop - shift),
+                    has_whole = h.has_whole,
+                    value = h.value
+                ))
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// Like iter but shifts right instead of left.
+def iterBack(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            var shift = 0.0lf - double(cycle % n) / nf
+            if (shift > 0.0lf) {
+                shift -= 1.0lf
+            }
+            let innerSpan = TimeSpan(start = sub.start + shift, stop = sub.stop + shift)
+            var haps <- pat(innerSpan)
+            for (h in haps) {
+                result |> push(Hap( // nolint:PERF006
+                    whole = TimeSpan(start = h.whole.start - shift, stop = h.whole.stop - shift),
+                    part = TimeSpan(start = h.part.start - shift, stop = h.part.stop - shift),
+                    has_whole = h.has_whole,
+                    value = h.value
+                ))
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// Conditional transform based on cycle number.
+// when_cycle(pat, @(c) => c % 4 == 0, @(x) => fast(x, 2.0lf))
+def when_cycle(var pat : Pattern; var cond : lambda<(cycle : int) : bool>; transform : PatternTransform) : Pattern {
+    var transformed <- invoke(transform, pat)
+    return @capture(<- pat, <- transformed, <- cond) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            if (cond(cycle)) {
+                var haps <- transformed(sub)
+                for (h in haps) {
+                    result |> push(h) // nolint:PERF006
+                }
+                delete haps
+            } else {
+                var haps <- pat(sub)
+                for (h in haps) {
+                    result |> push(h) // nolint:PERF006
+                }
+                delete haps
+            }
+        }
+        return <- result
+    }
+}
+
+// Loop first fraction of pattern. linger(pat, 0.25) — first quarter looped to fill each cycle.
+// Semantics: output(T) = pat(T mod t). Equivalent to pat.zoom(0, t).slow(t).
+def linger(var pat : Pattern; t : double) : Pattern {
+    return @capture(= t, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        return <- result if (t <= 0.0lf)
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = floor(sub.start)
+            let relStart = sub.start - cycle
+            let relStop = sub.stop - cycle
+            // iterate each period-t chunk overlapping [relStart, relStop]
+            var i = 0
+            while (true) {
+                let chunkStart = double(i) * t
+                break if (chunkStart >= 1.0lf || chunkStart >= relStop)
+                let chunkStop = chunkStart + t
+                if (chunkStop > relStart) {
+                    let overlapStart = max(chunkStart, relStart)
+                    let overlapStop = min(min(chunkStop, 1.0lf), relStop)
+                    // query pat at the same offset inside [0, t], in this cycle
+                    let innerSpan = TimeSpan(
+                        start = cycle + (overlapStart - chunkStart),
+                        stop = cycle + (overlapStop - chunkStart)
+                    )
+                    var haps <- pat(innerSpan)
+                    for (h in haps) {
+                        // shift events by chunkStart so they land in the output iteration
+                        result |> push(Hap( // nolint:PERF006
+                            whole = TimeSpan(start = h.whole.start + chunkStart, stop = h.whole.stop + chunkStart),
+                            part = TimeSpan(start = h.part.start + chunkStart, stop = h.part.stop + chunkStart),
+                            has_whole = h.has_whole,
+                            value = h.value
+                        ))
+                    }
+                    delete haps
+                }
+                i ++
+            }
+        }
+        return <- result
+    }
+}
+
+// Combined fast + speed. hurry(pat, 2.0) speeds up pattern AND sample playback.
+def hurry(var pat : Pattern; factor : double) : Pattern {
+    return <- fast(pat, factor) |> set_speed(float(factor))
+}
+
+// Squeeze pattern into time window [b,e] within each cycle.
+// compress(pat, 0.25, 0.75) — pattern plays in middle half of each cycle
+def compress(var pat : Pattern; b, e : double) : Pattern {
+    let dur = e - b
+    return @capture(= b, = dur, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = floor(sub.start)
+            let winStart = cycle + b
+            let winStop = cycle + b + dur
+            let overStart = max(sub.start, winStart)
+            let overStop = min(sub.stop, winStop)
+            if (overStart >= overStop) {
+                continue
+            }
+            // map [winStart,winStop] → [cycle,cycle+1]
+            let innerStart = cycle + (overStart - winStart) / dur
+            let innerStop = cycle + (overStop - winStart) / dur
+            var haps <- pat(TimeSpan(start = innerStart, stop = innerStop))
+            for (h in haps) {
+                // map back: [cycle,cycle+1] → [winStart,winStop]
+                result |> push(Hap( // nolint:PERF006
+                    whole = TimeSpan(
+                        start = (h.whole.start - cycle) * dur + winStart,
+                        stop = (h.whole.stop - cycle) * dur + winStart
+                    ),
+                    part = TimeSpan(
+                        start = (h.part.start - cycle) * dur + winStart,
+                        stop = (h.part.stop - cycle) * dur + winStart
+                    ),
+                    has_whole = h.has_whole,
+                    value = h.value
+                ))
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// Apply function to the nth chunk each cycle (rotating).
+// chunk(pat, 4, @(x) => fast(x, 2.0lf)) — doubles speed of chunk 0, then 1, then 2, then 3
+def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
+    var transformed <- invoke(transform, pat)
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat, <- transformed) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            var activeChunk = cycle % n
+            if (activeChunk < 0) {
+                activeChunk += n
+            }
+            let cyc = floor(sub.start)
+            for (i in range(n)) {
+                let chunkStart = cyc + double(i) / nf
+                let chunkStop = cyc + double(i + 1) / nf
+                let overStart = max(sub.start, chunkStart)
+                let overStop = min(sub.stop, chunkStop)
+                if (overStart >= overStop) {
+                    continue
+                }
+                let querySpan = TimeSpan(start = overStart, stop = overStop)
+                if (i == activeChunk) {
+                    var haps <- transformed(querySpan)
+                    for (h in haps) {
+                        result |> push(h) // nolint:PERF006
+                    }
+                    delete haps
+                } else {
+                    var haps <- pat(querySpan)
+                    for (h in haps) {
+                        result |> push(h) // nolint:PERF006
+                    }
+                    delete haps
+                }
+            }
+        }
+        return <- result
+    }
+}
+
+// Interleave n slices of the pattern across events.
+// striate(pat, 4) — cuts each sample into n parts; slice i gets begin=i/n, end=(i+1)/n.
+// Behavior: progressive slices reveal later parts of the sample envelope.
+def striate(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    let nfinv = 1.0 / float(n)
+    return @capture(= n, = nf, = nfinv, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        // speed up pattern by n, then assign each event the begin/end for its slice
+        let innerSpan = TimeSpan(start = span.start * nf, stop = span.stop * nf)
+        var haps <- pat(innerSpan)
+        result |> reserve(length(haps))
+        for (h in haps) {
+            let step = int(sameCycle(h.whole.start)) % n
+            var ev = h.value
+            ev.begin = float(step) * nfinv
+            ev.end_pos = float(step + 1) * nfinv
+            result |> push(Hap(
+                whole = TimeSpan(start = h.whole.start / nf, stop = h.whole.stop / nf),
+                part = TimeSpan(start = h.part.start / nf, stop = h.part.stop / nf),
+                has_whole = h.has_whole,
+                value = ev
+            ))
+        }
+        delete haps
+        return <- result
+    }
+}
+
+// Restructure pattern using a boolean mask from mini-notation.
+// struct_(pat, s("t f t t")) — play events only where mask is true
+def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
+    return @capture(<- pat, <- bool_pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var mask_haps <- bool_pat(span)
+        for (mh in mask_haps) {
+            if (!mh.has_whole) {
+                continue
+            }
+            // query inner pattern at mask hap's whole
+            var inner_haps <- pat(mh.whole)
+            for (ih in inner_haps) {
+                let pStart = max(ih.part.start, mh.part.start)
+                let pStop = min(ih.part.stop, mh.part.stop)
+                if (pStart < pStop) {
+                    result |> push(Hap( // nolint:PERF006
+                        whole = mh.whole,
+                        part = TimeSpan(start = pStart, stop = pStop),
+                        has_whole = true,
+                        value = ih.value
+                    ))
+                }
+            }
+            delete inner_haps
+        }
+        delete mask_haps
+        return <- result
+    }
+}
+
+// Keep events where mask pattern is active (has events).
+def mask(var pat : Pattern; var mask_pat : Pattern) : Pattern {
+    return @capture(<- pat, <- mask_pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var haps <- pat(span)
+        for (h in haps) {
+            if (!h.has_whole) {
+                continue
+            }
+            // check if mask has any event overlapping this hap
+            var mask_haps <- mask_pat(h.whole)
+            if (length(mask_haps) > 0) {
+                result |> push(h) // nolint:PERF006
+            }
+            delete mask_haps
+        }
+        delete haps
+        return <- result
+    }
+}
+
+// Randomly pick one pattern per cycle.
+def choose(var pats : array<Pattern>) : Pattern {
+    let cn = length(pats)
+    return @capture(= cn, <- pats) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            let idx = int(strudel_hash32(double(cycle), 0) % uint(cn))
+            var haps <- invoke(pats[idx], sub)
+            for (h in haps) {
+                result |> push(h) // nolint:PERF006
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// Weighted random pattern selection per cycle.
+def wchoose(var pats : array<Pattern>; var weights : array<float>) : Pattern {
+    var total_weight = 0.0
+    for (w in weights) {
+        total_weight += w
+    }
+    let tw = total_weight
+    let cn = length(pats)
+    return @capture(= cn, = tw, <- pats, <- weights) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            let r = strudel_hash01(double(cycle), 0) * tw
+            var cumulative = 0.0
+            var idx = 0
+            for (i in range(cn)) {
+                cumulative += weights[i]
+                if (r < cumulative) {
+                    idx = i
+                    break
+                }
+            }
+            var haps <- invoke(pats[idx], sub)
+            for (h in haps) {
+                result |> push(h) // nolint:PERF006
+            }
+            delete haps
+        }
+        return <- result
+    }
+}
+
+// Alias for choose.
+def randcat(var pats : array<Pattern>) : Pattern {
+    return <- choose(pats)
+}
+
+// Alias for choose — chooseCycles (one pick per cycle).
+// daStrudel's `choose` already behaves per-cycle; this name exists for the
+// `chooseCycles` convention used by some pattern libraries where `choose`
+// is a continuous rand signal (glitchy for discrete note patterns).
+def chooseCycles(var pats : array<Pattern>) : Pattern {
+    return <- choose(pats)
+}
+
+// Deterministic 32-bit RNG for strudel. Given a query time and an index,
+// returns a well-mixed uint. Approach:
+//   T = floor(t * 2^29)  — ~1.86ns time resolution, overflow-safe for decades
+//   decorrelate (T_low, T_high, slot) with Murmur mix constants
+//   apply Murmur3 finalizer for full avalanche
+// This replaces earlier LCG/single-multiply hashes whose middle bits correlated
+// across consecutive slots (the "same-note-in-a-row" bug in scramble/shuffle).
+def strudel_hash32(t : double; slot : int) : uint {
+    let Ti = int64(t * 536870912.0lf)
+    let lo = uint(Ti)
+    let hi = uint(Ti >> 32l)
+    var key = lo ^ ((hi ^ 0x85EBCA6Bu) * 0xC2B2AE35u)
+    key ^= (uint(slot) ^ 0x7F4A7C15u) * 0x9E3779B9u
+    key ^= key >> 16u
+    key *= 0x85EBCA6Bu
+    key ^= key >> 13u
+    key *= 0xC2B2AE35u
+    key ^= key >> 16u
+    return key
+}
+
+// Same hash, mapped to float in [0, 1).
+def strudel_hash01(t : double; slot : int) : float {
+    return float(strudel_hash32(t, slot)) / 4294967296.0
+}
+
+// Random permutation of n subdivisions per cycle.
+def shuffle(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            // Fisher-Yates shuffle using cycle as seed
+            var perm : array<int>
+            perm |> resize(n)
+            for (i in range(n)) {
+                perm[i] = i
+            }
+            var fi = n - 1
+            while (fi > 0) {
+                let j = int(strudel_hash32(double(cycle), fi) % uint(fi + 1))
+                let tmp = perm[fi]
+                perm[fi] = perm[j]
+                perm[j] = tmp
+                fi --
+            }
+            let cyc = floor(sub.start)
+            for (i in range(n)) {
+                let slotStart = cyc + double(i) / nf
+                let slotStop = cyc + double(i + 1) / nf
+                let overStart = max(sub.start, slotStart)
+                let overStop = min(sub.stop, slotStop)
+                if (overStart >= overStop) {
+                    continue
+                }
+                // query the perm[i]-th subdivision
+                let srcStart = cyc + double(perm[i]) / nf
+                let srcStop = cyc + double(perm[i] + 1) / nf
+                var haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
+                for (h in haps) {
+                    // remap to destination slot
+                    let shift = slotStart - srcStart
+                    result |> push(Hap( // nolint:PERF006
+                        whole = TimeSpan(start = h.whole.start + shift, stop = h.whole.stop + shift),
+                        part = TimeSpan(start = max(h.part.start + shift, overStart), stop = min(h.part.stop + shift, overStop)),
+                        has_whole = h.has_whole,
+                        value = h.value
+                    ))
+                }
+                delete haps
+            }
+        }
+        return <- result
+    }
+}
+
+// Shuffle with replacement — each slot picks a random subdivision.
+def scramble(var pat : Pattern; n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf, <- pat) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        var inscope split = splitSpans(span)
+        for (sub in split) {
+            let cycle = int(sameCycle(sub.start))
+            let cyc = floor(sub.start)
+            for (i in range(n)) {
+                let slotStart = cyc + double(i) / nf
+                let slotStop = cyc + double(i + 1) / nf
+                let overStart = max(sub.start, slotStart)
+                let overStop = min(sub.stop, slotStop)
+                if (overStart >= overStop) {
+                    continue
+                }
+                let srcIdx = int(strudel_hash32(double(cycle), i) % uint(n))
+                let srcStart = cyc + double(srcIdx) / nf
+                let srcStop = cyc + double(srcIdx + 1) / nf
+                var haps <- pat(TimeSpan(start = srcStart, stop = srcStop))
+                for (h in haps) {
+                    let shift = slotStart - srcStart
+                    result |> push(Hap( // nolint:PERF006
+                        whole = TimeSpan(start = h.whole.start + shift, stop = h.whole.stop + shift),
+                        part = TimeSpan(start = max(h.part.start + shift, overStart), stop = min(h.part.stop + shift, overStop)),
+                        has_whole = h.has_whole,
+                        value = h.value
+                    ))
+                }
+                delete haps
+            }
+        }
+        return <- result
+    }
+}
+
+// ─── Additional Signals ───
+
+// Square wave 0..1. First half = 1.0, second half = 0.0.
+def signal_square() : Pattern {
+    return signal(@(t : double) : float {
+        let pos = t - floor(t)
+        return pos < 0.5lf ? 1.0 : 0.0
+    })
+}
+
+// Inverted sawtooth 0..1. Falls from 1.0 to 0.0 each cycle.
+def signal_isaw() : Pattern {
+    return signal(@(t : double) : float {
+        return 1.0 - float(t - floor(t))
+    })
+}
+
+// Inverted triangle 0..1. Starts at 1.0, falls to 0.0 at midpoint, returns to 1.0.
+def signal_itri() : Pattern {
+    return signal(@(t : double) : float {
+        let pos = float(t - floor(t))
+        return pos < 0.5 ? 1.0 - pos * 2.0 : (pos - 0.5) * 2.0
+    })
+}
+
+// Bipolar sine -1..1
+def signal_sine2() : Pattern {
+    return signal(@(t : double) : float {
+        return float(sin(3.14159265358979323846lf * 2.0lf * t))
+    })
+}
+
+// Bipolar cosine -1..1
+def signal_cosine2() : Pattern {
+    return signal(@(t : double) : float {
+        return float(cos(3.14159265358979323846lf * 2.0lf * t))
+    })
+}
+
+// Bipolar sawtooth -1..1
+def signal_saw2() : Pattern {
+    return signal(@(t : double) : float {
+        return float(t - floor(t)) * 2.0 - 1.0
+    })
+}
+
+// Bipolar triangle -1..1
+def signal_tri2() : Pattern {
+    return signal(@(t : double) : float {
+        let pos = float(t - floor(t))
+        return pos < 0.5 ? pos * 4.0 - 1.0 : 3.0 - pos * 4.0
+    })
+}
+
+// Bipolar square -1..1
+def signal_square2() : Pattern {
+    return signal(@(t : double) : float {
+        let pos = t - floor(t)
+        return pos < 0.5lf ? 1.0 : -1.0
+    })
+}
+
+// Bipolar inverted sawtooth -1..1
+def signal_isaw2() : Pattern {
+    return signal(@(t : double) : float {
+        return 1.0 - float(t - floor(t)) * 2.0
+    })
+}
+
+// Bipolar inverted triangle -1..1
+def signal_itri2() : Pattern {
+    return signal(@(t : double) : float {
+        let pos = float(t - floor(t))
+        return pos < 0.5 ? 1.0 - pos * 4.0 : pos * 4.0 - 3.0
+    })
+}
+
+// Random 0..1 — deterministic per query time (hash-based).
+def signal_rand() : Pattern {
+    return signal(@(t : double) : float {
+        return strudel_hash01(t, 0)
+    })
+}
+
+// Random -1..1
+def signal_rand2() : Pattern {
+    return signal(@(t : double) : float {
+        return strudel_hash01(t, 0) * 2.0 - 1.0
+    })
+}
+
+// Random integer 0..n-1
+def signal_irand(n : int) : Pattern {
+    return signal(@capture(= n) (t : double) : float {
+        return float(strudel_hash32(t, 0) % uint(n))
+    })
+}
+
+// Discrete ramp 0..n-1 within each cycle.
+def signal_run(n : int) : Pattern {
+    let nf = double(n)
+    return @capture(= n, = nf) (span : TimeSpan) : array<Hap> {
+        var result : array<Hap>
+        let cycle = floor(span.start)
+        for (i in range(n)) {
+            let start = cycle + double(i) / nf
+            let stop = cycle + double(i + 1) / nf
+            if (stop > span.start && start < span.stop) {
+                let pStart = max(start, span.start)
+                let pStop = min(stop, span.stop)
+                result |> push(Hap(
+                    whole = TimeSpan(start = start, stop = stop),
+                    part = TimeSpan(start = pStart, stop = pStop),
+                    has_whole = true,
+                    value = Event(note = float(i))
+                ))
+            }
+        }
+        return <- result
+    }
+}
+
+// ─── Bare-Name Aliases ───
+// Shorter names for chainable pattern combinators.
+// Old set_* names remain valid.
+
+// ── Scalar parameter aliases ──
+
+def gain(var pat : Pattern; g : float) : Pattern { return <- set_gain(pat, g); }
+def velocity(var pat : Pattern; v : float) : Pattern { return <- set_velocity(pat, v); }
+def vel(var pat : Pattern; v : float) : Pattern { return <- set_velocity(pat, v); }
+def pan(var pat : Pattern; p : float) : Pattern { return <- set_pan(pat, p); }
+def speed(var pat : Pattern; spd : float) : Pattern { return <- set_speed(pat, spd); }
+def note(var pat : Pattern; n : float) : Pattern { return <- set_note(pat, n); }
+def sound(var pat : Pattern; snd : string) : Pattern { return <- set_sound(pat, snd); }
+def cut(var pat : Pattern; c : int) : Pattern { return <- set_cut(pat, c); }
+def room(var pat : Pattern; r : float) : Pattern { return <- set_room(pat, r); }
+def roomsize(var pat : Pattern; r : float) : Pattern { return <- set_roomsize(pat, r); }
+def size(var pat : Pattern; r : float) : Pattern { return <- set_roomsize(pat, r); }
+def delay(var pat : Pattern; d : float) : Pattern { return <- set_delay(pat, d); }
+def delaytime(var pat : Pattern; d : float) : Pattern { return <- set_delaytime(pat, d); }
+def dt(var pat : Pattern; d : float) : Pattern { return <- set_delaytime(pat, d); }
+def delayfeedback(var pat : Pattern; d : float) : Pattern { return <- set_delayfeedback(pat, d); }
+def dfb(var pat : Pattern; d : float) : Pattern { return <- set_delayfeedback(pat, d); }
+def orbit(var pat : Pattern; o : int) : Pattern { return <- set_orbit(pat, o); }
+def fm(var pat : Pattern; f : float) : Pattern { return <- set_fm(pat, f); }
+def fmh(var pat : Pattern; f : float) : Pattern { return <- set_fmh(pat, f); }
+def lpf(var pat : Pattern; freq : float) : Pattern { return <- set_lpf(pat, freq); }
+def lp(var pat : Pattern; freq : float) : Pattern { return <- set_lpf(pat, freq); }
+def hpf(var pat : Pattern; freq : float) : Pattern { return <- set_hpf(pat, freq); }
+def hp(var pat : Pattern; freq : float) : Pattern { return <- set_hpf(pat, freq); }
+def lpq(var pat : Pattern; q : float) : Pattern { return <- set_lpq(pat, q); }
+def resonance(var pat : Pattern; q : float) : Pattern { return <- set_lpq(pat, q); }
+def hpq(var pat : Pattern; q : float) : Pattern { return <- set_hpq(pat, q); }
+def attack(var pat : Pattern; a : float) : Pattern { return <- set_attack(pat, a); }
+def att(var pat : Pattern; a : float) : Pattern { return <- set_attack(pat, a); }
+def decay(var pat : Pattern; d : float) : Pattern { return <- set_decay(pat, d); }
+def dec(var pat : Pattern; d : float) : Pattern { return <- set_decay(pat, d); }
+def sustain(var pat : Pattern; s : float) : Pattern { return <- set_sustain(pat, s); }
+def sus(var pat : Pattern; s : float) : Pattern { return <- set_sustain(pat, s); }
+def release(var pat : Pattern; r : float) : Pattern { return <- set_release(pat, r); }
+def rel(var pat : Pattern; r : float) : Pattern { return <- set_release(pat, r); }
+def chorus(var pat : Pattern; c : float) : Pattern { return <- set_chorus(pat, c); }
+
+// ── Sample region & effects aliases ──
+
+def begin(var pat : Pattern; b : float) : Pattern { return <- set_begin(pat, b); }
+def end_pos(var pat : Pattern; e_val : float) : Pattern { return <- set_end(pat, e_val); }
+def crush(var pat : Pattern; c : float) : Pattern { return <- set_crush(pat, c); }
+def coarse(var pat : Pattern; c : int) : Pattern { return <- set_coarse(pat, c); }
+def shape(var pat : Pattern; s : float) : Pattern { return <- set_shape(pat, s); }
+def djf(var pat : Pattern; d : float) : Pattern { return <- set_djf(pat, d); }
+def bpf(var pat : Pattern; freq : float) : Pattern { return <- set_bpf(pat, freq); }
+def bpq(var pat : Pattern; q : float) : Pattern { return <- set_bpq(pat, q); }
+
+// ── Phaser / Tremolo / Compressor aliases ──
+
+def phaser(var pat : Pattern; r : float) : Pattern { return <- set_phaser(pat, r); }
+def ph(var pat : Pattern; r : float) : Pattern { return <- set_phaser(pat, r); }
+def phaserdepth(var pat : Pattern; d : float) : Pattern { return <- set_phaserdepth(pat, d); }
+def phd(var pat : Pattern; d : float) : Pattern { return <- set_phaserdepth(pat, d); }
+def phasercenter(var pat : Pattern; c : float) : Pattern { return <- set_phasercenter(pat, c); }
+def phc(var pat : Pattern; c : float) : Pattern { return <- set_phasercenter(pat, c); }
+def phasersweep(var pat : Pattern; s : float) : Pattern { return <- set_phasersweep(pat, s); }
+def phs(var pat : Pattern; s : float) : Pattern { return <- set_phasersweep(pat, s); }
+
+def tremolo(var pat : Pattern; r : float) : Pattern { return <- set_tremolo(pat, r); }
+def trem(var pat : Pattern; r : float) : Pattern { return <- set_tremolo(pat, r); }
+def tremolodepth(var pat : Pattern; d : float) : Pattern { return <- set_tremolodepth(pat, d); }
+def tremdepth(var pat : Pattern; d : float) : Pattern { return <- set_tremolodepth(pat, d); }
+
+def compressor(var pat : Pattern; thr_db : float) : Pattern { return <- set_compressor(pat, thr_db); }
+// camelCase aliases; also expose snake_case for daScript-idiomatic callers.
+def compressorRatio(var pat : Pattern; r : float) : Pattern { return <- set_compressor_ratio(pat, r); }
+def compressor_ratio(var pat : Pattern; r : float) : Pattern { return <- set_compressor_ratio(pat, r); }
+def compressorKnee(var pat : Pattern; k : float) : Pattern { return <- set_compressor_knee(pat, k); }
+def compressor_knee(var pat : Pattern; k : float) : Pattern { return <- set_compressor_knee(pat, k); }
+def compressorAttack(var pat : Pattern; a : float) : Pattern { return <- set_compressor_attack(pat, a); }
+def compressor_attack(var pat : Pattern; a : float) : Pattern { return <- set_compressor_attack(pat, a); }
+def compressorRelease(var pat : Pattern; r : float) : Pattern { return <- set_compressor_release(pat, r); }
+def compressor_release(var pat : Pattern; r : float) : Pattern { return <- set_compressor_release(pat, r); }
+
+// ── SF2 aliases ──
+
+def sf2(var pat : Pattern; program : int) : Pattern { return <- set_sf2(pat, program); }
+def sf2(var pat : Pattern; name : string) : Pattern { return <- set_sf2(pat, name); }
+def sf2_bank(var pat : Pattern; bank : int) : Pattern { return <- set_sf2_bank(pat, bank); }
+def sf2_expression(var pat : Pattern; v : float) : Pattern { return <- set_sf2_expression(pat, v); }
+def sf2_mod_wheel(var pat : Pattern; v : float) : Pattern { return <- set_sf2_mod_wheel(pat, v); }
+def sf2_pitch_bend(var pat : Pattern; v : float) : Pattern { return <- set_sf2_pitch_bend(pat, v); }
+
+// ── Pattern-modulated parameter aliases ──
+
+def gain(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_gain(pat, mod_pat); }
+def velocity(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_velocity(pat, mod_pat); }
+def vel(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_velocity(pat, mod_pat); }
+def pan(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_pan(pat, mod_pat); }
+def speed(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_speed(pat, mod_pat); }
+def note(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_note(pat, mod_pat); }
+def sound(var pat : Pattern; var sound_pat : Pattern) : Pattern { return <- set_sound(pat, sound_pat); }
+def room(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_room(pat, mod_pat); }
+def roomsize(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_roomsize(pat, mod_pat); }
+def size(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_roomsize(pat, mod_pat); }
+def delay(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_delay(pat, mod_pat); }
+def delaytime(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_delaytime(pat, mod_pat); }
+def dt(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_delaytime(pat, mod_pat); }
+def delayfeedback(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_delayfeedback(pat, mod_pat); }
+def dfb(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_delayfeedback(pat, mod_pat); }
+def fm(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_fm(pat, mod_pat); }
+def fmh(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_fmh(pat, mod_pat); }
+def lpf(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_lpf(pat, mod_pat); }
+def lp(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_lpf(pat, mod_pat); }
+def hpf(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_hpf(pat, mod_pat); }
+def hp(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_hpf(pat, mod_pat); }
+def lpq(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_lpq(pat, mod_pat); }
+def resonance(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_lpq(pat, mod_pat); }
+def hpq(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_hpq(pat, mod_pat); }
+def attack(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_attack(pat, mod_pat); }
+def att(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_attack(pat, mod_pat); }
+def decay(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_decay(pat, mod_pat); }
+def dec(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_decay(pat, mod_pat); }
+def sustain(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_sustain(pat, mod_pat); }
+def sus(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_sustain(pat, mod_pat); }
+def release(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_release(pat, mod_pat); }
+def rel(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_release(pat, mod_pat); }
+def chorus(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_chorus(pat, mod_pat); }
+def sf2_expression(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_sf2_expression(pat, mod_pat); }
+def sf2_mod_wheel(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_sf2_mod_wheel(pat, mod_pat); }
+def sf2_pitch_bend(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_sf2_pitch_bend(pat, mod_pat); }
+def begin(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_begin(pat, mod_pat); }
+def end_pos(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_end(pat, mod_pat); }
+def crush(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_crush(pat, mod_pat); }
+def shape(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_shape(pat, mod_pat); }
+def djf(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_djf(pat, mod_pat); }
+def bpf(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_bpf(pat, mod_pat); }
+def bpq(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_bpq(pat, mod_pat); }
+def phaser(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phaser(pat, mod_pat); }
+def ph(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phaser(pat, mod_pat); }
+def phaserdepth(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phaserdepth(pat, mod_pat); }
+def phd(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phaserdepth(pat, mod_pat); }
+def phasercenter(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phasercenter(pat, mod_pat); }
+def phc(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phasercenter(pat, mod_pat); }
+def phasersweep(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phasersweep(pat, mod_pat); }
+def phs(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_phasersweep(pat, mod_pat); }
+def tremolo(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_tremolo(pat, mod_pat); }
+def trem(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_tremolo(pat, mod_pat); }
+def tremolodepth(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_tremolodepth(pat, mod_pat); }
+def tremdepth(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_tremolodepth(pat, mod_pat); }
+def compressor(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor(pat, mod_pat); }
+def compressorRatio(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_ratio(pat, mod_pat); }
+def compressor_ratio(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_ratio(pat, mod_pat); }
+def compressorKnee(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_knee(pat, mod_pat); }
+def compressor_knee(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_knee(pat, mod_pat); }
+def compressorAttack(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_attack(pat, mod_pat); }
+def compressor_attack(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_attack(pat, mod_pat); }
+def compressorRelease(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_release(pat, mod_pat); }
+def compressor_release(var pat : Pattern; var mod_pat : Pattern) : Pattern { return <- set_compressor_release(pat, mod_pat); }
+
+// ── Signal aliases ──
+
+def sine() : Pattern { return <- signal_sine(); }
+def cosine() : Pattern { return <- signal_cosine(); }
+def saw() : Pattern { return <- signal_saw(); }
+def tri() : Pattern { return <- signal_tri(); }
+def perlin() : Pattern { return <- signal_perlin(); }
+def range(var pat : Pattern; lo, hi : float) : Pattern { return <- signal_range(pat, lo, hi); }
+def square() : Pattern { return <- signal_square(); }
+def isaw() : Pattern { return <- signal_isaw(); }
+def itri() : Pattern { return <- signal_itri(); }
+def sine2() : Pattern { return <- signal_sine2(); }
+def cosine2() : Pattern { return <- signal_cosine2(); }
+def saw2() : Pattern { return <- signal_saw2(); }
+def tri2() : Pattern { return <- signal_tri2(); }
+def square2() : Pattern { return <- signal_square2(); }
+def isaw2() : Pattern { return <- signal_isaw2(); }
+def itri2() : Pattern { return <- signal_itri2(); }
+def rand() : Pattern { return <- signal_rand(); }
+def rand2() : Pattern { return <- signal_rand2(); }
+def irand(n : int) : Pattern { return <- signal_irand(n); }
+def run(n : int) : Pattern { return <- signal_run(n); }
+
+// ── Additional aliases ──
+
+def degradeBy(var pat : Pattern; prob : float) : Pattern { return <- degrade(pat, prob); }

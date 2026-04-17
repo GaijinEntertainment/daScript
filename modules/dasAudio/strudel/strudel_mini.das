@@ -109,7 +109,9 @@ def tokenize(input : string) : array<Token> {
                 let start = i
                 while (i < n) {
                     let c = int(data[i])
-                    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
+                    // Include '#' so note names like "d#3" parse as a single WORD token
+                    // (mini-notation treats # as a step char).
+                    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '#') {
                         i ++
                     } else {
                         break
@@ -316,6 +318,9 @@ def parse_atom(var p : Parser) : Pattern {
 
 // Try to parse a note name like "c3", "eb4", "fs2" → MIDI number.
 // Returns -1.0 if not a note name.
+// Parse a note name with explicit octave. "d3", "eb4", "fs3". Returns -1 on miss.
+// Used by the mini-notation tokenizer — bare letters like "d" are treated as sounds,
+// not notes, so `s("a e i")` can be vowels or sound names without collision.
 def parse_note_name(name : string) : float {
     let n = length(name)
     if (n < 2 || n > 3) {
@@ -352,6 +357,52 @@ def parse_note_name(name : string) : float {
             return
         }
         let octave = octCh - int('0')
+        result = float((octave + 1) * 12 + semitone)
+    }
+    return result
+}
+
+// Parse a note name allowing octave to be omitted (defaults to default_oct,
+// e.g. noteToMidi(note, defaultOctave=3)). "d", "d#", "d#3", "eb".
+// Returns -1 if the string isn't a valid note.
+def parse_note_name_default(name : string; default_oct : int) : float {
+    let n = length(name)
+    if (n < 1 || n > 3) {
+        return -1.0
+    }
+    var result = -1.0
+    peek_data(name) $(bytes) {
+        let ch = int(bytes[0])
+        var semitone = -1
+        if (ch == 'c') { semitone = 0; }
+        elif (ch == 'd') { semitone = 2; }
+        elif (ch == 'e') { semitone = 4; }
+        elif (ch == 'f') { semitone = 5; }
+        elif (ch == 'g') { semitone = 7; }
+        elif (ch == 'a') { semitone = 9; }
+        elif (ch == 'b') { semitone = 11; }
+        if (semitone < 0) {
+            return
+        }
+        var octave = default_oct
+        var nextIdx = 1
+        if (n >= 2) {
+            let mod = int(bytes[1])
+            if (mod == 's' || mod == '#') {
+                semitone ++
+                nextIdx = 2
+            } elif (mod == 'b') {
+                semitone --
+                nextIdx = 2
+            }
+        }
+        if (nextIdx < n) {
+            let octCh = int(bytes[nextIdx])
+            if (octCh < '0' || octCh > '9') {
+                return
+            }
+            octave = octCh - int('0')
+        }
         result = float((octave + 1) * 12 + semitone)
     }
     return result
@@ -475,7 +526,22 @@ def set_s(var pat : Pattern; notation : string) : Pattern {
 // note("c3 ~ e3 g3") → pattern with note events (sound defaults to "sine")
 def note_pattern(notation : string; sound : string = "sine") : Pattern {
     let pat <- s(notation)
-    return <- pat |> set_sound(sound)
+    // Post-process: any event whose .s is a note name (including bare "d", "d#"
+    // without octave) gets converted to .note via default-octave parsing.
+    // parse_atom already converts tokens with explicit octave ("d3"); this pass
+    // handles the shorthand where the octave is implicit (default 3).
+    let converted <- pat |> fmap(@(e : Event) : Event {
+        var r = e
+        if (!empty(r.s)) {
+            let midi = parse_note_name_default(r.s, 3)
+            if (midi >= 0.0) {
+                r.note = midi
+                r.s = ""
+            }
+        }
+        return r
+    })
+    return <- converted |> set_sound(sound)
 }
 
 // Parse mini-notation with | bar separators for sequential melodies.
@@ -512,3 +578,14 @@ def every_degrade(n : int; prob : float; notation : string) : Pattern {
     let off <- s(notation)
     return <- every(n, on, off)
 }
+
+// ─── Bare-Name Aliases ───
+
+// note("c3 e3 g3") — alias for note_pattern
+def note(notation : string; sound : string = "sine") : Pattern { return <- note_pattern(notation, sound); }
+
+// vowel("a") or vowel("<a e i>") — alias for set_vowel (string overload)
+def vowel(var pat : Pattern; notation : string) : Pattern { return <- set_vowel(pat, notation); }
+
+// vowel(s("<a e i>") |> slow(4.0lf)) — alias for set_vowel (Pattern overload)
+def vowel(var pat : Pattern; var vowel_pat : Pattern) : Pattern { return <- set_vowel(pat, vowel_pat); }

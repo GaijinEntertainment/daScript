@@ -223,28 +223,28 @@ def init() {
         )
         */
         strudel_add_track(
-            note_pattern("c2 ~ [~ c2] ~, ~ eb2 ~ eb2, [~ fs2] [~ fs2] [~ fs2] [~ fs2]")
-                |> set_sf2(0) |> set_sf2_bank(128) |> set_gain(0.7)
+            note("c2 ~ [~ c2] ~, ~ eb2 ~ eb2, [~ fs2] [~ fs2] [~ fs2] [~ fs2]")
+                |> sf2(0) |> sf2_bank(128) |> gain(0.7)
                 |> pianoroll("drums") |> vis_color(0xFF5722u) |> drums()
         )
         strudel_add_track(
-            note_pattern("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>")
-                |> set_sf2("piano") |> set_gain(0.45)
+            note("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>")
+                |> sf2("piano") |> gain(0.45)
                 |> pianoroll("piano") |> vis_color(0x42A5F5u)
         )
         strudel_add_track(
-            note_pattern("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>")
-                |> set_sf2("acoustic_bass") |> set_gain(0.6)
+            note("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>")
+                |> sf2("acoustic_bass") |> gain(0.6)
                 |> pianoroll("bass") |> vis_color(0x8BC34Au) |> scope()
         )
         strudel_add_track(
-            note_pattern("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")
-                |> set_sf2("string_ensemble") |> set_gain(0.2)
+            note("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>")
+                |> sf2("string_ensemble") |> gain(0.2)
                 |> pianoroll("strings") |> vis_color(0xE040FFu) |> vectorscope()
         )
         strudel_add_track(
-            note_pattern("<e4 ~ ~ a4> <~ d5 ~ ~> <g4 ~ f4 ~> <~ ~ b4 ~>")
-                |> set_sf2("violin") |> set_gain(0.9)
+            note("<e4 ~ ~ a4> <~ d5 ~ ~> <g4 ~ f4 ~> <~ ~ b4 ~>")
+                |> sf2("violin") |> gain(0.9)
                 |> pianoroll("violin") |> vis_color(0xF06292u) |> spectrum()
         )
     } else {
@@ -253,20 +253,20 @@ def init() {
                 |> pianoroll("drums") |> vis_color(0xFF5722u) |> drums()
         )
         strudel_add_track(
-            note_pattern("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>", "sawtooth")
-                |> set_gain(0.3) |> pianoroll("piano") |> vis_color(0x42A5F5u)
+            note("<[a3 c4 e4 a4 e4 c4 a3 c4] [f3 a3 c4 f4 c4 a3 f3 a3] [c3 e3 g3 c4 g3 e3 c3 e3] [g3 b3 d4 g4 d4 b3 g3 b3]>", "sawtooth")
+                |> gain(0.3) |> pianoroll("piano") |> vis_color(0x42A5F5u)
         )
         strudel_add_track(
-            note_pattern("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>", "sine")
-                |> set_gain(0.4) |> pianoroll("bass") |> vis_color(0x8BC34Au) |> scope()
+            note("<[a2 ~ ~ a2 ~ a2 ~ ~] [f2 ~ ~ f2 ~ f2 ~ ~] [c2 ~ ~ c2 ~ c2 ~ ~] [g2 ~ ~ g2 ~ g2 ~ ~]>", "sine")
+                |> gain(0.4) |> pianoroll("bass") |> vis_color(0x8BC34Au) |> scope()
         )
         strudel_add_track(
-            note_pattern("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>", "sawtooth")
-                |> set_gain(0.15) |> pianoroll("strings") |> vis_color(0xE040FFu) |> vectorscope()
+            note("<[a2,c3,e3] [f2,a2,c3] [c2,e2,g2] [g2,b2,d3]>", "sawtooth")
+                |> gain(0.15) |> pianoroll("strings") |> vis_color(0xE040FFu) |> vectorscope()
         )
         strudel_add_track(
-            note_pattern("<e4 ~ ~ a4> <~ d5 ~ ~> <g4 ~ f4 ~> <~ ~ b4 ~>", "sawtooth")
-                |> set_gain(0.1) |> pianoroll("violin") |> vis_color(0xF06292u) |> spectrum()
+            note("<e4 ~ ~ a4> <~ d5 ~ ~> <g4 ~ f4 ~> <~ ~ b4 ~>", "sawtooth")
+                |> gain(0.1) |> pianoroll("violin") |> vis_color(0xF06292u) |> spectrum()
         )
     }
     // Build panels from visualization registrations

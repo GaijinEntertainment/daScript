@@ -14,6 +14,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- atom("sine") |> set_note(48.0) |> set_sustain(1.0) |> set_pan(signal_sine() |> slow(4.0lf))
+    let pat <- atom("sine") |> note(48.0) |> sustain(1.0) |> pan(sine() |> slow(4.0lf))
     play_feature_cps(pat, 0.5lf)
 }

@@ -16,8 +16,8 @@ require feature_common
 [export]
 def main() {
     let media = "{get_das_root()}/examples/media"
-    var pat <- jux(s("bd sd hh cp"), @(x) => rev(x))
-    play_feature_cps(pat, 0.5lf) <| $ {
+    let pat <- jux(s("bd sd hh cp"), @(x) => rev(x))
+    play_feature_cps(pat, 0.5lf) {
         strudel_load_sound("{media}/drums/bd", "bd")
         strudel_load_sound("{media}/drums/sd", "sd")
         strudel_load_sound("{media}/drums/hh", "hh")

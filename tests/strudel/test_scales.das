@@ -80,8 +80,8 @@ def test_parse_root_c3(t : T?) {
 
 [test]
 def test_parse_root_g(t : T?) {
-    // G without octave → G4 = 67
-    t |> equal(parse_root("G"), 67)
+    // G without octave → G3 = 55 (default octave is 3)
+    t |> equal(parse_root("G"), 55)
 }
 
 [test]
@@ -183,12 +183,12 @@ def test_set_scale_g_major(t : T?) {
 
 [test]
 def test_set_scale_no_root(t : T?) {
-    // just "major" without root → defaults to C4
+    // just "major" without root → defaults to C3 (default octave 3)
     let pat <- n("0 4") |> set_scale("major")
     var inscope events <- query_all(pat)
     t |> equal(length(events), 2)
-    t |> success(abs(events[0].note - 60.0) < 0.01)  // C4
-    t |> success(abs(events[1].note - 67.0) < 0.01)  // G4
+    t |> success(abs(events[0].note - 48.0) < 0.01)  // C3
+    t |> success(abs(events[1].note - 55.0) < 0.01)  // G3
 }
 
 // ─── scale_pattern convenience ───

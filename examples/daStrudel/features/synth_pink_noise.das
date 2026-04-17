@@ -15,6 +15,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- atom("pink") |> set_sustain(1.0) |> set_lpf(300.0)
+    let pat <- atom("pink") |> sustain(1.0) |> lpf(300.0)
     play_feature_cps(pat, 0.5lf)
 }

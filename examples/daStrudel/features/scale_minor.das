@@ -15,6 +15,6 @@ require feature_common
 
 [export]
 def main() {
-    let pat <- scale_pattern("0 1 2 3 4", "C4:minor:pentatonic") |> set_attack(0.001) |> set_decay(0.1) |> set_sustain(0.0) |> set_release(0.2)
+    let pat <- scale_pattern("0 1 2 3 4", "C4:minor:pentatonic") |> attack(0.001) |> decay(0.1) |> sustain(0.0) |> release(0.2)
     play_feature_cps(pat, 0.5lf)
 }

@@ -24,6 +24,24 @@ def noise(var seed : uint&) : float {
     return float(seed >> 9u & 0x7FFFFFu) / float(0x3FFFFFu) - 1.0
 }
 
+// Polynomial band-limited step. Smooths the discontinuity at phase 0 / 1
+// of a naive sawtooth or square to eliminate aliases above Nyquist.
+// Ref: https://www.kvraudio.com/forum/viewtopic.php?t=375517
+// t = phase [0,1), dt = freq / sample_rate.
+def poly_blep(t, dt : float) : float {
+    var dt2 = dt
+    if (dt2 > 0.5) { dt2 = 0.5; }
+    if (dt2 < 0.0001) { return 0.0; }
+    if (t < dt2) {
+        let x = t / dt2
+        return x + x - x * x - 1.0
+    } elif (t > 1.0 - dt2) {
+        let x = (t - 1.0) / dt2
+        return x * x + x + x + 1.0
+    }
+    return 0.0
+}
+
 // ADSR envelope. Returns amplitude 0.0–1.0 for a given time position.
 def adsr(t, attack, decay, sustain, release, duration : float) : float {
     if (t < 0.0) {
@@ -522,8 +540,8 @@ def to_osc_type(sound : string) : OscType {
     return OscType.osc_unknown
 }
 
-let SUPERSAW_VOICES = 7
-let SUPERSAW_DETUNE = 0.2  // detune spread in semitones (+/- from center)
+let SUPERSAW_VOICES = 5       // default unison voice count
+let SUPERSAW_DETUNE = 0.18    // default frequency spread in semitones
 
 // Pink noise state — Paul Kellet's 7-stage cascaded IIR filter
 struct PinkNoiseState {
@@ -704,6 +722,107 @@ def vowel_filter_tick(var vf : VowelFilter; input : float) : float {
     return sum * VOWEL_MAKEUP_GAIN
 }
 
+// ─── Per-voice effect chain (bitcrush, waveshaper, DJ filter, bandpass, phaser, tremolo, compressor) ───
+// Wraps the C++ ma_* effect structs; initialised from Event fields.
+// Fields whose corresponding Event field is at its "off" value stay unused,
+// so a default VoiceFX is a cheap no-op.
+[safe_when_uninitialized]
+struct VoiceFX {
+    @safe_when_uninitialized bc   : ma_bitcrush
+    @safe_when_uninitialized ws   : ma_waveshaper
+    @safe_when_uninitialized dj   : ma_djfilter
+    @safe_when_uninitialized bp   : ma_bandpass
+    @safe_when_uninitialized ph   : ma_phaser
+    @safe_when_uninitialized trem : ma_tremolo
+    @safe_when_uninitialized comp : ma_compressor
+    has_crush : bool = false
+    has_shape : bool = false
+    has_djf   : bool = false
+    has_bpf   : bool = false
+    has_phaser : bool = false
+    has_tremolo : bool = false
+    has_compressor : bool = false
+    active    : bool = false
+}
+
+// Configure a VoiceFX from an Event. Returns silently if nothing is active.
+def fx_init_from_event(var fx : VoiceFX; event : Event; sample_rate : float) {
+    if (event.crush > 0.0 || event.coarse > 0) {
+        unsafe { bitcrush_init(addr(fx.bc)); }
+        fx.bc.bits = event.crush
+        fx.bc.coarse = event.coarse
+        fx.has_crush = true
+    }
+    if (event.shape > 0.0) {
+        unsafe { waveshaper_init(addr(fx.ws)); }
+        fx.ws.drive = event.shape
+        fx.has_shape = true
+    }
+    if (abs(event.djf - 0.5) > 0.001) {
+        unsafe { djfilter_init(addr(fx.dj), sample_rate); }
+        fx.dj.position = event.djf
+        fx.has_djf = true
+    }
+    if (event.bpf > 0.0) {
+        unsafe { bandpass_init(addr(fx.bp), sample_rate); }
+        unsafe { bandpass_setup(addr(fx.bp), event.bpf, max(event.bpq, 0.01)); }
+        fx.has_bpf = true
+    }
+    if (event.phaser > 0.0) {
+        unsafe { phaser_init(addr(fx.ph), sample_rate); }
+        fx.ph.rate = event.phaser
+        fx.ph.depth = clamp(event.phaserdepth, 0.0, 1.0)
+        fx.ph.center = event.phasercenter
+        fx.ph.sweep = event.phasersweep
+        fx.has_phaser = true
+    }
+    if (event.tremolo > 0.0 && event.tremolodepth > 0.0) {
+        unsafe { tremolo_init(addr(fx.trem), sample_rate); }
+        fx.trem.rate = event.tremolo
+        fx.trem.depth = clamp(event.tremolodepth, 0.0, 1.0)
+        fx.has_tremolo = true
+    }
+    if (event.compressor < 0.0) {
+        unsafe { compressor_init(addr(fx.comp), sample_rate); }
+        fx.comp.threshold_db = event.compressor
+        fx.comp.ratio = max(event.compressor_ratio, 1.0)
+        fx.comp.knee_db = max(event.compressor_knee, 0.0)
+        fx.comp.attack = max(event.compressor_attack, 0.0)
+        fx.comp.release = max(event.compressor_release, 0.0)
+        fx.has_compressor = true
+    }
+    fx.active = fx.has_crush || fx.has_shape || fx.has_djf || fx.has_bpf || fx.has_phaser || fx.has_tremolo || fx.has_compressor
+}
+
+// Apply configured effects to an interleaved stereo buffer (n_frames = sample-frame count).
+// Ordered: crush → shape → djfilter → bandpass → phaser → tremolo → compressor.
+// Phaser and tremolo come after the timbral effects to modulate the finished tone;
+// compressor is last so it sees the post-FX signal.
+def fx_apply(var fx : VoiceFX; var buf : array<float>; n_frames : int) {
+    if (!fx.active || n_frames <= 0 || length(buf) < n_frames * 2) {
+        return
+    }
+    if (fx.has_crush)      { unsafe { bitcrush_process(addr(fx.bc), addr(buf[0]), n_frames); } }
+    if (fx.has_shape)      { unsafe { waveshaper_process(addr(fx.ws), addr(buf[0]), n_frames); } }
+    if (fx.has_djf)        { unsafe { djfilter_process(addr(fx.dj), addr(buf[0]), n_frames); } }
+    if (fx.has_bpf)        { unsafe { bandpass_process(addr(fx.bp), addr(buf[0]), n_frames); } }
+    if (fx.has_phaser)     { unsafe { phaser_process(addr(fx.ph), addr(buf[0]), n_frames); } }
+    if (fx.has_tremolo)    { unsafe { tremolo_process(addr(fx.trem), addr(buf[0]), n_frames); } }
+    if (fx.has_compressor) { unsafe { compressor_process(addr(fx.comp), addr(buf[0]), n_frames); } }
+}
+
+// Apply effects to an already-rendered stereo PCM buffer (one-shot for pre-rendered voices).
+// State is local to this call, so effects reset every render.
+def fx_apply_to_samples(event : Event; var samples : array<float>; sample_rate : float) {
+    let n_frames = length(samples) / 2
+    if (n_frames <= 0) {
+        return
+    }
+    var fx : VoiceFX
+    fx_init_from_event(fx, event, sample_rate)
+    fx_apply(fx, samples, n_frames)
+}
+
 // Streaming oscillator voice — renders per-chunk instead of pre-rendering the full duration.
 struct OscVoice {
     osc_type        : OscType = OscType.osc_sine
@@ -741,6 +860,8 @@ struct OscVoice {
     orbit : int = 0             // effect bus routing
     // vowel formant filter
     @safe_when_uninitialized vowel_filter : VowelFilter
+    // per-voice audio effects (crush/coarse/shape/djf/bpf/bpq)
+    @safe_when_uninitialized fx : VoiceFX
 }
 
 // Initialize supersaw phases with random offsets for natural unison spread.
@@ -813,7 +934,8 @@ def private osc_chunk_sawtooth(var voice : OscVoice; var output : array<float>; 
         }
         var p = voice.phase + fmOffset
         p -= floor(p)
-        var sample = (p * 2.0 - 1.0) * env
+        // Band-limited sawtooth via polyBLEP to suppress aliasing above Nyquist.
+        var sample = (p * 2.0 - 1.0 - poly_blep(p, phaseInc)) * env
         if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
         if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
@@ -842,7 +964,10 @@ def private osc_chunk_square(var voice : OscVoice; var output : array<float>; va
         }
         var p = voice.phase + fmOffset
         p -= floor(p)
-        var sample = (p < 0.5 ? 1.0 : -1.0) * env
+        // Band-limited square: subtract BLEP at rising edge (p=0), add BLEP at falling edge (p=0.5).
+        var p_half = p + 0.5
+        p_half -= floor(p_half)
+        var sample = ((p < 0.5 ? 1.0 : -1.0) - poly_blep(p, phaseInc) + poly_blep(p_half, phaseInc)) * env
         if (hasLpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.lpf_biquad), sample); } }
         if (hasHpf) { unsafe { sample = ma_sf2_biquad_tick(addr(voice.hpf_biquad), sample); } }
         if (hasVowel) { sample = vowel_filter_tick(voice.vowel_filter, sample); }
@@ -911,7 +1036,8 @@ def private osc_chunk_supersaw(var voice : OscVoice; var output : array<float>; 
         for (v in range(SUPERSAW_VOICES)) {
             var p = voice.supersaw_phases[v] + fmOffset
             p -= floor(p)
-            let saw = (p * 2.0 - 1.0) * gainAdj
+            // polyBLEP-corrected sawtooth per detuned voice
+            let saw = (p * 2.0 - 1.0 - poly_blep(p, voicePhaseInc[v])) * gainAdj
             if (v % 2 == 0) { mixL += saw; } else { mixR += saw; }
             voice.supersaw_phases[v] += voicePhaseInc[v]
             voice.supersaw_phases[v] -= floor(voice.supersaw_phases[v])
@@ -1075,7 +1201,7 @@ def render_event_stereo(event : Event; duration_sec : float) : array<float> {
 // Returns raw stereo — no gain or pan.
 def render_event_stereo(event : Event; duration_sec : float; bank : SampleBank) : array<float> {
     if (key_exists(bank.sounds, event.s)) {
-        var samples <- render_sample(bank, event.s, event.n, event.speed)
+        var samples <- render_sample(bank, event.s, event.n, event.speed, event.begin, event.end_pos)
         if (length(samples) > 0) {
             return <- samples
         }

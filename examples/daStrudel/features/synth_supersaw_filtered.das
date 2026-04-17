@@ -18,7 +18,7 @@ require feature_common
 
 [export]
 def main() {
-    var lpfSig <- signal_sine() |> signal_range(400.0, 6000.0) |> slow(4.0lf)
-    var pat <- note_pattern("c3", "supersaw") |> set_lpf(lpfSig) |> set_attack(0.05) |> set_decay(0.1) |> set_sustain(0.8) |> set_release(0.5)
+    let lpfSig <- sine() |> range(400.0, 6000.0) |> slow(4.0lf)
+    let pat <- note("c3", "supersaw") |> lpf(lpfSig) |> attack(0.05) |> decay(0.1) |> sustain(0.8) |> release(0.5)
     play_feature_cps(pat, 0.25lf)
 }
