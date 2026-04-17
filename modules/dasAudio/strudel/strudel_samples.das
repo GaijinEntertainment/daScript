@@ -1,7 +1,10 @@
 options gen2
 options indenting = 4
 
-module strudel_samples shared
+module strudel_samples shared public
+//! Sample bank and audio file loading for the strudel pattern engine.
+//! Decodes WAV/MP3/FLAC/OGG via miniaudio (from disk or memory), organises
+//! them into named banks with indexed variations, and resamples playback.
 
 require audio/audio_boost
 require audio
@@ -9,22 +12,26 @@ require daslib/fio
 require daslib/strings_boost
 require math
 
-// A sample: interleaved float data + channel count.
+//! A decoded PCM audio sample.
 [safe_when_uninitialized]
 struct Sample {
     data        : array<float>   // interleaved PCM
+        //! Interleaved PCM float samples (left, right, left, right, ...).
     channels    : int = 1
+        //! Channel count (1 = mono, 2 = stereo).
     sample_rate : int = 48000
+        //! Native sample rate of the decoded audio in Hz.
 }
 
-// A sample bank: sound name → array of variations.
+//! A named bank of samples, each mapped to an array of variations.
 struct SampleBank {
     sounds : table<string; array<Sample>>
+        //! Map from lowercase sound name to its indexed variations (bd:0, bd:1, ...).
 }
 
-// Load a single audio file via miniaudio decoder.
-// Keeps native channel count (mono or stereo).
 def load_audio_file(path : string) : Sample {
+    //! Decode a single audio file (WAV/MP3/FLAC/OGG) from disk into a Sample.
+    //! Keeps the native channel count (mono or stereo); returns an empty Sample on failure.
     var result : Sample
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, 0u, 0u)
@@ -50,14 +57,14 @@ def load_audio_file(path : string) : Sample {
 }
 
 // Check if a filename looks like an audio file.
-def is_audio_file(name : string) : bool {
+def private is_audio_file(name : string) : bool {
     let lower = to_lower(name)
     return ends_with(lower, ".wav") || ends_with(lower, ".mp3") || ends_with(lower, ".flac") || ends_with(lower, ".ogg")
 }
 
-// Load a single sound from a directory of audio files.
-// Files are sorted alphabetically to match strudel sample indexing.
 def load_sound(path : string; name : string; var bank : SampleBank) {
+    //! Load a single named sound from a directory of audio files into the bank.
+    //! Files are sorted alphabetically so index :0, :1, ... matches strudel's sample indexing.
     var files : array<string>
     dir(path) $(file) {
         if (file == "." || file == "..") {
@@ -84,7 +91,7 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
 }
 
 // Load a Dirt-Samples style directory structure.
-def load_sample_dir(root : string; var bank : SampleBank) {
+def private load_sample_dir(root : string; var bank : SampleBank) {
     dir(root) $(entry) {
         if (entry == "." || entry == "..") {
             return
@@ -109,9 +116,9 @@ def load_sample_dir(root : string; var bank : SampleBank) {
     }
 }
 
-// Load audio from in-memory bytes (WAV, MP3, FLAC, OGG).
-// Uses miniaudio's memory decoder. Returns empty Sample on failure.
 def load_audio_memory(data : array<uint8>) : Sample {
+    //! Decode audio bytes (WAV/MP3/FLAC/OGG) from memory into a Sample.
+    //! Uses miniaudio's memory decoder with explicit error checking; returns an empty Sample on failure.
     var result : Sample
     if (length(data) == 0) {
         return <- result
@@ -137,8 +144,8 @@ def load_audio_memory(data : array<uint8>) : Sample {
     return <- result
 }
 
-// Load a sound from in-memory bytes into a sample bank.
 def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank) {
+    //! Decode audio bytes and add the result as a single-variation sound in the bank.
     var sample <- load_audio_memory(data)
     if (length(sample.data) > 0) {
         let soundName = to_lower(name)
@@ -148,11 +155,11 @@ def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank)
     }
 }
 
-// Render a sample with speed control via miniaudio resampler + channel converter.
-// begin/end_pos are normalized slice bounds (0.0–1.0) — striate, chop, loop_at use these.
-// Returns interleaved stereo, no gain/pan applied.
 def render_sample(bank : SampleBank; name : string; variation : int; speed : float;
                   begin : float = 0.0; end_pos : float = 1.0) : array<float> {
+    //! Render a sample slice at the given playback speed as interleaved stereo.
+    //! begin/end_pos are normalized [0.0..1.0] slice bounds used by striate/chop/loop_at;
+    //! speed resamples via miniaudio and mono input is upmixed to stereo. No gain/pan applied.
     var stereo : array<float>
     bank.sounds |> get(name) $(variations) {
         if (length(variations) == 0) {

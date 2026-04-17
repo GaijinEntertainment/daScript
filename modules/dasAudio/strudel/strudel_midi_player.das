@@ -4,6 +4,9 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
 module strudel_midi_player shared public
+//! MIDI Standard File playback on a dedicated audio thread.
+//! Routes events to either a GM-preset oscillator/sample path or an SF2 soundfont,
+//! mixes multiple tracks through reverb/chorus buses, and exposes a command-channel API.
 
 require strudel/strudel_midi
 require strudel/strudel_synth
@@ -19,15 +22,23 @@ require math
 
 // ─── GM Instrument Presets ───
 
+//! General MIDI instrument preset: oscillator waveform and ADSR envelope.
 struct GmPreset {
     osc   : OscType = OscType.osc_sine
+        //! Oscillator waveform used to synthesise the instrument.
     att   : float = 0.005
+        //! Envelope attack time in seconds.
     dec   : float = 0.1
+        //! Envelope decay time in seconds.
     sus   : float = 0.5
+        //! Envelope sustain level in [0, 1].
     rel   : float = 0.15
+        //! Envelope release time in seconds.
 }
 
 def gm_preset(program : int) : GmPreset {
+    //! Map a General MIDI program number (0-127) to a `GmPreset` used by the oscillator path.
+    //! Groups programs by GM family (piano, strings, brass, synth lead/pad, ...) and returns a reasonable default envelope per family.
     if (program < 8) {         // Piano — percussive, no sustain
         return GmPreset(osc = OscType.osc_triangle, att = 0.002, dec = 1.5, sus = 0.0, rel = 0.1)
     } elif (program < 16) {    // Chromatic Percussion
@@ -67,6 +78,8 @@ def gm_preset(program : int) : GmPreset {
 // ─── Channel 10 Drum Map ───
 
 def render_drum_hit(note : int; velocity : float) : array<float> {
+    //! Render a GM channel-10 drum hit for `note` at the given velocity as a mono PCM buffer.
+    //! Dispatches to the appropriate `render_*` drum voice from `strudel_synth`; falls back to a short hi-hat burst for unmapped notes.
     let gain = velocity
     if (note == 35 || note == 36) {
         return <- render_bd(0.5, gain)
@@ -117,7 +130,7 @@ def render_drum_hit(note : int; velocity : float) : array<float> {
 
 // ─── GM Drum Note → Sample Bank Name ───
 
-def gm_drum_name(note : int) : string {
+def private gm_drum_name(note : int) : string {
     if (note == 35 || note == 36) { return "bd"; }
     if (note == 37) { return "sidestick"; }
     if (note == 38 || note == 40) { return "sd"; }
@@ -137,9 +150,9 @@ def gm_drum_name(note : int) : string {
 
 // ─── Piano Note → Sample Mapping ───
 
-let PIANO_PITCH_CENTERS = fixed_array(29, 35, 40, 45, 50, 55, 59, 62, 65, 71, 76, 81, 86, 91, 96)
+let private PIANO_PITCH_CENTERS = fixed_array(29, 35, 40, 45, 50, 55, 59, 62, 65, 71, 76, 81, 86, 91, 96)
 
-def piano_sample_name(midi_note : int) : tuple<name : string; speed : float> {
+def private piano_sample_name(midi_note : int) : tuple<name : string; speed : float> {
     var best = 62
     var bestDist = 200
     for (n in PIANO_PITCH_CENTERS) {
@@ -156,6 +169,8 @@ def piano_sample_name(midi_note : int) : tuple<name : string; speed : float> {
 // ─── MIDI ADSR (sustain holds until note-off) ───
 
 def midi_adsr(elapsed, note_off_elapsed, attack, decay, sustain, release : float) : float {
+    //! Evaluate the MIDI-style ADSR at `elapsed` seconds since note-on and `note_off_elapsed` seconds since note-off.
+    //! `note_off_elapsed < 0` means the note is still held. The sustain phase also decays exponentially so long-held notes fade.
     if (elapsed < 0.0) {
         return 0.0
     }
@@ -183,6 +198,7 @@ def midi_adsr(elapsed, note_off_elapsed, attack, decay, sustain, release : float
 
 // ─── MIDI Voice ───
 
+//! One active oscillator/sample voice on the legacy (non-SF2) MIDI playback path.
 struct MidiVoice {
     channel     : int
     note        : int
@@ -206,6 +222,7 @@ struct MidiVoice {
 
 // ─── Channel State ───
 
+//! Per-MIDI-channel playback state (program, CCs, pitch bend, sustain pedal).
 struct MidiChannelState {
     program    : int = 0
     volume     : float = 1.0    // CC7 (linear 0-1, used for non-SF2 voices)
@@ -220,37 +237,60 @@ struct MidiChannelState {
     cc_raw     : int[128]
 }
 
-def channel_init_cc(var ch : MidiChannelState) {
+def private channel_init_cc(var ch : MidiChannelState) {
     sf2_default_cc_values(ch.cc_raw)
 }
 
 // ─── Playback State (per track) ───
 
+//! Top-level playback state for a single MIDI track (multiple tracks are mixed by the audio thread).
 struct MidiPlaybackState {
     name           : string
+        //! Track name supplied by the caller (also used by ``midi_stop`` / ``midi_set_volume``).
     events         : array<MidiEvent>   // merged, sorted by tick
+        //! All MIDI events across tracks, merged and sorted by absolute tick.
     @safe_when_uninitialized channels : MidiChannelState[16]
+        //! Per-channel state (program, CCs, pitch bend, sustain pedal).
     voices         : array<MidiVoice?>
+        //! Active oscillator/sample voices (legacy path; unused when SF2 is active).
     csf2_voices    : array<ma_sf2_voice>   // SF2-based voices (C, for real-time rendering)
+        //! Active SF2 voices rendered by the C runtime.
     bank           : SampleBank const?  // optional sample bank (pointer to main context)
+        //! Optional sample bank pointer (owned by the main context).
     sf2            : SF2File const?     // optional SF2 soundfont (pointer to main context)
+        //! Optional SF2 soundfont pointer (owned by the main context).
     ticks_per_qn   : int = 480          // from MIDI file
+        //! Ticks per quarter note, taken from the MIDI file header.
     event_index    : int = 0
+        //! Index of the next event in `events` to process.
     current_tick   : double = 0.0lf
+        //! Current playback position in ticks.
     ticks_per_sec  : double = 0.0lf
+        //! Conversion factor from seconds to ticks (depends on current tempo).
     tempo_usec     : int = 500000       // default 120 BPM
+        //! Current tempo in microseconds per quarter note (500000 = 120 BPM).
     playback_time  : double = 0.0lf
+        //! Elapsed playback time in seconds.
     looping        : bool = false
+        //! If true, playback restarts from the beginning when the track ends.
     gain           : float = 1.0
+        //! Current linear gain applied to the track mix.
     target_gain    : float = 1.0
+        //! Fade target for `gain`; used by `midi_set_volume` to implement fades.
     fade_speed     : float = 0.0
+        //! Fade rate per second; 0 means instantaneous.
     remove_when_silent : bool = false
+        //! If true, the track is removed once it fades to zero (used by ``midi_stop``).
     done           : bool = false
+        //! Set to true when playback has finished and no voices remain.
     mixer          : ma_volume_mixer
+        //! Volume/pan mixer used for drum and sample voices.
     mixer_ready    : bool = false
+        //! True after `ma_volume_mixer_init` has been called on `mixer`.
 }
 
 def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : string; gain : float; looping : bool; bank : SampleBank const? = null; sf2 : SF2File const? = null) {
+    //! Initialise a `MidiPlaybackState` from a parsed `MidiFile`, merging its tracks and resetting per-channel state to GM defaults.
     state.name = name
     state.events <- merge_tracks(*midi)
     state.gain = gain
@@ -270,7 +310,7 @@ def init_playback(var state : MidiPlaybackState; midi : MidiFile const?; name : 
 // ─── SF2 Voice Management ───
 
 // Per-voice metadata not stored in ma_sf2_voice (C struct doesn't have these)
-struct SF2VoiceMeta {
+struct private SF2VoiceMeta {
     channel : int = 0
     note : int = 0
     exclusive_class : int = 0
@@ -363,6 +403,8 @@ def private sf2_note_off(var state : MidiPlaybackState; ch, note : int) {
 // ─── Event Processing ───
 
 def process_events(var state : MidiPlaybackState) {
+    //! Dispatch all MIDI events up to the current playback tick: note-on/off, program changes, CCs, pitch bend, tempo.
+    //! Routes note events either to the SF2 voice allocator or to the legacy oscillator/sample path depending on `state.sf2`.
     while (state.event_index < length(state.events)) {
         let ev & = unsafe(state.events[state.event_index])
         if (double(ev.tick) > state.current_tick) {
@@ -508,6 +550,8 @@ def process_events(var state : MidiPlaybackState) {
 // ─── Render One Tick ───
 
 def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<float> {
+    //! Advance playback by `chunk_seconds`, process pending events, render all active voices and return an interleaved stereo PCM chunk.
+    //! Handles oscillator voices, drum/sample playback, SF2 voices, and the shared reverb/chorus send buses.
     process_events(state)
     let chunkFrames = int(chunk_seconds * float(SAMPLE_RATE))
     let chunkSamples = chunkFrames * 2  // stereo
@@ -750,7 +794,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
 
 // ─── Command Channel ───
 
-variant MidiCommand {
+variant private MidiCommand {
     shutdown     : bool;
     add_track    : MidiTrackCmd;
     remove_track : string;
@@ -758,7 +802,7 @@ variant MidiCommand {
     set_pause    : bool;
 }
 
-struct MidiTrackCmd {
+struct private MidiTrackCmd {
     name    : string
     file    : MidiFile const?   // pointer to main context's g_midi_files entry
     bank    : SampleBank const? // pointer to main context's sample bank (optional)
@@ -973,12 +1017,14 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
 
 // ─── Public API ───
 
-// Set a visualization channel for MIDI audio output. Call before midi_init().
 def public midi_set_audio_vis_channel(var ch : Channel?) {
+    //! Register a channel that will receive rendered audio chunks for visualisation; call before `midi_init`.
     g_midi_audio_vis_ptr = unsafe(reinterpret<void?>(ch))
 }
 
 def public midi_init() {
+    //! Start the MIDI playback thread and attach it to the running audio stream.
+    //! No-op if already running; panics if the audio system has not been initialised first.
     if (g_midi_running) {
         return
     }
@@ -1003,8 +1049,8 @@ def public midi_init() {
     g_midi_running = true
 }
 
-// Load standard piano + drum samples into the module-global bank.
 def public midi_load_samples(media_path : string) {
+    //! Populate the module-global sample bank with piano samples (`note_{n}`) and GM drum samples under `media_path`.
     // piano samples
     for (n in PIANO_PITCH_CENTERS) {
         load_sound("{media_path}/piano/note_{n}", "note_{n}", g_midi_bank)
@@ -1016,13 +1062,15 @@ def public midi_load_samples(media_path : string) {
     }
 }
 
-// Load an SF2 soundfont into the module-global slot.
 def public midi_load_sf2(path : string) : bool {
+    //! Load an SF2 soundfont from disk into the module-global slot; returns true on success.
     g_midi_sf2 = sf2_load(path)
     return g_midi_sf2 != null
 }
 
 def public midi_play(name : string; path : string; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null; use_sf2 : bool = true) : bool {
+    //! Parse a .mid file from disk and submit it for playback under `name`.
+    //! Auto-starts the playback thread if needed; falls back to the oscillator/sample path when no SF2 is loaded or `use_sf2` is false.
     g_midi_files[name] <- load_midi(path)
     if (length(g_midi_files[name].tracks) == 0) {
         g_midi_files |> erase(name)
@@ -1046,6 +1094,8 @@ def public midi_play(name : string; path : string; gain : float = 1.0; looping :
 }
 
 def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0; looping : bool = false; bank : SampleBank const? = null; use_sf2 : bool = true) : bool {
+    //! Parse a .mid file from an in-memory byte array and submit it for playback under `name`.
+    //! Same semantics as `midi_play` but sourced from memory instead of disk.
     g_midi_files[name] <- parse_midi(data)
     if (length(g_midi_files[name].tracks) == 0) {
         g_midi_files |> erase(name)
@@ -1069,6 +1119,7 @@ def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0
 }
 
 def public midi_stop(name : string = "") {
+    //! Stop a single track by name, or shut down the whole playback thread when `name` is empty.
     if (!g_midi_running) {
         return
     }
@@ -1086,6 +1137,7 @@ def public midi_stop(name : string = "") {
 }
 
 def public midi_set_volume(name : string; volume : float; fade : float = 0.0) {
+    //! Set the linear gain of a named track, optionally fading over `fade` seconds (0 = instantaneous).
     if (!g_midi_running || g_midi_cmd_channel == null) {
         return
     }
@@ -1098,6 +1150,7 @@ def public midi_set_volume(name : string; volume : float; fade : float = 0.0) {
 }
 
 def public midi_set_pause(paused : bool) {
+    //! Pause or resume all MIDI playback (the underlying audio stream continues with silence while paused).
     if (!g_midi_running || g_midi_cmd_channel == null) {
         return
     }
@@ -1105,6 +1158,7 @@ def public midi_set_pause(paused : bool) {
 }
 
 def public midi_shutdown() {
+    //! Stop the playback thread and release its channels; blocks until the audio thread confirms shutdown.
     if (!g_midi_running || g_midi_cmd_channel == null) {
         return
     }
@@ -1125,11 +1179,12 @@ def public midi_shutdown() {
 }
 
 def public midi_is_playing() : bool {
+    //! Return true while the MIDI playback thread is running.
     return g_midi_running
 }
 
-// Initialize reverb + chorus for offline rendering (midi_tick without midi_init/thread).
 def public midi_init_reverb() {
+    //! Initialise the module-global reverb and chorus effects for offline rendering (calling `midi_tick` without running the thread).
     if (g_reverb == null) {
         g_reverb = new ConvolutionReverb
         conv_reverb_init(g_reverb, SAMPLE_RATE, 2.0, 15000.0, 1000.0, 0.01)

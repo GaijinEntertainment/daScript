@@ -53,6 +53,7 @@ struct MidiEvent {
 //! A sequence of MIDI events forming one track.
 struct MidiTrack {
     events : array<MidiEvent>
+        //! Events in this track, in order of absolute tick position.
 }
 
 //! Parsed MIDI file containing header info and tracks.
@@ -119,7 +120,7 @@ def read_vlq(data : array<uint8>; var cursor : int&) : int {
 
 // ─── Track Parser ───
 
-def parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
+def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack {
     //! Parse a single MTrk chunk starting at cursor, returning the track with all events.
     var track : MidiTrack
     // expect "MTrk"

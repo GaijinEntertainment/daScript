@@ -1,7 +1,10 @@
 options gen2
 options indenting = 4
 
-module strudel_mini shared
+module strudel_mini shared public
+//! Mini-notation tokenizer and parser — the strudel DSL for describing patterns as strings.
+//! Turns `"bd sd [hh hh] cp"` into a `Pattern` via `s()` / `n()` / `seq()`. Also provides
+//! fluent setters (`set_s`, `set_vowel`, `note_pattern`) and aliases (`s`, `note`, `vowel`).
 
 require strudel/strudel_event
 require strudel/strudel_time
@@ -11,36 +14,59 @@ require strings  // to_int, to_float, to_double, slice
 
 // ─── Tokenizer ───
 
+//! Mini-notation token kind.
 enum TokenKind {
     WORD        // bd, sd, c3, sawtooth
+        //! Identifier: sound name, note name, or keyword.
     NUMBER      // 3, 0.5
+        //! Numeric literal.
     TILDE       // ~ (silence)
+        //! Silence `~`.
     LBRACKET    // [
+        //! Opening bracket `[` — start of a subsequence.
     RBRACKET    // ]
+        //! Closing bracket `]` — end of a subsequence.
     LANGLE      // <
+        //! Opening angle `<` — start of an alternation (slowcat).
     RANGLE      // >
+        //! Closing angle `>` — end of an alternation.
     LPAREN      // (
+        //! Opening parenthesis `(` — reserved.
     RPAREN      // )
+        //! Closing parenthesis `)` — reserved.
     COMMA       // ,
+        //! Comma `,` — stack separator.
     STAR        // *
+        //! Star `*` — fast modifier (`x*n` = `x` played `n` times).
     SLASH       // /
+        //! Slash `/` — slow modifier (`x/n` = `x` stretched over `n` cycles).
     BANG        // !
+        //! Bang `!` — replicate modifier.
     AT          // @
+        //! At `@` — weight modifier (`x@n` occupies `n` units of the parent sequence).
     QUESTION    // ?
+        //! Question `?` — degrade modifier (random drop).
     COLON       // :
+        //! Colon `:` — sample-index modifier (`bd:1` picks variation 1).
     PIPE        // |
+        //! Pipe `|` — bar separator in `seq(...)`.
     EOF_TOKEN
+        //! End-of-input marker.
 }
 
+//! A single mini-notation token.
 struct Token {
     kind : TokenKind
+        //! Token kind.
     text : string
+        //! Source text of the token.
     pos  : int
+        //! Byte offset of the token in the original input string.
 }
 
-// Tokenize a mini-notation string.
-// Uses peek_data for O(1) per-character access instead of character_at (which is O(n)).
 def tokenize(input : string) : array<Token> {
+    //! Tokenize a mini-notation string into an array of `Token`. Uses `peek_data` for
+    //! O(1) per-character access. An `EOF_TOKEN` is always appended at the end.
     var tokens : array<Token>
     peek_data(input) $(data) {
         var i = 0
@@ -138,22 +164,22 @@ def tokenize(input : string) : array<Token> {
 //   atom_expr = WORD | NUMBER | "~" | "[" pattern "]" | "<" seq_expr+ ">"
 //   modifier  = "*" NUMBER | "/" NUMBER | "!" NUMBER | "?" NUMBER?
 
-struct Parser {
+struct private Parser {
     tokens : array<Token>
     pos    : int = 0
 }
 
-def peek(p : Parser) : Token {
+def private peek(p : Parser) : Token {
     return p.tokens[p.pos]
 }
 
-def advance(var p : Parser) : Token {
+def private advance(var p : Parser) : Token {
     let tok = p.tokens[p.pos]
     p.pos ++
     return tok
 }
 
-def expect_token(var p : Parser; kind : TokenKind) : Token {
+def private expect_token(var p : Parser; kind : TokenKind) : Token {
     let tok = peek(p)
     if (tok.kind != kind) {
         panic("mini-notation parse error at {tok.pos}: expected {kind}, got {tok.kind} '{tok.text}'")
@@ -161,12 +187,12 @@ def expect_token(var p : Parser; kind : TokenKind) : Token {
     return advance(p)
 }
 
-def at_end(p : Parser) : bool {
+def private at_end(p : Parser) : bool {
     return p.tokens[p.pos].kind == TokenKind.EOF_TOKEN
 }
 
 // Is the current token the start of an element?
-def is_element_start(p : Parser) : bool {
+def private is_element_start(p : Parser) : bool {
     let k = peek(p).kind
     return k == TokenKind.WORD || k == TokenKind.NUMBER || k == TokenKind.TILDE || k == TokenKind.LBRACKET || k == TokenKind.LANGLE
 }
@@ -174,7 +200,7 @@ def is_element_start(p : Parser) : bool {
 // Forward declarations via mutual recursion — daScript handles this.
 
 // parse_pattern → stack_expr
-def parse_pattern(var p : Parser) : Pattern {
+def private parse_pattern(var p : Parser) : Pattern {
     var first <- parse_seq(p)
     if (peek(p).kind != TokenKind.COMMA) {
         return <- first
@@ -191,7 +217,7 @@ def parse_pattern(var p : Parser) : Pattern {
 }
 
 // parse_seq → element+ → fastcat (or weighted_fastcat if _ or @ used)
-def parse_seq(var p : Parser) : Pattern {
+def private parse_seq(var p : Parser) : Pattern {
     var elements : array<Pattern>
     var weights : array<float>
     var has_weights = false
@@ -231,7 +257,7 @@ def parse_seq(var p : Parser) : Pattern {
 }
 
 // parse_element → atom_expr modifier*
-def parse_element(var p : Parser) : Pattern {
+def private parse_element(var p : Parser) : Pattern {
     var pat <- parse_atom(p)
     // apply modifiers
     while (!at_end(p)) {
@@ -275,7 +301,7 @@ def parse_element(var p : Parser) : Pattern {
 }
 
 // parse_atom → WORD | NUMBER | ~ | [ pattern ] | < seq+ >
-def parse_atom(var p : Parser) : Pattern {
+def private parse_atom(var p : Parser) : Pattern {
     let tok = peek(p)
     if (tok.kind == TokenKind.WORD) {
         advance(p)
@@ -316,12 +342,10 @@ def parse_atom(var p : Parser) : Pattern {
 
 // ─── Note Name Parsing ───
 
-// Try to parse a note name like "c3", "eb4", "fs2" → MIDI number.
-// Returns -1.0 if not a note name.
-// Parse a note name with explicit octave. "d3", "eb4", "fs3". Returns -1 on miss.
-// Used by the mini-notation tokenizer — bare letters like "d" are treated as sounds,
-// not notes, so `s("a e i")` can be vowels or sound names without collision.
 def parse_note_name(name : string) : float {
+    //! Parse a note name with explicit octave (`"c3"`, `"eb4"`, `"fs2"`) into a MIDI
+    //! number. Returns `-1.0` on miss. Bare letters without an octave return -1 —
+    //! this is intentional so `s("a e i")` parses as sound names, not notes.
     let n = length(name)
     if (n < 2 || n > 3) {
         return -1.0
@@ -362,10 +386,9 @@ def parse_note_name(name : string) : float {
     return result
 }
 
-// Parse a note name allowing octave to be omitted (defaults to default_oct,
-// e.g. noteToMidi(note, defaultOctave=3)). "d", "d#", "d#3", "eb".
-// Returns -1 if the string isn't a valid note.
 def parse_note_name_default(name : string; default_oct : int) : float {
+    //! Parse a note name allowing the octave to be omitted (falls back to `default_oct`).
+    //! Accepts `"d"`, `"d#"`, `"d#3"`, `"eb"`. Returns `-1.0` on miss.
     let n = length(name)
     if (n < 1 || n > 3) {
         return -1.0
@@ -413,7 +436,7 @@ def parse_note_name_default(name : string; default_oct : int) : float {
 // Parse notation with | bar separators.
 // "A B | C D E" = cat([fastcat([A, B]), fastcat([C, D, E])])
 // Each bar plays for one cycle; notes within a bar subdivide evenly.
-def parse_bars(var p : Parser) : Pattern {
+def private parse_bars(var p : Parser) : Pattern {
     // check if there are any PIPE tokens — if not, fall back to regular parsing
     var has_pipes = false
     for (tok in p.tokens) {
@@ -453,27 +476,25 @@ def parse_bars(var p : Parser) : Pattern {
 
 // ─── Public API ───
 
-// Parse mini-notation and return a Pattern of sound events.
-// s("bd sd [hh hh] cp") → fastcat([atom("bd"), atom("sd"), fastcat([atom("hh"), atom("hh")]), atom("cp")])
 def s(notation : string) : Pattern {
+    //! Parse mini-notation and return a `Pattern` of sound events. Example:
+    //! `s("bd sd [hh hh] cp")` plays kick, snare, two hats in one step, clap.
     var tokens <- tokenize(notation)
     var p = Parser()
     p.tokens <- tokens
     return <- parse_pattern(p)
 }
 
-// Parse mini-notation as numeric values (note field holds the number).
-// n("<2 16>") → pattern alternating 2.0 and 16.0 per cycle.
-// Useful as patternified parameter: slow(pat, n("<2 16>"))
 def n(notation : string) : Pattern {
+    //! Parse mini-notation as numeric values (each atom's `note` field holds the number).
+    //! Useful as a patternified parameter, e.g. `slow(pat, n("<2 16>"))`.
     return <- s(notation)
 }
 
-// pat |> set_vowel("a") — static vowel, or
-// pat |> set_vowel("<a e i o u>") — cycling vowel from mini-notation.
-// Single token (no spaces, brackets, or angle brackets) → static fmap.
-// Otherwise → parse as mini-notation pattern, sample at each event's onset.
 def set_vowel(var pat : Pattern; notation : string) : Pattern {
+    //! Apply a vowel-formant filter. Static: `pat |> set_vowel("a")`. Cycling:
+    //! `pat |> set_vowel("<a e i o u>")` parses mini-notation and samples at each
+    //! event's onset. Single-token input takes a fast-path `fmap`.
     // detect mini-notation: contains space, <, >, [, ], *, or comma
     var is_pattern = false
     for (ch in notation) {
@@ -496,17 +517,18 @@ def set_vowel(var pat : Pattern; notation : string) : Pattern {
     })
 }
 
-// pat |> set_vowel(s("<a e i o u>") |> slow(5.0lf)) — set vowel from a pre-built pattern.
-// Use when the vowel pattern needs transforms (slow, fast, rev) before applying.
 def set_vowel(var pat : Pattern; var vowel_pat : Pattern) : Pattern {
+    //! Set vowel from a pre-built pattern. Use when the vowel pattern needs transforms
+    //! (`slow`, `fast`, `rev`) before applying — e.g. `pat |> set_vowel(s("<a e i o u>") |> slow(5.0lf))`.
     return combineWithStr(pat, vowel_pat, @(e : Event; val : string) : Event {
         var r = e; r.vowel = val; return r
     })
 }
 
-// pat |> set_s("<supersaw sawtooth>") — strudel-style .s() with mini-notation.
-// Single token → static set_sound. Mini-notation → parse and sample at onset.
 def set_s(var pat : Pattern; notation : string) : Pattern {
+    //! Strudel-style `.s()` with mini-notation. Example: `pat |> set_s("<supersaw sawtooth>")`.
+    //! Single-token input goes through `set_sound` directly; mini-notation is parsed
+    //! and sampled at each event's onset.
     // detect mini-notation: contains space, <, >, [, ], *, or comma
     var is_pattern = false
     for (ch in notation) {
@@ -522,9 +544,10 @@ def set_s(var pat : Pattern; notation : string) : Pattern {
     return set_sound(pat, sound_pat)
 }
 
-// Parse mini-notation for note patterns.
-// note("c3 ~ e3 g3") → pattern with note events (sound defaults to "sine")
 def note_pattern(notation : string; sound : string = "sine") : Pattern {
+    //! Parse mini-notation for note patterns. Example: `note_pattern("c3 ~ e3 g3")`
+    //! plays C3, silence, E3, G3 with the default `"sine"` sound. Any atom whose
+    //! token looks like a note name is converted via default-octave parsing.
     let pat <- s(notation)
     // Post-process: any event whose .s is a note name (including bare "d", "d#"
     // without octave) gets converted to .note via default-octave parsing.
@@ -544,9 +567,10 @@ def note_pattern(notation : string; sound : string = "sine") : Pattern {
     return <- converted |> set_sound(sound)
 }
 
-// Parse mini-notation with | bar separators for sequential melodies.
-// "e4 e4 f4 g4 | g4 f4 e4 d4" → each bar is one cycle, notes subdivide evenly.
 def seq(notation : string; sound : string = "sine") : Pattern {
+    //! Parse mini-notation with `|` bar separators for sequential melodies. Each bar
+    //! plays for one cycle with its notes evenly subdivided. Example:
+    //! `seq("e4 e4 f4 g4 | g4 f4 e4 d4")` plays two bars of four quarter-notes each.
     var tokens <- tokenize(notation)
     var p = Parser()
     p.tokens <- tokens
@@ -558,22 +582,25 @@ def seq(notation : string; sound : string = "sine") : Pattern {
 // These re-parse the notation to create two independent patterns,
 // since lambdas aren't copyable.
 
-// every_fast(4, 2.0, "bd sd hh cp") — double speed every 4th cycle
 def every_fast(n : int; factor : double; notation : string) : Pattern {
+    //! Apply `fast(factor)` to the pattern every `n`th cycle. Example:
+    //! `every_fast(4, 2.0, "bd sd hh cp")` plays at double speed on cycles 4, 8, 12, ...
     let on <- s(notation) |> fast(factor)
     let off <- s(notation)
     return <- every(n, on, off)
 }
 
-// every_slow(4, 2.0, "bd sd hh cp") — half speed every 4th cycle
 def every_slow(n : int; factor : double; notation : string) : Pattern {
+    //! Apply `slow(factor)` to the pattern every `n`th cycle. Example:
+    //! `every_slow(4, 2.0, "bd sd hh cp")` plays at half speed on cycles 4, 8, 12, ...
     let on <- s(notation) |> slow(factor)
     let off <- s(notation)
     return <- every(n, on, off)
 }
 
-// every_degrade(4, 0.5, "bd sd hh cp") — randomly drop events every 4th cycle
 def every_degrade(n : int; prob : float; notation : string) : Pattern {
+    //! Randomly drop events from the pattern every `n`th cycle. Example:
+    //! `every_degrade(4, 0.5, "bd sd hh cp")` drops ~half the events on cycles 4, 8, ...
     let on <- s(notation) |> degrade(prob)
     let off <- s(notation)
     return <- every(n, on, off)
@@ -581,11 +608,18 @@ def every_degrade(n : int; prob : float; notation : string) : Pattern {
 
 // ─── Bare-Name Aliases ───
 
-// note("c3 e3 g3") — alias for note_pattern
-def note(notation : string; sound : string = "sine") : Pattern { return <- note_pattern(notation, sound); }
+def note(notation : string; sound : string = "sine") : Pattern {
+    //! Alias for `note_pattern`. Example: `note("c3 e3 g3")`.
+    return <- note_pattern(notation, sound);
+}
 
-// vowel("a") or vowel("<a e i>") — alias for set_vowel (string overload)
-def vowel(var pat : Pattern; notation : string) : Pattern { return <- set_vowel(pat, notation); }
+def vowel(var pat : Pattern; notation : string) : Pattern {
+    //! Alias for `set_vowel` (string overload). Example: `pat |> vowel("<a e i>")`.
+    return <- set_vowel(pat, notation);
+}
 
-// vowel(s("<a e i>") |> slow(4.0lf)) — alias for set_vowel (Pattern overload)
-def vowel(var pat : Pattern; var vowel_pat : Pattern) : Pattern { return <- set_vowel(pat, vowel_pat); }
+def vowel(var pat : Pattern; var vowel_pat : Pattern) : Pattern {
+    //! Alias for `set_vowel` (Pattern overload). Use when the vowel pattern needs
+    //! transforms. Example: `pat |> vowel(s("<a e i>") |> slow(4.0lf))`.
+    return <- set_vowel(pat, vowel_pat);
+}

@@ -1,7 +1,10 @@
 options gen2
 options indenting = 4
 
-module strudel_synth shared
+module strudel_synth shared public
+//! Audio synthesis and effects for the strudel pattern engine.
+//! Houses oscillators (sine/saw/square/triangle/supersaw), drum voices (bd/sd/hh/tom/ride/...),
+//! biquad/formant filters, the per-voice FX chain and the top-level `render_event_stereo` entry point.
 
 require strudel/strudel_event
 require strudel/strudel_samples
@@ -12,14 +15,13 @@ let SAMPLE_RATE = 48000
 let TWO_PI = 3.14159265358979323846 * 2.0
 let OSC_TURN_DOWN = 0.3  // oscillator turn-down — only oscillators, not samples/drums
 
-// Convert MIDI note number to frequency in Hz.
-// 60 = middle C = 261.63 Hz
 def note_to_freq(note : float) : float {
+    //! Convert a MIDI note number to frequency in Hz (A4 = 69 = 440 Hz, middle C = 60).
     return 440.0 * pow(2.0, (note - 69.0) / 12.0)
 }
 
-// Simple pseudo-random noise from a seed. Returns -1.0 to 1.0.
 def noise(var seed : uint&) : float {
+    //! Linear congruential pseudo-random noise in [-1.0, 1.0]. Advances the seed in place.
     seed = seed * 1664525u + 1013904223u
     return float(seed >> 9u & 0x7FFFFFu) / float(0x3FFFFFu) - 1.0
 }
@@ -28,7 +30,7 @@ def noise(var seed : uint&) : float {
 // of a naive sawtooth or square to eliminate aliases above Nyquist.
 // Ref: https://www.kvraudio.com/forum/viewtopic.php?t=375517
 // t = phase [0,1), dt = freq / sample_rate.
-def poly_blep(t, dt : float) : float {
+def private poly_blep(t, dt : float) : float {
     var dt2 = dt
     if (dt2 > 0.5) { dt2 = 0.5; }
     if (dt2 < 0.0001) { return 0.0; }
@@ -43,7 +45,7 @@ def poly_blep(t, dt : float) : float {
 }
 
 // ADSR envelope. Returns amplitude 0.0–1.0 for a given time position.
-def adsr(t, attack, decay, sustain, release, duration : float) : float {
+def private adsr(t, attack, decay, sustain, release, duration : float) : float {
     if (t < 0.0) {
         return 0.0
     }
@@ -70,7 +72,7 @@ def adsr(t, attack, decay, sustain, release, duration : float) : float {
 
 // Apply convolution reverb to a mono buffer. amount=0.0 is dry, 1.0 is full wet.
 // Uses a synthetic impulse response (noise with exponential decay + lowpass sweep).
-def apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : float = 0.4) {
+def private apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : float = 0.4) {
     if (amount <= 0.0) {
         return
     }
@@ -95,7 +97,7 @@ def apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : flo
 }
 
 // Add a single slapback echo at a given delay (in seconds) with given gain.
-def apply_slapback(var samples : array<float>; delay_sec : float = 0.035; echo_gain : float = 0.4) {
+def private apply_slapback(var samples : array<float>; delay_sec : float = 0.035; echo_gain : float = 0.4) {
     let delay_samples = int(delay_sec * float(SAMPLE_RATE))
     let n = length(samples)
     for (i in range(delay_samples, n)) {
@@ -105,8 +107,9 @@ def apply_slapback(var samples : array<float>; delay_sec : float = 0.035; echo_g
 
 // ─── Drum Synthesis ───
 
-// Kick drum: 808-style — fast pitch sweep (~6ms), noise click transient, soft waveshaping
 def render_bd(duration : float; gain : float) : array<float> {
+    //! Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
+    //! Combines a pitched sine body with a fast pitch sweep, a bandpass beater click and a rimshot-like snap, then applies a short room.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -140,8 +143,8 @@ def render_bd(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Snare: tonal body (~220Hz) + high-passed noise (snare wires) + room
 def render_sd(duration : float; gain : float) : array<float> {
+    //! Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -172,8 +175,8 @@ def render_sd(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Hi-hat: metallic oscillator bank + tonal body + room
 def render_hh(duration : float; gain : float) : array<float> {
+    //! Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples <- render_metallic(duration, gain * 0.7, 18.0)
     // add tonal component (~200Hz) like SF2 — the "bell" of the hi-hat
@@ -190,8 +193,8 @@ def render_hh(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Clap: sharp noise burst through bandpass (~1.1kHz) + long room tail
 def render_cp(duration : float; gain : float) : array<float> {
+    //! Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -214,7 +217,7 @@ def render_cp(duration : float; gain : float) : array<float> {
 
 // ─── Biquad Filter ───
 
-struct BiquadState {
+struct private BiquadState {
     x1 : float = 0.0
     x2 : float = 0.0
     y1 : float = 0.0
@@ -226,7 +229,7 @@ struct BiquadState {
     b2 : float = 0.0
 }
 
-def biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
+def private biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
     let w0 = float(TWO_PI) * freq / sample_rate
     let cs = cos(w0)
     let sn = sin(w0)
@@ -239,7 +242,7 @@ def biquad_highpass(var bq : BiquadState; freq, sample_rate : float) {
     bq.b2 = (1.0 - alpha) * norm
 }
 
-def biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
+def private biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
     let w0 = float(TWO_PI) * freq / sample_rate
     let cs = cos(w0)
     let sn = sin(w0)
@@ -252,7 +255,7 @@ def biquad_bandpass(var bq : BiquadState; freq, q, sample_rate : float) {
     bq.b2 = (1.0 - alpha) * norm
 }
 
-def biquad_process(var bq : BiquadState; x : float) : float {
+def private biquad_process(var bq : BiquadState; x : float) : float {
     let y = bq.a0 * x + bq.a1 * bq.x1 + bq.a2 * bq.x2 - bq.b1 * bq.y1 - bq.b2 * bq.y2
     bq.x2 = bq.x1
     bq.x1 = x
@@ -265,9 +268,9 @@ def biquad_process(var bq : BiquadState; x : float) : float {
 
 // 6 square-wave oscillators at inharmonic ratios produce metallic timbre.
 // Used by hi-hat, ride, crash, and tambourine.
-let HH_FREQS = fixed_array(205.3, 304.4, 369.6, 522.7, 540.0, 800.0)
+let private HH_FREQS = fixed_array(205.3, 304.4, 369.6, 522.7, 540.0, 800.0)
 
-def render_metallic(duration : float; gain : float; decay_rate : float; hpf_freq : float = 5000.0; noise_mix : float = 0.3) : array<float> {
+def private render_metallic(duration : float; gain : float; decay_rate : float; hpf_freq : float = 5000.0; noise_mix : float = 0.3) : array<float> {
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -304,15 +307,16 @@ def render_metallic(duration : float; gain : float; decay_rate : float; hpf_freq
 
 // ─── Additional Drum Synthesis ───
 
-// Open hi-hat: same metallic oscillator bank, much longer decay
 def render_oh(duration : float; gain : float) : array<float> {
+    //! Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
     var samples <- render_metallic(duration, gain, 8.0)
     apply_room(samples, 0.1)
     return <- samples
 }
 
-// Tom: same layered approach as BD — body + beater click + impulse + room
 def render_tom(duration : float; gain : float; base_freq : float) : array<float> {
+    //! Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
+    //! Used for tom_low (~80 Hz) and tom_high (~175 Hz).
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -352,8 +356,8 @@ def render_tom(duration : float; gain : float; base_freq : float) : array<float>
     return <- samples
 }
 
-// Ride cymbal: bell tone (~350Hz) + metallic shimmer, long sustain
 def render_ride(duration : float; gain : float) : array<float> {
+    //! Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -386,8 +390,8 @@ def render_ride(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Crash cymbal: bell tone (~490Hz) + metallic wash, medium-fast decay
 def render_crash(duration : float; gain : float) : array<float> {
+    //! Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -420,8 +424,8 @@ def render_crash(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Rimshot: woody thud (~200Hz) + high click (~1200Hz) + noise snap
 def render_rimshot(duration : float; gain : float) : array<float> {
+    //! Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -448,8 +452,8 @@ def render_rimshot(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Cowbell: two square waves at 540 Hz and 800 Hz through bandpass
 def render_cowbell(duration : float; gain : float) : array<float> {
+    //! Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -478,8 +482,8 @@ def render_cowbell(duration : float; gain : float) : array<float> {
     return <- samples
 }
 
-// Tambourine: high-pass noise with narrow band peaks for jingle
 def render_tambourine(duration : float; gain : float) : array<float> {
+    //! Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
     let nsamples = int(duration * float(SAMPLE_RATE))
     var samples : array<float>
     samples |> resize(nsamples)
@@ -510,18 +514,28 @@ def render_tambourine(duration : float; gain : float) : array<float> {
 
 // ─── Oscillators ───
 
+//! Oscillator waveform selector for an `OscVoice`.
 enum OscType {
     osc_sine
+        //! Pure sine wave.
     osc_sawtooth
+        //! Band-limited sawtooth (poly-BLEP anti-aliased).
     osc_square
+        //! Band-limited square wave (poly-BLEP anti-aliased).
     osc_triangle
+        //! Triangle wave derived from the phase.
     osc_supersaw
+        //! Unison stack of detuned band-limited sawtooths, stereo-spread.
     osc_pink_noise
+        //! Pink noise via Paul Kellet's 7-stage cascaded IIR.
     osc_white_noise
+        //! Uniform white noise.
     osc_unknown
+        //! Unrecognised sound name — used as a sentinel by `to_osc_type`.
 }
 
 def to_osc_type(sound : string) : OscType {
+    //! Map a strudel sound name ("sine", "sawtooth", ...) to an `OscType`; unknown names return `osc_unknown`.
     if (sound == "sine") {
         return OscType.osc_sine
     } elif (sound == "sawtooth") {
@@ -540,10 +554,10 @@ def to_osc_type(sound : string) : OscType {
     return OscType.osc_unknown
 }
 
-let SUPERSAW_VOICES = 5       // default unison voice count
-let SUPERSAW_DETUNE = 0.18    // default frequency spread in semitones
+let private SUPERSAW_VOICES = 5       // default unison voice count
+let private SUPERSAW_DETUNE = 0.18    // default frequency spread in semitones
 
-// Pink noise state — Paul Kellet's 7-stage cascaded IIR filter
+//! Pink noise state — Paul Kellet's 7-stage cascaded IIR filter.
 struct PinkNoiseState {
     b0 : float = 0.0
     b1 : float = 0.0
@@ -555,7 +569,7 @@ struct PinkNoiseState {
     seed : uint = 54321u
 }
 
-def pink_noise_tick(var st : PinkNoiseState) : float {
+def private pink_noise_tick(var st : PinkNoiseState) : float {
     let white = noise(st.seed)
     st.b0 = 0.99886 * st.b0 + white * 0.0555179
     st.b1 = 0.99332 * st.b1 + white * 0.0750759
@@ -572,21 +586,32 @@ def pink_noise_tick(var st : PinkNoiseState) : float {
 // 5 parallel bandpass filters using standard formant tables.
 // Each formant has frequency, gain, and Q. The outputs are summed with a makeup gain of 8.0.
 
-// Bandpass biquad filter (transposed direct form II, 3 numerator coefficients).
-// Unlike ma_sf2_biquad which hardcodes a2=a0 (LPF/HPF only), this has explicit a2.
+//! General-purpose bandpass biquad (transposed direct form II) with all three numerator coefficients.
+//! Unlike `ma_sf2_biquad` (LPF/HPF only, `a2 == a0`), this stores an explicit `a2`, allowing true BPF/BRF shapes.
 struct FormantBiquad {
     a0 : double = 0.0lf
+        //! Feed-forward coefficient 0.
     a1 : double = 0.0lf
+        //! Feed-forward coefficient 1 (0 for BPF).
     a2 : double = 0.0lf
+        //! Feed-forward coefficient 2 (`-a0` for BPF).
     b1 : double = 0.0lf
+        //! Feedback coefficient 1.
     b2 : double = 0.0lf
+        //! Feedback coefficient 2.
     z1 : double = 0.0lf
+        //! Internal delay-line state 1.
     z2 : double = 0.0lf
+        //! Internal delay-line state 2.
     gain : float = 1.0          // per-formant amplitude scaling
+        //! Per-formant amplitude scaling applied to the filter output by the vowel filter.
     active : int = 0
+        //! Non-zero when the filter has valid coefficients and should process samples.
 }
 
 def formant_biquad_setup_bpf(var bq : FormantBiquad; freq, q, sample_rate : float) {
+    //! Compute bandpass coefficients for the given centre frequency and Q.
+    //! Deactivates the filter if the cutoff is outside the usable range (near 0 or Nyquist).
     let fc_norm = freq / sample_rate
     if (fc_norm <= 0.001 || fc_norm >= 0.499) {
         bq.active = 0
@@ -607,6 +632,7 @@ def formant_biquad_setup_bpf(var bq : FormantBiquad; freq, q, sample_rate : floa
 }
 
 def formant_biquad_tick(var bq : FormantBiquad; input : float) : float {
+    //! Process one sample through the biquad and return the output.
     let inp = double(input)
     let out = inp * bq.a0 + bq.z1
     bq.z1 = inp * bq.a1 + bq.z2 - bq.b1 * out
@@ -617,20 +643,27 @@ def formant_biquad_tick(var bq : FormantBiquad; input : float) : float {
 let VOWEL_NUM_FORMANTS = 5
 let VOWEL_MAKEUP_GAIN = 8.0    // makeup gain for vowel formant filter
 
+//! Five parallel bandpass filters that impose a vowel-like formant shape on an input signal.
 struct VowelFilter {
     @safe_when_uninitialized formants : FormantBiquad[5]
+        //! Five formant bandpass biquads processed in parallel and summed.
     active : bool = false
+        //! True once the filter has been set up for a known vowel; otherwise ``tick`` is bypassed by callers.
 }
 
-// Formant data: [freq, gain, Q] per formant, 5 formants per vowel.
-// Standard formant tables.
+//! Table row of formant parameters for a single vowel (5 formants × freq/gain/Q).
 struct FormantData {
     freqs : float[5]
+        //! Centre frequency of each formant in Hz.
     gains : float[5]
+        //! Linear gain of each formant (formant 0 is usually the loudest).
     qs    : float[5]
+        //! Q (resonance) of each formant bandpass.
 }
 
 def vowel_get_formant_data(vowel : string; var data : FormantData) : bool {
+    //! Look up formant parameters for a vowel name ("a", "e", "i", "o", "u", "ae", "aa", "oe", "ue", "y", "uh", "un", "en", "an", "on").
+    //! Returns false if the vowel is unknown.
     if (vowel == "a") {
         data.freqs = fixed_array(660.0, 1120.0, 2750.0, 3000.0, 3350.0)
         data.gains = fixed_array(1.0, 0.5012, 0.0708, 0.0631, 0.0126)
@@ -698,6 +731,7 @@ def vowel_get_formant_data(vowel : string; var data : FormantData) : bool {
 }
 
 def vowel_filter_init(var vf : VowelFilter; vowel : string) {
+    //! Configure a VowelFilter for the named vowel, deactivating it if the vowel is unknown.
     var data : FormantData
     if (!vowel_get_formant_data(vowel, data)) {
         vf.active = false
@@ -711,8 +745,8 @@ def vowel_filter_init(var vf : VowelFilter; vowel : string) {
     vf.active = true
 }
 
-// Apply vowel filter: 5 parallel bandpass filters, sum outputs, scale by makeup gain.
 def vowel_filter_tick(var vf : VowelFilter; input : float) : float {
+    //! Process one sample through the vowel filter: sum the 5 parallel formant bandpass outputs and apply the makeup gain.
     var sum = 0.0
     for (i in range(VOWEL_NUM_FORMANTS)) {
         if (vf.formants[i].active != 0) {
@@ -722,31 +756,46 @@ def vowel_filter_tick(var vf : VowelFilter; input : float) : float {
     return sum * VOWEL_MAKEUP_GAIN
 }
 
-// ─── Per-voice effect chain (bitcrush, waveshaper, DJ filter, bandpass, phaser, tremolo, compressor) ───
-// Wraps the C++ ma_* effect structs; initialised from Event fields.
-// Fields whose corresponding Event field is at its "off" value stay unused,
-// so a default VoiceFX is a cheap no-op.
+//! Per-voice effect chain: bitcrush, waveshaper, DJ filter, bandpass, phaser, tremolo and compressor.
+//! Wraps the C++ `ma_*` effect structs and is initialised from Event fields; a default-constructed
+//! VoiceFX with no Event-driven parameters active is a cheap no-op.
 [safe_when_uninitialized]
 struct VoiceFX {
     @safe_when_uninitialized bc   : ma_bitcrush
+        //! Bitcrusher state (bit-depth + sample-rate reduction).
     @safe_when_uninitialized ws   : ma_waveshaper
+        //! Waveshaper state (drive-based soft distortion).
     @safe_when_uninitialized dj   : ma_djfilter
+        //! DJ filter state (single-knob low-pass/high-pass blend).
     @safe_when_uninitialized bp   : ma_bandpass
+        //! Bandpass filter state (centre + Q).
     @safe_when_uninitialized ph   : ma_phaser
+        //! Phaser state (rate/depth/centre/sweep).
     @safe_when_uninitialized trem : ma_tremolo
+        //! Tremolo state (amplitude modulation rate/depth).
     @safe_when_uninitialized comp : ma_compressor
+        //! Compressor state (threshold/ratio/knee/attack/release).
     has_crush : bool = false
+        //! Bitcrush is enabled and will be applied to the voice.
     has_shape : bool = false
+        //! Waveshaper is enabled.
     has_djf   : bool = false
+        //! DJ filter is enabled (position != 0.5).
     has_bpf   : bool = false
+        //! Bandpass filter is enabled.
     has_phaser : bool = false
+        //! Phaser is enabled.
     has_tremolo : bool = false
+        //! Tremolo is enabled.
     has_compressor : bool = false
+        //! Compressor is enabled.
     active    : bool = false
+        //! True if any of the above effects is enabled; skip `fx_apply` entirely when false.
 }
 
-// Configure a VoiceFX from an Event. Returns silently if nothing is active.
 def fx_init_from_event(var fx : VoiceFX; event : Event; sample_rate : float) {
+    //! Configure a VoiceFX chain from the relevant Event fields (crush/coarse/shape/djf/bpf/phaser/tremolo/compressor).
+    //! Leaves everything disabled when no Event field is active, so the chain can stay at `fx.active == false`.
     if (event.crush > 0.0 || event.coarse > 0) {
         unsafe { bitcrush_init(addr(fx.bc)); }
         fx.bc.bits = event.crush
@@ -794,11 +843,10 @@ def fx_init_from_event(var fx : VoiceFX; event : Event; sample_rate : float) {
     fx.active = fx.has_crush || fx.has_shape || fx.has_djf || fx.has_bpf || fx.has_phaser || fx.has_tremolo || fx.has_compressor
 }
 
-// Apply configured effects to an interleaved stereo buffer (n_frames = sample-frame count).
-// Ordered: crush → shape → djfilter → bandpass → phaser → tremolo → compressor.
-// Phaser and tremolo come after the timbral effects to modulate the finished tone;
-// compressor is last so it sees the post-FX signal.
 def fx_apply(var fx : VoiceFX; var buf : array<float>; n_frames : int) {
+    //! Apply the enabled effects to an interleaved stereo buffer in place.
+    //! Order: crush -> shape -> djfilter -> bandpass -> phaser -> tremolo -> compressor
+    //! (phaser/tremolo modulate the finished tone, compressor is last so it sees the post-FX signal).
     if (!fx.active || n_frames <= 0 || length(buf) < n_frames * 2) {
         return
     }
@@ -811,9 +859,9 @@ def fx_apply(var fx : VoiceFX; var buf : array<float>; n_frames : int) {
     if (fx.has_compressor) { unsafe { compressor_process(addr(fx.comp), addr(buf[0]), n_frames); } }
 }
 
-// Apply effects to an already-rendered stereo PCM buffer (one-shot for pre-rendered voices).
-// State is local to this call, so effects reset every render.
 def fx_apply_to_samples(event : Event; var samples : array<float>; sample_rate : float) {
+    //! Apply Event-driven effects to a pre-rendered stereo buffer as a one-shot.
+    //! Effect state is local to this call, so effects reset every render; used for drum/sample voices that don't stream.
     let n_frames = length(samples) / 2
     if (n_frames <= 0) {
         return
@@ -823,57 +871,87 @@ def fx_apply_to_samples(event : Event; var samples : array<float>; sample_rate :
     fx_apply(fx, samples, n_frames)
 }
 
-// Streaming oscillator voice — renders per-chunk instead of pre-rendering the full duration.
+//! Streaming oscillator voice rendered per audio chunk rather than pre-rendered for the full duration.
+//! Holds oscillator state, ADSR, filters, FM, supersaw unison, noise, effect sends, vowel filter and per-voice FX.
 struct OscVoice {
     osc_type        : OscType = OscType.osc_sine
+        //! Which waveform this voice produces.
     freq            : float = 440.0
+        //! Base frequency in Hz (before FM and supersaw detune).
     phase           : float = 0.0       // oscillator phase [0,1)
+        //! Main oscillator phase in [0, 1).
     duration        : float = 1.0       // total note duration in seconds
+        //! Total note duration in seconds (release stage extends beyond this).
     attack          : float = 0.001
+        //! ADSR attack time in seconds.
     decay           : float = 0.05
+        //! ADSR decay time in seconds.
     sustain         : float = 0.0
+        //! ADSR sustain level in [0, 1].
     release_sec     : float = 0.01
+        //! ADSR release time in seconds.
     samples_elapsed : int = 0           // samples rendered so far
+        //! Number of samples rendered so far; used to compute the envelope time.
     finished        : bool = false
+        //! Set to true when the ADSR has fully decayed; scheduler then retires the voice.
     gain            : float = 1.0       // event.gain * event.velocity
+        //! Effective voice gain (event.gain * event.velocity).
     pan             : float = 0.0       // -1=left, 0=center, 1=right
+        //! Stereo pan: -1 = full left, 0 = centre, +1 = full right.
     cut             : int = 0           // cut group
+        //! Cut group — non-zero values cut off any previous voice with the same cut value.
     offset_frames   : int = 0           // sub-chunk onset delay (frames)
+        //! Sub-chunk onset delay in frames, consumed at the start of the first render chunk.
     lpf_biquad      : ma_sf2_biquad     // low-pass filter state
+        //! Low-pass biquad filter state (initialised by `osc_voice_init_filters`).
     hpf_biquad      : ma_sf2_biquad     // high-pass filter state
+        //! High-pass biquad filter state.
     // FM synthesis state
     fm_depth        : float = 0.0       // FM modulation index (0 = off)
+        //! FM modulation index (0 disables FM).
     fm_harmonicity  : float = 1.0       // modulator freq = carrier freq * harmonicity
+        //! Ratio of modulator frequency to carrier frequency.
     fm_mod_phase    : float = 0.0       // modulator oscillator phase [0,1)
+        //! FM modulator oscillator phase in [0, 1).
     // supersaw state — 7 detuned sawtooth phases
     supersaw_phases : float[7]
+        //! Independent phases for each detuned sawtooth voice in the supersaw stack.
     // noise state
     @safe_when_uninitialized pink : PinkNoiseState
+        //! Pink-noise generator state (Paul Kellet's 7-stage IIR).
     white_seed : uint = 12345u
+        //! LCG seed used by the white-noise generator.
     // reverb send
     reverb_send : float = 0.0   // reverb send amount from Event.room (0.0–1.0)
+        //! Send amount into the reverb bus (driven by Event.room).
     // chorus send
     chorus_send : float = 0.0   // chorus send amount from Event.chorus (0.0–1.0)
+        //! Send amount into the chorus bus (driven by Event.chorus).
     // delay send
     delay_send : float = 0.0    // delay send amount from Event.delay_amount (0.0–1.0)
+        //! Send amount into the delay bus (driven by Event.delay_amount).
     // orbit
     orbit : int = 0             // effect bus routing
+        //! Orbit index used by the scheduler to route this voice into a shared effect bus.
     // vowel formant filter
     @safe_when_uninitialized vowel_filter : VowelFilter
+        //! Optional vowel formant filter applied after the biquad filters.
     // per-voice audio effects (crush/coarse/shape/djf/bpf/bpq)
     @safe_when_uninitialized fx : VoiceFX
+        //! Per-voice FX chain (bitcrush/waveshaper/DJ filter/bandpass/phaser/tremolo/compressor).
 }
 
-// Initialize supersaw phases with random offsets for natural unison spread.
 def osc_voice_init_supersaw(var voice : OscVoice) {
+    //! Seed the supersaw unison phases with randomised offsets so the detuned voices don't start in phase.
     var seed = 99999u
     for (i in range(SUPERSAW_VOICES)) {
         voice.supersaw_phases[i] = float(noise(seed) * 0.5 + 0.5)  // [0,1)
     }
 }
 
-// Initialize OscVoice filter state from Event lpf/hpf/lpq/hpq values.
 def osc_voice_init_filters(var voice : OscVoice; lpf, hpf, lpq, hpq : float) {
+    //! Configure the voice's low-pass and high-pass biquads from Event lpf/hpf cutoffs and lpq/hpq resonances.
+    //! Cutoffs <= 0 or >= Nyquist leave the corresponding filter inactive.
     let sr = float(SAMPLE_RATE)
     // LPF: active if cutoff > 0 and below Nyquist
     if (lpf > 0.0 && lpf < sr * 0.5) {
@@ -1108,9 +1186,9 @@ def private osc_chunk_white_noise(var voice : OscVoice; var output : array<float
     }
 }
 
-// Render one chunk of an oscillator voice directly into the output buffer (additive).
-// Dispatches to per-type loop with invariants hoisted out.
 def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb_send_buf : array<float>; var delay_send_buf : array<float>; var chorus_send_buf : array<float>; chunkFrames : int) {
+    //! Render one chunk of the oscillator voice additively into the output buffer and the reverb/delay/chorus send buffers.
+    //! Hoists invariants out of the inner loop and dispatches to the per-oscillator-type render function.
     // consume sub-chunk onset offset
     if (voice.offset_frames >= chunkFrames) {
         voice.offset_frames -= chunkFrames
@@ -1160,10 +1238,9 @@ def osc_render_chunk(var voice : OscVoice; var output : array<float>; var reverb
 
 // ─── Main render entry point ───
 
-// Render an Event into interleaved stereo PCM.
-// Returns raw audio — no gain or pan applied. The scheduler's
-// ma_volume_mixer handles gain and pan during the mix pass.
 def render_event_stereo(event : Event; duration_sec : float) : array<float> {
+    //! Render an Event into an interleaved stereo PCM buffer using the built-in drum synths.
+    //! Returns raw audio with no gain/pan applied — the scheduler's `ma_volume_mixer` applies those during the mix pass.
     let s = event.s
     var mono : array<float>
     // drum sounds have fixed durations, rendered at unit gain
@@ -1197,9 +1274,9 @@ def render_event_stereo(event : Event; duration_sec : float) : array<float> {
     return <- mono_to_stereo(mono)
 }
 
-// Render with sample bank — tries bank first, falls back to synthesis.
-// Returns raw stereo — no gain or pan.
 def render_event_stereo(event : Event; duration_sec : float; bank : SampleBank) : array<float> {
+    //! Render an Event into stereo PCM, preferring a sample from the bank when present and falling back to synthesis.
+    //! Returns raw stereo — gain and pan are applied later by the scheduler.
     if (key_exists(bank.sounds, event.s)) {
         var samples <- render_sample(bank, event.s, event.n, event.speed, event.begin, event.end_pos)
         if (length(samples) > 0) {
@@ -1209,8 +1286,9 @@ def render_event_stereo(event : Event; duration_sec : float; bank : SampleBank) 
     return <- render_event_stereo(event, duration_sec)
 }
 
-// Convert mono buffer to interleaved stereo (duplicate to both channels).
 def mono_to_stereo(var mono : array<float>) : array<float> {
+    //! Upmix a mono buffer to interleaved stereo by duplicating each sample to both channels.
+    //! Consumes `mono` (moves and frees it).
     var stereo : array<float>
     let n = length(mono)
     stereo |> resize(n * 2)

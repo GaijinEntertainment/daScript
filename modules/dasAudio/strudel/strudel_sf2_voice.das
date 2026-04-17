@@ -4,16 +4,19 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
 module strudel_sf2_voice shared public
+//! Per-voice SF2 synthesis: envelopes, LFOs, biquad filter, and modulator matrix.
+//! Resolves SF2 generators across preset/instrument/global zone layers, evaluates
+//! SF2.01 default and zone modulators, and populates the C `ma_sf2_voice` runtime state.
 
 require strudel/strudel_sf2
 require audio
 require math
 
-let SF2_SAMPLE_RATE = 48000.0
+let private SF2_SAMPLE_RATE = 48000.0
 
-// SF2 default velocity→attenuation curve (concave, 960 cB range)
-// See SF2 spec section 8.4.2 — default modulator #1
 def public sf2_velocity_attenuation(velocity : int) : float {
+    //! SF2 default velocity-to-attenuation curve (concave, 960 cB range).
+    //! Implements default modulator #1 from SF2 spec section 8.4.2; returns a linear gain.
     if (velocity <= 0) {
         return 0.0
     }
@@ -123,8 +126,9 @@ def private sf2_mod_transform_source(src : int; val, src_range : float) : float 
     return v
 }
 
-// Evaluate a single SF2 modulator: amount * transform(src1) * transform(src2)
 def public sf2_mod_get_value(m : SF2Modulator; velocity, key : int; cc_values : int[128]) : float {
+    //! Evaluate a single SF2 modulator: amount * transform(src1) * transform(src2).
+    //! Applies the optional absolute-value transform when `m.transform == 2`.
     let s1 = sf2_mod_source_value(m.src_oper, velocity, key, cc_values)
     let v1 = sf2_mod_transform_source(m.src_oper, s1._0, s1._1)
     let s2 = sf2_mod_source_value(m.amt_src_oper, velocity, key, cc_values)
@@ -136,9 +140,8 @@ def public sf2_mod_get_value(m : SF2Modulator; velocity, key : int; cc_values : 
     return result
 }
 
-// Apply all modulators from a zone to a generator accumulator.
-// gen_offsets[oper] += sum of modulator outputs targeting that generator.
 def public sf2_apply_modulators(zone : SF2Zone; velocity, key : int; cc_values : int[128]; var gen_offsets : float[64]) {
+    //! Accumulate all modulator outputs from a zone into `gen_offsets` indexed by destination generator.
     for (m in zone.modulators) {
         let val = sf2_mod_get_value(m, velocity, key, cc_values)
         if (m.dest_oper >= 0 && m.dest_oper < 64) {
@@ -149,8 +152,9 @@ def public sf2_apply_modulators(zone : SF2Zone; velocity, key : int; cc_values :
 
 // ─── SF2 Default Modulators (spec 8.4.1-8.4.10) ───
 
-// Two modulators match identity if they have the same src1, src2, and destination.
 def public sf2_mod_identity_match(a, b : SF2Modulator) : bool {
+    //! Two SF2 modulators share identity when src1, src2, and destination all match.
+    //! Used to detect when a zone modulator overrides a default modulator.
     return a.src_oper == b.src_oper && a.amt_src_oper == b.amt_src_oper && a.dest_oper == b.dest_oper
 }
 
@@ -191,11 +195,11 @@ let private SF2_DEFAULT_MODS = fixed_array(
     SF2Modulator(src_oper = int(0x020E), amt_src_oper = int(0x0010), dest_oper = int(SF2GenOper.fineTune), amount = 12700, transform = 0)
 )
 
-// Apply default modulators that are not overridden by any zone modulator.
-// Call this AFTER applying zone modulators to gen_offsets.
 def public sf2_apply_default_modulators(izone : SF2Zone; global_izone : SF2Zone const?;
                                         pzone : SF2Zone const?; global_pzone : SF2Zone const?;
                                         velocity, key : int; cc_values : int[128]; var gen_offsets : float[64]) {
+    //! Apply the 10 SF2 spec default modulators (8.4.1-8.4.10) that are not overridden by any zone modulator.
+    //! Must be called AFTER zone modulators have already been accumulated into `gen_offsets`.
     for (dm in SF2_DEFAULT_MODS) {
         if (dm.amount == 0) {
             continue  // disabled default (#2 vel→filter)
@@ -222,32 +226,55 @@ def public sf2_apply_default_modulators(izone : SF2Zone; global_izone : SF2Zone 
 
 // ─── Envelope ───
 
+//! SF2 six-stage DAHDSR envelope stage enumeration.
 enum SF2EnvStage {
     env_delay
+        //! Silent delay before the envelope starts.
     env_attack
+        //! Rising ramp from 0.0 to 1.0.
     env_hold
+        //! Hold at peak level before decay begins.
     env_decay
+        //! Falling ramp from peak toward sustain level.
     env_sustain
+        //! Held at sustain level until note-off.
     env_release
+        //! Falling ramp from current level toward zero after note-off.
     env_finished
+        //! Envelope has fully decayed and voice can be freed.
 }
 
+//! SF2 volume or modulation envelope state (DAHDSR).
 struct SF2Envelope {
     stage : SF2EnvStage = SF2EnvStage.env_delay
+        //! Current envelope stage.
     time_in_stage : float = 0.0
+        //! Countdown samples remaining in the current stage (delay/hold).
     level : float = 0.0
+        //! Current envelope output level [0..1].
     release_level : float = 1.0     // captured at note-off
+        //! Level captured at note-off; release ramps down from here.
     slope : float = 0.0             // per-sample slope (linear or exponential base)
+        //! Per-sample slope (linear delta or exponential multiplier depending on stage).
     is_exponential : bool = false   // current segment uses exponential curve
+        //! True when the current segment uses an exponential curve instead of linear.
     is_amp_env : bool = false       // amplitude envelope uses exponential decay/release
+        //! True for the amplitude envelope (uses exponential decay/release and velocity-scaled attack).
     midi_velocity : int = 127       // for velocity-scaled attack
+        //! MIDI velocity used to scale the attack segment length on amplitude envelopes.
     // parameters (seconds)
     delay_sec : float = 0.0
+        //! Delay stage duration in seconds.
     attack_sec : float = 0.001
+        //! Attack stage duration in seconds.
     hold_sec : float = 0.0
+        //! Hold stage duration in seconds.
     decay_sec : float = 0.001
+        //! Decay stage duration in seconds.
     sustain_level : float = 1.0     // 0.0 to 1.0
+        //! Sustain level in [0..1] as a linear fraction (1.0 = peak, 0.0 = silence).
     release_sec : float = 0.001
+        //! Release stage duration in seconds.
 }
 
 // Initialize envelope for a specific stage transition
@@ -314,6 +341,7 @@ def private sf2_env_next_segment(var env : SF2Envelope&; sample_rate : float) {
 }
 
 def sf2_env_start(var env : SF2Envelope&; sample_rate : float) {
+    //! Begin playback of an SF2 envelope: enter the delay stage (or jump straight to attack if delay is zero).
     // start delay (or skip to attack if delay is 0)
     env.stage = SF2EnvStage.env_delay
     env.level = 0.0
@@ -328,6 +356,8 @@ def sf2_env_start(var env : SF2Envelope&; sample_rate : float) {
 }
 
 def sf2_env_tick(var env : SF2Envelope&; released : bool; sample_rate : float) : float {
+    //! Advance the envelope one sample and return the current level.
+    //! When `released` becomes true the envelope jumps into the release stage from its current level.
     if (released && env.stage != SF2EnvStage.env_release && env.stage != SF2EnvStage.env_finished) {
         // jump to release from current level
         env.release_level = env.level
@@ -392,14 +422,20 @@ def sf2_env_tick(var env : SF2Envelope&; released : bool; sample_rate : float) :
 
 // ─── LFO ───
 
+//! SF2 low-frequency oscillator state (triangle wave with an initial delay).
 struct SF2LFO {
     delay_sec : float = 0.0
+        //! Silent delay before the LFO begins oscillating, in seconds.
     freq : float = 8.176       // Hz
+        //! LFO frequency in Hz (SF2 default ~8.176 Hz = 0 cents from middle C).
     phase : float = 0.0
+        //! Current phase in [0..1].
     elapsed : float = 0.0
+        //! Elapsed time since note-on, used to test against `delay_sec`.
 }
 
 def sf2_lfo_tick(var lfo : SF2LFO&; dt : float) : float {
+    //! Advance the LFO by `dt` seconds and return the triangle-wave output in [-1..1] (zero during the delay).
     lfo.elapsed += dt
     if (lfo.elapsed < lfo.delay_sec) {
         return 0.0
@@ -415,7 +451,7 @@ def sf2_lfo_tick(var lfo : SF2LFO&; dt : float) : float {
 // ─── Biquad Low-Pass Filter ───
 
 // Transposed direct form II biquad low-pass filter
-struct SF2Biquad {
+struct private SF2Biquad {
     q_inv : double = 0.0lf
     a0 : double = 0.0lf
     a1 : double = 0.0lf
@@ -426,7 +462,7 @@ struct SF2Biquad {
     active : bool = false
 }
 
-def sf2_biquad_setup(var bq : SF2Biquad&; fc_normalized : float) {
+def private sf2_biquad_setup(var bq : SF2Biquad&; fc_normalized : float) {
     // fc_normalized = cutoff_hz / sample_rate (0 to 0.5)
     // QInv must be set before calling this
     if (fc_normalized >= 0.499) {
@@ -443,7 +479,7 @@ def sf2_biquad_setup(var bq : SF2Biquad&; fc_normalized : float) {
     bq.b2 = (1.0lf - K * bq.q_inv + KK) * norm
 }
 
-def sf2_biquad_tick(var bq : SF2Biquad&; input : float) : float {
+def private sf2_biquad_tick(var bq : SF2Biquad&; input : float) : float {
     if (!bq.active) {
         return input
     }
@@ -478,10 +514,9 @@ def private get_gen(izone : SF2Zone; global_izone : SF2Zone const?; pzone : SF2Z
     return val
 }
 
-// Initialize CC values to GM defaults. Used by MidiChannelState and standalone voice creation.
-// CC7=100 (GM volume), CC10=64 (pan center), CC11=127 (expression max),
-// CC[127]=8192 (pitch wheel center — stored in last CC slot as placeholder for SF2 modulators).
 def public sf2_default_cc_values(var cc : int[128]) {
+    //! Initialise a CC array to General MIDI defaults (CC7=100, CC10=64, CC11=127, pitchwheel slot=8192).
+    //! Used by MidiChannelState and standalone voice creation; slot 127 holds the pitch wheel value for SF2 modulator input.
     cc[7] = 100
     cc[10] = 64
     cc[11] = 127
@@ -490,20 +525,23 @@ def public sf2_default_cc_values(var cc : int[128]) {
 
 // ─── Per-voice attenuation state for CC re-evaluation ───
 
-// Stores everything needed to recalculate attenuation when CC values change.
-// All modulators targeting initialAttenuation are
-// stored per voice and re-evaluated when CC7/CC11/etc. change.
+//! Per-voice state for recomputing volume attenuation when MIDI CCs change.
+//! Caches every modulator that targets initialAttenuation so CC7/CC11/etc changes can be applied without re-resolving zones.
 struct SF2VoiceAttenState {
     base_atten_cb : int = 0           // generator initialAttenuation (centibels)
+        //! Generator initialAttenuation value in centibels, before modulators.
     velocity : int = 127
+        //! Note-on velocity captured at voice creation.
     key : int = 60
+        //! MIDI key number captured at voice creation.
     atten_mods : array<SF2Modulator>  // all modulators targeting initialAttenuation
+        //! All modulators (zone + unoverridden defaults) targeting initialAttenuation, collected once.
 }
 
-// Collect all modulators that target initialAttenuation from all zone layers,
-// plus defaults that aren't overridden. This is called once at voice creation.
 def public sf2_collect_atten_modulators(izone : SF2Zone; global_izone : SF2Zone const?;
                                         pzone : SF2Zone const?; global_pzone : SF2Zone const?) : array<SF2Modulator> {
+    //! Collect every modulator targeting initialAttenuation across all zone layers plus unoverridden defaults.
+    //! Called once at voice creation; results are cached in SF2VoiceAttenState for fast CC-driven re-evaluation.
     var result : array<SF2Modulator>
     let target = int(SF2GenOper.initialAttenuation)
     // zone modulators
@@ -555,9 +593,9 @@ def public sf2_collect_atten_modulators(izone : SF2Zone; global_izone : SF2Zone 
     return <- result
 }
 
-// Recalculate voice attenuation from stored modulators + current CC values.
-// Called at voice creation and whenever CC7/CC11 change.
 def public sf2_recalc_atten(atten_state : SF2VoiceAttenState; cc_values : int[128]) : float {
+    //! Recalculate voice attenuation (linear gain) from cached modulators and current CC values.
+    //! Called at voice creation and whenever CC7/CC11/etc change on the channel.
     var mod_sum = 0.0
     for (m in atten_state.atten_mods) {
         mod_sum += sf2_mod_get_value(m, atten_state.velocity, atten_state.key, cc_values)
@@ -577,6 +615,8 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
                               cc_values : int[128];
                               var out_voice : ma_sf2_voice;
                               var out_atten_state : SF2VoiceAttenState) : bool {
+    //! Resolve all SF2 generators/modulators for a note and populate the C `ma_sf2_voice` runtime state.
+    //! Sets up sample addressing, pitch, envelopes, LFOs, filter, pan and attenuation; returns false if the sample is invalid.
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let global_izone = inst.global_zone
@@ -794,6 +834,8 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
 
 def public sf2_get_exclusive_class(sf2 : SF2File; inst_idx, izone_idx : int;
                                    pzone : SF2Zone const?; global_pzone : SF2Zone const?) : int {
+    //! Resolve the exclusiveClass generator across all zone layers.
+    //! Non-zero classes cut off earlier notes in the same class (GM drum open/closed hi-hat behaviour).
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     return get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.exclusiveClass), 0)
@@ -801,6 +843,7 @@ def public sf2_get_exclusive_class(sf2 : SF2File; inst_idx, izone_idx : int;
 
 def public sf2_get_reverb_send(sf2 : SF2File; inst_idx, izone_idx : int;
                                pzone : SF2Zone const?; global_pzone : SF2Zone const?) : float {
+    //! Resolve the reverb effects-send amount across zone layers, normalised to [0..1].
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let send = get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.reverbEffectsSend), 0)
@@ -809,6 +852,7 @@ def public sf2_get_reverb_send(sf2 : SF2File; inst_idx, izone_idx : int;
 
 def public sf2_get_chorus_send(sf2 : SF2File; inst_idx, izone_idx : int;
                                pzone : SF2Zone const?; global_pzone : SF2Zone const?) : float {
+    //! Resolve the chorus effects-send amount across zone layers, normalised to [0..1].
     let inst = sf2.instruments[inst_idx]
     let izone = inst.zones[izone_idx]
     let send = get_gen(*izone, inst.global_zone, pzone, global_pzone, int(SF2GenOper.chorusEffectsSend), 0)

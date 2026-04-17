@@ -105,6 +105,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/version_update.md` | Bumping the daslang version number (all files that need updating) |
 | `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Feature leaks using the tracking system (`--track-job-status`, `DumpJobQueLeaks`, refcount tracing) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
+| `skills/strudel_port.md` | Copy-pasting a strudel.cc pattern (user-level live-coding expression) into daslang |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 

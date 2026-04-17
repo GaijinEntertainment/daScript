@@ -101,8 +101,20 @@ require stbimage/stbimage_boost
 require stbimage/stbimage_ttf
 require audio/audio_boost
 require audio/audio_wav
+require strudel/strudel_event
+require strudel/strudel_time
+require strudel/strudel_live
+require strudel/strudel_scales
+require strudel/strudel_mini
+require strudel/strudel_samples
+require strudel/strudel_synth
+require strudel/strudel_scheduler
+require strudel/strudel_player
 require strudel/strudel_midi
+require strudel/strudel_midi_player
 require strudel/strudel_sf2
+require strudel/strudel_sf2_voice
+require strudel/strudel_pattern
 
 def document_module_math(root : string) {
     var mod = get_module("math")
@@ -1313,6 +1325,96 @@ def document_module_audio_wav(root : string) {
     document("WAV file reading and writing", mod, "audio_wav.rst", groups)
 }
 
+def document_module_strudel_event(root : string) {
+    var mod = find_module("strudel_event")
+    var groups <- array<DocGroup>(
+        group_by_regex("ADSR and delay resolution", mod, %regex~(resolve_adsr|resolve_delaytime)$%%)
+    )
+    document("Event payload and ADSR/delay-time resolvers", mod, "strudel_event.rst", groups)
+}
+
+def document_module_strudel_time(root : string) {
+    var mod = find_module("strudel_time")
+    var groups <- array<DocGroup>(
+        group_by_regex("Cycle math", mod, %regex~(cyclePos|sameCycle|splitSpans)$%%)
+    )
+    document("Cycle-space time primitives: TimeSpan, Hap, and cycle helpers", mod, "strudel_time.rst", groups)
+}
+
+def document_module_strudel_live(root : string) {
+    var mod = find_module("strudel_live")
+    var groups <- array<DocGroup>(
+        group_by_regex("Live-reload state", mod, %regex~(save_strudel_state|restore_strudel_state)$%%)
+    )
+    document("Live-reload state preservation", mod, "strudel_live.rst", groups)
+}
+
+def document_module_strudel_scales(root : string) {
+    var mod = find_module("strudel_scales")
+    var groups <- array<DocGroup>(
+        group_by_regex("Scale and note selection", mod, %regex~(scale|set_scale|scale_pattern|get_scale_intervals_by_name|degree_to_note|parse_root)$%%)
+    )
+    document("Musical scales and note-name helpers", mod, "strudel_scales.rst", groups)
+}
+
+def document_module_strudel_mini(root : string) {
+    var mod = find_module("strudel_mini")
+    var groups <- array<DocGroup>(
+        group_by_regex("Tokenizer and parser", mod, %regex~(tokenize|parse_note_name|parse_note_name_default)$%%),
+        group_by_regex("Fluent DSL constructors", mod, %regex~(s|n|note_pattern|seq|note|vowel|set_s|set_vowel)$%%),
+        group_by_regex("Cycle-rate variants", mod, %regex~(every_fast|every_slow|every_degrade)$%%)
+    )
+    document("Mini-notation tokenizer, parser, and fluent-DSL entry points", mod, "strudel_mini.rst", groups)
+}
+
+def document_module_strudel_samples(root : string) {
+    var mod = find_module("strudel_samples")
+    var groups <- array<DocGroup>(
+        group_by_regex("Loading", mod, %regex~(load_audio_file|load_sound|load_audio_memory|load_sound_memory)$%%),
+        group_by_regex("Rendering", mod, %regex~(render_sample)$%%)
+    )
+    document("Sample bank and audio file loading", mod, "strudel_samples.rst", groups)
+}
+
+def document_module_strudel_synth(root : string) {
+    var mod = find_module("strudel_synth")
+    var groups <- array<DocGroup>(
+        group_by_regex("Pitch conversion", mod, %regex~(note_to_freq)$%%),
+        group_by_regex("Noise generators", mod, %regex~(noise)$%%),
+        group_by_regex("Drum renderers", mod, %regex~render_(bd|sd|hh|cp|oh|tom|ride|crash|rimshot|cowbell|tambourine)$%%),
+        group_by_regex("Oscillator type", mod, %regex~(to_osc_type)$%%),
+        group_by_regex("Voice FX chain", mod, %regex~(fx_init_from_event|fx_apply|fx_apply_to_samples)$%%),
+        group_by_regex("Oscillator voice", mod, %regex~(osc_voice_init_supersaw|osc_voice_init_filters|osc_render_chunk)$%%),
+        group_by_regex("Vowel filter", mod, %regex~(vowel_get_formant_data|vowel_filter_init|vowel_filter_tick|formant_biquad_setup_bpf|formant_biquad_tick)$%%),
+        group_by_regex("Voice rendering", mod, %regex~(render_event_stereo|mono_to_stereo)$%%)
+    )
+    document("Audio synthesis: oscillators, drums, filters, and effects", mod, "strudel_synth.rst", groups)
+}
+
+def document_module_strudel_scheduler(root : string) {
+    var mod = find_module("strudel_scheduler")
+    var groups <- array<DocGroup>(
+        group_by_regex("Orbit effects", mod, %regex~(init_reverb|init_chorus|init_delay|get_orbit_reverb|get_orbit_delay)$%%),
+        group_by_regex("Scheduler lifecycle", mod, %regex~(tick|shutdown_scheduler)$%%)
+    )
+    document("Voice allocation, effect bus routing, and per-tick mixing", mod, "strudel_scheduler.rst", groups)
+}
+
+def document_module_strudel_player(root : string) {
+    var mod = find_module("strudel_player")
+    var groups <- array<DocGroup>(
+        group_by_regex("Lifecycle", mod, %regex~strudel_(init|shutdown|create_channel)$%%),
+        group_by_regex("Playback control", mod, %regex~strudel_(play|stop|set_pause|is_playing|noop_cmd|tick|tick_offline|command)$%%),
+        group_by_regex("Tempo and timing", mod, %regex~strudel_(set_bpm|set_cps|get_bpm|get_cps|get_playback_time|set_look_ahead)$%%),
+        group_by_regex("Volume", mod, %regex~strudel_(set_volume|get_volume)$%%),
+        group_by_regex("Asset loading", mod, %regex~strudel_(load_sound|load_sample_dir|load_sf2|get_sf2_path|has_sf2)$%%),
+        group_by_regex("Track management", mod, %regex~strudel_(add_track|remove_track|fade_track)$%%),
+        group_by_regex("State serialization", mod, %regex~strudel_(save_state|restore_state|save_sf2_state|restore_sf2_state)$%%),
+        group_by_regex("Debug and diagnostics", mod, %regex~strudel_(debug_memory|reset_memory_baseline|debug_sample_peaks|debug_master_peak|debug_output_peak|debug_voices)$%%)
+    )
+    document("Top-level playback harness: tracks, BPM/CPS, and threaded audio", mod, "strudel_player.rst", groups)
+}
+
 def document_module_strudel_midi(root : string) {
     var mod = find_module("strudel_midi")
     var groups <- array<DocGroup>(
@@ -1321,6 +1423,19 @@ def document_module_strudel_midi(root : string) {
         group_by_regex("Binary readers", mod, %regex~(read_byte|read_u16|read_u32|read_vlq)$%%)
     )
     document("MIDI file parser", mod, "strudel_midi.rst", groups)
+}
+
+def document_module_strudel_midi_player(root : string) {
+    var mod = find_module("strudel_midi_player")
+    var groups <- array<DocGroup>(
+        group_by_regex("Lifecycle", mod, %regex~midi_(init|shutdown|init_reverb)$%%),
+        group_by_regex("Playback control", mod, %regex~midi_(play|play_data|stop|set_pause|is_playing|tick)$%%),
+        group_by_regex("Audio setup", mod, %regex~midi_(set_volume|set_audio_vis_channel)$%%),
+        group_by_regex("Asset loading", mod, %regex~midi_(load_samples|load_sf2)$%%),
+        group_by_regex("Event processing", mod, %regex~(init_playback|process_events)$%%),
+        group_by_regex("Drum and GM preset rendering", mod, %regex~(render_drum_hit|gm_preset|midi_adsr)$%%)
+    )
+    document("MIDI file playback with GM preset mapping", mod, "strudel_midi_player.rst", groups)
 }
 
 def document_module_strudel_sf2(root : string) {
@@ -1333,6 +1448,36 @@ def document_module_strudel_sf2(root : string) {
         group_by_regex("Modulator source helpers", mod, %regex~(sf2_mod_src)%%)
     )
     document("SoundFont 2 file parser", mod, "strudel_sf2.rst", groups)
+}
+
+def document_module_strudel_sf2_voice(root : string) {
+    var mod = find_module("strudel_sf2_voice")
+    var groups <- array<DocGroup>(
+        group_by_regex("Envelope", mod, %regex~sf2_env_(start|tick)$%%),
+        group_by_regex("LFO", mod, %regex~sf2_lfo_tick$%%),
+        group_by_regex("Modulators", mod, %regex~sf2_(velocity_attenuation|mod_get_value|apply_modulators|mod_identity_match|apply_default_modulators|default_cc_values|collect_atten_modulators|recalc_atten)$%%),
+        group_by_regex("Voice creation", mod, %regex~sf2_(create_c_voice|get_exclusive_class|get_reverb_send|get_chorus_send)$%%)
+    )
+    document("SoundFont 2 per-voice runtime: envelope, LFO, modulators, biquad", mod, "strudel_sf2_voice.rst", groups)
+}
+
+def document_module_strudel_pattern(root : string) {
+    var mod = find_module("strudel_pattern")
+    var groups <- array<DocGroup>(
+        group_by_regex("Pattern construction", mod, %regex~(pure|silence|atom|querySpan|queryArc|patternType)$%%),
+        group_by_regex("Time manipulation", mod, %regex~(fast|slow|stack|cat|fastcat|weighted_fastcat|fmap)$%%),
+        group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby)$%%),
+        group_by_regex("Setter primitives", mod, %regex~set_.*$%%),
+        group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|sound|cut|orbit|begin|end_pos)$%%),
+        group_by_regex("Fluent control: effects sends", mod, %regex~(room|roomsize|size|delay|delaytime|dt|delayfeedback|dfb|delaysync|chorus)$%%),
+        group_by_regex("Fluent control: filters", mod, %regex~(lpf|lp|hpf|hp|lpq|resonance|hpq|bpf|bpq|djf)$%%),
+        group_by_regex("Fluent control: envelope", mod, %regex~(attack|att|decay|dec|sustain|sus|release|rel)$%%),
+        group_by_regex("Fluent control: synthesis and shaping", mod, %regex~(fm|fmh|crush|coarse|shape)$%%),
+        group_by_regex("Fluent control: modulation FX", mod, %regex~(phaser|ph|phaserdepth|phd|phasercenter|phc|phasersweep|phs|tremolo|trem|tremolodepth|tremdepth|compressor.*)$%%),
+        group_by_regex("Fluent control: SF2", mod, %regex~sf2.*$%%),
+        group_by_regex("Signals", mod, %regex~(signal|signal_.*|sine|cosine|saw|tri|perlin|range|square|isaw|itri|sine2|cosine2|saw2|tri2|square2|isaw2|itri2|rand|rand2|irand|run)$%%)
+    )
+    document("Pattern algebra, combinators, and fluent control API", mod, "strudel_pattern.rst", groups)
 }
 
 def document_module_peg(root : string) {
@@ -1369,8 +1514,21 @@ def main {
     // document dasAudio daScript modules
     document_module_audio_boost(root)
     document_module_audio_wav(root)
+    // document strudel modules
+    document_module_strudel_event(root)
+    document_module_strudel_time(root)
+    document_module_strudel_live(root)
+    document_module_strudel_scales(root)
+    document_module_strudel_mini(root)
+    document_module_strudel_samples(root)
+    document_module_strudel_synth(root)
+    document_module_strudel_scheduler(root)
+    document_module_strudel_player(root)
     document_module_strudel_midi(root)
+    document_module_strudel_midi_player(root)
     document_module_strudel_sf2(root)
+    document_module_strudel_sf2_voice(root)
+    document_module_strudel_pattern(root)
     // document dasPEG module
     document_module_peg(root)
     document_module_debugapi(root)

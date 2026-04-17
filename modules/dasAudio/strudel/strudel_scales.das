@@ -1,7 +1,10 @@
 options gen2
 options indenting = 4
 
-module strudel_scales shared
+module strudel_scales shared public
+//! Music-theory helpers: scale interval tables (major, minor, modes, pentatonic, blues, ...)
+//! and the `set_scale` combinator that reinterprets `event.note` as a scale degree.
+//! Scale definitions use the `Root:Type` string syntax, e.g. `"C4:major"` or `"D:pentatonic"`.
 
 require strudel/strudel_event
 require strudel/strudel_time
@@ -125,6 +128,9 @@ def private parse_scale_def(scale_def : string) : tuple<int; string> {
 // Wraps at octave boundaries: degree 7 in major = root + 12.
 // Handles negative degrees (wraps backwards).
 def degree_to_note(degree : int; root_midi : int; intervals : array<int> const) : float {
+    //! Convert a scale degree to a MIDI note number. Degree 0 = root, 1 = second, etc.;
+    //! wraps at octave boundaries so degree 7 in a major scale = root + 12. Negative
+    //! degrees wrap backwards: degree -1 in a 7-note scale is the 7th one octave down.
     let n = length(intervals)
     if (n == 0) {
         return float(root_midi)
@@ -147,6 +153,9 @@ def degree_to_note(degree : int; root_midi : int; intervals : array<int> const) 
 // pat |> set_scale("C4:major") — degree 0→60, 1→62, 2→64, 3→65, 4→67...
 
 def set_scale(var pat : Pattern; scale_def : string) : Pattern {
+    //! Treat each event's `note` field as a scale degree and map it to a MIDI note
+    //! using `scale_def` (format `"Root:Type"`, e.g. `"C4:major"`, `"D:pentatonic"`).
+    //! Example: `n("0 2 4 7") |> set_scale("C4:major")` plays C, E, G, C (one octave up).
     let parsed = parse_scale_def(scale_def)
     let root_midi = parsed._0
     let scale_type = parsed._1
@@ -161,22 +170,29 @@ def set_scale(var pat : Pattern; scale_def : string) : Pattern {
 
 // ─── Convenience Constructors ───
 
-// scale_pattern("0 2 4 7", "C4:pentatonic") — shorthand for n() |> set_scale() |> set_sound()
 def scale_pattern(notation : string; scale_def : string; sound : string = "sine") : Pattern {
+    //! Shorthand for `n(notation) |> set_scale(scale_def) |> set_sound(sound)`.
+    //! Example: `scale_pattern("0 2 4 7", "C4:pentatonic")` plays a pentatonic arpeggio.
     return <- n(notation) |> set_scale(scale_def) |> set_sound(sound)
 }
 
 // ─── Query Helpers (for tests) ───
 
 def get_scale_intervals_by_name(scale_type : string) : array<int> {
+    //! Return the semitone-interval table for a named scale (`"major"`, `"minor"`,
+    //! `"dorian"`, `"pentatonic"`, `"blues"`, `"chromatic"`, ...). Used by tests.
     return <- get_scale_intervals(scale_type)
 }
 
 def parse_root(root_str : string) : int {
+    //! Parse a root-note string (`"C"`, `"Eb4"`, `"Fs3"`, ...) into a MIDI note number.
+    //! Default octave is 3. Exposed for tests.
     return parse_scale_root(root_str)
 }
 
 // ─── Alias ───
 
-// scale("C4:major") — alias for set_scale
-def scale(var pat : Pattern; scale_def : string) : Pattern { return <- set_scale(pat, scale_def); }
+def scale(var pat : Pattern; scale_def : string) : Pattern {
+    //! Alias for `set_scale`. Example: `n("0 2 4") |> scale("C4:major")`.
+    return <- set_scale(pat, scale_def);
+}

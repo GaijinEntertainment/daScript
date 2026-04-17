@@ -71,9 +71,13 @@ enum SF2GenOper {
 
 // ─── SF2 Sample Types ───
 
+//! Mono sample — produces a single channel.
 let public SF2_SAMPLE_MONO   = 1u
+//! Right channel of a stereo pair (linked to a left sample).
 let public SF2_SAMPLE_RIGHT  = 2u
+//! Left channel of a stereo pair (linked to a right sample).
 let public SF2_SAMPLE_LEFT   = 4u
+//! Linked sample flag — indicates a multi-sample link set.
 let public SF2_SAMPLE_LINKED = 8u
 
 // ─── SF2 Data Structures ───
@@ -294,19 +298,19 @@ def private parse_sample_headers(data : array<uint8>; offset, size : int) : arra
     return <- result
 }
 
-struct RawPresetHeader {
+struct private RawPresetHeader {
     name : string
     preset : int
     bank : int
     pbag_index : int
 }
 
-struct RawInstrumentHeader {
+struct private RawInstrumentHeader {
     name : string
     ibag_index : int
 }
 
-struct RawBag {
+struct private RawBag {
     gen_index : int
     mod_index : int
 }
