@@ -39,5 +39,6 @@ THE SOFTWARE.
    sec_code_quality.rst
    sec_media.rst
    sec_audio.rst
+   sec_strudel.rst
 
 

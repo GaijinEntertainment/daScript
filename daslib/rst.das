@@ -576,7 +576,7 @@ def describe_type(td : TypeDecl?) {
         // if td.flags.constant
         //     write(writer," const")
         for (d in td.dim) {
-            write(writer, "[")
+            write(writer, "\\ [")
             write(writer, d)
             write(writer, "]")
         }

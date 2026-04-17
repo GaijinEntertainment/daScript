@@ -293,6 +293,42 @@ Run any tutorial from the project root::
    tutorials/dasAudio_07_wav_io.rst
    tutorials/dasAudio_08_midi.rst
 
+.. _tutorials_dastrudel:
+
+daStrudel (Live-Coding) Tutorials
+==================================
+
+These tutorials cover the ``strudel`` module — pattern-based live-coding
+music with mini-notation, time algebra, per-voice effects, samples, SF2
+soundfonts, MIDI playback, and live-reload.  Companion ``.das`` files
+are in ``tutorials/daStrudel/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/daStrudel/daStrudel_01_hello_pattern.das
+
+For the strudel-to-strudel.cc feature comparison, see
+:ref:`strudel_vs_strudel_cc`.
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/daStrudel_01_hello_pattern.rst
+   tutorials/daStrudel_02_mini_notation_fundamentals.rst
+   tutorials/daStrudel_03_mini_notation_advanced.rst
+   tutorials/daStrudel_04_time_manipulation.rst
+   tutorials/daStrudel_05_euclidean_rhythms.rst
+   tutorials/daStrudel_06_stacking_combining.rst
+   tutorials/daStrudel_07_per_voice_fx.rst
+   tutorials/daStrudel_08_effects_filters.rst
+   tutorials/daStrudel_09_adsr_envelopes.rst
+   tutorials/daStrudel_10_scales_music_theory.rst
+   tutorials/daStrudel_11_synthesis.rst
+   tutorials/daStrudel_12_samples.rst
+   tutorials/daStrudel_13_sf2_soundfont.rst
+   tutorials/daStrudel_14_midi_files.rst
+   tutorials/daStrudel_15_live_reloading.rst
+
 .. _tutorials_daspeg:
 
 dasPEG (Parser Generator) Tutorials

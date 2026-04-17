@@ -1,7 +1,10 @@
 options gen2
 options indenting = 4
 
-module strudel_scheduler shared
+module strudel_scheduler shared public
+//! Voice allocation, effect bus routing, and per-tick mixing for strudel playback.
+//! Maintains pre-rendered sample voices, streaming oscillator voices, and real-time SF2 voices,
+//! routing each through per-orbit reverb/delay buses plus a shared chorus bus.
 
 require strudel/strudel_event
 require strudel/strudel_time
@@ -14,80 +17,126 @@ require audio/audio_boost
 require audio
 require math
 
-// An active voice: a pre-rendered stereo buffer being played back.
+//! An active voice: a pre-rendered stereo buffer being played back.
 struct Voice {
     samples : array<float>   // interleaved stereo PCM (raw, no gain/pan)
+        //! Interleaved stereo PCM buffer (raw, without gain/pan applied).
     position : int = 0       // current read position (in floats, not frames)
+        //! Current read position in floats (not frames); negative values delay playback start.
     cut : int = 0            // cut group (0 = no cut)
+        //! Cut group — new voices in the same group kill older ones (0 = no cut).
     gain : float = 0.8       // volume for this voice
+        //! Linear gain applied during mixing.
     pan : float = 0.0        // pan for this voice (-1=left, 0=center, 1=right)
+        //! Stereo pan (-1 = left, 0 = center, 1 = right).
     reverb_send : float = 0.0  // reverb send amount from Event.room (0.0–1.0)
+        //! Reverb send amount (0.0–1.0) from Event.room.
     chorus_send : float = 0.0  // chorus send amount from Event.chorus (0.0–1.0)
+        //! Chorus send amount (0.0–1.0) from Event.chorus.
     delay_send : float = 0.0   // delay send amount from Event.delay_amount (0.0–1.0)
+        //! Delay send amount (0.0–1.0) from Event.delay_amount.
     orbit : int = 0            // effect bus routing
+        //! Orbit index — selects which per-orbit effect bus receives this voice's sends.
 }
 
-// Per-voice metadata for SF2 voices (not stored in the C ma_sf2_voice struct).
+//! Per-voice metadata for SF2 voices (companion to the C ma_sf2_voice struct).
 [safe_when_uninitialized]
 struct StrudelSF2Meta {
     note             : int = 0       // MIDI note (for re-trigger matching)
+        //! MIDI note number (used for re-trigger matching).
     note_off_sample  : int = -1      // sample position to fire note-off (-1 = don't auto note-off)
+        //! Sample index at which to fire note-off (-1 = never auto note-off).
     samples_elapsed  : int = 0       // how many samples rendered so far
+        //! Total samples rendered for this voice so far.
     reverb_send      : float = 0.0   // per-voice reverb amount from SF2 generators
+        //! Per-voice reverb send (from SF2 generators).
     chorus_send      : float = 0.0   // per-voice chorus amount from SF2 generators
+        //! Per-voice chorus send (from SF2 generators).
     delay_send       : float = 0.0   // per-voice delay amount from Event.delay_amount
+        //! Per-voice delay send (from Event.delay_amount).
     exclusive_class  : int = 0       // SF2 exclusive class (hi-hat choke etc.)
+        //! SF2 exclusive class — voices in the same non-zero class choke each other (e.g. hi-hats).
     cut              : int = 0       // strudel cut group
+        //! Strudel cut group (0 = no cut).
     gain             : float = 1.0   // event gain * velocity (applied as attenuation scale)
+        //! Event gain × velocity, applied as an attenuation scale factor.
     orbit            : int = 0       // effect bus routing
+        //! Orbit index — selects which per-orbit effect bus receives this voice's sends.
     @safe_when_uninitialized fx : VoiceFX  // per-voice audio effects
+        //! Per-voice audio effects (crush/shape/filter/etc.), applied post-render.
     pan              : float = 0.0   // stereo pan (-1..1) used when fx routes through temp buffer
+        //! Stereo pan (-1..1), used when FX routing goes through a temp buffer.
 }
 
-// Per-orbit effect bus. Each orbit has independent reverb + delay instances.
-// Orbits are created on demand when a voice with that orbit index is spawned.
+//! Per-orbit effect bus. Each orbit has independent reverb + delay instances.
+//! Orbits are created on demand when a voice with that orbit index is spawned.
 [safe_when_uninitialized]
 struct OrbitBus {
     reverb            : ConvolutionReverb?
+        //! Convolution reverb instance (null until a voice requests reverb).
     delay_proc        : ma_delay?
+        //! Stereo delay instance (null until a voice requests delay).
     reverb_send_buf   : array<float>
+        //! Scratch buffer accumulating reverb sends from all voices routed to this orbit.
     reverb_out_buf    : array<float>
+        //! Scratch buffer receiving the reverb's wet output for mixing into the master.
     delay_send_buf    : array<float>
+        //! Scratch buffer accumulating delay sends from all voices routed to this orbit.
     delay_out_buf     : array<float>
+        //! Scratch buffer receiving the delay's wet output for mixing into the master.
     current_roomsize      : float = -1.0
+        //! Most recently applied reverb roomsize (-1 = uninitialized).
     current_delaytime     : float = -1.0
+        //! Most recently applied delay time in seconds (-1 = uninitialized).
     current_delayfeedback : float = -1.0
+        //! Most recently applied delay feedback amount (-1 = uninitialized).
 }
 
-// The scheduler bridges the pattern engine and audio output.
-// Maintains two pools: pre-rendered sample voices and real-time SF2 voices.
-// Effects are routed through per-orbit buses (each orbit has its own reverb + delay).
+//! Bridges the pattern engine and audio output.
+//! Maintains three voice pools (pre-rendered samples, streaming oscillators, real-time SF2)
+//! and routes each voice's sends through per-orbit effect buses plus a shared chorus.
 [safe_when_uninitialized]
 struct Scheduler {
     cps          : double = 0.5lf   // cycles per second (0.5 = 120 BPM at 4 beats/cycle)
+        //! Cycles per second (0.5 = 120 BPM at 4 beats per cycle).
     startTime    : double = 0.0lf   // wall-clock time when playback started
+        //! Wall-clock time when playback started (seconds).
     lastQueryEnd : double = 0.0lf   // cycle position of last query end
+        //! Cycle position of the last pattern-query end, used to avoid duplicate spawning.
     voices       : array<Voice?>    // pre-rendered sample/oscillator voices
+        //! Pool of pre-rendered sample voices.
     osc_voices   : array<OscVoice> // streaming oscillator voices
+        //! Pool of streaming oscillator voices.
     mixer        : ma_volume_mixer  // reused across ticks
+        //! Miniaudio volume mixer, reused across ticks for gain/pan application.
     mixer_ready  : bool = false
+        //! True once the mixer has been initialized.
     output       : array<float>    // reusable output buffer (avoids per-tick allocation)
+        //! Reusable stereo output buffer for the current tick.
     // SF2 real-time voice pool
     sf2           : SF2File const?        // loaded soundfont (null = SF2 disabled)
+        //! Loaded SoundFont (null = SF2 disabled for this scheduler).
     sf2_voices    : array<ma_sf2_voice>   // real-time SF2 voices (C structs)
+        //! Pool of real-time SF2 voices (C structs).
     sf2_meta      : array<StrudelSF2Meta> // parallel metadata
+        //! Parallel metadata array for each SF2 voice.
     // Per-orbit effect buses (created on demand)
     orbit_buses   : array<OrbitBus?>
+        //! Per-orbit effect buses, indexed by orbit number and allocated on demand.
     // Chorus (SF2-only, not orbit-routed)
     chorus          : ma_chorus?
+        //! Shared chorus unit (null until any voice requests chorus).
     chorus_send_buf : array<float>
+        //! Chorus send accumulation buffer shared across orbits.
     chorus_out_buf  : array<float>
+        //! Chorus wet-output buffer mixed into the master.
     // Shared scratch buffer for per-voice FX processing (sized per-tick)
     voice_fx_buf    : array<float>
+        //! Scratch buffer for per-voice FX processing, sized on demand each tick.
 }
 
 // Convert wall-clock time to cycle position.
-def current_cycle(sched : Scheduler; wall_time : double) : double {
+def private current_cycle(sched : Scheduler; wall_time : double) : double {
     return (wall_time - sched.startTime) * sched.cps
 }
 
@@ -149,14 +198,14 @@ def private update_orbit_delay_params(var bus : OrbitBus; delaytime, delayfeedba
     delay_set_params(bus.delay_proc, SAMPLE_RATE, dt, fb)
 }
 
-// Initialize reverb on the scheduler's default orbit (backwards compat).
 def init_reverb(var sched : Scheduler) {
+    //! Initialize reverb on the scheduler's default orbit (bus 0). Convenience wrapper used by older API.
     ensure_orbit(sched, 0)
     init_orbit_reverb(*sched.orbit_buses[0])
 }
 
-// Initialize chorus on the scheduler (not orbit-routed).
 def init_chorus(var sched : Scheduler) {
+    //! Initialize the scheduler's shared chorus unit with default parameters (no-op if already initialized).
     if (sched.chorus == null) {
         sched.chorus = new ma_chorus
         chorus_init(sched.chorus, float(SAMPLE_RATE))
@@ -165,8 +214,8 @@ def init_chorus(var sched : Scheduler) {
     }
 }
 
-// Initialize delay on the scheduler's default orbit (backwards compat).
 def init_delay(var sched : Scheduler; delaytime : float = 0.5; delayfeedback : float = 0.5) {
+    //! Initialize delay on the scheduler's default orbit (bus 0) with the given time/feedback.
     ensure_orbit(sched, 0)
     init_orbit_delay(*sched.orbit_buses[0], delaytime, delayfeedback)
 }
@@ -614,12 +663,9 @@ def private process_chorus(var sched : Scheduler; var output : array<float>; chu
     }
 }
 
-// Tick the scheduler: query pattern for new events, render them,
-// mix all active voices into a fixed-size stereo buffer.
-//
-// chunk_seconds: how much audio to produce this tick (e.g. 0.05 for 50ms)
-// lookAhead: how far ahead in time to query for new events (in seconds)
 def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time : double; chunk_seconds : float = 0.05; lookAhead : float = 0.1) : void {
+    //! Advance one audio block: query the pattern for new events, spawn voices, mix all voices through the orbit/chorus buses into sched.output.
+    //! chunk_seconds controls how much audio is produced this tick; lookAhead is how far ahead in time to query for new events.
     let cycleNow = current_cycle(sched, wall_time)
     let cycleEnd = current_cycle(sched, wall_time + double(lookAhead))
     let spawnEnd = current_cycle(sched, wall_time + double(chunk_seconds) + 0.01lf)
@@ -824,8 +870,8 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
     // output stays in sched.output — caller reads it directly
 }
 
-// Accessors for orbit bus effects (for tests and backwards compat).
 def get_orbit_reverb(var sched : Scheduler; orbit : int = 0) : ConvolutionReverb? {
+    //! Fetch the reverb instance for the given orbit (for inspection or tests). Returns null if no bus or no reverb configured.
     if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
         return sched.orbit_buses[orbit].reverb
     }
@@ -833,14 +879,15 @@ def get_orbit_reverb(var sched : Scheduler; orbit : int = 0) : ConvolutionReverb
 }
 
 def get_orbit_delay(var sched : Scheduler; orbit : int = 0) : ma_delay? {
+    //! Fetch the delay instance for the given orbit (for inspection or tests). Returns null if no bus or no delay configured.
     if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
         return sched.orbit_buses[orbit].delay_proc
     }
     return null
 }
 
-// Release native resources owned by the scheduler.
 def shutdown_scheduler(var sched : Scheduler) {
+    //! Release native resources owned by the scheduler (reverb/delay/chorus instances on every orbit bus).
     for (bus in sched.orbit_buses) {
         if (bus != null) {
             if (bus.delay_proc != null) {
@@ -859,11 +906,11 @@ def shutdown_scheduler(var sched : Scheduler) {
 }
 
 // Set tempo in BPM (assumes 4 beats per cycle).
-def set_bpm(var sched : Scheduler; bpm : double) {
+def private set_bpm(var sched : Scheduler; bpm : double) {
     sched.cps = bpm / 240.0lf
 }
 
 // Set cycles per second directly.
-def setcps(var sched : Scheduler; cps : double) {
+def private setcps(var sched : Scheduler; cps : double) {
     sched.cps = cps
 }
