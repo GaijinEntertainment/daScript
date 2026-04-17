@@ -408,6 +408,113 @@ def each_clone(var channel : Channel?; tinfo : auto(TT)) {
     }
 }
 
+//
+// Stream wrappers — cross-context byte pipeline. Bytes are owned C++-side,
+// so either end may free the Stream without coordinating with the other.
+//
+
+require daslib/archive
+
+def push(stream : Stream?; var data : array<uint8>) {
+    //! Copy bytes into the stream (at the tail). Bytes are owned by the Stream C++-side
+    //! after push — caller may free the source buffer immediately.
+    _builtin_stream_push(stream, data)
+}
+
+def push(stream : Stream?; data : array<uint8> const#) {
+    //! Overload for temporary/borrowed views (e.g. bytes popped from another stream).
+    _builtin_stream_push(stream, data)
+}
+
+def push_batch(stream : Stream?; var data : array<array<uint8>>) {
+    //! Copy a batch of byte blobs into the stream atomically under a single lock.
+    _builtin_stream_push_batch(stream, data)
+}
+
+def push_archive(stream : Stream?; var value : auto(TT)) {
+    //! Serialize ``value`` via ``daslib/archive`` and push the resulting bytes onto the stream.
+    //! Use ``pop_archive`` or ``gather_archive`` on the consumer side to deserialize.
+    var bytes <- mem_archive_save(value)
+    _builtin_stream_push(stream, bytes)
+    unsafe {
+        delete bytes
+    }
+}
+
+def pop(stream : Stream?; blk : block<(bytes : array<uint8># -const) : void>) {
+    //! Blocking pop from the stream. Invokes the block with a borrowed view over the
+    //! popped bytes. The view is only valid for the duration of the block.
+    _builtin_stream_pop(stream, blk)
+}
+
+def try_pop(stream : Stream?; blk : block<(bytes : array<uint8># -const) : void>) : bool {
+    //! Non-blocking pop. Returns true if an item was consumed, false if the stream was empty.
+    return _builtin_stream_try_pop(stream, blk)
+}
+
+def pop_with_timeout(stream : Stream?; timeout_ms : int; blk : block<(bytes : array<uint8># -const) : void>) : bool {
+    //! Pop with a timeout in milliseconds. Returns true if an item was consumed in time.
+    return _builtin_stream_pop_with_timeout(stream, timeout_ms, blk)
+}
+
+def gather(stream : Stream?; blk : block<(bytes : array<uint8># -const) : void>) {
+    //! Drain the stream: invoke the block once per buffered blob in push order, then clear.
+    _builtin_stream_gather(stream, blk)
+}
+
+def peek(stream : Stream?; blk : block<(bytes : array<uint8># -const) : void>) {
+    //! Iterate buffered blobs in push order WITHOUT consuming them.
+    _builtin_stream_peek(stream, blk)
+}
+
+def pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) : bool {
+    //! Blocking pop + deserialize via ``daslib/archive``. Returns true if a value was consumed.
+    //! The block receives an owned reference — safe to pass fields to functions expecting ``const``.
+    var any = false
+    var value : TT -# -& -const
+    _builtin_stream_pop(stream) $(bytes : array<uint8># -const) {
+        if (length(bytes) > 0) {
+            any = true
+            mem_archive_load(bytes, value)
+        }
+    }
+    if (any) {
+        invoke(blk, value)
+    }
+    unsafe {
+        delete value
+    }
+    return any
+}
+
+def try_pop_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) : bool {
+    //! Non-blocking pop + deserialize. Returns true if a value was consumed.
+    var any = false
+    var value : TT -# -& -const
+    any = _builtin_stream_try_pop(stream) $(bytes : array<uint8># -const) {
+        mem_archive_load(bytes, value)
+    }
+    if (any) {
+        invoke(blk, value)
+    }
+    unsafe {
+        delete value
+    }
+    return any
+}
+
+def gather_archive(stream : Stream?; blk : block<(var value : auto(TT)&) : void>) {
+    //! Drain the stream, deserializing each blob via ``daslib/archive`` and invoking the block on each.
+    _builtin_stream_gather(stream) $(bytes : array<uint8># -const) {
+        var value : TT -# -& -const
+        mem_archive_load(bytes, value)
+        invoke(blk, value)
+        unsafe {
+            delete value
+        }
+    }
+}
+
 def with_wait_group(count : int; blk : block<(var status : JobStatus?) : void>) {
     //! Creates a wait group with the given notification count and auto-joins after the block.
     //! Each unit of work should call ``notify_and_release`` (or ``done``) when complete.

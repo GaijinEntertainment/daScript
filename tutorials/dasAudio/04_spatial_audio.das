@@ -12,6 +12,7 @@
 // Best experienced with headphones for spatial positioning.
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require audio/audio_boost

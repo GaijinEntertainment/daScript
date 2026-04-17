@@ -182,6 +182,54 @@ struct SF2File {
     preset_lookup : table<int; int>     //! Fast lookup: (bank << 8 | program) -> index into presets.
 }
 
+// ─── Finalizers (release pointer-based ownership graph) ───
+
+def finalize(var d : SF2InstrumentDef explicit) {
+    //! Release global_zone and each zones[i] — structs held by raw pointer.
+    if (d.global_zone != null) {
+        unsafe {
+            delete d.global_zone
+        }
+    }
+    for (z in d.zones) {
+        unsafe {
+            delete z
+        }
+    }
+    delete d.zones
+}
+
+def finalize(var d : SF2PresetDef explicit) {
+    //! Release global_zone and each zones[i] — structs held by raw pointer.
+    if (d.global_zone != null) {
+        unsafe {
+            delete d.global_zone
+        }
+    }
+    for (z in d.zones) {
+        unsafe {
+            delete z
+        }
+    }
+    delete d.zones
+}
+
+def finalize(var f : SF2File explicit) {
+    //! Release every instrument / preset pointer. delete of each triggers its own finalize.
+    for (inst in f.instruments) {
+        unsafe {
+            delete inst
+        }
+    }
+    delete f.instruments
+    for (preset in f.presets) {
+        unsafe {
+            delete preset
+        }
+    }
+    delete f.presets
+}
+
 // ─── Binary Readers (Little-Endian) ───
 
 def private read_u8(data : array<uint8>; var cursor : int&) : int {

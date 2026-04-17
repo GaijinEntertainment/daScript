@@ -456,10 +456,10 @@ def document_module_apply(root : string) {
 def document_module_jobque(root : string) {
     var mod = find_module("jobque")
     var groups <- array<DocGroup>(
-        group_by_regex("Channel, JobStatus, Lockbox", mod, %regex~(append|notify|join|channel_create|channel_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%),
+        group_by_regex("Channel, JobStatus, Lockbox, Stream", mod, %regex~(append|notify|join|channel_create|channel_remove|stream_create|stream_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%),
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|is_job_que_shutting_down)$%%),
         group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke|new_debugger_thread)$%%),
-        group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que|with_lock_box)$%%),
+        group_by_regex("Construction", mod, %regex~(with_channel|with_stream|with_job_status|with_job_que|with_lock_box)$%%),
         group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     )
     document("Jobs and threads", mod, "jobque.rst", groups)
@@ -470,8 +470,8 @@ def document_module_jobque_boost(root : string) {
     var groups <- array<DocGroup>(
         group_by_regex("Invocations", mod, %regex~(new_job|new_thread)$%%),
         group_by_regex("Iteration", mod, %regex~(for_each|each|each_clone|for_each_clone)$%%),
-        group_by_regex("Passing data", mod, %regex~(push|push_clone|push_batch|push_batch_clone)$%%),
-        group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone)$%%),
+        group_by_regex("Passing data", mod, %regex~(push|push_clone|push_batch|push_batch_clone|push_archive)$%%),
+        group_by_regex("Receiving data", mod, %regex~(gather|gather_ex|gather_and_forward|peek|pop|pop_one|pop_and_clone_one|try_pop|try_pop_clone|pop_with_timeout|pop_with_timeout_clone|pop_archive|try_pop_archive|gather_archive)$%%),
         group_by_regex("Synchronization", mod, %regex~(with_wait_group|done)$%%),
         group_by_regex("Parallel execution", mod, %regex~(_parallel_for|parallel_for|_parallel_for_each|parallel_for_each|_parallel_map|parallel_map)$%%),
         group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear|fill|grab)$%%),
@@ -1300,7 +1300,7 @@ def document_module_audio(root : string) {
 def document_module_audio_boost(root : string) {
     var mod = find_module("audio_boost")
     var groups <- array<DocGroup>(
-        group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|with_collected_audio_system|audio_system_create|audio_system_finalize|audio_system_collect|audio_system_release_context)$%%),
+        group_by_regex("Audio system lifecycle", mod, %regex~(with_audio_system|audio_system_create|audio_system_finalize|audio_system_release_context)$%%),
         group_by_regex("Sound playback", mod, %regex~(play_sound|play_3d_sound)%%),
         group_by_regex("Sound control", mod, %regex~(set_volume|set_pan|set_pitch|set_pause|set_global_pitch|set_global_pause|stop|set_playback_position)$%%),
         group_by_regex("3D audio", mod, %regex~(set_head_position|set_position)$%%),
@@ -1312,7 +1312,7 @@ def document_module_audio_boost(root : string) {
         group_by_regex("PCM stream", mod, %regex~(append_to_pcm|append_box_to_pcm)$%%),
         group_by_regex("Decoding", mod, %regex~(decode_audio)$%%),
         group_by_regex("Sound ID", mod, %regex~(generate_sound_sid)$%%),
-        group_by_regex("Internal channel management", mod, %regex~(get_audio_command_channel|set_audio_thread_command_channel|get_collect_command_channel|set_collect_thread_command_channel|get_sound_sid|set_sound_sid)$%%)
+        group_by_regex("Internal stream management", mod, %regex~(get_audio_command_stream|set_audio_thread_command_stream|get_sound_sid|set_sound_sid)$%%)
     )
     document("Audio playback, mixing, 3D spatial audio, and effects", mod, "audio_boost.rst", groups)
 }
@@ -1445,7 +1445,8 @@ def document_module_strudel_sf2(root : string) {
         group_by_regex("Preset and zone lookup", mod, %regex~(sf2_find_preset|sf2_find_zones)$%%),
         group_by_regex("Generator access", mod, %regex~(has_generator|get_generator|get_generator_range)$%%),
         group_by_regex("Unit conversion", mod, %regex~(timecents_to_seconds|cents_to_hz|centibels_to_linear)$%%),
-        group_by_regex("Modulator source helpers", mod, %regex~(sf2_mod_src)%%)
+        group_by_regex("Modulator source helpers", mod, %regex~(sf2_mod_src)%%),
+        hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%))
     )
     document("SoundFont 2 file parser", mod, "strudel_sf2.rst", groups)
 }

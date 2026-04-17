@@ -1492,7 +1492,7 @@ def update() {
 def shutdown() {
     print("Shutting down...\n")
     strudel_shutdown()
-    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
+    audio_system_finalize(asch.command, asch.next_sid)
     delete_gl_objects()
     live_destroy_window()
 }

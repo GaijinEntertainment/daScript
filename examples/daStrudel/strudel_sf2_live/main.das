@@ -101,7 +101,7 @@ var asch : AudioSystemChannels
 
 [export]
 def init() {
-    if (get_audio_command_channel() == null) {
+    if (get_audio_command_stream() == null) {
         asch = audio_system_create()
     }
     if (!strudel_has_sf2()) {
@@ -127,7 +127,7 @@ def update() {
 def shutdown() {
     print("Shutting down...\n")
     strudel_shutdown()
-    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
+    audio_system_finalize(asch.command, asch.next_sid)
 }
 
 // --- standalone mode (daslang.exe) ---

@@ -267,6 +267,7 @@ namespace das {
         tp << "JobStatus #" << HEX << mTrackId << DEC;
         if ( mTrackMagic == TRACK_CHANNEL ) tp << " (Channel)";
         else if ( mTrackMagic == TRACK_LOCKBOX ) tp << " (LockBox)";
+        else if ( mTrackMagic == TRACK_STREAM ) tp << " (Stream)";
         else tp << " (JobStatus)";
         tp << (isAddRef ? " addRef" : " releaseRef")
            << " (rc=" << int(mRef.load()) << ")";
@@ -352,6 +353,7 @@ namespace das {
                    << " (rc=" << int(p->mRef.load()) << ")";
                 if ( p->mTrackMagic == TRACK_CHANNEL ) tp << " Channel";
                 else if ( p->mTrackMagic == TRACK_LOCKBOX ) tp << " LockBox";
+                else if ( p->mTrackMagic == TRACK_STREAM ) tp << " Stream";
                 else tp << " JobStatus";
                 if ( !p->mCreatedAt.empty() ) tp << " created at " << p->mCreatedAt;
                 tp << "\n";

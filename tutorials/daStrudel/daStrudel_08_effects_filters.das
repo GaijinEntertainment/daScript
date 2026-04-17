@@ -14,6 +14,7 @@
 // Run: daslang.exe tutorials/daStrudel/daStrudel_08_effects_filters.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require strudel/strudel public

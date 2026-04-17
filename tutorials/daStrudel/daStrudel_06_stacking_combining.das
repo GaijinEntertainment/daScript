@@ -10,6 +10,7 @@
 // Run: daslang.exe tutorials/daStrudel/daStrudel_06_stacking_combining.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require strudel/strudel public

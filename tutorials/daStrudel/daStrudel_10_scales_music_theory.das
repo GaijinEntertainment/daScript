@@ -13,6 +13,7 @@
 // Run: daslang.exe tutorials/daStrudel/daStrudel_10_scales_music_theory.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require strudel/strudel public

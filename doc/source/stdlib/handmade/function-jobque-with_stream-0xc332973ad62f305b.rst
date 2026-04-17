@@ -1,0 +1,1 @@
+Creates an unbounded `Stream`, invokes the given block with a stable pointer to it, and automatically releases the reference when the block returns. The simplest way to scope a stream to a producer/consumer pair.

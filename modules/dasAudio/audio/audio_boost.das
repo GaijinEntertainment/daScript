@@ -12,7 +12,9 @@ module audio_boost shared private
 //! Supports volume, pan, pitch, 3D positioning with HRTF, distance attenuation,
 //! Doppler effect, I3DL2 reverb presets, and look-ahead limiting.
 //!
-//! All audio commands are sent to a dedicated audio thread via a lock-free channel.
+//! All audio commands are archive-serialized and shipped to the audio thread through a
+//! byte ``Stream``. Stream bytes are owned C++-side, so cleanup is automatic: either
+//! side can free without coordinating with the other (no "collect channel" needed).
 //! Use `with_audio_system` to initialize and finalize the audio system.
 
 require audio public
@@ -22,6 +24,7 @@ require daslib/rtti
 require daslib/array_boost
 require daslib/jobque_boost
 require daslib/apply_in_context
+require daslib/archive
 
 let public SPEED_OF_SOUND = 343.3f
 //! Speed of sound in m/s, used for Doppler calculations.
@@ -620,7 +623,7 @@ def update_hrtf(dt : float; nFrames : uint64) {
 
 struct AudioCommandAddDecoder {
     sid : SID
-    @do_not_delete decoder : ma_decoder const?
+    decoder : uint64      //! opaque ma_decoder? (archive-safe)
     rate : int
     channels : int
 }
@@ -657,7 +660,7 @@ struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream {
 
 struct AudioCommandStatus {
     sid : SID
-    status : void?
+    status : uint64       //! opaque LockBox? (archive-safe)
 }
 
 struct AudioCommandSoundPosition3D {
@@ -672,6 +675,15 @@ struct AudioCommandHeadPosition3D {
     velocity : float3
 }
 
+// Archive overloads for C++ ManagedStructureAnnotation types — POD, serialize raw.
+def serialize(var arch : Archive; var value : ma_chorus_config) {
+    arch |> serialize_raw(value)
+}
+
+def serialize(var arch : Archive; var value : I3DL2ReverbProperties) {
+    arch |> serialize_raw(value)
+}
+
 variant AudioCommand {
     shutdown                : bool
     add_decoder             : AudioCommandAddDecoder
@@ -681,7 +693,7 @@ variant AudioCommand {
     add_pcm_stream          : AudioCommandAddPCMStream
     add_pcm_stream_3d       : AudioCommandAddPCMStream3D
     append_pcm              : tuple<sid : SID; samples : array<float>>
-    append_box_pcm          : tuple<sid : SID; box : void?>
+    append_box_pcm          : tuple<sid : SID; box : uint64>  //! opaque LockBox? (archive-safe)
     pause                   : tuple<sid : SID; paused : bool>
     volume                  : tuple<sid : SID; volume : float; time : float>
     pan                     : tuple<sid : SID; pan : float>
@@ -697,17 +709,12 @@ variant AudioCommand {
     global_pause            : bool
 }
 
-var g_command_channel : Channel?
-var g_collect_channel : Channel?
+var g_command_stream : Stream?
 
 [pinvoke, export]
-def setup_command_processor(var ch, cch : Channel?) {
-    g_command_channel = ch
-    g_command_channel |> add_ref
-    if (cch != null) {
-        g_collect_channel = cch
-        g_collect_channel |> add_ref
-    }
+def setup_command_processor(var s : Stream?) {
+    g_command_stream = s
+    g_command_stream |> add_ref
 }
 
 def add_channel(sid : SID; var channel : AudioChannel?) {
@@ -725,57 +732,22 @@ def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var 
     add_channel(sid, channel)
 }
 
-def collect_channel(channel : Channel?) {
-    channel |> gather_ex() $(cmd : AudioCommand#; info : TypeInfo const?; var ctx : Context) {
-        unsafe {
-            var pCmd = reinterpret<AudioCommand?> addr(cmd)
-            delete pCmd
-        }
-    }
-}
-
-def public audio_system_collect {
-    //! Process deferred audio cleanup. Call periodically when using with_collected_audio_system.
-    if (g_collect_channel != null) {
-        g_collect_channel |> collect_channel()
-    }
-}
-
 def public audio_system_release_context {
-    //! Release the mixer context reference.
-    if (g_command_channel != null) {
+    //! Release the mixer context reference. Commands buffered in the stream are drained on the mixer context.
+    if (g_command_stream != null) {
         unsafe(invoke_in_context(mixer_context(), "command_processor"))
-    }
-
-    audio_system_collect()
-
-    if (g_command_channel != null) {
-        g_command_channel |> collect_channel()
     }
 }
 
 def command_processor {
-    return if (g_command_channel == null)
-    var commands : array<AudioCommand>
-    if (g_collect_channel != null) {
-        g_command_channel |> gather_and_forward(g_collect_channel) $(cmd : AudioCommand#) {
-            commands |> push_clone(cmd)
-        }
-    } else {
-        g_command_channel |> gather() $(cmd : AudioCommand#) {
-            commands |> push_clone(cmd)
-        }
-    }
-    for (cmd in commands) {
+    return if (g_command_stream == null)
+    g_command_stream |> gather_archive() $(var cmd : AudioCommand) {
         if (cmd is shutdown) {
             unsafe {
                 delete g_channels
             }
             g_sid_2_channel |> clear()
-            g_command_channel |> release
-            if (g_collect_channel != null) {
-                g_collect_channel |> release
-            }
+            g_command_stream |> release
         } elif (cmd is add_decoder) {
             assume dcmd = cmd as add_decoder
             var decoder  = new AudioSourceDecoder()
@@ -885,21 +857,22 @@ def command_processor {
             }
         } elif (cmd is status) {
             assume scmd = cmd as status
+            var scmd_status = unsafe(reinterpret<LockBox?>(scmd.status))
             let found = g_sid_2_channel |> get(scmd.sid) $(var ch : AudioChannel?&) {
                 if (ch.status != null) {
-                    if (scmd.status != null) {
+                    if (scmd_status != null) {
                         panic("audio: status already set for {scmd.sid}")
                     }
                     ch.status |> notify_and_release
                 }
-                ch.status = unsafe(reinterpret<LockBox?> scmd.status)
+                ch.status = scmd_status
             }
             if (!found) {
-                if (scmd.status != null) {
-                    scmd.status |> update() $(var data : AudioChannelStatus#) {
+                if (scmd_status != null) {
+                    scmd_status |> update() $(var data : AudioChannelStatus#) {
                         data = AudioChannelStatus(state = AudioChannelState.stopped)
                     }
-                    scmd.status |> notify_and_release
+                    scmd_status |> notify_and_release
                 }
             }
         } elif (cmd is reverb) {
@@ -929,7 +902,6 @@ def command_processor {
             panic("unknown audio command {cmd}")
         }
     }
-    delete commands
 }
 
 var g_limiter : ma_limiter
@@ -1005,57 +977,37 @@ def finalize_mixer {
 }
 
 tuple public AudioSystemChannels {
-    command : Channel ?
-    collect : Channel ?
+    command : Stream ?
     next_sid : Atomic64 ?
 }
 
-def public audio_system_create(collect : bool = false) : AudioSystemChannels {
+def public audio_system_create : AudioSystemChannels {
     //! Low-level: creates the audio system. Prefer with_audio_system.
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
-    var channel = unsafe(channel_create())
-    channel |> add_ref()
-    g_command_channel = channel
+    var s = unsafe(stream_create())
+    s |> add_ref()
+    g_command_stream = s
     g_sound_sid = atomic64_create()
-    var collectChannel : Channel?
-    if (collect) {
-        collectChannel = unsafe(channel_create())
-        collectChannel |> add_ref()
-        g_collect_channel = collectChannel
-    }
-    unsafe(invoke_in_context(mixer_context(), "setup_command_processor", channel, collectChannel))
-    return (channel, collectChannel, g_sound_sid)
+    unsafe(invoke_in_context(mixer_context(), "setup_command_processor", s))
+    return (s, g_sound_sid)
 }
 
-def public audio_system_finalize(var channel, collectChannel : Channel?&; var next_sid : Atomic64?) {
+def public audio_system_finalize(var s : Stream?&; var next_sid : Atomic64?) {
     //! Low-level: shuts down the audio system.
-    channel |> push <| new AudioCommand(shutdown = true)
+    s |> push_archive(AudioCommand(shutdown = true))
     unsafe(invoke_in_context(mixer_context(), "command_processor"))
     sound_finalize()
-    g_command_channel |> release
-    channel |> join
-    unsafe(channel_remove(channel))
+    g_command_stream |> release
+    s |> join
+    unsafe(stream_remove(s))
     unsafe(atomic64_remove(g_sound_sid))
-    if (g_collect_channel != null) {
-        g_collect_channel |> release
-        collectChannel |> join
-        unsafe(channel_remove(collectChannel))
-        collectChannel = null
-    }
 }
 
 def public with_audio_system(blk : block) {
     //! Initializes the audio system, runs the block, then shuts down. All audio API calls must happen inside this block.
     var channels = audio_system_create()
     invoke(blk)
-    audio_system_finalize(channels.command, channels.collect, channels.next_sid)
-}
-
-def public with_collected_audio_system(blk : block) {
-    //! Initializes the audio system with garbage collection, runs the block, then shuts down. Use audio_system_collect to process deferred cleanup.
-    var channels = audio_system_create(true)
-    invoke(blk)
-    audio_system_finalize(channels.command, channels.collect, channels.next_sid)
+    audio_system_finalize(channels.command, channels.next_sid)
 }
 
 var private g_sound_sid : Atomic64?
@@ -1075,15 +1027,16 @@ def make_decoder(filename : string; rate, channels : int) : ma_decoder? {
     return decoder
 }
 
-var global_batch : array<AudioCommand?>?
+// Batch: each command is archive-serialized once, accumulated into array<array<uint8>>,
+// then pushed atomically as one Stream batch.
+var global_batch : array<array<uint8>>?
 
 def public begin_batch() {
     //! Begin batching audio commands. All commands until end_batch are sent atomically.
     if (global_batch != null) {
         panic("nested batch")
     }
-    var tempBatch = new array<AudioCommand?>()
-
+    var tempBatch = new array<array<uint8>>()
     global_batch = tempBatch
 }
 
@@ -1092,8 +1045,7 @@ def public end_batch() {
     if (global_batch == null) {
         panic("no batch")
     }
-    g_command_channel |> push_batch(*global_batch)
-    *global_batch |> resize(0)
+    g_command_stream |> push_batch(*global_batch)
     unsafe {
         delete * global_batch
     }
@@ -1105,24 +1057,27 @@ def public batch(cb : block) {
     if (global_batch != null) {
         panic("nested batch")
     }
-    var tempBatch : array<AudioCommand?>
+    var tempBatch : array<array<uint8>>
 
     global_batch = unsafe(addr(tempBatch))
     cb |> invoke()
     global_batch = null
 
-    g_command_channel |> push_batch(tempBatch)
-    tempBatch |> resize(0)
+    g_command_stream |> push_batch(tempBatch)
     unsafe {
         delete tempBatch
     }
 }
 
-def push_cmd(var cmd : AudioCommand?) {
+def push_cmd(var cmd : AudioCommand) {
+    var bytes <- mem_archive_save(cmd)
     if (global_batch != null) {
-        *global_batch |> push(cmd)
+        *global_batch |> emplace(bytes)
     } else {
-        g_command_channel |> push(cmd)
+        g_command_stream |> push(bytes)
+        unsafe {
+            delete bytes
+        }
     }
 }
 
@@ -1134,7 +1089,7 @@ def public play_sound_from_file(filename : string; rate, channels : int) {
         return INVALID_SID
     }
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_decoder = AudioCommandAddDecoder(sid = sid, decoder = decoder, rate = rate, channels = channels))
+    push_cmd(AudioCommand(add_decoder = AudioCommandAddDecoder(sid = sid, decoder = intptr(decoder), rate = rate, channels = channels)))
     return sid
 }
 
@@ -1146,58 +1101,58 @@ def public play_3d_sound_from_file(filename : string; position : float3; attenua
         return INVALID_SID
     }
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_decoder_3d =
-        AudioCommandAddDecoder3D(sid = sid, decoder = decoder, rate = rate, channels = channels, position = position, attenuation = attenuation))
+    push_cmd(AudioCommand(add_decoder_3d =
+        AudioCommandAddDecoder3D(sid = sid, decoder = intptr(decoder), rate = rate, channels = channels, position = position, attenuation = attenuation)))
     return sid
 }
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid()) {
     //! Create a PCM streaming channel. Feed it samples with append_to_pcm.
-    push_cmd <| new AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = sid, rate = rate, channels = channels))
+    push_cmd(AudioCommand(add_pcm_stream <- AudioCommandAddPCMStream(sid = sid, rate = rate, channels = channels)))
     return sid
 }
 
 def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int) {
     //! Create a 3D PCM streaming channel. Feed it samples with append_to_pcm.
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_pcm_stream_3d <-
-        AudioCommandAddPCMStream3D(sid = sid, rate = rate, channels = channels, position = position, attenuation = attenuation))
+    push_cmd(AudioCommand(add_pcm_stream_3d <-
+        AudioCommandAddPCMStream3D(sid = sid, rate = rate, channels = channels, position = position, attenuation = attenuation)))
     return sid
 }
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>) {
     //! plays sound from PCM data
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false))
+    push_cmd(AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false)))
     return sid
 }
 
 def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>) {
     //! plays looping sound from PCM data
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true))
+    push_cmd(AudioCommand(add_pcm <- AudioCommandAddPCM(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true)))
     return sid
 }
 
 def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>) {
     //! plays 3D sound from PCM data
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_pcm_3d <-
-        AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false, position = position, attenuation = attenuation))
+    push_cmd(AudioCommand(add_pcm_3d <-
+        AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = false, position = position, attenuation = attenuation)))
     return sid
 }
 
 def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>) {
     //! plays 3D looping sound from PCM data
     let sid = generate_sound_sid()
-    push_cmd <| new AudioCommand(add_pcm_3d <-
-        AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true, position = position, attenuation = attenuation))
+    push_cmd(AudioCommand(add_pcm_3d <-
+        AudioCommandAddPCM3D(sid = sid, rate = rate, channels = channels, samples <- samples, loop = true, position = position, attenuation = attenuation)))
     return sid
 }
 
 def public append_to_pcm(sid : SID; var samples : array<float>) {
     //! append samples to PCM stream
-    push_cmd <| new AudioCommand(append_pcm <-  (sid, samples))
+    push_cmd(AudioCommand(append_pcm <-  (sid, samples)))
     return sid
 }
 
@@ -1205,58 +1160,58 @@ def public append_box_to_pcm(sid : SID; box : LockBox?; var samples : array<floa
     //! append samples from lock box to PCM stream. Box is grabbed and released on audio thread.
     //! samples buffer must outlive the grab — caller keeps it alive until box.isReady.
     _builtin_lockbox_fill(box, unsafe(addr(samples)))
-    push_cmd <| new AudioCommand(append_box_pcm = (sid, unsafe(reinterpret<void?>(box))))
+    push_cmd(AudioCommand(append_box_pcm = (sid, intptr(box))))
     return sid
 }
 
 def public set_pause(sid : SID; paused : bool) {
     //! pause or unpause sound
-    push_cmd <| new AudioCommand(pause = (sid, paused))
+    push_cmd(AudioCommand(pause = (sid, paused)))
     return sid
 }
 
 def public set_volume(sid : SID; volume : float; time : float = 0.002f) {
     //! set volume of sound
-    push_cmd <| new AudioCommand(volume = (sid, volume, time))
+    push_cmd(AudioCommand(volume = (sid, volume, time)))
     return sid
 }
 
 def public set_pan(sid : SID; pan : float) {
     //! set pan of sound
-    push_cmd <| new AudioCommand(pan = (sid, pan))
+    push_cmd(AudioCommand(pan = (sid, pan)))
     return sid
 }
 
 def public set_pitch(sid : SID; pitch : float) {
     //! set pitch of sound
-    push_cmd <| new AudioCommand(pitch = (sid, pitch))
+    push_cmd(AudioCommand(pitch = (sid, pitch)))
     return sid
 }
 
 def public set_global_pitch(pitch : float) {
     //! set global pitch of sounds
-    push_cmd <| new AudioCommand(global_pitch = pitch)
+    push_cmd(AudioCommand(global_pitch = pitch))
 }
 
 def public set_global_pause(pause : bool) {
     //! set global pause of sounds
-    push_cmd <| new AudioCommand(global_pause = pause)
+    push_cmd(AudioCommand(global_pause = pause))
 }
 
 def public stop(sid : SID; time : float = 0.0f) {
     //! stop sound
-    push_cmd <| new AudioCommand(stop = (sid, time))
+    push_cmd(AudioCommand(stop = (sid, time)))
     return sid
 }
 
 def public set_head_position(pos, dir : float3; vel : float3 = float3(0.)) {
     //! set head position for 3D sound
-    push_cmd <| new AudioCommand(head_transform = AudioCommandHeadPosition3D(position = pos, direction = dir, velocity = vel))
+    push_cmd(AudioCommand(head_transform = AudioCommandHeadPosition3D(position = pos, direction = dir, velocity = vel)))
 }
 
 def public set_position(sid : SID; pos : float3; dir : float3 = float3(0.)) {
     //! set sound position for 3D sound
-    push_cmd <| new AudioCommand(sound_position = AudioCommandSoundPosition3D(sid = sid, position = pos, velocity = dir))
+    push_cmd(AudioCommand(sound_position = AudioCommandSoundPosition3D(sid = sid, position = pos, velocity = dir)))
     return sid
 }
 
@@ -1265,7 +1220,7 @@ def public set_status_update(sid : SID; var status : LockBox?) {
     status |> add_ref
     status |> append(1)
     status |> set() <| new AudioChannelStatus(state = AudioChannelState.starting)
-    push_cmd <| new AudioCommand(status = AudioCommandStatus(sid = sid, status = status))
+    push_cmd(AudioCommand(status = AudioCommandStatus(sid = sid, status = intptr(status))))
     return sid
 }
 
@@ -1276,13 +1231,13 @@ def public clear_status(var status : LockBox?) {
 
 def public unset_status_update(sid : SID) {
     //! unset status for sound
-    push_cmd <| new AudioCommand(status = AudioCommandStatus(sid = sid, status = null))
+    push_cmd(AudioCommand(status = AudioCommandStatus(sid = sid, status = 0ul)))
     return sid
 }
 
 def public set_reverb(sid : SID; reverb : I3DL2ReverbProperties) {
     //! set reverb for sound
-    push_cmd <| new AudioCommand(reverb = (sid, reverb))
+    push_cmd(AudioCommand(reverb = (sid, reverb)))
     return sid
 }
 
@@ -1320,7 +1275,7 @@ def public set_reverb_preset(sid : SID; preset : ReverbPreset) {
 
 def public set_chorus(sid : SID; config : ma_chorus_config) {
     //! set chorus effect for sound
-    push_cmd <| new AudioCommand(chorus_cmd = (sid, config))
+    push_cmd(AudioCommand(chorus_cmd = (sid, config)))
     return sid
 }
 
@@ -1331,7 +1286,7 @@ def public set_chorus_default(sid : SID) {
 
 def public set_playback_position(sid : SID; position : uint64) {
     //! set playback position for sound (in frames)
-    push_cmd <| new AudioCommand(set_playback_position = (sid, position))
+    push_cmd(AudioCommand(set_playback_position = (sid, position)))
     return sid
 }
 
@@ -1354,41 +1309,22 @@ def public decode_audio(data : array<uint8> | #; var channels, rate : int&) : ar
     return <- samples
 }
 
-def public get_audio_command_channel : void ? {
-    return g_command_channel
+def public get_audio_command_stream : void ? {
+    return g_command_stream
 }
 
 [unsafe_operation]
-def public set_audio_thread_command_channel(ch : void?) {
-    var channel = unsafe(reinterpret<Channel?> ch)
-    if (channel == g_command_channel) {
+def public set_audio_thread_command_stream(ch : void?) {
+    var s = unsafe(reinterpret<Stream?> ch)
+    if (s == g_command_stream) {
         return
     }
-    if (g_command_channel != null) {
-        g_command_channel |> release
+    if (g_command_stream != null) {
+        g_command_stream |> release
     }
-    g_command_channel = channel
-    if (g_command_channel != null) {
-        g_command_channel |> add_ref
-    }
-}
-
-def public get_collect_command_channel : void ? {
-    return g_collect_channel
-}
-
-[unsafe_operation]
-def public set_collect_thread_command_channel(ch : void?) {
-    var channel = unsafe(reinterpret<Channel?> ch)
-    if (channel == g_collect_channel) {
-        return
-    }
-    if (g_collect_channel != null) {
-        g_collect_channel |> release
-    }
-    g_collect_channel = channel
-    if (g_collect_channel != null) {
-        g_collect_channel |> add_ref
+    g_command_stream = s
+    if (g_command_stream != null) {
+        g_command_stream |> add_ref
     }
 }
 

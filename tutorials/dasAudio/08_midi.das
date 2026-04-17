@@ -10,6 +10,7 @@
 // Run: daslang.exe tutorials/dasAudio/08_midi.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require strudel/strudel_midi

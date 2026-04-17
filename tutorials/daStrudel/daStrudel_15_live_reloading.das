@@ -151,7 +151,7 @@ var asch : AudioSystemChannels
 [export]
 def init() {
     print("daStrudel tutorial 15 — live reload\n")
-    if (get_audio_command_channel() == null) {
+    if (get_audio_command_stream() == null) {
         asch = audio_system_create()
     }
     load_samples()
@@ -168,7 +168,7 @@ def update() {
 def shutdown() {
     print("shutdown\n")
     strudel_shutdown()
-    audio_system_finalize(asch.command, asch.collect, asch.next_sid)
+    audio_system_finalize(asch.command, asch.next_sid)
 }
 
 // Standalone fallback — if run under daslang.exe, act as a regular demo.

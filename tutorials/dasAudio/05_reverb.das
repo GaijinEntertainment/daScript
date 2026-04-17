@@ -9,6 +9,7 @@
 // Run: daslang.exe tutorials/dasAudio/05_reverb.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require audio/audio_boost

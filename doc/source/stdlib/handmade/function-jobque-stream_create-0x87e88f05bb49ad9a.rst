@@ -1,0 +1,1 @@
+Creates a new empty `Stream`, a FIFO of opaque byte buffers owned by the runtime. Payload bytes are copied into the stream on ``push`` and produced as non-owning views on ``pop`` / ``gather``. Either side can safely destroy the stream — memory belongs to the stream itself rather than to a particular context.

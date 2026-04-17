@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 options indenting = 4
 
 module vis_renderer shared

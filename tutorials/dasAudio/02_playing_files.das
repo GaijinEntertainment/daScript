@@ -9,6 +9,7 @@
 // Run: daslang.exe tutorials/dasAudio/02_playing_files.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require audio/audio_boost

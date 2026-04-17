@@ -60,6 +60,7 @@ namespace das {
         static constexpr uint32_t TRACK_JOB_STATUS = 0xDA5CA001;
         static constexpr uint32_t TRACK_CHANNEL    = 0xDA5CA002;
         static constexpr uint32_t TRACK_LOCKBOX    = 0xDA5CA003;
+        static constexpr uint32_t TRACK_STREAM     = 0xDA5CA004;
         static void DumpJobQueLeaks();
         void trackEvent ( LineInfo * at, bool isAddRef );
     protected:

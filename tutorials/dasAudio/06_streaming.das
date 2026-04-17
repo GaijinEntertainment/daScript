@@ -4,11 +4,11 @@
 //   - Creating a PCM stream with play_sound_from_pcm_stream
 //   - Feeding audio chunks with append_to_pcm
 //   - Building a real-time frequency sweep
-//   - Using with_collected_audio_system and audio_system_collect
 //
 // Run: daslang.exe tutorials/dasAudio/06_streaming.das
 
 options gen2
+options persistent_heap
 options indenting = 4
 
 require audio/audio_boost
@@ -73,43 +73,33 @@ def example_streaming_sweep() {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Section 2 — Collected audio system
+// Section 2 — Extended streaming: rising chord
 // ──────────────────────────────────────────────────────────────────────────
 //
-// with_collected_audio_system is an alternative to with_audio_system that
-// enables garbage collection for audio resources. When using it, you must
-// call audio_system_collect periodically to process deferred cleanup.
-//
-// This is useful for long-running applications (games, tools) where audio
-// channels are created and destroyed over time.
+// The audio command pipeline uses a byte Stream under the hood — commands are
+// archive-serialized and shipped to the audio thread, which owns and frees
+// the buffered bytes itself. No deferred cleanup step is needed from the
+// caller; just run commands and the audio system will take care of the rest.
 
-def example_collected_system() {
-    print("\n=== Section 2: Collected audio system ===\n")
-    print("  with_collected_audio_system enables GC for audio resources.\n")
-    print("  Call audio_system_collect() periodically for cleanup.\n\n")
+def example_rising_chord() {
+    print("\n=== Section 2: Rising chord via PCM stream ===\n")
 
-    with_collected_audio_system() {
-        // Play a short tone
-        let sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, 1)
-        print("  Created stream in collected system, SID = {sid}\n")
+    let sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, 1)
+    print("  Created stream, SID = {sid}\n")
 
-        let chunk_samples = MA_SAMPLE_RATE / 10  // 100ms
-        for (i in range(10)) {
-            let freq = 440.0 + float(i) * 44.0
-            var samples <- [for (x in range(chunk_samples));
-                sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE)) * 0.4
-            ]
-            append_to_pcm(sid, samples)
-            // Call collect periodically to process cleanup
-            audio_system_collect()
-            sleep(100u)
-        }
-
-        print("  Played 1 second of ascending tones with periodic GC\n")
-        stop(sid, 0.1)
-        audio_system_collect()
-        sleep(200u)
+    let chunk_samples = MA_SAMPLE_RATE / 10  // 100ms
+    for (i in range(10)) {
+        let freq = 440.0 + float(i) * 44.0
+        var samples <- [for (x in range(chunk_samples));
+            sin(2.0 * PI * freq * float(x) / float(MA_SAMPLE_RATE)) * 0.4
+        ]
+        append_to_pcm(sid, samples)
+        sleep(100u)
     }
+
+    print("  Played 1 second of ascending tones\n")
+    stop(sid, 0.1)
+    sleep(200u)
 }
 
 [export]
@@ -117,7 +107,7 @@ def main {
     print("AUDIO-06: Streaming Audio\n\n")
     with_audio_system() {
         example_streaming_sweep()
+        example_rising_chord()
     }
-    example_collected_system()
     print("\nDone!\n")
 }
