@@ -391,6 +391,14 @@ def set_delayfeedback(var pat : Pattern; d : float) : Pattern {
     return <- fmap(pat, fn)
 }
 
+// pat |> set_delaysync(0.1875) — set delay time in cycles (tempo-synced delay)
+def set_delaysync(var pat : Pattern; d : float) : Pattern {
+    let fn <- @capture(= d) (e : Event) : Event {
+        var ev = e; ev.delaysync = d; return ev
+    }
+    return <- fmap(pat, fn)
+}
+
 // pat |> set_orbit(1) — set effect bus routing
 def set_orbit(var pat : Pattern; o : int) : Pattern {
     let fn <- @capture(= o) (e : Event) : Event {
@@ -2222,6 +2230,7 @@ def delaytime(var pat : Pattern; d : float) : Pattern { return <- set_delaytime(
 def dt(var pat : Pattern; d : float) : Pattern { return <- set_delaytime(pat, d); }
 def delayfeedback(var pat : Pattern; d : float) : Pattern { return <- set_delayfeedback(pat, d); }
 def dfb(var pat : Pattern; d : float) : Pattern { return <- set_delayfeedback(pat, d); }
+def delaysync(var pat : Pattern; d : float) : Pattern { return <- set_delaysync(pat, d); }
 def orbit(var pat : Pattern; o : int) : Pattern { return <- set_orbit(pat, o); }
 def fm(var pat : Pattern; f : float) : Pattern { return <- set_fm(pat, f); }
 def fmh(var pat : Pattern; f : float) : Pattern { return <- set_fmh(pat, f); }

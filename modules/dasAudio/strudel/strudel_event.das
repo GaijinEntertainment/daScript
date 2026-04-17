@@ -3,6 +3,8 @@ options indenting = 4
 
 module strudel_event shared
 
+require math
+
 // The payload of every pattern event — "what to play and how".
 // All defaults are "do nothing" values: gain 0.8 is a sensible level,
 // lpf 0 means "no filter" (undefined = no filter).
@@ -18,16 +20,17 @@ struct Event {
     lpq     : float = 1.0       // low-pass filter resonance Q (1.0 = gentle, >5 = peaky)
     hpf     : float = 0.0       // high-pass filter cutoff Hz (0 = off)
     hpq     : float = 1.0       // high-pass filter resonance Q (1.0 = gentle, >5 = peaky)
-    attack  : float = 0.001     // envelope attack time in seconds
-    decay   : float = 0.05      // envelope decay time
-    sustain : float = 0.0       // envelope sustain level (default: no sustain hold)
-    release : float = 0.01      // envelope release time
+    attack  : float = -1.0      // envelope attack time in seconds (-1 = unset → resolver picks default)
+    decay   : float = -1.0      // envelope decay time (-1 = unset)
+    sustain : float = -1.0      // envelope sustain level (-1 = unset; full sustain if no ADSR set, percussion if decay set alone)
+    release : float = -1.0      // envelope release time (-1 = unset)
     cut     : int = 0           // cut group (0 = no cut, >0 = kill same group)
     room    : float = 0.0       // reverb send amount 0.0–1.0
     roomsize : float = 2.0      // reverb decay time in seconds (0.1–10.0)
     delay_amount : float = 0.0  // delay send amount 0.0–1.0
-    delaytime    : float = 0.5  // delay time in seconds
+    delaytime    : float = -1.0 // delay time in seconds (-1 = unset → derived from delaysync and cps)
     delayfeedback : float = 0.5 // delay feedback 0.0–1.0
+    delaysync    : float = 0.1875 // delay time in cycles (3/16 cycle); used when delaytime is unset
     orbit   : int = 0           // effect bus routing (0 = default)
     fm      : float = 0.0       // FM synthesis modulation depth
     fmh     : float = 1.0       // FM harmonicity ratio (modulator freq / carrier freq)
@@ -63,4 +66,44 @@ struct Event {
     sf2_expression : float = -1.0 // SF2 expression CC11 (0.0–1.0, -1 = use default)
     sf2_mod_wheel  : float = -1.0 // SF2 mod wheel CC1 (0.0–1.0, -1 = use default)
     sf2_pitch_bend : float = -1.0 // SF2 pitch bend (0.0–1.0 where 0.5 = center, -1 = use default)
+}
+
+// Resolve ADSR fields from their "user set / unset" form (−1 = unset) into concrete
+// envelope parameters. The rules are designed so that intuitive shorthand sounds right:
+//
+//   • Nothing set           → a=0.001, d=0.001, s=1.0, r=0.01 (a held tone with tiny envelope edges)
+//   • Only decay set        → sustain drops to 0.001 (percussion: attack-then-decay to silence)
+//   • Only attack or only release set (no decay) → sustain stays at 1.0 (held tone)
+//   • Sustain set explicitly → use the given value, whatever else is set
+//
+// All values are clamped to envmin/releaseMin floors so a stray 0 never produces a click.
+def resolve_adsr(attack, decay, sustain, release : float) : tuple<float; float; float; float> {
+    let envmin = 0.001
+    let envmax = 1.0
+    let release_min = 0.01
+    let a_set = attack >= 0.0
+    let d_set = decay >= 0.0
+    let s_set = sustain >= 0.0
+    let r_set = release >= 0.0
+    if (!a_set && !d_set && !s_set && !r_set) {
+        return (envmin, envmin, envmax, release_min)
+    }
+    let sustain_resolved = s_set ? sustain : (d_set ? envmin : envmax)
+    let a_final = max(a_set ? attack : 0.0, envmin)
+    let d_final = max(d_set ? decay : 0.0, envmin)
+    let r_final = max(r_set ? release : 0.0, release_min)
+    let s_final = min(sustain_resolved, envmax)
+    return (a_final, d_final, s_final, r_final)
+}
+
+// Resolve delay time: if delaytime was set explicitly (>= 0), use it; otherwise
+// derive it from delaysync (in cycles) and the current cps so the echo locks to
+// the tempo. The 3/16-cycle default yields a dotted-eighth feel that changes
+// automatically when the user changes cps.
+def resolve_delaytime(delaytime, delaysync, cps : float) : float {
+    if (delaytime >= 0.0) {
+        return delaytime
+    }
+    let safe_cps = cps > 0.0001 ? cps : 0.5
+    return delaysync / safe_cps
 }

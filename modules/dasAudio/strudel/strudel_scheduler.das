@@ -183,10 +183,11 @@ def private setup_orbit_for_event(var sched : Scheduler; event : Event) {
         update_orbit_reverb_roomsize(*bus, event.roomsize)
     }
     if (event.delay_amount > 0.0) {
+        let dt = resolve_delaytime(event.delaytime, event.delaysync, float(sched.cps))
         if (bus.delay_proc == null) {
-            init_orbit_delay(*bus, event.delaytime, event.delayfeedback)
+            init_orbit_delay(*bus, dt, event.delayfeedback)
         } else {
-            update_orbit_delay_params(*bus, event.delaytime, event.delayfeedback)
+            update_orbit_delay_params(*bus, dt, event.delayfeedback)
         }
     }
     if (event.chorus > 0.0) {
@@ -662,14 +663,15 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
                     // streaming oscillator path
                     let offsetFrames = max(int(offsetSec * float(SAMPLE_RATE)), 0)
                     let oscType = to_osc_type(h.value.s)
+                    let adsr = resolve_adsr(h.value.attack, h.value.decay, h.value.sustain, h.value.release)
                     var oscv = OscVoice(
                         osc_type = oscType,
                         freq = note_to_freq(h.value.note),
                         duration = durSec,
-                        attack = h.value.attack,
-                        decay = h.value.decay,
-                        sustain = h.value.sustain,
-                        release_sec = h.value.release,
+                        attack = adsr._0,
+                        decay = adsr._1,
+                        sustain = adsr._2,
+                        release_sec = adsr._3,
                         gain = h.value.gain * h.value.velocity,
                         pan = h.value.pan * 2.0 - 1.0,
                         cut = cutGroup,
