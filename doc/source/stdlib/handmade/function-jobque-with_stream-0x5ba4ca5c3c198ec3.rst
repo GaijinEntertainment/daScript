@@ -1,0 +1,1 @@
+Creates a `Stream` with an expected item count, invokes the given block with a stable pointer to it, and automatically releases the reference when the block returns. Use the integer overload when the consumer should know up-front how many messages to expect (e.g. for deterministic join semantics).

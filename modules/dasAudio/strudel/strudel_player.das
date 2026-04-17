@@ -76,6 +76,7 @@ var public g_master_pcm : array<float>
 var public g_vis_index : int = 0
 
 // --- Memory tracking ---
+let private LEAK_WARN_THRESHOLD = 1024l  // bytes; only warn on leaks strictly above this
 var private g_debug_memory : bool = false
 var private g_mem_heap_baseline : uint64 = 0ul
 var private g_mem_str_baseline : uint64 = 0ul
@@ -703,7 +704,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         let delta_heap = int64(mem_heap_max) - int64(mem_heap_base)
         let delta_str = int64(mem_str_max) - int64(mem_str_base)
         to_log(0, "strudel {UTILIZATION/10}.{UTILIZATION%10}% avg, {MAX_UTIL/10}.{MAX_UTIL%10}% peak util, heap {mem_heap_max/1024ul}kb (delta {delta_heap}), str {mem_str_max/1024ul}kb (delta {delta_str})\n")
-        if (delta_heap > 0l || delta_str > 0l) {
+        if (delta_heap > LEAK_WARN_THRESHOLD || delta_str > LEAK_WARN_THRESHOLD) {
             to_log(0, "strudel WARNING: potential memory leak detected (delta heap={delta_heap}, str={delta_str})\n")
         }
     }
@@ -719,7 +720,7 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
 def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : string) : void> = @@strudel_noop_cmd) {
     //! Spawn the strudel playback thread and inject shared resources (sample bank, SF2, audio channel).
     //! fn runs on the new thread — it should add tracks and call strudel_play(). Call from main thread only.
-    if (get_audio_command_channel() == null) {
+    if (get_audio_command_stream() == null) {
         panic("strudel_init: audio system not initialized. Call audio_system_create() first.")
     }
     g_cmd_fn = cmd_fn
@@ -735,7 +736,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     // capture shared resources from main thread
     var bank_ptr = unsafe(addr(g_bank))
     var sf2_ptr = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
-    var audio_ch = get_audio_command_channel()
+    var audio_ch = get_audio_command_stream()
     var cmd_ch = g_cmd_channel
     var done_ch = g_done_channel
     var pb_box = g_playback_box
@@ -746,7 +747,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         // inject shared resources into thread context
         g_bank_ptr = bank_ptr
         unsafe {
-            set_audio_thread_command_channel(audio_ch)
+            set_audio_thread_command_stream(audio_ch)
         }
         g_sf2 = unsafe(reinterpret<SF2File?>(sf2_ptr))
         g_sid = thread_sid
@@ -760,7 +761,7 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         invoke(fn)
         // cleanup
         unsafe {
-            set_audio_thread_command_channel(null)
+            set_audio_thread_command_stream(null)
         }
         cmd_ch |> release()
         pb_box |> release()
@@ -820,6 +821,14 @@ def public strudel_shutdown() {
     delete g_track_pcm
     delete g_master_pcm
     g_sid = 0ul
+    // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
+    if (g_sf2 != null) {
+        unsafe {
+            delete g_sf2
+        }
+        g_sf2 = null
+        g_sf2_path := ""
+    }
     // utilization stats
     if (g_tick_total_samples > 0ul) {
         let SPEED = g_tick_total_time / double(g_tick_total_samples)
@@ -839,7 +848,7 @@ def public strudel_shutdown() {
         let leak_heap = int64(mem_heap_now) - int64(g_mem_heap_baseline)
         let leak_str = int64(mem_str_now) - int64(g_mem_str_baseline)
         to_log(0, "strudel mem: heap {int(mem_heap_now)/1024}kb (peak {int(g_mem_heap_max)/1024}kb, leak {leak_heap/1024l}kb), str {int(mem_str_now)/1024}kb (leak {leak_str/1024l}kb)\n")
-        if (leak_heap > 65536l || leak_str > 0l) {
+        if (leak_heap > LEAK_WARN_THRESHOLD || leak_str > LEAK_WARN_THRESHOLD) {
             to_log(0, "strudel WARNING: potential memory leak detected (heap={leak_heap}, str={leak_str})\n")
         }
         g_mem_heap_baseline = 0ul

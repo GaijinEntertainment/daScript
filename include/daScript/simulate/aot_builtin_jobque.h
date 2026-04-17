@@ -5,6 +5,7 @@
 #include "aot.h"
 
 #include <queue>
+#include <vector>
 
 namespace das {
 
@@ -136,6 +137,43 @@ namespace das {
         Context *           owner = nullptr;
     };
 
+    class DAS_API Stream : public JobStatus {
+    public:
+        Stream() { mTrackMagic = TRACK_STREAM; }
+        Stream( int count ) { mTrackMagic = TRACK_STREAM; mRemaining = count; }
+        virtual ~Stream();
+        void push ( const uint8_t * data, uint32_t size );
+        void pushBatch ( const uint8_t * const * data, const uint32_t * sizes, int count );
+        void pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+        bool tryPop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+        bool popWithTimeout ( int timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+        bool isEmpty() const;
+        int  total() const;
+    public:
+        template <typename TT>
+        void for_each_item ( TT && tt ) {
+            lock_guard<mutex> guard(mCompleteMutex);
+            for ( auto & v : pipe ) {
+                Array arr;
+                array_mark_locked(arr, (void *)v.data(), (uint32_t)v.size());
+                tt(&arr);
+            }
+        }
+        template <typename TT>
+        void gather ( TT && tt ) {
+            lock_guard<mutex> guard(mCompleteMutex);
+            for ( auto & v : pipe ) {
+                Array arr;
+                array_mark_locked(arr, (void *)v.data(), (uint32_t)v.size());
+                tt(&arr);
+            }
+            pipe.clear();
+        }
+    protected:
+        uint32_t                mSleepMs = 1;
+        deque<vector<uint8_t>>  pipe;
+    };
+
     DAS_API bool is_job_que_shutting_down();
     DAS_API void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
     DAS_API void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo );
@@ -165,6 +203,17 @@ namespace das {
     DAS_API void channelGatherAndForward ( Channel * ch, Channel * toCh, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     DAS_API void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     DAS_API void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
+    DAS_API Stream * streamCreate ( Context * context, LineInfoArg * at );
+    DAS_API void streamRemove ( Stream * & ch, Context * context, LineInfoArg * at );
+    DAS_API void withStream ( const TBlock<void, Stream *> & blk, Context * context, LineInfoArg * at );
+    DAS_API void withStreamEx ( int32_t count, const TBlock<void, Stream *> & blk, Context * context, LineInfoArg * at );
+    DAS_API void streamPush ( Stream * ch, const TArray<uint8_t> & data, Context * context, LineInfoArg * at );
+    DAS_API void streamPushBatch ( Stream * ch, const TArray<TArray<uint8_t>> & data, Context * context, LineInfoArg * at );
+    DAS_API void streamPop ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+    DAS_API bool streamTryPop ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+    DAS_API bool streamPopWithTimeout ( Stream * ch, int32_t timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+    DAS_API void streamGather ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
+    DAS_API void streamPeek ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at );
     DAS_API LockBox * lockBoxCreate( Context *, LineInfoArg * );
     DAS_API void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at );
     DAS_API void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at );

@@ -826,7 +826,7 @@ var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids 
 
 def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_channel : Channel?; audio_channel : void?; vis_ptr : void?) {
     unsafe {
-        set_audio_thread_command_channel(audio_channel)
+        set_audio_thread_command_stream(audio_channel)
     }
     let CHUNK_SEC = 0.05lf
     var total_time = 0.lf
@@ -999,7 +999,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     status_box |> join()
     unsafe(lock_box_remove(status_box))
     unsafe {
-        set_audio_thread_command_channel(null)
+        set_audio_thread_command_stream(null)
     }
     cmd_channel |> release()
     unsafe {
@@ -1028,7 +1028,7 @@ def public midi_init() {
     if (g_midi_running) {
         return
     }
-    if (get_audio_command_channel() == null) {
+    if (get_audio_command_stream() == null) {
         panic("midi_init: audio system not initialized. Call audio_system_create() first.")
     }
     if (g_midi_sid == 0ul) {
@@ -1039,7 +1039,7 @@ def public midi_init() {
     let sid = g_midi_sid
     var cmd_ch = g_midi_cmd_channel
     var done_ch = g_midi_done_channel
-    let audio_ch = get_audio_command_channel()
+    let audio_ch = get_audio_command_stream()
     let vis_ptr = g_midi_audio_vis_ptr
     new_thread() <| @capture(= sid, = cmd_ch, = done_ch, = audio_ch, = vis_ptr) {
         midi_thread_main(sid, cmd_ch, done_ch, audio_ch, vis_ptr)
@@ -1176,6 +1176,13 @@ def public midi_shutdown() {
     unsafe(channel_remove(g_midi_done_channel))
     g_midi_done_channel = null
     g_midi_running = false
+    // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
+    if (g_midi_sf2 != null) {
+        unsafe {
+            delete g_midi_sf2
+        }
+        g_midi_sf2 = null
+    }
 }
 
 def public midi_is_playing() : bool {

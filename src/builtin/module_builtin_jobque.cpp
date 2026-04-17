@@ -11,6 +11,7 @@
 MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
 MAKE_TYPE_FACTORY(LockBox, LockBox)
+MAKE_TYPE_FACTORY(Stream, Stream)
 
 MAKE_TYPE_FACTORY(Atomic32, AtomicTT<int32_t>)
 MAKE_TYPE_FACTORY(Atomic64, AtomicTT<int64_t>)
@@ -284,6 +285,196 @@ namespace das {
         delete ch;
         ch = nullptr;
     }
+
+    Stream::~Stream() {
+        lock_guard<mutex> guard(mCompleteMutex);
+        pipe.clear();
+        DAS_ASSERT(mRef==0);
+    }
+
+    void Stream::push ( const uint8_t * data, uint32_t size ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        pipe.emplace_back();
+        auto & v = pipe.back();
+        v.resize(size);
+        if ( size ) memcpy(v.data(), data, size);
+        mCond.notify_all();
+    }
+
+    void Stream::pushBatch ( const uint8_t * const * data, const uint32_t * sizes, int count ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        for ( int i=0; i!=count; ++i ) {
+            pipe.emplace_back();
+            auto & v = pipe.back();
+            v.resize(sizes[i]);
+            if ( sizes[i] ) memcpy(v.data(), data[i], sizes[i]);
+        }
+        mCond.notify_all();
+    }
+
+    static void invoke_stream_block ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk,
+                                      const uint8_t * data, uint32_t size,
+                                      Context * context, LineInfoArg * at ) {
+        Array arr;
+        array_mark_locked(arr, (void *)data, size);
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(blk, args, nullptr, at);
+    }
+
+    void Stream::pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        while ( true ) {
+            unique_lock<mutex> uguard(mCompleteMutex);
+            if ( !mCond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
+                bool continue_waiting = (mRemaining>0) && pipe.empty();
+                return !continue_waiting;
+            }) ) {
+                this_thread::yield();
+            } else {
+                break;
+            }
+        }
+        vector<uint8_t> item;
+        {
+            lock_guard<mutex> guard(mCompleteMutex);
+            if ( !pipe.empty() ) {
+                item = das::move(pipe.front());
+                pipe.pop_front();
+            }
+        }
+        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+    }
+
+    bool Stream::tryPop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        vector<uint8_t> item;
+        {
+            lock_guard<mutex> guard(mCompleteMutex);
+            if ( pipe.empty() ) return false;
+            item = das::move(pipe.front());
+            pipe.pop_front();
+        }
+        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+        return true;
+    }
+
+    bool Stream::popWithTimeout ( int timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        vector<uint8_t> item;
+        {
+            unique_lock<mutex> uguard(mCompleteMutex);
+            if ( !mCond.wait_for(uguard, chrono::milliseconds(timeoutMs), [&]() {
+                return !pipe.empty() || mRemaining <= 0;
+            }) ) {
+                return false;
+            }
+            if ( pipe.empty() ) return false;
+            item = das::move(pipe.front());
+            pipe.pop_front();
+        }
+        invoke_stream_block(blk, item.data(), (uint32_t)item.size(), context, at);
+        return true;
+    }
+
+    bool Stream::isEmpty() const {
+        lock_guard<mutex> guard(mCompleteMutex);
+        return pipe.empty();
+    }
+
+    int Stream::total() const {
+        lock_guard<mutex> guard(mCompleteMutex);
+        return (int) pipe.size();
+    }
+
+    Stream * streamCreate ( Context *, LineInfoArg * at ) {
+        Stream * ch = new Stream();
+        if ( at ) ch->mCreatedAt = at->describe();
+        ch->addRef(at);
+        return ch;
+    }
+
+    void streamRemove ( Stream * & ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamRemove: stream is null");
+        if (!ch->isValid()) context->throw_error_at(at, "stream is invalid (already deleted?)");
+        if (ch->releaseRef(at)) context->throw_error_at(at, "stream being deleted while being used");
+        delete ch;
+        ch = nullptr;
+    }
+
+    void withStream ( const TBlock<void, Stream *> & blk, Context * context, LineInfoArg * at ) {
+        Stream ch;
+        AddReleaseGuard<Stream> guard(&ch, context, at);
+        das_invoke<void>::invoke<Stream *>(context, at, blk, &ch);
+    }
+
+    void withStreamEx ( int32_t count, const TBlock<void, Stream *> & blk, Context * context, LineInfoArg * at ) {
+        Stream ch(count);
+        AddReleaseGuard<Stream> guard(&ch, context, at);
+        das_invoke<void>::invoke<Stream *>(context, at, blk, &ch);
+    }
+
+    void streamPush ( Stream * ch, const TArray<uint8_t> & data, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamPush: stream is null");
+        ch->push((const uint8_t *)data.data, data.size);
+    }
+
+    void streamPushBatch ( Stream * ch, const TArray<TArray<uint8_t>> & data, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamPushBatch: stream is null");
+        if ( data.size == 0 ) return;
+        vector<const uint8_t *> ptrs;
+        vector<uint32_t> sizes;
+        ptrs.reserve(data.size);
+        sizes.reserve(data.size);
+        auto items = (const TArray<uint8_t> *)data.data;
+        for ( uint32_t i=0; i!=data.size; ++i ) {
+            ptrs.push_back((const uint8_t *)items[i].data);
+            sizes.push_back(items[i].size);
+        }
+        ch->pushBatch(ptrs.data(), sizes.data(), (int)data.size);
+    }
+
+    void streamPop ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamPop: stream is null");
+        ch->pop(blk, context, at);
+    }
+
+    bool streamTryPop ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamTryPop: stream is null");
+        return ch->tryPop(blk, context, at);
+    }
+
+    bool streamPopWithTimeout ( Stream * ch, int32_t timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamPopWithTimeout: stream is null");
+        return ch->popWithTimeout(timeoutMs, blk, context, at);
+    }
+
+    void streamGather ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamGather: stream is null");
+        ch->gather([&](Array * arr) {
+            vec4f args[1];
+            args[0] = cast<Array *>::from(arr);
+            context->invoke(blk, args, nullptr, at);
+        });
+    }
+
+    void streamPeek ( Stream * ch, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "streamPeek: stream is null");
+        ch->for_each_item([&](Array * arr) {
+            vec4f args[1];
+            args[0] = cast<Array *>::from(arr);
+            context->invoke(blk, args, nullptr, at);
+        });
+    }
+
+    struct StreamAnnotation : ManagedStructureAnnotation<Stream,false> {
+        StreamAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Stream", ml) {
+            addProperty<DAS_BIND_MANAGED_PROP(isEmpty)>("isEmpty");
+            addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
+            addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
+            addProperty<DAS_BIND_MANAGED_PROP(total)>("total");
+        }
+        virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const override {
+            return TypeDecl::gcFlag_heap;
+        }
+    };
 
     struct ChannelAnnotation : ManagedStructureAnnotation<Channel,false> {
         ChannelAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Channel", ml) {
@@ -590,6 +781,9 @@ namespace das {
             auto lbx = new LockBoxAnnotation(lib);
             lbx->from("JobStatus");
             addAnnotation(lbx);
+            auto stra = new StreamAnnotation(lib);
+            stra->from("JobStatus");
+            addAnnotation(stra);
             auto a32 = new AtomicAnnotation<int32_t>("Atomic32",lib);
             addAnnotation(a32);
             auto a64 = new AtomicAnnotation<int64_t>("Atomic64",lib);
@@ -709,6 +903,40 @@ namespace das {
             addExtern<DAS_BIND_FUN(channelRemove)>(*this, lib, "channel_remove",
                 SideEffects::invoke, "channelRemove")
                     ->args({ "channel", "context","line" })->unsafeOperation = true;
+            // stream
+            addExtern<DAS_BIND_FUN(streamPush)>(*this, lib, "_builtin_stream_push",
+                SideEffects::modifyArgumentAndExternal, "streamPush")
+                    ->args({"stream","data","context","line"});
+            addExtern<DAS_BIND_FUN(streamPushBatch)>(*this, lib, "_builtin_stream_push_batch",
+                SideEffects::modifyArgumentAndExternal, "streamPushBatch")
+                    ->args({"stream","data","context","line"});
+            addExtern<DAS_BIND_FUN(streamPop)>(*this, lib, "_builtin_stream_pop",
+                SideEffects::modifyArgumentAndExternal, "streamPop")
+                    ->args({"stream","block","context","line"});
+            addExtern<DAS_BIND_FUN(streamTryPop)>(*this, lib, "_builtin_stream_try_pop",
+                SideEffects::modifyArgumentAndExternal, "streamTryPop")
+                    ->args({"stream","block","context","line"});
+            addExtern<DAS_BIND_FUN(streamPopWithTimeout)>(*this, lib, "_builtin_stream_pop_with_timeout",
+                SideEffects::modifyArgumentAndExternal, "streamPopWithTimeout")
+                    ->args({"stream","timeout_ms","block","context","line"});
+            addExtern<DAS_BIND_FUN(streamGather)>(*this, lib, "_builtin_stream_gather",
+                SideEffects::modifyArgumentAndExternal, "streamGather")
+                    ->args({"stream","block","context","line"});
+            addExtern<DAS_BIND_FUN(streamPeek)>(*this, lib, "_builtin_stream_peek",
+                SideEffects::modifyArgumentAndExternal, "streamPeek")
+                    ->args({"stream","block","context","line"});
+            addExtern<DAS_BIND_FUN(withStream)>(*this, lib, "with_stream",
+                SideEffects::invoke, "withStream")
+                    ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(withStreamEx)>(*this, lib, "with_stream",
+                SideEffects::invoke, "withStreamEx")
+                    ->args({"count","block","context","line"});
+            addExtern<DAS_BIND_FUN(streamCreate)>(*this, lib, "stream_create",
+                SideEffects::invoke, "streamCreate")
+                    ->args({ "context","line" })->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(streamRemove)>(*this, lib, "stream_remove",
+                SideEffects::invoke, "streamRemove")
+                    ->args({ "stream", "context","line" })->unsafeOperation = true;
             // job status
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
                 SideEffects::modifyExternal, "withJobStatus")

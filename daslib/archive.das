@@ -417,7 +417,11 @@ def public mem_archive_save(var t : auto&) {
     var mems = new MemSerializer()
     var sarch = Archive(reading = false, stream = mems)
     sarch |> serialize(t)
-    return <- mems->extractData()
+    var result <- mems->extractData()
+    unsafe {
+        delete mems
+    }
+    return <- result
 }
 
 def public mem_archive_load(var data : array<uint8>; var t : auto&; canfail : bool = false) : bool {
@@ -425,11 +429,29 @@ def public mem_archive_load(var data : array<uint8>; var t : auto&; canfail : bo
     var memr = new MemSerializer(data)
     var rarch = Archive(reading = true, stream = memr)
     rarch |> serialize(t)
-    if (!memr->OK()) {
+    let ok = memr->OK()
+    if (!ok) {
         if (!canfail) {
-            panic(memr->getLastError())
+            let lastErr = memr->getLastError()
+            unsafe {
+                delete memr
+            }
+            panic(lastErr)
+        }
+        unsafe {
+            delete memr
         }
         return false
     }
+    unsafe {
+        delete memr
+    }
     return true
+}
+
+def public mem_archive_load(data : array<uint8># -const; var t : auto&; canfail : bool = false) : bool {
+    //! Loads the object from a memory archive, reading from a borrowed view without cloning.
+    //! `data` must outlive the call. Reinterprets the borrowed view as a regular array;
+    //! the MemSerializer only reads and never mutates or frees it.
+    return mem_archive_load(unsafe(reinterpret<array<uint8>>(data)), t, canfail)
 }

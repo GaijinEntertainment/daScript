@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 options indenting = 4
 
 // Quick verification: stereo-linked samples + chorus
