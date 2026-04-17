@@ -160,7 +160,7 @@ namespace das {
     const FILE * builtin_stdout() GENERATE_IO_STUB_RET
     const FILE * builtin_stderr() GENERATE_IO_STUB_RET
     bool builtin_feof(const FILE* _f) GENERATE_IO_STUB_RET
-    const FILE * builtin_fopen  ( const char * name, const char * mode ) GENERATE_IO_STUB_RET
+    const FILE * builtin_fopen  ( const char * name, const char * mode, Context *, LineInfoArg * ) GENERATE_IO_STUB_RET
     vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
     vec4f builtin_write ( Context & context, SimNode_CallBase * call, vec4f * args ) GENERATE_IO_STUB_RET
     vec4f builtin_load ( Context & context, SimNode_CallBase * node, vec4f * args ) GENERATE_IO_STUB_RET
@@ -253,23 +253,15 @@ namespace das {
     }
 
     static bool is_valid_fopen_mode(const char *mode) {
-        if (!mode || (mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a'))
-            return false;
-        for (const char *p = mode + 1; *p; ++p) {
-            if (*p != '+' && *p != 'b' && *p != 't' && *p != 'x')
-                return false;
-        }
-        return true;
+        return mode && strchr("rwa", mode[0]) && mode[1 + strspn(mode + 1, "+btx")] == '\0';
     }
 
-    const FILE * builtin_fopen  ( const char * name, const char * mode ) {
-        if ( name && is_valid_fopen_mode(mode)) {
-            FILE * f = fopen(name, mode);
-            if ( f ) setvbuf(f, NULL, _IOFBF, 65536);
-            return f;
-        } else {
-            return nullptr;
-        }
+    const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at ) {
+        if ( !name ) context->throw_error_at(at, "can't fopen NULL name");
+        if ( !is_valid_fopen_mode(mode) ) context->throw_error_at(at, "invalid fopen mode '%s'", mode ? mode : "<null>");
+        FILE * f = fopen(name, mode);
+        if ( f ) setvbuf(f, NULL, _IOFBF, 65536);
+        return f;
     }
 
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) {
@@ -1242,7 +1234,7 @@ namespace das {
                     ->args({"path","error","context","at"});
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
                 SideEffects::modifyExternal, "builtin_fopen")
-                    ->args({"name","mode"})->setNoDiscard();
+                    ->args({"name","mode","context","line"})->setNoDiscard();
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
                 SideEffects::modifyExternal, "builtin_fclose")
                     ->args({"file","context","line"});
