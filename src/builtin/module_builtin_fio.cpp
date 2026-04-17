@@ -252,8 +252,18 @@ namespace das {
         if ( text ) fputs(text,(FILE *)f);
     }
 
+    static bool is_valid_fopen_mode(const char *mode) {
+        if (!mode || (mode[0] != 'r' && mode[0] != 'w' && mode[0] != 'a'))
+            return false;
+        for (const char *p = mode + 1; *p; ++p) {
+            if (*p != '+' && *p != 'b' && *p != 't' && *p != 'x')
+                return false;
+        }
+        return true;
+    }
+
     const FILE * builtin_fopen  ( const char * name, const char * mode ) {
-        if ( name && mode ) {
+        if ( name && is_valid_fopen_mode(mode)) {
             FILE * f = fopen(name, mode);
             if ( f ) setvbuf(f, NULL, _IOFBF, 65536);
             return f;
