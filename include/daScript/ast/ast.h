@@ -1547,6 +1547,7 @@ namespace das
         uint64_t    max_static_variables_size = 0x100000000;   // 4GB
         /*option*/ uint64_t    max_heap_allocated = 0;
         /*option*/ uint64_t    max_string_heap_allocated = 0;
+        /*option*/ bool        track_allocations = false;          // track where heap allocations came from (line info + comment)
     // rtti
         /*option*/ bool rtti = false;                              // create extended RTTI
     // language

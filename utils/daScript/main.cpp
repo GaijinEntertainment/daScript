@@ -53,6 +53,8 @@ static bool useAot = false;
 
 static bool version2syntax = true;
 static bool gen2MakeSyntax = false;
+static bool trackAllocations = false;
+static bool heapReportAtExit = false;
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
@@ -67,6 +69,7 @@ static CodeOfPolicies getPolicies() {
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
     policies.scoped_stack_allocator = scopedStackAllocator;
+    policies.track_allocations = trackAllocations;
     return policies;
 }
 
@@ -386,6 +389,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.version_2_syntax = version2syntax;
     policies.gen2_make_syntax = gen2MakeSyntax;
     policies.scoped_stack_allocator = scopedStackAllocator;
+    policies.track_allocations = trackAllocations;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -463,6 +467,12 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
                         }
                     }
                 }
+            }
+            if ( heapReportAtExit && pctx ) {
+                tout << "--- heap report ---\n";
+                pctx->heap->report();
+                tout << "--- string heap report ---\n";
+                pctx->stringHeap->report();
             }
         }
     }
@@ -629,6 +639,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="v2makeSyntax" ) {
                 version2syntax = false;
                 gen2MakeSyntax = true;
+            } else if ( cmd=="track-allocations" ) {
+                trackAllocations = true;
+            } else if ( cmd=="heap-report" ) {
+                heapReportAtExit = true;
             } else if ( cmd=="jit") {
                 jitEnabled = JitMode::Direct;
             } else if ( cmd=="use-aot") {

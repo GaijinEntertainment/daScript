@@ -404,10 +404,13 @@ inline size_t das_aligned_memsize(void * ptr){
 }
 #endif
 
-// when enabled, Context heap memory will track where the allocation came from
-// via mark_location and mark_comment
+// when enabled, Context heap memory can track where the allocation came from
+// via mark_location and mark_comment. This is now a compile-time kill switch —
+// the actual tracking is controlled at runtime via CodeOfPolicies::track_allocations
+// and defaults to off. Setting DAS_TRACK_ALLOCATIONS=0 dead-code-eliminates the
+// tracking infrastructure for shipping builds.
 #ifndef DAS_TRACK_ALLOCATIONS
-#define DAS_TRACK_ALLOCATIONS   0
+#define DAS_TRACK_ALLOCATIONS   1
 #endif
 
 // when enabled, Context heap memory will be filled with 0xcd when deleted

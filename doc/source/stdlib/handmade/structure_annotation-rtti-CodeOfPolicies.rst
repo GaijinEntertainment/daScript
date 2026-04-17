@@ -28,6 +28,7 @@ Whether macro context does garbage collection.
 Maximum size of static variables.
 Maximum heap allocated.
 Maximum string heap allocated.
+Track where each heap allocation came from (line info + comment). When enabled, every allocation routes through the large-object map so ``heap->report()`` can list leaks with source location.
 Whether to enable RTTI.
 Whether to allow unsafe table lookups (via [] operator).
 Whether to relax pointer constness rules.

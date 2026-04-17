@@ -36,6 +36,8 @@ static TextPrinter tout;
 static string projectFile;
 static string project_root;
 static bool version2syntax = true;
+static bool trackAllocations = false;
+static bool heapReportAtExit = false;
 
 // --- DLL function pointers (loaded at runtime from dasModuleLiveHost) ---
 // All use POD types only — safe across DLL boundary.
@@ -175,6 +177,7 @@ static CompileResult compile_script(const string & fn) {
     policies.threadlock_context = true;
     policies.ignore_shared_modules = true;
     policies.rtti = true;
+    policies.track_allocations = trackAllocations;
 
     ModuleGroup moduleGroup;
     result.program = compileDaScript(fn, result.access, tout, moduleGroup, policies);
@@ -548,6 +551,13 @@ static int run_lifecycle(const string & fn) {
         }
     }
 
+    if (heapReportAtExit && ctx) {
+        tout << "--- heap report ---\n";
+        ctx->heap->report();
+        tout << "--- string heap report ---\n";
+        ctx->stringHeap->report();
+    }
+
     return 0;
 }
 
@@ -560,6 +570,8 @@ static void print_help() {
     tout << "  -dasroot <path>   — override DAS_ROOT\n";
     tout << "  -cwd              — change working directory to script's folder\n";
     tout << "  -v1syntax         — use v1 syntax (default: v2)\n";
+    tout << "  -track-allocations — track where heap allocations came from\n";
+    tout << "  -heap-report      — dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules  — skip loading dynamic modules\n";
     tout << "  --                — separator for script arguments\n";
     tout << "  -h, --help        — this help\n";
@@ -639,6 +651,10 @@ int main(int argc, char * argv[]) {
             changeCwd = true;
         } else if (arg == "-v1syntax") {
             version2syntax = false;
+        } else if (arg == "-track-allocations") {
+            trackAllocations = true;
+        } else if (arg == "-heap-report") {
+            heapReportAtExit = true;
         } else if (arg == "--no-dyn-modules") {
             noDynamicModules = true;
         } else if (arg == "-h" || arg == "--help") {
