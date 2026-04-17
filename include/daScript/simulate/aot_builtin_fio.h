@@ -45,7 +45,7 @@ namespace das {
     };
 #endif
 
-    DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode );
+    DAS_API const FILE * builtin_fopen  ( const char * name, const char * mode, Context * context, LineInfoArg * at );
     DAS_API void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at );
     DAS_API void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at );
