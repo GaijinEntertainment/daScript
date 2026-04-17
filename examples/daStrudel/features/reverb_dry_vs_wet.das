@@ -19,6 +19,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- note_pattern("c4 ~ c4 ~", "sine") |> set_attack(0.001) |> set_decay(0.15) |> set_sustain(0.0) |> set_release(0.01) |> set_room(0.8) |> set_roomsize(2.0)
+    let pat <- note("c4 ~ c4 ~", "sine") |> attack(0.001) |> decay(0.15) |> sustain(0.0) |> release(0.01) |> room(0.8) |> roomsize(2.0)
     play_feature_cps(pat, 0.5lf)
 }

@@ -16,6 +16,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- every(2, note_pattern("c4 e4 g4 c5") |> set_sustain(1.0) |> rev(), note_pattern("c4 e4 g4 c5") |> set_sustain(1.0))
+    let pat <- every(2, note("c4 e4 g4 c5") |> sustain(1.0) |> rev(), note("c4 e4 g4 c5") |> sustain(1.0))
     play_feature_cps(pat, 0.5lf)
 }

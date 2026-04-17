@@ -22,6 +22,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- note_pattern("c3 e3 g3", "sawtooth") |> set_vowel("<a e i o u>") |> set_gain(0.2) |> set_attack(0.05) |> set_decay(0.2) |> set_sustain(0.7) |> set_release(0.5) |> set_room(0.3) |> set_roomsize(3.0)
+    let pat <- note("c3 e3 g3", "sawtooth") |> vowel("<a e i o u>") |> gain(0.2) |> attack(0.05) |> decay(0.2) |> sustain(0.7) |> release(0.5) |> room(0.3) |> roomsize(3.0)
     play_feature_cps(pat, 0.5lf)
 }

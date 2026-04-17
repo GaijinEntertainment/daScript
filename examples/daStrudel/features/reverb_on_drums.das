@@ -15,6 +15,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- s("bd sd bd [sd cp]") |> set_room(0.5) |> set_roomsize(3.0)
+    let pat <- s("bd sd bd [sd cp]") |> room(0.5) |> roomsize(3.0)
     play_feature_cps(pat, 0.5lf)
 }

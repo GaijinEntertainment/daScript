@@ -6,6 +6,10 @@
 #include "reverb.h"
 #include "chorus.h"
 #include "convolution_reverb.h"
+#include "effects.h"
+#include "phaser.h"
+#include "tremolo.h"
+#include "compressor.h"
 
 // AOT-visible declarations for global-scope functions called from namespace das
 float das_ma_sf2_biquad_tick ( ma_sf2_biquad * bq, float input );
@@ -71,4 +75,21 @@ namespace das {
     void dasAudio_delayUninit ( ma_delay * d, Context * context, LineInfoArg * at );
     void dasAudio_delaySetParams ( ma_delay * d, int sample_rate, float delay_time_sec, float feedback, Context * context, LineInfoArg * at );
     void dasAudio_delayProcess ( ma_delay * d, float * input, float * output, int nFrames, Context * context, LineInfoArg * at );
+
+    void dasAudio_bitcrushInit ( ma_bitcrush * bc, Context * context, LineInfoArg * at );
+    void dasAudio_bitcrushProcess ( ma_bitcrush * bc, float * buf, int nFrames, Context * context, LineInfoArg * at );
+    void dasAudio_waveshaperInit ( ma_waveshaper * ws, Context * context, LineInfoArg * at );
+    void dasAudio_waveshaperProcess ( ma_waveshaper * ws, float * buf, int nFrames, Context * context, LineInfoArg * at );
+    void dasAudio_djfilterInit ( ma_djfilter * dj, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_djfilterProcess ( ma_djfilter * dj, float * buf, int nFrames, Context * context, LineInfoArg * at );
+    void dasAudio_bandpassInit ( ma_bandpass * bp, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_bandpassSetup ( ma_bandpass * bp, float freq, float q, Context * context, LineInfoArg * at );
+    void dasAudio_bandpassProcess ( ma_bandpass * bp, float * buf, int nFrames, Context * context, LineInfoArg * at );
+
+    void dasAudio_phaserInit ( ma_phaser * ph, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_phaserProcess ( ma_phaser * ph, float * buf, int nFrames, Context * context, LineInfoArg * at );
+    void dasAudio_tremoloInit ( ma_tremolo * tr, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_tremoloProcess ( ma_tremolo * tr, float * buf, int nFrames, Context * context, LineInfoArg * at );
+    void dasAudio_compressorInit ( ma_compressor * c, float sample_rate, Context * context, LineInfoArg * at );
+    void dasAudio_compressorProcess ( ma_compressor * c, float * buf, int nFrames, Context * context, LineInfoArg * at );
 }

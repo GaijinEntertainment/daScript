@@ -23,7 +23,7 @@ require feature_common
 
 [export]
 def main() {
-    let lpfSig <- signal_sine() |> signal_range(200.0, 2000.0) |> slow(4.0lf)
-    let pat <- note_pattern("c3 e3 g3", "sawtooth") |> set_lpf(lpfSig) |> set_gain(0.2) |> set_attack(0.05) |> set_decay(0.2) |> set_sustain(0.8) |> set_release(0.3) |> set_room(0.7) |> set_roomsize(5.0)
+    let lpfSig <- sine() |> range(200.0, 2000.0) |> slow(4.0lf)
+    let pat <- note("c3 e3 g3", "sawtooth") |> lpf(lpfSig) |> gain(0.2) |> attack(0.05) |> decay(0.2) |> sustain(0.8) |> release(0.3) |> room(0.7) |> roomsize(5.0)
     play_feature_cps(pat, 0.5lf)
 }

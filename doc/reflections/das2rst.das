@@ -1277,6 +1277,8 @@ def document_module_audio(root : string) {
         group_by_regex("Convolution Reverb", mod, %regex~conv_reverb%%),
         group_by_regex("Chorus", mod, %regex~chorus%%),
         group_by_regex("Delay", mod, %regex~delay_%%),
+        group_by_regex("Per-voice effects", mod, %regex~.*(bandpass|bitcrush|compressor|djfilter|phaser|tremolo|waveshaper)_(init|process|setup)$%%),
+        group_by_regex("Per-voice effect types", mod, %regex~ma_(bandpass|bitcrush|compressor|djfilter|phaser|tremolo|waveshaper)$%%),
         group_by_regex("SF2 voice", mod, %regex~ma_sf2%%),
         group_by_regex("Enumerations and constants", mod, %regex~MA_SAMPLE_RATE$%%)
     )

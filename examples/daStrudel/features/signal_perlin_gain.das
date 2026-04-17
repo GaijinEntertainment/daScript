@@ -15,6 +15,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- atom("sawtooth") |> set_note(48.0) |> set_sustain(1.0) |> set_lpf(800.0) |> set_gain(signal_perlin() |> signal_range(0.1, 0.8) |> slow(4.0lf))
+    let pat <- atom("sawtooth") |> note(48.0) |> sustain(1.0) |> lpf(800.0) |> gain(perlin() |> range(0.1, 0.8) |> slow(4.0lf))
     play_feature_cps(pat, 0.5lf)
 }

@@ -23,8 +23,8 @@ require feature_common
 
 [export]
 def main() {
-    let lpfSig <- signal_sine() |> signal_range(250.0, 800.0) |> slow(32.0lf)
-    let panSig <- signal_sine() |> signal_range(0.3, 0.7) |> slow(20.0lf)
-    let pat <- note_pattern("<c2 eb2 g2 bb2 f2 ab2 g2 eb2>", "supersaw") |> slow(24.0lf) |> set_gain(0.1) |> set_attack(4.0) |> set_decay(2.0) |> set_sustain(0.7) |> set_release(6.0) |> set_lpf(lpfSig) |> set_hpf(80.0) |> set_room(0.9) |> set_roomsize(8.0) |> set_pan(panSig) |> set_orbit(2)
+    let lpfSig <- sine() |> range(250.0, 800.0) |> slow(32.0lf)
+    let panSig <- sine() |> range(0.3, 0.7) |> slow(20.0lf)
+    let pat <- note("<c2 eb2 g2 bb2 f2 ab2 g2 eb2>", "supersaw") |> slow(24.0lf) |> gain(0.1) |> attack(4.0) |> decay(2.0) |> sustain(0.7) |> release(6.0) |> lpf(lpfSig) |> hpf(80.0) |> room(0.9) |> roomsize(8.0) |> pan(panSig) |> orbit(2)
     play_feature_cpm(pat, 15.0lf)
 }

@@ -19,7 +19,7 @@ require feature_common
 
 [export]
 def main() {
-    let lpfSig <- signal_sine() |> signal_range(120.0, 350.0) |> slow(40.0lf)
-    let pat <- atom("pink") |> set_gain(0.3) |> set_sustain(1.0) |> set_lpf(lpfSig) |> set_hpf(40.0) |> set_room(0.5) |> set_roomsize(4.0) |> set_orbit(5)
+    let lpfSig <- sine() |> range(120.0, 350.0) |> slow(40.0lf)
+    let pat <- atom("pink") |> gain(0.3) |> sustain(1.0) |> lpf(lpfSig) |> hpf(40.0) |> room(0.5) |> roomsize(4.0) |> orbit(5)
     play_feature_cpm(pat, 15.0lf)
 }

@@ -16,9 +16,9 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- layer([
-        note_pattern("c3 e3 g3 c4") |> set_sustain(1.0) |> transpose(4.0),
-        note_pattern("c3 e3 g3 c4") |> set_sustain(1.0) |> transpose(7.0)],
-      note_pattern("c3 e3 g3 c4") |> set_sustain(1.0))
+    let pat <- layer([
+        note("c3 e3 g3 c4") |> sustain(1.0) |> transpose(4.0),
+        note("c3 e3 g3 c4") |> sustain(1.0) |> transpose(7.0)],
+      note("c3 e3 g3 c4") |> sustain(1.0))
     play_feature_cps(pat, 0.5lf)
 }

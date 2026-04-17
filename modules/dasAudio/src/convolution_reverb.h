@@ -2,7 +2,7 @@
 #define convolution_reverb_h
 
 // Partitioned convolution reverb using synthetic impulse response.
-// Based on the strudel-cc approach: random noise with exponential decay and lowpass sweep.
+// IR synthesis: random noise with exponential decay and lowpass sweep.
 // Uses uniform partitioned overlap-save with minfft for FFT.
 //
 // The IR is split into fixed-size blocks (CONV_BLOCK_SIZE). Each block is pre-transformed

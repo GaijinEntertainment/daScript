@@ -18,6 +18,6 @@ require feature_common
 
 [export]
 def main() {
-    var pat <- s("sawtooth") |> set_note(48.0) |> set_attack(0.01) |> set_decay(0.1) |> set_sustain(0.7) |> set_release(0.3) |> set_lpf(2000.0)
+    let pat <- s("sawtooth") |> note(48.0) |> attack(0.01) |> decay(0.1) |> sustain(0.7) |> release(0.3) |> lpf(2000.0)
     play_feature_cps(pat, 0.5lf)
 }
