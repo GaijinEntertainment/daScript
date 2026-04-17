@@ -154,6 +154,7 @@ IF(NOT DAS_AUDIO_DISABLED)
         tests/strudel/test_sf2.das
         tests/strudel/test_sf2_voice.das
         tests/strudel/test_sf2_modulators.das
+        tests/strudel/test_adsr_resolver.das
         tests/strudel/test_aliases.das
         tests/strudel/test_combinators.das
         tests/strudel/test_delay.das

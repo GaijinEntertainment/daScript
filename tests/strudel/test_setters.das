@@ -111,7 +111,8 @@ def test_event_defaults(t : T?) {
     t |> success(abs(ev.room) < 0.001)
     t |> success(abs(ev.roomsize - 2.0) < 0.001)
     t |> success(abs(ev.delay_amount) < 0.001)
-    t |> success(abs(ev.delaytime - 0.5) < 0.001)
+    t |> success(ev.delaytime < 0.0)  // sentinel: unset → resolver derives from delaysync + cps
+    t |> success(abs(ev.delaysync - 0.1875) < 0.001)  // 3/16 cycle default
     t |> success(abs(ev.delayfeedback - 0.5) < 0.001)
     t |> equal(ev.orbit, 0)
     t |> success(abs(ev.fm) < 0.001)
