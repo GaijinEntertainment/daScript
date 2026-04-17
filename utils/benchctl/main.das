@@ -22,9 +22,7 @@ def main() {
         print("[{red_str("error")}] {err}\n")
         exit_code = 1
     }
-    unsafe {
-        exit(exit_code)
-    }
+    return exit_code
 }
 
 def run_main() : string {

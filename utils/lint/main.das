@@ -145,10 +145,7 @@ def main() {
         print("  --paranoid-only          only run regular lint\n")
         print("  --perf-only              only run perf lint\n")
         print("  --style-only             only run style lint\n")
-        unsafe {
-            fio::exit(1)
-        }
-        return
+        return 1
     }
     var quiet = false
     var postfix = false
@@ -173,10 +170,7 @@ def main() {
     }
     if (length(paths) == 0) {
         print("Error: no files or directories specified\n")
-        unsafe {
-            fio::exit(1)
-        }
-        return
+        return 1
     }
     let any_only = only_paranoid || only_perf || only_style
     let run_paranoid = !any_only || only_paranoid
@@ -190,10 +184,7 @@ def main() {
     }
     if (length(files) == 0) {
         print("Error: no .das files found\n")
-        unsafe {
-            fio::exit(1)
-        }
-        return
+        return 1
     }
     if (!quiet) {
         print("Linting {length(files)} file(s)...\n\n")
@@ -223,11 +214,11 @@ def main() {
     }
     print("\n--- Summary ---\n")
     print("{length(files)} files, {total_issues} issue(s), {total_errors} error(s)\n")
-    unsafe {
-        if (total_errors > 0) {
-            fio::exit(1)
-        } elif (total_issues > 0) {
-            fio::exit(2)
-        }
+    if (total_errors > 0) {
+        return 1
+    } elif (total_issues > 0) {
+        return 2
+    } else {
+        return 0
     }
 }

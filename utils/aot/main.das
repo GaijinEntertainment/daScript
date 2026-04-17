@@ -198,8 +198,8 @@ def main() {
         }
     }
     if (!result) {
-        // Doing exit() may cause SIFO on complex files
-        // with init, so return as usual if everything is ok.
-        unsafe(fio::exit(-1))
+        return -1
+    } else {
+        return 0
     }
 }
