@@ -341,8 +341,8 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
         )
     ENDIF()
     TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
-    TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn)
-    ADD_DEPENDENCIES(${module_name} libDaScriptDyn)
+    TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn_runtime)
+    ADD_DEPENDENCIES(${module_name} libDaScriptDyn_runtime)
     LIST(APPEND DAS_DYN_MODULES_LIBS ${module_name})
 ENDMACRO()
 
@@ -498,7 +498,7 @@ endif()
             -DEXEDIR=$<TARGET_FILE_DIR:daslang>
             -DWORKDIR=${PROJECT_SOURCE_DIR}
             -P ${_script}
-        DEPENDS daslang
+        DEPENDS daslang libDaScriptDyn_runtime
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running headless module examples"
     )
@@ -625,17 +625,8 @@ list(SORT VECMATH_SRC)
 SOURCE_GROUP_FILES("vecmath" VECMATH_SRC)
 
 SET(AST_SRC
-src/ast/ast.cpp
-src/ast/ast_interop.cpp
-src/ast/ast_tls.cpp
-src/ast/ast_visitor.cpp
 src/ast/ast_generate.cpp
 src/ast/ast_simulate.cpp
-src/ast/ast_typedecl.cpp
-src/ast/ast_match.cpp
-src/ast/ast_module.cpp
-src/ast/ast_print.cpp
-src/ast/ast_aot_cpp.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_infer_type_report.cpp
 src/ast/ast_infer_type_function.cpp
@@ -643,34 +634,37 @@ src/ast/ast_infer_type_helper.cpp
 src/ast/ast_infer_type_op.cpp
 src/ast/ast_infer_type_make.cpp
 src/ast/ast_lint.cpp
-src/ast/ast_allocate_stack.cpp
-src/ast/ast_derive_alias.cpp
 src/ast/ast_const_folding.cpp
 src/ast/ast_block_folding.cpp
 src/ast/ast_gc_collect.cpp
-src/ast/ast_inscope_pod.cpp
 src/ast/ast_unused.cpp
-src/ast/ast_annotations.cpp
-src/ast/ast_export.cpp
 src/ast/ast_parse.cpp
 src/ast/ast_validate.cpp
 src/ast/ast_debug_info_helper.cpp
 src/ast/ast_handle.cpp
 src/ast/dyn_modules.cpp
-include/daScript/ast/compilation_errors.h
-include/daScript/ast/ast_typedecl.h
-include/daScript/ast/ast_typefactory.h
-include/daScript/ast/ast.h
-include/daScript/ast/ast_expressions.h
-include/daScript/ast/ast_visitor.h
-include/daScript/ast/ast_generate.h
-include/daScript/ast/ast_match.h
-include/daScript/ast/ast_interop.h
-include/daScript/ast/ast_handle.h
-include/daScript/ast/ast_policy_types.h
 )
 list(SORT AST_SRC)
 SOURCE_GROUP_FILES("ast" AST_SRC)
+
+SET(RUNTIME_DEFAULT_MODULES
+    src/builtin/module_builtin.cpp
+    src/builtin/module_builtin_array.cpp
+    src/builtin/module_builtin_ast_serialize.cpp
+    src/builtin/module_builtin_dasbind.cpp
+    src/builtin/module_builtin_fio.cpp
+    src/builtin/module_builtin_math.cpp
+    src/builtin/module_builtin_misc_types.cpp
+    src/builtin/module_builtin_runtime.cpp
+    src/builtin/module_builtin_runtime_lockcheck.cpp
+    src/builtin/module_builtin_runtime_sort.cpp
+    src/builtin/module_builtin_string.cpp
+    src/builtin/module_builtin_uriparser.cpp
+    src/builtin/module_builtin_vector.cpp
+    src/builtin/module_builtin_vector_ctor.cpp
+    src/builtin/module_file_access.cpp
+)
+LIST(APPEND RUNTIME_MODULES ${RUNTIME_DEFAULT_MODULES})
 
 SET(BUILTIN_SRC
 include/daScript/builtin/ast_gen.inc
@@ -678,20 +672,8 @@ include/daScript/builtin/debugapi_gen.inc
 
 src/builtin/modules.cpp
 src/builtin/module_builtin.h
-src/builtin/module_builtin.cpp
-src/builtin/module_builtin_misc_types.cpp
-src/builtin/module_builtin_runtime.cpp
-src/builtin/module_builtin_runtime_sort.cpp
-src/builtin/module_builtin_runtime_lockcheck.cpp
-src/builtin/module_builtin_vector.cpp
-src/builtin/module_builtin_vector_ctor.cpp
-src/builtin/module_builtin_array.cpp
-src/builtin/module_builtin_math.cpp
-src/builtin/module_builtin_string.cpp
-src/builtin/module_builtin_rtti.h
 src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
-src/builtin/module_builtin_ast_serialize.cpp
 src/builtin/module_builtin_ast_flags.cpp
 src/builtin/module_builtin_ast_annotations.cpp
 src/builtin/module_builtin_ast_annotations_1.cpp
@@ -699,55 +681,84 @@ src/builtin/module_builtin_ast_annotations_2.cpp
 src/builtin/module_builtin_ast_annotations_3.cpp
 src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
-src/builtin/module_builtin_uriparser.h
-src/builtin/module_builtin_uriparser.cpp
-src/builtin/module_jit.cpp
-src/builtin/module_builtin_fio.cpp
-src/builtin/module_builtin_dasbind.cpp
-src/builtin/module_builtin_network.cpp
 src/builtin/module_builtin_debugger.cpp
 src/builtin/module_builtin_jobque.cpp
-src/builtin/module_file_access.cpp
+src/builtin/module_builtin_uriparser.h
+src/builtin/module_builtin_network.cpp
+src/builtin/module_jit.cpp
 )
 list(SORT BUILTIN_SRC)
 SOURCE_GROUP_FILES("module builtin" BUILTIN_SRC)
 
-SET(MISC_SRC
-include/daScript/misc/enums.h
-include/daScript/misc/hal.h
-include/daScript/misc/fpe.h
-include/daScript/misc/copy_bytes.h
-include/daScript/misc/platform.h
-include/daScript/misc/vectypes.h
-include/daScript/misc/arraytype.h
-include/daScript/misc/rangetype.h
-include/daScript/misc/string_writer.h
-include/daScript/misc/type_name.h
-include/daScript/misc/memory_model.h
-include/daScript/misc/wyhash.h
-include/daScript/misc/anyhash.h
-include/daScript/misc/safebox.h
-include/daScript/misc/smart_ptr.h
-include/daScript/misc/free_list.h
-include/daScript/misc/sysos.h
-include/daScript/misc/callable.h
-include/daScript/misc/debug_break.h
-include/daScript/misc/instance_debugger.h
-include/daScript/misc/gc_node.h
-include/daScript/misc/job_que.h
-include/daScript/misc/uric.h
-src/misc/gc_node.cpp
-src/misc/sysos.cpp
-src/misc/string_writer.cpp
-src/misc/memory_model.cpp
-src/misc/job_que.cpp
-src/misc/free_list.cpp
-src/misc/daScriptC.cpp
-src/misc/uric.cpp
-src/misc/format.cpp
+SET(RUNTIME_SRC
+src/hal/performance_time.cpp
+src/hal/debug_break.cpp
+src/hal/project_specific.cpp
+src/hal/project_specific_file_info.cpp
+src/hal/project_specific_crash_handler.cpp
+src/simulate/runtime_string.cpp
+src/simulate/runtime_iterator.cpp
+src/simulate/runtime_array.cpp
+src/simulate/runtime_table.cpp
+src/simulate/runtime_profile.cpp
+
+src/simulate/simulate_fn_hash.cpp
+src/simulate/simulate_gc.cpp
+src/simulate/simulate_exceptions.cpp
+src/simulate/simulate_instrument.cpp
+
+src/runtime/context.cpp
+src/runtime/jit_runtime.cpp
+src/simulate/json_scan.cpp
+src/simulate/json_print.cpp
+
+src/simulate/data_walker.cpp
+src/simulate/bin_serializer.cpp
+src/simulate/fs_file_info.cpp
+src/simulate/debug_info.cpp
+src/simulate/hash.cpp
+src/simulate/heap.cpp
+src/simulate/debug_print.cpp
+
 )
-list(SORT MISC_SRC)
-SOURCE_GROUP_FILES("misc" MISC_SRC)
+
+SET(RUNTIME_EXTRA_SRC
+    src/ast/ast.cpp
+    src/ast/ast_function.cpp
+    src/ast/ast_aot_cpp.cpp
+    src/ast/ast_interop.cpp
+    src/ast/ast_tls.cpp
+    src/ast/ast_visitor.cpp
+    src/ast/ast_function.cpp
+    src/ast/ast_typedecl.cpp
+    src/ast/ast_match.cpp
+    src/ast/ast_module.cpp
+    src/ast/ast_print.cpp
+    src/ast/ast_allocate_stack.cpp
+    src/ast/ast_derive_alias.cpp
+    src/ast/ast_inscope_pod.cpp
+    src/ast/ast_annotations.cpp
+    src/ast/ast_export.cpp
+    src/ast/ast_debug_info_helper.cpp
+    src/ast/ast_handle.cpp
+    src/ast/ast_program.cpp
+
+    src/misc/gc_node.cpp
+    src/misc/das_common.cpp
+    src/misc/sysos.cpp
+    src/misc/string_writer.cpp
+    src/misc/memory_model.cpp
+    src/misc/job_que.cpp
+    src/misc/free_list.cpp
+    src/misc/uric.cpp
+    src/misc/format.cpp
+)
+
+SET(C_API_SRC
+src/misc/daScriptC.cpp
+)
+list(SORT C_API_SRC)
+SOURCE_GROUP_FILES("misc" C_API_SRC)
 
 SET(SIMULATE_FUSION_SRC
 src/simulate/simulate_fusion.cpp
@@ -788,34 +799,14 @@ list(SORT SIMULATE_FUSION_SRC)
 SOURCE_GROUP_FILES("fusion" SIMULATE_FUSION_SRC)
 
 SET(SIMULATE_SRC
-src/hal/performance_time.cpp
-include/daScript/misc/performance_time.h
-src/hal/debug_break.cpp
-src/hal/project_specific.cpp
-src/hal/project_specific_file_info.cpp
-src/hal/project_specific_crash_handler.cpp
-include/daScript/misc/crash_handler.h
-include/daScript/misc/network.h
 src/misc/network.cpp
-src/simulate/hash.cpp
-src/simulate/debug_info.cpp
-src/simulate/runtime_string.cpp
-src/simulate/runtime_array.cpp
-src/simulate/runtime_table.cpp
-src/simulate/runtime_profile.cpp
 src/simulate/standalone_ctx_utils.cpp
 src/simulate/simulate.cpp
-src/simulate/simulate_exceptions.cpp
-src/simulate/simulate_gc.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp
 src/simulate/simulate_print.cpp
-src/simulate/simulate_fn_hash.cpp
-src/simulate/simulate_instrument.cpp
 include/daScript/simulate/cast.h
 include/daScript/simulate/hash.h
-include/daScript/simulate/heap.h
-src/simulate/heap.cpp
 include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
 include/daScript/simulate/runtime_string.h
@@ -832,16 +823,8 @@ include/daScript/simulate/simulate_visit.h
 include/daScript/simulate/simulate_visit_op.h
 include/daScript/simulate/simulate_visit_op_undef.h
 include/daScript/simulate/sim_policy.h
-src/simulate/data_walker.cpp
-include/daScript/simulate/data_walker.h
-src/simulate/debug_print.cpp
-src/simulate/json_print.cpp
-src/simulate/json_scan.cpp
-include/daScript/simulate/debug_print.h
 include/daScript/simulate/for_each.h
 include/daScript/simulate/bind_enum.h
-include/daScript/simulate/bin_serializer.h
-src/simulate/bin_serializer.cpp
 include/daScript/simulate/aot.h
 include/daScript/simulate/aot_library.h
 include/daScript/simulate/aot_builtin.h
@@ -858,7 +841,6 @@ include/daScript/simulate/aot_builtin_dasbind.h
 include/daScript/simulate/aot_builtin_uriparser.h
 include/daScript/simulate/aot_builtin_jit.h
 include/daScript/simulate/fs_file_info.h
-src/simulate/fs_file_info.cpp
 )
 
 
@@ -918,19 +900,53 @@ include_directories(include)
 include_directories(3rdparty/fmt/include)
 
 MACRO(SETUP_LIBDASCRIPT library shared_lib)
+    SET(RUNTIME_SRCS
+        ${RUNTIME_MODULES}   # builtin modules
+        ${RUNTIME_SRC}       # runtime
+        ${RUNTIME_EXTRA_SRC} # ast + misc
+    )
+    SET(COMPILER_SRC
+        ${PARSER_GENERATED_SRC}
+        ${PARSER_SRC}
+        ${VECMATH_SRC}
+        ${AST_SRC}
+        ${SIMULATE_SRC}
+        ${BUILTIN_SRC}
+        ${DASCRIPT_FMT_SRC}
+        ${SIMULATE_FUSION_SRC}
+        ${C_API_SRC}
+    )
     IF(${shared_lib})
-        SETUP_DAS_SHARED_LIBRARY(${library} ${PARSER_GENERATED_SRC}
-                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
-                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
-                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+        SETUP_DAS_SHARED_LIBRARY(${library} ${COMPILER_SRC})
         TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1)
         TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DLL=1)
         # Set DAS_EXPORTS to export all MOD symbols from libDaScript
+        SETUP_DAS_SHARED_LIBRARY(${library}_runtime
+            ${RUNTIME_SRCS}
+            src/stubs/simulate_stub.cpp
+        )
+        TARGET_COMPILE_DEFINITIONS(${library}_runtime PRIVATE DAS_RT_EXPORTS=1 DAS_MOD_EXPORTS=1)
+        TARGET_COMPILE_DEFINITIONS(${library}_runtime PUBLIC DAS_ENABLE_DLL=1)
+        target_include_directories(${library}_runtime PRIVATE
+                ${DAS_SMMALLOC_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                ${NEED_MODULES_PATH}
+        )
+        ADD_DEPENDENCIES(${library}_runtime need_and_resolve)
+        target_link_libraries(${library}_runtime libUriParserDyn)
+        target_link_libraries(${library} ${library}_runtime)
+        TARGET_COMPILE_DEFINITIONS(${library}_runtime PUBLIC DAS_DEBUGGER=0)
+        IF(WIN32)
+            # Windows forces all symbols to be presented, to avoid creating
+            # stubs mark as unresolved.
+            target_link_options(${library}_runtime PRIVATE /FORCE:UNRESOLVED)
+        ENDIF()
     ELSE()
-        ADD_DAS_STATIC_LIBRARY(${library} ${PARSER_GENERATED_SRC}
-                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
-                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
-                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+        ADD_DAS_STATIC_LIBRARY(${library}
+            ${COMPILER_SRC}
+            ${RUNTIME_SRCS}
+        )
     ENDIF()
     TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DYN_INCLUDES=1)
     ADD_DEPENDENCIES(${library} need_and_resolve)
@@ -1336,7 +1352,7 @@ install(FILES ${DAS_BUILTIN_HEADERS}
 
 # Install all modules and main library.
 install(TARGETS
-    libDaScript libDaScriptDyn libUriParser libUriParserDyn
+    libDaScript libDaScriptDyn libDaScriptDyn_runtime libUriParser libUriParserDyn
     EXPORT DASTargets
     RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}

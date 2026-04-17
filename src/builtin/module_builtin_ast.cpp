@@ -7,7 +7,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_simulate.h"
-#include "daScript/das_common.h"
+#include "daScript/misc/das_common.h"
 #include "daScript/simulate/aot_builtin_ast.h"
 #include "daScript/simulate/aot_builtin_string.h"
 #include "daScript/misc/performance_time.h"
@@ -1211,6 +1211,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(get_mangled_name_t)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_t")
                 ->args({"type","context","line"});
+        addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
+            SideEffects::none, "das_get_builtin_function_address")
+                ->args({"fn","context","at"});
         addExtern<DAS_BIND_FUN(get_mangled_name_v)>(*this, lib,  "get_mangled_name",
             SideEffects::none, "get_mangled_name_v")
                 ->args({"variable","context","line"});

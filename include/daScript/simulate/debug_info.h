@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
+
 #include "daScript/misc/gc_node.h"
+#include "daScript/misc/platform.h"
 
 namespace das
 {
@@ -111,7 +114,7 @@ namespace das
         string      cppName;
     };
 
-    struct DAS_API FileInfo {
+    struct DAS_RT_API FileInfo {
     public:
         virtual void freeSourceData() { }
         virtual ~FileInfo() { freeSourceData(); }
@@ -127,7 +130,7 @@ namespace das
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 
-    class DAS_API TextFileInfo : public FileInfo {
+    class DAS_RT_API TextFileInfo : public FileInfo {
     public:
         TextFileInfo ( ) = default;
         TextFileInfo ( const char * src, uint32_t len, bool own )
@@ -191,7 +194,7 @@ namespace das
     };
 
     typedef smart_ptr<class FileAccess> FileAccessPtr;
-    class DAS_API FileAccess : public ptr_ref_count {
+    class DAS_RT_API FileAccess : public ptr_ref_count {
     public:
         FileAccess() { ref_count_magic = TRACK_PTR_FILE_ACCESS; }
         virtual ~FileAccess() {}
@@ -245,7 +248,7 @@ namespace das
     struct SimFunction;
     class Context;
 
-    class DAS_API ModuleFileAccess : public FileAccess {
+    class DAS_RT_API ModuleFileAccess : public FileAccess {
     public:
         ModuleFileAccess();
         ModuleFileAccess ( const string & pak, const FileAccessPtr & access );
@@ -277,7 +280,7 @@ namespace das
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
-    struct DAS_API LineInfo {
+    struct DAS_RT_API LineInfo {
         LineInfo() = default;
         LineInfo(FileInfo * fi, int c, int l, int lc, int ll)
             : fileInfo(fi)
@@ -297,7 +300,7 @@ namespace das
 
     struct LineInfoArg : LineInfo {};
 
-    struct DAS_API TypeInfo {
+    struct DAS_RT_API TypeInfo {
         enum {
             flag_ref = 1<<0,
             flag_refType = 1<<1,
@@ -533,22 +536,22 @@ namespace das
         }
     };
 
-    DAS_API string das_to_string ( Type t );
-    DAS_API Type nameToBasicType(const string & name);
+    DAS_RT_API string das_to_string ( Type t );
+    DAS_RT_API Type nameToBasicType(const string & name);
 
-    DAS_API int getTypeBaseSize ( Type type );
-    DAS_API int getTypeBaseAlign ( Type type );
-    DAS_API int getTypeBaseSize ( TypeInfo * info );
-    DAS_API int getDimSize ( TypeInfo * info );
-    DAS_API int getTypeSize ( TypeInfo * info );
-    DAS_API int getTypeAlign ( TypeInfo * info );
-    DAS_API int getTupleFieldOffset ( TypeInfo * info, int index );
-    DAS_API int getVariantFieldOffset ( TypeInfo * info, int index );
+    DAS_RT_API int getTypeBaseSize ( Type type );
+    DAS_RT_API int getTypeBaseAlign ( Type type );
+    DAS_RT_API int getTypeBaseSize ( TypeInfo * info );
+    DAS_RT_API int getDimSize ( TypeInfo * info );
+    DAS_RT_API int getTypeSize ( TypeInfo * info );
+    DAS_RT_API int getTypeAlign ( TypeInfo * info );
+    DAS_RT_API int getTupleFieldOffset ( TypeInfo * info, int index );
+    DAS_RT_API int getVariantFieldOffset ( TypeInfo * info, int index );
 
-    DAS_API bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
-    DAS_API bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
-    DAS_API bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
-    DAS_API bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType);
+    DAS_RT_API bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
+    DAS_RT_API bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );
+    DAS_RT_API bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType );
+    DAS_RT_API bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType);
 
     enum class PrintFlags : uint32_t {
         none =                  0
@@ -567,6 +570,6 @@ namespace das
             | PrintFlags::typeQualifiers | PrintFlags::fixedFloatingPoint
     };
 
-    DAS_API string debug_type ( const TypeInfo * info );
-    DAS_API string getTypeInfoMangledName ( TypeInfo * info );
+    DAS_RT_API string debug_type ( const TypeInfo * info );
+    DAS_RT_API string getTypeInfoMangledName ( TypeInfo * info );
 }

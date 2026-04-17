@@ -492,7 +492,7 @@ namespace das
         return res;
     }
 
-    DAS_API vector<string> split ( const char * str, const char * delim ) {
+    DAS_RT_API vector<string> split ( const char * str, const char * delim ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
         vector<const char *> tokens;

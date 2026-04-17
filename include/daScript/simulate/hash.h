@@ -78,7 +78,7 @@ namespace das {
     template <> __forceinline uint64_t hash_function ( Context &, urange value ) {
         return hash_uint64(*((uint64_t *)&value));
     }
-    DAS_API uint64_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
-    DAS_API uint64_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
+    DAS_RT_API uint64_t hash_value ( Context & ctx, void * pX, TypeInfo * info );
+    DAS_RT_API uint64_t hash_value ( Context & ctx, vec4f value, TypeInfo * info );
 }
 

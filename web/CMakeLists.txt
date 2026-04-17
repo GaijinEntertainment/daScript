@@ -332,6 +332,7 @@ SET(AST_SRC
 ../src/ast/ast_typedecl.cpp
 ../src/ast/ast_match.cpp
 ../src/ast/ast_module.cpp
+../src/ast/ast_program.cpp
 ../src/ast/ast_print.cpp
 ../src/ast/ast_aot_cpp.cpp
 ../src/ast/ast_infer_type.cpp
@@ -495,9 +496,11 @@ SET(SIMULATE_SRC
 ../include/daScript/misc/crash_handler.h
 ../include/daScript/misc/network.h
 ../src/misc/network.cpp
+../src/misc/das_common.cpp
 ../src/simulate/hash.cpp
 ../src/simulate/debug_info.cpp
 ../src/simulate/runtime_string.cpp
+../src/simulate/runtime_iterator.cpp
 ../src/simulate/runtime_array.cpp
 ../src/simulate/runtime_table.cpp
 ../src/simulate/runtime_profile.cpp
@@ -533,6 +536,8 @@ SET(SIMULATE_SRC
 ../src/simulate/data_walker.cpp
 ../include/daScript/simulate/data_walker.h
 ../src/simulate/debug_print.cpp
+../src/runtime/context.cpp
+../src/runtime/jit_runtime.cpp
 ../src/simulate/json_print.cpp
 ../src/simulate/json_scan.cpp
 ../include/daScript/simulate/debug_print.h

@@ -122,7 +122,7 @@ namespace das {
         uint32_t    stackSize = 0;
     };
 
-    class DAS_API AnyHeapAllocator {
+    class DAS_RT_API AnyHeapAllocator {
     public:
         virtual ~AnyHeapAllocator() = default;
         virtual bool breakOnFree ( void *, uint32_t ) { return false; }
@@ -192,7 +192,7 @@ namespace das {
 
     typedef das_hash_set<StrHashEntry,StrHashPred,StrEqPred> das_string_set;
 
-    class DAS_API StringHeapAllocator : public AnyHeapAllocator {
+    class DAS_RT_API StringHeapAllocator : public AnyHeapAllocator {
     public:
         virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
@@ -213,7 +213,7 @@ namespace das {
 #define DAS_HEAP_DEBUGGER_BREAK_ON_FREE 0
 #endif
 
-    class DAS_API PersistentHeapAllocator final : public AnyHeapAllocator {
+    class DAS_RT_API PersistentHeapAllocator final : public AnyHeapAllocator {
 #if DAS_HEAP_DEBUGGER_BREAK_ON_FREE
         void * breakFreeAddr = nullptr;
         uint32_t breakFreeSize = 0;
@@ -269,7 +269,7 @@ namespace das {
         MemoryModel model;
     };
 
-    class DAS_API LinearHeapAllocator final : public AnyHeapAllocator {
+    class DAS_RT_API LinearHeapAllocator final : public AnyHeapAllocator {
     public:
         LinearHeapAllocator() {}
         virtual char * impl_allocate ( uint32_t size ) override {
@@ -320,7 +320,7 @@ namespace das {
         das_string_set internMap;
     };
 
-    class DAS_API PersistentStringAllocator final : public StringHeapAllocator {
+    class DAS_RT_API PersistentStringAllocator final : public StringHeapAllocator {
     public:
         PersistentStringAllocator();
         virtual char * impl_allocate ( uint32_t size ) override;
@@ -349,7 +349,7 @@ namespace das {
         MemoryModel model;
     };
 
-    class DAS_API LinearStringAllocator final : public StringHeapAllocator {
+    class DAS_RT_API LinearStringAllocator final : public StringHeapAllocator {
     public:
         LinearStringAllocator();
         virtual char * impl_allocate ( uint32_t size ) override;

@@ -14,12 +14,12 @@ namespace das {
         StringWriterTag(StringWriterTag&&) = delete;
         StringWriterTag& operator=(StringWriterTag&&) = delete;
     };
-    DAS_API extern StringWriterTag HEX;
-    DAS_API extern StringWriterTag DEC;
-    DAS_API extern StringWriterTag FIXEDFP;
-    DAS_API extern StringWriterTag SCIENTIFIC;
+    DAS_RT_API extern StringWriterTag HEX;
+    DAS_RT_API extern StringWriterTag DEC;
+    DAS_RT_API extern StringWriterTag FIXEDFP;
+    DAS_RT_API extern StringWriterTag SCIENTIFIC;
 
-    class DAS_API StringWriter {
+    class DAS_RT_API StringWriter {
     public:
         virtual ~StringWriter() {}
         virtual string str() const = 0;
@@ -56,7 +56,7 @@ namespace das {
     #define DAS_SMALL_BUFFER_SIZE   4096
     #endif
 
-    class DAS_API FixedBufferTextWriter : public StringWriter {
+    class DAS_RT_API FixedBufferTextWriter : public StringWriter {
     public:
         virtual string str() const override;
         virtual uint64_t tellp() const override;
@@ -72,7 +72,7 @@ namespace das {
     #define DAS_STRING_BUILDER_BUFFER_SIZE   256
     #endif
 
-    class DAS_API TextWriter : public StringWriter {
+    class DAS_RT_API TextWriter : public StringWriter {
     public:
         TextWriter() {}
 
@@ -104,7 +104,7 @@ namespace das {
         int32_t capacity = DAS_STRING_BUILDER_BUFFER_SIZE;
     };
 
-    class DAS_API TextPrinter : public TextWriter {
+    class DAS_RT_API TextPrinter : public TextWriter {
     public:
         TextPrinter() {}
         virtual void output() override;
@@ -144,7 +144,7 @@ namespace das {
 
     const char * getLogMarker(int level);
 
-    class DAS_API LOG : public TextWriter {
+    class DAS_RT_API LOG : public TextWriter {
     public:
         LOG ( int level = LogLevel::debug ) : logLevel(level) {}
         virtual void output() override;

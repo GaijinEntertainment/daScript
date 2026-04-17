@@ -243,7 +243,7 @@ namespace das
     void printSimNode ( TextWriter & ss, Context * context, SimNode * node, bool debugHash=false );
     class Function;
     void printSimFunction ( TextWriter & ss, Context * context, Function * fun, SimNode * node, bool debugHash=false );
-    DAS_API uint64_t getSemanticHash ( SimNode * node, Context * context );
+    DAS_RT_API uint64_t getSemanticHash ( SimNode * node, Context * context );
 
     class DebugAgent : public ptr_ref_count {
     public:
@@ -310,7 +310,7 @@ namespace das
     struct CodeOfPolicies;
     struct AnnotationArgumentList;
 
-    class DAS_API Context : public ptr_ref_count, public enable_shared_from_this<Context> {
+    class DAS_RT_API Context : public ptr_ref_count, public enable_shared_from_this<Context> {
         template <typename TT> friend struct SimNode_GetGlobalR2V;
         friend struct SimNode_GetGlobal;
         template <typename TT> friend struct SimNode_GetSharedR2V;
@@ -898,24 +898,24 @@ namespace das
         }
     };
 
-    DAS_API void tickDebugAgent ( );
-    DAS_API void collectDebugAgentState ( Context & ctx, const LineInfo & at );
-    DAS_API void onBreakpointsReset ( const char * file, int breakpointsNum );
-    DAS_API void tickSpecificDebugAgent ( const char * name );
-    DAS_API void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
-    DAS_API void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
-    DAS_API void shutdownDebugAgent();
-    DAS_API void shutdownThreadLocalDebugAgent();
-    DAS_API void deleteDebugAgent ( const char * category, LineInfoArg * at, Context * context );
-    DAS_API void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
-    DAS_API bool isInDebugAgentCreation();
-    DAS_API bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
-    DAS_API void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
-    DAS_API Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
-    DAS_API void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
-    DAS_API void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
-    DAS_API void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo * at, int, const char *)> && lmb );
-    DAS_API void uninstallCppDebugAgent ( const char * category );
+    DAS_RT_API void tickDebugAgent ( );
+    DAS_RT_API void collectDebugAgentState ( Context & ctx, const LineInfo & at );
+    DAS_RT_API void onBreakpointsReset ( const char * file, int breakpointsNum );
+    DAS_RT_API void tickSpecificDebugAgent ( const char * name );
+    DAS_RT_API void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
+    DAS_RT_API void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
+    DAS_RT_API void shutdownDebugAgent();
+    DAS_RT_API void shutdownThreadLocalDebugAgent();
+    DAS_RT_API void deleteDebugAgent ( const char * category, LineInfoArg * at, Context * context );
+    DAS_RT_API void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
+    DAS_RT_API bool isInDebugAgentCreation();
+    DAS_RT_API bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    DAS_RT_API void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line );
+    DAS_RT_API Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
+    DAS_RT_API void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
+    DAS_RT_API void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
+    DAS_RT_API void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo * at, int, const char *)> && lmb );
+    DAS_RT_API void uninstallCppDebugAgent ( const char * category );
 
     class SharedStackGuard {
     public:
@@ -940,32 +940,6 @@ namespace das
     };
 
     struct DataWalker;
-
-    struct DAS_API Iterator {
-        Iterator(LineInfo * at) : debugInfo(at) {}
-        virtual ~Iterator() {}
-        virtual bool first ( Context & context, char * value ) = 0;
-        virtual bool next  ( Context & context, char * value ) = 0;
-        virtual void close ( Context & context, char * value ) = 0;    // can't throw
-        virtual void walk ( DataWalker & ) { }
-       bool isOpen = false;
-       LineInfo * debugInfo;
-    };
-
-    struct PointerDimIterator : Iterator {
-        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz, LineInfo * at )
-            : Iterator(at), data(d), data_end(d+cnt), size(sz) {}
-        virtual bool first(Context &, char * _value) override;
-        virtual bool next(Context &, char * _value) override;
-        virtual void close(Context & context, char * _value) override;
-        char ** data;
-        char ** data_end;
-        uint32_t size;
-    };
-
-    struct Sequence {
-        mutable Iterator * iter;
-    };
 
 #if DAS_ENABLE_PROFILER
 

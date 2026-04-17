@@ -1,6 +1,7 @@
 #pragma once
 
 #include "daScript/ast/ast_typefactory.h"
+#include "daScript/simulate/runtime_iterator.h"
 #include "daScript/simulate/jit_abi.h"
 #include "daScript/misc/free_list.h"
 #include "daScript/misc/gc_node.h"
@@ -39,7 +40,7 @@ namespace das {
 
     struct AstSerializer;
 
-    struct DAS_API TypeDecl : gc_node {
+    struct DAS_RT_API TypeDecl : gc_node {
         enum {
             dimAuto = -1,
             dimConst = -2,
@@ -670,7 +671,7 @@ namespace das {
         return tt;
     }
 
-    das::TypeDeclPtr DAS_API makeHandleType(const das::ModuleLibrary & library, const char * typeName);
+    das::TypeDeclPtr DAS_RT_API makeHandleType(const das::ModuleLibrary & library, const char * typeName);
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName );
 
@@ -683,8 +684,22 @@ namespace das {
     enum class CpptSkipConst { no, yes };
     enum class CpptRedundantConst { no, yes };
     enum class ChooseSmartPtr { no, yes };
+    enum CpptUseAlias { no, yes };
 
-    string DAS_API describeCppType(const TypeDecl * type,
+    string aotSuffixNameEx ( const string & funcName, const char * suffix );
+    string das_to_cppString ( Type t );
+    string das_to_cppCTypeString ( Type t );
+    string aotModuleName ( Module * pm  );
+    string aotStructName ( Structure * st );
+    string DAS_RT_API describeCppTypeEx ( const TypeDecl *type,
+                            CpptSubstitureRef substituteRef,
+                            CpptSkipRef skipRef,
+                            CpptSkipConst skipConst,
+                            CpptRedundantConst redundantConst,
+                            CpptUseAlias useAlias,
+                            ChooseSmartPtr chooseSmartPtr);
+
+    string DAS_RT_API describeCppType(const TypeDecl * type,
                            CpptSubstitureRef substituteRef = CpptSubstitureRef::no,
                            CpptSkipRef skipRef = CpptSkipRef::no,
                            CpptSkipConst skipConst = CpptSkipConst::no,

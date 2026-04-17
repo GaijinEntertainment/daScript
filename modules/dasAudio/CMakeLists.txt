@@ -52,6 +52,8 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 
 	SETUP_AUDIO(libDasModuleAudio)
 	SETUP_AUDIO(dasModuleAudio)
+	# audio depends on rtti module => required libDaScriptDyn.
+	TARGET_LINK_LIBRARIES(dasModuleAudio PRIVATE libDaScriptDyn)
 
 	# HRTF FFT convolution — compile minfft.c directly (avoids cross-DLL static lib issues on Windows)
 	SET(DAS_MINFFT_INCLUDE ${PROJECT_SOURCE_DIR}/modules/dasMinfft/minfft)

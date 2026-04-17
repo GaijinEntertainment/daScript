@@ -581,6 +581,8 @@ namespace das {
             // libs
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
+            // jobque uses TypeInfo from rtti in channel/lockbox functions
+            addBuiltinDependency(lib, Module::require("rtti_core"), false);
             // types
             addAnnotation(new JobStatusAnnotation(lib));
             auto cha = new ChannelAnnotation(lib);

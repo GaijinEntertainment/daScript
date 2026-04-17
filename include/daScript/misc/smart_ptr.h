@@ -2,7 +2,7 @@
 
 #include <atomic>
 
-DAS_API void os_debug_break();
+DAS_RT_API void os_debug_break();
 
 namespace das {
 
@@ -338,11 +338,11 @@ namespace das {
     #define DAS_TRACK_SMART_PTR_ID         if ( ref_count_id==ref_count_track ) os_debug_break();
     #define DAS_TRACK_SMART_PTR_ID_DTOR    if ( ref_count_id==ref_count_track_destructor ) os_debug_break();
 
-    DAS_API extern atomic<uint64_t> g_smart_ptr_total;
+    DAS_RT_API extern atomic<uint64_t> g_smart_ptr_total;
     #define DAS_SMART_PTR_NEW     g_smart_ptr_total++;
     #define DAS_SMART_PTR_DELETE  g_smart_ptr_total--;
 
-    class DAS_API ptr_ref_count {
+    class DAS_RT_API ptr_ref_count {
     public:
         uint64_t                    ref_count_id;
         ptr_ref_count *             ref_count_next = nullptr;

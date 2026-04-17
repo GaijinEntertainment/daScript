@@ -841,6 +841,20 @@ namespace das
         }
     }
 
+
+    static string getModuleName ( const string & nameWithDots ) {
+        auto idx = nameWithDots.find_last_of("./");
+        if ( idx==string::npos ) return nameWithDots;
+        return nameWithDots.substr(idx+1);
+    }
+
+    static string getModuleFileName ( const string & nameWithDots ) {
+        auto fname = nameWithDots;
+        // TODO: should we?
+        replace ( fname.begin(), fname.end(), '.', '/' );
+        return fname;
+    }
+
     ModuleInfo FileAccess::getModuleInfo ( const string & req, const string & from ) const {
         auto mod = getModuleName(req);
         string modFName = getModuleFileName(req);

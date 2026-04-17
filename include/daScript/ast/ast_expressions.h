@@ -6,7 +6,7 @@ namespace das
 {
     struct ExprClone;
 
-    struct DAS_API ExprReader : Expression {
+    struct DAS_RT_API ExprReader : Expression {
         ExprReader () { __rtti = "ExprReader"; }
         ExprReader ( const LineInfo & a, ReaderMacro * rm )
             : Expression(a), macro(rm) { __rtti = "ExprReader"; }
@@ -18,7 +18,7 @@ namespace das
         string sequence;
     };
 
-    struct DAS_API ExprLabel : Expression {
+    struct DAS_RT_API ExprLabel : Expression {
         ExprLabel () { __rtti = "ExprLabel"; };
         ExprLabel ( const LineInfo & a, int32_t s, const string & cm = string() )
             : Expression(a), label(s), comment(cm) { __rtti = "ExprLabel"; }
@@ -31,7 +31,7 @@ namespace das
         string   comment;
     };
 
-    struct DAS_API ExprGoto : Expression {
+    struct DAS_RT_API ExprGoto : Expression {
         ExprGoto () { __rtti = "ExprGoto"; };
         ExprGoto ( const LineInfo & a, int32_t s )
             : Expression(a), label(s) { __rtti = "ExprGoto"; }
@@ -47,7 +47,7 @@ namespace das
         ExpressionPtr   subexpr = nullptr;
     };
 
-    struct DAS_API ExprRef2Value : Expression {
+    struct DAS_RT_API ExprRef2Value : Expression {
         ExprRef2Value() { __rtti = "ExprRef2Value"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -58,7 +58,7 @@ namespace das
         ExpressionPtr   subexpr = nullptr;
     };
 
-    struct DAS_API ExprRef2Ptr : Expression {
+    struct DAS_RT_API ExprRef2Ptr : Expression {
         ExprRef2Ptr () { __rtti = "ExprRef2Ptr"; };
         ExprRef2Ptr ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprRef2Ptr"; }
@@ -71,7 +71,7 @@ namespace das
         ExpressionPtr   subexpr = nullptr;
     };
 
-    struct DAS_API ExprPtr2Ref : Expression {
+    struct DAS_RT_API ExprPtr2Ref : Expression {
         ExprPtr2Ref () { __rtti = "ExprPtr2Ref"; };
         ExprPtr2Ref ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprPtr2Ref"; }
@@ -85,7 +85,7 @@ namespace das
         bool assumeNoAlias = false;
     };
 
-    struct DAS_API ExprAddr : Expression {
+    struct DAS_RT_API ExprAddr : Expression {
         ExprAddr ()  { __rtti = "ExprAddr"; };
         ExprAddr ( const LineInfo & a, const string & n )
             : Expression(a), target(n) { __rtti = "ExprAddr"; }
@@ -99,7 +99,7 @@ namespace das
         Function * func = nullptr;
     };
 
-    struct DAS_API ExprNullCoalescing : ExprPtr2Ref {
+    struct DAS_RT_API ExprNullCoalescing : ExprPtr2Ref {
         ExprNullCoalescing () { __rtti = "ExprNullCoalescing"; };
         ExprNullCoalescing ( const LineInfo & a, ExpressionPtr s, ExpressionPtr defVal )
             : ExprPtr2Ref(a,s), defaultValue(defVal) { __rtti = "ExprNullCoalescing"; }
@@ -112,7 +112,7 @@ namespace das
         ExpressionPtr   defaultValue = nullptr;
     };
 
-    struct DAS_API ExprDelete : Expression {
+    struct DAS_RT_API ExprDelete : Expression {
         ExprDelete() { __rtti = "ExprDelete"; }
         ExprDelete ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprDelete"; }
@@ -125,7 +125,7 @@ namespace das
         bool native = false;
     };
 
-    struct DAS_API ExprAt : Expression {
+    struct DAS_RT_API ExprAt : Expression {
         ExprAt() { __rtti = "ExprAt"; };
         ExprAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i, bool no_promo = false )
             : Expression(a), subexpr(s), index(i) { __rtti = "ExprAt"; no_promotion = no_promo; }
@@ -149,7 +149,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprSafeAt : ExprAt {
+    struct DAS_RT_API ExprSafeAt : ExprAt {
         ExprSafeAt() { __rtti = "ExprSafeAt"; };
         ExprSafeAt ( const LineInfo & a, ExpressionPtr s, ExpressionPtr i, bool no_promo=false )
             : ExprAt(a,s,i,no_promo) { __rtti = "ExprSafeAt"; }
@@ -162,7 +162,7 @@ namespace das
     };
 
 
-    struct DAS_API ExprBlock : Expression {
+    struct DAS_RT_API ExprBlock : Expression {
         ExprBlock() { __rtti = "ExprBlock"; }
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
         virtual uint32_t getEvalFlags() const override;
@@ -218,7 +218,7 @@ namespace das
 
     struct ExprOp2;
 
-    struct DAS_API ExprVar : Expression {
+    struct DAS_RT_API ExprVar : Expression {
         ExprVar () { __rtti = "ExprVar"; };
         ExprVar ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprVar"; }
@@ -247,7 +247,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprTag : Expression {
+    struct DAS_RT_API ExprTag : Expression {
         ExprTag () { __rtti = "ExprTag"; }
         ExprTag ( const LineInfo & a, ExpressionPtr se, const string & n )
             : Expression(a), subexpr(se), name(n) { __rtti = "ExprTag"; }
@@ -264,7 +264,7 @@ namespace das
 
     struct ExprClone;
 
-    struct DAS_API ExprField : Expression {
+    struct DAS_RT_API ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
         ExprField ( const LineInfo & a, ExpressionPtr val, const string & n, bool no_promo=false )
             : Expression(a), value(val), name(n), atField(a) { __rtti = "ExprField"; no_promotion = no_promo; }
@@ -302,7 +302,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprIsVariant : ExprField {
+    struct DAS_RT_API ExprIsVariant : ExprField {
         ExprIsVariant () { __rtti = "ExprIsVariant"; };
         ExprIsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprIsVariant"; }
@@ -313,7 +313,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprAsVariant : ExprField {
+    struct DAS_RT_API ExprAsVariant : ExprField {
         ExprAsVariant () { __rtti = "ExprAsVariant"; };
         ExprAsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprAsVariant"; }
@@ -324,7 +324,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprSafeAsVariant : ExprField {
+    struct DAS_RT_API ExprSafeAsVariant : ExprField {
         ExprSafeAsVariant () { __rtti = "ExprSafeAsVariant"; };
         ExprSafeAsVariant ( const LineInfo & a, ExpressionPtr val, const string & n )
             : ExprField(a,val,n) { __rtti = "ExprSafeAsVariant"; }
@@ -337,7 +337,7 @@ namespace das
         bool skipQQ = false;
     };
 
-    struct DAS_API ExprSwizzle : Expression {
+    struct DAS_RT_API ExprSwizzle : Expression {
         ExprSwizzle () { __rtti = "ExprSwizzle"; };
         ExprSwizzle ( const LineInfo & a, ExpressionPtr val, const string & n )
             : Expression(a), value(val), mask(n) { __rtti = "ExprSwizzle"; }
@@ -359,7 +359,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprSafeField : ExprField {
+    struct DAS_RT_API ExprSafeField : ExprField {
         ExprSafeField () { __rtti = "ExprSafeField"; };
         ExprSafeField ( const LineInfo & a, ExpressionPtr val, const string & n, bool no_promo=false )
             : ExprField(a,val,n,no_promo) { __rtti = "ExprSafeField"; }
@@ -374,7 +374,7 @@ namespace das
         bool skipQQ = false;
     };
 
-    struct DAS_API ExprLooksLikeCall : Expression {
+    struct DAS_RT_API ExprLooksLikeCall : Expression {
         ExprLooksLikeCall () { __rtti = "ExprLooksLikeCall"; };
         ExprLooksLikeCall ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprLooksLikeCall"; }
@@ -392,7 +392,7 @@ namespace das
         LineInfo                atEnclosure;
     };
 
-    struct DAS_API ExprCallMacro : ExprLooksLikeCall {
+    struct DAS_RT_API ExprCallMacro : ExprLooksLikeCall {
         ExprCallMacro () { __rtti = "ExprCallMacro"; name="__call_macro__"; };
         ExprCallMacro ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallMacro"; }
@@ -404,7 +404,7 @@ namespace das
         CallMacro * macro = nullptr;
     };
 
-    struct DAS_API ExprCallFunc : ExprLooksLikeCall {
+    struct DAS_RT_API ExprCallFunc : ExprLooksLikeCall {
         ExprCallFunc () { __rtti = "ExprCallFunc"; };
         ExprCallFunc ( const LineInfo & a, const string & n )
             : ExprLooksLikeCall(a,n) { __rtti = "ExprCallFunc"; }
@@ -422,7 +422,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprOp : ExprCallFunc {
+    struct DAS_RT_API ExprOp : ExprCallFunc {
         ExprOp () { __rtti = "ExprOp"; };
         ExprOp ( const LineInfo & a, const string & o )
             : ExprCallFunc(a,o), op(o) { __rtti = "ExprOp"; }
@@ -433,7 +433,7 @@ namespace das
     };
 
     // unary    !subexpr
-    struct DAS_API ExprOp1 : ExprOp {
+    struct DAS_RT_API ExprOp1 : ExprOp {
         ExprOp1 () { __rtti = "ExprOp1"; };
         ExprOp1 ( const LineInfo & a, const string & o, ExpressionPtr s )
             : ExprOp(a,o), subexpr(s) { __rtti = "ExprOp1"; }
@@ -450,7 +450,7 @@ namespace das
     };
 
     // binary   left < right
-    struct DAS_API ExprOp2 : ExprOp {
+    struct DAS_RT_API ExprOp2 : ExprOp {
         ExprOp2 () { __rtti = "ExprOp2"; };
         ExprOp2 ( const LineInfo & a, const string & o, ExpressionPtr l, ExpressionPtr r )
             : ExprOp(a,o), left(l), right(r) { __rtti = "ExprOp2"; }
@@ -467,7 +467,7 @@ namespace das
     };
 
     // this copies one object to the other
-    struct DAS_API ExprCopy : ExprOp2 {
+    struct DAS_RT_API ExprCopy : ExprOp2 {
         ExprCopy () { __rtti = "ExprCopy"; };
         ExprCopy ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, "=", l, r) { __rtti = "ExprCopy"; };
@@ -487,7 +487,7 @@ namespace das
     };
 
     // this moves one object to the other
-    struct DAS_API ExprMove : ExprOp2 {
+    struct DAS_RT_API ExprMove : ExprOp2 {
         ExprMove () { __rtti = "ExprMove"; };
         ExprMove ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, "<-", l, r) { __rtti = "ExprMove"; };
@@ -506,7 +506,7 @@ namespace das
     };
 
     // this clones one object to the other
-    struct DAS_API ExprClone : ExprOp2 {
+    struct DAS_RT_API ExprClone : ExprOp2 {
         ExprClone () { __rtti = "ExprClone"; };
         ExprClone ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, ":=", l, r) { __rtti = "ExprClone"; };
@@ -519,7 +519,7 @@ namespace das
 
     // this only exists during parsing, and can't be
     // and this is why it does not have CLONE
-    struct DAS_API ExprSequence : ExprOp2 {
+    struct DAS_RT_API ExprSequence : ExprOp2 {
         ExprSequence ( const LineInfo & a, ExpressionPtr l, ExpressionPtr r )
             : ExprOp2(a, ",", l, r) { __rtti = "ExprSequence"; }
         virtual bool rtti_isSequence() const override { return true; }
@@ -527,7 +527,7 @@ namespace das
     };
 
     // trinary  subexpr ? left : right
-    struct DAS_API ExprOp3 : ExprOp {
+    struct DAS_RT_API ExprOp3 : ExprOp {
         ExprOp3 () { __rtti = "ExprOp3"; };
         ExprOp3 ( const LineInfo & a, const string & o, ExpressionPtr s,
                  ExpressionPtr l, ExpressionPtr r )
@@ -544,7 +544,7 @@ namespace das
         ExpressionPtr   subexpr = nullptr, left = nullptr, right = nullptr;
     };
 
-    struct DAS_API ExprTryCatch : Expression {
+    struct DAS_RT_API ExprTryCatch : Expression {
         ExprTryCatch() { __rtti = "ExprTryCatch"; };
         ExprTryCatch ( const LineInfo & a, ExpressionPtr t, ExpressionPtr c )
             : Expression(a), try_block(t), catch_block(c) { __rtti = "ExprTryCatch"; }
@@ -556,7 +556,7 @@ namespace das
         ExpressionPtr   try_block = nullptr, catch_block = nullptr;
     };
 
-    struct DAS_API ExprReturn : Expression {
+    struct DAS_RT_API ExprReturn : Expression {
         ExprReturn() { __rtti = "ExprReturn"; };
         ExprReturn ( const LineInfo & a, ExpressionPtr s )
             : Expression(a), subexpr(s) { __rtti = "ExprReturn"; }
@@ -591,7 +591,7 @@ namespace das
         TypeDeclPtr             returnType = nullptr;
     };
 
-    struct DAS_API ExprBreak : Expression {
+    struct DAS_RT_API ExprBreak : Expression {
         ExprBreak() { __rtti = "ExprBreak";} ;
         ExprBreak ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprBreak"; }
@@ -602,7 +602,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprContinue : Expression {
+    struct DAS_RT_API ExprContinue : Expression {
         ExprContinue() { __rtti = "ExprContinue"; };
         ExprContinue ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprContinue"; }
@@ -613,7 +613,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
+    struct DAS_RT_API ExprFakeContext : ExprConstT<void *, ExprFakeContext> {
         ExprFakeContext(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         ExprFakeContext(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeContext) { __rtti = "ExprFakeContext"; }
         virtual bool rtti_isFakeContext() const override { return true; }
@@ -621,7 +621,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {
+    struct DAS_RT_API ExprFakeLineInfo : ExprConstT<void *, ExprFakeLineInfo> {
         ExprFakeLineInfo(void * ptr = nullptr) : ExprConstT(ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
         ExprFakeLineInfo(const LineInfo & a, void * ptr = nullptr) : ExprConstT(a, ptr, Type::fakeLineInfo) { __rtti = "ExprFakeLineInfo"; }
         virtual bool rtti_isFakeLineInfo() const override { return true; }
@@ -629,7 +629,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
+    struct DAS_RT_API ExprConstPtr : ExprConstT<void *,ExprConstPtr> {
         ExprConstPtr(void * ptr = nullptr)
             : ExprConstT(ptr,Type::tPointer) { __rtti = "ExprConstPtr"; }
         ExprConstPtr(const LineInfo & a, void * ptr = nullptr)
@@ -643,7 +643,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
+    struct DAS_RT_API ExprConstInt : ExprConstT<int32_t,ExprConstInt> {
         ExprConstInt(int32_t i = 0)
             : ExprConstT(i,Type::tInt) { __rtti = "ExprConstInt";}
         ExprConstInt(const LineInfo & a, int32_t i = 0)
@@ -651,7 +651,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstEnumeration : ExprConst {
+    struct DAS_RT_API ExprConstEnumeration : ExprConst {
         ExprConstEnumeration(int val, const TypeDeclPtr & td)
             : ExprConst(Type::tEnumeration) {
             __rtti = "ExprConstEnumeration";
@@ -676,7 +676,7 @@ namespace das
         string          text;
     };
 
-    struct DAS_API ExprConstInt8 : ExprConstT<int8_t,ExprConstInt8> {
+    struct DAS_RT_API ExprConstInt8 : ExprConstT<int8_t,ExprConstInt8> {
         ExprConstInt8(int8_t i = 0)
             : ExprConstT(i,Type::tInt8) { __rtti = "ExprConstInt8"; }
         ExprConstInt8(const LineInfo & a, int8_t i = 0)
@@ -684,7 +684,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
+    struct DAS_RT_API ExprConstInt16 : ExprConstT<int16_t,ExprConstInt16> {
         ExprConstInt16(int16_t i = 0)
             : ExprConstT(i,Type::tInt16) { __rtti = "ExprConstInt16"; }
         ExprConstInt16(const LineInfo & a, int16_t i = 0)
@@ -692,7 +692,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
+    struct DAS_RT_API ExprConstInt64 : ExprConstT<int64_t,ExprConstInt64> {
         ExprConstInt64(int64_t i = 0)
             : ExprConstT(i,Type::tInt64) { __rtti = "ExprConstInt64"; }
         ExprConstInt64(const LineInfo & a, int64_t i = 0)
@@ -700,7 +700,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstBitfield : ExprConstT<uint64_t,ExprConstBitfield> {
+    struct DAS_RT_API ExprConstBitfield : ExprConstT<uint64_t,ExprConstBitfield> {
         ExprConstBitfield(uint64_t i = 0)
             : ExprConstT(i,Type::tBitfield) { __rtti = "ExprConstBitfield"; }
         ExprConstBitfield(const LineInfo & a, uint64_t i = 0)
@@ -712,7 +712,7 @@ namespace das
         TypeDeclPtr bitfieldType = nullptr;
     };
 
-    struct DAS_API ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
+    struct DAS_RT_API ExprConstInt2 : ExprConstT<int2,ExprConstInt2> {
         ExprConstInt2(int2 i = int2())
             : ExprConstT(i,Type::tInt2) { __rtti = "ExprConstInt2"; }
         ExprConstInt2(const LineInfo & a, int2 i)
@@ -720,7 +720,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstRange : ExprConstT<range,ExprConstRange> {
+    struct DAS_RT_API ExprConstRange : ExprConstT<range,ExprConstRange> {
         ExprConstRange(range i = range())
             : ExprConstT(i,Type::tRange) { __rtti = "ExprConstRange"; }
         ExprConstRange(const LineInfo & a, range i)
@@ -728,7 +728,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstRange64 : ExprConstT<range64,ExprConstRange64> {
+    struct DAS_RT_API ExprConstRange64 : ExprConstT<range64,ExprConstRange64> {
         ExprConstRange64(range64 i = range64())
             : ExprConstT(i,Type::tRange64) { __rtti = "ExprConstRange64"; }
         ExprConstRange64(const LineInfo & a, range64 i)
@@ -737,7 +737,7 @@ namespace das
     };
 
 
-    struct DAS_API ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
+    struct DAS_RT_API ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
         ExprConstInt3(int3 i = int3())
             : ExprConstT(i,Type::tInt3) { __rtti = "ExprConstInt3"; }
         ExprConstInt3(const LineInfo & a, int3 i)
@@ -745,7 +745,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
+    struct DAS_RT_API ExprConstInt4 : ExprConstT<int4,ExprConstInt4> {
         ExprConstInt4(int4 i = int4())
             : ExprConstT(i,Type::tInt4) { __rtti = "ExprConstInt4"; }
         ExprConstInt4(const LineInfo & a, int4 i)
@@ -753,7 +753,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
+    struct DAS_RT_API ExprConstUInt8 : ExprConstT<uint8_t,ExprConstUInt8> {
         ExprConstUInt8(uint8_t i = 0)
             : ExprConstT(i,Type::tUInt8) { __rtti = "ExprConstUInt8"; }
         ExprConstUInt8(const LineInfo & a, uint8_t i = 0)
@@ -761,7 +761,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
+    struct DAS_RT_API ExprConstUInt16 : ExprConstT<uint16_t,ExprConstUInt16> {
         ExprConstUInt16(uint16_t i = 0)
             : ExprConstT(i,Type::tUInt16) { __rtti = "ExprConstUInt16"; }
         ExprConstUInt16(const LineInfo & a, uint16_t i = 0)
@@ -769,7 +769,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
+    struct DAS_RT_API ExprConstUInt64 : ExprConstT<uint64_t,ExprConstUInt64> {
         ExprConstUInt64(uint64_t i = 0)
             : ExprConstT(i,Type::tUInt64) { __rtti = "ExprConstUInt64"; }
         ExprConstUInt64(const LineInfo & a, uint64_t i = 0)
@@ -777,7 +777,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
+    struct DAS_RT_API ExprConstUInt : ExprConstT<uint32_t,ExprConstUInt> {
         ExprConstUInt(uint32_t i = 0)
             : ExprConstT(i,Type::tUInt) { __rtti = "ExprConstUInt"; }
         ExprConstUInt(const LineInfo & a, uint32_t i = 0)
@@ -788,7 +788,7 @@ namespace das
     int64_t getConstExprIntOrUInt ( ExpressionPtr expr );
     pair<int64_t,bool> tryGetConstExprIntOrUInt ( ExpressionPtr expr );
 
-    struct DAS_API ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
+    struct DAS_RT_API ExprConstUInt2 : ExprConstT<uint2,ExprConstUInt2> {
         ExprConstUInt2(uint2 i = uint2())
             : ExprConstT(i,Type::tUInt2) { __rtti = "ExprConstUInt2"; }
         ExprConstUInt2(const LineInfo & a, uint2 i)
@@ -796,7 +796,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstURange : ExprConstT<urange,ExprConstURange> {
+    struct DAS_RT_API ExprConstURange : ExprConstT<urange,ExprConstURange> {
         ExprConstURange(urange i = urange())
             : ExprConstT(i,Type::tURange) { __rtti = "ExprConstURange"; }
         ExprConstURange(const LineInfo & a, urange i)
@@ -804,7 +804,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstURange64 : ExprConstT<urange64,ExprConstURange64> {
+    struct DAS_RT_API ExprConstURange64 : ExprConstT<urange64,ExprConstURange64> {
         ExprConstURange64(urange64 i = urange64())
             : ExprConstT(i,Type::tURange64) { __rtti = "ExprConstURange64"; }
         ExprConstURange64(const LineInfo & a, urange64 i)
@@ -812,7 +812,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
+    struct DAS_RT_API ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {
         ExprConstUInt3(uint3 i = uint3())
             : ExprConstT(i,Type::tUInt3) { __rtti = "ExprConstUInt3"; }
         ExprConstUInt3(const LineInfo & a, uint3 i)
@@ -820,7 +820,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
+    struct DAS_RT_API ExprConstUInt4 : ExprConstT<uint4,ExprConstUInt4> {
         ExprConstUInt4(uint4 i = uint4())
             : ExprConstT(i,Type::tUInt4) { __rtti = "ExprConstUInt4"; }
         ExprConstUInt4(const LineInfo & a, uint4 i)
@@ -828,7 +828,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstBool : ExprConstT<bool,ExprConstBool> {
+    struct DAS_RT_API ExprConstBool : ExprConstT<bool,ExprConstBool> {
         ExprConstBool(bool i = false)
             : ExprConstT(i,Type::tBool) { __rtti = "ExprConstBool"; }
         ExprConstBool(const LineInfo & a, bool i = false)
@@ -836,7 +836,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstFloat : ExprConstT<float,ExprConstFloat> {
+    struct DAS_RT_API ExprConstFloat : ExprConstT<float,ExprConstFloat> {
         ExprConstFloat(float i = 0.0f)
             : ExprConstT(i,Type::tFloat) { __rtti = "ExprConstFloat"; }
         ExprConstFloat(int i)
@@ -848,7 +848,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstDouble : ExprConstT<double,ExprConstDouble> {
+    struct DAS_RT_API ExprConstDouble : ExprConstT<double,ExprConstDouble> {
         ExprConstDouble(double i = 0.0)
             : ExprConstT(i,Type::tDouble) { __rtti = "ExprConstDouble"; }
         ExprConstDouble(const LineInfo & a, double i = 0.0)
@@ -856,7 +856,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
+    struct DAS_RT_API ExprConstFloat2 : ExprConstT<float2,ExprConstFloat2> {
         ExprConstFloat2(float2 i = float2())
             : ExprConstT(i,Type::tFloat2) { __rtti = "ExprConstFloat2"; }
         ExprConstFloat2(const LineInfo & a, float2 i)
@@ -864,7 +864,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
+    struct DAS_RT_API ExprConstFloat3 : ExprConstT<float3,ExprConstFloat3> {
         ExprConstFloat3(float3 i = float3())
             : ExprConstT(i,Type::tFloat3) { __rtti = "ExprConstFloat3"; }
         ExprConstFloat3(const LineInfo & a, float3 i)
@@ -872,7 +872,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
+    struct DAS_RT_API ExprConstFloat4 : ExprConstT<float4,ExprConstFloat4> {
         ExprConstFloat4(float4 i = float4())
             : ExprConstT(i,Type::tFloat4) { __rtti = "ExprConstFloat4"; }
         ExprConstFloat4(const LineInfo & a, float4 i)
@@ -880,7 +880,7 @@ namespace das
         auto getValue() const { return ExprConstT::getValue(); };
     };
 
-    struct DAS_API ExprConstString : ExprConst {
+    struct DAS_RT_API ExprConstString : ExprConst {
         ExprConstString(const string & str = string())
             : ExprConst(Type::tString), text(str) { __rtti = "ExprConstString"; }
         ExprConstString(const LineInfo & a, const string & str = string())
@@ -894,7 +894,7 @@ namespace das
         string  text;
     };
 
-    struct DAS_API ExprStringBuilder : Expression {
+    struct DAS_RT_API ExprStringBuilder : Expression {
         ExprStringBuilder() { __rtti = "ExprStringBuilder";  };
         ExprStringBuilder(const LineInfo & a)
             : Expression(a) { __rtti = "ExprStringBuilder"; }
@@ -912,7 +912,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprLet : Expression {
+    struct DAS_RT_API ExprLet : Expression {
         ExprLet() { __rtti = "ExprLet"; }
         Variable * find ( const string & name ) const;
         virtual ExpressionPtr clone( ExpressionPtr expr = nullptr ) const override;
@@ -934,7 +934,7 @@ namespace das
     };
 
     // for a,b in foo,bar where a>b ...
-    struct DAS_API ExprFor : Expression {
+    struct DAS_RT_API ExprFor : Expression {
         ExprFor () { __rtti = "ExprFor"; };
         ExprFor ( const LineInfo & a )
             : Expression(a) { __rtti = "ExprFor"; }
@@ -958,7 +958,7 @@ namespace das
         bool                    canShadow = false;                  // if enabled, local variables can shadow
     };
 
-    struct DAS_API ExprUnsafe : Expression {
+    struct DAS_RT_API ExprUnsafe : Expression {
         ExprUnsafe() { __rtti = "ExprUnsafe"; };
         ExprUnsafe(const LineInfo & a)
             : Expression(a) { __rtti = "ExprUnsafe"; }
@@ -971,7 +971,7 @@ namespace das
         ExpressionPtr   body = nullptr;
     };
 
-    struct DAS_API ExprWhile : Expression {
+    struct DAS_RT_API ExprWhile : Expression {
         ExprWhile() { __rtti = "ExprWhile"; };
         ExprWhile(const LineInfo & a)
             : Expression(a) { __rtti = "ExprWhile"; }
@@ -984,7 +984,7 @@ namespace das
         ExpressionPtr   cond = nullptr, body = nullptr;
     };
 
-    struct DAS_API ExprWith : Expression {
+    struct DAS_RT_API ExprWith : Expression {
         ExprWith() { __rtti = "ExprWith"; };
         ExprWith(const LineInfo & a)
             : Expression(a) { __rtti = "ExprWith"; }
@@ -996,7 +996,7 @@ namespace das
         ExpressionPtr   with = nullptr, body = nullptr;
     };
 
-    struct DAS_API ExprAssume : Expression {
+    struct DAS_RT_API ExprAssume : Expression {
         ExprAssume() { __rtti = "ExprAssume"; };
         ExprAssume(const LineInfo & a, const string & al, ExpressionPtr se )
             : Expression(a), alias(al), subexpr(se) { __rtti = "ExprAssume"; }
@@ -1035,7 +1035,7 @@ namespace das
         CaptureEntry( const string n, CaptureMode m ) : name(n), mode(m) {}
     };
 
-    struct DAS_API ExprMakeBlock : Expression {
+    struct DAS_RT_API ExprMakeBlock : Expression {
         ExprMakeBlock () { __rtti = "ExprMakeBlock"; };
         ExprMakeBlock ( const LineInfo & a, ExpressionPtr b, bool isl = false, bool islf = false )
             : Expression(a), block(b) {
@@ -1066,7 +1066,7 @@ namespace das
         string aotFunctorName;
     };
 
-    struct DAS_API ExprMakeGenerator : ExprLooksLikeCall {
+    struct DAS_RT_API ExprMakeGenerator : ExprLooksLikeCall {
         ExprMakeGenerator () { __rtti = "ExprMakeGenerator"; };
         ExprMakeGenerator ( const LineInfo & a, ExpressionPtr b = nullptr );
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1078,7 +1078,7 @@ namespace das
         LineInfo captureAt;
     };
 
-    struct DAS_API ExprYield : Expression {
+    struct DAS_RT_API ExprYield : Expression {
         ExprYield () { __rtti = "ExprYield"; };
         ExprYield ( const LineInfo & a, ExpressionPtr val );
         virtual ExpressionPtr visit(Visitor & vis) override;
@@ -1095,7 +1095,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprInvoke : ExprLikeCall<ExprInvoke> {
+    struct DAS_RT_API ExprInvoke : ExprLikeCall<ExprInvoke> {
         ExprInvoke () { __rtti = "ExprInvoke"; name = "invoke"; };
         ExprInvoke ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprInvoke>(a,name) { __rtti = "ExprInvoke"; }
@@ -1111,7 +1111,7 @@ namespace das
         bool        cmresAlias = false;
     };
 
-    struct DAS_API ExprAssert : ExprLikeCall<ExprAssert> {
+    struct DAS_RT_API ExprAssert : ExprLikeCall<ExprAssert> {
         ExprAssert ( ) { __rtti = "ExprAssert"; name="assert"; };
         ExprAssert ( const LineInfo & a, const string & name, bool isV )
             : ExprLikeCall<ExprAssert>(a,name) { isVerify = isV; __rtti = "ExprAssert"; }
@@ -1121,7 +1121,7 @@ namespace das
         bool isVerify = false;
     };
 
-    struct DAS_API ExprQuote : ExprLikeCall<ExprQuote> {
+    struct DAS_RT_API ExprQuote : ExprLikeCall<ExprQuote> {
         ExprQuote ( ) { __rtti = "ExprQuote"; name="quote"; };
         ExprQuote ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprQuote>(a,name) { __rtti = "ExprQuote"; }
@@ -1131,7 +1131,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
+    struct DAS_RT_API ExprStaticAssert : ExprLikeCall<ExprStaticAssert> {
         ExprStaticAssert () { __rtti = "ExprStaticAssert"; name="static_assert"; };
         ExprStaticAssert ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprStaticAssert>(a,name) { __rtti = "ExprStaticAssert"; }
@@ -1139,7 +1139,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprDebug : ExprLikeCall<ExprDebug> {
+    struct DAS_RT_API ExprDebug : ExprLikeCall<ExprDebug> {
         ExprDebug () { __rtti = "ExprDebug"; name="debug"; };
         ExprDebug ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprDebug>(a, name) { __rtti = "ExprDebug"; }
@@ -1147,7 +1147,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprMemZero : ExprLikeCall<ExprMemZero> {
+    struct DAS_RT_API ExprMemZero : ExprLikeCall<ExprMemZero> {
         ExprMemZero () { __rtti = "ExprMemZero"; name="memzero"; };
         ExprMemZero ( const LineInfo & a, const string & name )
             : ExprLikeCall<ExprMemZero>(a, name) { __rtti = "ExprMemZero"; }
@@ -1185,7 +1185,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprErase : ExprLikeCall<ExprErase> {
+    struct DAS_RT_API ExprErase : ExprLikeCall<ExprErase> {
         ExprErase() { __rtti = "ExprErase"; name="erase"; };
         ExprErase ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprErase>(a, "erase") { __rtti = "ExprErase"; }
@@ -1193,7 +1193,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprFind : ExprLikeCall<ExprFind> {
+    struct DAS_RT_API ExprFind : ExprLikeCall<ExprFind> {
         ExprFind() { __rtti = "ExprFind"; name="find"; };
         ExprFind ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprFind>(a, "find") { __rtti = "ExprFind"; }
@@ -1201,7 +1201,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprKeyExists : ExprLikeCall<ExprKeyExists> {
+    struct DAS_RT_API ExprKeyExists : ExprLikeCall<ExprKeyExists> {
         ExprKeyExists() { __rtti = "ExprKeyExists"; name="key_exists"; };
         ExprKeyExists ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprKeyExists>(a, "key_exists") { __rtti = "ExprKeyExists"; }
@@ -1209,7 +1209,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprSetInsert : ExprLikeCall<ExprSetInsert> {
+    struct DAS_RT_API ExprSetInsert : ExprLikeCall<ExprSetInsert> {
         ExprSetInsert() { __rtti = "ExprSetInsert"; name="insert"; };
         ExprSetInsert ( const LineInfo & a, const string & )
             : ExprLikeCall<ExprSetInsert>(a, "insert") { __rtti = "ExprSetInsert"; }
@@ -1217,7 +1217,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
     };
 
-    struct DAS_API ExprTypeInfo : Expression {
+    struct DAS_RT_API ExprTypeInfo : Expression {
         ExprTypeInfo () { __rtti = "ExprTypeInfo"; }
         ExprTypeInfo ( const LineInfo & a, const string & tr, ExpressionPtr s,
                       const string & stt="", const string & ett="" )
@@ -1237,7 +1237,7 @@ namespace das
         TypeInfoMacro *     macro = nullptr;
     };
 
-    struct DAS_API ExprIs : Expression {
+    struct DAS_RT_API ExprIs : Expression {
         ExprIs () { __rtti = "ExprIs"; };
         ExprIs ( const LineInfo & a, ExpressionPtr s, const TypeDeclPtr & t )
             : Expression(a), subexpr(s), typeexpr(t) { __rtti = "ExprIs"; }
@@ -1249,7 +1249,7 @@ namespace das
         TypeDeclPtr     typeexpr = nullptr;
     };
 
-    struct DAS_API ExprAscend : Expression {
+    struct DAS_RT_API ExprAscend : Expression {
         ExprAscend() { __rtti = "ExprAscend";};
         ExprAscend( const LineInfo & a, ExpressionPtr se, const TypeDeclPtr & as = nullptr )
             : Expression(a), subexpr(se), ascType(as) { __rtti = "ExprAscend"; }
@@ -1270,7 +1270,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprCast : Expression {
+    struct DAS_RT_API ExprCast : Expression {
         ExprCast() { __rtti = "ExprCast"; };
         ExprCast( const LineInfo & a, ExpressionPtr se, const TypeDeclPtr & ct )
             : Expression(a), subexpr(se), castType(ct) { __rtti = "ExprCast"; }
@@ -1290,7 +1290,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprNew : ExprCallFunc {
+    struct DAS_RT_API ExprNew : ExprCallFunc {
         ExprNew() { __rtti = "ExprNew"; };
         ExprNew ( const LineInfo & a, const TypeDeclPtr & t, bool ini )
             : ExprCallFunc(a,"new"), typeexpr(t), initializer(ini) { __rtti = "ExprNew"; }
@@ -1302,7 +1302,7 @@ namespace das
         bool            initializer = false;
     };
 
-    struct DAS_API ExprCall : ExprCallFunc {
+    struct DAS_RT_API ExprCall : ExprCallFunc {
         ExprCall () { __rtti = "ExprCall"; };
         ExprCall ( const LineInfo & a, const string & n )
             : ExprCallFunc(a,n) { __rtti = "ExprCall"; }
@@ -1321,7 +1321,7 @@ namespace das
         }
     };
 
-    struct DAS_API ExprIfThenElse : Expression {
+    struct DAS_RT_API ExprIfThenElse : Expression {
         ExprIfThenElse () { __rtti = "ExprIfThenElse"; };
         ExprIfThenElse ( const LineInfo & a, ExpressionPtr c,
                         ExpressionPtr ift, ExpressionPtr iff )
@@ -1377,7 +1377,7 @@ namespace das
     };
     typedef MakeStruct *      MakeStructPtr;
 
-    struct DAS_API ExprNamedCall : Expression {
+    struct DAS_RT_API ExprNamedCall : Expression {
         ExprNamedCall () { __rtti = "ExprNamedCall"; };
         ExprNamedCall ( const LineInfo & a, const string & n )
             : Expression(a), name(n) { __rtti = "ExprNamedCall";}
@@ -1393,7 +1393,7 @@ namespace das
         bool        methodCall = false;
     };
 
-    struct DAS_API ExprMakeLocal : Expression {
+    struct DAS_RT_API ExprMakeLocal : Expression {
         ExprMakeLocal() { __rtti = "ExprMakeLocal"; };
         ExprMakeLocal ( const LineInfo & at )
             : Expression(at) { __rtti = "ExprMakeLocal"; }
@@ -1417,7 +1417,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprMakeStruct : ExprMakeLocal {
+    struct DAS_RT_API ExprMakeStruct : ExprMakeLocal {
         ExprMakeStruct() { __rtti = "ExprMakeStruct"; };
         ExprMakeStruct ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeStruct"; }
@@ -1450,7 +1450,7 @@ namespace das
         };
     };
 
-    struct DAS_API ExprMakeVariant : ExprMakeLocal {
+    struct DAS_RT_API ExprMakeVariant : ExprMakeLocal {
         ExprMakeVariant() { __rtti = "ExprMakeVariant"; };
         ExprMakeVariant ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeVariant"; }
@@ -1464,7 +1464,7 @@ namespace das
         vector<MakeFieldDeclPtr>    variants;
     };
 
-    struct DAS_API ExprMakeArray : ExprMakeLocal {
+    struct DAS_RT_API ExprMakeArray : ExprMakeLocal {
         ExprMakeArray() { __rtti = "ExprMakeArray"; };
         ExprMakeArray ( const LineInfo & at )
             : ExprMakeLocal(at) { __rtti = "ExprMakeArray"; }
@@ -1480,7 +1480,7 @@ namespace das
         bool                        gen2 = false;
     };
 
-    struct DAS_API ExprMakeTuple : ExprMakeArray {
+    struct DAS_RT_API ExprMakeTuple : ExprMakeArray {
         ExprMakeTuple() { __rtti = "ExprMakeTuple"; };
         ExprMakeTuple ( const LineInfo & at )
             : ExprMakeArray(at) { __rtti = "ExprMakeTuple"; }
@@ -1494,7 +1494,7 @@ namespace das
         vector <string> recordNames;
     };
 
-    struct DAS_API ExprArrayComprehension : Expression {
+    struct DAS_RT_API ExprArrayComprehension : Expression {
         ExprArrayComprehension() { __rtti = "ExprArrayComprehension"; };
         ExprArrayComprehension ( const LineInfo & at )
             : Expression(at) { __rtti = "ExprArrayComprehension"; }
@@ -1509,7 +1509,7 @@ namespace das
         bool            tableSyntax = false;
     };
 
-    struct DAS_API ExprTypeDecl : Expression {
+    struct DAS_RT_API ExprTypeDecl : Expression {
         ExprTypeDecl () { __rtti = "ExprTypeDecl"; };
         ExprTypeDecl ( const LineInfo & a, const TypeDeclPtr & d )
             : Expression(a), typeexpr(d) { __rtti = "ExprTypeDecl"; }

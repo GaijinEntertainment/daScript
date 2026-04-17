@@ -871,6 +871,9 @@ namespace das {
         Fail,           // error message is displayed and exception is thrown
     };
 
+    static vector<tuple<string,string,string>> g_registered_dynamic_modules; // path, cpp_class_name, daslang_name
+    static vector<tuple<string,string,string>> g_registered_native_paths;
+
     // Returns DLL handle.
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
         string actualPath(path);
@@ -916,6 +919,7 @@ namespace das {
             return nullptr;
         }
         *ModuleKarma += unsigned(intptr_t(mod));
+        g_registered_dynamic_modules.emplace_back(path, mod_name, mod->name);
         return lib;
     }
     void *register_dynamic_module_silent(const char *path, const char *mod_name, Context * context, LineInfoArg * at ) {
@@ -938,6 +942,19 @@ namespace das {
             cur_mod = prev(mod_resolve->end());
         }
         cur_mod->paths.emplace_back(src_path, dst_path);
+        g_registered_native_paths.emplace_back(mod_name, src_path, dst_path);
+    }
+
+    void for_each_registered_native_path ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
+        for ( const auto & [mod_name, src_path, dst_path] : g_registered_native_paths ) {
+            das_invoke<void>::invoke<const char *,const char *,const char *>(context, at, block, mod_name.c_str(), src_path.c_str(), dst_path.c_str());
+        }
+    }
+
+    void for_each_registered_dynamic_module ( const TBlock<void,const char *,const char *,const char *> & block, Context * context, LineInfoArg * at ) {
+        for ( const auto & [path, mod_name, das_name] : g_registered_dynamic_modules ) {
+            das_invoke<void>::invoke<const char *,const char *,const char *>(context, at, block, path.c_str(), mod_name.c_str(), das_name.c_str());
+        }
     }
 
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) {
@@ -1351,6 +1368,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(register_native_path)>(*this, lib, "register_native_path",
                 SideEffects::worstDefault, "register_native_path")
                     ->args({"mod_name", "src", "dst", "context","at"});
+            addExtern<DAS_BIND_FUN(for_each_registered_dynamic_module)>(*this, lib, "for_each_registered_dynamic_module",
+                SideEffects::accessExternal, "for_each_registered_dynamic_module")
+                    ->args({"block", "context","at"});
+            addExtern<DAS_BIND_FUN(for_each_registered_native_path)>(*this, lib, "for_each_registered_native_path",
+                SideEffects::accessExternal, "for_each_registered_native_path")
+                    ->args({"block", "context","at"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});

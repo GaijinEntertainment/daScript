@@ -23,7 +23,7 @@ namespace das {
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #endif
 
-    struct DAS_API DataWalker : ptr_ref_count {
+    struct DAS_RT_API DataWalker : ptr_ref_count {
     // we doing what?
         class Context * context = nullptr;
         bool collecting = false;

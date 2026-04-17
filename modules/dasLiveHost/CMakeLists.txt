@@ -19,6 +19,8 @@ IF ((NOT DAS_LIVE_HOST_INCLUDED) AND ((NOT ${DAS_LIVE_HOST_DISABLED}) OR (NOT DE
     ADD_MODULE_LIB(libDasModuleLiveHost dasModuleLiveHost ${DAS_LIVE_HOST_MODULE_SRC})
     SETUP_CPP11(libDasModuleLiveHost)
     SETUP_CPP11(dasModuleLiveHost)
+    # LiveHost uses RTTI/compiler APIs => link against the full compiler lib.
+    TARGET_LINK_LIBRARIES(dasModuleLiveHost PRIVATE libDaScriptDyn)
 
     install(DIRECTORY ${DAS_LIVE_HOST_DIR}/live
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasLiveHost
