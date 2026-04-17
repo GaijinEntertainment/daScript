@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_simulate.h"
+#include "daScript/simulate/simulate_fusion.h"
 
 #include "daScript/simulate/runtime_array.h"
 #include "daScript/simulate/runtime_table_nodes.h"
@@ -22,6 +23,9 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das
 {
+    // fusion function pointers (defined here in main lib, set by fusion lib)
+    void (*g_fusionContextFn) ( Context & context, TextWriter & logs, bool enableFusion ) = nullptr;
+    void (*g_resetFusionEngineFn) () = nullptr;
     // topological sort for the [init] nodes
 
     struct InitSort {
@@ -3760,7 +3764,8 @@ namespace das
         bool aot_hint = policies.aot && !folding && !thisModule->isModule;
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
-            fusion(context, logs);
+            DAS_ASSERTF(g_fusionContextFn, "fusion library not loaded, add call to NEED_FUSION macro.");
+            g_fusionContextFn(context, logs, options.getBoolOption("fusion",true));
             context.relocateCode(true); // this to get better estimate on relocated size. its fust enough
         }
 #else

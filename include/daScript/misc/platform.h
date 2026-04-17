@@ -267,6 +267,11 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #else
     #define DAS_MOD_API DAS_IMPORT_DLL
 #endif
+#ifdef DAS_CC_EXPORTS
+    #define DAS_CC_API DAS_EXPORT_DLL
+#else
+    #define DAS_CC_API DAS_IMPORT_DLL
+#endif
 #endif
 #else
 
@@ -274,6 +279,7 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #define DAS_IMPORT_DLL
 #define DAS_API
 #define DAS_MOD_API
+#define DAS_CC_API
 
 #endif
 

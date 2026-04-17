@@ -216,9 +216,9 @@ namespace das {
         das_hash_map<SimNode *,SimNodeInfo> & info;
     };
 
-    void Program::fusion ( Context & context, TextWriter & logs ) {
+    void fusionContext ( Context & context, TextWriter & logs, bool enableFusion ) {
         // log all functions
-        if ( options.getBoolOption("fusion",true) ) {
+        if ( enableFusion ) {
             bool anyFusion = true;
             while ( anyFusion) {
                 anyFusion = false;
@@ -247,6 +247,12 @@ namespace das {
     void registerFusion ( const char * OpName, const char * CTypeName, FusionPoint * node ) {
         (**g_fusionEngine)[fuseName(OpName,CTypeName)].emplace_back(node);
     }
+
+}
+
+DAS_CC_API void register_fusion () {
+    das::g_fusionContextFn = &das::fusionContext;
+    das::g_resetFusionEngineFn = &das::resetFusionEngine;
 }
 
 extern "C" DAS_CC_API void jit_register_fusion () {

@@ -742,7 +742,7 @@ extern "C" {
                     const auto path = get_prefix(getExecutableFileName());
                     const auto winCfg = path.substr(path.find_last_of("\\/") + 1);
                     const auto windowsConfig = (winCfg == "bin" ? "" : (winCfg + "/"));
-                    result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
+                    result.runtimeLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn_runtime.lib";
                     if (linkWholeLib) {
                         result.compilerLibrary = getDasRoot() + "/lib/" + windowsConfig + "libDaScriptDyn.lib";
                     }
@@ -753,12 +753,12 @@ extern "C" {
                 }
                 if (result.runtimeLibrary.empty()) {
                 #if defined(__APPLE__)
-                    result.runtimeLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.dylib";
+                    result.runtimeLibrary = getDasRoot() + "/lib/liblibDaScriptDyn_runtime.dylib";
                     if (linkWholeLib) {
                         result.compilerLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.dylib";
                     }
                 #else
-                    result.runtimeLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.so";
+                    result.runtimeLibrary = getDasRoot() + "/lib/liblibDaScriptDyn_runtime.so";
                     if (linkWholeLib) {
                         result.compilerLibrary = getDasRoot() + "/lib/liblibDaScriptDyn.so";
                     }

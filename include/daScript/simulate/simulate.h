@@ -838,6 +838,8 @@ namespace das
         const char *    last_exception = nullptr;
         jmp_buf *       throwBuf = nullptr;
     protected:
+        friend void fusionContext( Context & context, TextWriter & logs, bool enableFusion );
+
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
         SimFunction ** initFunctions = nullptr;

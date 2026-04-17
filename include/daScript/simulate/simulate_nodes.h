@@ -24,7 +24,7 @@ namespace das {
         ,   sShared
     };
 
-    struct SimSource {
+    struct DAS_API SimSource {
         union {
             SimNode *       subexpr;
             union {
@@ -2969,7 +2969,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     };
 
     // COPY REFERENCE VALUE
-    struct SimNode_CopyRefValue : SimNode {
+    struct DAS_API SimNode_CopyRefValue : SimNode {
         SimNode_CopyRefValue(const LineInfo & at, SimNode * ll, SimNode * rr, size_t sz)
             : SimNode(at), l(ll), r(rr), size(uint32_t(sz)) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;

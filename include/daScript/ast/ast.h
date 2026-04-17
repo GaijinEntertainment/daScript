@@ -1703,7 +1703,6 @@ namespace das
         bool optimizationBlockFolding(int32_t round);
         bool optimizationCondFolding(int32_t round);
         bool optimizationUnused(TextWriter & logs, int32_t round);
-        void fusion ( Context & context, TextWriter & logs );
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void validateAst();

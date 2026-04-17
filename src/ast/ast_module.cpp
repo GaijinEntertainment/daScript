@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/das_common.h"
 #include "daScript/daScriptModule.h"
+#include "daScript/simulate/simulate_fusion.h"
 
 #include <atomic>
 
@@ -132,8 +133,6 @@ namespace das {
         }
     }
 
-    void resetFusionEngine();
-
     atomic<int> g_envTotal(0);
 
     void Module::Initialize() {
@@ -213,7 +212,8 @@ namespace das {
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
 
         clearGlobalAotLibrary();
-        resetFusionEngine();
+        DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
+        g_resetFusionEngineFn();
         daScriptEnvironment::setBound(nullptr);
         if ( daScriptEnvironment::getOwned() ) {
             delete daScriptEnvironment::getOwned();

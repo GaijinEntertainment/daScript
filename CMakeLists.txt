@@ -676,7 +676,6 @@ SET(BUILTIN_SRC
 include/daScript/builtin/ast_gen.inc
 include/daScript/builtin/debugapi_gen.inc
 
-src/builtin/modules.cpp
 src/builtin/module_builtin.h
 src/builtin/module_builtin.cpp
 src/builtin/module_builtin_misc_types.cpp
@@ -742,7 +741,6 @@ src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
 src/misc/free_list.cpp
-src/misc/daScriptC.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -917,20 +915,13 @@ list(SORT DAS_LIB_SRC)
 include_directories(include)
 include_directories(3rdparty/fmt/include)
 
-MACRO(SETUP_LIBDASCRIPT library shared_lib)
+MACRO(SETUP_LIBDASCRIPT library shared_lib full_setup sources exports_def)
     IF(${shared_lib})
-        SETUP_DAS_SHARED_LIBRARY(${library} ${PARSER_GENERATED_SRC}
-                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
-                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
-                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
-        TARGET_COMPILE_DEFINITIONS(${library} PRIVATE DAS_EXPORTS=1 DAS_MOD_EXPORTS=1)
+        SETUP_DAS_SHARED_LIBRARY(${library} ${${sources}})
+        TARGET_COMPILE_DEFINITIONS(${library} PRIVATE ${exports_def}=1 DAS_MOD_EXPORTS=1)
         TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DLL=1)
-        # Set DAS_EXPORTS to export all MOD symbols from libDaScript
     ELSE()
-        ADD_DAS_STATIC_LIBRARY(${library} ${PARSER_GENERATED_SRC}
-                ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
-                ${MISC_SRC} ${SIMULATE_FUSION_SRC} ${MAIN_SRC}
-                ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC})
+        ADD_DAS_STATIC_LIBRARY(${library} ${${sources}})
     ENDIF()
     TARGET_COMPILE_DEFINITIONS(${library} PUBLIC DAS_ENABLE_DYN_INCLUDES=1)
     ADD_DEPENDENCIES(${library} need_and_resolve)
@@ -940,23 +931,25 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
             ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/uriparser/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
-    IF(${shared_lib})
-        target_link_libraries(${library} libUriParserDyn)
-    ELSE()
-        target_link_libraries(${library} libUriParser)
-    ENDIF()
-    #target_link_libraries(${library} fmt::fmt)
-    IF(LINUX_UUID)
-        target_link_libraries(${library} uuid)
-    ENDIF()
-    IF(UNIX AND NOT APPLE)
-        TARGET_LINK_LIBRARIES(${library} ${CMAKE_DL_LIBS})
-    ENDIF()
-    IF(HAIKU)
-        TARGET_LINK_LIBRARIES(${library} network uuid)
-    ENDIF()
-    IF(WIN32)
-        target_link_libraries(${library} dbghelp)
+    IF(${full_setup})
+        IF(${shared_lib})
+            target_link_libraries(${library} libUriParserDyn)
+        ELSE()
+            target_link_libraries(${library} libUriParser)
+        ENDIF()
+        #target_link_libraries(${library} fmt::fmt)
+        IF(LINUX_UUID)
+            target_link_libraries(${library} uuid)
+        ENDIF()
+        IF(UNIX AND NOT APPLE)
+            TARGET_LINK_LIBRARIES(${library} ${CMAKE_DL_LIBS})
+        ENDIF()
+        IF(HAIKU)
+            TARGET_LINK_LIBRARIES(${library} network uuid)
+        ENDIF()
+        IF(WIN32)
+            target_link_libraries(${library} dbghelp)
+        ENDIF()
     ENDIF()
     SETUP_CPP11(${library})
     target_compile_features(${library} PUBLIC cxx_std_17)
@@ -969,8 +962,31 @@ MACRO(SETUP_LIBDASCRIPT library shared_lib)
     )
 ENDMACRO()
 
-SETUP_LIBDASCRIPT(libDaScript OFF)
-SETUP_LIBDASCRIPT(libDaScriptDyn ON)
+SET(LIBDASCRIPT_RUNTIME_SRC
+    ${PARSER_GENERATED_SRC}
+    ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${SIMULATE_SRC} ${BUILTIN_SRC}
+    ${MISC_SRC} ${MAIN_SRC}
+    ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC} ${DASCRIPT_FMT_SRC}
+)
+
+SET(LIBDASCRIPT_COMPILER_SRC
+    ${SIMULATE_FUSION_SRC}
+    src/misc/daScriptC.cpp
+    src/builtin/modules.cpp
+)
+
+# Eventually libDaScript_runtime will contain only minimal subset of sources
+# required to run standalone executable.
+#
+# Note: Now it contains everything except fusion.
+SETUP_LIBDASCRIPT(libDaScript_runtime OFF ON LIBDASCRIPT_RUNTIME_SRC DAS_EXPORTS)
+SETUP_LIBDASCRIPT(libDaScriptDyn_runtime ON ON LIBDASCRIPT_RUNTIME_SRC DAS_EXPORTS)
+
+SETUP_LIBDASCRIPT(libDaScript OFF OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
+SETUP_LIBDASCRIPT(libDaScriptDyn ON OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
+
+target_link_libraries(libDaScript libDaScript_runtime)
+target_link_libraries(libDaScriptDyn libDaScriptDyn_runtime)
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
 
@@ -1336,7 +1352,7 @@ install(FILES ${DAS_BUILTIN_HEADERS}
 
 # Install all modules and main library.
 install(TARGETS
-    libDaScript libDaScriptDyn libUriParser libUriParserDyn
+    libDaScript libDaScript_runtime libDaScriptDyn libDaScriptDyn_runtime libUriParser libUriParserDyn
     EXPORT DASTargets
     RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     LIBRARY DESTINATION ${DAS_INSTALL_LIBDIR}

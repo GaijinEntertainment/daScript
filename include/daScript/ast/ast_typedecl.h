@@ -691,7 +691,7 @@ namespace das {
                            CpptRedundantConst redundantConst = CpptRedundantConst::yes,
                            ChooseSmartPtr chooseSmartPtr = ChooseSmartPtr::no);
 
-    class MangledNameParser {
+    class DAS_API MangledNameParser {
     protected:
         virtual void error ( const string &, const char * );
         string parseAnyName ( const char * & ch, bool allowModule );
