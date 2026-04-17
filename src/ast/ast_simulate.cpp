@@ -3596,6 +3596,9 @@ namespace das
         context.heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
         context.stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
         context.stringHeap->setLimit ( options.getUInt64OptionEx("string_heap_size_limit", "max_string_heap_allocated", policies.max_string_heap_allocated) );
+        bool trackAlloc = options.getBoolOption("track_allocations", policies.track_allocations);
+        context.heap->setTrackAllocations(trackAlloc);
+        context.stringHeap->setTrackAllocations(trackAlloc);
         context.constStringHeap = make_shared<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);

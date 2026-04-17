@@ -1305,7 +1305,7 @@ namespace debugger {
 #if DAS_TRACK_INSANE_POINTER
         das_track_insane_pointer(ptr);
 #else
-        ctx->throw_error("insane pointer tracking is disabled, recompile with DAS_TRACK_INSANE_POINTER=1 && DAS_TRACK_ALLOCATIONS=1");
+        ctx->throw_error("insane pointer tracking is disabled, recompile with DAS_TRACK_INSANE_POINTER=1 and set options track_allocations = true (or policies.track_allocations)");
 #endif
     }
 

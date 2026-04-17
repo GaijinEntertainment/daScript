@@ -4104,6 +4104,7 @@ namespace das {
         tw << "    policies.persistent_heap = " << program.options.getBoolOption("persistent_heap", program.policies.persistent_heap) << ";\n";
         tw << "    policies.heap_size_hint = " << program.options.getIntOption("heap_size_hint", program.policies.heap_size_hint) << ";\n";
         tw << "    policies.string_heap_size_hint = " << program.options.getIntOption("string_heap_size_hint", program.policies.string_heap_size_hint) << ";\n";
+        tw << "    policies.track_allocations = " << program.options.getBoolOption("track_allocations", program.policies.track_allocations) << ";\n";
 
         tw << "    context.setup(" << program.totalVariables << "/*totalVariables*/, "
                                    << program.globalStringHeapSize << " /*globalStringHeapSize*/, policies, {});\n";

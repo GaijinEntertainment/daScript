@@ -247,7 +247,8 @@ def handle_tools_list(id_json : string) : string {
         {
             "file" => PropertySchema(_type = "string", description = "Path to the .das file to run"),
             "code" => PropertySchema(_type = "string", description = "Inline daslang code to run (written to temp file and executed)"),
-            "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 30). Process tree is killed if exceeded")
+            "timeout" => PropertySchema(_type = "string", description = "Timeout in seconds (default: 30). Process tree is killed if exceeded"),
+            "track_allocations" => PropertySchema(_type = "string", description = "If 'true', enable heap allocation tracking and append a heap report at exit (shows where each allocation came from)")
         },
         []
     ))
@@ -521,7 +522,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "format_file") {
         return do_format_file(arg1)
     } elif (tool_name == "run_script") {
-        return do_run_script(arg1, arg2, arg3)
+        return do_run_script(arg1, arg2, arg3, arg4 == "true")
     } elif (tool_name == "eval_expression") {
         return do_eval_expression(arg1, arg2)
     } elif (tool_name == "describe_type") {
@@ -662,6 +663,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "code")
         arg3 = get_string_arg(args, "timeout")
+        arg4 = get_string_arg(args, "track_allocations")
     } elif (name == "eval_expression") {
         arg1 = get_string_arg(args, "expression")
         if (empty(arg1)) {

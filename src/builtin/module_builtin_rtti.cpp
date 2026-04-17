@@ -768,6 +768,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(max_static_variables_size)>("max_static_variables_size");
             addField<DAS_BIND_MANAGED_FIELD(max_heap_allocated)>("max_heap_allocated");
             addField<DAS_BIND_MANAGED_FIELD(max_string_heap_allocated)>("max_string_heap_allocated");
+            addField<DAS_BIND_MANAGED_FIELD(track_allocations)>("track_allocations");
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language

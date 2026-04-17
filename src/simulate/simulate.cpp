@@ -991,6 +991,9 @@ namespace das
         heap->setLimit ( options.getUInt64OptionEx("heap_size_limit", "max_heap_allocated", policies.max_heap_allocated) );
         stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
         stringHeap->setLimit ( options.getUInt64OptionEx("string_heap_size_limit", "max_string_heap_allocated", policies.max_string_heap_allocated) );
+        bool track = options.getBoolOption("track_allocations", policies.track_allocations);
+        heap->setTrackAllocations(track);
+        stringHeap->setTrackAllocations(track);
         constStringHeap = make_shared<ConstStringAllocator>();
         totalVariables = totalVars;
         if ( globalStringHeapSize ) {
@@ -1200,9 +1203,11 @@ namespace das
         // heap
         heap->setInitialSize(ctx.heap->getInitialSize());
         heap->setLimit(ctx.heap->getLimit());
+        heap->setTrackAllocations(ctx.heap->isTrackingAllocations());
         stringHeap->setInitialSize(ctx.stringHeap->getInitialSize());
         stringHeap->setIntern(ctx.stringHeap->isIntern());
         stringHeap->setLimit(ctx.stringHeap->getLimit());
+        stringHeap->setTrackAllocations(ctx.stringHeap->isTrackingAllocations());
         // globals
         annotationData = ctx.annotationData;
         globalsSize = ctx.globalsSize;
