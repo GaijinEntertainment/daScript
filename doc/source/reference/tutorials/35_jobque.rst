@@ -14,9 +14,10 @@ Job Queue (jobque)
 
 This tutorial covers the ``jobque_boost`` module — daslang's built-in
 multi-threading primitives.  The module provides a work-stealing thread pool,
-typed channels for inter-thread communication, job statuses and wait groups
-for synchronization, lock boxes for shared mutable state, and high-level
-helpers like ``parallel_for``.
+typed channels for inter-thread communication, byte streams for
+cross-context messaging, job statuses and wait groups for synchronization,
+lock boxes for shared mutable state, and high-level helpers like
+``parallel_for``.
 
 .. code-block:: das
 
@@ -33,6 +34,11 @@ Core concepts
 * **Channel** — a thread-safe FIFO queue for passing typed struct data between
   jobs.  Created with ``with_channel(count)`` where ``count`` is the expected
   number of ``notify_and_release`` calls before the channel closes.
+* **Stream** — a byte-oriented FIFO whose buffers are owned C++-side, so
+  either end may be freed without coordinating with the other.  Preferred
+  over channels when producer and consumer live in different contexts.
+  Carries raw bytes (``push`` / ``pop``) or structured data serialized via
+  ``daslib/archive`` (``push_archive`` / ``pop_archive``).
 * **JobStatus** — a counter that tracks asynchronous completion.
   ``notify_and_release`` decrements it, ``join`` blocks until it reaches zero.
 * **Wait group** — ``with_wait_group`` wraps a ``JobStatus`` with automatic
@@ -163,6 +169,107 @@ number of producers.  ``for_each_clone`` blocks until all have called
         print("producers: {results}\n")
     }
     // output: producers: [0, 100, 200]
+
+Streams
+=======
+
+A ``Stream`` is a byte-oriented FIFO backed by storage that lives outside any
+daslang context, so producer and consumer can release their references
+independently — this is what makes streams the preferred transport between
+threads or contexts whose lifetimes you cannot coordinate.
+
+``with_stream()`` opens a stream that is ready immediately.  ``push`` copies
+bytes onto the tail; ``try_pop`` is non-blocking and hands the consumer a
+borrowed view valid only for the duration of the block:
+
+.. code-block:: das
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            var payload = [1u8, 2u8, 3u8, 4u8]
+            s |> push(payload)
+            print("buffered blobs: {s.total}\n")
+
+            let ok = s |> try_pop() $(view : array<uint8># -const) {
+                print("popped {length(view)} bytes, first = {view[0]}\n")
+            }
+            print("try_pop succeeded: {ok}\n")
+        }
+    }
+    // output:
+    // buffered blobs: 1
+    // popped 4 bytes, first = 1
+    // try_pop succeeded: true
+
+Streams carrying structured data
+================================
+
+``push_archive`` serializes any struct or variant through ``daslib/archive``
+and enqueues the resulting bytes.  ``gather_archive`` drains the stream,
+invoking the block once per message in FIFO order:
+
+.. code-block:: das
+
+    require daslib/archive
+
+    struct Command {
+        id : int
+        name : string
+        payload : array<int>
+    }
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            for (i in range(3)) {
+                s |> push_archive(Command(id = i, name = "cmd", payload <- [i, i * 10]))
+            }
+            s |> gather_archive() $(var c : Command) {
+                print("  [{c.id}] {c.name} payload = {c.payload}\n")
+            }
+        }
+    }
+    // output:
+    //   [0] cmd payload = [0, 0]
+    //   [1] cmd payload = [1, 10]
+    //   [2] cmd payload = [2, 20]
+
+Related: ``peek`` reads without draining; ``pop_with_timeout`` blocks up to
+a bounded interval; ``push_batch`` enqueues multiple blobs atomically under
+a single lock.
+
+Stream across a worker job
+==========================
+
+A job that captures a ``Stream`` must release its reference before exiting.
+Two idioms cover the common cases:
+
+* Use ``s |> release`` when completion is signalled separately (typically
+  alongside a wait group, as in the example below).
+* Use ``s |> notify_and_release`` when the stream itself is the completion
+  signal — open it with ``with_stream(count)`` and the consumer can observe
+  readiness via ``s.isReady``.
+
+.. code-block:: das
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            with_wait_group(1) $(wg) {
+                new_job() @() {
+                    for (i in range(4)) {
+                        s |> push_archive(Command(id = i, name = "work", payload <- [i * i]))
+                    }
+                    s |> release
+                    wg |> done
+                }
+            }
+            var got : array<int>
+            s |> gather_archive() $(var c : Command) {
+                got |> push(c.payload[0])
+            }
+            print("squares from worker: {got}\n")
+        }
+    }
+    // output: squares from worker: [0, 1, 4, 9]
 
 JobStatus
 =========
