@@ -403,6 +403,7 @@ def update() {
             let py0 = fh - panel_h * float(pi + 1)
             render_panel_name(font, p.name, display_w, display_h, py0 + m, py1 - m)
         }
+        delete verts
     }
     live_end_frame()
 }

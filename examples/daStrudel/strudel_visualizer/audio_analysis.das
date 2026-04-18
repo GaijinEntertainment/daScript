@@ -61,6 +61,8 @@ def audio_analysis_update_spectrum(var aa : AudioAnalysis) {
     for (i in range(FFT_BINS)) {
         aa.spectrum_smooth[i] = aa.spectrum_smooth[i] * (1.0 - smooth) + aa.spectrum_bins[i] * smooth
     }
+    delete re
+    delete im
 }
 
 // --- FFT (radix-2 Cooley-Tukey, in-place) ---
