@@ -20,6 +20,6 @@ def good_lambda_shorthand_complex() {
 
 // Value pipe: <| expr is valid style, only block pipes should be flagged
 def good_value_pipe() {
-    var arr : array<int>
+    var arr <- [1, 2, 3]
     arr |> push <| 42
 }

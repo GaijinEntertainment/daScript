@@ -188,9 +188,7 @@ def demo_runners() {
     async_run(single)
 
     print("\n=== async_run_all (cooperative) ===\n")
-    var tasks : array<iterator<bool>>
-    tasks |> emplace <| worker("alpha", 2)
-    tasks |> emplace <| worker("beta", 3)
+    var tasks : array<iterator<bool>> <- [worker("alpha", 2), worker("beta", 3)]
     async_run_all(tasks)
     print("  all done\n")
 

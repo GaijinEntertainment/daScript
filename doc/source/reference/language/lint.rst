@@ -550,6 +550,47 @@ semantics), compiler-generated variables, and generic instantiations.
     // Good — combined
     var s := src
 
+STYLE012 — ``array<T>`` initialized by a run of ``push``/``emplace``
+====================================================================
+
+Declaring an empty ``array<T>`` variable immediately followed by two or
+more contiguous ``push`` or ``emplace`` calls that all target the same
+variable is a common "I forgot how to initialize an array" pattern. Use
+an array literal instead — it is shorter, faster (one allocation with
+the right capacity instead of repeated grows), and makes the initial
+contents obvious at a glance.
+
+A single ``push`` right after the declaration is **not** flagged,
+because the verbose form is often the most readable option for a single
+element. ``push_clone`` is deliberately excluded — there is no clean
+array-literal equivalent.
+
+The rule excludes ``var inscope``, compiler-generated variables, and
+generic instantiations (same exclusions as STYLE011).
+
+.. code-block:: das
+
+    // Bad — two pushes after empty array declaration
+    var a : array<int>
+    a |> push(1)                                // STYLE012
+    a |> push(2)
+
+    // Good — inferred element type
+    var a <- [1, 2]
+
+    // Good — typed constructor, useful for polymorphic upcasts or
+    // interface pointers where array literal type inference picks the
+    // first element's type
+    var shapes <- array<Shape?>(new Circle(3.0),
+                                new Rectangle(2.0, 5.0),
+                                new Circle(1.0))
+
+    // Good — conditional / loop pushes are not flagged
+    var b : array<int>
+    for (i in range(10)) {
+        b |> push(i)
+    }
+
 -----
 Tests
 -----

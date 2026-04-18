@@ -122,10 +122,7 @@ def main {
     // === Polymorphism ===
 
     // Base pointer can hold any derived instance
-    var shapes : array<Shape?>
-    shapes |> push(new Circle(3.0))
-    shapes |> push(new Rectangle(2.0, 5.0))
-    shapes |> push(new Circle(1.0))
+    var shapes <- array<Shape?>(new Circle(3.0), new Rectangle(2.0, 5.0), new Circle(1.0))
 
     print("all shapes:\n")
     for (s in shapes) {

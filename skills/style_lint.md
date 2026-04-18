@@ -22,7 +22,9 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE003 | `foo() $() { ... }` | Remove redundant `$()`; use `foo() { ... }` |
 | STYLE005 | `if (cond) { return val }` | Use `return val if (cond)` (configurable, off by default) |
 | STYLE006 | `string(x.__rtti) == "ExprFoo"` | Use `x is ExprFoo` |
+| STYLE010 | `if (true) { ... }` | Use a bare block `{ ... }` |
 | STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
+| STYLE012 | `var a : array<T>; a \|> push(x); a \|> emplace(<-y)` (≥ 2 contiguous `push`/`emplace`) | Use array literal `var a <- [x, <-y]`, or typed constructor `var a <- array<T>(x, y)` when an explicit element type is needed (polymorphic upcasts, interface pointers). `push_clone` excluded; single `push` stays silent — often more readable |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -34,11 +36,15 @@ The `<|` pipe and `$()` are desugared during parsing — in the compiled AST, `f
 
 **Generators:** `generator<T>() <| $ { ... }` is fully lowered before the lint pass — `ExprMakeGenerator` becomes `ExprMakeStruct` + builtin `each` call. Detection uses `preVisitExprMakeStruct` with column-precise source line check: verifies the `ExprMakeStruct` at position starts with `generator<` in the source, then checks for `<|` pipe after it.
 
-### Pure AST (STYLE005-006)
+**`defer` special case:** The `defer` macro erases its call node before the lint pass runs, so `preVisitExprCall` never sees `defer <| $() { ... }`. Instead, `preVisitFunction` invokes `check_defer_pipe`, which scans each source line of the function body for `defer` followed by `<|` and a block opener (`$(`, `$ `, `${`, `@`, `{`). This is why STYLE001/002 on `defer` fire from a different code path than on ordinary calls.
+
+### Pure AST (STYLE005-006, STYLE010-011)
 
 - **STYLE005:** `ExprIfThenElse` with no `if_false`, single-statement body that is `ExprReturn`/`ExprBreak`/`ExprContinue`. Skips already-postfix forms by checking `ifte.at.line != stmt.at.line`.
 - **STYLE006:** `ExprOp2("==")` where one side is `string(x.__rtti)` pattern.
+- **STYLE010:** `ExprIfThenElse` with `cond is ExprConstBool && cond.value && if_false == null`. Runs in the same `preVisitExprIfThenElse` override as STYLE005; `if_flags.isStatic` branches are skipped so `static_if (true)` doesn't trigger. Works because the lint visitor runs before constant-folding would collapse the `if`.
 - **STYLE011:** Tracks uninitialized variables from `preVisitExprLetVariable` (excluding `generated` and `inScope`). In `preVisitExprBlockExpression`, checks if the next statement is `ExprCopy`/`ExprClone`/`ExprMove` whose left side references a tracked variable.
+- **STYLE012:** In `preVisitExprBlockExpression`, when `expr is ExprLet`, locates the let's index inside `blk.list` (pointer equality via `smart_ptr ==`). For each variable `v` in the let that is `var a : array<T>` with no init (also excluding `generated`, `inScope`, and generic-host instantiations), walks forward through `blk.list` counting contiguous `ExprCall` statements where `call.func.fromGeneric.name` is `"push"` or `"emplace"` and `arguments[0]` (unwrapping `ExprRef2Value`) resolves to `v`. Stops at the first non-matching statement. Emits when count ≥ 2 — a single `push` is often the more readable form, so the rule targets "I forgot how to init an array" bugs rather than every possible rewrite. `push_clone` is deliberately excluded because there is no clean array-literal equivalent.
 
 ## How to Add a New Rule
 
@@ -98,6 +104,5 @@ bin/Release/daslang.exe utils/lint/main.das -- file1.das [file2.das ...] [--quie
 
 ## Known Limitations
 
-- **STYLE010 (if true)**: Cannot be detected via AST — `if (true)` is constant-folded before the visitor runs. `no_infer_time_folding` would prevent this but breaks `daslib/ast.das` compilation. Needs tree-sitter.
 - **STYLE001-003 source detection**: Uses `get_file_source_line()` which reads one line at a time. Multi-line call expressions are handled by scanning from the call's line to the block's line.
 - **`[lint_macro]` errors vs `expect`**: Style warnings emitted via `[lint_macro]` don't work with `expect` directives. Tests use the standalone runner instead.

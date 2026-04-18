@@ -128,8 +128,7 @@ def main {
     // [expect_dim] — see summary for built-in contracts
     // [expect_any_array] — any array type
     print("expect_any_array:\n")
-    var nums : array<int>
-    nums |> push(1); nums |> push(2); nums |> push(3)
+    let nums <- [1, 2, 3]
     print_first(nums)
 
     // [expect_any_numeric] — numeric types only
@@ -165,11 +164,9 @@ def main {
 
     // concept_assert
     print("concept_assert:\n")
-    var ints : array<int>
-    ints |> push(10); ints |> push(20); ints |> push(30)
+    let ints <- [10, 20, 30]
     print("  sum_all([10,20,30]) = {sum_all(ints)}\n")
-    var floats : array<float>
-    floats |> push(1.0); floats |> push(2.0); floats |> push(3.0)
+    let floats <- [1.0, 2.0, 3.0]
     print("  sum_all([1,2,3]) = {sum_all(floats)}\n")
     // var strs : array<string>
     // strs |> push("a")

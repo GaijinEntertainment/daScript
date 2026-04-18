@@ -944,9 +944,7 @@ def document_bitfield(mod : Module?; doc_file : file; name : string; value : Typ
     var tab : array<array<string>>
     emplace(tab, array<string>("field", "bit"))
     for (an, bit in value.argNames, urange(32)) {
-        var line : array<string>
-        push(line, string(an))
-        push(line, "{uint64(1ul << uint64(bit))}")
+        var line <- [string(an), "{uint64(1ul << uint64(bit))}"]
         emplace(tab, line)
     }
 
@@ -968,9 +966,7 @@ def document_variant(mod : Module?; doc_file : file; name : string; value : Type
     var tab : array<array<string>>
     emplace(tab, array<string>("field", "type"))
     for (an, at in value.argNames, value.argTypes) {
-        var line : array<string>
-        push(line, string(an))
-        push(line, describe_type(at))
+        var line <- [string(an), describe_type(at)]
         emplace(tab, line)
     }
     document_topic("Variants", doc_file, topic("typedef", mod, name), describe(value), tab)
@@ -1183,9 +1179,7 @@ def document_function_arguments(doc_file : file; argNames : array<string>; argTy
     for (an, at in argNames, argTypes) {
         continue if (skip-- > 0)
         if (argument_needs_documenting(at)) {
-            var line : array<string>
-            push(line, an)
-            push(line, describe_type(at))
+            var line <- [an, describe_type(at)]
             emplace(tab, line)
         }
     }
@@ -1353,9 +1347,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
             for_each_global(mod) $(gVar) {
                 peek(gVar.name) $(gvar_name) {
                 if (!gVar.flags.private_variable && gvar_name |> starts_with(staticFieldPrefix)) {
-                    var line : array<string>
-                    push(line, "{value.name}.{gvar_name |> slice(length(staticFieldPrefix))}")
-                    push(line, describe_type(gVar._type))
+                    var line <- ["{value.name}.{gvar_name |> slice(length(staticFieldPrefix))}", describe_type(gVar._type)]
                     if (hasValues) {
                         push(line, gVar.init != null ? describe(gVar.init) : "")
                     }
@@ -1366,9 +1358,7 @@ def document_classes(doc_file : file; mods : array<Module?>) {
 
             for (fld in value.fields) {
                 if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
-                    var line : array<string>
-                    push(line, string(fld.name))
-                    push(line, describe_type(fld._type))
+                    var line <- [string(fld.name), describe_type(fld._type)]
                     if (hasValues) {
                         push(line, fld.init != null ? describe(fld.init) : "")
                     }
@@ -1499,9 +1489,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
     }
     for (fld in value.fields) {
         if (!is_class_method(value, fld) && !(fld.flags.generated) && fld.flags.implemented && !fld.flags.privateField && !(fld.flags.parentType) && (fld.name != "__rtti")) {
-            var line : array<string>
-            push(line, string(fld.name))
-            push(line, describe_type(fld._type))
+            var line <- [string(fld.name), describe_type(fld._type)]
             if (hasValues) {
                 push(line, fld.init != null ? describe(fld.init) : "")
             }

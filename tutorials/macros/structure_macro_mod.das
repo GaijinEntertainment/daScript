@@ -95,12 +95,12 @@ class SerializableMacro : AstStructureAnnotation {
         // splice compile-time strings, and only `obj` (the generated
         // function's parameter) for runtime references.
         let funcName = "describe_{st.name}"
-        var bodyExprs : array<ExpressionPtr>
-
         // Header: "StructName (version N):\n"
-        bodyExprs |> push <| qmacro(print($v("{st.name} (version ")))
-        bodyExprs |> push <| qmacro(print("{obj._version}"))
-        bodyExprs |> push <| qmacro(print($v("):\n")))
+        var bodyExprs <- [
+            qmacro(print($v("{st.name} (version "))),
+            qmacro(print("{obj._version}")),
+            qmacro(print($v("):\n")))
+        ]
 
         // Build and register the stub.
         // $t(st) splices the struct type, $b() injects the statements.

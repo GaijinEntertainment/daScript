@@ -199,12 +199,13 @@ class MemoizeMacro : AstFunctionAnnotation {
         }
 
         // Step 6: Assemble the wrapper body
-        var bodyExprs : array<ExpressionPtr>
-        bodyExprs |> push <| qmacro_expr(${ let key = $e(keyExpr); })
-        bodyExprs |> push <| qmacro_expr(${ if (key_exists($i(cacheName), key)) { unsafe { return $i(cacheName)[key]; } } })
-        bodyExprs |> push <| qmacro_expr(${ let result = $c(originalCopyName)($a(callArgs)); })
-        bodyExprs |> push <| qmacro_expr(${ $i(cacheName) |> insert_clone(key, result); })
-        bodyExprs |> push <| qmacro_expr(${ return result; })
+        var bodyExprs <- [
+            qmacro_expr(${ let key = $e(keyExpr); }),
+            qmacro_expr(${ if (key_exists($i(cacheName), key)) { unsafe { return $i(cacheName)[key]; } } }),
+            qmacro_expr(${ let result = $c(originalCopyName)($a(callArgs)); }),
+            qmacro_expr(${ $i(cacheName) |> insert_clone(key, result); }),
+            qmacro_expr(${ return result; })
+        ]
 
         // Step 7: Create the wrapper function
         var wrapperFn <- qmacro_function(wrapperName) $($a(wrapperArgs)) : $t(wrapperRetType) {

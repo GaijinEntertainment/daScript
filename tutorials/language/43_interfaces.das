@@ -160,9 +160,7 @@ def demo_polymorphic_dispatch() {
     var c = new Circle(3.0)
     var s = new Sprite("tree")
 
-    var drawables : array<IDrawable?>
-    drawables |> push(c as IDrawable)
-    drawables |> push(s as IDrawable)
+    var drawables <- array<IDrawable?>(c as IDrawable, s as IDrawable)
 
     draw_all(drawables)
 }
