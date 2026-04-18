@@ -228,6 +228,10 @@ def finalize(var f : SF2File explicit) {
         }
     }
     delete f.presets
+    // explicit finalizer replaces the default cascade — must delete remaining heap-owning fields
+    delete f.sample_data
+    delete f.samples
+    delete f.preset_lookup
 }
 
 // ─── Binary Readers (Little-Endian) ───
@@ -563,7 +567,9 @@ def public sf2_load(path : string) : SF2File? {
         to_log(0, "SF2: file too small or not found: {path}\n")
         return null
     }
-    return <- sf2_parse(data)
+    var result = sf2_parse(data)
+    delete data
+    return <- result
 }
 
 def public sf2_parse(data : array<uint8>) : SF2File? {
