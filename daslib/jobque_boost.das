@@ -662,6 +662,12 @@ def public capture_jobque_lock_box(var js : LockBox?) : LockBox? {
     return js
 }
 
+def public capture_jobque_stream(var s : Stream?) : Stream? {
+    //! this function is used to capture a stream that is used by the jobque.
+    s |> add_ref
+    return s
+}
+
 def public release_capture_jobque_channel(ch : Channel?) {
     //! this function is used to release a channel that is used by the jobque.
     if (ch != null) {
@@ -680,6 +686,13 @@ def public release_capture_jobque_lock_box(js : LockBox?) {
     //! this function is used to release a lock box that is used by the jobque.
     if (js != null) {
         panic("LockBox has not been released. missing box|>release or box|>notify_and_release")
+    }
+}
+
+def public release_capture_jobque_stream(s : Stream?) {
+    //! this function is used to release a stream that is used by the jobque.
+    if (s != null) {
+        panic("Stream has not been released. missing stream|>release or stream|>notify_and_release")
     }
 }
 
@@ -723,7 +736,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         )
         return <- pCall
     }
-    //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
+    //! This macro implements capturing of the `jobque::Channel`, `jobque::JobStatus`, `jobque::LockBox`, and `jobque::Stream` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; typ : TypeDeclPtr) : ExpressionPtr {
         //! Implementation details for the capture macro.
@@ -733,14 +746,16 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
             return <- make_capture_call(expr, "jobque_boost::capture_jobque_job_status")
         } elif (typ |> isPtrToJQ("LockBox")) {
             return <- make_capture_call(expr, "jobque_boost::capture_jobque_lock_box")
+        } elif (typ |> isPtrToJQ("Stream")) {
+            return <- make_capture_call(expr, "jobque_boost::capture_jobque_stream")
         }
         return null
     }
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
         //! Implementation details for the capture macro.
         //! Note: generators are skipped because their ``finally`` section is called on every
-        //! iteration, not just once at destruction. This means ``Channel``, ``JobStatus``, and
-        //! ``LockBox`` captures inside generators do NOT get automatic release checks.
+        //! iteration, not just once at destruction. This means ``Channel``, ``JobStatus``,
+        //! ``LockBox``, and ``Stream`` captures inside generators do NOT get automatic release checks.
         //! Users must manually call ``release`` on captured jobque objects inside generators.
         if (fun.flags._generator) {// generator gets finally section called every single time. nothing we can do
             return
@@ -754,6 +769,9 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             } elif (fld._type |> isPtrToJQ("LockBox")) {
                 var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_lock_box")
+                (fun.body as ExprBlock).finalList |> emplace(pCall)
+            } elif (fld._type |> isPtrToJQ("Stream")) {
+                var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_stream")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             }
         }

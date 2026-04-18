@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 
 module strudel_player shared public
 //! Top-level playback harness for strudel patterns.
-//! Manages tracks, BPM/CPS, sample/SF2 banks, and a command channel for both
+//! Manages tracks, BPM/CPS, sample/SF2 banks, and a command stream for both
 //! main-thread (strudel_tick) and dedicated-thread (strudel_play) playback modes.
 
 require strudel/strudel_event
@@ -23,7 +23,7 @@ require daslib/fio
 require daslib/strings_boost
 require math
 
-// --- Command channel ---
+// --- Command stream ---
 
 variant private StrudelCommand {
     shutdown : bool;
@@ -54,8 +54,8 @@ var public g_wall_time : double = 0.0lf
 var private g_wall_samples : int64 = 0l  // exact sample count — g_wall_time derived from this
 //! Current tempo in cycles per second (0.5 = 120 BPM at 4 beats/cycle).
 var public g_cps : double = 0.5lf
-var private g_cmd_channel : Channel?
-var private g_done_channel : Channel?
+var private g_cmd_stream : Stream?
+var private g_done_status : JobStatus?
 var private g_sf2 : SF2File?
 var private g_sf2_path : string
 var private g_cmd_fn : function<(cmd : string) : void>
@@ -195,16 +195,16 @@ def public strudel_set_pause(paused : bool) {
 def public strudel_set_bpm(bpm : double) {
     //! Set tempo in beats per minute (assumes 4 beats per cycle). Safe to call from the main thread.
     g_cps = bpm / 240.0lf
-    if (g_cmd_channel != null) {
-        g_cmd_channel |> push(new StrudelCommand(set_bpm = bpm))
+    if (g_cmd_stream != null) {
+        g_cmd_stream |> push_archive(StrudelCommand(set_bpm = bpm))
     }
 }
 
 def public strudel_set_cps(cps : double) {
     //! Set tempo directly in cycles per second. Safe to call from the main thread.
     g_cps = cps
-    if (g_cmd_channel != null) {
-        g_cmd_channel |> push(new StrudelCommand(set_cps = cps))
+    if (g_cmd_stream != null) {
+        g_cmd_stream |> push_archive(StrudelCommand(set_cps = cps))
     }
 }
 
@@ -338,13 +338,8 @@ def public strudel_fade_track(idx : int; target_gain : float; time : float) {
 def public strudel_command(cmd : string) {
     //! Send a user command string from the main thread to the strudel playback thread.
     //! The command is dispatched to the cmd_fn passed to strudel_init.
-    if (g_cmd_channel != null) {
-        var sc = new StrudelCommand(shutdown = false)
-        unsafe {
-            set_variant_index(*sc, 3)  // user_cmd
-            sc.user_cmd = cmd
-        }
-        g_cmd_channel |> push(sc)
+    if (g_cmd_stream != null) {
+        g_cmd_stream |> push_archive(StrudelCommand(user_cmd = cmd))
     }
 }
 
@@ -356,11 +351,11 @@ def public strudel_noop_cmd(cmd : string) {
 // --- Command processing (called on strudel thread) ---
 
 def private strudel_process_commands(cmd_fn : function<(cmd : string) : void>) : bool {
-    if (g_cmd_channel == null) {
+    if (g_cmd_stream == null) {
         return true
     }
     var running = true
-    g_cmd_channel |> gather() $(cmd : StrudelCommand#) {
+    g_cmd_stream |> gather_archive() $(var cmd : StrudelCommand) {
         if (cmd is shutdown) {
             running = false
         } elif (cmd is set_bpm) {
@@ -728,22 +723,24 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
     if (g_playback_box == null) {
         g_playback_box = unsafe(lock_box_create())
     }
-    // create channels
-    g_cmd_channel = unsafe(channel_create())
-    g_done_channel = unsafe(channel_create())
+    // create command stream and done status (thread-exit signal, wait group of 1).
+    // @capture auto-bumps refcount for Stream and JobStatus — no manual add_ref needed.
+    g_cmd_stream = unsafe(stream_create())
+    g_done_status = unsafe(job_status_create())
+    g_done_status |> append(1)
     // create PCM stream on main thread (audio globals are initialized here)
     let thread_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     // capture shared resources from main thread
     var bank_ptr = unsafe(addr(g_bank))
     var sf2_ptr = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
     var audio_ch = get_audio_command_stream()
-    var cmd_ch = g_cmd_channel
-    var done_ch = g_done_channel
+    var cmd_st = g_cmd_stream
+    var done_st = g_done_status
     var pb_box = g_playback_box
     let wt = g_wall_time
     let cps = g_cps
     let la = g_look_ahead
-    new_thread() <| @capture(= fn, = bank_ptr, = sf2_ptr, = audio_ch, = cmd_ch, = done_ch, = pb_box, = wt, = cps, = la, = thread_sid) {
+    new_thread() <| @capture(= fn, = bank_ptr, = sf2_ptr, = audio_ch, = cmd_st, = done_st, = pb_box, = wt, = cps, = la, = thread_sid) {
         // inject shared resources into thread context
         g_bank_ptr = bank_ptr
         unsafe {
@@ -751,8 +748,8 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         }
         g_sf2 = unsafe(reinterpret<SF2File?>(sf2_ptr))
         g_sid = thread_sid
-        g_cmd_channel = cmd_ch
-        g_done_channel = done_ch
+        g_cmd_stream = cmd_st
+        g_done_status = done_st
         g_playback_box = pb_box
         g_wall_time = wt
         g_cps = cps
@@ -763,32 +760,22 @@ def public strudel_init(fn : function<() : void>; cmd_fn : function<(cmd : strin
         unsafe {
             set_audio_thread_command_stream(null)
         }
-        cmd_ch |> release()
+        cmd_st |> release()
         pb_box |> release()
-        done_ch |> push(new StrudelCommand(shutdown = true))
-        done_ch |> release()
+        done_st |> notify_and_release
     }
 }
 
 def public strudel_shutdown() {
-    //! Shut down playback: signal the strudel thread to stop, release channels/lockboxes, free all tracks.
+    //! Shut down playback: signal the strudel thread to stop, release stream/status/lockboxes, free all tracks.
     //! Safe to call from the main thread; also finalizes memory/utilization stats.
-    if (g_cmd_channel != null) {
-        g_cmd_channel |> push(new StrudelCommand(shutdown = true))
-        var got_done = false
-        while (!got_done) {
-            _builtin_channel_pop(g_done_channel) $(data) {
-                if (data != null) {
-                    got_done = true
-                }
-            }
-        }
-        // command channel
-        unsafe(channel_remove(g_cmd_channel))
-        g_cmd_channel = null
-        // done channel
-        unsafe(channel_remove(g_done_channel))
-        g_done_channel = null
+    if (g_cmd_stream != null) {
+        g_cmd_stream |> push_archive(StrudelCommand(shutdown = true))
+        // wait for worker thread to exit (notify_and_release on done_status)
+        g_done_status |> join
+        // refcount was 2 after init; worker's release made it 1; *_remove decrements to 0 and deletes
+        unsafe(stream_remove(g_cmd_stream))
+        unsafe(job_status_remove(g_done_status))
         // player box
         unsafe(lock_box_remove(g_playback_box))
         g_playback_box = null
