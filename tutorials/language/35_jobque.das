@@ -4,6 +4,7 @@
 //   - Initializing the job queue with with_job_que
 //   - Spawning background jobs with new_job
 //   - Channel: push_clone, for_each_clone, notify_and_release
+//   - Stream: push / pop / gather bytes and push_archive / pop_archive structured data
 //   - JobStatus: with_job_status, notify_and_release, join
 //   - Wait groups: with_wait_group and done
 //   - LockBox: set and get
@@ -16,6 +17,7 @@
 options gen2
 
 require daslib/jobque_boost
+require daslib/archive
 
 // === What is jobque? ===
 
@@ -170,6 +172,112 @@ def multiple_producers() {
     // output: producers: [0, 100, 200]
 }
 
+// === Streams ===
+
+def stream_basics() {
+    print("\n=== Streams ===\n")
+
+    // A Stream is a byte-oriented FIFO that owns its data C++-side — either end
+    // can be freed without coordinating with the other, so streams are the
+    // preferred cross-context transport. Channels require both sides to share
+    // the same context lifetime; streams do not.
+    //
+    // Use push / pop for raw bytes, or push_archive / pop_archive to
+    // serialize arbitrary structs and variants via daslib/archive.
+    //
+    // with_stream() — open-ended stream, ready immediately.
+    // with_stream(count) — acts like JobStatus: isReady only after count notifies.
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            // Push a blob of bytes; the Stream takes a copy.
+            var payload = [1u8, 2u8, 3u8, 4u8]
+            s |> push(payload)
+            print("buffered blobs: {s.total}\n")
+
+            // try_pop returns false if the stream is empty; the block receives
+            // a borrowed view valid only for its duration.
+            let ok = s |> try_pop() $(view : array<uint8># -const) {
+                print("popped {length(view)} bytes, first = {view[0]}\n")
+            }
+            print("try_pop succeeded: {ok}\n")
+        }
+    }
+    // output:
+    // buffered blobs: 1
+    // popped 4 bytes, first = 1
+    // try_pop succeeded: true
+}
+
+// === Streams carrying structured data ===
+
+struct Command {
+    id : int
+    name : string
+    payload : array<int>
+}
+
+def stream_archive() {
+    print("\n=== Streams carrying structured data ===\n")
+
+    // push_archive serializes any struct or variant through daslib/archive
+    // and enqueues the resulting bytes. gather_archive drains the stream,
+    // invoking the block once per message in FIFO order.
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            for (i in range(3)) {
+                s |> push_archive(Command(id = i, name = "cmd", payload <- [i, i * 10]))
+            }
+            s |> gather_archive() $(var c : Command) {
+                print("  [{c.id}] {c.name} payload = {c.payload}\n")
+            }
+        }
+    }
+    // output:
+    //   [0] cmd payload = [0, 0]
+    //   [1] cmd payload = [1, 10]
+    //   [2] cmd payload = [2, 20]
+}
+
+// === Stream across a worker job ===
+
+def stream_producer_job() {
+    print("\n=== Stream across a worker job ===\n")
+
+    // Typical pattern: a Stream carries the data, a wait group signals
+    // completion. The producer pushes messages, then calls done(wg);
+    // the consumer waits on the wait group, then drains the stream.
+    //
+    // Using with_stream(count) would also work, but pairing it with a
+    // wait group keeps the "I'm finished" signal independent of whether
+    // any messages were buffered.
+
+    with_job_que() {
+        with_stream() $(var s : Stream?) {
+            with_wait_group(1) $(wg) {
+                new_job() @() {
+                    for (i in range(4)) {
+                        s |> push_archive(Command(id = i, name = "work", payload <- [i * i]))
+                    }
+                    // Jobs that capture a Stream must release their reference
+                    // before exiting — use `s |> release` when completion is
+                    // signalled elsewhere, or `s |> notify_and_release` when
+                    // the Stream itself is the completion signal.
+                    s |> release
+                    wg |> done
+                }
+            }
+            var got : array<int>
+            s |> gather_archive() $(var c : Command) {
+                got |> push(c.payload[0])
+            }
+            print("squares from worker: {got}\n")
+        }
+    }
+    // output: squares from worker: [0, 1, 4, 9]
+}
+
 // === JobStatus and with_job_status ===
 
 def job_status_demo() {
@@ -321,6 +429,9 @@ def main() {
     channels_demo()
     structs_through_channels()
     multiple_producers()
+    stream_basics()
+    stream_archive()
+    stream_producer_job()
     job_status_demo()
     wait_group_demo()
     lockbox_demo()
