@@ -112,10 +112,7 @@ def worker(name : string; steps : int) {
 
 def demo_run_all() {
     print("\n=== cr_run_all (cooperative scheduling) ===\n")
-    var tasks : Coroutines
-    tasks |> emplace <| worker("alpha", 3)
-    tasks |> emplace <| worker("beta", 2)
-    tasks |> emplace <| worker("gamma", 4)
+    var tasks : Coroutines <- [worker("alpha", 3), worker("beta", 2), worker("gamma", 4)]
     cr_run_all(tasks)
     print("  all tasks done\n")
 }
@@ -223,9 +220,7 @@ def batch_processor(name : string; total_items : int) {
 
 def demo_practical() {
     print("\n=== practical: cooperative batch processing ===\n")
-    var tasks : Coroutines
-    tasks |> emplace <| batch_processor("worker-A", 5)
-    tasks |> emplace <| batch_processor("worker-B", 3)
+    var tasks : Coroutines <- [batch_processor("worker-A", 5), batch_processor("worker-B", 3)]
     cr_run_all(tasks)
     print("  all batches done\n")
 }

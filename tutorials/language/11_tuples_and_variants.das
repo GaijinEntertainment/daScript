@@ -152,9 +152,7 @@ def main {
 
     // typedef creates a name for any type.
     // StringArray was declared above as array<string>.
-    var names : StringArray
-    names |> push("Alice")
-    names |> push("Bob")
+    let names : StringArray <- ["Alice", "Bob"]
     print("names: {names[0]}, {names[1]}\n")
 
     // You can also use typedef for function types, tables, etc.

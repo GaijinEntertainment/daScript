@@ -175,10 +175,7 @@ variant Shape {
 def demo_variants() {
     print("\n=== Section 5: Variants ===\n")
 
-    var shapes : array<Shape>
-    shapes |> emplace(Shape(circle = 5.0))
-    shapes |> emplace(Shape(rect = float2(3.0, 4.0)))
-    shapes |> emplace(Shape(triangle = float3(3.0, 4.0, 5.0)))
+    var shapes <- [Shape(circle = 5.0), Shape(rect = float2(3.0, 4.0)), Shape(triangle = float3(3.0, 4.0, 5.0))]
 
     for (s in shapes) {
         apply(s) $(name, field) {

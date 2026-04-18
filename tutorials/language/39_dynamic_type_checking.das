@@ -203,10 +203,9 @@ def is_as_syntax_demo() {
 def process_shapes() {
     print("\n=== polymorphic processing ===\n")
 
-    var shapes : array<Shape?>
-    shapes |> push(new Circle(name = "sun", radius = 10.0))
-    shapes |> push(new Rectangle(name = "wall", width = 8.0, height = 3.0))
-    shapes |> push(new Circle(name = "ball", radius = 2.5))
+    var shapes <- array<Shape?>(new Circle(name = "sun", radius = 10.0),
+                                new Rectangle(name = "wall", width = 8.0, height = 3.0),
+                                new Circle(name = "ball", radius = 2.5))
     var sq = new Square(name = "tile")
     sq.width = 4.0
     sq.height = 4.0

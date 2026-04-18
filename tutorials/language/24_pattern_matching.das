@@ -385,11 +385,9 @@ def main {
     print("  [1,5,9] -> {classify_static_arr(sa)}\n")
     sa = fixed_array<int>(7, 7, 7)
     print("  [7,7,7] -> {classify_static_arr(sa)}\n")
-    var da : array<int>
-    da |> push(0); da |> push(0); da |> push(3); da |> push(4)
+    let da <- [0, 0, 3, 4]
     print("  [0,0,3,4] -> {classify_dynamic_arr(da)}\n")
-    var da2 : array<int>
-    da2 |> push(5); da2 |> push(6)
+    let da2 <- [5, 6]
     print("  [5,6] -> {classify_dynamic_arr(da2)}\n")
 
     // match_expr

@@ -113,10 +113,11 @@ class BuildDemoMacro : AstCallMacro {
         // 6. qmacro_block() { stmts } — multiple statements as ExprBlock.
         //    $b(stmts) — splice array<ExpressionPtr> as a block body.
         // ===============================================================
-        var steps : array<ExpressionPtr>
-        steps |> push <| qmacro(print("  step 1\n"))
-        steps |> push <| qmacro(print("  step 2\n"))
-        steps |> push <| qmacro(print("  step 3\n"))
+        var steps <- [
+            qmacro(print("  step 1\n")),
+            qmacro(print("  step 2\n")),
+            qmacro(print("  step 3\n"))
+        ]
 
         var block_stmts = qmacro_block() {
             print("qmacro_block body:\n")

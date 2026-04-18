@@ -20,6 +20,7 @@ module style_lint shared private
 //!   STYLE006 — string(__rtti) comparison should use `is` operator
 //!   STYLE010 — if (true) should be a bare block
 //!   STYLE011 — variable declaration followed by immediate assignment
+//!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
 
 require daslib/ast_boost
 require strings
@@ -385,6 +386,77 @@ class StyleLintVisitor : AstVisitor {
             }
             pending_uninit_vars |> resize(0)
         }
+        if (expr is ExprLet) {
+            self->check_style012_array_init(blk, expr as ExprLet)
+        }
+    }
+
+    // --- STYLE012: array<T> var then contiguous push/emplace instead of literal ---
+
+    def check_style012_array_init(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function != null && current_function.fromGeneric != null) {
+            return
+        }
+        // Find this ExprLet's index in the enclosing block's statement list.
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        if (idx < 0 || idx + 1 >= n) {
+            return
+        }
+        for (v in elet.variables) {
+            if (v.init != null) {
+                continue
+            }
+            if (v.flags.generated || v.flags.inScope) {
+                continue
+            }
+            if (v._type == null || v._type.baseType != Type.tArray) {
+                continue
+            }
+            if (length(v._type.dim) != 0) {
+                continue
+            }
+            var count = 0
+            for (j in range(idx + 1, n)) {
+                let stmt = blk.list[j]
+                if (!(stmt is ExprCall)) {
+                    break
+                }
+                if (!self->is_push_or_emplace_of(stmt as ExprCall, v)) {
+                    break
+                }
+                count++
+            }
+            if (count >= 2) {
+                self->style_warning("STYLE012: array<T> initialized by a run of push/emplace calls; use an array literal `var a <- [x, <-y, z]` (or `var a <- array<T>(x, y, z)` when you need an explicit element type, e.g. for polymorphic upcasts)", v.at)
+            }
+        }
+    }
+
+    def is_push_or_emplace_of(call : ExprCall?; target : Variable?) : bool {
+        if (call.func == null || call.func.fromGeneric == null) {
+            return false
+        }
+        if (call.func.fromGeneric.name != "push" && call.func.fromGeneric.name != "emplace") {
+            return false
+        }
+        if (length(call.arguments) < 2) {
+            return false
+        }
+        var arg = call.arguments[0]
+        if (arg is ExprRef2Value) {
+            arg = (arg as ExprRef2Value.subexpr)
+        }
+        if (!(arg is ExprVar)) {
+            return false
+        }
+        return (arg as ExprVar).variable == target
     }
 
     // --- helpers ---
