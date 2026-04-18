@@ -531,6 +531,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | override_field.das | Struct field `override` for function pointers in derived struct | |
 | partial_specialization.das | Generic function specialization dispatch | |
 | peek_and_modify_string.das | `peek_data` finds chars, `modify_data` replaces bytes | |
+| permissive_tuple_const.das | Tuple param with `const?` field accepts argument tuple with non-const `?` field (generic + exact overloads) | |
 | pointers.das | Pointer operations — new, deref, safe navigation, null checks | |
 | ptr_arithmetic.das | Pointer arithmetic — signed/unsigned int/int64/uint/uint64 | |
 | ptr_index.das | Pointer deref and index, default null pointer argument | |
