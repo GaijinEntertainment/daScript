@@ -25,7 +25,6 @@ TextPrinter tout;
 static string projectFile;
 // aot config
 static bool aotMacros = false;
-static bool aotEnabled = false;
 static bool isAotLib = false;
 static string aotResult = "";
 // aot config end
@@ -58,7 +57,7 @@ static bool heapReportAtExit = false;
 
 static CodeOfPolicies getPolicies() {
     CodeOfPolicies policies;
-    policies.aot = aotEnabled;
+    policies.aot = false;
     policies.aot_module = true;
     if (aotMacros) {
         policies.aot_macros = true;
@@ -73,114 +72,64 @@ static CodeOfPolicies getPolicies() {
     return policies;
 }
 
-bool compile ( const string & fn, const string & cppFn, bool dryRun, bool cross_platform ) {
+bool aot_compile ( vector<pair<string, string>> &aot_files, bool dryRun, bool cross_platform ) {
+    // call daslib/aot_cpp `aot()` from C++
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,getPolicies()) ) {
-        if ( program->failed() ) {
-            tout << "failed to compile\n";
-            for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-            }
-            return false;
-        } else {
-            auto pctx = SimulateWithErrReport(program, tout);
-            if (!pctx) {
-                return false;
-            }
-            if ( dryRun ) {
-                tout << "dry run success, no changes will be written\n";
-                return true;
-            }
-
-            // AOT time
-            TextWriter tw;
-            bool noAotModule = false;
-            // header
-            tw << AOT_INCLUDES;
-            // lets comment on required modules
-            program->library.foreach_in_order([&](Module * mod){
-                if ( mod->name=="" ) {
-                    // nothing, its main program module. i.e ::
-                } else {
-                    if ( mod->name=="$" ) {
-                        tw << " // require builtin\n";
-                    } else {
-                        tw << " // require " << mod->name << "\n";
-                    }
-                    if ( mod->aotRequire(tw)==ModuleAotType::no_aot ) {
-                        tw << "  // AOT disabled due to this module\n";
-                        noAotModule = true;
-                    }
-                }
-                return true;
-            }, program->getThisModule());
-            if ( program->options.getBoolOption("no_aot",false) ) {
-                TextWriter noTw;
-                if (!noAotModule)
-                  noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
-                else
-                  noTw << "// AOT disabled due to options no_aot=true. There are also some modules which require no_aot\n\n";
-                return saveToFile(tout, cppFn, noTw.str(), quiet);
-            } else if ( noAotModule ) {
-                TextWriter noTw;
-                noTw << "// AOT disabled due to module requirements\n";
-                noTw << "#if 0\n\n";
-                noTw << tw.str();
-                noTw << "\n#endif\n";
-                return saveToFile(tout, cppFn, noTw.str(), quiet);
-            } else {
-                tw << AOT_HEADERS;
-                {
-                    NamespaceGuard das_guard(tw, "das");
-                    {
-                        NamespaceGuard anon_guard(tw, program->thisNamespace); // anonymous
-                        daScriptEnvironment::getBound()->g_Program = program;    // setting it for the AOT macros
-                        program->aotCpp(*pctx, tw, cross_platform);
-                        daScriptEnvironment::getBound()->g_Program.reset();
-                        // list STUFF
-                        program->registerAotCpp(tw, *pctx, false);
-                        tw << "\n";
-                        if ( !isAotLib ) tw << "static AotListBase impl(registerAotFunctions);\n";
-                        // validation stuff
-                        if ( paranoid_validation ) {
-                            program->validateAotCpp(tw,*pctx);
-                            tw << "\n";
-                        }
-                        // footer
-                    }
-                    if ( isAotLib ) tw << "AotListBase impl_aot_" << program->thisModule->name << "(" << program->thisNamespace << "::registerAotFunctions);\n";
-                }
-                tw << AOT_FOOTER;
-                return saveToFile(tout, cppFn, tw.str(), quiet);
-            }
+    CodeOfPolicies stubPolicies;
+    stubPolicies.version_2_syntax = true;
+    stubPolicies.aot_module = true;
+    string aotCppPath = getDasRoot() + "/daslib/aot_cpp.das";
+    auto program = compileDaScript(aotCppPath, access, tout, dummyGroup, stubPolicies);
+    if ( !program || program->failed() ) {
+        tout << "failed to compile daslib/aot_cpp.das\n";
+        if ( program ) for ( auto & err : program->errors ) {
+            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
         }
-    } else {
-        tout << "failed to compile\n";
         return false;
     }
-}
-
-bool compileStandalone ( const string & inputFile, const string & outDir, const StandaloneContextCfg &cfg ) {
-    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
-    ModuleGroup dummyGroup;
-    auto policies = getPolicies();
-    policies.ignore_shared_modules = true;
-    if ( auto program = compileDaScript(inputFile,access,tout,dummyGroup,policies) ) {
-        if ( program->failed() ) {
-            tout << "failed to compile\n";
-            for ( auto & err : program->errors ) {
-                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
-            }
-            return false;
-        } else {
-            runStandaloneVisitor(program, outDir, cfg);
-            return true;
-        }
-    } else {
-        tout << "failed to compile\n";
+    auto pctx = SimulateWithErrReport(program, tout);
+    if ( !pctx ) return false;
+    bool isUnique = false;
+    auto aotFn = pctx->findFunction("aot", isUnique);
+    if ( !aotFn ) {
+        tout << "daslib aot() not found\n";
         return false;
     }
+    CodeOfPolicies cop = getPolicies();
+    cop.aot = false;
+    cop.aot_lib = isAotLib;
+    cop.ignore_shared_modules = false;
+    bool compiled = true;
+    for (const auto &[in, out] : aot_files) {
+        // Use `or` here, to return `true` if at least one file compiled successfully.
+        string inputStr = in;
+        vec4f args[4];
+        args[0] = cast<char*>::from((char*)inputStr.c_str());
+        args[1] = cast<bool>::from(paranoid_validation);
+        args[2] = cast<bool>::from(cross_platform);
+        args[3] = cast<CodeOfPolicies*>::from(&cop);
+        pctx->restart();
+        vec4f ret = pctx->evalWithCatch(aotFn, args);
+        if ( auto ex = pctx->getException() ) {
+            tout << "aot exception: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
+            return false;
+        }
+        const char * resultStr = cast<char*>::to(ret);
+        if ( dryRun ) {
+            tout << "dry run success, no changes will be written\n";
+        } else if ( !resultStr || !resultStr[0] ) {
+            tout << "aot returned empty result for " << in << "\n";
+            compiled = false;
+        } else {
+            bool is_ok = saveToFile(tout, out, resultStr, quiet);
+            if (!is_ok && !quiet) {
+                tout << "Failed to compile `" << out << "` in aot.\n";
+            }
+            compiled &= is_ok;
+        }
+    }
+    return compiled;
 }
 
 int das_aot_main ( int argc, char * argv[] ) {
@@ -190,16 +139,13 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-standalone-context <ctx_name>] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-standalone-class <class_name>]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform]\n";
         return -1;
     }
     bool dryRun = false;
     bool cross_platform = false; // strcmp("-aotlib", argv[1]) == 0;
     bool scriptArgs = false;
-    bool standaloneContext = false;
     bool das_mode = false;
-    char * standaloneContextName = nullptr;
-    char * standaloneClassName = nullptr;
     vector<pair<string, string>> aot_files;
     string project_root;
     if ( argc>3  ) {
@@ -223,13 +169,6 @@ int das_aot_main ( int argc, char * argv[] ) {
                 cross_platform = true;
             } else if ( strcmp(argv[ai],"-aot-macros")==0 ) {
                 aotMacros = true;
-            } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
-                standaloneContextName = argv[ai + 1];
-                standaloneContext = true;
-                ai += 1;
-            } else if ( strcmp(argv[ai],"-standalone-class")==0 ) {
-                standaloneClassName = argv[ai + 1];
-                ai += 1;
             } else if ( strcmp(argv[ai],"-project")==0 ) {
                 if ( ai+1 > argc ) {
                     tout << "das-project requires argument";
@@ -281,63 +220,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     Module::Initialize();
     daScriptEnvironment::getBound()->g_isInAot = true;
     bool compiled = true;
-    if ( standaloneContext ) {
-        StandaloneContextCfg cfg = {standaloneContextName, standaloneClassName ? standaloneClassName : "StandaloneContext"};
-        cfg.cross_platform = cross_platform;
-        compiled = compileStandalone(argv[2], argv[3], cfg);
-    } else {
-        if (argv[2] == string("aot_file_mode")) {
-            auto f = get_file_access(nullptr);
-            const char *src;
-            uint32_t len;
-            f->getFileInfo(argv[3])->getSourceAndLength(src, len);
-            string_view content(src, len);
-            size_t pos = 0;
-            // Old MAC uses `\r`. Windows uses `\r\n`. Linux uses `\n`.
-            // Solution below is not optimal, but simplest.
-            // We will remove it, once switched to the das aot completely.
-            while (pos < content.length()) {
-                size_t end1 = content.find('\n', pos);
-                size_t end2 = content.find('\r', pos);
-                size_t end = das::min(end1, end2);
-                string_view line = content.substr(pos, end - pos);
-                pos = (end == string_view::npos) ? content.length() : end + 1;
-                if (line.empty()) continue;
-
-                auto mode_end = line.find(' ');
-                auto in_file_end = line.find(' ', mode_end + 1);
-
-                // No need to support contexts. This is temporary.
-                if (line.substr(0, mode_end) != "aot") {
-                    if (!quiet) {
-                        tout << "Uknown mode on line `" << string(line) << "`, skipping.\n";
-                    }
-                    continue;
-                }
-
-                string in_file(line.substr(mode_end + 1, in_file_end - mode_end - 1));
-                string out_file(line.substr(in_file_end + 1));
-
-                // Use `or` here, to return `true` if at least one file compiled successfully.
-                auto is_ok = compile(in_file, out_file, dryRun, cross_platform);
-                if (!is_ok && !quiet) {
-                    tout << "Failed to compile `" << string(in_file) << "` in aot.\n";
-                }
-                compiled &= is_ok;
-            }
-        } else {
-            size_t id = 2;
-            for (const auto &[in, out] : aot_files) {
-                // Use `or` here, to return `true` if at least one file compiled successfully.
-                auto is_ok = compile(in, out, dryRun, cross_platform);
-                if (!is_ok && !quiet) {
-                    tout << "Failed to compile `" << out << "` in aot.\n";
-                }
-                compiled &= is_ok;
-                id += 2;
-            }
-        }
-    }
+    compiled = aot_compile(aot_files, dryRun, cross_platform);
     Module::Shutdown();
     return compiled ? 0 : -1;
 }
@@ -371,12 +254,6 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
         access->addExtraModule("just_in_time", getDasRoot() + "/daslib/just_in_time.das");
         policies.jit_output_path = jitOutPath;
         policies.dll_search_paths.emplace_back(getDasRoot() + "/lib");
-    } else if (aotEnabled) {
-        policies.aot = false;
-        policies.aot_module = true;
-        access->addExtraModule("ast_aot_macro", getDasRoot() + "/daslib/aot_macro.das");
-        policies.aot_result = aotResult;
-        daScriptEnvironment::getBound()->g_isInAot = true;
     }
     if ( useAot ) {
         // don't set policies.aot here - the host program (e.g. dastest) doesn't need AOT linking
@@ -529,8 +406,6 @@ void print_help() {
         << "    -exe        JIT compile to standalone executable (implies -dry-run)\n"
         << "    -output <path> set JIT output path\n"
         << "    -use-aot    enable AOT linking (requires AOT stubs linked into the binary)\n"
-        << "    -aot2 <in_script.das> <out_script.das.cpp> AOT generation (v2, implies -dry-run)\n"
-        << "    -aot_lib    mark AOT output as library module (use with -aot2)\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -project_root <path> root directory of the project (used for dyn modules)\n"
         << "    -run-fmt    <-i/-d> <-v2/-v1> {--semicolon} run formatter\n"
@@ -658,21 +533,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="exe") {
                 jitEnabled = JitMode::Executable;
                 dryRun = true;
-            } else if ( cmd=="aot2") {
-                dryRun = true;
-                aotEnabled = true;
-                if ( i+3 > argc ) {
-                    printf("daslang -aot2 <in_script.das> <out_script.das.cpp>\n");
-                    print_help();
-                    return -1;
-                }
-                files.emplace_back(argv[i + 1]);
-                aotResult = argv[i + 2];
-                i += 2;
-            } else if ( cmd=="aot_lib") {
-                dryRun = true;
-                aotEnabled = true;
-                isAotLib = true;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {
