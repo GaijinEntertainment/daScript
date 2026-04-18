@@ -3924,11 +3924,6 @@ namespace das
             logs << "unique        " << context.getUniqueMemorySize() << "\n";
         }
 
-        // log CPP
-        if (options.getBoolOption("log_cpp")) {
-            aotCpp(context,logs);
-            registerAotCpp(logs,context);
-        }
         isSimulating = false;
         context.thisHelper = &helper;   // note - we may need helper for the 'complete'
         auto bound_env = daScriptEnvironment::getBound();

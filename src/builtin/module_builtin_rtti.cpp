@@ -306,8 +306,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(last_exception)>("last_exception");
             addField<DAS_BIND_MANAGED_FIELD(exceptionAt)>("exceptionAt");
             addField<DAS_BIND_MANAGED_FIELD(contextMutex)>("contextMutex");
-            addProperty<DAS_BIND_MANAGED_PROP(getInitSemanticHash)>("getInitSemanticHash",
-                                                                  "getInitSemanticHash");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalFunctions)>("totalFunctions",
                 "getTotalFunctions");
             addProperty<DAS_BIND_MANAGED_PROP(getTotalVariables)>("totalVariables",

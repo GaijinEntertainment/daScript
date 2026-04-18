@@ -346,7 +346,6 @@ namespace das
             sharedSize += sharedDiff;
             globalsSize += globalDiff;
         }
-        uint64_t getInitSemanticHash();
 
         void onAllocateString ( void * ptr, uint64_t size, bool tempString, const LineInfo & at );
         void onFreeString ( void * ptr, bool tempString, const LineInfo & at );

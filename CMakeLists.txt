@@ -635,7 +635,6 @@ src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
-src/ast/ast_aot_cpp.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_infer_type_report.cpp
 src/ast/ast_infer_type_function.cpp
@@ -1185,7 +1184,6 @@ endif()
 # This list should be significantly reduced, most of the files, except aot related should be private.
 SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/aot_templates.h
-    include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/ast_expressions.h
     include/daScript/ast/ast_generate.h
     include/daScript/ast/ast.h
