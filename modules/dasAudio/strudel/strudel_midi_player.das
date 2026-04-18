@@ -6,7 +6,7 @@ options no_unused_function_arguments = false
 module strudel_midi_player shared public
 //! MIDI Standard File playback on a dedicated audio thread.
 //! Routes events to either a GM-preset oscillator/sample path or an SF2 soundfont,
-//! mixes multiple tracks through reverb/chorus buses, and exposes a command-channel API.
+//! mixes multiple tracks through reverb/chorus buses, and exposes a command-stream API.
 
 require strudel/strudel_midi
 require strudel/strudel_synth
@@ -16,6 +16,7 @@ require strudel/strudel_sf2_voice
 require audio/audio_boost
 require audio
 require daslib/jobque_boost
+require daslib/archive
 require strudel/strudel_player
 require daslib/fio
 require math
@@ -792,7 +793,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
     return <- output
 }
 
-// ─── Command Channel ───
+// ─── Command Stream ───
 
 variant private MidiCommand {
     shutdown     : bool;
@@ -802,11 +803,14 @@ variant private MidiCommand {
     set_pause    : bool;
 }
 
+// Pointer fields are encoded as uint64 (via intptr) so the command payload is POD-serializable.
+// The pointed-to MidiFile/SampleBank/SF2File lives in main-thread globals that outlive the command.
+[safe_when_uninitialized]
 struct private MidiTrackCmd {
     name    : string
-    file    : MidiFile const?   // pointer to main context's g_midi_files entry
-    bank    : SampleBank const? // pointer to main context's sample bank (optional)
-    sf2     : SF2File const?    // pointer to main context's SF2 file (optional)
+    file    : uint64    // MidiFile const?   — main-thread g_midi_files entry
+    bank    : uint64    // SampleBank const? — main-thread sample bank (0 = none)
+    sf2     : uint64    // SF2File const?    — main-thread SF2 file (0 = none)
     gain    : float = 1.0
     looping : bool = false
 }
@@ -814,8 +818,8 @@ struct private MidiTrackCmd {
 // ─── Module Globals ───
 
 var private g_midi_sid : uint64 = 0ul
-var private g_midi_cmd_channel : Channel?
-var private g_midi_done_channel : Channel?
+var private g_midi_cmd_stream  : Stream?
+var private g_midi_done_status : JobStatus?
 var private g_midi_files : table<string; MidiFile>  // owns parsed data
 var private g_midi_bank : SampleBank                // module-global sample bank
 var private g_midi_sf2 : SF2File?                   // module-global SF2 soundfont
@@ -824,7 +828,7 @@ var private g_midi_audio_vis_ptr : void?  // audio vis channel as void* (avoids 
 
 // ─── Audio Thread Main Loop ───
 
-def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_channel : Channel?; audio_channel : void?; vis_ptr : void?) {
+def private midi_thread_main(sid : uint64; var cmd_stream : Stream?; var done_status : JobStatus?; audio_channel : void?; vis_ptr : void?) {
     unsafe {
         set_audio_thread_command_stream(audio_channel)
     }
@@ -854,20 +858,17 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     var running = true
     while (running) {
         // process commands
-        cmd_channel |> gather() $(cmd : MidiCommand#) {
+        cmd_stream |> gather_archive() $(var cmd : MidiCommand) {
             if (cmd is shutdown) {
                 running = false
             } elif (cmd is add_track) {
-                let tc & = cmd as add_track
-                // extract pointer via reinterpret to strip # temp lifetime
-                let file_ptr = unsafe(reinterpret<MidiFile const?>(tc.file))
-                let bank_ptr = unsafe(reinterpret<SampleBank const?>(tc.bank))
-                let sf2_ptr = unsafe(reinterpret<SF2File const?>(tc.sf2))
+                assume tc = cmd as add_track
+                // payload pointers are uint64 (intptr-encoded); keep them opaque until use
                 pending_adds |> emplace(MidiTrackCmd(
                     name := tc.name,
-                    file = file_ptr,
-                    bank = bank_ptr,
-                    sf2 = sf2_ptr,
+                    file = tc.file,
+                    bank = tc.bank,
+                    sf2 = tc.sf2,
                     gain = tc.gain,
                     looping = tc.looping
                 ))
@@ -912,7 +913,11 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
                 k --
             }
             var ps = new MidiPlaybackState()
-            init_playback(*ps, tc.file, tc.name, tc.gain, tc.looping, tc.bank, tc.sf2)
+            // reinterpret uint64 payload pointers back to typed smart pointers
+            let file_ptr = unsafe(reinterpret<MidiFile const?>(tc.file))
+            let bank_ptr = unsafe(reinterpret<SampleBank const?>(tc.bank))
+            let sf2_ptr  = unsafe(reinterpret<SF2File const?>(tc.sf2))
+            init_playback(*ps, file_ptr, tc.name, tc.gain, tc.looping, bank_ptr, sf2_ptr)
             tracks |> push(ps)
         }
         pending_adds |> clear()
@@ -1001,7 +1006,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
     unsafe {
         set_audio_thread_command_stream(null)
     }
-    cmd_channel |> release()
+    cmd_stream |> release
     unsafe {
         if (g_reverb != null) {
             conv_reverb_uninit(g_reverb)
@@ -1011,8 +1016,7 @@ def private midi_thread_main(sid : uint64; var cmd_channel : Channel?; var done_
             delete g_chorus
         }
     }
-    done_channel |> push(new MidiCommand(shutdown = true))
-    done_channel |> release()
+    done_status |> notify_and_release
 }
 
 // ─── Public API ───
@@ -1034,17 +1038,19 @@ def public midi_init() {
     if (g_midi_sid == 0ul) {
         g_midi_sid = play_sound_from_pcm_stream(MA_SAMPLE_RATE, MA_CHANNELS)
     }
-    g_midi_cmd_channel = unsafe(channel_create())
-    g_midi_done_channel = unsafe(channel_create())
+    g_midi_cmd_stream = unsafe(stream_create())
+    g_midi_done_status = unsafe(job_status_create())
+    g_midi_done_status |> append(1)                   // expect one notification on worker exit
+    // @capture auto-bumps refcount for Stream and JobStatus — no manual add_ref needed
     let sid = g_midi_sid
-    var cmd_ch = g_midi_cmd_channel
-    var done_ch = g_midi_done_channel
+    var cmd_st = g_midi_cmd_stream
+    var done_st = g_midi_done_status
     let audio_ch = get_audio_command_stream()
     let vis_ptr = g_midi_audio_vis_ptr
-    new_thread() <| @capture(= sid, = cmd_ch, = done_ch, = audio_ch, = vis_ptr) {
-        midi_thread_main(sid, cmd_ch, done_ch, audio_ch, vis_ptr)
-        cmd_ch = null
-        done_ch = null
+    new_thread() <| @capture(= sid, = cmd_st, = done_st, = audio_ch, = vis_ptr) {
+        midi_thread_main(sid, cmd_st, done_st, audio_ch, vis_ptr)
+        cmd_st = null
+        done_st = null
     }
     g_midi_running = true
 }
@@ -1081,15 +1087,15 @@ def public midi_play(name : string; path : string; gain : float = 1.0; looping :
     }
     let file_ptr = unsafe(addr(g_midi_files[name]))
     let sf2_ptr = use_sf2 && g_midi_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_midi_sf2)) : null
-    var cmd = new MidiCommand(add_track = MidiTrackCmd(
+    let bank_ptr = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank))))
+    g_midi_cmd_stream |> push_archive(MidiCommand(add_track = MidiTrackCmd(
         name = name,
-        file = file_ptr,
-        bank = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank)))),
-        sf2 = sf2_ptr,
+        file = intptr(file_ptr),
+        bank = intptr(bank_ptr),
+        sf2  = intptr(sf2_ptr),
         gain = gain,
         looping = looping
-    ))
-    g_midi_cmd_channel |> push(cmd)
+    )))
     return true
 }
 
@@ -1106,15 +1112,15 @@ def public midi_play_data(name : string; data : array<uint8>; gain : float = 1.0
     }
     let file_ptr = unsafe(addr(g_midi_files[name]))
     let sf2_ptr = use_sf2 && g_midi_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_midi_sf2)) : null
-    var cmd = new MidiCommand(add_track = MidiTrackCmd(
+    let bank_ptr = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank))))
+    g_midi_cmd_stream |> push_archive(MidiCommand(add_track = MidiTrackCmd(
         name = name,
-        file = file_ptr,
-        bank = bank != null ? bank : unsafe(reinterpret<SampleBank const?>(unsafe(addr(g_midi_bank)))),
-        sf2 = sf2_ptr,
+        file = intptr(file_ptr),
+        bank = intptr(bank_ptr),
+        sf2  = intptr(sf2_ptr),
         gain = gain,
         looping = looping
-    ))
-    g_midi_cmd_channel |> push(cmd)
+    )))
     return true
 }
 
@@ -1127,54 +1133,36 @@ def public midi_stop(name : string = "") {
         // stop all — shutdown the thread
         midi_shutdown()
     } else {
-        var cmd = new MidiCommand(shutdown = false)
-        unsafe {
-            set_variant_index(*cmd, 2)  // remove_track
-            cmd.remove_track = name
-        }
-        g_midi_cmd_channel |> push(cmd)
+        g_midi_cmd_stream |> push_archive(MidiCommand(remove_track = name))
     }
 }
 
 def public midi_set_volume(name : string; volume : float; fade : float = 0.0) {
     //! Set the linear gain of a named track, optionally fading over `fade` seconds (0 = instantaneous).
-    if (!g_midi_running || g_midi_cmd_channel == null) {
+    if (!g_midi_running || g_midi_cmd_stream == null) {
         return
     }
-    var cmd = new MidiCommand(shutdown = false)
-    unsafe {
-        set_variant_index(*cmd, 3)  // set_volume
-        cmd.set_volume = (name, volume, fade)
-    }
-    g_midi_cmd_channel |> push(cmd)
+    g_midi_cmd_stream |> push_archive(MidiCommand(set_volume = (name, volume, fade)))
 }
 
 def public midi_set_pause(paused : bool) {
     //! Pause or resume all MIDI playback (the underlying audio stream continues with silence while paused).
-    if (!g_midi_running || g_midi_cmd_channel == null) {
+    if (!g_midi_running || g_midi_cmd_stream == null) {
         return
     }
-    g_midi_cmd_channel |> push(new MidiCommand(set_pause = paused))
+    g_midi_cmd_stream |> push_archive(MidiCommand(set_pause = paused))
 }
 
 def public midi_shutdown() {
-    //! Stop the playback thread and release its channels; blocks until the audio thread confirms shutdown.
-    if (!g_midi_running || g_midi_cmd_channel == null) {
+    //! Stop the playback thread and release its stream/status; blocks until the audio thread confirms shutdown.
+    if (!g_midi_running || g_midi_cmd_stream == null) {
         return
     }
-    g_midi_cmd_channel |> push(new MidiCommand(shutdown = true))
-    var got_done = false
-    while (!got_done) {
-        _builtin_channel_pop(g_midi_done_channel) $(data) {
-            if (data != null) {
-                got_done = true
-            }
-        }
-    }
-    unsafe(channel_remove(g_midi_cmd_channel))
-    g_midi_cmd_channel = null
-    unsafe(channel_remove(g_midi_done_channel))
-    g_midi_done_channel = null
+    g_midi_cmd_stream |> push_archive(MidiCommand(shutdown = true))
+    g_midi_done_status |> join                        // blocks until worker notify_and_release
+    // refcount was 2 after init; worker's release made it 1; stream_remove decrements to 0 and deletes
+    unsafe(stream_remove(g_midi_cmd_stream))
+    unsafe(job_status_remove(g_midi_done_status))
     g_midi_running = false
     // release SF2 soundfont (finalizer recursively frees instruments/presets/zones)
     if (g_midi_sf2 != null) {

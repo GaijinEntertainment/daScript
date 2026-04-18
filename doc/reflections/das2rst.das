@@ -475,7 +475,7 @@ def document_module_jobque_boost(root : string) {
         group_by_regex("Synchronization", mod, %regex~(with_wait_group|done)$%%),
         group_by_regex("Parallel execution", mod, %regex~(_parallel_for|parallel_for|_parallel_for_each|parallel_for_each|_parallel_map|parallel_map)$%%),
         group_by_regex("LockBox operations", mod, %regex~(set|get|update|clear|fill|grab)$%%),
-        group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status|capture_jobque_lock_box|release_capture_jobque_lock_box)$%%)
+        group_by_regex("Internal capture details", mod, %regex~(capture_jobque_channel|capture_jobque_job_status|release_capture_jobque_channel|release_capture_jobque_job_status|capture_jobque_lock_box|release_capture_jobque_lock_box|capture_jobque_stream|release_capture_jobque_stream)$%%)
     )
     document("Boost package for jobs and threads", mod, "jobque_boost.rst", groups)
 }
