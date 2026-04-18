@@ -425,8 +425,6 @@ default ``false``.
      - Logs memory usage after simulation.
    * - ``log_debug_mem``
      - Logs debug memory information.
-   * - ``log_cpp``
-     - Logs C++ representation.
    * - ``log_aot``
      - Logs AOT output.
    * - ``log_infer_passes``

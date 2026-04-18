@@ -2,6 +2,7 @@
 
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast.h"
+#include "daScript/misc/enums.h"
 
 #include <inttypes.h>
 
@@ -3415,6 +3416,351 @@ namespace das
     }
 
     uint64_t TypeDecl::getMangledNameHash() const { return hash_blockz64((uint8_t *)getMangledName().c_str()); }
+
+    // Name dumper
+
+    Enum<Type> g_cppCTypeTable = {
+        {   Type::autoinfer,    "autoinfer"  },
+        {   Type::alias,        "alias"  },
+        {   Type::anyArgument,  "anyArgument"  },
+        {   Type::tVoid,        "tVoid"  },
+        {   Type::tStructure,   "tStructure" },
+        {   Type::tPointer,     "tPointer" },
+        {   Type::tBool,        "tBool"  },
+        {   Type::tInt8,        "tInt8"  },
+        {   Type::tUInt8,       "tUInt8"  },
+        {   Type::tInt16,       "tInt16"  },
+        {   Type::tUInt16,      "tUInt16"  },
+        {   Type::tInt64,       "tInt64"  },
+        {   Type::tUInt64,      "tUInt64"  },
+        {   Type::tString,      "tString" },
+        {   Type::tPointer,     "tPointer" },
+        {   Type::tEnumeration,   "tEnumeration" },
+        {   Type::tEnumeration8,  "tEnumeration8" },
+        {   Type::tEnumeration16, "tEnumeration16" },
+        {   Type::tEnumeration64, "tEnumeration64" },
+        {   Type::tBitfield,    "tBitfield" },
+        {   Type::tBitfield8,    "tBitfield8" },
+        {   Type::tBitfield16,    "tBitfield16" },
+        {   Type::tBitfield64,    "tBitfield64" },
+        {   Type::tIterator,    "tIterator" },
+        {   Type::tArray,       "tArray" },
+        {   Type::tTable,       "tTable" },
+        {   Type::tInt,         "tInt"   },
+        {   Type::tInt2,        "tInt2"  },
+        {   Type::tInt3,        "tInt3"  },
+        {   Type::tInt4,        "tInt4"  },
+        {   Type::tUInt,        "tUInt"  },
+        {   Type::tUInt2,       "tUInt2" },
+        {   Type::tUInt3,       "tUInt3" },
+        {   Type::tUInt4,       "tUInt4" },
+        {   Type::tFloat,       "tFloat" },
+        {   Type::tFloat2,      "tFloat2"},
+        {   Type::tFloat3,      "tFloat3"},
+        {   Type::tFloat4,      "tFloat4"},
+        {   Type::tDouble,      "tDouble" },
+        {   Type::tRange,       "tRange" },
+        {   Type::tURange,      "tURange"},
+        {   Type::tRange64,     "tRange64" },
+        {   Type::tURange64,    "tURange64"},
+        {   Type::tBlock,       "tBlock"},
+        {   Type::tFunction,    "tFunction"},
+        {   Type::tLambda,      "tLambda"},
+        {   Type::tTuple,       "tTuple"},
+        {   Type::tVariant,     "tVariant"},
+        {   Type::tHandle,      "tHandle"}
+    };
+
+    Enum<Type> g_cppTypeTable = {
+        {   Type::anyArgument,  "vec4f"    },
+        {   Type::tVoid,        "void"     },
+        {   Type::tBool,        "bool"     },
+        {   Type::tInt8,        "int8_t"   },
+        {   Type::tUInt8,       "uint8_t"  },
+        {   Type::tInt16,       "int16_t"  },
+        {   Type::tUInt16,      "uint16_t" },
+        {   Type::tInt64,       "int64_t"  },
+        {   Type::tUInt64,      "uint64_t" },
+        {   Type::tBitfield,    "Bitfield" },
+        {   Type::tBitfield8,   "Bitfield8" },
+        {   Type::tBitfield16,  "Bitfield16" },
+        {   Type::tBitfield64,  "Bitfield64" },
+        {   Type::tString,      "char *"   },
+        {   Type::tInt,         "int32_t"  },
+        {   Type::tInt2,        "int2"     },
+        {   Type::tInt3,        "int3"     },
+        {   Type::tInt4,        "int4"     },
+        {   Type::tUInt,        "uint32_t" },
+        {   Type::tUInt2,       "uint2"    },
+        {   Type::tUInt3,       "uint3"    },
+        {   Type::tUInt4,       "uint4"    },
+        {   Type::tFloat,       "float"    },
+        {   Type::tFloat2,      "float2"   },
+        {   Type::tFloat3,      "float3"   },
+        {   Type::tFloat4,      "float4"   },
+        {   Type::tDouble,      "double"   },
+        {   Type::tRange,       "range"    },
+        {   Type::tURange,      "urange"   },
+        {   Type::tRange64,     "range64"  },
+        {   Type::tURange64,    "urange64" },
+        {   Type::tBlock,       "Block"    },
+        {   Type::tFunction,    "Func"     },
+        {   Type::tLambda,      "Lambda"   },
+        {   Type::tTuple,       "Tuple"    },
+        {   Type::tVariant,     "Variant"  }
+    };
+
+    string aotModuleName ( Module * pm  ) {
+        if ( pm->name.empty() ) {
+            return "";
+        } else if ( pm->name=="$" ) {
+            return "_builtin_";
+        } else {
+            return pm->name;
+        }
+    }
+
+    string das_to_cppString ( Type t ) {
+        return g_cppTypeTable.find(t);
+    }
+
+    string das_to_cppCTypeString ( Type t ) {
+        return g_cppCTypeTable.find(t);
+    }
+
+    bool isConstRedundantForCpp ( const TypeDecl * type ) {
+        if ( type->dim.size() ) return false;
+        if ( type->isVectorType() ) return true;
+        switch ( type->baseType ) {
+            case Type::tBool:
+            case Type::tInt8:
+            case Type::tUInt8:
+            case Type::tInt16:
+            case Type::tUInt16:
+            case Type::tInt64:
+            case Type::tUInt64:
+            case Type::tInt:
+            case Type::tUInt:
+            case Type::tFloat:
+            case Type::tDouble:
+            case Type::tEnumeration:
+            case Type::tEnumeration8:
+            case Type::tEnumeration16:
+            case Type::tEnumeration64:
+            case Type::tBitfield:
+            case Type::tBitfield8:
+            case Type::tBitfield16:
+            case Type::tBitfield64:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static char hex_char ( int Ch ) {
+        Ch &= 0x0f;
+        if ( Ch<=9 ) return (char)('0'+Ch);
+        else return (char)('a'+(Ch-10));
+    }
+
+    string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
+        string name;
+        bool prefix = false;
+        for ( char ch : funcName ) {
+            if ( isalnum(ch) || ch=='_' ) {
+                name += ch;
+            } else {
+                prefix = true;
+                switch ( ch ) {
+                    case '=':   name += "Equ"; break;
+                    case '+':   name += "Add"; break;
+                    case '-':   name += "Sub"; break;
+                    case '*':   name += "Mul"; break;
+                    case '/':   name += "Div"; break;
+                    case '%':   name += "Mod"; break;
+                    case '&':   name += "And"; break;
+                    case '|':   name += "Or"; break;
+                    case '^':   name += "Xor"; break;
+                    case '?':   name += "Qmark"; break;
+                    case '~':   name += "Tilda"; break;
+                    case '!':   name += "Excl"; break;
+                    case '>':   name += "Greater"; break;
+                    case '<':   name += "Less"; break;
+                    case '[':   name += "Sqbl"; break;
+                    case ']':   name += "Sqbr"; break;
+                    case '.':   name += "Dot"; break;
+                    case '`':   name += "Tick"; break;
+                    case ',':   name += "Comma"; break;
+                    default:
+                        name += "_0x";
+                        name += hex_char(ch>>4);
+                        name += hex_char(ch & 0x0f);
+                        name += "_";
+                        break;
+                }
+            }
+        }
+        return prefix ? (suffix + name) : name;
+    }
+
+    static string aotStructName ( Structure * st ) {
+        return aotSuffixNameEx(st->name,"");
+    }
+
+    static string describeCppTypeEx ( const TypeDecl * type,
+                            CpptSubstitureRef substituteRef,
+                            CpptSkipRef skipRef,
+                            CpptSkipConst skipConst,
+                            CpptRedundantConst redundantConst,
+                            ChooseSmartPtr chooseSmartPtr) {
+
+        TextWriter stream;
+        auto baseType = type->baseType;
+        if ( isConstRedundantForCpp(type) && redundantConst==CpptRedundantConst::yes ) {
+            if (substituteRef == CpptSubstitureRef::yes && type->ref) {
+                // can't skip const
+            } else if ( type->ref ) {
+                // can't skip const
+            } else {
+                skipConst = CpptSkipConst::yes;
+            }
+        }
+        if ( type->dim.size() ) {
+            for ( size_t d=0, ds=type->dim.size(); d!=ds; ++d ) {
+                stream << "TDim<";
+            }
+        }
+        if ( baseType==Type::alias ) {
+            stream << "DAS_COMMENT(alias)";
+        } else if ( baseType==Type::autoinfer ) {
+            stream << "DAS_COMMENT(auto";
+            if ( !type->alias.empty() ) {
+                stream << "(" << type->alias << ")";
+            }
+            stream << ")";
+        } else if ( baseType==Type::tHandle ) {
+            if ( type->annotation->cppName.empty() ) {
+                stream << type->annotation->name;
+            } else {
+                stream << type->annotation->cppName;
+            }
+        } else if ( baseType==Type::tArray ) {
+            if ( type->firstType ) {
+                stream << "TArray<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr) << ">";
+            } else {
+                stream << "Array";
+            }
+        } else if ( baseType==Type::tTable ) {
+            if ( type->firstType && type->secondType ) {
+                stream << "TTable<" << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::yes,CpptRedundantConst::yes, chooseSmartPtr)
+                << "," << describeCppTypeEx(type->secondType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr) << ">";
+            } else {
+                stream << "Table";
+            }
+        } else if ( baseType==Type::tTuple ) {
+            stream << "TTuple<" << int(type->getTupleSize());
+            for ( const auto & arg : type->argTypes ) {
+                stream << ",";
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr);
+            }
+            stream << ">";
+        } else if ( baseType==Type::tVariant ) {
+            stream << "TVariant<" << int(type->getVariantSize()) << "," << int(type->getVariantAlign());
+            for ( const auto & arg : type->argTypes ) {
+                stream << ",";
+                stream << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr);
+            }
+            stream << ">";
+        } else if ( baseType==Type::tStructure ) {
+            if ( type->structType ) {
+                if ( type->structType->module->name.empty() ) {
+                    stream << aotStructName(type->structType);
+                } else {
+                    stream << aotModuleName(type->structType->module) << "::" << aotStructName(type->structType);
+                }
+            } else {
+                stream << "DAS_COMMENT(unspecified structure) ";
+            }
+        } else if ( baseType==Type::tPointer ) {
+            if ( !type->smartPtr ) {
+                if ( type->firstType ) {
+                    stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no, chooseSmartPtr) << " *";
+                } else {
+                    stream << "void *";
+                }
+            } else {
+                if ( type->firstType ) {
+                    stream  << (type->smartPtrNative && chooseSmartPtr == ChooseSmartPtr::yes ? "smart_ptr<" : "smart_ptr_raw<")
+                            <<  describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no, chooseSmartPtr)
+                            << ">";
+                } else {
+                    stream  << (type->smartPtrNative && chooseSmartPtr == ChooseSmartPtr::yes ? "smart_ptr<" : "smart_ptr_raw<") << "void>";
+                }
+            }
+        } else if ( type->isEnumT() ) {
+            if ( type->enumType ) {
+                if ( type->enumType->external ) {
+                    stream << "DAS_COMMENT(bound_enum) " << type->enumType->cppName;
+                } else if ( type->enumType->module->name.empty() ) {
+                    stream << "DAS_COMMENT(enum) " << type->enumType->name;
+                } else {
+                    stream << "DAS_COMMENT(enum) " << aotModuleName(type->enumType->module) << "::" << type->enumType->name;
+                }
+            } else {
+                stream << "DAS_COMMENT(unspecified enumeration)";
+            }
+        } else if ( baseType==Type::tIterator ) {
+            if ( type->firstType ) {
+                stream << "Sequence DAS_COMMENT((" << describeCppTypeEx(type->firstType,substituteRef,skipRef,skipConst,CpptRedundantConst::yes, chooseSmartPtr) << "))";
+            } else {
+                stream << "Sequence";
+            }
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction || baseType==Type::tLambda ) {
+            if ( !type->constant && type->baseType==Type::tBlock ) {
+                stream << "const ";
+            }
+            stream << das_to_cppString(baseType) << " DAS_COMMENT((";
+            if ( type->firstType ) {
+                stream << describeCppTypeEx(type->firstType,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr);
+            } else {
+                stream << "void";
+            }
+            if ( type->argTypes.size() ) {
+                for ( const auto & arg : type->argTypes ) {
+                    stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes, chooseSmartPtr);
+                }
+            }
+            stream << "))";
+        } else {
+            stream << das_to_cppString(baseType);
+        }
+        if ( type->dim.size() ) {
+            for ( auto itd=type->dim.rbegin(), itds=type->dim.rend(); itd!=itds; ++itd ) {
+                stream << "," << *itd << ">";
+            }
+        }
+        if ( skipConst==CpptSkipConst::no ) {
+            if ( type->constant ) {
+                stream << " const ";
+            }
+        }
+        if ( type->ref && skipRef==CpptSkipRef::no ) {
+            if ( substituteRef==CpptSubstitureRef::no ) {
+                stream << " &";
+            } else {
+                stream << " *";
+            }
+        }
+        return stream.str();
+    }
+
+    string describeCppType ( const TypeDecl * type,
+                            CpptSubstitureRef substituteRef,
+                            CpptSkipRef skipRef,
+                            CpptSkipConst skipConst,
+                            CpptRedundantConst redundantConst, ChooseSmartPtr chooseSmartPtr ) {
+        return describeCppTypeEx(type, substituteRef, skipRef, skipConst, redundantConst, chooseSmartPtr);
+    }
 
     // Mangled name parser
 
