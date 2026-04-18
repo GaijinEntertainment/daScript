@@ -579,7 +579,7 @@ def midi_tick(var state : MidiPlaybackState; chunk_seconds : float) : array<floa
             let count = min(available, space)
             if (count > 0) {
                 ma_volume_mixer_set_volume(unsafe(addr(state.mixer)), vol)
-                ma_volume_mixer_set_pan(unsafe(addr(state.mixer)), ch_state.pan)
+                ma_volume_mixer_set_pan_immediate(unsafe(addr(state.mixer)), ch_state.pan)
                 let nFrames = uint64(count / 2)
                 unsafe {
                     ma_volume_mixer_process_pcm_frames(
