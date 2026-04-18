@@ -234,6 +234,48 @@ Increment and addition
    Pointer arithmetic can easily cause out-of-bounds access or invalid
    pointer states.  Use array bounds-checked access whenever possible.
 
+.. _pointer_const_argument:
+
+--------------------------------
+Const widening when passing args
+--------------------------------
+
+When passing a pointer as a function argument, a non-const pointer ``T?`` is
+accepted where the parameter is declared as ``T const?``.  The callee promises
+not to modify the pointee, so narrowing the caller's permission is safe:
+
+.. code-block:: das
+
+    def inspect(p : Point const?) {   // read-only view
+        print("{p.x}, {p.y}\n")
+    }
+
+    var pt = new Point(x = 1.0, y = 2.0)
+    inspect(pt)                       // Point?  ->  Point const?  — OK
+
+The same widening applies when the pointer is wrapped in a :ref:`tuple <tuples>`
+at the top of the parameter type:
+
+.. code-block:: das
+
+    var ats : array<tuple<string; Point const?>>
+
+    def push_named(dst : array<tuple<string; Point const?>>;
+                   e   : tuple<string; Point const?>) {
+        dst |> push(e)
+    }
+
+    var p = new Point()
+    push_named(ats, ("origin", p))    // tuple<string; Point?>  accepted for
+                                      // tuple<string; Point const?>
+
+The rule is one-directional: a ``T const?`` argument is **not** accepted where
+a non-const ``T?`` is expected.  The widening also only applies at the top
+level of the argument type — pointers nested inside arrays, tables, or deeper
+structures must match constness exactly.  See ``TypeDecl::isSameType`` (the
+``isPassType`` parameter) in ``src/ast/ast_typedecl.cpp`` for the
+implementation.
+
 .. _pointer_void:
 
 --------------

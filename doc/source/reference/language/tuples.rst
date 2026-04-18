@@ -109,11 +109,51 @@ Iterators and containers can be expanded in the for-loop in a similar way:
         assert(c == "3")
     }
 
+Passing tuples as arguments — const widening
+============================================
+
+When a tuple value is passed as a function argument, each pointer field
+inside the tuple participates in the same const-widening rule used for
+top-level pointer parameters (see :ref:`Pointers <pointer_const_argument>`).
+A non-const pointer ``T?`` inside the argument tuple is accepted where the
+parameter tuple has ``T const?``:
+
+.. code-block:: das
+
+    struct Node { at : Loc }
+    var ats : array<tuple<string; Loc const?>>
+
+    // Exact-match overload.
+    def takeng(a : array<tuple<string; Loc const?>>;
+               b : tuple<string; Loc const?>) { ... }
+
+    // Generic overload — TT is inferred from the array element type,
+    // so b must match tuple<string; Loc const?> as well.
+    def take(a : array<auto(TT)>; b : TT) { ... }
+
+    def feed(var a : Node?&) {
+        take(ats,   ("test", unsafe(addr(a.at))))   // tuple<string; Loc?>
+        takeng(ats, ("test", unsafe(addr(a.at))))   // accepted for
+                                                    // tuple<string; Loc const?>
+    }
+
+The widening is one-directional (``T?`` widens to ``T const?``, not the
+reverse) and applies to tuples that appear **directly** as an argument type.
+Tuples nested inside containers or inside other structures are not relaxed —
+their element types must match exactly.  Variants and options do **not**
+participate in this relaxation.
+
+The implementation lives in ``TypeDecl::isSameType`` in
+``src/ast/ast_typedecl.cpp``: the ``isPassType`` flag is propagated into the
+tuple's ``argTypes`` comparison so the pointer field inherits the same
+relaxation that the top-level parameter pointer gets.
+
 .. seealso::
 
     :ref:`Datatypes <datatypes_and_values>` for a list of built-in types,
     :ref:`Pattern matching <pattern-matching>` for matching and destructuring tuples,
     :ref:`Finalizers <finalizers>` for tuple finalization,
     :ref:`Move, copy, and clone <clone_to_move>` for tuple copy and move rules,
-    :ref:`Aliases <aliases>` for the ``typedef`` shorthand tuple syntax.
+    :ref:`Aliases <aliases>` for the ``typedef`` shorthand tuple syntax,
+    :ref:`Pointers <pointer_const_argument>` for the matching rule on top-level pointer arguments.
 

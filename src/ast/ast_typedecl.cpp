@@ -1744,11 +1744,12 @@ namespace das
                         }
                     }
                 }
+                auto isPass = baseType==Type::tTuple ? isPassType : false;
                 for ( size_t i=0, is=argTypes.size(); i!=is; ++i ) {
                     const auto & arg = argTypes[i];
                     const auto & declArg = decl.argTypes[i];
                     if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes,
-                            TemporaryMatters::yes,AllowSubstitute::no,true ) ) {
+                            TemporaryMatters::yes,AllowSubstitute::no,true,isPass ) ) {
                         return false;
                     }
                 }
