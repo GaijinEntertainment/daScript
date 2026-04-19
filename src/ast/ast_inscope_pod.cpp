@@ -53,7 +53,6 @@ namespace das {
                         || func->hasUnsafe
                         || !func->module->allowPodInscope
                         || (func->fromGeneric && !func->fromGeneric->module->allowPodInscope)
-                        || blocks.back()->inTheLoop
                     ) {
                     if ( logs ) {
                         if ( !var->at.empty() && var->at.fileInfo ) {
@@ -68,7 +67,6 @@ namespace das {
                         if ( !func->module->allowPodInscope ) *logs << "\tmodule " << func->module->name << " does not allow in-scope POD\n";
                         if ( func->fromGeneric && !func->fromGeneric->module->allowPodInscope )
                             *logs << "\tgeneric function module " << func->fromGeneric->module->name << " does not allow in-scope POD\n";
-                        if ( blocks.back()->inTheLoop ) *logs << "\tblock is in the loop, which does not have separate 'finally' scope. you can add 'if ( true )' to create scope, or take variable outside of loop\n";
                     }
                 } else {
                     func->notInferred();

@@ -39,7 +39,8 @@ def test_finally(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@early_out))
         g_steps = 0
         early_out(t, array<int>(1, 2, 3, 4))
-        t |> equal(2, g_steps)
+        // per-iter inner finally fires at aidx=1 and aidx=2 (before return); outer fires once = 3
+        t |> equal(3, g_steps)
     }
 }
 
@@ -55,7 +56,8 @@ def early_out(t : T?; var aclone : array<int>) {
         }
     } finally {
         g_steps ++
-        t |> equal(0, lock_count(aclone))
+        // per-iteration finally fires while iterator still holds the lock
+        t |> equal(1, lock_count(aclone))
     }
 } finally {
     t |> equal(0, lock_count(aclone))
@@ -149,7 +151,8 @@ def test_for_finally(max : int = 10) {
         t[9] = 13
         count += uno
     }
-    return count == 1 && t[9] == 13
+    // per-iter finally: iterations 0..5 each run finally (break after x==5's finally)
+    return count == 6 && t[9] == 13
 }
 
 var {
@@ -179,7 +182,8 @@ def test_while_finally(max : int = 10) {
         t[9] = 12 + uno
         count ++
     }
-    return count == 1 && t[9] == 13
+    // per-iter finally: iterations 0..5 each run finally (break after x==5's finally)
+    return count == 6 && t[9] == 13
 }
 
 var {

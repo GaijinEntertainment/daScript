@@ -415,17 +415,26 @@ how it exits (normal flow, ``break``, ``continue``, or ``return``):
         print("search complete\n")
     }
 
-``finally`` can be attached to any block, including loops and bare visibility blocks:
+When attached to a ``for`` or ``while`` loop body, ``finally`` runs **at the end of
+every iteration** — on normal fall-through, ``continue``, ``break``, and ``return``.
+This makes ``var inscope`` inside a loop body safe: each iteration finalizes its own
+scoped variables before the next iteration begins.
 
 .. code-block:: das
 
     for ( x in data ) {
-        if ( x < 0 ) {
-            break
-        }
+        var inscope buf <- allocate(x)
+        process(buf)
     } finally {
-        print("loop done\n")
+        print("iteration done\n")
     }
+    // "iteration done" prints once per element in `data`
+
+If the iterator is empty (or the initial ``while`` condition is false), the body
+never enters and the loop's ``finally`` never runs.
+
+``finally`` can also be attached to a bare visibility block, where it runs once
+when the block exits:
 
 .. code-block:: das
 
@@ -503,8 +512,8 @@ section of the enclosing block:
     // ... use resource ...
     // delete resource is called automatically at end of block
 
-``inscope`` cannot appear directly in a loop block, since the ``finally`` section of a loop
-executes only once.
+``inscope`` is allowed inside loop bodies — the loop's ``finally`` runs per iteration,
+so each iteration finalizes its own scoped variables.
 
 **Variable name aliases (aka):**
 

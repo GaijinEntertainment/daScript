@@ -77,12 +77,24 @@ that needs prompt release.
 finally blocks
 ==============
 
-``finally`` runs cleanup code when a block exits::
+``finally`` runs cleanup code when a block exits. When attached to a ``for`` or
+``while`` loop body, it runs at the end of **every** iteration — on normal
+fall-through, ``continue``, ``break``, and ``return``::
 
   for (i in range(3)) {
       counter += 1
   } finally {
-      print("done, counter={counter}\n")
+      print("iter done, counter={counter}\n")
+  }
+  // prints three times: counter=1, counter=2, counter=3
+
+This is what makes ``var inscope`` safe inside a loop body — each iteration
+finalizes its own scoped variables before the next one begins::
+
+  for (path in paths) {
+      var inscope f = acquire("File", path)
+      read(f)
+      // delete f runs here, at the end of each iteration
   }
 
 Heap pointers

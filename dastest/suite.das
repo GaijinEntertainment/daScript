@@ -33,6 +33,8 @@ struct SuiteCtx {
     compile_only : bool = false
     use_aot : bool = false
     cov_path : string = ""
+    debugger : bool = false    // --debugger: set cop.debugger so context.debugger is truthy, exercising _Debug SimNode variants
+    keep_alive : bool = false  // --keep-alive: set cop.keep_alive so _KeepAlive SimNode variants get dispatched
 
     // Testing-related options.
     testNames : array<string>
@@ -99,6 +101,8 @@ def SuiteCtx(args : array<string>) : SuiteCtx {
     ctx.compile_only = args |> has_value("--compile-only")
     ctx.use_aot = args |> has_value("--use-aot") || is_in_aot()
     ctx.cov_path = args |> get_str_arg("--cov-path", "")
+    ctx.debugger = args |> has_value("--debugger")
+    ctx.keep_alive = args |> has_value("--keep-alive")
     collect_tests_names(args, ctx.testNames)
 
     ctx.bench_enabled = args |> has_value("--bench")
@@ -174,6 +178,8 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             cop.fail_on_no_aot = ctx.use_aot
             cop.threadlock_context = true
             cop.jit_enabled = jit_enabled()
+            cop.debugger = ctx.debugger
+            cop.keep_alive = ctx.keep_alive
             if (jit_enabled()) {
                 access |> add_extra_module("just_in_time", "{get_das_root()}/daslib/just_in_time.das")
             }

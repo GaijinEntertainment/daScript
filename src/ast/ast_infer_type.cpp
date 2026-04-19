@@ -4737,10 +4737,6 @@ namespace das {
         expr->visibility.last_line = scope->at.last_line;
         // macro generated invisible variable
         // DAS_ASSERTF(expr->visibility.line,"visiblity failed at %s",expr->at.describe().c_str());
-        if (expr->inScope && scopes.back()->inTheLoop) {
-            error("in scope let is not allowed in the loop",
-                  "you can always create scope with 'if true'", "", expr->at, CompilationError::in_scope_in_the_loop);
-        }
     }
     void InferTypes::preVisitLet(ExprLet *expr, const VariablePtr &var, bool last) {
         Visitor::preVisitLet(expr, var, last);

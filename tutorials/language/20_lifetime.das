@@ -100,11 +100,12 @@ def main {
     // even if an error occurs.
 
     print("=== finally ===\n")
+    // 'finally' on a loop body runs at the end of every iteration.
     var counter = 0
     for (_i in range(3)) {
         counter += 1
     } finally {
-        print("  loop done, counter={counter}\n")
+        print("  iter done, counter={counter}\n")
     }
 
     // === Heap pointers (new) ===
@@ -149,5 +150,7 @@ def main {
 //   cleanup: File (id=2)
 //   inscope block ended
 // === finally ===
-//   loop done, counter=3
+//   iter done, counter=1
+//   iter done, counter=2
+//   iter done, counter=3
 // === done ===

@@ -3508,21 +3508,38 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = list;
-            loopbegin:;
-                for (; body!=tail; ++body) {
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin:;
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
-                for ( int t=0; t!=totalCount; ++t ){
-                    if ( !sources[t]->next(context, pi[t]) ) goto loopend;
-                    if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin_fin:;
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
             }
         loopend:
             closeIterators(sources, pi, context);
-            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3538,9 +3555,8 @@ SIM_NODE_AT_VECTOR(Float, float)
             V_FINAL();
             V_END();
         }
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        DAS_EVAL_ABI virtual vec4f eval ( Context & ) override {
             DAS_PROFILE_NODE
-            evalFinal(context);
             return v_zero();
         }
     };
@@ -3563,19 +3579,34 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = list;
-            loopbegin:;
-                for (; body!=tail; ++body) {
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin:;
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
                 }
-                if ( !sources->next(context, pi) ) goto loopend;
-                if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin_fin:;
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
         loopend:
             sources->close(context, pi);
-            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3616,22 +3647,40 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = this->list;
-            loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
-                for (; body!=tail; ++body) {
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = this->list;
+                loopbegin:;
+                    DAS_KEEPALIVE_LOOP(&context);
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
-                for ( int t=0; t!=totalCount; ++t ){
-                    if ( !sources[t]->next(context, pi[t]) ) goto loopend;
-                    if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = this->list;
+                loopbegin_fin:;
+                    DAS_KEEPALIVE_LOOP(&context);
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
             }
         loopend:
             this->closeIterators(sources, pi, context);
-            this->evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3658,20 +3707,36 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = list;
-            loopbegin:;
-                DAS_KEEPALIVE_LOOP(&context);
-                for (; body!=tail; ++body) {
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin:;
+                    DAS_KEEPALIVE_LOOP(&context);
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
                 }
-                if ( !sources->next(context, pi) ) goto loopend;
-                if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin_fin:;
+                    DAS_KEEPALIVE_LOOP(&context);
+                    for (; body!=tail; ++body) {
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
         loopend:
             sources->close(context, pi);
-            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3714,22 +3779,40 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = this->list;
-            loopbegin:;
-                for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = this->list;
+                loopbegin:;
+                    for (; body!=tail; ++body) {
+                        DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
-                for ( int t=0; t!=totalCount; ++t ){
-                    if ( !sources[t]->next(context, pi[t]) ) goto loopend;
-                    if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = this->list;
+                loopbegin_fin:;
+                    for (; body!=tail; ++body) {
+                        DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    for ( int t=0; t!=totalCount; ++t ){
+                        if ( !sources[t]->next(context, pi[t]) ) goto loopend;
+                        if ( context.stopFlags ) goto loopend;
+                    }
                 }
             }
         loopend:
             this->closeIterators(sources, pi, context);
-            this->evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -3756,20 +3839,36 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
-            while ( !context.stopFlags ) {
-                SimNode ** __restrict body = list;
-            loopbegin:;
-                for (; body!=tail; ++body) {
-                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
-                    (*body)->eval(context);
-                    DAS_PROCESS_LOOP_FLAGS(break);
+            if ( this->totalFinal == 0 ) {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin:;
+                    for (; body!=tail; ++body) {
+                        DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS(break);
+                    }
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
                 }
-                if ( !sources->next(context, pi) ) goto loopend;
-                if ( context.stopFlags ) goto loopend;
+            } else {
+                while ( !context.stopFlags ) {
+                    SimNode ** __restrict body = list;
+                loopbegin_fin:;
+                    for (; body!=tail; ++body) {
+                        DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                        (*body)->eval(context);
+                        DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                    }
+                loopend_fin:;
+                    this->evalFinal(context);
+                    if ( context.stopFlags & (EvalFlags::stopForBreak | EvalFlags::stopForReturn) ) goto loopend;
+                    if ( !sources->next(context, pi) ) goto loopend;
+                    if ( context.stopFlags ) goto loopend;
+                }
             }
         loopend:
             sources->close(context, pi);
-            evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

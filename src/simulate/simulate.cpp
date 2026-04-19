@@ -705,16 +705,28 @@ namespace das
     vec4f SimNode_While::eval ( Context & context ) {
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
-        while ( cond->evalBool(context) && !context.stopFlags ) {
-            SimNode ** __restrict body = list;
-        loopbegin:;
-            for (; body!=tail; ++body) {
-                (*body)->eval(context);
-                DAS_PROCESS_LOOP_FLAGS(break);
+        if ( this->totalFinal == 0 ) {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        } else {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin_fin:;
+                for (; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                }
+            loopend_fin:;
+                evalFinal(context);
             }
         }
     loopend:;
-        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -724,17 +736,30 @@ namespace das
     vec4f SimNodeDebug_While::eval ( Context & context ) {
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
-        while ( cond->evalBool(context) && !context.stopFlags ) {
-            SimNode ** __restrict body = list;
-        loopbegin:;
-            for (; body!=tail; ++body) {
-                DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
-                (*body)->eval(context);
-                DAS_PROCESS_LOOP_FLAGS(break);
+        if ( this->totalFinal == 0 ) {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        } else {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin_fin:;
+                for (; body!=tail; ++body) {
+                    DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                }
+            loopend_fin:;
+                evalFinalSingleStep(context);
             }
         }
     loopend:;
-        evalFinalSingleStep(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -745,17 +770,30 @@ namespace das
     vec4f SimNodeKeepAlive_While::eval ( Context & context ) {
         DAS_PROFILE_NODE
         SimNode ** __restrict tail = list + total;
-        while ( cond->evalBool(context) && !context.stopFlags ) {
-            SimNode ** __restrict body = list;
-        loopbegin:;
-            DAS_KEEPALIVE_LOOP(&context);
-            for (; body!=tail; ++body) {
-                (*body)->eval(context);
-                DAS_PROCESS_LOOP_FLAGS(break);
+        if ( this->totalFinal == 0 ) {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin:;
+                DAS_KEEPALIVE_LOOP(&context);
+                for (; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS(break);
+                }
+            }
+        } else {
+            while ( cond->evalBool(context) && !context.stopFlags ) {
+                SimNode ** __restrict body = list;
+            loopbegin_fin:;
+                DAS_KEEPALIVE_LOOP(&context);
+                for (; body!=tail; ++body) {
+                    (*body)->eval(context);
+                    DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin_fin,loopend_fin,break);
+                }
+            loopend_fin:;
+                evalFinal(context);
             }
         }
     loopend:;
-        evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }

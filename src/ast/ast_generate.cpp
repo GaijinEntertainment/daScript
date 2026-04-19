@@ -926,8 +926,8 @@ namespace das {
 
     class BreakAndContinueVisitor : public Visitor {
     public:
-        BreakAndContinueVisitor ( int32_t bg, int32_t cg )
-            : breakGoto(bg), continueGoto(cg) {
+        BreakAndContinueVisitor ( int32_t bg, int32_t cg, const string & bf = string() )
+            : breakGoto(bg), continueGoto(cg), breakFlag(bf) {
         }
         virtual void preVisit ( ExprWhile * expr ) override {
             Visitor::preVisit(expr);
@@ -947,7 +947,19 @@ namespace das {
         }
         virtual ExpressionPtr visit(ExprBreak *expr) override {
             if ( depth ) return Visitor::visit(expr);
-            return new ExprGoto(expr->at, breakGoto);
+            if ( breakFlag.empty() ) {
+                return new ExprGoto(expr->at, breakGoto);
+            }
+            // emit: { breakFlag = true; goto breakGoto }
+            auto blk = new ExprBlock();
+            blk->at = expr->at;
+            blk->isCollapseable = true;
+            auto flg = new ExprVar(expr->at, breakFlag);
+            auto trv = new ExprConstBool(expr->at, true);
+            auto cpy = new ExprCopy(expr->at, flg, trv);
+            blk->list.push_back(cpy);
+            blk->list.push_back(new ExprGoto(expr->at, breakGoto));
+            return blk;
         }
         virtual ExpressionPtr visit(ExprContinue *expr) override {
             if ( depth ) return Visitor::visit(expr);
@@ -956,11 +968,17 @@ namespace das {
     protected:
         int32_t breakGoto;
         int32_t continueGoto;
+        string  breakFlag;
         int     depth = 0;
     };
 
     void replaceBreakAndContinue ( Expression * expr, int32_t bg, int32_t cg ) {
         BreakAndContinueVisitor rbnc(bg, cg);
+        expr->visit(rbnc);
+    }
+
+    void replaceBreakAndContinueWithFlag ( Expression * expr, int32_t bg, int32_t cg, const string & breakFlag ) {
+        BreakAndContinueVisitor rbnc(bg, cg, breakFlag);
         expr->visit(rbnc);
     }
 
@@ -1137,19 +1155,49 @@ namespace das {
 
     ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func ) {
         auto begin_loop_label = func->totalGenLabel ++;
+        auto iter_end_loop_label = func->totalGenLabel ++;
         auto end_loop_label = func->totalGenLabel ++;
         ExprBlock * bodyBlock = nullptr;
+        const bool hasFinally = expr->body->rtti_isBlock() &&
+                                !static_cast<ExprBlock*>(expr->body)->finalList.empty();
+        // only introduce __broke flag when body has a finally — otherwise classic break -> end
+        string breakFlag;
+        if ( hasFinally ) {
+            breakFlag = "__broke_while_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+        }
         if ( expr->body->rtti_isBlock() ) {
             bodyBlock = static_cast<ExprBlock*>(expr->body->clone());
             giveBlockVariablesUniqueNames(bodyBlock);
-            replaceBreakAndContinue(bodyBlock, end_loop_label, begin_loop_label);
+            if ( hasFinally ) {
+                // break -> set flag, goto iter_end (runs finally, then exits via flag check)
+                // continue -> iter_end (runs finally, flag=false, loops back)
+                replaceBreakAndContinueWithFlag(bodyBlock, iter_end_loop_label, iter_end_loop_label, breakFlag);
+            } else {
+                replaceBreakAndContinue(bodyBlock, end_loop_label, begin_loop_label);
+            }
         }
         auto blk = new ExprBlock();
         blk->at = expr->at;
         blk->isCollapseable = true;
+        // __broke = false  (only when finally present)
+        if ( hasFinally ) {
+            auto leqt = new ExprLet();
+            leqt->at = expr->at;
+            leqt->atInit = expr->at;
+            leqt->visibility = expr->at;
+            auto bvar = new Variable();
+            bvar->generated = true;
+            bvar->at = expr->at;
+            bvar->name = breakFlag;
+            bvar->type = new TypeDecl(Type::tBool);
+            bvar->init = new ExprConstBool(expr->at, false);
+            leqt->variables.push_back(bvar);
+            blk->list.push_back(leqt);
+        }
         auto bll = new ExprLabel(expr->at, begin_loop_label,
                                           "begin while at line " + to_string(expr->at.line));
         blk->list.push_back(bll);
+        // false initial / exhausted cond skips finally entirely
         auto gtel = new ExprGoto(expr->at, end_loop_label);
         auto btel = new ExprBlock();
         btel->at = expr->at;
@@ -1164,16 +1212,27 @@ namespace das {
         } else {
             blk->list.push_back(expr->body->clone());
         }
+        if ( hasFinally ) {
+            // iter_end label: per-iteration finally (normal fall-through, continue, break all route here)
+            auto iell = new ExprLabel(expr->at, iter_end_loop_label,
+                                               "iter end while at line " + to_string(expr->at.line));
+            blk->list.push_back(iell);
+            for ( auto & fse : bodyBlock->finalList ) {
+                blk->list.push_back(fse->clone());
+            }
+            // if (__broke) goto end — else fall through to goto begin
+            auto gtef = new ExprGoto(expr->at, end_loop_label);
+            auto btef = new ExprBlock();
+            btef->at = expr->at;
+            btef->list.push_back(gtef);
+            auto fchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, breakFlag), btef, nullptr);
+            blk->list.push_back(fchk);
+        }
         auto gbeg = new ExprGoto(expr->at, begin_loop_label);
         blk->list.push_back(gbeg);
         auto ell = new ExprLabel(expr->at, end_loop_label,
                                           "end while at line " + to_string(expr->at.line));
         blk->list.push_back(ell);
-        if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
-            for ( auto & fse : bodyBlock->finalList ) {
-                blk->list.push_back(fse->clone());
-            }
-        }
         verifyGenerated(blk);
         return blk;
     }
@@ -1189,11 +1248,23 @@ namespace das {
         auto end_loop_label = func->totalGenLabel ++;
         ExprFor * forCopy = nullptr;
         ExprBlock * bodyBlock = nullptr;
+        const bool hasFinally = expr->body->rtti_isBlock() &&
+                                !static_cast<ExprBlock*>(expr->body)->finalList.empty();
+        string breakFlag;
+        if ( hasFinally ) {
+            breakFlag = "__broke_for_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+        }
         if ( expr->body->rtti_isBlock() ) {
             forCopy = static_cast<ExprFor*>(expr->clone());
             bodyBlock = static_cast<ExprBlock*>(forCopy->body);
             giveBlockVariablesUniqueNames(forCopy);
-            replaceBreakAndContinue(bodyBlock, end_loop_label, mid_loop_label);
+            if ( hasFinally ) {
+                // break -> set flag, goto mid (finally runs, flag check -> end, iterator_close runs)
+                // continue -> mid (finally runs, advances iterator, re-checks)
+                replaceBreakAndContinueWithFlag(bodyBlock, mid_loop_label, mid_loop_label, breakFlag);
+            } else {
+                replaceBreakAndContinue(bodyBlock, end_loop_label, mid_loop_label);
+            }
             expr = forCopy;
         }
         auto blk = new ExprBlock();
@@ -1222,6 +1293,21 @@ namespace das {
         lvar->init = new ExprConstBool(expr->at, true);
         leqt->variables.push_back(lvar);
         blk->list.push_back(leqt);
+        // __broke = false (only when finally present)
+        if ( hasFinally ) {
+            auto bleqt = new ExprLet();
+            bleqt->at = expr->at;
+            bleqt->atInit = expr->at;
+            bleqt->visibility = expr->visibility;
+            auto bvar = new Variable();
+            bvar->generated = true;
+            bvar->at = expr->at;
+            bvar->name = breakFlag;
+            bvar->type = new TypeDecl(Type::tBool);
+            bvar->init = new ExprConstBool(expr->at, false);
+            bleqt->variables.push_back(bvar);
+            blk->list.push_back(bleqt);
+        }
         // sources
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
@@ -1343,6 +1429,19 @@ namespace das {
         auto mll = new ExprLabel(expr->at, mid_loop_label,
                                           "continue for at line " + to_string(expr->at.line));
         blk->list.push_back(mll);
+        if ( hasFinally ) {
+            // per-iteration finally (normal fall-through, continue, and break all route here)
+            for ( auto & fse : bodyBlock->finalList ) {
+                blk->list.push_back(fse->clone());
+            }
+            // if (__broke) goto end — skip iterator_next
+            auto gtef = new ExprGoto(expr->at, end_loop_label);
+            auto btef = new ExprBlock();
+            btef->at = expr->at;
+            btef->list.push_back(gtef);
+            auto fchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, breakFlag), btef, nullptr);
+            blk->list.push_back(fchk);
+        }
         // loop &= _builtin_iterator_next(it0,pvar0)
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
@@ -1360,11 +1459,6 @@ namespace das {
         auto ell = new ExprLabel(expr->at, end_loop_label,
                                           "end for at line " + to_string(expr->at.line));
         blk->list.push_back(ell);
-        if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
-            for ( auto & fse : bodyBlock->finalList ) {
-                blk->list.push_back(fse->clone());
-            }
-        }
         // loop &= _builtin_iterator_close(it0,pvar0)
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];

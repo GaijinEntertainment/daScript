@@ -75,6 +75,8 @@ Or let VSCode CMake Tools pick up the settings change automatically.
 
 When AOT fails with `error[50101]: AOT link failed`, the issue is a **semantic hash mismatch** between the generated C++ stubs and runtime. Each generated `.cpp` file has hash comments showing function hashes and dependency hashes. The runtime error also prints the same breakdown. Compare them to find the diverging function or dependency. See `skills/aot_testing.md` for the full debugging guide (hash architecture, debug macros, common causes).
 
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (the old `src/ast/ast_aot_cpp.cpp` was emptied by commit `581363ebc`). When codegen output diverges, edit `daslib/aot_cpp.das` — not the C++ stub in `src/ast/`.
+
 ## GitHub Operations
 
 - **Use GitHub MCP tools** (`mcp__github__*`) for all GitHub operations (creating PRs, listing issues, reading PRs, etc.) — they avoid shell escaping issues entirely
@@ -172,6 +174,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - daslang has garbage collection — `delete` is not required in most code
 - `var inscope` declares automatic cleanup; struct fields need defaults or `@safe_when_uninitialized`
+- `var inscope` is legal inside `for` / `while` loop bodies — the loop's `finally` runs per iteration (on fall-through, `continue`, `break`, `return`), so each iteration finalizes its own scoped variables
 - `<-` is memcpy+memset(0), NOT smart_ptr-aware — see `skills/das_macros.md` for smart_ptr patterns
 
 ### Context heaps and threading

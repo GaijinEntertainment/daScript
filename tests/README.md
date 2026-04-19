@@ -600,6 +600,20 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | vector_fields.das | float4 .r/.g/.b/.a fields and swizzle | |
 | with_statement.das | `with (struct) { field = val }` block scoping | |
 
+## loops/
+
+Coverage of per-iteration `finally` semantics across every loop form. Each cell asserts the finally counter equals the expected per-iteration count; `inscope` cells verify `var inscope` inside a loop body is legal and leak-free.
+
+| File | Description | Expects errors |
+|---|---|---|
+| for_range.das | `for (x in range(n))` — plain, break, continue, return, nested, var inscope, empty | |
+| for_array.das | `for (x in array<int>)` — plain, break, continue, return, nested, var inscope, empty | |
+| for_fixed_array.das | `for (x in int[N])` — plain, break, continue, return, var inscope | |
+| for_iterator.das | `for (x in iterator<int>)` (generator-backed) — plain, break, continue, return, var inscope, empty | |
+| for_multi_source.das | `for (a, b in src1, src2)` — plain, break, continue, return, var inscope, empty, uneven sources | |
+| while.das | `while (cond)` — plain, break, continue, return, nested, var inscope, never-taken | |
+| nested.das | Mixed nested loops — for-in-for, while-in-for, for-in-while, triple-nested, break isolation | |
+
 ## linq/
 
 | File | Description | Expects errors |

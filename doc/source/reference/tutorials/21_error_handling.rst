@@ -73,12 +73,14 @@ at the **caller's** line — useful inside generic functions::
 finally and defer
 =================
 
-``finally`` runs cleanup code when a block exits::
+``finally`` runs cleanup code when a block exits. On a ``for`` or ``while`` loop
+body it runs at the end of **every** iteration — normal fall-through,
+``continue``, ``break``, and ``return`` all route through it::
 
   for (i in range(3)) {
       total += i
   } finally {
-      print("loop done\n")
+      print("iter done\n")   // prints three times
   }
 
 ``defer`` (from ``daslib/defer``) schedules cleanup that runs when the
