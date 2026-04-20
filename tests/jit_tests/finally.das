@@ -35,6 +35,14 @@ def test_finally(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@test_block_finally))
         t |> success(test_block_finally())
     }
+    t |> run("cmres return without finally") @(t : T?) {
+        t |> success(!jit_enabled() || is_jit_function(@@cmres_return_without_finally))
+        let bag = cmres_return_without_finally()
+        t |> equal(bag.a, 1)
+        t |> equal(bag.b, 2)
+        t |> equal(bag.c, 3)
+        t |> equal(bag.d, 4)
+    }
     t |> run("for loop with early out") @(t : T?) {
         t |> success(!jit_enabled() || is_jit_function(@@early_out))
         g_steps = 0
@@ -212,6 +220,23 @@ def test_block_finally() {
     var t = 0
     invoke() <| $() { t = 1; } finally { t = 2; }
     return t == 2
+}
+
+struct CmresBag {
+    a : int
+    b : int
+    c : int
+    d : int
+}
+
+// CMRES return from inside a bare block with NO finally on any enclosing block —
+// exercises has_any_finally_block's false-returning path (LLVM JIT must NOT spill
+// the return value to a temp when no finally is present).
+[jit]
+def cmres_return_without_finally() : CmresBag {
+    {
+        return CmresBag(a=1, b=2, c=3, d=4)
+    }
 }
 
 

@@ -866,7 +866,9 @@ class public LlvmJitVisitor : AstVisitor {
             if (stopAtLoop && blk.blockFlags.inTheLoop) {
                 break
             }
-            return true
+            if (blk |> hasFinalSection()) {
+                return true
+            }
         }
         return false
     }
