@@ -4038,7 +4038,7 @@ namespace das
         for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
-                uint64_t semHash = fnn[fni]->aotHash = getFunctionAotHash(fnn[fni]);
+                uint64_t semHash = getFunctionAotHash(fnn[fni]);
                 auto it = aotLib.find(semHash);
                 if ( it != aotLib.end() ) {
                     fn.code = (it->second)(context);
