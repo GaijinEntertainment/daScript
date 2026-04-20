@@ -51,7 +51,7 @@ def main() {
 
     if (empty(parsed.command)) {
         print_usage()
-        return
+        return 0
     }
 
     let root = get_full_file_name(parsed.root)
@@ -59,56 +59,61 @@ def main() {
     let command = parsed.command
     let is_global = parsed.global_flag
 
+    var rc = 0
     if (command == "list") {
-        cmd_list(root, parsed.json, is_global)
+        rc = cmd_list(root, parsed.json, is_global)
     } elif (command == "install") {
         if (empty(parsed.command_arg)) {
-            cmd_install_all(root, parsed.force, is_global)
+            rc = cmd_install_all(root, parsed.force, is_global)
         } else {
-            cmd_install(root, parsed.command_arg, parsed.force, is_global, "", parsed.branch)
+            rc = cmd_install(root, parsed.command_arg, parsed.force, is_global, "", parsed.branch)
         }
     } elif (command == "remove") {
         if (empty(parsed.command_arg)) {
-            print("Error: remove requires a package name\n")
+            to_log(LOG_ERROR, "Error: remove requires a package name\n")
+            rc = 1
         } else {
-            cmd_remove(root, parsed.command_arg, is_global)
+            rc = cmd_remove(root, parsed.command_arg, is_global)
         }
     } elif (command == "update") {
         if (empty(parsed.command_arg)) {
-            cmd_update_all(root, is_global)
+            rc = cmd_update_all(root, is_global)
         } else {
-            cmd_update(root, parsed.command_arg, is_global)
+            rc = cmd_update(root, parsed.command_arg, is_global)
         }
     } elif (command == "upgrade") {
         if (empty(parsed.command_arg)) {
-            cmd_upgrade_all(root, is_global)
+            rc = cmd_upgrade_all(root, is_global)
         } else {
-            cmd_upgrade(root, parsed.command_arg, is_global)
+            rc = cmd_upgrade(root, parsed.command_arg, is_global)
         }
     } elif (command == "build") {
-        cmd_build(root, is_global)
+        rc = cmd_build(root, is_global)
     } elif (command == "check") {
-        cmd_check(root, parsed.json, is_global)
+        rc = cmd_check(root, parsed.json, is_global)
     } elif (command == "doctor") {
-        cmd_doctor()
+        rc = cmd_doctor()
     } elif (command == "search") {
         if (empty(parsed.command_arg)) {
-            cmd_search_all(root, parsed.json)
+            rc = cmd_search_all(root, parsed.json)
         } else {
-            cmd_search(root, parsed.command_arg, parsed.json)
+            rc = cmd_search(root, parsed.command_arg, parsed.json)
         }
     } elif (command == "update-index") {
-        cmd_update_index(root)
+        rc = cmd_update_index(root)
     } elif (command == "introduce") {
-        cmd_introduce(root, parsed.command_arg)
+        rc = cmd_introduce(root, parsed.command_arg)
     } elif (command == "withdraw") {
         if (empty(parsed.command_arg)) {
-            print("Error: withdraw requires a package name\n")
+            to_log(LOG_ERROR, "Error: withdraw requires a package name\n")
+            rc = 1
         } else {
-            cmd_withdraw(root, parsed.command_arg)
+            rc = cmd_withdraw(root, parsed.command_arg)
         }
     } else {
-        print("Unknown command: {command}\n\n")
+        to_log(LOG_ERROR, "Unknown command: {command}\n\n")
         print_usage()
+        rc = 1
     }
+    return rc
 }

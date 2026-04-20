@@ -116,7 +116,7 @@ def run_das_package_build(das_package_path : string; var info : PackageBuildInfo
 // Internal: compile, simulate, call function, read state
 def private run_das_package(das_package_path : string; func_name : string; args : array<string>; blk : block<(ctx : smart_ptr<Context>) : void>) : bool {
     if (!fexist(das_package_path)) {
-        print("Error: {das_package_path} not found\n")
+        to_log(LOG_ERROR, "Error: {das_package_path} not found\n")
         return false
     }
     var ok = false
@@ -127,12 +127,12 @@ def private run_das_package(das_package_path : string; func_name : string; args 
             cop.export_all = true
             compile_file(das_package_path, access, unsafe(addr(mg)), cop) $(compiled; program; issues) {
                 if (!compiled) {
-                    print("Error compiling {das_package_path}:\n{issues}\n")
+                    to_log(LOG_ERROR, "Error compiling {das_package_path}:\n{issues}\n")
                     return
                 }
                 simulate(program) $(simulated; ctx; serrors) {
                     if (!simulated) {
-                        print("Error simulating {das_package_path}:\n{serrors}\n")
+                        to_log(LOG_ERROR, "Error simulating {das_package_path}:\n{serrors}\n")
                         return
                     }
                     try {
