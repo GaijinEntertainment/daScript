@@ -41,6 +41,7 @@ def print_usage() {
     print("  --no-color      Disable colored output\n")
     print("  --verbose, -v   Print detailed progress\n")
     print("  --json          Machine-readable JSON output (list, check, search)\n")
+    print("  --branch <name>, -b <name>  Install from a branch (e.g. master) instead of a tag\n")
 }
 
 [export]
@@ -64,7 +65,7 @@ def main() {
         if (empty(parsed.command_arg)) {
             cmd_install_all(root, parsed.force, is_global)
         } else {
-            cmd_install(root, parsed.command_arg, parsed.force, is_global)
+            cmd_install(root, parsed.command_arg, parsed.force, is_global, "", parsed.branch)
         }
     } elif (command == "remove") {
         if (empty(parsed.command_arg)) {

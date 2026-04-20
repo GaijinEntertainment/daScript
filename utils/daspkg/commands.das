@@ -27,6 +27,7 @@ struct ParsedArgs {
     force : bool
     json : bool
     global_flag : bool
+    branch : string
 }
 
 def parse_args(args : array<string>) : ParsedArgs {
@@ -57,6 +58,9 @@ def parse_args(args : array<string>) : ParsedArgs {
         } elif (arg == "--root" && i + 1 < length(args)) {
             i ++
             result.root = args[i]
+        } elif ((arg == "--branch" || arg == "-b") && i + 1 < length(args)) {
+            i ++
+            result.branch = args[i]
         } elif (empty(result.command)) {
             result.command = arg
         } elif (empty(result.command_arg)) {
@@ -225,12 +229,12 @@ def private git_clone(url, dir : string) : bool {
     return true
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false) {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = "") {
     var visiting : table<string; bool>
-    install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global])
+    install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false) {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -251,12 +255,21 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     }
 
     // step 2: resolve version via .das_package (if present)
-    log_debug("resolving version for '{pkg_name}' (requested: '{version}')")
+    log_debug("resolving version for '{pkg_name}' (requested: '{version}' branch: '{branch}')")
     var actual_source = source
     var actual_tag = ""
     var actual_branch = ""
+    if (!empty(branch)) {
+        // explicit --branch overrides version/resolve
+        log("Switching to branch {branch}...\n")
+        if (!git_checkout_branch(tmp_dir, branch)) {
+            force_rmdir(tmp_dir)
+            return
+        }
+        actual_branch = branch
+    }
     let das_package = "{tmp_dir}/.das_package"
-    if (fexist(das_package)) {
+    if (empty(actual_branch) && fexist(das_package)) {
         log_debug("found .das_package — running resolve()")
         var res : ResolveResult
         if (run_das_package_resolve(das_package, "", version, res)) {
@@ -370,7 +383,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     try_build_package(target_dir, pkg_name, is_global)
 }
 
-def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = "") {
+def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") {
     // parse spec: name[@version]
     var source = spec
     var version = ""
@@ -417,10 +430,10 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
             }
             log("Resolved '{source}' -> {url}\n")
             var visiting : table<string; bool>
-            install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true])
+            install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
         } else {
             var visiting : table<string; bool>
-            install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true])
+            install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
         }
         return
     }
@@ -469,10 +482,10 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
         }
         log("Resolved '{source}' -> {url}\n")
         var visiting : table<string; bool>
-        install_git(root, pkg_name, url, version, lf, visiting, [is_root = true])
+        install_git(root, pkg_name, url, version, lf, visiting, [is_root = true, branch = branch])
     } else {
         var visiting : table<string; bool>
-        install_git(root, pkg_name, source, version, lf, visiting, [is_root = true])
+        install_git(root, pkg_name, source, version, lf, visiting, [is_root = true, branch = branch])
     }
 }
 
