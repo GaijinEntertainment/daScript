@@ -19,6 +19,49 @@ module llvm_macro shared private
 
 var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole library; when false, only against runtime
 
+// Bump this constant whenever LLVM codegen / linking logic changes in a way that
+// invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
+// runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
+// makes every previously written DLL miss the cache on the next run and get GC'd.
+let LLVM_JIT_CODEGEN_VERSION : uint64 = 0x01ul
+
+let JIT_FNV_PRIME : uint64 = 1099511628211ul
+
+def jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
+                     emit_prologue : bool; debug_info : bool) : string {
+    var h = LLVM_JIT_CODEGEN_VERSION
+    for (fn in funcs) {
+        h = (h ^ get_function_aot_hash(fn)) * JIT_FNV_PRIME
+    }
+    h = (h ^ uint64(opt_level)) * JIT_FNV_PRIME
+    h = (h ^ uint64(size_level)) * JIT_FNV_PRIME
+    h = (h ^ (emit_prologue ? 1ul : 0ul)) * JIT_FNV_PRIME
+    h = (h ^ (debug_info ? 1ul : 0ul)) * JIT_FNV_PRIME
+    return "{h}"
+}
+
+def jit_gc_stale_dlls(subdir : string; keep_basename : string) {
+    // Delete any file in subdir whose basename does not match the current hash.
+    // Covers stale `.dll` plus linker artifacts (`.o`, `.lib`, `.exp`, `.pdb`).
+    let keep_prefix = "{keep_basename}."
+    dir(subdir) $(fname) {
+        if (fname == "." || fname == "..") {
+            return
+        }
+        if (fname |> starts_with(keep_prefix)) {
+            return
+        }
+        let full_path = "{subdir}/{fname}"
+        var err : string
+        let ok = remove(full_path, err)
+        if (ok && empty(err)) {
+            to_log(LOG_INFO, "LLVM JIT: GC stale artifact {full_path}\n")
+        } else {
+            to_log(LOG_WARNING, "LLVM JIT: failed to GC stale artifact {full_path}: {err}\n")
+        }
+    }
+}
+
 struct JitState {
     dll : void?
     ee : void?
@@ -106,7 +149,7 @@ class JIT_LLVM : AstSimulateMacro {
         // out to be reachable.
         let exe_strict = true
         assume config_out_path = string(prog.policies.jit_output_path)
-        let output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
+        var output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
 
@@ -140,6 +183,15 @@ class JIT_LLVM : AstSimulateMacro {
         }
         if (!empty(funcs)) {
             let totalTime = ref_time_ticks()
+            // Content-address the DLL so that distinct (AST + codegen version + opt flags)
+            // combinations land in distinct files. Same inputs -> same filename -> cache hit.
+            // Only applied in dll-mode with the default output path; if the user pinned
+            // jit_output_path explicitly or we're producing an exe, keep their path.
+            var dll_hash_basename : string
+            if (use_dll && config_out_path |> empty()) {
+                dll_hash_basename = jit_dll_basename(funcs, opt_level, size_level, emit_prologue, debug_info)
+                output_path = ".jitted_scripts/{prog.thisNamespace}/{dll_hash_basename}"
+            }
             init_jit(opt_level |> uint)
 
             var jit_flags : LlvmJitFlags
@@ -167,6 +219,9 @@ class JIT_LLVM : AstSimulateMacro {
                 recompile_prog = dll_changed
                 if (recompile_prog) {
                     g_dynamic_lib_handle.reset();
+                    to_log(LOG_INFO, "LLVM JIT: DLL cache miss, codegen for {output_path}.dll\n")
+                } else {
+                    to_log(LOG_INFO, "LLVM JIT: DLL cache hit {output_path}.dll\n")
                 }
             }
             if (recompile_prog) {
@@ -234,6 +289,11 @@ class JIT_LLVM : AstSimulateMacro {
                     g_dynamic_lib_handle = get_dll_by_path(output_path)
                     let (missing, disabling) = get_dll_missing(funcs, disabled, g_dynamic_lib_handle, uids)
                     assert(missing |> empty() && disabling |> empty())
+
+                    // Clean up stale DLLs in the per-script subdirectory.
+                    if (!(dll_hash_basename |> empty())) {
+                        jit_gc_stale_dlls(dir_name(output_path), dll_hash_basename)
+                    }
                 }
             }
             if (use_dll) {
