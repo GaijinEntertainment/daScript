@@ -890,7 +890,9 @@ namespace das {
         auto lib = loadDynamicLibrary(actualPath.c_str());
         if (!lib) {
             if (static_cast<RegisterOnError>(on_error) != RegisterOnError::Quiet) {
-                auto err_msg = "dynamic module `" + string(mod_name) + "` — library not found: " + actualPath + "\n";
+                auto dlErr = getDynamicLibraryError();
+                auto err_msg = "dynamic module `" + string(mod_name) + "` — failed to load: " + actualPath
+                    + (dlErr.empty() ? string("\n") : (" (" + dlErr + ")\n"));
                 context->to_err(at, err_msg.c_str());
                 if (static_cast<RegisterOnError>(on_error) == RegisterOnError::Fail) {
                     context->throw_error(err_msg.c_str());
