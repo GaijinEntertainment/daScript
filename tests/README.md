@@ -373,6 +373,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 |---|---|---|
 | _glob.das | *(helper)* Shared module defining `AAA = 10` | |
 | _helper_foo.das | *(helper)* Module providing `TestObjectFoo` struct and `testFoo` function | |
+| _helper_macro_uninferred.das | *(helper)* `[bad_emitter]` structure_macro that adds an un-inferred function during patch | |
 | _module_a.das | *(helper)* Module for module_vis_fail — globals, types, functions | |
 | _module_b.das | *(helper)* Module for module_vis_fail — requires _module_a | |
 | _operators_derived.das | *(helper)* Derived class BarOp | |
@@ -505,6 +506,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | make_handle.das | Handle construction — `TestObjectFoo(fooData=...)`, global/local/cmres/ascend | |
 | make_local.das | Struct local construction — defaults, `uninitialized`, fixed_array | |
 | make_struct_with_clone.das | Struct construction with clone `:=` for array fields | |
+| failed_macro_added_function_must_infer.das | structure_macro adds a function during patch without setting astChanged — compiler reports internal-error diagnostics with a hint, instead of crashing | **expect** `50100:2` |
 | map_to_a.das | `map_to_array` — reinterpret raw memory as typed array via unsafe block | |
 | memset.das | memset8, memset16, memset32, memset64, memset128 | |
 | memzero.das | memzero for float and fixed_array | |

@@ -579,6 +579,25 @@ namespace das {
         }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
+            if ( !expr->func ) {
+                // a resolved ExprCall must have a non-null func by this stage;
+                // reaching here means the call was produced after type inference
+                // and infer was never re-run on it. common causes:
+                //  - a structure or function annotation patch() mutated the AST
+                //    but did not set astChanged=true, so the parse loop did not
+                //    re-infer;
+                //  - a pass / optimization macro modified the AST and returned
+                //    false from apply(), suppressing the re-infer cycle;
+                //  - a substitution macro (call / reader / typeinfo / variant /
+                //    type / etc.) produced a node, but the call site forgot to
+                //    forward it as a substitute so type inference never sees it.
+                program->error("internal compilation error, call reached lint with unresolved func",
+                    "this typically means the AST was modified after type inference "
+                    "without signalling that infer needs to run again - check the "
+                    "annotation patch() / pass apply() / substitution macro that produced this node",
+                    "", expr->at, CompilationError::missing_node);
+                return;
+            }
             verifyOnlyFastAot(expr->func, expr->at);
             verifyNoWrite(expr);
             if ( checkDeprecated && expr->func->deprecated ) {

@@ -780,12 +780,15 @@ namespace das {
                 if (!program->failed())
                     program->lint(logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
-                program->foldUnsafe();
+                if (!program->failed())
+                    program->foldUnsafe();
                 auto timeO = ref_time_ticks();
-                if (program->getOptimize()) {
-                    program->optimize(logs,libGroup);
-                } else {
-                    program->buildAccessFlags(logs);
+                if (!program->failed()) {
+                    if (program->getOptimize()) {
+                        program->optimize(logs,libGroup);
+                    } else {
+                        program->buildAccessFlags(logs);
+                    }
                 }
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 *totOpt += get_time_usec(timeO);

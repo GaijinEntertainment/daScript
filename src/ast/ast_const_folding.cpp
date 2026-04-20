@@ -59,7 +59,37 @@ namespace das {
     };
 
     class NoSideEffectVisitor : public Visitor {
+    public:
+        explicit NoSideEffectVisitor ( Program * prog ) : program(prog) {}
     protected:
+        Program * program = nullptr;
+        // report an internal compiler error. a resolved ExprCall / ExprOpN
+        // must have a non-null func by this stage; reaching here means the
+        // call was produced after type inference and infer was never re-run
+        // on it. common causes:
+        //  - a structure or function annotation patch() mutated the AST but did
+        //    not set astChanged=true, so the parse loop did not re-infer;
+        //  - a pass / optimization macro modified the AST and returned false from
+        //    apply(), suppressing the re-infer cycle;
+        //  - a substitution macro (call / reader / typeinfo / variant / type / etc.)
+        //    produced a node, but the call site forgot to forward it as a substitute
+        //    so type inference never sees it.
+        // we report the diagnostic (which sets failToCompile) and then let the
+        // caller fall through to Visitor::visit so child traversal continues.
+        // skipping the func-deref code path keeps us safe within this pass; the
+        // noSideEffects/noNativeSideEffects flags retain their conservative
+        // default of false set by SetSideEffectVisitor::preVisitExpression, and
+        // ast_parse.cpp now gates downstream pipeline stages (foldUnsafe /
+        // optimize / buildAccessFlags / verifyAndFoldContracts) on !failed()
+        // so the broken AST is not walked again.
+        void reportNullFunc ( Expression * expr, const char * exprKind ) {
+            program->error("internal compilation error, " + string(exprKind) +
+                " reached side-effect analysis with unresolved func",
+                "this typically means the AST was modified after type inference "
+                "without signalling that infer needs to run again - check the "
+                "annotation patch() / pass apply() / substitution macro that produced this node",
+                "", expr->at, CompilationError::missing_node);
+        }
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
@@ -171,6 +201,7 @@ namespace das {
         }
     // op1
         virtual ExpressionPtr visit ( ExprOp1 * expr ) override {
+            if ( !expr->func ) { reportNullFunc(expr, "op1"); return Visitor::visit(expr); }
             expr->noSideEffects = expr->subexpr->noSideEffects && (expr->func->sideEffectFlags==0);
             expr->noNativeSideEffects = expr->subexpr->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
@@ -178,6 +209,7 @@ namespace das {
         }
     // op2
         virtual ExpressionPtr visit ( ExprOp2 * expr ) override {
+            if ( !expr->func ) { reportNullFunc(expr, "op2"); return Visitor::visit(expr); }
             expr->noSideEffects = expr->left->noSideEffects && expr->right->noSideEffects && (expr->func->sideEffectFlags==0);
             expr->noNativeSideEffects = expr->left->noNativeSideEffects && expr->right->noNativeSideEffects
                 && ((expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0);
@@ -192,6 +224,7 @@ namespace das {
         }
     // call
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if ( !expr->func ) { reportNullFunc(expr, "call"); return Visitor::visit(expr); }
             expr->noSideEffects = (expr->func->sideEffectFlags==0);
             expr->noNativeSideEffects = (expr->func->sideEffectFlags & uint32_t(SideEffects::inferredSideEffects))==0;
             if ( expr->noSideEffects ) {
@@ -938,7 +971,7 @@ namespace das {
     void Program::checkSideEffects() {
         SetSideEffectVisitor sse;
         visit(sse);
-        NoSideEffectVisitor nse;
+        NoSideEffectVisitor nse(this);
         visit(nse);
     }
 
