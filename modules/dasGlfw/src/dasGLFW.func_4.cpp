@@ -1,4 +1,4 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
 #include "daScript/misc/platform.h"
@@ -10,47 +10,87 @@
 #include "dasGLFW.h"
 #include "need_dasGLFW.h"
 namespace das {
+#include "dasGLFW.func.aot.decl.inc"
 void Module_dasGLFW::initFunctions_4() {
-	addExtern< int (*)(int) , glfwGetKeyScancode >(*this,lib,"glfwGetKeyScancode",SideEffects::worstDefault,"glfwGetKeyScancode")
-		->args({"key"});
-	addExtern< int (*)(GLFWwindow *,int) , glfwGetKey >(*this,lib,"glfwGetKey",SideEffects::worstDefault,"glfwGetKey")
-		->args({"window","key"});
-	addExtern< int (*)(GLFWwindow *,int) , glfwGetMouseButton >(*this,lib,"glfwGetMouseButton",SideEffects::worstDefault,"glfwGetMouseButton")
-		->args({"window","button"});
-	addExtern< void (*)(GLFWwindow *,double *,double *) , glfwGetCursorPos >(*this,lib,"glfwGetCursorPos",SideEffects::worstDefault,"glfwGetCursorPos")
-		->args({"window","xpos","ypos"});
-	addExtern< void (*)(GLFWwindow *,double,double) , glfwSetCursorPos >(*this,lib,"glfwSetCursorPos",SideEffects::worstDefault,"glfwSetCursorPos")
-		->args({"window","xpos","ypos"});
-	addExtern< GLFWcursor * (*)(const GLFWimage *,int,int) , glfwCreateCursor >(*this,lib,"glfwCreateCursor",SideEffects::worstDefault,"glfwCreateCursor")
-		->args({"image","xhot","yhot"});
-	addExtern< GLFWcursor * (*)(int) , glfwCreateStandardCursor >(*this,lib,"glfwCreateStandardCursor",SideEffects::worstDefault,"glfwCreateStandardCursor")
-		->args({"shape"});
-	addExtern< void (*)(GLFWcursor *) , glfwDestroyCursor >(*this,lib,"glfwDestroyCursor",SideEffects::worstDefault,"glfwDestroyCursor")
-		->args({"cursor"});
-	addExtern< void (*)(GLFWwindow *,GLFWcursor *) , glfwSetCursor >(*this,lib,"glfwSetCursor",SideEffects::worstDefault,"glfwSetCursor")
-		->args({"window","cursor"});
-	addExtern< int (*)(int) , glfwJoystickPresent >(*this,lib,"glfwJoystickPresent",SideEffects::worstDefault,"glfwJoystickPresent")
-		->args({"jid"});
-	addExtern< const float * (*)(int,int *) , glfwGetJoystickAxes >(*this,lib,"glfwGetJoystickAxes",SideEffects::worstDefault,"glfwGetJoystickAxes")
-		->args({"jid","count"});
-	addExtern< const unsigned char * (*)(int,int *) , glfwGetJoystickButtons >(*this,lib,"glfwGetJoystickButtons",SideEffects::worstDefault,"glfwGetJoystickButtons")
-		->args({"jid","count"});
-	addExtern< const unsigned char * (*)(int,int *) , glfwGetJoystickHats >(*this,lib,"glfwGetJoystickHats",SideEffects::worstDefault,"glfwGetJoystickHats")
-		->args({"jid","count"});
-	addExtern< const char * (*)(int) , glfwGetJoystickName >(*this,lib,"glfwGetJoystickName",SideEffects::worstDefault,"glfwGetJoystickName")
-		->args({"jid"});
-	addExtern< const char * (*)(int) , glfwGetJoystickGUID >(*this,lib,"glfwGetJoystickGUID",SideEffects::worstDefault,"glfwGetJoystickGUID")
-		->args({"jid"});
-	addExtern< void (*)(int,void *) , glfwSetJoystickUserPointer >(*this,lib,"glfwSetJoystickUserPointer",SideEffects::worstDefault,"glfwSetJoystickUserPointer")
-		->args({"jid","pointer"});
-	addExtern< void * (*)(int) , glfwGetJoystickUserPointer >(*this,lib,"glfwGetJoystickUserPointer",SideEffects::worstDefault,"glfwGetJoystickUserPointer")
-		->args({"jid"});
-	addExtern< int (*)(int) , glfwJoystickIsGamepad >(*this,lib,"glfwJoystickIsGamepad",SideEffects::worstDefault,"glfwJoystickIsGamepad")
-		->args({"jid"});
-	addExtern< int (*)(const char *) , glfwUpdateGamepadMappings >(*this,lib,"glfwUpdateGamepadMappings",SideEffects::worstDefault,"glfwUpdateGamepadMappings")
-		->args({"string"});
-	addExtern< const char * (*)(int) , glfwGetGamepadName >(*this,lib,"glfwGetGamepadName",SideEffects::worstDefault,"glfwGetGamepadName")
-		->args({"jid"});
+// from GLFW/glfw3.h:4673:13
+	makeExtern< int (*)(GLFWwindow *,int) , glfwGetInputMode , SimNode_ExtFuncCall >(lib,"glfwGetInputMode","glfwGetInputMode")
+		->args({"window","mode"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4738:14
+	makeExtern< void (*)(GLFWwindow *,int,int) , glfwSetInputMode , SimNode_ExtFuncCall >(lib,"glfwSetInputMode","glfwSetInputMode")
+		->args({"window","mode","value"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4767:13
+	makeExtern< int (*)() , glfwRawMouseMotionSupported , SimNode_ExtFuncCall >(lib,"glfwRawMouseMotionSupported","glfwRawMouseMotionSupported")
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4835:21
+	makeExtern< const char * (*)(int,int) , glfwGetKeyName , SimNode_ExtFuncCall >(lib,"glfwGetKeyName","glfwGetKeyName")
+		->args({"key","scancode"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4862:13
+	makeExtern< int (*)(int) , glfwGetKeyScancode , SimNode_ExtFuncCall >(lib,"glfwGetKeyScancode","glfwGetKeyScancode")
+		->args({"key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4901:13
+	makeExtern< int (*)(GLFWwindow *,int) , glfwGetKey , SimNode_ExtFuncCall >(lib,"glfwGetKey","glfwGetKey")
+		->args({"window","key"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4930:13
+	makeExtern< int (*)(GLFWwindow *,int) , glfwGetMouseButton , SimNode_ExtFuncCall >(lib,"glfwGetMouseButton","glfwGetMouseButton")
+		->args({"window","button"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:4968:14
+	makeExtern< void (*)(GLFWwindow *,double *,double *) , glfwGetCursorPos , SimNode_ExtFuncCall >(lib,"glfwGetCursorPos","glfwGetCursorPos")
+		->args({"window","xpos","ypos"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5008:14
+	makeExtern< void (*)(GLFWwindow *,double,double) , glfwSetCursorPos , SimNode_ExtFuncCall >(lib,"glfwSetCursorPos","glfwSetCursorPos")
+		->args({"window","xpos","ypos"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5046:21
+	makeExtern< GLFWcursor * (*)(const GLFWimage *,int,int) , glfwCreateCursor , SimNode_ExtFuncCall >(lib,"glfwCreateCursor","glfwCreateCursor")
+		->args({"image","xhot","yhot"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5094:21
+	makeExtern< GLFWcursor * (*)(int) , glfwCreateStandardCursor , SimNode_ExtFuncCall >(lib,"glfwCreateStandardCursor","glfwCreateStandardCursor")
+		->args({"shape"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5121:14
+	makeExtern< void (*)(GLFWcursor *) , glfwDestroyCursor , SimNode_ExtFuncCall >(lib,"glfwDestroyCursor","glfwDestroyCursor")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5148:14
+	makeExtern< void (*)(GLFWwindow *,GLFWcursor *) , glfwSetCursor , SimNode_ExtFuncCall >(lib,"glfwSetCursor","glfwSetCursor")
+		->args({"window","cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5476:13
+	makeExtern< int (*)(int) , glfwJoystickPresent , SimNode_ExtFuncCall >(lib,"glfwJoystickPresent","glfwJoystickPresent")
+		->args({"jid"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5509:22
+	makeExtern< const float * (*)(int,int *) , glfwGetJoystickAxes , SimNode_ExtFuncCall >(lib,"glfwGetJoystickAxes","glfwGetJoystickAxes")
+		->args({"jid","count"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5550:30
+	makeExtern< const unsigned char * (*)(int,int *) , glfwGetJoystickButtons , SimNode_ExtFuncCall >(lib,"glfwGetJoystickButtons","glfwGetJoystickButtons")
+		->args({"jid","count"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5607:30
+	makeExtern< const unsigned char * (*)(int,int *) , glfwGetJoystickHats , SimNode_ExtFuncCall >(lib,"glfwGetJoystickHats","glfwGetJoystickHats")
+		->args({"jid","count"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5638:21
+	makeExtern< const char * (*)(int) , glfwGetJoystickName , SimNode_ExtFuncCall >(lib,"glfwGetJoystickName","glfwGetJoystickName")
+		->args({"jid"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5679:21
+	makeExtern< const char * (*)(int) , glfwGetJoystickGUID , SimNode_ExtFuncCall >(lib,"glfwGetJoystickGUID","glfwGetJoystickGUID")
+		->args({"jid"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from GLFW/glfw3.h:5705:14
+	makeExtern< void (*)(int,void *) , glfwSetJoystickUserPointer , SimNode_ExtFuncCall >(lib,"glfwSetJoystickUserPointer","glfwSetJoystickUserPointer")
+		->args({"jid","pointer"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

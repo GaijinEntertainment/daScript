@@ -1,4 +1,4 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
 auto ann_GLFWvidmode = new GLFWvidmode_GeneratedAnnotation(lib);
@@ -9,3 +9,5 @@ auto ann_GLFWimage = new GLFWimage_GeneratedAnnotation(lib);
 addAnnotation(ann_GLFWimage);
 auto ann_GLFWgamepadstate = new GLFWgamepadstate_GeneratedAnnotation(lib);
 addAnnotation(ann_GLFWgamepadstate);
+auto ann_GLFWallocator = new GLFWallocator_GeneratedAnnotation(lib);
+addAnnotation(ann_GLFWallocator);

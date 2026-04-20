@@ -1,6 +1,7 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
+// from GLFW/glfw3.h:2026:16
 struct GLFWvidmode_GeneratedAnnotation : ManagedStructureAnnotation<GLFWvidmode> {
 	GLFWvidmode_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("GLFWvidmode", ml, "GLFWvidmode") {
 	}
@@ -14,6 +15,7 @@ struct GLFWvidmode_GeneratedAnnotation : ManagedStructureAnnotation<GLFWvidmode>
 	}
 };
 
+// from GLFW/glfw3.h:2060:16
 struct GLFWgammaramp_GeneratedAnnotation : ManagedStructureAnnotation<GLFWgammaramp> {
 	GLFWgammaramp_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("GLFWgammaramp", ml, "GLFWgammaramp") {
 	}
@@ -25,6 +27,7 @@ struct GLFWgammaramp_GeneratedAnnotation : ManagedStructureAnnotation<GLFWgammar
 	}
 };
 
+// from GLFW/glfw3.h:2089:16
 struct GLFWimage_GeneratedAnnotation : ManagedStructureAnnotation<GLFWimage> {
 	GLFWimage_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("GLFWimage", ml, "GLFWimage") {
 	}
@@ -35,12 +38,22 @@ struct GLFWimage_GeneratedAnnotation : ManagedStructureAnnotation<GLFWimage> {
 	}
 };
 
+// from GLFW/glfw3.h:2113:16
 struct GLFWgamepadstate_GeneratedAnnotation : ManagedStructureAnnotation<GLFWgamepadstate> {
 	GLFWgamepadstate_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("GLFWgamepadstate", ml, "GLFWgamepadstate") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(buttons)>("buttons","buttons");
 		addField<DAS_BIND_MANAGED_FIELD(axes)>("axes","axes");
+	}
+};
+
+// from GLFW/glfw3.h:2137:16
+struct GLFWallocator_GeneratedAnnotation : ManagedStructureAnnotation<GLFWallocator> {
+	GLFWallocator_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("GLFWallocator", ml, "GLFWallocator") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(user)>("user","user");
 	}
 };
 
