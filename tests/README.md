@@ -613,6 +613,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | for_multi_source.das | `for (a, b in src1, src2)` — plain, break, continue, return, var inscope, empty, uneven sources | |
 | while.das | `while (cond)` — plain, break, continue, return, nested, var inscope, never-taken | |
 | nested.das | Mixed nested loops — for-in-for, while-in-for, for-in-while, triple-nested, break isolation | |
+| generator_loops.das | `for`/`while` inside a generator body — yield-from-finally interleaves with body yields per iteration; break, continue, return, nested, empty | |
 
 ## linq/
 
