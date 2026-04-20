@@ -174,7 +174,7 @@ namespace das
     ,   yield               = 1 << 4
     };
 
-#define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \
+#define DAS_PROCESS_LOOP_FLAGS_LABELED(beginLabel,endLabel,howtocontinue) \
     {   if (context.stopFlags) { \
         if (context.stopFlags & EvalFlags::stopForContinue) { \
             context.stopFlags &= ~EvalFlags::stopForContinue; \
@@ -182,11 +182,14 @@ namespace das
         } else if (context.stopFlags&EvalFlags::jumpToLabel && context.gotoLabel<this->totalLabels) { \
             if ((body=this->list+this->labels[context.gotoLabel])>=this->list) { \
                 context.stopFlags &= ~EvalFlags::jumpToLabel; \
-                goto loopbegin; \
+                goto beginLabel; \
             } \
         } \
-        goto loopend; \
+        goto endLabel; \
     } }
+
+#define DAS_PROCESS_LOOP_FLAGS(howtocontinue) \
+    DAS_PROCESS_LOOP_FLAGS_LABELED(loopbegin,loopend,howtocontinue)
 
 #define DAS_PROCESS_LOOP1_FLAGS(howtocontinue) \
     {   if (context.stopFlags) { \

@@ -16,6 +16,16 @@ daslang supports three execution tiers: interpreter → AOT (to C++) → JIT (LL
   - `cop.aot_module = true` — set during AOT generation (not at runtime)
   - `cop.aot_lib = true` — library AOT mode (for daslib modules)
 
+### AOT C++ emitter location
+
+The AOT C++ emitter lives in **`daslib/aot_cpp.das`** (a visitor written in daslang). The old `src/ast/ast_aot_cpp.cpp` was emptied by commit `581363ebc` — do not edit it. When codegen output changes shape, edit `daslib/aot_cpp.das` and rebuild `libDaScriptAot`.
+
+Key helpers used by the emitter:
+
+- **`preVisitExprBlockFinal(blk)`** — emits `auto <finallyName> = das_finally([&]() { ... });` at the start of the block's finally region. The RAII guard fires on normal fall-through, `continue`, `break`, and `return`. For `for`/`while` loop bodies the guard sits **inside** the generated C++ body braces, so finally runs once per iteration — not once after the loop.
+- **`das_finally`** — C++ RAII scope guard defined in the runtime. Destructor runs the captured finally lambda at any scope exit.
+- **`finallyName(blk)`** — generates a unique C++ identifier for the per-block `das_finally` guard variable.
+
 ## The test_aot Binary
 
 `tests/aot/CMakeLists.txt` defines the `test_aot` executable — a standalone binary with AOT stubs compiled in. It uses the same `main.cpp` as `daslang` but links additional AOT-generated object files.

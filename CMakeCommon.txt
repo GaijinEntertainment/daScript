@@ -111,8 +111,8 @@ MACRO(SETUP_LIB_DEFINITIONS _target)
         )
     endif()
     target_compile_definitions(${_target} PUBLIC
-        $<$<CONFIG:Release>:DAS_FUSION=2 DAS_DEBUGGER=0>
-        $<$<CONFIG:MinSizeRel>:DAS_FUSION=1 DAS_DEBUGGER=0>
+        $<$<CONFIG:Release>:DAS_FUSION=2>
+        $<$<CONFIG:MinSizeRel>:DAS_FUSION=1>
         $<$<CONFIG:RelWithDebInfo>:DAS_FUSION=1>
     )
 ENDMACRO()

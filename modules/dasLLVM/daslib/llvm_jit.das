@@ -291,6 +291,7 @@ class public LlvmJitVisitor : AstVisitor {
     sortedLabels : array<SLabel>
     finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
     afterFinallyBlocks : table<ExprBlock?; array<LLVMOpaqueBasicBlock?>>
+    forBodyToExpr : table<ExprBlock?; ExprFor?>     // for-loop body block -> ExprFor (for iterator close on return path)
     skipCall : table<ExprCall?>
     range2 : table<Expression?; LLVMOpaqueValue?>       // for loop - range - where to
     callBlock : LLVMOpaqueValue?
@@ -509,7 +510,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def process_finally(expr : ExpressionPtr) {
-        var blk <- collect_finally(expr, true)
+        var blk <- collect_finally(expr, false)
         sort(blk) <| $(a, b) => uid.get_block_name_ptr(a).publ() < uid.get_block_name_ptr(b).publ()
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
@@ -855,11 +856,7 @@ class public LlvmJitVisitor : AstVisitor {
         if (blk == null) {
             return false
         }
-        if (length(blk.finalList) > 0) {
-            return true
-        }
-        // TODO: do better test here. block with iterator, or over an array<> has a final section. maybe other??? but not all
-        return blk.blockFlags.forLoop   // for loop always has final section
+        return length(blk.finalList) > 0
     }
 
     def has_any_finally_block(stopAtLoop : bool) {
@@ -869,7 +866,9 @@ class public LlvmJitVisitor : AstVisitor {
             if (stopAtLoop && blk.blockFlags.inTheLoop) {
                 break
             }
-            return true
+            if (blk |> hasFinalSection()) {
+                return true
+            }
         }
         return false
     }
@@ -879,9 +878,7 @@ class public LlvmJitVisitor : AstVisitor {
         var anyFinallyBlocks = false
         for (i in range(len)) {
             var blk = block_stack[len - 1 - i]
-            if (stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)) {
-                break
-            }
+            var atLoopBoundary = stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)
             if (blk |> hasFinalSection()) {
                 var after = append_basic_block("{from_where}_after_call_finally_block_{int(blk.at.line)}")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after), after)
@@ -892,14 +889,20 @@ class public LlvmJitVisitor : AstVisitor {
                 afterFinallyBlocks[blk] |> push(after)
                 anyFinallyBlocks = true
             }
+            // For return paths that bypass loop_end (stopAtLoop=false), emit iterator-close
+            // for each enclosing for-loop body. break/continue route through loop_end/loop_continue
+            // which already handle close, so skip there.
+            if (!stopAtLoop && blk.blockFlags.forLoop && key_exists(forBodyToExpr, blk)) {
+                emit_iterator_close(forBodyToExpr[blk])
+            }
+            if (atLoopBoundary) {
+                break
+            }
         }
         return anyFinallyBlocks
     }
 
     def override preVisitExprBlock(var blk : ExprBlock?) : void {
-        if (blk.blockFlags.inTheLoop) {
-            blk.blockFlags |= ExprBlockFlags.finallyDisabled
-        }
         block_stack |> push(blk)
     }
 
@@ -913,14 +916,13 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override preVisitExprBlockFinal(blk : ExprBlock?) : void {
         add_default_terminator(blk)
-        if (!blk.blockFlags.forLoop) {// for loop just does it
-            if (finallyBlocks |> key_exists(blk)) {
-                var fblk = finallyBlocks[blk]
-                if (!current_block_terminates()) {
-                    LLVMBuildBr(g_builder, fblk)
-                }
-                LLVMPositionBuilderAtEnd(g_builder, fblk)
+        if (finallyBlocks |> key_exists(blk)) {
+            var fblk = finallyBlocks[blk]
+            if (!current_block_terminates()) {
+                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
+                LLVMBuildBr(g_builder, fblk)
             }
+            LLVMPositionBuilderAtEnd(g_builder, fblk)
         }
     }
 
@@ -949,15 +951,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
-        if (length(blk.finalList) == 0) {// TODO: check for loop
+        if (length(blk.finalList) == 0) {
             add_default_terminator(blk)
-        } elif (!blk.blockFlags.inTheLoop) {
+        } else {
             jump_to_next_finally(blk)
         }
         block_stack |> pop()
-        if (blk.blockFlags.inTheLoop) {
-            blk.blockFlags ^= ExprBlockFlags.finallyDisabled
-        }
         return blk
     }
 
@@ -2693,15 +2692,6 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildBr(g_builder, lblk.loop_start)
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
-        if (expr.body is ExprBlock) {
-            let body = expr.body as ExprBlock
-            if (length(body.finalList) != 0) {
-                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
-                LLVMBuildBr(g_builder, finallyBlocks[body])
-                visit_finally(body, adapter)
-                jump_to_next_finally(body)
-            }
-        }
         return expr
     }
 
@@ -2870,6 +2860,9 @@ class public LlvmJitVisitor : AstVisitor {
             lblk.need_loop = LLVMBuildAlloca(g_builder, types.t_int1, "need_loop")
         }
         loop_stack |> push(lblk)
+        if (expr.body is ExprBlock) {
+            forBodyToExpr[expr.body as ExprBlock] = expr
+        }
         for (ssrc in expr.sources) {
             if (is_count_or_ucount(ssrc)) {
                 skipCall |> insert(ssrc as ExprCall)
@@ -3103,13 +3096,13 @@ class public LlvmJitVisitor : AstVisitor {
             }
         */
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)                  // LOOP END
-        // in for loop closing iterators is included in the finally section
-        let body = expr.body as ExprBlock
-        var fblk = finallyBlocks[body]
-        LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
-        LLVMBuildBr(g_builder, fblk)
-        LLVMPositionBuilderAtEnd(g_builder, fblk)
-        // close all iterators
+        emit_iterator_close(expr)
+        return expr
+    }
+
+    def emit_iterator_close(expr : ExprFor?) {
+        // close iterators in reverse order; called at loop_end (normal/break exit)
+        // and inline in call_all_finally_blocks for return paths that bypass loop_end
         let len = length(expr.iteratorVariables)
         for (i in range(len)) {
             let ri = len - i - 1
@@ -3126,12 +3119,6 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         }
-        // now, final block if there is anything there
-        if (length(body.finalList) != 0) {
-            visit_finally(body, adapter)
-        }
-        jump_to_next_finally(body)
-        return expr
     }
 
 // ExprMakeVariant

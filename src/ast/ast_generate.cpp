@@ -926,8 +926,10 @@ namespace das {
 
     class BreakAndContinueVisitor : public Visitor {
     public:
-        BreakAndContinueVisitor ( int32_t bg, int32_t cg )
-            : breakGoto(bg), continueGoto(cg) {
+        BreakAndContinueVisitor ( int32_t bg, int32_t cg, const string & bf = string(),
+                                  int32_t rg = 0, const string & rf = string(), const string & rvn = string() )
+            : breakGoto(bg), continueGoto(cg), breakFlag(bf),
+              returnGoto(rg), returnFlag(rf), returnValueName(rvn) {
         }
         virtual void preVisit ( ExprWhile * expr ) override {
             Visitor::preVisit(expr);
@@ -947,21 +949,89 @@ namespace das {
         }
         virtual ExpressionPtr visit(ExprBreak *expr) override {
             if ( depth ) return Visitor::visit(expr);
-            return new ExprGoto(expr->at, breakGoto);
+            if ( breakFlag.empty() ) {
+                return new ExprGoto(expr->at, breakGoto);
+            }
+            // emit: { breakFlag = true; goto breakGoto }
+            auto blk = new ExprBlock();
+            blk->at = expr->at;
+            blk->isCollapseable = true;
+            auto flg = new ExprVar(expr->at, breakFlag);
+            auto trv = new ExprConstBool(expr->at, true);
+            auto cpy = new ExprCopy(expr->at, flg, trv);
+            blk->list.push_back(cpy);
+            blk->list.push_back(new ExprGoto(expr->at, breakGoto));
+            return blk;
         }
         virtual ExpressionPtr visit(ExprContinue *expr) override {
             if ( depth ) return Visitor::visit(expr);
             return new ExprGoto(expr->at, continueGoto);
         }
+        virtual ExpressionPtr visit(ExprReturn *expr) override {
+            if ( depth ) return Visitor::visit(expr);
+            if ( returnFlag.empty() ) return Visitor::visit(expr);
+            // yield-emitted returns are internal control-flow — leave them alone
+            if ( expr->fromYield ) return Visitor::visit(expr);
+            // emit: { __return_value = subexpr; __returning = true; goto returnGoto }
+            // so the enclosing loop's per-iteration finally runs before the real return
+            auto blk = new ExprBlock();
+            blk->at = expr->at;
+            blk->isCollapseable = true;
+            if ( expr->subexpr && !returnValueName.empty() ) {
+                auto rv = new ExprVar(expr->at, returnValueName);
+                auto cpy = new ExprCopy(expr->at, rv, expr->subexpr->clone());
+                blk->list.push_back(cpy);
+            }
+            auto flg = new ExprVar(expr->at, returnFlag);
+            auto trv = new ExprConstBool(expr->at, true);
+            auto cpy2 = new ExprCopy(expr->at, flg, trv);
+            blk->list.push_back(cpy2);
+            blk->list.push_back(new ExprGoto(expr->at, returnGoto));
+            return blk;
+        }
     protected:
         int32_t breakGoto;
         int32_t continueGoto;
+        string  breakFlag;
+        int32_t returnGoto;
+        string  returnFlag;
+        string  returnValueName;
         int     depth = 0;
     };
 
     void replaceBreakAndContinue ( Expression * expr, int32_t bg, int32_t cg ) {
         BreakAndContinueVisitor rbnc(bg, cg);
         expr->visit(rbnc);
+    }
+
+    void replaceBreakAndContinueWithFlag ( Expression * expr, int32_t bg, int32_t cg, const string & breakFlag ) {
+        BreakAndContinueVisitor rbnc(bg, cg, breakFlag);
+        expr->visit(rbnc);
+    }
+
+    void replaceBreakContinueAndReturn ( Expression * expr, int32_t bg, int32_t cg, const string & breakFlag,
+                                         int32_t rg, const string & returnFlag, const string & returnValueName ) {
+        BreakAndContinueVisitor rbnc(bg, cg, breakFlag, rg, returnFlag, returnValueName);
+        expr->visit(rbnc);
+    }
+
+    class HasTopLevelReturnVisitor : public Visitor {
+    public:
+        virtual void preVisit ( ExprWhile * ) override { depth ++; }
+        virtual ExpressionPtr visit ( ExprWhile * expr ) override { depth --; return Visitor::visit(expr); }
+        virtual void preVisit ( ExprFor * ) override { depth ++; }
+        virtual ExpressionPtr visit ( ExprFor * expr ) override { depth --; return Visitor::visit(expr); }
+        virtual void preVisit ( ExprReturn * expr ) override {
+            if ( depth == 0 && !expr->fromYield ) found = true;
+        }
+        bool found = false;
+        int  depth = 0;
+    };
+
+    bool bodyHasTopLevelReturn ( Expression * body ) {
+        HasTopLevelReturnVisitor v;
+        body->visit(v);
+        return v.found;
     }
 
     ExpressionPtr generateYield( ExprYield * expr, const FunctionPtr & func ) {
@@ -1137,19 +1207,89 @@ namespace das {
 
     ExpressionPtr replaceGeneratorWhile ( ExprWhile * expr, const FunctionPtr & func ) {
         auto begin_loop_label = func->totalGenLabel ++;
+        auto iter_end_loop_label = func->totalGenLabel ++;
         auto end_loop_label = func->totalGenLabel ++;
         ExprBlock * bodyBlock = nullptr;
+        const bool hasFinally = expr->body->rtti_isBlock() &&
+                                !static_cast<ExprBlock*>(expr->body)->finalList.empty();
+        // only introduce __broke / __returning flags when body has a finally —
+        // otherwise classic break -> end, and return just exits the enclosing function
+        string breakFlag, returnFlag, returnValueName;
+        bool hasReturn = false;
+        if ( hasFinally ) {
+            breakFlag = "__broke_while_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+            hasReturn = bodyHasTopLevelReturn(expr->body);
+            if ( hasReturn ) {
+                returnFlag = "__returning_while_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+                returnValueName = "__return_value_while_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+            }
+        }
         if ( expr->body->rtti_isBlock() ) {
             bodyBlock = static_cast<ExprBlock*>(expr->body->clone());
             giveBlockVariablesUniqueNames(bodyBlock);
-            replaceBreakAndContinue(bodyBlock, end_loop_label, begin_loop_label);
+            if ( hasFinally ) {
+                // break -> set flag, goto iter_end (runs finally, then exits via flag check)
+                // continue -> iter_end (runs finally, flag=false, loops back)
+                // return -> spill value, set flag, goto iter_end (runs finally, then real return)
+                replaceBreakContinueAndReturn(bodyBlock, iter_end_loop_label, iter_end_loop_label, breakFlag,
+                                              iter_end_loop_label, returnFlag, returnValueName);
+            } else {
+                replaceBreakAndContinue(bodyBlock, end_loop_label, begin_loop_label);
+            }
         }
         auto blk = new ExprBlock();
         blk->at = expr->at;
         blk->isCollapseable = true;
+        // __broke = false  (only when finally present)
+        if ( hasFinally ) {
+            auto leqt = new ExprLet();
+            leqt->at = expr->at;
+            leqt->atInit = expr->at;
+            leqt->visibility = expr->at;
+            auto bvar = new Variable();
+            bvar->generated = true;
+            bvar->at = expr->at;
+            bvar->name = breakFlag;
+            bvar->type = new TypeDecl(Type::tBool);
+            bvar->init = new ExprConstBool(expr->at, false);
+            leqt->variables.push_back(bvar);
+            blk->list.push_back(leqt);
+        }
+        // __returning = false; __return_value : <func->result>  (only when body has return)
+        if ( hasReturn ) {
+            auto leqt = new ExprLet();
+            leqt->at = expr->at;
+            leqt->atInit = expr->at;
+            leqt->visibility = expr->at;
+            auto rvar = new Variable();
+            rvar->generated = true;
+            rvar->at = expr->at;
+            rvar->name = returnFlag;
+            rvar->type = new TypeDecl(Type::tBool);
+            rvar->init = new ExprConstBool(expr->at, false);
+            leqt->variables.push_back(rvar);
+            blk->list.push_back(leqt);
+            if ( func->result && !func->result->isVoid() ) {
+                auto lvqt = new ExprLet();
+                lvqt->at = expr->at;
+                lvqt->atInit = expr->at;
+                lvqt->visibility = expr->at;
+                auto vvar = new Variable();
+                vvar->generated = true;
+                vvar->at = expr->at;
+                vvar->name = returnValueName;
+                vvar->type = new TypeDecl(*func->result);
+                vvar->type->constant = false;
+                vvar->type->explicitConst = false;
+                vvar->type->ref = false;
+                lvqt->variables.push_back(vvar);
+                blk->list.push_back(lvqt);
+            }
+        }
         auto bll = new ExprLabel(expr->at, begin_loop_label,
                                           "begin while at line " + to_string(expr->at.line));
         blk->list.push_back(bll);
+        // false initial / exhausted cond skips finally entirely
         auto gtel = new ExprGoto(expr->at, end_loop_label);
         auto btel = new ExprBlock();
         btel->at = expr->at;
@@ -1164,16 +1304,41 @@ namespace das {
         } else {
             blk->list.push_back(expr->body->clone());
         }
+        if ( hasFinally ) {
+            // iter_end label: per-iteration finally (normal fall-through, continue, break, return all route here)
+            auto iell = new ExprLabel(expr->at, iter_end_loop_label,
+                                               "iter end while at line " + to_string(expr->at.line));
+            blk->list.push_back(iell);
+            for ( auto & fse : bodyBlock->finalList ) {
+                blk->list.push_back(fse->clone());
+            }
+            // if (__returning) return __return_value (runs before break check so return wins over break)
+            if ( hasReturn ) {
+                auto rblk = new ExprBlock();
+                rblk->at = expr->at;
+                rblk->isCollapseable = true;
+                auto pRet = new ExprReturn();
+                pRet->at = expr->at;
+                if ( func->result && !func->result->isVoid() ) {
+                    pRet->subexpr = new ExprVar(expr->at, returnValueName);
+                }
+                rblk->list.push_back(pRet);
+                auto rchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, returnFlag), rblk, nullptr);
+                blk->list.push_back(rchk);
+            }
+            // if (__broke) goto end — else fall through to goto begin
+            auto gtef = new ExprGoto(expr->at, end_loop_label);
+            auto btef = new ExprBlock();
+            btef->at = expr->at;
+            btef->list.push_back(gtef);
+            auto fchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, breakFlag), btef, nullptr);
+            blk->list.push_back(fchk);
+        }
         auto gbeg = new ExprGoto(expr->at, begin_loop_label);
         blk->list.push_back(gbeg);
         auto ell = new ExprLabel(expr->at, end_loop_label,
                                           "end while at line " + to_string(expr->at.line));
         blk->list.push_back(ell);
-        if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
-            for ( auto & fse : bodyBlock->finalList ) {
-                blk->list.push_back(fse->clone());
-            }
-        }
         verifyGenerated(blk);
         return blk;
     }
@@ -1189,11 +1354,31 @@ namespace das {
         auto end_loop_label = func->totalGenLabel ++;
         ExprFor * forCopy = nullptr;
         ExprBlock * bodyBlock = nullptr;
+        const bool hasFinally = expr->body->rtti_isBlock() &&
+                                !static_cast<ExprBlock*>(expr->body)->finalList.empty();
+        string breakFlag, returnFlag, returnValueName;
+        bool hasReturn = false;
+        if ( hasFinally ) {
+            breakFlag = "__broke_for_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+            hasReturn = bodyHasTopLevelReturn(expr->body);
+            if ( hasReturn ) {
+                returnFlag = "__returning_for_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+                returnValueName = "__return_value_for_" + to_string(expr->at.line) + "_" + to_string(expr->at.column);
+            }
+        }
         if ( expr->body->rtti_isBlock() ) {
             forCopy = static_cast<ExprFor*>(expr->clone());
             bodyBlock = static_cast<ExprBlock*>(forCopy->body);
             giveBlockVariablesUniqueNames(forCopy);
-            replaceBreakAndContinue(bodyBlock, end_loop_label, mid_loop_label);
+            if ( hasFinally ) {
+                // break -> set flag, goto mid (finally runs, flag check -> end, iterator_close runs)
+                // continue -> mid (finally runs, advances iterator, re-checks)
+                // return -> spill value, set flag, goto mid (finally runs, then real return)
+                replaceBreakContinueAndReturn(bodyBlock, mid_loop_label, mid_loop_label, breakFlag,
+                                              mid_loop_label, returnFlag, returnValueName);
+            } else {
+                replaceBreakAndContinue(bodyBlock, end_loop_label, mid_loop_label);
+            }
             expr = forCopy;
         }
         auto blk = new ExprBlock();
@@ -1222,6 +1407,52 @@ namespace das {
         lvar->init = new ExprConstBool(expr->at, true);
         leqt->variables.push_back(lvar);
         blk->list.push_back(leqt);
+        // __broke = false (only when finally present)
+        if ( hasFinally ) {
+            auto bleqt = new ExprLet();
+            bleqt->at = expr->at;
+            bleqt->atInit = expr->at;
+            bleqt->visibility = expr->visibility;
+            auto bvar = new Variable();
+            bvar->generated = true;
+            bvar->at = expr->at;
+            bvar->name = breakFlag;
+            bvar->type = new TypeDecl(Type::tBool);
+            bvar->init = new ExprConstBool(expr->at, false);
+            bleqt->variables.push_back(bvar);
+            blk->list.push_back(bleqt);
+        }
+        // __returning = false; __return_value : <func->result>  (only when body has return)
+        if ( hasReturn ) {
+            auto rleqt = new ExprLet();
+            rleqt->at = expr->at;
+            rleqt->atInit = expr->at;
+            rleqt->visibility = expr->visibility;
+            auto rvar = new Variable();
+            rvar->generated = true;
+            rvar->at = expr->at;
+            rvar->name = returnFlag;
+            rvar->type = new TypeDecl(Type::tBool);
+            rvar->init = new ExprConstBool(expr->at, false);
+            rleqt->variables.push_back(rvar);
+            blk->list.push_back(rleqt);
+            if ( func->result && !func->result->isVoid() ) {
+                auto vleqt = new ExprLet();
+                vleqt->at = expr->at;
+                vleqt->atInit = expr->at;
+                vleqt->visibility = expr->visibility;
+                auto vvar = new Variable();
+                vvar->generated = true;
+                vvar->at = expr->at;
+                vvar->name = returnValueName;
+                vvar->type = new TypeDecl(*func->result);
+                vvar->type->constant = false;
+                vvar->type->explicitConst = false;
+                vvar->type->ref = false;
+                vleqt->variables.push_back(vvar);
+                blk->list.push_back(vleqt);
+            }
+        }
         // sources
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
@@ -1343,6 +1574,41 @@ namespace das {
         auto mll = new ExprLabel(expr->at, mid_loop_label,
                                           "continue for at line " + to_string(expr->at.line));
         blk->list.push_back(mll);
+        if ( hasFinally ) {
+            // per-iteration finally (normal fall-through, continue, break, return all route here)
+            for ( auto & fse : bodyBlock->finalList ) {
+                blk->list.push_back(fse->clone());
+            }
+            // if (__returning) { <close iterators>; return __return_value }
+            if ( hasReturn ) {
+                auto rblk = new ExprBlock();
+                rblk->at = expr->at;
+                rblk->isCollapseable = true;
+                // close iterators before returning (mirrors normal end_loop path)
+                for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
+                    auto cbif = new ExprCall(expr->at, "_builtin_iterator_close");
+                    cbif->generated = true;
+                    cbif->arguments.push_back(new ExprVar(expr->at, srcNames[si]));
+                    cbif->arguments.push_back(new ExprVar(expr->at, pVarNames[si]));
+                    rblk->list.push_back(cbif);
+                }
+                auto pRet = new ExprReturn();
+                pRet->at = expr->at;
+                if ( func->result && !func->result->isVoid() ) {
+                    pRet->subexpr = new ExprVar(expr->at, returnValueName);
+                }
+                rblk->list.push_back(pRet);
+                auto rchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, returnFlag), rblk, nullptr);
+                blk->list.push_back(rchk);
+            }
+            // if (__broke) goto end — skip iterator_next
+            auto gtef = new ExprGoto(expr->at, end_loop_label);
+            auto btef = new ExprBlock();
+            btef->at = expr->at;
+            btef->list.push_back(gtef);
+            auto fchk = new ExprIfThenElse(expr->at, new ExprVar(expr->at, breakFlag), btef, nullptr);
+            blk->list.push_back(fchk);
+        }
         // loop &= _builtin_iterator_next(it0,pvar0)
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
@@ -1360,11 +1626,6 @@ namespace das {
         auto ell = new ExprLabel(expr->at, end_loop_label,
                                           "end for at line " + to_string(expr->at.line));
         blk->list.push_back(ell);
-        if ( bodyBlock && !bodyBlock->finalList.empty() ) { // finally, if we have it
-            for ( auto & fse : bodyBlock->finalList ) {
-                blk->list.push_back(fse->clone());
-            }
-        }
         // loop &= _builtin_iterator_close(it0,pvar0)
         for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];

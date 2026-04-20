@@ -1401,9 +1401,6 @@ class public CppAot : AstVisitor {
     def override preVisitExprBlock(var blk : ExprBlock?) {
         push(scopes, blk);
         blk.blockFlags |= ExprBlockFlags.finallyBeforeBody;
-        if (blk.blockFlags.inTheLoop) {
-            blk.blockFlags |= ExprBlockFlags.finallyDisabled;
-        }
         write(*ss, "\{\n");
         tab ++;
         // pre-declare variables
@@ -2485,28 +2482,12 @@ class public CppAot : AstVisitor {
     }
 // ExprWhile
     def override preVisitExprWhile(wh : ExprWhile?) {
-        if (wh.body is ExprBlock) {
-            let blk = wh.body as ExprBlock;
-            if (!blk.finalList.empty()) {
-                write(*ss, "\{\n");
-                tab ++;
-                visit_finally(blk, adapter);
-                write(*ss, tabs());
-            }
-        }
         write(*ss, "while ( ");
     }
     def override preVisitExprWhileBody(wh : ExprWhile?; body : ExpressionPtr) {
         write(*ss, " )\n{tabs()}");
     }
     def override visitExprWhile(var wh : ExprWhile?) : ExpressionPtr {
-        if (wh.body is ExprBlock) {
-            let blk = wh.body as ExprBlock;
-            if (!blk.finalList.empty()) {
-                tab --;
-                write(*ss, "\n{tabs()}\}");
-            }
-        }
         return wh;
     }
 // if then else
@@ -3678,12 +3659,6 @@ class public CppAot : AstVisitor {
     }
     def override preVisitExprForBody(ffor : ExprFor?) {
         let nl = needLoopName(ffor);
-        if (ffor.body is ExprBlock) {
-            let blk = ffor.body as ExprBlock;
-            if (!blk.finalList.empty()) {
-                visit_finally(blk, adapter)
-            }
-        }
         write(*ss, "{tabs()}for ( ; {nl} ; {nl} = ");
         for (variable in ffor.iteratorVariables) {
             if (variable != ffor.iteratorVariables[0]) {

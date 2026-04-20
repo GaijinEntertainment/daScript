@@ -61,13 +61,14 @@ def sum_numbers(a, b : auto(T)) : T {
 
 // === finally blocks ===
 // Runs when a block exits, regardless of how (return, panic, etc.)
+// On a for/while loop body, finally runs per iteration — not once at the end.
 
 def process_with_cleanup() {
     var counter = 0
     for (_i in range(3)) {
         counter += 1
     } finally {
-        print("  loop cleanup, counter={counter}\n")
+        print("  iter cleanup, counter={counter}\n")
     }
     // finally can attach to any block: functions, loops, if blocks
 }
@@ -165,7 +166,9 @@ def main {
 //   sum_numbers(3, 4) = 7
 //   sum_numbers(1.5, 2.5) = 4
 // finally:
-//   loop cleanup, counter=3
+//   iter cleanup, counter=1
+//   iter cleanup, counter=2
+//   iter cleanup, counter=3
 // defer:
 //   step 1: acquire resources
 //   step 2: do work
