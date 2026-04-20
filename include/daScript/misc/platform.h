@@ -366,22 +366,64 @@ void DAS_API os_debug_break();
     #endif
 #endif
 
+// Heap-leak tracking hooks. Zero-cost when DAS_TRACK_ALLOC is off (empty inline bodies
+// fold away). When on, external implementations in src/misc/alloc_tracker.cpp record
+// every aligned allocation and symbolize survivors after Module::Shutdown().
+namespace das {
+#if DAS_TRACK_ALLOC
+    DAS_API void    track_alloc_hook(void *p, size_t sz) noexcept;
+    DAS_API void    track_free_hook(void *p) noexcept;
+    DAS_API void    arm_alloc_tracking() noexcept;
+    DAS_API size_t  dump_alloc_leaks(FILE *out);
+    // Landmark RAII: ctor walks the stack once and stores the chain; alloc-site
+    // captures that match the landmark's RSP short-circuit with a memcpy. Place
+    // one on the stack high in the call tree (e.g. top of compile_and_run) to
+    // cut per-allocation unwind cost from ~N frames to ~depth-above-landmark.
+    // Win64 only — other platforms treat it as a no-op.
+    #if defined(_MSC_VER) && defined(_M_X64)
+        DAS_API void das_fast_stack_landmark_enter() noexcept;
+        DAS_API void das_fast_stack_landmark_exit() noexcept;
+        struct AllocTrackingLandmark {
+            AllocTrackingLandmark() noexcept  { das_fast_stack_landmark_enter(); }
+            ~AllocTrackingLandmark() noexcept { das_fast_stack_landmark_exit(); }
+        };
+    #else
+        struct AllocTrackingLandmark {
+            AllocTrackingLandmark() noexcept {}
+            ~AllocTrackingLandmark() noexcept {}
+        };
+    #endif
+#else
+    inline void   track_alloc_hook(void *, size_t) noexcept {}
+    inline void   track_free_hook(void *) noexcept {}
+    inline void   arm_alloc_tracking() noexcept {}
+    inline size_t dump_alloc_leaks(FILE *) { return 0; }
+    struct AllocTrackingLandmark {
+        AllocTrackingLandmark() noexcept {}
+        ~AllocTrackingLandmark() noexcept {}
+    };
+#endif
+}
+
 #ifndef DAS_ALIGNED_ALLOC
 #define DAS_ALIGNED_ALLOC 1
 inline void *das_aligned_alloc16(size_t size) {
     DAS_ASSERTF(size != 0, "das_aligned_alloc16 called with size 0");
+    void *p;
 #if defined(_MSC_VER)
-    return _aligned_malloc(size, 16);
+    p = _aligned_malloc(size, 16);
 #else
-    void * mem = nullptr;
-    if (posix_memalign(&mem, 16, size)) {
+    p = nullptr;
+    if (posix_memalign(&p, 16, size)) {
         DAS_ASSERTF(0, "posix_memalign returned nullptr");
         return nullptr;
     }
-    return mem;
 #endif
+    das::track_alloc_hook(p, size);
+    return p;
 }
 inline void das_aligned_free16(void *ptr) {
+    das::track_free_hook(ptr);
 #if defined(_MSC_VER)
     _aligned_free(ptr);
 #else
@@ -420,12 +462,6 @@ inline size_t das_aligned_memsize(void * ptr){
 
 #ifndef DAS_TRACK_INSANE_POINTERS
 #define DAS_TRACK_INSANE_POINTERS 0
-#endif
-
-// when enabled, TypeDecl, Expression, Variable, Structure, Enumeration and Function
-// will be filled with 0xcd when deleted
-#ifndef DAS_MACRO_SANITIZER
-#define DAS_MACRO_SANITIZER 0
 #endif
 
 #if defined(_M_IX86) && defined(_MSC_VER) && !defined(__clang__) && _MSC_VER <= 1900

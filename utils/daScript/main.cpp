@@ -229,6 +229,10 @@ int das_aot_main ( int argc, char * argv[] ) {
 //   0 on success
 //   non-zero from int main, or 1 on compile/simulate/verify/exception failure
 int compile_and_run ( const string & fn, const string & mainFnName, bool outputProgramCode, bool dryRun, bool compileOnly, const char * introFile = nullptr ) {
+    // Heap-leak tracker: arm the tail-memoize landmark so per-allocation stack
+    // captures below this frame skip re-walking ancestors. No-op when
+    // DAS_TRACK_ALLOC is off or on non-Win64.
+    das::AllocTrackingLandmark _alloc_tracker_landmark;
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
@@ -461,6 +465,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     _set_error_mode(_OUT_TO_STDERR);
 #endif
     install_das_crash_handler();
+    das::arm_alloc_tracking();
     bool isArgAot = false;
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;
@@ -692,6 +697,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
     JobStatus::DumpJobQueLeaks();
+    // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),
+    // so it fires after all static destructors — cleaner than dumping here.
     if ( g_smart_ptr_total!=0 ) {
         TextPrinter tp;
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";

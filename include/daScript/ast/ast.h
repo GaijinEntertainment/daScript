@@ -197,12 +197,6 @@ namespace das
         Type                baseType = Type::tInt;
         AnnotationList      annotations;
         bool                isPrivate = false;
-#if DAS_MACRO_SANITIZER
-    public:
-        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
-        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
-            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
-#endif
     };
 
     class DAS_API Structure : public gc_node {
@@ -330,12 +324,6 @@ namespace das
             uint32_t    flags = 0;
         };
         mutable bool circularGuard = false;   // we prevent circular lookups with this guard. Do not serialize, do not expose to daslang
-#if DAS_MACRO_SANITIZER
-    public:
-        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
-        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
-            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
-#endif
     };
 
     struct DAS_API Variable : gc_node {
@@ -415,12 +403,6 @@ namespace das
         };
 
         AnnotationArgumentList  annotation;
-#if DAS_MACRO_SANITIZER
-    public:
-        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
-        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
-            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
-#endif
     };
 
     struct VarLessPred {
@@ -739,12 +721,6 @@ namespace das
             };
             uint32_t    printFlags = 0;
         };
-#if DAS_MACRO_SANITIZER
-    public:
-        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
-        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
-            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
-#endif
     };
 
     struct ExprLooksLikeCall;
@@ -1023,12 +999,6 @@ namespace das
         bool isFullyInferred = false;
         string inferredSource;
 
-#if DAS_MACRO_SANITIZER
-    public:
-        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
-        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
-            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
-#endif
     };
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
