@@ -9,11 +9,11 @@ class GlfwGen : CppGenBind {
     override generate_constant_decl = true
     glfw_skip_func : table<string; bool>
     def GlfwGen {
-        bind_root = "{get_das_root()}/Modules/dasGlfw/src"
+        bind_root = "{get_das_root()}/modules/dasGlfw/src"
         bind_module = "dasGLFW"
         bind_das_module = "glfw"
         let pfn = "GLFW/glfw3.h"
-        let pfp = "{get_das_root()}/Modules/dasGlfw/glfw/include/"
+        let pfp = "{get_das_root()}/modules/dasGlfw/glfw/include/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",

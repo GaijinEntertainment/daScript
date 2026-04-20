@@ -10,11 +10,11 @@ class XbyakGen : CppGenBind {
     override generate_constant_decl = false
     xbyak_skip_func : table<string; bool>
     def XbyakGen {
-        bind_root = "{get_das_root()}/Modules/dasXbyak/src"
+        bind_root = "{get_das_root()}/modules/dasXbyak/src"
         bind_module = "dasXBYAK"
         bind_das_module = "xbyak"
         let pfn = "xbyak/xbyak.h"
-        let pfp = "{get_das_root()}/Modules/dasXbyak/xbyak/"
+        let pfp = "{get_das_root()}/modules/dasXbyak/xbyak/"
         CONST_FILE_NAMES <- array<string>(
             "{pfp}{pfn}"
         )

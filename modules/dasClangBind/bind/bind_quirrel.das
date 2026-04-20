@@ -20,12 +20,12 @@ class QuirrelGen : CppGenBind {
     )
 
     def QuirrelGen {
-        bind_root = "{get_das_root()}/Modules/dasQuirrel/src"
+        bind_root = "{get_das_root()}/modules/dasQuirrel/src"
         bind_module = "dasQUIRREL"
         bind_das_module = "quirrel"
         let pfn = "cb_dasQuirrel.h"
-        let pfp = "{get_das_root()}/Modules/dasQuirrel/src/"
-        let quirrel_i = "{get_das_root()}/Modules/dasQuirrel/libquirrel/include/"
+        let pfp = "{get_das_root()}/modules/dasQuirrel/src/"
+        let quirrel_i = "{get_das_root()}/modules/dasQuirrel/libquirrel/include/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",

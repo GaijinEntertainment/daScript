@@ -7,7 +7,7 @@ require daslib/strings_boost
 class ClangGen : CppGenBind {
     override func_to_stdout = false
     def ClangGen {
-        bind_root = "{get_das_root()}/Modules/dasClangBind/src"
+        bind_root = "{get_das_root()}/modules/dasClangBind/src"
         bind_module = "dasClangBind"
         bind_das_module = "cbind"
         let pfn = "clang-c/Index.h"
