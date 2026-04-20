@@ -1467,6 +1467,8 @@ class CppGenBind : AnyGenBind {
                 if (pt.kind == CXTypeKind.Char_S || pt.kind == CXTypeKind.SChar) {
                     let value = clang_EvalResult_getAsStr(res)
                     result = "new ExprConstString(\"{value}\")"
+                } elif (clang_EvalResult_getAsInt(res) == 0) {
+                    result = "new ExprConstPtr()"
                 } else {
                     to_log(LOG_WARNING, "unsupported default value of pointer type {string(clang_getTypeSpelling(t))} at {clang_getCursorLocationDescription(c)}\n")
                 }
