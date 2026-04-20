@@ -852,7 +852,7 @@ def build_package(pkg_dir : string) : bool {
 
     // Configure — pass DASLANG_DIR so the package can find headers and libs
     var output : string
-    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\"", output)
+    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" -DCMAKE_BUILD_TYPE=Release", output)
     if (exit_code != 0) {
         log("  CMake configure FAILED:\n{output}\n")
         return false
