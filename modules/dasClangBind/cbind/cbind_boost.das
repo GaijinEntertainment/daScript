@@ -151,12 +151,13 @@ def clang_typeToDasType(var t : CXType; rules : TypeRules) {
     return result
 }
 
-def clang_getCursorLocationDescription(var c : CXCursor) {
+def clang_getCursorLocationFullPath(var c : CXCursor) {
     var file : CXFile
     var line, column, offset : uint
     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
-    var fname = clang_getFileName(file)
-    return "{string(fname)}:{int(line)}:{int(column)}"
+    // libclang returns backslashes on Windows; normalize to '/' so prefix matching is OS-independent
+    let fname = string(clang_getFileName(file)) |> replace_multiple([("\\", "/")])
+    return "{fname}:{int(line)}:{int(column)}"
 }
 
 def clang_getCursorLocationFileName(var c : CXCursor) {
@@ -257,6 +258,14 @@ class AnyGenBind {
 
     def open_file_name : string {
         return "{PARSE_FILE_PREFIX}{PARSE_FILE_NAME}"
+    }
+    // strip the parsed library's header root — paths stay stable across OS and install folder
+    def clang_getCursorLocationDescription(var c : CXCursor) : string {
+        var full = clang_getCursorLocationFullPath(c)
+        if (!empty(PARSE_FILE_PREFIX) && full |> starts_with(PARSE_FILE_PREFIX)) {
+            return full |> slice(length(PARSE_FILE_PREFIX))
+        }
+        return full
     }
     def skip_file(fname : string) : bool {
         return !fname |> ends_with(PARSE_FILE_NAME)
@@ -1487,7 +1496,10 @@ class CppGenBind : AnyGenBind {
                         }
                         clang_EvalResult_dispose(nres)
                         return CXChildVisitResult.Break
-                    } elif (CC.kind == CXCursorKind.CXXNullPtrLiteralExpr) {
+                    } elif (CC.kind == CXCursorKind.CXXNullPtrLiteralExpr ||
+                            CC.kind == CXCursorKind.GNUNullExpr) {
+                        // `NULL` macro in C++ expands to __null (GNUNullExpr);
+                        // `nullptr` is CXXNullPtrLiteralExpr
                         has_null = true
                         return CXChildVisitResult.Break
                     }
@@ -1529,6 +1541,9 @@ class CppGenBind : AnyGenBind {
         let ns_en = namespace_name(enum_name)
         let das_enum_name = dasEnumName(enum_name, ns_en)
         if (skip_enum(ns_en, enum_name)) {
+            return
+        }
+        if (clang_isForwardDeclaration(cursor)) {
             return
         }
         enumDecl |> push((ns_en, enum_name))
@@ -1674,6 +1689,7 @@ class CppGenBind : AnyGenBind {
         module_cpp_file |> fwrite("\tinitMain();\n")
         module_cpp_file |> fwrite("\treturn true;\n")
         module_cpp_file |> fwrite("\}\n")
+        module_cpp_file |> fwrite("REGISTER_DYN_MODULE(Module_{bind_module},Module_{bind_module});\n")
         module_cpp_file |> fwrite("}\n")
         module_cpp_file |> fwrite("REGISTER_MODULE_IN_NAMESPACE(Module_{bind_module},das);\n\n")
     }
@@ -1792,7 +1808,7 @@ def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX : string; ARGV : array<st
         clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
         var fname = string(clang_getFileName(file))
         if (fname |> ends_with(PARSE_FILE_NAME)) {
-            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}\n")
+            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationFullPath(c)}\n")
         }
         return CXChildVisitResult.Recurse
     }
