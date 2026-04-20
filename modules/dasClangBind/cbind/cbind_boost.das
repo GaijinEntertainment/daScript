@@ -1431,40 +1431,40 @@ class CppGenBind : AnyGenBind {
             if (t.kind == CXTypeKind.Char32 || t.kind == CXTypeKind.Int) {
                 let value = clang_EvalResult_getAsInt(res)
                 if (this_alias != "") {
-                    result = "make_smart<ExprConstEnumeration>({value},makeType<{this_alias}>(lib))"
+                    result = "new ExprConstEnumeration({value},makeType<{this_alias}>(lib))"
                 } else {
-                    result = "make_smart<ExprConstInt>({value})"
+                    result = "new ExprConstInt({value})"
                 }
             } elif (t.kind == CXTypeKind.UInt) {
                 let value = uint(clang_EvalResult_getAsInt(res))
-                result = "make_smart<ExprConstUInt>({value})"
+                result = "new ExprConstUInt({value})"
             } elif (t.kind == CXTypeKind.Long || t.kind == CXTypeKind.LongLong) {
                 let value = int64(clang_EvalResult_getAsLongLong(res))
-                result = "make_smart<ExprConstInt64>({value})"
+                result = "new ExprConstInt64({value})"
             } elif (t.kind == CXTypeKind.ULong || t.kind == CXTypeKind.ULongLong) {
                 let value = uint64(clang_EvalResult_getAsLongLong(res))
-                result = "make_smart<ExprConstUInt64>({value})"
+                result = "new ExprConstUInt64({value})"
             } elif (t.kind == CXTypeKind.Float) {
                 let value = clang_EvalResult_getAsDouble(res)
-                result = "make_smart<ExprConstFloat>({value})"
+                result = "new ExprConstFloat({value})"
             } elif (t.kind == CXTypeKind.Double) {
                 let value = clang_EvalResult_getAsDouble(res)
-                result = "make_smart<ExprConstDouble>({value})"
+                result = "new ExprConstDouble({value})"
             } elif (t.kind == CXTypeKind.Bool) {
                 let value = clang_EvalResult_getAsInt(res)
-                result = "make_smart<ExprConstBool>({value != 0})"
+                result = "new ExprConstBool({value != 0})"
             } elif (t.kind == CXTypeKind.Pointer) {
                 var pt = clang_getCanonicalType(clang_getPointeeType(t))
                 if (pt.kind == CXTypeKind.Char_S || pt.kind == CXTypeKind.SChar) {
                     let value = clang_EvalResult_getAsStr(res)
-                    result = "make_smart<ExprConstString>(\"{value}\")"
+                    result = "new ExprConstString(\"{value}\")"
                 } else {
                     to_log(LOG_WARNING, "unsupported default value of pointer type {string(clang_getTypeSpelling(t))} at {clang_getCursorLocationDescription(c)}\n")
                 }
             } elif (t.kind == CXTypeKind.Enum) {
                 let value = clang_EvalResult_getAsInt(res)
                 let thisArgEnum = string(clang_getTypeSpelling(t))
-                result = "make_smart<ExprConstEnumeration>({value},makeType<{thisArgEnum}>(lib))"
+                result = "new ExprConstEnumeration({value},makeType<{thisArgEnum}>(lib))"
             } else {
                 to_log(LOG_WARNING, "unsupported default value of type {string(clang_getTypeSpelling(t))} : {t.kind} at {clang_getCursorLocationDescription(c)}\n")
             }
@@ -1496,9 +1496,9 @@ class CppGenBind : AnyGenBind {
                 if (has_null) {
                     var pt = clang_getCanonicalType(clang_getPointeeType(t))
                     if (pt.kind == CXTypeKind.Char_S || pt.kind == CXTypeKind.SChar) {
-                        result = "make_smart<ExprConstString>(\"\")"
+                        result = "new ExprConstString(\"\")"
                     } else {
-                        result = "make_smart<ExprConstPtr>()"
+                        result = "new ExprConstPtr()"
                     }
                 }
             }
