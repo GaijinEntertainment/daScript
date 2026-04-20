@@ -6,12 +6,11 @@ require daslib/strings_boost
 
 class ClangGen : CppGenBind {
     override func_to_stdout = false
-    def ClangGen {
+    def ClangGen(pfp : string) {
         bind_root = "{get_das_root()}/modules/dasClangBind/src"
         bind_module = "dasClangBind"
         bind_das_module = "cbind"
         let pfn = "clang-c/Index.h"
-        let pfp = "{get_das_root()}/../libclang/include/"
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",
@@ -91,8 +90,15 @@ class ClangGen : CppGenBind {
 
 [export]
 def main {
+    // parse CLI: -- --clang_path <libclang-include-path>
+    let args <- get_command_line_arguments()
+    var pfp = "{get_das_root()}/../libclang/include/"
+    let idx = find_index(args, "--clang_path")
+    if (idx >= 0 && idx + 1 < length(args)) {
+        pfp = args[idx + 1]
+    }
     // generate
-    var cgb = new ClangGen()
+    var cgb = new ClangGen(pfp)
     defer() {
         unsafe {
             delete cgb
