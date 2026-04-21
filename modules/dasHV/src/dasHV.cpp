@@ -553,9 +553,6 @@ static WebServer_Adapter * lookup_server ( Handle<hv::WebSocketServer> h ) {
 }
 
 Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const char * pathToCert, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at ) {
-    auto adapter = new WebServer_Adapter((char *)pClass,info,context);
-    adapter->port = port;
-    adapter->https_port = httpsPort;
     if ( httpsPort ) {
         hssl_ctx_init_param_t param;
         memset(&param, 0, sizeof(param));
@@ -569,6 +566,9 @@ Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const
             context->throw_error_at(at, "libHV: hssl_ctx_init failed! Please check the certificate files `%s` and `%s`.", crt_file.c_str(), key_file.c_str());
         }
     }
+    auto adapter = new WebServer_Adapter((char *)pClass,info,context);
+    adapter->port = port;
+    adapter->https_port = httpsPort;
     shared_ptr<hv::WebSocketServer> sp(adapter);
     return HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
 }
