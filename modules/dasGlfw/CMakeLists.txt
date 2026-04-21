@@ -167,6 +167,18 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 				"${EXECUTABLE_OUTPUT_PATH}/$<CONFIG>/glfw3.dll"
 		)
 	ENDIF()
+
+	IF(APPLE)
+		set_target_properties(dasModuleGlfw PROPERTIES
+			BUILD_RPATH "${GLFW_DYNAMIC_LIB_PATH}/lib"
+			INSTALL_RPATH "@loader_path/glfw_dyn/Release/lib"
+		)
+	ELSEIF(UNIX)
+		set_target_properties(dasModuleGlfw PROPERTIES
+			BUILD_RPATH "${GLFW_DYNAMIC_LIB_PATH}/lib"
+			INSTALL_RPATH "$ORIGIN/glfw_dyn/Release/lib"
+		)
+	ENDIF()
 	IF(WIN32)
 		# On Win we have .dll and .lib in runtime only .dll is needed.
 		install(FILES ${DAS_GLFW_DIR}/glfw_dyn/Release/bin/glfw3.dll DESTINATION ${DAS_INSTALL_BINDIR})
