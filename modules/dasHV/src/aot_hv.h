@@ -14,41 +14,43 @@
 #include <hv/WebSocketServer.h>
 
 #include "daScript/simulate/simulate.h"
+#include "daScript/misc/handle_registry.h"
 
 namespace das {
 
     // websocket client
-    hv::WebSocketClient * makeWebSocketClient ( const void * pClass, const StructInfo * info, Context * context );
-    int das_wsc_open ( hv::WebSocketClient & client, const char* url );
-    int das_wsc_send ( hv::WebSocketClient & client, const char* msg );
-    int das_wsc_send_buf ( hv::WebSocketClient & client, const char* msg, int32_t len, ws_opcode opcode );
-    bool das_wsc_is_connected ( hv::WebSocketClient & client );
-    void das_wsc_tick ( hv::WebSocketClient & client );
+    Handle<hv::WebSocketClient> makeWebSocketClient ( const void * pClass, const StructInfo * info, Context * context );
+    int das_wsc_open ( Handle<hv::WebSocketClient> h, const char* url );
+    int das_wsc_send ( Handle<hv::WebSocketClient> h, const char* msg );
+    int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t len, ws_opcode opcode );
+    int das_wsc_close ( Handle<hv::WebSocketClient> h );
+    bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h );
+    void das_wsc_tick ( Handle<hv::WebSocketClient> h );
 
     // websocket server
-    hv::WebSocketServer * makeWebSocketServer ( int port, int httpsPort, const char * pathToCert, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at );
-    int das_wss_send ( hv::WebSocketChannel * channel, const char * msg, ws_opcode opcode, bool fin );
-    int das_wss_send_buf ( hv::WebSocketChannel * channel, const char * buf, int32_t len, ws_opcode opcode, bool fin );
-    int das_wss_send_fragment ( hv::WebSocketChannel * channel, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode );
-    int das_wss_start ( hv::WebSocketServer * server );
-    void das_wss_tick ( hv::WebSocketServer * server );
-    int das_wss_stop ( hv::WebSocketServer * server );
+    Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const char * pathToCert, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at );
+    int das_wss_send ( Handle<hv::WebSocketChannel> h, const char * msg, ws_opcode opcode, bool fin );
+    int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, ws_opcode opcode, bool fin );
+    int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode );
+    int das_wss_start ( Handle<hv::WebSocketServer> h );
+    void das_wss_tick ( Handle<hv::WebSocketServer> h );
+    int das_wss_stop ( Handle<hv::WebSocketServer> h );
 
     // server routes
-    void das_wss_get ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_post ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_put ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_del ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_patch ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_head ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_any ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_sse ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
-    void das_wss_static ( hv::WebSocketServer * server, const char * path, const char * dir );
-    void das_wss_allow_cors ( hv::WebSocketServer * server );
-    void das_wss_set_document_root ( hv::WebSocketServer * server, const char * dir );
-    void das_wss_set_home_page ( hv::WebSocketServer * server, const char * filename );
-    void das_wss_set_index_of ( hv::WebSocketServer * server, const char * dir );
-    void das_wss_set_error_page ( hv::WebSocketServer * server, const char * filename );
+    void das_wss_get ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_post ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_put ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_del ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_patch ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_head ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_any ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_sse ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at );
+    void das_wss_static ( Handle<hv::WebSocketServer> h, const char * path, const char * dir );
+    void das_wss_allow_cors ( Handle<hv::WebSocketServer> h );
+    void das_wss_set_document_root ( Handle<hv::WebSocketServer> h, const char * dir );
+    void das_wss_set_home_page ( Handle<hv::WebSocketServer> h, const char * filename );
+    void das_wss_set_index_of ( Handle<hv::WebSocketServer> h, const char * dir );
+    void das_wss_set_error_page ( Handle<hv::WebSocketServer> h, const char * filename );
 
     // response writer (SSE/chunked)
     int das_writer_end_headers ( hv::HttpResponseWriter * w, const char * key, const char * value );
@@ -56,7 +58,7 @@ namespace das {
     int das_writer_write_chunked ( hv::HttpResponseWriter * w, const char * data, int32_t len );
     int das_writer_end ( hv::HttpResponseWriter * w );
     int das_writer_close ( hv::HttpResponseWriter * w );
-    void das_writer_release ( hv::WebSocketServer * server, hv::HttpResponseWriter * w );
+    void das_writer_release ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w );
 
     // response helpers
     http_status das_resp_string ( HttpResponse * resp, const char * msg, http_status status );

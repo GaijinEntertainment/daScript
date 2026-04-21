@@ -210,48 +210,47 @@ protected:
     vector<function<void()>>    que;
 };
 
-struct WebSocketClientAnnotation : ManagedStructureAnnotation<hv::WebSocketClient> {
-    WebSocketClientAnnotation(ModuleLibrary & ml)
-        : ManagedStructureAnnotation ("WebSocketClient", ml, "hv::WebSocketClient") {
-    }
-};
-
-hv::WebSocketClient * makeWebSocketClient ( const void * pClass, const StructInfo * info, Context * context ) {
-    return new WebSocketClient_Adapter((char *)pClass,info,context);
+Handle<hv::WebSocketClient> makeWebSocketClient ( const void * pClass, const StructInfo * info, Context * context ) {
+    auto adapter = new WebSocketClient_Adapter((char *)pClass,info,context);
+    shared_ptr<hv::WebSocketClient> sp(adapter);
+    return HandleRegistry<hv::WebSocketClient>::instance().acquire(sp);
 }
 
-int das_wsc_open ( hv::WebSocketClient & client, const char* url ) {
-    return client.open(url);
+int das_wsc_open ( Handle<hv::WebSocketClient> h, const char* url ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->open(url ? url : "");
 }
 
-int das_wsc_send ( hv::WebSocketClient & client, const char* msg ) {
-    return client.send(msg);
+int das_wsc_send ( Handle<hv::WebSocketClient> h, const char* msg ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->send(msg ? msg : "");
 }
 
-int das_wsc_send_buf ( hv::WebSocketClient & client, const char* msg, int32_t len, ws_opcode opcode ) {
-    return client.send(msg, len, opcode);
+int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t len, ws_opcode opcode ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->send(msg ? msg : "", len, opcode);
 }
 
-bool das_wsc_is_connected ( hv::WebSocketClient & client ) {
-    return client.isConnected();
+int das_wsc_close ( Handle<hv::WebSocketClient> h ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->close();
 }
 
-void das_wsc_tick ( hv::WebSocketClient & client ) {
-    auto adapter = (WebSocketClient_Adapter *) &client;
-    adapter->tick();
+bool das_wsc_is_connected ( Handle<hv::WebSocketClient> h ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return false;
+    return p->isConnected();
 }
 
-struct WebSocketServerAnnotation : ManagedStructureAnnotation<hv::WebSocketServer> {
-    WebSocketServerAnnotation(ModuleLibrary & ml)
-        : ManagedStructureAnnotation ("WebSocketServer", ml, "hv::WebSocketServer") {
-    }
-};
-
-struct WebSocketChannelAnnotation : ManagedStructureAnnotation<hv::WebSocketChannel> {
-    WebSocketChannelAnnotation(ModuleLibrary & ml)
-        : ManagedStructureAnnotation ("WebSocketChannel", ml, "hv::WebSocketChannel") {
-    }
-};
+void das_wsc_tick ( Handle<hv::WebSocketClient> h ) {
+    auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
+    if ( !p ) return;
+    ((WebSocketClient_Adapter *) p.get())->tick();
+}
 
 
 struct HttpMessageAnnotation : ManagedStructureAnnotation<HttpMessage> {
@@ -304,41 +303,72 @@ public:
         : HvWebServer_Adapter(info), classPtr(pClass), context(ctx) {
         registerWebSocketService(&service);
         registerHttpService(&router);
-        service.onopen = [=](const WebSocketChannelPtr& channel, const HttpRequestPtr& url) {
+        service.onopen = [this](const WebSocketChannelPtr& channel, const HttpRequestPtr& url) {
+            Handle<hv::WebSocketChannel> h;
+            {
+                lock_guard<mutex> cguard(channel_lock);
+                h = HandleRegistry<hv::WebSocketChannel>::instance().acquire(channel);
+                channel_handles[channel.get()] = h;
+            }
+            std::string urlStr = url ? url->url : std::string();
             lock_guard<mutex> guard(lock);
-            que.emplace_back([=](){
-                onWsOpen(channel,url);
+            que.emplace_back([this, h, urlStr](){
+                onWsOpen(h, urlStr);
             });
         };
-        service.onclose = [=](const WebSocketChannelPtr& channel) {
+        service.onclose = [this](const WebSocketChannelPtr& channel) {
+            Handle<hv::WebSocketChannel> h;
+            {
+                lock_guard<mutex> cguard(channel_lock);
+                auto it = channel_handles.find(channel.get());
+                if ( it != channel_handles.end() ) {
+                    h = it->second;
+                    channel_handles.erase(it);
+                }
+            }
             lock_guard<mutex> guard(lock);
-            que.emplace_back([=](){
-                onWsClose(channel);
+            que.emplace_back([this, h](){
+                onWsClose(h);
+                HandleRegistry<hv::WebSocketChannel>::instance().release(h);
             });
         };
-        service.onmessage = [=](const WebSocketChannelPtr& channel, const std::string&msg) {
+        service.onmessage = [this](const WebSocketChannelPtr& channel, const std::string& msg) {
+            Handle<hv::WebSocketChannel> h;
+            {
+                lock_guard<mutex> cguard(channel_lock);
+                auto it = channel_handles.find(channel.get());
+                if ( it != channel_handles.end() ) h = it->second;
+            }
+            if ( !h ) return;
             lock_guard<mutex> guard(lock);
-            que.emplace_back([=](){
-                onWsMessage(channel,msg);
+            que.emplace_back([this, h, msg](){
+                onWsMessage(h, msg);
             });
         };
     }
-    void onWsOpen ( const WebSocketChannelPtr& channel, const HttpRequestPtr& url) {
+    ~WebServer_Adapter() {
+        lock_guard<mutex> cguard(channel_lock);
+        for ( auto & kv : channel_handles ) {
+            HandleRegistry<hv::WebSocketChannel>::instance().release(kv.second);
+        }
+        channel_handles.clear();
+    }
+    void onWsOpen ( Handle<hv::WebSocketChannel> h, const std::string & url ) {
         lock_guard<mutex> guard(lock);
         if ( auto fnOnOpen = get_onWsOpen(classPtr) ) {
-            invoke_onWsOpen(context,fnOnOpen,classPtr,channel.get(),(char *)url->url.c_str());
+            invoke_onWsOpen(context,fnOnOpen,classPtr,h,(char *)url.c_str());
         }
     }
-    void onWsClose ( const WebSocketChannelPtr& channel ) {
+    void onWsClose ( Handle<hv::WebSocketChannel> h ) {
         lock_guard<mutex> guard(lock);
         if ( auto fnOnClose = get_onWsClose(classPtr) ) {
-            invoke_onWsClose(context,fnOnClose,classPtr,channel.get());
+            invoke_onWsClose(context,fnOnClose,classPtr,h);
         }
     }
-    void onWsMessage (const WebSocketChannelPtr& channel, const std::string&msg) {
+    void onWsMessage ( Handle<hv::WebSocketChannel> h, const std::string & msg ) {
         lock_guard<mutex> guard(lock);
         if ( auto fnOnMessage = get_onWsMessage(classPtr) ) {
-            invoke_onWsMessage(context,fnOnMessage,classPtr,channel.get(),(char *)msg.c_str());
+            invoke_onWsMessage(context,fnOnMessage,classPtr,h,(char *)msg.c_str());
         }
     }
     void tick() {
@@ -502,11 +532,18 @@ protected:
     vector<function<void()>>    que;
     mutex       writer_lock;
     map<hv::HttpResponseWriter*, HttpResponseWriterPtr>  active_writers;
+    mutex       channel_lock;
+    map<hv::WebSocketChannel*, Handle<hv::WebSocketChannel>>  channel_handles;
 };
 
 string getDasRoot ( void );
 
-hv::WebSocketServer * makeWebSocketServer ( int port, int httpsPort, const char * pathToCert, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at ) {
+static WebServer_Adapter * lookup_server ( Handle<hv::WebSocketServer> h ) {
+    auto p = HandleRegistry<hv::WebSocketServer>::instance().lookup(h);
+    return (WebServer_Adapter *) p.get();
+}
+
+Handle<hv::WebSocketServer> makeWebSocketServer ( int port, int httpsPort, const char * pathToCert, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at ) {
     auto adapter = new WebServer_Adapter((char *)pClass,info,context);
     adapter->port = port;
     adapter->https_port = httpsPort;
@@ -523,84 +560,84 @@ hv::WebSocketServer * makeWebSocketServer ( int port, int httpsPort, const char 
             context->throw_error_at(at, "libHV: hssl_ctx_init failed! Please check the certificate files `%s` and `%s`.", crt_file.c_str(), key_file.c_str());
         }
     }
-    return adapter;
+    shared_ptr<hv::WebSocketServer> sp(adapter);
+    return HandleRegistry<hv::WebSocketServer>::instance().acquire(sp);
 }
 
-int das_wss_send ( hv::WebSocketChannel * channel, const char * msg, ws_opcode opcode, bool fin ) {
-    return channel->send(string(msg), opcode, fin);
+int das_wss_send ( Handle<hv::WebSocketChannel> h, const char * msg, ws_opcode opcode, bool fin ) {
+    auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->send(string(msg ? msg : ""), opcode, fin);
 }
 
-int das_wss_send_buf ( hv::WebSocketChannel * channel, const char * buf, int32_t len, ws_opcode opcode, bool fin ) {
-    return channel->send(buf, len, opcode, fin);
+int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, ws_opcode opcode, bool fin ) {
+    auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->send(buf, len, opcode, fin);
 }
 
-int das_wss_send_fragment ( hv::WebSocketChannel * channel, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode ) {
-    return channel->send(buf, len, fragment, opcode);
+int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode ) {
+    auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
+    if ( !p ) return -1;
+    return p->send(buf, len, fragment, opcode);
 }
 
-int das_wss_start ( hv::WebSocketServer * server ) {
-    auto adapter = (WebServer_Adapter *) server;
+int das_wss_start ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return -1;
     return adapter->start();
 }
 
-void das_wss_tick ( hv::WebSocketServer * server ) {
-    auto adapter = (WebServer_Adapter *) server;
+void das_wss_tick ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return;
     adapter->tick();
 }
 
-int das_wss_stop ( hv::WebSocketServer * server ) {
-    auto adapter = (WebServer_Adapter *) server;
+int das_wss_stop ( Handle<hv::WebSocketServer> h ) {
+    auto adapter = lookup_server(h);
+    if ( !adapter ) return -1;
     return adapter->stop();
 }
 
-void das_wss_get ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->GET(url, lmb, context, at);
+void das_wss_get ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->GET(url, lmb, context, at);
 }
 
-void das_wss_post ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->POST(url, lmb, context, at);
+void das_wss_post ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->POST(url, lmb, context, at);
 }
 
-void das_wss_put ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->PUT(url, lmb, context, at);
+void das_wss_put ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->PUT(url, lmb, context, at);
 }
 
-void das_wss_del ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->DEL(url, lmb, context, at);
+void das_wss_del ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->DEL(url, lmb, context, at);
 }
 
-void das_wss_patch ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->PATCH(url, lmb, context, at);
+void das_wss_patch ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->PATCH(url, lmb, context, at);
 }
 
-void das_wss_head ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->HEAD(url, lmb, context, at);
+void das_wss_head ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->HEAD(url, lmb, context, at);
 }
 
-void das_wss_any ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->ANY(url, lmb, context, at);
+void das_wss_any ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->ANY(url, lmb, context, at);
 }
 
-void das_wss_static ( hv::WebSocketServer * server, const char * path, const char * dir ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->STATIC(path ? path : "/", dir ? dir : ".");
+void das_wss_static ( Handle<hv::WebSocketServer> h, const char * path, const char * dir ) {
+    if ( auto adapter = lookup_server(h) ) adapter->STATIC(path ? path : "/", dir ? dir : ".");
 }
 
-void das_wss_allow_cors ( hv::WebSocketServer * server ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->ALLOW_CORS();
+void das_wss_allow_cors ( Handle<hv::WebSocketServer> h ) {
+    if ( auto adapter = lookup_server(h) ) adapter->ALLOW_CORS();
 }
 
-void das_wss_sse ( hv::WebSocketServer * server, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->SSE(url, lmb, context, at);
+void das_wss_sse ( Handle<hv::WebSocketServer> h, const char * url, Lambda lmb, Context * context, LineInfoArg * at ) {
+    if ( auto adapter = lookup_server(h) ) adapter->SSE(url, lmb, context, at);
 }
 
 // HttpResponseWriter operations
@@ -630,30 +667,25 @@ int das_writer_close ( hv::HttpResponseWriter * w ) {
     return w->close(true);
 }
 
-void das_writer_release ( hv::WebSocketServer * server, hv::HttpResponseWriter * w ) {
-    if ( !server || !w ) return;
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->release_writer(w);
+void das_writer_release ( Handle<hv::WebSocketServer> h, hv::HttpResponseWriter * w ) {
+    if ( !w ) return;
+    if ( auto adapter = lookup_server(h) ) adapter->release_writer(w);
 }
 
-void das_wss_set_document_root ( hv::WebSocketServer * server, const char * dir ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->SET_DOCUMENT_ROOT(dir);
+void das_wss_set_document_root ( Handle<hv::WebSocketServer> h, const char * dir ) {
+    if ( auto adapter = lookup_server(h) ) adapter->SET_DOCUMENT_ROOT(dir);
 }
 
-void das_wss_set_home_page ( hv::WebSocketServer * server, const char * filename ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->SET_HOME_PAGE(filename);
+void das_wss_set_home_page ( Handle<hv::WebSocketServer> h, const char * filename ) {
+    if ( auto adapter = lookup_server(h) ) adapter->SET_HOME_PAGE(filename);
 }
 
-void das_wss_set_index_of ( hv::WebSocketServer * server, const char * dir ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->SET_INDEX_OF(dir);
+void das_wss_set_index_of ( Handle<hv::WebSocketServer> h, const char * dir ) {
+    if ( auto adapter = lookup_server(h) ) adapter->SET_INDEX_OF(dir);
 }
 
-void das_wss_set_error_page ( hv::WebSocketServer * server, const char * filename ) {
-    auto adapter = (WebServer_Adapter *) server;
-    adapter->SET_ERROR_PAGE(filename);
+void das_wss_set_error_page ( Handle<hv::WebSocketServer> h, const char * filename ) {
+    if ( auto adapter = lookup_server(h) ) adapter->SET_ERROR_PAGE(filename);
 }
 
 http_status das_resp_string ( HttpResponse * resp, const char * msg, http_status status ) {
@@ -1130,8 +1162,9 @@ public:
         addEnumeration(new Enumeration_ws_session_type());
         addEnumeration(new Enumeration_http_method());
         addEnumeration(new Enumeration_http_status());
-        // client
-        addAnnotation(new WebSocketClientAnnotation(lib));
+        // client — handle-backed
+        addHandleAnnotation<hv::WebSocketClient>(this, lib, "WebSocketClient",
+            "destroy_web_socket_client", "das::Handle<hv::WebSocketClient>");
         addExtern<DAS_BIND_FUN(makeWebSocketClient)> (*this, lib, "make_web_socket_client",
             SideEffects::worstDefault, "makeWebSocketClient")
                 ->args({"class","info","context"});
@@ -1144,19 +1177,20 @@ public:
         addExtern<DAS_BIND_FUN(das_wsc_send_buf)> (*this, lib, "send",
             SideEffects::worstDefault, "das_wsc_send_buf")
                 ->args({"self","msg","len","opcode"});
-        using hv_ws_close = DAS_CALL_MEMBER(hv::WebSocketClient::close);
-        addExtern<DAS_CALL_METHOD(hv_ws_close)>(*this, lib, "close",
-            SideEffects::worstDefault, DAS_CALL_MEMBER_CPP(hv::WebSocketClient::close))
-    	        ->args({"self"});
+        addExtern<DAS_BIND_FUN(das_wsc_close)>(*this, lib, "close",
+            SideEffects::worstDefault, "das_wsc_close")
+                ->args({"self"});
         addExtern<DAS_BIND_FUN(das_wsc_is_connected)>(*this, lib, "is_connected",
             SideEffects::worstDefault,"das_wsc_is_connected")
 	            ->args({"self"});
         addExtern<DAS_BIND_FUN(das_wsc_tick)>(*this, lib, "tick",
             SideEffects::worstDefault,"das_wsc_tick")
 	            ->args({"self"});
-        // server
-        addAnnotation(new WebSocketServerAnnotation(lib));
-        addAnnotation(new WebSocketChannelAnnotation(lib));
+        // server — handle-backed
+        addHandleAnnotation<hv::WebSocketServer>(this, lib, "WebSocketServer",
+            "destroy_web_socket_server", "das::Handle<hv::WebSocketServer>");
+        addHandleAnnotation<hv::WebSocketChannel>(this, lib, "WebSocketChannel",
+            "", "das::Handle<hv::WebSocketChannel>");
         addAnnotation(new HttpMessageAnnotation(lib));
         addAnnotation(new HttpRequestAnnotation(lib));
         addAnnotation(new HttpResponseAnnotation(lib));

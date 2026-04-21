@@ -195,6 +195,7 @@ def with_advanced_server(port : int; static_root : string; blk : block<(base_url
                         sleep(10u)
                     }
                     server->stop()
+                    server->cleanup()
                     unsafe {
                         delete server
                     }

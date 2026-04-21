@@ -23,18 +23,21 @@ class HvWebSocketClient {
     //! Subclass and override ``onOpen``, ``onClose``, and ``onMessage``
     //! to handle connection lifecycle and incoming messages. Call
     //! ``process_event_que`` periodically to dispatch events.
-    client : WebSocketClient?
+    client : WebSocketClient = default<WebSocketClient>
     def init(url : string) : int {
         //! Connects to the given WebSocket URL. Returns 0 on success.
         client = make_web_socket_client(unsafe(addr(self)), class_info(self))
-        return open(*client, url)
+        return open(client, url)
+    }
+    def cleanup {
+        //! Releases the underlying WebSocket client handle. Idempotent.
+        if (is_alive(client)) {
+            destroy_web_socket_client(client)
+            client = default<WebSocketClient>
+        }
     }
     def operator delete {
-        if (client != null) {
-            unsafe {
-                delete client
-            }
-        }
+        self->cleanup()
     }
     def abstract onOpen : void
         //! Called when the WebSocket connection is established.
@@ -44,19 +47,19 @@ class HvWebSocketClient {
         //! Called when a text message is received from the server.
     def is_connected : bool {
         //! Returns ``true`` if the WebSocket connection is currently open.
-        return is_connected(*client)
+        return is_connected(client)
     }
     def process_event_que {
         //! Processes pending WebSocket events; must be called periodically.
-        tick(*client)
+        tick(client)
     }
     def send(text : string) {
         //! Sends a text message to the server.
-        send(*client, text)
+        send(client, text)
     }
     def close : int {
         //! Closes the WebSocket connection. Returns 0 on success.
-        return close(*client)
+        return close(client)
     }
 }
 
@@ -65,7 +68,7 @@ class HvWebServer {
     //! Subclass and override ``onWsOpen``, ``onWsClose``, ``onWsMessage``,
     //! ``onTick``, and ``onInit`` as needed. Register HTTP routes with
     //! ``GET``, ``POST``, ``PUT``, ``DELETE``, ``PATCH``, ``HEAD``, or ``ANY``.
-    server : WebSocketServer?
+    server : WebSocketServer = default<WebSocketServer>
     def init(port : int) {
         //! Initializes an HTTP/WebSocket server on the specified port.
         server = make_web_socket_server(port, 0, "", unsafe(addr(self)), class_info(self))
@@ -77,6 +80,16 @@ class HvWebServer {
         let certPath = !empty(pathToCert) ? pathToCert : get_das_root() + "/modules/dasHV/cert"
         server = make_web_socket_server(port, httpsPort, certPath, unsafe(addr(self)), class_info(self))
         onInit()
+    }
+    def cleanup {
+        //! Releases the underlying WebSocket server handle. Idempotent.
+        if (is_alive(server)) {
+            destroy_web_socket_server(server)
+            server = default<WebSocketServer>
+        }
+    }
+    def operator delete {
+        self->cleanup()
     }
     def start : int {
         //! Starts the server. Returns 0 on success.
@@ -90,11 +103,11 @@ class HvWebServer {
         //! Processes pending HTTP and WebSocket events; must be called periodically.
         tick(server)
     }
-    def onWsOpen(channel : WebSocketChannel?; url : string#) : void {}
+    def onWsOpen(channel : WebSocketChannel; url : string#) : void {}
         //! Called when a WebSocket client connects. Override to handle new connections.
-    def onWsClose(channel : WebSocketChannel?) : void {}
+    def onWsClose(channel : WebSocketChannel) : void {}
         //! Called when a WebSocket client disconnects. Override to handle disconnections.
-    def onWsMessage(channel : WebSocketChannel?; msg : string#) : void {}
+    def onWsMessage(channel : WebSocketChannel; msg : string#) : void {}
         //! Called when a WebSocket message is received. Override to handle messages.
     def onTick : void {}
         //! Called each tick cycle. Override for periodic work.
