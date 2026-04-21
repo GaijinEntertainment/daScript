@@ -1,4 +1,4 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
 template <> struct cast_arg<GLFWvidmode> {
@@ -23,5 +23,11 @@ template <> struct cast_arg<GLFWgamepadstate> {
 	static __forceinline const GLFWgamepadstate & to ( Context & ctx, SimNode * node ) {
 		vec4f res = node->eval(ctx);
 		return * cast<GLFWgamepadstate *>::to(res);
+	}
+};
+template <> struct cast_arg<GLFWallocator> {
+	static __forceinline const GLFWallocator & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<GLFWallocator *>::to(res);
 	}
 };

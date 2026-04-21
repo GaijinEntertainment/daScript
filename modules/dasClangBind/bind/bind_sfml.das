@@ -12,12 +12,12 @@ class SFMLGen : CppGenBind {
     enum2sfmlenum : table<string; string>
     sfml_skip_func : table<string; bool>
     def SFMLGen {
-        bind_root = "{get_das_root()}/Modules/dasSFML/src"
+        bind_root = "{get_das_root()}/modules/dasSFML/src"
         bind_module = "dasSFML"
         bind_das_module = "sfml"
         let pfn = "sfml_stub.h"
-        let pfp = "{get_das_root()}/Modules/dasSFML/src/"
-        let isfml = "{get_das_root()}/Modules/dasSFML/SFML/include/"
+        let pfp = "{get_das_root()}/modules/dasSFML/src/"
+        let isfml = "{get_das_root()}/modules/dasSFML/SFML/include/"
         /*
         CONST_FILE_NAMES <- [{string
             "{pfp}{pfn}"

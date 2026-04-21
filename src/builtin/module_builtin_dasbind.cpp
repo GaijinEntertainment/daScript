@@ -203,7 +203,8 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         } else {
             void * libhandle = bindDynamicLibrary(lib);
             if ( !libhandle ) {
-                err = "can't load library " + lib;
+                auto dlErr = getDynamicLibraryError();
+                err = "can't load library " + lib + (dlErr.empty() ? string() : (" (" + dlErr + ")"));
                 return nullptr;
             }
             fnptr = getFunctionAddress(libhandle, func.c_str());

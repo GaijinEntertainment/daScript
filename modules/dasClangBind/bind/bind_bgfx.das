@@ -12,12 +12,12 @@ class BgfxGen : CppGenBind {
     bgfx_skip_func : table<string; bool>
     bgfx_skip_struct : table<string; bool>
     def BgfxGen {
-        bind_root = "{get_das_root()}/Modules/dasBGFX/src"
+        bind_root = "{get_das_root()}/modules/dasBGFX/src"
         bind_module = "dasBGFX"
         bind_das_module = "bgfx"
         let pfn = "bgfx/c99/bgfx.h"
-        let pfp = "{get_das_root()}/Modules/dasBGFX/bgfx/bgfx/include/"
-        let inc_bx = "{get_das_root()}/Modules/dasBGFX/bgfx/bx/include/"
+        let pfp = "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/include/"
+        let inc_bx = "{get_das_root()}/modules/dasBGFX/bgfx/bx/include/"
         CONST_FILE_NAMES <- array<string>(
             "{pfp}{pfn}",
             "{pfp}bgfx/defines.h"

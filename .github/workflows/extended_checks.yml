@@ -92,11 +92,17 @@ jobs:
             sudo apt-get update -y
             sudo apt-get install --no-install-recommends -y \
               mesa-common-dev \
+              libglu1-mesa-dev \
+              libgl1-mesa-dev \
+              libglfw3-dev \
               libx11-dev \
               libxrandr-dev \
               libxcursor-dev \
               libxinerama-dev \
-              libxi-dev
+              libxi-dev \
+              libclang-16-dev \
+              llvm-16-dev \
+              clang-16
             ;;
         esac
 
@@ -119,15 +125,28 @@ jobs:
         ACTIVE_MODULES=$(grep -v "^#" ci/release_modules.txt | cut -d':' -f2 | sed 's|^|-D|' | xargs)
         case "${{ matrix.target }}" in
           windows)
+            echo "BIN=./bin/Release" >> $GITHUB_ENV
             export PATH="/c/Strawberry/perl/bin:$PATH"
             cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x64 -A ${{ matrix.architecture_string }} \
               $ACTIVE_MODULES -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
             cmake --build ./build --config Release --target daslang das-fmt daslang_static --parallel
             ;;
-          *)
+          linux)
+            echo "BIN=./bin" >> $GITHUB_ENV
             CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build \
               -DCMAKE_BUILD_TYPE:STRING=Release \
               -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
+              -DDAS_CLANG_BIND_DISABLED=OFF \
+              -DDAS_GLFW_DISABLED=OFF \
+              -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
+            cmake --build ./build --config Release --target daslang daslang_static
+            ;;
+          *)
+            echo "BIN=./bin" >> $GITHUB_ENV
+            CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build \
+              -DCMAKE_BUILD_TYPE:STRING=Release \
+              -DCMAKE_OSX_ARCHITECTURES="${{ matrix.architecture_string }}" \
+              -DDAS_GLFW_DISABLED=OFF \
               -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
             cmake --build ./build --config Release --target daslang daslang_static
             ;;
@@ -139,10 +158,6 @@ jobs:
     - name: "Run dasgen and check generated files are up to date"
       run: |
         set -eux
-        case "${{ matrix.target }}" in
-          windows) BIN=./bin/Release/ ;;
-          *)       BIN=./bin/ ;;
-        esac
         $BIN/daslang dasgen/gen_bind.das
         git diff --exit-code -- include/daScript/builtin/ \
           || (echo "ERROR: Generated .inc files are out of date. Run './bin/daslang dasgen/gen_bind.das' locally and commit the result." && exit 1)
@@ -157,35 +172,51 @@ jobs:
       run: |
         set -eux
         cmake --build ./build --config Release --target all_utils_exe
-        case "${{ matrix.target }}" in
-          windows) BIN=./bin/Release/ ;;
-          *)       BIN=./bin/ ;;
-        esac
         $BIN/daslang -exe -output ./bin/das-fmt ./das-fmt/dasfmt.das
 
     - name: "Run formatter"
       run: |
         set -eux
-        case "${{ matrix.target }}" in
-          windows) BIN=./bin/Release/ ;;
-          *)       BIN=./bin/ ;;
-        esac
         $BIN/daslang ./das-fmt/dasfmt.das -- --path ./ --verify
         $BIN/das-fmt.exe --path ./ --verify
 
     - name: "Test daslang_static"
       run: |
         set -eux
-        case "${{ matrix.target }}" in
-          windows) BIN=bin/Release TESTS=../../tests ;;
-          *)       BIN=bin         TESTS=../tests ;;
-        esac
-        cd $BIN
-        ./daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test $TESTS
+        $BIN/daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests
+
+    - name: "Run self-binder (bind_clangbind.das)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path /usr/lib/llvm-16/include/
+        git diff --exit-code -- modules/dasClangBind/src/ \
+          || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
+
+    - name: "Install dasImgui (daspkg)"
+      run: |
+        set -eux
+        $BIN/daslang utils/daspkg/main.das -- install dasImgui --branch master
+
+    - name: "Run self-binder (bind_imgui.das)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang modules/dasImgui/bind/bind_imgui.das
+        cd modules/dasImgui && git diff --exit-code -- src/ \
+          || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
+
+    - name: "Dry-run imgui examples"
+      run: |
+        set -eux
+        for f in modules/dasImgui/example/*.das; do
+          echo "== compile-only: $f =="
+          $BIN/daslang -compile-only "$f"
+        done
 
     - name: "Coverage"
       if: matrix.target == 'linux'
       run: |
-        cd bin
-        ./daslang _dasroot_/dastest/dastest.das -- --cov-path coverage.lcov --color --test ../tests --timeout 1800
-        ./dascov.exe -- coverage.lcov --exclude tests/
+        $BIN/daslang dastest/dastest.das -- --cov-path coverage.lcov --color --test ./tests/language --timeout 1800
+        $BIN/dascov.exe -- coverage.lcov --exclude tests/language
+

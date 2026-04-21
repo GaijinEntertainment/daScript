@@ -21,7 +21,7 @@ def glfwInitOpenGL(major : int = 3; minor : int = 3; dctx : bool = false; compat
     }
     glfwWindowHint(int(GLFW_OPENGL_FORWARD_COMPAT), 1)
     if (dctx) {
-        glfwWindowHint(int(GLFW_OPENGL_DEBUG_CONTEXT), 1)
+        glfwWindowHint(int(GLFW_CONTEXT_DEBUG), 1)
     }
 }
 

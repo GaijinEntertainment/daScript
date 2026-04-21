@@ -1,4 +1,4 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
 #include "daScript/misc/platform.h"
@@ -6,12 +6,14 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_typefactory_bind.h"
+#include "daScript/simulate/bind_enum.h"
 #include "dasGLFW.h"
 #include "need_dasGLFW.h"
 #include "dasGLFW.struct.impl.inc"
 namespace das {
 #include "dasGLFW.enum.class.inc"
 #include "dasGLFW.struct.class.inc"
+#include "dasGLFW.func.aot.inc"
 Module_dasGLFW::Module_dasGLFW() : Module("glfw") {
 }
 bool Module_dasGLFW::initDependencies() {

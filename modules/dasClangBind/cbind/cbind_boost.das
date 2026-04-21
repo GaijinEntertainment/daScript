@@ -151,12 +151,13 @@ def clang_typeToDasType(var t : CXType; rules : TypeRules) {
     return result
 }
 
-def clang_getCursorLocationDescription(var c : CXCursor) {
+def clang_getCursorLocationFullPath(var c : CXCursor) {
     var file : CXFile
     var line, column, offset : uint
     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
-    var fname = clang_getFileName(file)
-    return "{string(fname)}:{int(line)}:{int(column)}"
+    // libclang returns backslashes on Windows; normalize to '/' so prefix matching is OS-independent
+    let fname = string(clang_getFileName(file)) |> replace_multiple([("\\", "/")])
+    return "{fname}:{int(line)}:{int(column)}"
 }
 
 def clang_getCursorLocationFileName(var c : CXCursor) {
@@ -257,6 +258,14 @@ class AnyGenBind {
 
     def open_file_name : string {
         return "{PARSE_FILE_PREFIX}{PARSE_FILE_NAME}"
+    }
+    // strip the parsed library's header root — paths stay stable across OS and install folder
+    def clang_getCursorLocationDescription(var c : CXCursor) : string {
+        var full = clang_getCursorLocationFullPath(c)
+        if (!empty(PARSE_FILE_PREFIX) && full |> starts_with(PARSE_FILE_PREFIX)) {
+            return full |> slice(length(PARSE_FILE_PREFIX))
+        }
+        return full
     }
     def skip_file(fname : string) : bool {
         return !fname |> ends_with(PARSE_FILE_NAME)
@@ -1431,40 +1440,42 @@ class CppGenBind : AnyGenBind {
             if (t.kind == CXTypeKind.Char32 || t.kind == CXTypeKind.Int) {
                 let value = clang_EvalResult_getAsInt(res)
                 if (this_alias != "") {
-                    result = "make_smart<ExprConstEnumeration>({value},makeType<{this_alias}>(lib))"
+                    result = "new ExprConstEnumeration({value},makeType<{this_alias}>(lib))"
                 } else {
-                    result = "make_smart<ExprConstInt>({value})"
+                    result = "new ExprConstInt({value})"
                 }
             } elif (t.kind == CXTypeKind.UInt) {
                 let value = uint(clang_EvalResult_getAsInt(res))
-                result = "make_smart<ExprConstUInt>({value})"
+                result = "new ExprConstUInt({value})"
             } elif (t.kind == CXTypeKind.Long || t.kind == CXTypeKind.LongLong) {
                 let value = int64(clang_EvalResult_getAsLongLong(res))
-                result = "make_smart<ExprConstInt64>({value})"
+                result = "new ExprConstInt64({value})"
             } elif (t.kind == CXTypeKind.ULong || t.kind == CXTypeKind.ULongLong) {
                 let value = uint64(clang_EvalResult_getAsLongLong(res))
-                result = "make_smart<ExprConstUInt64>({value})"
+                result = "new ExprConstUInt64({value})"
             } elif (t.kind == CXTypeKind.Float) {
                 let value = clang_EvalResult_getAsDouble(res)
-                result = "make_smart<ExprConstFloat>({value})"
+                result = "new ExprConstFloat({value})"
             } elif (t.kind == CXTypeKind.Double) {
                 let value = clang_EvalResult_getAsDouble(res)
-                result = "make_smart<ExprConstDouble>({value})"
+                result = "new ExprConstDouble({value})"
             } elif (t.kind == CXTypeKind.Bool) {
                 let value = clang_EvalResult_getAsInt(res)
-                result = "make_smart<ExprConstBool>({value != 0})"
+                result = "new ExprConstBool({value != 0})"
             } elif (t.kind == CXTypeKind.Pointer) {
                 var pt = clang_getCanonicalType(clang_getPointeeType(t))
                 if (pt.kind == CXTypeKind.Char_S || pt.kind == CXTypeKind.SChar) {
                     let value = clang_EvalResult_getAsStr(res)
-                    result = "make_smart<ExprConstString>(\"{value}\")"
+                    result = "new ExprConstString(\"{value}\")"
+                } elif (clang_EvalResult_getAsInt(res) == 0) {
+                    result = "new ExprConstPtr()"
                 } else {
                     to_log(LOG_WARNING, "unsupported default value of pointer type {string(clang_getTypeSpelling(t))} at {clang_getCursorLocationDescription(c)}\n")
                 }
             } elif (t.kind == CXTypeKind.Enum) {
                 let value = clang_EvalResult_getAsInt(res)
                 let thisArgEnum = string(clang_getTypeSpelling(t))
-                result = "make_smart<ExprConstEnumeration>({value},makeType<{thisArgEnum}>(lib))"
+                result = "new ExprConstEnumeration({value},makeType<{thisArgEnum}>(lib))"
             } else {
                 to_log(LOG_WARNING, "unsupported default value of type {string(clang_getTypeSpelling(t))} : {t.kind} at {clang_getCursorLocationDescription(c)}\n")
             }
@@ -1487,7 +1498,10 @@ class CppGenBind : AnyGenBind {
                         }
                         clang_EvalResult_dispose(nres)
                         return CXChildVisitResult.Break
-                    } elif (CC.kind == CXCursorKind.CXXNullPtrLiteralExpr) {
+                    } elif (CC.kind == CXCursorKind.CXXNullPtrLiteralExpr ||
+                            CC.kind == CXCursorKind.GNUNullExpr) {
+                        // `NULL` macro in C++ expands to __null (GNUNullExpr);
+                        // `nullptr` is CXXNullPtrLiteralExpr
                         has_null = true
                         return CXChildVisitResult.Break
                     }
@@ -1496,9 +1510,9 @@ class CppGenBind : AnyGenBind {
                 if (has_null) {
                     var pt = clang_getCanonicalType(clang_getPointeeType(t))
                     if (pt.kind == CXTypeKind.Char_S || pt.kind == CXTypeKind.SChar) {
-                        result = "make_smart<ExprConstString>(\"\")"
+                        result = "new ExprConstString(\"\")"
                     } else {
-                        result = "make_smart<ExprConstPtr>()"
+                        result = "new ExprConstPtr()"
                     }
                 }
             }
@@ -1529,6 +1543,9 @@ class CppGenBind : AnyGenBind {
         let ns_en = namespace_name(enum_name)
         let das_enum_name = dasEnumName(enum_name, ns_en)
         if (skip_enum(ns_en, enum_name)) {
+            return
+        }
+        if (clang_isForwardDeclaration(cursor)) {
             return
         }
         enumDecl |> push((ns_en, enum_name))
@@ -1674,6 +1691,7 @@ class CppGenBind : AnyGenBind {
         module_cpp_file |> fwrite("\tinitMain();\n")
         module_cpp_file |> fwrite("\treturn true;\n")
         module_cpp_file |> fwrite("\}\n")
+        module_cpp_file |> fwrite("REGISTER_DYN_MODULE(Module_{bind_module},Module_{bind_module});\n")
         module_cpp_file |> fwrite("}\n")
         module_cpp_file |> fwrite("REGISTER_MODULE_IN_NAMESPACE(Module_{bind_module},das);\n\n")
     }
@@ -1792,7 +1810,7 @@ def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX : string; ARGV : array<st
         clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
         var fname = string(clang_getFileName(file))
         if (fname |> ends_with(PARSE_FILE_NAME)) {
-            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}\n")
+            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationFullPath(c)}\n")
         }
         return CXChildVisitResult.Recurse
     }

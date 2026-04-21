@@ -1,4 +1,4 @@
-// this file is generated via daScript automatic C++ binder
+// this file is generated via Daslang automatic binder
 // all user modifications will be lost after this file is re-generated
 
 #include "daScript/misc/platform.h"
@@ -30,9 +30,7 @@ bool Module_dasClangBind::initDependencies() {
 	initMain();
 	return true;
 }
-
 REGISTER_DYN_MODULE(Module_dasClangBind,Module_dasClangBind);
-
 }
 REGISTER_MODULE_IN_NAMESPACE(Module_dasClangBind,das);
 

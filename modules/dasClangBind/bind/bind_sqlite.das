@@ -15,12 +15,12 @@ class SqliteGen : CppGenBind {
     )
 
     def SqliteGen {
-        bind_root = "{get_das_root()}/Modules/dasSQLITE/src"
+        bind_root = "{get_das_root()}/modules/dasSQLITE/src"
         bind_module = "dasSQLITE"
         bind_das_module = "sqlite"
         let pfn = "cb_dasSQLITE.h"
-        let pfp = "{get_das_root()}/Modules/dasSQLITE/src/"
-        let sqlite_i = "{get_das_root()}/Modules/dasSQLITE/sqlite/"
+        let pfp = "{get_das_root()}/modules/dasSQLITE/src/"
+        let sqlite_i = "{get_das_root()}/modules/dasSQLITE/sqlite/"
         CONST_FILE_NAMES <- array<string>(
             "{sqlite_i}sqlite3.h"
         )

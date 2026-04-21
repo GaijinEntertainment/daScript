@@ -27,6 +27,7 @@ struct ParsedArgs {
     force : bool
     json : bool
     global_flag : bool
+    branch : string
 }
 
 def parse_args(args : array<string>) : ParsedArgs {
@@ -57,6 +58,9 @@ def parse_args(args : array<string>) : ParsedArgs {
         } elif (arg == "--root" && i + 1 < length(args)) {
             i ++
             result.root = args[i]
+        } elif ((arg == "--branch" || arg == "-b") && i + 1 < length(args)) {
+            i ++
+            result.branch = args[i]
         } elif (empty(result.command)) {
             result.command = arg
         } elif (empty(result.command_arg)) {
@@ -76,7 +80,7 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
         } else {
             print("No packages installed{is_global ? " globally" : ""} (no lock file found)\n")
         }
-        return
+        return 0
     }
     if (length(lf.packages) == 0) {
         if (json) {
@@ -84,12 +88,12 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
         } else {
             print("No packages installed{is_global ? " globally" : ""}\n")
         }
-        return
+        return 0
     }
     if (json) {
         print(sprint_json(lf.packages, false))
         print("\n")
-        return
+        return 0
     }
     print("{is_global ? "Global packages" : "Installed packages"}:\n")
     for (entry in lf.packages) {
@@ -111,6 +115,7 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
             print("    {entry.source}\n")
         }
     }
+    return 0
 }
 
 def install_local(root, pkg_name, source : string; var lf : LockFile; is_global : bool = false) {
@@ -120,8 +125,8 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; is_global 
     log_debug("install_local: '{pkg_name}' from '{full_source}' -> '{target}'")
 
     if (!fexist(full_source)) {
-        log("Error: local path '{full_source}' does not exist\n")
-        return
+        to_log(LOG_ERROR, "Error: local path '{full_source}' does not exist\n")
+        return 1
     }
 
     mkdir(modules_dir)
@@ -133,8 +138,8 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; is_global 
 
     log("Copying {full_source} -> {target}\n")
     if (!copy_dir_rec(full_source, target)) {
-        log("Error: copy failed\n")
-        return
+        to_log(LOG_ERROR, "Error: copy failed\n")
+        return 1
     }
 
     set_package(lf, PackageEntry(name = pkg_name, source = full_source, local = true, root = true, global = is_global))
@@ -147,22 +152,23 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; is_global 
     if (!is_global) {
         gitignore_add(root, "modules/{pkg_name}")
     }
-    try_build_package(target, pkg_name, is_global)
+    return try_build_package(target, pkg_name, is_global)
 }
 
 def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) {
     if (key_exists(visiting, pkg_name)) {
         log("Warning: dependency cycle detected at '{pkg_name}' — skipping\n")
-        return
+        return 0
     }
     visiting |> insert(pkg_name, true)
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let pkg_dir = "{modules_dir}/{pkg_name}"
     let das_package = "{pkg_dir}/.das_package"
     if (!fexist(das_package)) {
-        return
+        return 0
     }
     var pkg_deps : array<PackageDependency>
+    var rc = 0
     if (run_das_package_deps(das_package, "", pkg_deps)) {
         log_debug("{pkg_name} has {length(pkg_deps)} dependencies")
         for (d in pkg_deps) {
@@ -177,11 +183,15 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile; var visitin
                 continue
             }
             log("  Installing dependency: {dep_name}...\n")
-            install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false, is_global = is_global])
+            let drc = install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false, is_global = is_global])
+            if (drc != 0) {
+                rc = drc
+            }
         }
     } else {
         log_debug("{pkg_name}: no dependencies declared")
     }
+    return rc
 }
 
 
@@ -189,12 +199,12 @@ def private git_checkout_tag(dir, tag : string) : bool {
     var output : string
     var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin tag \"{tag}\"", output)
     if (exit_code != 0) {
-        log("Error: git fetch tag failed (exit {exit_code}):\n{output}\n")
+        to_log(LOG_ERROR, "Error: git fetch tag failed (exit {exit_code}):\n{output}\n")
         return false
     }
     exit_code = run_cmd("git -C \"{dir}\" checkout \"{tag}\"", output)
     if (exit_code != 0) {
-        log("Error: git checkout failed (exit {exit_code}):\n{output}\n")
+        to_log(LOG_ERROR, "Error: git checkout failed (exit {exit_code}):\n{output}\n")
         return false
     }
     return true
@@ -204,12 +214,12 @@ def private git_checkout_branch(dir, branch : string) : bool {
     var output : string
     var exit_code = run_cmd("git -C \"{dir}\" fetch --depth 1 origin \"{branch}\"", output)
     if (exit_code != 0) {
-        log("Error: git fetch branch failed (exit {exit_code}):\n{output}\n")
+        to_log(LOG_ERROR, "Error: git fetch branch failed (exit {exit_code}):\n{output}\n")
         return false
     }
-    exit_code = run_cmd("git -C \"{dir}\" checkout \"{branch}\"", output)
+    exit_code = run_cmd("git -C \"{dir}\" checkout -B \"{branch}\" FETCH_HEAD", output)
     if (exit_code != 0) {
-        log("Error: git checkout failed (exit {exit_code}):\n{output}\n")
+        to_log(LOG_ERROR, "Error: git checkout failed (exit {exit_code}):\n{output}\n")
         return false
     }
     return true
@@ -219,18 +229,18 @@ def private git_clone(url, dir : string) : bool {
     var output : string
     let exit_code = run_cmd("git clone --depth 1 \"{url}\" \"{dir}\"", output)
     if (exit_code != 0) {
-        log("Error: git clone failed (exit {exit_code}):\n{output}\n")
+        to_log(LOG_ERROR, "Error: git clone failed (exit {exit_code}):\n{output}\n")
         return false
     }
     return true
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false) {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; is_root : bool = true; is_global : bool = false; branch : string = "") {
     var visiting : table<string; bool>
-    install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global])
+    return install_git(root, pkg_name, source, version, lf, visiting, [is_root = is_root, is_global = is_global, branch = branch])
 }
 
-def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false) {
+def install_git(root, pkg_name, source, version : string; var lf : LockFile; var visiting : table<string; bool>; is_root : bool = true; is_global : bool = false; branch : string = "") {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let tmp_dir = "{modules_dir}/.daspkg_tmp/{pkg_name}"
     let target_dir = "{modules_dir}/{pkg_name}"
@@ -247,16 +257,25 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     let git_url = "https://{source}.git"
     log("Cloning {git_url}...\n")
     if (!git_clone(git_url, tmp_dir)) {
-        return
+        return 1
     }
 
     // step 2: resolve version via .das_package (if present)
-    log_debug("resolving version for '{pkg_name}' (requested: '{version}')")
+    log_debug("resolving version for '{pkg_name}' (requested: '{version}' branch: '{branch}')")
     var actual_source = source
     var actual_tag = ""
     var actual_branch = ""
+    if (!empty(branch)) {
+        // explicit --branch overrides version/resolve
+        log("Switching to branch {branch}...\n")
+        if (!git_checkout_branch(tmp_dir, branch)) {
+            force_rmdir(tmp_dir)
+            return 1
+        }
+        actual_branch = branch
+    }
     let das_package = "{tmp_dir}/.das_package"
-    if (fexist(das_package)) {
+    if (empty(actual_branch) && fexist(das_package)) {
         log_debug("found .das_package — running resolve()")
         var res : ResolveResult
         if (run_das_package_resolve(das_package, "", version, res)) {
@@ -268,21 +287,21 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 actual_source = res.source
                 let redirect_url = "https://{res.source}.git"
                 if (!git_clone(redirect_url, tmp_dir)) {
-                    return
+                    return 1
                 }
                 // checkout the ref from the redirect
                 if (!empty(res.tag)) {
                     log("Fetching tag {res.tag}...\n")
                     if (!git_checkout_tag(tmp_dir, res.tag)) {
                         force_rmdir(tmp_dir)
-                        return
+                        return 1
                     }
                     actual_tag = res.tag
                 } elif (!empty(res.branch)) {
                     log("Switching to branch {res.branch}...\n")
                     if (!git_checkout_branch(tmp_dir, res.branch)) {
                         force_rmdir(tmp_dir)
-                        return
+                        return 1
                     }
                     actual_branch = res.branch
                 }
@@ -291,7 +310,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 log("Fetching tag {res.tag}...\n")
                 if (!git_checkout_tag(tmp_dir, res.tag)) {
                     force_rmdir(tmp_dir)
-                    return
+                    return 1
                 }
                 actual_tag = res.tag
             } elif (!empty(res.branch)) {
@@ -299,7 +318,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 log("Switching to branch {res.branch}...\n")
                 if (!git_checkout_branch(tmp_dir, res.branch)) {
                     force_rmdir(tmp_dir)
-                    return
+                    return 1
                 }
                 actual_branch = res.branch
             } elif (!empty(version)) {
@@ -310,7 +329,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                     log("Fetching tag v{version}...\n")
                     if (!git_checkout_tag(tmp_dir, "v{version}")) {
                         force_rmdir(tmp_dir)
-                        return
+                        return 1
                     }
                     actual_tag = "v{version}"
                 } else {
@@ -327,7 +346,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
             log("Fetching tag v{version}...\n")
             if (!git_checkout_tag(tmp_dir, "v{version}")) {
                 force_rmdir(tmp_dir)
-                return
+                return 1
             }
             actual_tag = "v{version}"
         } else {
@@ -342,8 +361,8 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
         force_rmdir(target_dir)
     }
     if (!rename(tmp_dir, target_dir)) {
-        log("Error: failed to move {tmp_dir} to {target_dir}\n")
-        return
+        to_log(LOG_ERROR, "Error: failed to move {tmp_dir} to {target_dir}\n")
+        return 1
     }
 
     // step 4: record in lock file
@@ -363,14 +382,17 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
 
     // step 6: install dependencies
     log_debug("checking dependencies for '{pkg_name}'")
-    install_dependencies(root, pkg_name, lf, visiting, is_global)
+    let dep_rc = install_dependencies(root, pkg_name, lf, visiting, is_global)
+    if (dep_rc != 0) {
+        return dep_rc
+    }
 
     // step 7: build
     log_debug("checking build for '{pkg_name}'")
-    try_build_package(target_dir, pkg_name, is_global)
+    return try_build_package(target_dir, pkg_name, is_global)
 }
 
-def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = "") {
+def cmd_install(root, spec : string; force : bool; is_global : bool = false; version_constraint : string = ""; branch : string = "") {
     // parse spec: name[@version]
     var source = spec
     var version = ""
@@ -387,8 +409,8 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
 
     let pkg_name = package_name_from_source(source)
     if (empty(pkg_name)) {
-        log("Error: cannot determine package name from '{source}'\n")
-        return
+        to_log(LOG_ERROR, "Error: cannot determine package name from '{source}'\n")
+        return 1
     }
 
     log_debug("cmd_install: pkg='{pkg_name}' source='{source}' version='{version}' global={is_global}")
@@ -399,30 +421,29 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
         read_global_lock_file(glf)
         if (!force && has_package(glf, pkg_name)) {
             log("'{pkg_name}' is already installed globally (use --force to reinstall)\n")
-            return
+            return 0
         }
         // also skip if directory already exists (built-in SDK modules)
         let global_dir = "{get_das_root()}/modules/{pkg_name}"
         if (!force && fexist(global_dir) && !has_package(glf, pkg_name)) {
             log("'{pkg_name}' already present in {get_das_root()}/modules/ — skipping\n")
-            return
+            return 0
         }
         if (is_local_path(source)) {
-            install_local(root, pkg_name, source, glf, [is_global = true])
+            return install_local(root, pkg_name, source, glf, [is_global = true])
         } elif (is_index_name(source)) {
             let url = resolve_from_index(root, source)
             if (empty(url)) {
-                log("Error: package '{source}' not found in the index\n")
-                return
+                to_log(LOG_ERROR, "Error: package '{source}' not found in the index\n")
+                return 1
             }
             log("Resolved '{source}' -> {url}\n")
             var visiting : table<string; bool>
-            install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true])
+            return install_git(root, pkg_name, url, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
         } else {
             var visiting : table<string; bool>
-            install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true])
+            return install_git(root, pkg_name, source, version, glf, visiting, [is_root = true, is_global = true, branch = branch])
         }
-        return
     }
 
     // local install — check global first
@@ -430,7 +451,7 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
     read_lock_file(root, lf)
     if (!force && has_package(lf, pkg_name)) {
         log("'{pkg_name}' is already installed (use --force to reinstall)\n")
-        return
+        return 0
     }
 
     // check if a compatible global version exists
@@ -445,48 +466,49 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
                 tag = ge.tag, branch = ge.branch, root = true, global = true))
             write_lock_file(root, lf)
             log("Using global '{pkg_name}' @ {ge.tag}\n")
-            return
+            return 0
         } else {
             // version mismatch
-            log("Error: global '{pkg_name}' is {ge.tag}, but project requires {constraint}\n")
+            to_log(LOG_ERROR, "Error: global '{pkg_name}' is {ge.tag}, but project requires {constraint}\n")
             log("  Use --force to install locally, or: daspkg install --global {source}@{constraint}\n")
             if (!force) {
-                return
+                return 1
             }
             // --force: fall through to local install
         }
     }
 
     if (is_local_path(source)) {
-        install_local(root, pkg_name, source, lf)
+        return install_local(root, pkg_name, source, lf)
     } elif (is_index_name(source)) {
         // resolve from index
         log("Installing {source} from {source}...\n")
         let url = resolve_from_index(root, source)
         if (empty(url)) {
-            log("Error: package '{source}' not found in the index\n")
-            return
+            to_log(LOG_ERROR, "Error: package '{source}' not found in the index\n")
+            return 1
         }
         log("Resolved '{source}' -> {url}\n")
         var visiting : table<string; bool>
-        install_git(root, pkg_name, url, version, lf, visiting, [is_root = true])
+        return install_git(root, pkg_name, url, version, lf, visiting, [is_root = true, branch = branch])
     } else {
         var visiting : table<string; bool>
-        install_git(root, pkg_name, source, version, lf, visiting, [is_root = true])
+        return install_git(root, pkg_name, source, version, lf, visiting, [is_root = true, branch = branch])
     }
 }
 
 def cmd_install_all(root : string; force : bool; is_global : bool = false) {
     let das_package = "{root}/.das_package"
     if (!fexist(das_package)) {
-        print("No .das_package found\n")
-        return
+        to_log(LOG_ERROR, "No .das_package found\n")
+        return 1
     }
     var pkg_deps : array<PackageDependency>
     if (!run_das_package_deps(das_package, "", pkg_deps) || length(pkg_deps) == 0) {
-        print("No dependencies listed in .das_package\n")
-        return
+        to_log(LOG_ERROR, "No dependencies listed in .das_package\n")
+        return 1
     }
+    var rc = 0
     for (d in pkg_deps) {
         // append version constraint as @version if present (e.g. "=1.0" -> "@1.0")
         var spec = d.source
@@ -500,20 +522,24 @@ def cmd_install_all(root : string; force : bool; is_global : bool = false) {
             }
             spec = "{spec}@{ver}"
         }
-        cmd_install(root, spec, force, is_global, d.version_constraint)
+        let drc = cmd_install(root, spec, force, is_global, d.version_constraint)
+        if (drc != 0) {
+            rc = drc
+        }
     }
+    return rc
 }
 
 def cmd_remove(root, name : string; is_global : bool = false) {
     if (is_global) {
         var glf : LockFile
         if (!read_global_lock_file(glf)) {
-            log("Error: no global lock file found\n")
-            return
+            to_log(LOG_ERROR, "Error: no global lock file found\n")
+            return 1
         }
         if (!has_package(glf, name)) {
-            log("Error: package '{name}' is not installed globally\n")
-            return
+            to_log(LOG_ERROR, "Error: package '{name}' is not installed globally\n")
+            return 1
         }
         let pkg_dir = "{get_das_root()}/modules/{name}"
         if (fexist(pkg_dir)) {
@@ -523,16 +549,16 @@ def cmd_remove(root, name : string; is_global : bool = false) {
         remove_package(glf, name)
         write_global_lock_file(glf)
         log("Removed '{name}' (global)\n")
-        return
+        return 0
     }
     var lf : LockFile
     if (!read_lock_file(root, lf)) {
-        log("Error: no lock file found\n")
-        return
+        to_log(LOG_ERROR, "Error: no lock file found\n")
+        return 1
     }
     if (!has_package(lf, name)) {
-        log("Error: package '{name}' is not installed\n")
-        return
+        to_log(LOG_ERROR, "Error: package '{name}' is not installed\n")
+        return 1
     }
     let entry = get_package(lf, name)
     if (entry.global) {
@@ -540,7 +566,7 @@ def cmd_remove(root, name : string; is_global : bool = false) {
         remove_package(lf, name)
         write_lock_file(root, lf)
         log("Removed global reference to '{name}'. Global package still installed.\n")
-        return
+        return 0
     }
 
     let pkg_dir = "{root}/modules/{name}"
@@ -553,36 +579,37 @@ def cmd_remove(root, name : string; is_global : bool = false) {
     write_lock_file(root, lf)
     gitignore_remove(root, "modules/{name}")
     log("Removed '{name}'\n")
+    return 0
 }
 
 def cmd_update(root, name : string; is_global : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
-            log("Error: no global lock file found\n")
-            return
+            to_log(LOG_ERROR, "Error: no global lock file found\n")
+            return 1
         }
     } else {
         if (!read_lock_file(root, lf)) {
-            log("Error: no lock file found\n")
-            return
+            to_log(LOG_ERROR, "Error: no lock file found\n")
+            return 1
         }
     }
     if (!has_package(lf, name)) {
-        log("Error: package '{name}' is not installed{is_global ? " globally" : ""}\n")
-        return
+        to_log(LOG_ERROR, "Error: package '{name}' is not installed{is_global ? " globally" : ""}\n")
+        return 1
     }
     let entry = get_package(lf, name)
     if (!is_global && entry.global) {
         log("'{name}' is a global package — use 'daspkg update --global {name}'\n")
-        return
+        return 0
     }
     if (entry.local) {
         // re-copy from original source path
         let source = entry.source
         if (empty(source) || !fexist(source)) {
-            log("Error: local source '{source}' not found\n")
-            return
+            to_log(LOG_ERROR, "Error: local source '{source}' not found\n")
+            return 1
         }
         let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
         let target = "{modules_dir}/{name}"
@@ -591,12 +618,11 @@ def cmd_update(root, name : string; is_global : bool = false) {
             force_rmdir(target)
         }
         if (!copy_dir_rec(source, target)) {
-            log("Error: copy failed\n")
-            return
+            to_log(LOG_ERROR, "Error: copy failed\n")
+            return 1
         }
         log("Updated '{name}'\n")
-        try_build_package(target, name, is_global)
-        return
+        return try_build_package(target, name, is_global)
     }
     // re-install from source with same version — re-resolves via .das_package
     let source = entry.source
@@ -614,13 +640,13 @@ def cmd_update(root, name : string; is_global : bool = false) {
             force_rmdir(backup_dir)
         }
         if (!rename(pkg_dir, backup_dir)) {
-            log("Error: failed to backup '{name}'\n")
-            return
+            to_log(LOG_ERROR, "Error: failed to backup '{name}'\n")
+            return 1
         }
     }
     remove_package(lf, name)
     var visiting : table<string; bool>
-    install_git(root, name, source, version, lf, visiting, [is_root = is_root, is_global = is_global])
+    let install_rc = install_git(root, name, source, version, lf, visiting, [is_root = is_root, is_global = is_global])
     // check if install succeeded
     if (!has_package(lf, name)) {
         log_debug("install failed — restoring from {backup_dir}")
@@ -634,12 +660,13 @@ def cmd_update(root, name : string; is_global : bool = false) {
         } else {
             write_lock_file(root, lf)
         }
-        return
+        return 1
     }
     // cleanup backup
     if (fexist(backup_dir)) {
         force_rmdir(backup_dir)
     }
+    return install_rc
 }
 
 // resolve latest version for a git package by cloning default branch and running .das_package
@@ -666,27 +693,27 @@ def cmd_upgrade(root, name : string; is_global : bool = false) {
     var lf : LockFile
     if (is_global) {
         if (!read_global_lock_file(lf)) {
-            log("Error: no global lock file found\n")
-            return
+            to_log(LOG_ERROR, "Error: no global lock file found\n")
+            return 1
         }
     } else {
         if (!read_lock_file(root, lf)) {
-            log("Error: no lock file found\n")
-            return
+            to_log(LOG_ERROR, "Error: no lock file found\n")
+            return 1
         }
     }
     if (!has_package(lf, name)) {
-        log("Error: package '{name}' is not installed{is_global ? " globally" : ""}\n")
-        return
+        to_log(LOG_ERROR, "Error: package '{name}' is not installed{is_global ? " globally" : ""}\n")
+        return 1
     }
     let entry = get_package(lf, name)
     if (!is_global && entry.global) {
         log("'{name}' is a global package — use 'daspkg upgrade --global {name}'\n")
-        return
+        return 0
     }
     if (entry.local) {
         log("'{name}' is a local package — use 'update' instead\n")
-        return
+        return 0
     }
     // resolve latest from default branch
     log_debug("resolving latest version for '{name}' from {entry.source}")
@@ -694,7 +721,7 @@ def cmd_upgrade(root, name : string; is_global : bool = false) {
     var res : ResolveResult
     if (!resolve_latest(entry.source, res)) {
         log("  Could not resolve latest version for '{name}'\n")
-        return
+        return 0
     }
     // determine resolved ref
     let new_tag = res.tag
@@ -704,7 +731,7 @@ def cmd_upgrade(root, name : string; is_global : bool = false) {
     let new_ref = !empty(new_tag) ? new_tag : new_branch
     if (current_ref == new_ref) {
         log("  '{name}' is already at {current_ref}\n")
-        return
+        return 0
     }
     log("  {current_ref} -> {new_ref}\n")
     // re-install at the new version (empty version = unpinned)
@@ -717,9 +744,10 @@ def cmd_upgrade(root, name : string; is_global : bool = false) {
     }
     remove_package(lf, name)
     var visiting : table<string; bool>
-    install_git(root, name, source, "", lf, visiting, [is_root = is_root, is_global = is_global])
+    let install_rc = install_git(root, name, source, "", lf, visiting, [is_root = is_root, is_global = is_global])
     // check if deps need upgrading
     upgrade_dependencies(root, name, lf, is_global)
+    return install_rc
 }
 
 def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global : bool = false) {
@@ -760,12 +788,12 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
     if (is_global) {
         if (!read_global_lock_file(lf)) {
             print("No packages installed globally\n")
-            return
+            return 0
         }
     } else {
         if (!read_lock_file(root, lf)) {
             print("No packages installed (no lock file found)\n")
-            return
+            return 0
         }
     }
     // upgrade root packages only — deps get pulled along
@@ -777,11 +805,16 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
     }
     if (length(names) == 0) {
         print("No upgradeable packages\n")
-        return
+        return 0
     }
+    var rc = 0
     for (name in names) {
-        cmd_upgrade(root, name, is_global)
+        let drc = cmd_upgrade(root, name, is_global)
+        if (drc != 0) {
+            rc = drc
+        }
     }
+    return rc
 }
 
 def cmd_update_all(root : string; is_global : bool = false) {
@@ -789,12 +822,12 @@ def cmd_update_all(root : string; is_global : bool = false) {
     if (is_global) {
         if (!read_global_lock_file(lf)) {
             print("No packages installed globally\n")
-            return
+            return 0
         }
     } else {
         if (!read_lock_file(root, lf)) {
             print("No packages installed (no lock file found)\n")
-            return
+            return 0
         }
     }
     // collect names first — cmd_update modifies lf.packages
@@ -803,9 +836,14 @@ def cmd_update_all(root : string; is_global : bool = false) {
     for (entry in lf.packages) {
         names |> push_clone(entry.name)
     }
+    var rc = 0
     for (name in names) {
-        cmd_update(root, name, is_global)
+        let drc = cmd_update(root, name, is_global)
+        if (drc != 0) {
+            rc = drc
+        }
     }
+    return rc
 }
 
 def build_package(pkg_dir : string) : bool {
@@ -814,7 +852,7 @@ def build_package(pkg_dir : string) : bool {
 
     // Configure — pass DASLANG_DIR so the package can find headers and libs
     var output : string
-    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\"", output)
+    var exit_code = run_cmd("cmake -B \"{build_dir}\" -S \"{pkg_dir}\" -DDASLANG_DIR=\"{das_root}\" -DCMAKE_BUILD_TYPE=Release", output)
     if (exit_code != 0) {
         log("  CMake configure FAILED:\n{output}\n")
         return false
@@ -833,7 +871,7 @@ def cmd_build(root : string; is_global : bool = false) {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     if (!fexist(modules_dir)) {
         print("No modules directory found\n")
-        return
+        return 0
     }
     var built = 0
     var failed = 0
@@ -856,6 +894,10 @@ def cmd_build(root : string; is_global : bool = false) {
     } else {
         print("Build complete: {built} succeeded, {failed} failed\n")
     }
+    if (failed > 0) {
+        return 1
+    }
+    return 0
 }
 
 def check_tool(name, cmd : string) : bool {
@@ -899,11 +941,14 @@ def cmd_doctor() {
         print("Environment OK\n")
     } else {
         print("Some required tools are missing\n")
+        return 1
     }
+    return 0
 }
 
-def try_build_package(pkg_dir, name : string; is_global : bool = false) {
+def try_build_package(pkg_dir, name : string; is_global : bool = false) : int {
     var did_build = false
+    var rc = 0
     let das_package = "{pkg_dir}/.das_package"
     if (fexist(das_package)) {
         var info : PackageBuildInfo
@@ -911,7 +956,8 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) {
             if (info.is_cmake) {
                 log("Building '{name}'...\n")
                 if (!build_package(pkg_dir)) {
-                    log("  Warning: build failed for '{name}'\n")
+                    to_log(LOG_ERROR, "Error: build failed for '{name}'\n")
+                    rc = 1
                 } else {
                     did_build = true
                 }
@@ -920,7 +966,8 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) {
                 var output : string
                 let exit_code = run_cmd("cd \"{pkg_dir}\" && {info.command}", output)
                 if (exit_code != 0) {
-                    log("  Warning: custom build failed for '{name}':\n{output}\n")
+                    to_log(LOG_ERROR, "Error: custom build failed for '{name}':\n{output}\n")
+                    rc = 1
                 } else {
                     did_build = true
                 }
@@ -931,7 +978,8 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) {
         if (fexist("{pkg_dir}/CMakeLists.txt")) {
             log("Building '{name}'...\n")
             if (!build_package(pkg_dir)) {
-                log("  Warning: build failed for '{name}'\n")
+                to_log(LOG_ERROR, "Error: build failed for '{name}'\n")
+                rc = 1
             } else {
                 did_build = true
             }
@@ -945,6 +993,7 @@ def try_build_package(pkg_dir, name : string; is_global : bool = false) {
             }
         }
     }
+    return rc
 }
 
 struct CheckResult {
@@ -962,7 +1011,7 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
             } else {
                 print("No packages installed globally\n")
             }
-            return
+            return 0
         }
     } else {
         if (!read_lock_file(root, lf)) {
@@ -971,7 +1020,7 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
             } else {
                 print("No packages installed\n")
             }
-            return
+            return 0
         }
     }
     var results : array<CheckResult>
@@ -995,7 +1044,7 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
     if (json) {
         print(sprint_json(results, false))
         print("\n")
-        return
+        return ok ? 0 : 1
     }
     for (r in results) {
         if (r.status == "ok") {
@@ -1010,5 +1059,7 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
         print("All packages present\n")
     } else {
         print("Some packages are missing — run 'daspkg install' to fix\n")
+        return 1
     }
+    return 0
 }
