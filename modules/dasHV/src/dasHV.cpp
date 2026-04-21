@@ -317,17 +317,24 @@ public:
             });
         };
         service.onclose = [this](const WebSocketChannelPtr& channel) {
-            Handle<hv::WebSocketChannel> h;
-            {
-                lock_guard<mutex> cguard(channel_lock);
-                auto it = channel_handles.find(channel.get());
-                if ( it != channel_handles.end() ) {
-                    h = it->second;
-                    channel_handles.erase(it);
-                }
-            }
+            // Keep the channel→handle mapping here until the queued close
+            // actually runs: if the server is torn down before `tick()` drains
+            // `que`, the adapter destructor's cleanup loop below is our only
+            // chance to release the handle. Eagerly erasing the map entry
+            // would leak it in that race.
+            hv::WebSocketChannel * raw = channel.get();
             lock_guard<mutex> guard(lock);
-            que.emplace_back([this, h](){
+            que.emplace_back([this, raw](){
+                Handle<hv::WebSocketChannel> h;
+                {
+                    lock_guard<mutex> cguard(channel_lock);
+                    auto it = channel_handles.find(raw);
+                    if ( it != channel_handles.end() ) {
+                        h = it->second;
+                        channel_handles.erase(it);
+                    }
+                }
+                if ( !h ) return;
                 onWsClose(h);
                 HandleRegistry<hv::WebSocketChannel>::instance().release(h);
             });

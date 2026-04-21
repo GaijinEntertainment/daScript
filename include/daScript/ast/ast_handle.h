@@ -898,7 +898,10 @@ namespace das
     template <typename T>
     struct typeFactory<Handle<T>> {
         static ___noinline TypeDeclPtr make(const ModuleLibrary & library) {
-            return makeHandleType(library, typeName<T>::name());
+            // Normalize: typeName<T>::name() may return const char * or string
+            // depending on T's specialization. string -> const char* via c_str.
+            string tn = typeName<T>::name();
+            return makeHandleType(library, tn.c_str());
         }
     };
 
