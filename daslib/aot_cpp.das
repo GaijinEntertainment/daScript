@@ -411,7 +411,11 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         if (cfg.skip_const == false && typeDecl.flags.constant) {
             write(writer, " const ");
         }
-        if (typeDecl.flags.ref && cfg.skip_ref == false) {
+        // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
+        // even when daslang marks the expression result as ref (stack temp). Skip the
+        // &/* suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
+        let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
+        if (typeDecl.flags.ref && cfg.skip_ref == false && !valueHandle) {
             if (cfg.substitute_ref == false) {
                 write(writer, " &");
             } else {

@@ -15,7 +15,6 @@ module dashv_boost shared public
 require dashv public
 
 require daslib/rtti
-require daslib/ast_boost
 
 
 class HvWebSocketClient {
@@ -23,7 +22,8 @@ class HvWebSocketClient {
     //! Subclass and override ``onOpen``, ``onClose``, and ``onMessage``
     //! to handle connection lifecycle and incoming messages. Call
     //! ``process_event_que`` periodically to dispatch events.
-    client : WebSocketClient = default<WebSocketClient>
+    @safe_when_uninitialized
+    client : WebSocketClient
     def init(url : string) : int {
         //! Connects to the given WebSocket URL. Returns 0 on success.
         client = make_web_socket_client(unsafe(addr(self)), class_info(self))
@@ -68,7 +68,8 @@ class HvWebServer {
     //! Subclass and override ``onWsOpen``, ``onWsClose``, ``onWsMessage``,
     //! ``onTick``, and ``onInit`` as needed. Register HTTP routes with
     //! ``GET``, ``POST``, ``PUT``, ``DELETE``, ``PATCH``, ``HEAD``, or ``ANY``.
-    server : WebSocketServer = default<WebSocketServer>
+    @safe_when_uninitialized
+    server : WebSocketServer
     def init(port : int) {
         //! Initializes an HTTP/WebSocket server on the specified port.
         server = make_web_socket_server(port, 0, "", unsafe(addr(self)), class_info(self))
