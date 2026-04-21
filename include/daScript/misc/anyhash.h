@@ -2,6 +2,15 @@
 
 #include "daScript/misc/wyhash.h"
 
+// defensive fallbacks — anyhash.h may be pulled in through das_config.h
+// before platform.h / vecmath/dag_vecMathDecl.h have defined these.
+#ifndef DAS_SUPPRESS_UB
+#define DAS_SUPPRESS_UB
+#endif
+#ifndef NO_ASAN_INLINE
+#define NO_ASAN_INLINE inline
+#endif
+
 /*
     this is where we configure low level hash implementation
 */

@@ -581,10 +581,10 @@ SET(DAGOR_NOISE_SRC
 )
 SOURCE_GROUP_FILES("dag_noise" DAGOR_NOISE_SRC)
 
-SET(FLAT_HASH_MAP_SRC
-../include/ska/flat_hash_map.hpp
+SET(DAS_HASH_MAP_SRC
+../include/das_hash_map/das_hash_map.h
 )
-SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
+SOURCE_GROUP_FILES("das_hash_map" DAS_HASH_MAP_SRC)
 
 SET(MAIN_SRC
 ../include/daScript/daScript.h
@@ -648,7 +648,7 @@ include_directories(../include)
 include_directories(${PROJECT_SOURCE_DIR}/../3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-    ${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${DASCRIPT_FMT_SRC} ${AOT_STUB_SRC} ${AOT_GENERATED_SRC})
+    ${DAGOR_NOISE_SRC} ${DAS_HASH_MAP_SRC} ${DAS_LIB_SRC} ${DASCRIPT_FMT_SRC} ${AOT_STUB_SRC} ${AOT_GENERATED_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC

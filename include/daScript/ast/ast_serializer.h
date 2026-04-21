@@ -224,8 +224,8 @@ namespace das {
         template <typename K, typename V, typename H, typename E>
         void serialize_hash_map ( das_hash_map<K, V, H, E> & value );
 
-        template <typename K, typename V>
-        AstSerializer & operator << ( das_hash_map<K, V> & value );
+        template <typename K, typename V, typename H, typename E>
+        AstSerializer & operator << ( das_hash_map<K, V, H, E> & value );
 
         template <typename V>
         AstSerializer & operator << ( safebox_map<V> & box );
