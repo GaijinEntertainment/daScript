@@ -38,6 +38,7 @@ namespace das {
     class HandleRegistry {
     public:
         Handle<T> acquire ( const shared_ptr<T> & p ) {
+            if ( !p ) return Handle<T>{};
             lock_guard<mutex> guard(m);
             uint32_t idx;
             if ( free_head ) {
