@@ -26,6 +26,17 @@ option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 option(DAS_BUILD_DOCUMENTATION "Build HTML documentation via Sphinx during install" OFF)
+# RelWithDebInfo is permanently our heap-leak tracking / audit build.
+# DAS_TRACK_ALLOC=1 (and the global new/delete override) are auto-enabled below
+# via generator expressions; tracker source files are #if DAS_TRACK_ALLOC-gated
+# so they compile to empty TUs in Release/Debug.
+#
+# Note on RelWithDebInfo inlining: CMakeCommon's SETUP_COMPILER hard-resets
+# CMAKE_CXX_FLAGS_RELWITHDEBINFO without any explicit /Ob level. Because the
+# flag string retains /O2 (added by MSBuild's RelWithDebInfo defaults), /O2
+# implies /Ob2 per the MSVC docs, so codegen still matches Release inlining.
+# Do not reintroduce an /Ob1 -> /Ob2 string(REPLACE) here -- CMakeCommon would
+# overwrite it, making the replace dead code.
 set(DAS_INSTALL_BINDIR bin CACHE STRING "Directory where to install binaries")
 set(DAS_INSTALL_LIBDIR lib CACHE STRING "Directory where to install binaries")
 set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation")
@@ -740,6 +751,8 @@ src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
 src/misc/free_list.cpp
+src/misc/alloc_tracker.cpp
+src/misc/alloc_tracker_fast_stack.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -984,6 +997,25 @@ SETUP_LIBDASCRIPT(libDaScriptDyn_runtime ON ON LIBDASCRIPT_RUNTIME_SRC DAS_EXPOR
 SETUP_LIBDASCRIPT(libDaScript OFF OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
 SETUP_LIBDASCRIPT(libDaScriptDyn ON OFF LIBDASCRIPT_COMPILER_SRC DAS_CC_EXPORTS)
 
+# Heap leak tracking: permanently enabled in RelWithDebInfo only.
+# DAS_FREE_LIST=0 forces the reuse cache off so every aligned allocation reaches
+# the tracker and free_list.cpp's global operator new/delete overrides stay inert
+# (no double-override).
+target_compile_definitions(libDaScript_runtime    PUBLIC
+    $<$<CONFIG:RelWithDebInfo>:DAS_TRACK_ALLOC=1>
+    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>)
+target_compile_definitions(libDaScriptDyn_runtime PUBLIC
+    $<$<CONFIG:RelWithDebInfo>:DAS_TRACK_ALLOC=1>
+    $<$<CONFIG:RelWithDebInfo>:DAS_FREE_LIST=0>)
+# Global new/delete override: covers STL/raw new/smart_ptr refcount blocks.
+# On Windows each module resolves operator new per-CRT, so the override TU must
+# be compiled into every binary that wants its own code covered. Uses std::malloc
+# internally for cross-CRT compatibility; orphan frees (cross-module) are counted
+# at track_free_hook for diagnostics. The TU is #if DAS_TRACK_ALLOC-gated, so it
+# compiles empty in Release/Debug.
+target_sources(libDaScript_runtime    PRIVATE src/misc/alloc_tracker_overrides.cpp)
+target_sources(libDaScriptDyn_runtime PRIVATE src/misc/alloc_tracker_overrides.cpp)
+
 target_link_libraries(libDaScript libDaScript_runtime)
 target_link_libraries(libDaScriptDyn libDaScriptDyn_runtime)
 
@@ -1070,6 +1102,10 @@ if (NOT ${DAS_TOOLS_DISABLED})
 
     # Dynamic/DLL compiler binary — the default shipped binary.
     SETUP_COMPILER_BINARY(daslang libDaScriptDyn "" DAS_DYN_MODULES_LIBS)
+    # Each binary needs its own copy of the override TU to cover its own code
+    # (Windows resolves operator new per-CRT). TU is #if DAS_TRACK_ALLOC-gated.
+    target_sources(daslang        PRIVATE src/misc/alloc_tracker_overrides.cpp)
+    target_sources(daslang_static PRIVATE src/misc/alloc_tracker_overrides.cpp)
     # relative RPATH from install location
     if(APPLE)
         SET_TARGET_PROPERTIES(daslang PROPERTIES
@@ -1095,6 +1131,7 @@ if (NOT ${DAS_TOOLS_DISABLED})
         ${DAS_MODULES_NEED_INC}
     )
     add_executable(daslang-live ${DAS_LIVE_MAIN_SRC})
+    target_sources(daslang-live PRIVATE src/misc/alloc_tracker_overrides.cpp)
     TARGET_LINK_LIBRARIES(daslang-live libDaScriptDyn ${SRC_LIBRARIES})
     ADD_DEPENDENCIES(daslang-live libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
     target_include_directories(daslang-live PRIVATE

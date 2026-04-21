@@ -194,9 +194,6 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
     if (res.errors > 0) {
         log::error("{res.errors} error(s)")
     }
-    unsafe {
-        fio::exit(res.errors > 0 ? 1 : 0)
-    }
     return res
 }
 
@@ -255,7 +252,7 @@ def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string
 }
 
 [export]
-def main() {
+def main() : int {
     var args <- get_command_line_arguments()
     log::init_log(args)
     let runIdx = args |> find_index("--run")
@@ -274,7 +271,7 @@ def main() {
             tests <- suite::test_results
         )
         log::info_raw("\n{jsonResultPrefix}{sprint_json(report, false)}\n{jsonResultPrefix}")
-        return
+        return res.failed + res.errors
     }
 
     log::failuresOnly = args |> has_value("--failures-only")
@@ -287,9 +284,21 @@ def main() {
         unsafe {
             var mainCtx & = this_context()
             new_thread <| @capture(& res, & mainCtx) {
-                fio::sleep(uint(timeout * 1000.))
-                unsafe {
-                    mainCtx |> invoke_in_context("timeout_tests", res, startTime, timeout)
+                // Polled sleep: chunk into 100ms slices and watch for jobque
+                // shutdown so a clean main-return does not have to wait for
+                // the full timeout. ~Module_JobQue busy-waits on the thread
+                // count, so without this the shutdown path hangs.
+                let total_ms = uint(timeout * 1000.)
+                var slept = 0u
+                while (slept < total_ms && !is_job_que_shutting_down()) {
+                    let chunk = min(100u, total_ms - slept)
+                    fio::sleep(chunk)
+                    slept += chunk
+                }
+                if (slept >= total_ms) {
+                    unsafe {
+                        mainCtx |> invoke_in_context("timeout_tests", res, startTime, timeout)
+                    }
                 }
             }
         }
@@ -299,10 +308,7 @@ def main() {
     collect_input_paths(args, inputPaths)
     var files : array<string>
     if (!collect_files(inputPaths, files)) {
-        unsafe {
-            fio::exit(1)
-        }
-        return
+        return 1
     }
 
     timingOutliers = args |> get_int_arg("--timing-outliers", 0)
@@ -487,7 +493,7 @@ def main() {
             }
         }
     }
-    finish_tests(res, startTime)
+    return finish_tests(res, startTime)
 }
 
 
@@ -496,7 +502,11 @@ def timeout_tests(var res : SuiteResult; start_time : int64; timeout_sec : float
     res.errors += 1
     res.total += 1
     log::error("Test timed out after {timeout_sec}s")
-    finish_tests(res, start_time)
+    // timeout fires from a worker thread; fio::exit is the cross-thread
+    // cancellation mechanism (bypasses shutdown dump — acceptable for this path).
+    unsafe {
+        fio::exit(finish_tests(res, start_time))
+    }
 }
 
 
@@ -541,7 +551,7 @@ def private print_timing_outliers() {
 }
 
 
-def finish_tests(res : SuiteResult; start_time : int64) {
+def finish_tests(res : SuiteResult; start_time : int64) : int {
     let resCode = res.failed + res.errors
     let totalDt = get_time_usec(start_time)
     log::info("\n{to_string(res)}")
@@ -578,9 +588,7 @@ def finish_tests(res : SuiteResult; start_time : int64) {
             }
         }
     }
-    unsafe {
-        fio::exit(resCode)
-    }
+    return resCode
 }
 
 

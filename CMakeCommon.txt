@@ -110,10 +110,12 @@ MACRO(SETUP_LIB_DEFINITIONS _target)
             $<$<CONFIG:RelWithDebInfo>:DAS_NO_ASSERTIONS>
         )
     endif()
+    # RelWithDebInfo is our heap-leak audit configuration and MUST match Release
+    # codegen (fusion, inlining) so diagnostics are representative of what ships.
     target_compile_definitions(${_target} PUBLIC
         $<$<CONFIG:Release>:DAS_FUSION=2>
         $<$<CONFIG:MinSizeRel>:DAS_FUSION=1>
-        $<$<CONFIG:RelWithDebInfo>:DAS_FUSION=1>
+        $<$<CONFIG:RelWithDebInfo>:DAS_FUSION=2>
     )
 ENDMACRO()
 

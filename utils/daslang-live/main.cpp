@@ -635,6 +635,7 @@ int main(int argc, char * argv[]) {
 #endif
 
     install_das_crash_handler();
+    das::arm_alloc_tracking();
 
     string scriptFile;
     bool noDynamicModules = false;
@@ -728,6 +729,8 @@ int main(int argc, char * argv[]) {
 
     Module::Shutdown();
     JobStatus::DumpJobQueLeaks();
+    // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),
+    // so it fires after all static destructors — cleaner than dumping here.
     release_single_instance();
     return result;
 }

@@ -9,6 +9,7 @@ benchdata.db
 
 # build artifacts
 build/
+build-track/
 # All build binaries stored here
 bin/
 # JIT stores dll's here
