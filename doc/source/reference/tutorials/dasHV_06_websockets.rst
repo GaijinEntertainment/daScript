@@ -31,10 +31,10 @@ Override three callbacks:
 .. code-block:: das
 
    class ChatServer : HvWebServer {
-       clients : table<WebSocketChannel?; string>
+       clients : table<WebSocketChannel; string>
        next_id : int = 0
 
-       def override onWsOpen(channel : WebSocketChannel?; url : string#) {
+       def override onWsOpen(channel : WebSocketChannel; url : string#) {
            next_id++
            let nickname = "user_{next_id}"
            clients |> insert_clone(channel, nickname)
@@ -42,19 +42,19 @@ Override three callbacks:
            broadcast("{nickname} joined", channel)
        }
 
-       def override onWsClose(channel : WebSocketChannel?) {
+       def override onWsClose(channel : WebSocketChannel) {
            let nickname = clients?[channel] ?? "unknown"
            clients |> erase(channel)
-           broadcast("{nickname} left", null)
+           broadcast("{nickname} left", default<WebSocketChannel>)
        }
 
-       def override onWsMessage(channel : WebSocketChannel?; msg : string#) {
+       def override onWsMessage(channel : WebSocketChannel; msg : string#) {
            let nickname = clients?[channel] ?? "unknown"
            send(channel, "echo: {msg}", ws_opcode.WS_OPCODE_TEXT, true)
            broadcast("{nickname}: {msg}", channel)
        }
 
-       def broadcast(msg : string; exclude : WebSocketChannel?) {
+       def broadcast(msg : string; exclude : WebSocketChannel) {
            for (ch in keys(clients)) {
                if (ch != exclude) {
                    send(ch, msg, ws_opcode.WS_OPCODE_TEXT, true)
