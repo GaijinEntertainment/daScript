@@ -186,6 +186,7 @@ class LiveApiAgent : DapiDebugAgent {
     def operator delete() {
         if (server != null) {
             server->stop()
+            server->cleanup()
             unsafe {
                 delete server
             }

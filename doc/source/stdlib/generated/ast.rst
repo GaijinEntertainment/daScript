@@ -7813,7 +7813,7 @@ Properties
   *  :ref:`get_field_type (type: TypeDecl?; fieldName: string; constant: bool) : TypeDecl? <function-ast_get_field_type_TypeDecl_q__string_bool>`
   *  :ref:`get_file_source_line (info: FileInfo?; line: uint; blk: block\<(string#):void\>) <function-ast_get_file_source_line_FileInfo_q__uint_block_ls_string_hh__c_void_gr_>`
   *  :ref:`get_func_aot_prefix (ann: FunctionAnnotation?; stg: StringBuilderWriter?; call: ExprCallFunc?) <function-ast_get_func_aot_prefix_FunctionAnnotation_q__StringBuilderWriter_q__ExprCallFunc_q_>`
-  *  :ref:`get_function_aot_hash (fun: Function const?) : uint64 <function-ast_get_function_aot_hash_Function_const_q_>`
+  *  :ref:`get_function_aot_hash (fun: Function?) : uint64 <function-ast_get_function_aot_hash_Function_q_>`
   *  :ref:`get_function_hash_by_id (fun: Function?; id: int; pctx: void?) : uint64 <function-ast_get_function_hash_by_id_Function_q__int_void_q_>`
   *  :ref:`get_handled_type_field_type (type: TypeAnnotation?; field: string) : TypeInfo? <function-ast_get_handled_type_field_type_TypeAnnotation_q__string>`
   *  :ref:`get_handled_type_field_type_declaration (type: TypeAnnotation?; field: string; isConst: bool) : TypeDecl? <function-ast_get_handled_type_field_type_declaration_TypeAnnotation_q__string_bool>`
@@ -7943,9 +7943,9 @@ Returns the AOT function prefix string for the specified function.
 
             * **call** :  :ref:`ExprCallFunc <handle-ast-ExprCallFunc>`? implicit
 
-.. _function-ast_get_function_aot_hash_Function_const_q_:
+.. _function-ast_get_function_aot_hash_Function_q_:
 
-.. das:function:: get_function_aot_hash(fun: Function const?) : uint64
+.. das:function:: get_function_aot_hash(fun: Function?) : uint64
 
 Returns the hash of a function used for AOT matching.
 

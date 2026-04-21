@@ -39,7 +39,7 @@ let SERVER_PORT = 18085
 
 class ChatServer : HvWebServer {
     // Track connected clients: channel → nickname
-    clients : table<WebSocketChannel?; string>
+    clients : table<WebSocketChannel; string>
     next_id : int = 0
 
     def override onInit {
@@ -54,7 +54,7 @@ class ChatServer : HvWebServer {
         }
     }
 
-    def override onWsOpen(channel : WebSocketChannel?; url : string#) {
+    def override onWsOpen(channel : WebSocketChannel; url : string#) {
         next_id++
         let nickname = "user_{next_id}"
         clients |> insert_clone(channel, nickname)
@@ -65,14 +65,14 @@ class ChatServer : HvWebServer {
         broadcast("{nickname} joined", channel)
     }
 
-    def override onWsClose(channel : WebSocketChannel?) {
+    def override onWsClose(channel : WebSocketChannel) {
         let nickname = clients?[channel] ?? "unknown"
         print("[server] {nickname} disconnected\n")
         clients |> erase(channel)
-        broadcast("{nickname} left", null)
+        broadcast("{nickname} left", default<WebSocketChannel>)
     }
 
-    def override onWsMessage(channel : WebSocketChannel?; msg : string#) {
+    def override onWsMessage(channel : WebSocketChannel; msg : string#) {
         let nickname = clients?[channel] ?? "unknown"
         print("[server] {nickname}: {msg}\n")
         // Echo with prefix to the sender
@@ -82,7 +82,7 @@ class ChatServer : HvWebServer {
     }
 
     // Send a message to all connected clients except `exclude`
-    def broadcast(msg : string; exclude : WebSocketChannel?) {
+    def broadcast(msg : string; exclude : WebSocketChannel) {
         for (ch in keys(clients)) {
             if (ch != exclude) {
                 send(ch, msg, ws_opcode.WS_OPCODE_TEXT, true)
@@ -142,6 +142,7 @@ def with_ws_server(port : int; blk : block<(base_url : string) : void>) {
                         sleep(10u)
                     }
                     server->stop()
+                    server->cleanup()
                     unsafe {
                         delete server
                     }
@@ -278,6 +279,8 @@ def main() {
         print("  alice connected: {alice->is_connected()}\n")
         print("  bob connected: {bob->is_connected()}\n")
 
+        alice->cleanup()
+        bob->cleanup()
         unsafe {
             delete alice
             delete bob

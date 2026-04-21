@@ -87,6 +87,7 @@ def with_tutorial_server(port : int; blk : block<(base_url : string) : void>) {
                         sleep(10u)
                     }
                     server->stop()
+                    server->cleanup()
                     unsafe {
                         delete server
                     }

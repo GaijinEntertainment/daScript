@@ -178,6 +178,7 @@ def with_cookie_form_server(port : int; upload_dir : string; blk : block<(base_u
                         sleep(10u)
                     }
                     server->stop()
+                    server->cleanup()
                     unsafe {
                         delete server
                     }

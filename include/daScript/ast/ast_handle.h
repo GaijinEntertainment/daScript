@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_simulate.h"
+#include "daScript/misc/handle_registry.h"
 #include "daScript/simulate/interop.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/simulate_nodes.h"
@@ -862,6 +863,79 @@ namespace das
     void addEquNeqVal(Module & mod, const ModuleLibrary & lib) {
         addExtern<decltype(&das_equ_val<TT,TT>),  das_equ_val<TT,TT>> (mod, lib, "==", SideEffects::none, "das_equ_val");
         addExtern<decltype(&das_nequ_val<TT,TT>), das_nequ_val<TT,TT>>(mod, lib, "!=", SideEffects::none, "das_nequ_val");
+    }
+
+    template <typename T>
+    struct WrapType<Handle<T>> { enum { value = true }; typedef uint64_t type; typedef uint64_t rettype; };
+
+    template <typename T>
+    struct WrapArgType<Handle<T>> { typedef uint64_t type; };
+
+    template <typename T>
+    struct WrapRetType<Handle<T>> { typedef uint64_t type; };
+
+    template <typename T>
+    struct typeName<Handle<T>> {
+        static string name() {
+            return string("Handle<") + typeName<T>::name() + ">";
+        }
+    };
+
+    template <typename T>
+    struct cast<Handle<T>> {
+        static __forceinline Handle<T> to   ( vec4f x ) {
+            uint64_t raw = v_extract_xi64(v_cast_vec4i(x));
+            Handle<T> h;
+            h.value = raw;
+            return h;
+        }
+        static __forceinline vec4f from ( Handle<T> h ) {
+            uint64_t raw = h.value;
+            return v_cast_vec4f(v_ldui_half(&raw));
+        }
+    };
+
+    template <typename T>
+    struct typeFactory<Handle<T>> {
+        static ___noinline TypeDeclPtr make(const ModuleLibrary & library) {
+            // Normalize: typeName<T>::name() may return const char * or string
+            // depending on T's specialization. string -> const char* via c_str.
+            string tn = typeName<T>::name();
+            return makeHandleType(library, tn.c_str());
+        }
+    };
+
+    template <typename T>
+    struct ManagedHandleAnnotation : ManagedValueAnnotation<Handle<T>> {
+        ManagedHandleAnnotation ( ModuleLibrary & lib, const string & n, const string & cpn = string() )
+            : ManagedValueAnnotation<Handle<T>>(lib,n,cpn) {}
+    };
+
+    template <typename T> bool das_handle_is_alive ( Handle<T> h ) {
+        return HandleRegistry<T>::instance().is_alive(h);
+    }
+    template <typename T> bool das_handle_release  ( Handle<T> h ) {
+        return HandleRegistry<T>::instance().release(h);
+    }
+    template <typename T> bool das_handle_equ  ( Handle<T> a, Handle<T> b ) { return a == b; }
+    template <typename T> bool das_handle_nequ ( Handle<T> a, Handle<T> b ) { return a != b; }
+
+    template <typename T>
+    void addHandleAnnotation ( Module * mod, ModuleLibrary & lib,
+                               const string & name,
+                               const string & destroyFnName = string(),
+                               const string & cppTypeName = string() ) {
+        mod->addAnnotation(new ManagedHandleAnnotation<T>(lib, name, cppTypeName));
+        addExtern<decltype(&das_handle_equ<T>),  das_handle_equ<T>>
+            (*mod, lib, "==", SideEffects::none, "das_handle_equ");
+        addExtern<decltype(&das_handle_nequ<T>), das_handle_nequ<T>>
+            (*mod, lib, "!=", SideEffects::none, "das_handle_nequ");
+        addExtern<decltype(&das_handle_is_alive<T>), das_handle_is_alive<T>>
+            (*mod, lib, "is_alive", SideEffects::accessExternal, "das_handle_is_alive");
+        if ( !destroyFnName.empty() ) {
+            addExtern<decltype(&das_handle_release<T>), das_handle_release<T>>
+                (*mod, lib, destroyFnName.c_str(), SideEffects::modifyExternal, "das_handle_release");
+        }
     }
 
     void setParents ( Module * mod, const char * child, const std::initializer_list<const char *> & parents );
