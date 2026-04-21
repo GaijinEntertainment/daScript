@@ -103,13 +103,13 @@ class HvWebServer {
         //! Processes pending HTTP and WebSocket events; must be called periodically.
         tick(server)
     }
-    def onWsOpen(channel : WebSocketChannel; url : string#) : void {}
+    def abstract onWsOpen(channel : WebSocketChannel; url : string#) : void
         //! Called when a WebSocket client connects. Override to handle new connections.
-    def onWsClose(channel : WebSocketChannel) : void {}
+    def abstract onWsClose(channel : WebSocketChannel) : void
         //! Called when a WebSocket client disconnects. Override to handle disconnections.
-    def onWsMessage(channel : WebSocketChannel; msg : string#) : void {}
+    def abstract onWsMessage(channel : WebSocketChannel; msg : string#) : void
         //! Called when a WebSocket message is received. Override to handle messages.
-    def onTick : void {}
+    def abstract onTick : void
         //! Called each tick cycle. Override for periodic work.
     def onInit : void {}
         //! Called during server initialization, after the low-level server is created. Override to register routes.
