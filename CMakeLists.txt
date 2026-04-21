@@ -354,6 +354,12 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     TARGET_COMPILE_DEFINITIONS(${module_name} PRIVATE DAS_MOD_EXPORTS DAS_ENABLE_DLL=1)
     TARGET_LINK_LIBRARIES(${module_name} PUBLIC libDaScriptDyn)
     ADD_DEPENDENCIES(${module_name} libDaScriptDyn)
+    # Each shared module needs its own copy of the global new/delete overrides:
+    # Windows resolves operator new per-module at link time, and a module that
+    # allocates via the tracker but frees through the default CRT (or vice versa)
+    # looks like a leak. The TU is #if DAS_TRACK_ALLOC-gated so it compiles empty
+    # outside RelWithDebInfo. DAS_TRACK_ALLOC propagates from libDaScriptDyn_runtime.
+    target_sources(${module_name} PRIVATE ${PROJECT_SOURCE_DIR}/src/misc/alloc_tracker_overrides.cpp)
     LIST(APPEND DAS_DYN_MODULES_LIBS ${module_name})
 ENDMACRO()
 
