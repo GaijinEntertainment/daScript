@@ -107,13 +107,13 @@ namespace das
         virtual bool hasStringData(das_set<void *> & dep) const override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override {
             Annotation::gc_collect(target, from);
-            for ( auto & fp : fields ) {
+            for ( auto && fp : fields ) {
                 if ( fp.second.decl ) fp.second.decl->gc_collect(target, from);
                 if ( fp.second.constDecl ) fp.second.constDecl->gc_collect(target, from);
             }
         }
         virtual void visitTypeDecls ( const function<void(TypeDecl *)> & callback ) override {
-            for ( auto & fp : fields ) {
+            for ( auto && fp : fields ) {
                 if ( fp.second.decl ) callback(fp.second.decl);
                 if ( fp.second.constDecl ) callback(fp.second.constDecl);
             }

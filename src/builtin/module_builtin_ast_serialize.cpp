@@ -303,9 +303,9 @@ namespace das {
         value = das::move(deser);
     }
 
-    template <typename K, typename V>
-    AstSerializer & AstSerializer::operator << ( das_hash_map<K, V> & value ) {
-        serialize_hash_map<K, V, hash<K>, equal_to<K>>(value);
+    template <typename K, typename V, typename H, typename E>
+    AstSerializer & AstSerializer::operator << ( das_hash_map<K, V, H, E> & value ) {
+        serialize_hash_map<K, V, H, E>(value);
         return *this;
     }
 
@@ -2474,7 +2474,9 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 80;
+        // bumped for ska::flat_hash_map → das::daslang_hash_map switch:
+        // iteration order differs, invalidating any cached serialized AST.
+        static constexpr uint32_t currentVersion = 81;
         return currentVersion;
     }
 
