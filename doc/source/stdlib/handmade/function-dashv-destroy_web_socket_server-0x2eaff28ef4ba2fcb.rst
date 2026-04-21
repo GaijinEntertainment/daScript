@@ -1,1 +1,1 @@
-Releases the server handle and stops its background workers. Returns true if the handle was live.
+Releases the server handle. Returns true if the handle was live. When this drops the last reference, ``~hv::WebSocketServer`` runs and stops the background workers; call ``stop()`` explicitly if you keep other references to the server.

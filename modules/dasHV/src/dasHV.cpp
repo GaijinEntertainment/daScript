@@ -231,6 +231,8 @@ int das_wsc_send ( Handle<hv::WebSocketClient> h, const char* msg ) {
 int das_wsc_send_buf ( Handle<hv::WebSocketClient> h, const char* msg, int32_t len, ws_opcode opcode ) {
     auto p = HandleRegistry<hv::WebSocketClient>::instance().lookup(h);
     if ( !p ) return -1;
+    if ( len < 0 ) return -1;
+    if ( !msg && len != 0 ) return -1;
     return p->send(msg ? msg : "", len, opcode);
 }
 
@@ -580,12 +582,16 @@ int das_wss_send ( Handle<hv::WebSocketChannel> h, const char * msg, ws_opcode o
 int das_wss_send_buf ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, ws_opcode opcode, bool fin ) {
     auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
     if ( !p ) return -1;
+    if ( len < 0 ) return -1;
+    if ( !buf && len != 0 ) return -1;
     return p->send(buf, len, opcode, fin);
 }
 
 int das_wss_send_fragment ( Handle<hv::WebSocketChannel> h, const char * buf, int32_t len, int32_t fragment, ws_opcode opcode ) {
     auto p = HandleRegistry<hv::WebSocketChannel>::instance().lookup(h);
     if ( !p ) return -1;
+    if ( len < 0 || fragment < 0 ) return -1;
+    if ( !buf && len != 0 ) return -1;
     return p->send(buf, len, fragment, opcode);
 }
 
