@@ -156,7 +156,7 @@ namespace das {
     thread_local das_map<void *, GlswCallbacks> Module_dasGLFW::g_Callbacks;
 
     Module_dasGLFW::~Module_dasGLFW() {
-        g_Callbacks.clear();
+        swap(das_map<void *, GlswCallbacks>(), Module_dasGLFW::g_Callbacks);
     }
 
 	void Module_dasGLFW::initMain () {
