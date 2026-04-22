@@ -17,6 +17,7 @@ require strudel/strudel_scheduler
 require strudel/strudel_sf2
 require audio/audio_boost
 require audio
+require daslib/rtti
 require daslib/jobque_boost
 require daslib/archive
 require daslib/fio
@@ -668,7 +669,10 @@ def public strudel_play(cmd_fn : function<(cmd : string) : void> = @@strudel_noo
         g_wall_time = double(g_wall_samples) / double(SAMPLE_RATE)
         // update playback time for main thread
         if (g_playback_box != null) {
-            g_playback_box |> set(PlaybackTime(wall_time = g_wall_time, cps = g_cps))
+            g_playback_box |> update() $(var pt : PlaybackTime#) {
+                pt.wall_time = g_wall_time
+                pt.cps = g_cps
+            }
         }
         // buffer level feedback
         var que_len = 0
