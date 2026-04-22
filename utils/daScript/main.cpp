@@ -426,10 +426,10 @@ void print_help() {
         << "    -das-profiler-log-file <file> set profiler log file\n"
         << "    -das-profiler-manual manual profiler control\n"
         << "    -das-profiler-memory memory profiler\n"
-        << "    -das-profiler-time-unit <ns|us|ms|s> time unit for profiler output\n"
-        << "    -das-profiler-thread-local install profiler as per-thread agent (default when not tracking memory)\n"
-        << "    -das-profiler-global install profiler as singleton agent (default with -das-profiler-memory)\n"
-        << "    -das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
+        << "    --das-profiler-time-unit <ns|us|ms|s> time unit for profiler output\n"
+        << "    --das-profiler-thread-local install profiler as per-thread agent (default when not tracking memory)\n"
+        << "    --das-profiler-global install profiler as singleton agent (default with --das-profiler-memory)\n"
+        << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
@@ -651,7 +651,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 // do nothing, script handles it
             } else if ( cmd=="-das-profiler-time-unit" ) {
                 // script will pick up next argument by itself
-                if ( i+1 > argc ) {
+                if ( i+1 >= argc ) {
                     printf("expecting profiler time unit (ns, us, ms, s)\n");
                     print_help();
                     return -1;

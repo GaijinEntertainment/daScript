@@ -498,7 +498,7 @@ class MemoryLeakProfilerAgent : ProfilerBaseAgent {
             dump_leaks(ctx, tid)
             delete ctxs[tid]
         }
-        instrumented |> erase(ctx.getCodeAllocatorId)
+        // code-allocator ids are globally unique; keep them in `instrumented` so we never re-scan the same program
     }
     def override onInstrumentFunction(var ctx : Context; var fun : SimFunction?; entering : bool; userData : uint64) : void {
         unsafe {

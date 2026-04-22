@@ -89,8 +89,8 @@ Enabling the profiler
 
 There are two supported ways to install the profiler agent:
 
-Auto-install via ``-das-profiler``
-----------------------------------
+Auto-install via ``--das-profiler``
+-----------------------------------
 
 Passing any ``--das-profiler*`` CLI flag to ``daslang.exe`` implicitly
 injects ``daslib/profiler.das`` into your program and runs the agent's

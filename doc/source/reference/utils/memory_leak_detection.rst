@@ -213,8 +213,8 @@ for the full ownership story.
 
 .. _utils_mlk_smart_ptr:
 
-4. Smart-pointer tracking (``-track-smart-ptr <hexId>``)
-=========================================================
+4. Smart-pointer tracking (``--track-smart-ptr <hexId>``)
+==========================================================
 
 ``ptr_ref_count`` is the base class for daslang's refcounted smart pointers
 (``Context``, ``Program``, ``FileAccess``, compiler analyses, etc.). Each
@@ -258,7 +258,7 @@ lists survivors with subtype and ``created at`` source location.
 
    daslang --track-job-status <id> path/to/script.das
 
-The ``-track-job-status <id>`` flag traces every addRef / releaseRef on one
+The ``--track-job-status <id>`` flag traces every addRef / releaseRef on one
 specific object with the source location of each call. The workflow is
 essentially identical to #4 but specialized for these threading types ---
 they have their own exit dump format and their own narrower trace output.

@@ -162,7 +162,7 @@ hashes or crashes on subsequent runs.
 
 ---
 
-## #4 — `-track-smart-ptr <hexId>` (single smart_ptr trace)
+## #4 — `--track-smart-ptr <hexId>` (single smart_ptr trace)
 
 **Scope:** one specific `ptr_ref_count` subclass instance (Context, Program,
 FileAccess, gc-migrated types via their policy, any other smart_ptr).
@@ -183,7 +183,7 @@ collect stack traces.
 **Automatic companion:** at exit `daslang.exe` calls
 `ptr_ref_count::DumpTrackPtr()` (`utils/daScript/main.cpp:723`) which prints
 all surviving smart pointers. Read a suspect id from there, rerun with
-`-track-smart-ptr <id>`, debug.
+`--track-smart-ptr <id>`, debug.
 
 **Sister flag:** `ref_count_track_destructor` is a second static id (not
 exposed on the CLI yet) that breaks only on the destructor call. Set via
