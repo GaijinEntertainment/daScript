@@ -218,7 +218,9 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         }
         let tid = intptr(unsafe(addr(ctx)))
         events[tid].enabled = !manual
-        events[tid].silent = manual
+        // note: silent defaults to false. In manual mode the user flips
+        // `enabled` via set_enable_profiler; the dump on destroy is controlled
+        // separately by set_enable_profiler_log.
         ensure_instrumented(ctx)
     }
     def enable_profiler(ctxId : uint64; enabled : bool) : void {

@@ -235,7 +235,7 @@ Pick an id from there and rerun with ``--track-smart-ptr <hexId>``:
    daslang --track-smart-ptr 0x5a path/to/script.das
 
 ``addRef``, ``delRef``, and the destructor on that specific id call
-``os_debug_break()``. Attach a debugger (or ``-das-wait-debugger``) to
+``os_debug_break()``. Attach a debugger (or ``--das-wait-debugger``) to
 collect stack traces for each refcount bump. This makes it easy to find the
 site that's holding on too long.
 
