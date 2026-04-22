@@ -82,15 +82,20 @@ namespace das
     void ExprCallFunc::dispatch          ( Visitor & vis ) { vis.preVisitExpression(this); }
     void ExprMakeLocal::dispatch         ( Visitor & vis ) { vis.preVisitExpression(this); }
 
-    // templates -> no matching preVisit overload for the template forms themselves
+    // ExprConst base -> routes derivatives without their own dispatch
+    // (all numeric ExprConstT<T,...> derivatives) through preVisit(ExprConst*)
+    void ExprConst::dispatch             ( Visitor & vis ) { vis.preVisit(this); }
+
+    // templates -> route to preVisit(ExprLooksLikeCall*), the nearest
+    // concrete visitor overload, matching the current serialize chain
     template <typename It, typename SimNodeT, bool first>
     void ExprTableKeysOrValues<It,SimNodeT,first>::dispatch ( Visitor & vis ) {
-        vis.preVisitExpression(this);
+        vis.preVisit(static_cast<ExprLooksLikeCall*>(this));
     }
 
     template <typename It, typename SimNodeT>
     void ExprArrayCallWithSizeOrIndex<It,SimNodeT>::dispatch ( Visitor & vis ) {
-        vis.preVisitExpression(this);
+        vis.preVisit(static_cast<ExprLooksLikeCall*>(this));
     }
 
 }
