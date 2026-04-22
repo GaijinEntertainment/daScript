@@ -418,14 +418,18 @@ void print_help() {
         << "    -dry-run    compile and simulate script without execution\n"
         << "    -compile-only compile script without simulation and execution\n"
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
-        << "    -track-smart-ptr <id> track smart pointer with id\n"
-        << "    -track-job-status <id> track JobStatus/Channel/LockBox with id\n"
-        << "    -linear-stack-allocator  disable scoped stack allocator\n"
-        << "    -das-wait-debugger wait for debugger to attach\n"
-        << "    -das-profiler enable profiler\n"
-        << "    -das-profiler-log-file <file> set profiler log file\n"
-        << "    -das-profiler-manual manual profiler control\n"
-        << "    -das-profiler-memory memory profiler\n"
+        << "    --track-smart-ptr <id> track smart pointer with id\n"
+        << "    --track-job-status <id> track JobStatus/Channel/LockBox with id\n"
+        << "    --linear-stack-allocator  disable scoped stack allocator\n"
+        << "    --das-wait-debugger wait for debugger to attach\n"
+        << "    --das-profiler enable profiler\n"
+        << "    --das-profiler-log-file <file> set profiler log file\n"
+        << "    --das-profiler-manual manual profiler control\n"
+        << "    --das-profiler-memory memory profiler\n"
+        << "    --das-profiler-time-unit <ns|us|ms|s> time unit for profiler output\n"
+        << "    --das-profiler-thread-local install profiler as per-thread agent (default when not tracking memory)\n"
+        << "    --das-profiler-global install profiler as singleton agent (default with --das-profiler-memory)\n"
+        << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
@@ -639,6 +643,20 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 // do nohting, script handles it
             } else if ( cmd=="-das-profiler-memory" ) {
                 // do nohting, script handles it
+            } else if ( cmd=="-das-profiler-thread-local" ) {
+                // do nothing, script handles it
+            } else if ( cmd=="-das-profiler-global" ) {
+                // do nothing, script handles it
+            } else if ( cmd=="-das-profiler-leaks" ) {
+                // do nothing, script handles it
+            } else if ( cmd=="-das-profiler-time-unit" ) {
+                // script will pick up next argument by itself
+                if ( i+1 >= argc ) {
+                    printf("expecting profiler time unit (ns, us, ms, s)\n");
+                    print_help();
+                    return -1;
+                }
+                i += 1;
             } else if ( cmd=="no-dynamic-modules" ) {
                 noDynamicModules = true;
             } else if ( cmd=="h" || cmd=="-help" ) {
