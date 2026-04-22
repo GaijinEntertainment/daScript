@@ -146,6 +146,26 @@ Inside a derived class, ``super()`` calls the parent class constructor:
 Both forms are rewritten by the compiler into explicit calls to the parent class function:
 ``super()`` becomes ``Base`Base(self)`` and ``super.process(x)`` becomes ``Base`process(self, x)``.
 
+Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
+parent's finalizer on the current object:
+
+.. code-block:: das
+
+    class Derived : Base {
+        def operator delete {
+            delete super.self       // calls Base's finalizer on self
+            // additional cleanup
+        }
+    }
+
+The compiler rewrites ``delete super.self`` into ``delete cast<Base>(self)``. It is only
+valid inside an ``operator delete`` (or equivalently ``def finalize``) of a class that has
+a base class; other uses are rejected at compile time. The same form also works for struct
+finalizers declared as free functions — see :ref:`Structs <structs>`.
+
+Base-class finalization is explicit, not automatic: a derived finalizer that omits
+``delete super.self`` will not run the base finalizer.
+
 The option ``always_call_super`` can be enabled to require ``super()`` in every constructor
 (see :ref:`Options <options>`).
 

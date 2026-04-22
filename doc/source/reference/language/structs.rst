@@ -225,6 +225,23 @@ Virtual functions can be overridden in the derived structure:
         }
     }
 
+Struct finalizers are declared as free functions named ``operator delete`` (or ``finalize``)
+whose first argument is ``self``. Inside such a finalizer for a derived struct,
+``delete super.self`` runs the parent's finalizer:
+
+.. code-block:: das
+
+    struct Bar: Foo {}
+
+    def operator delete(var self: Bar) {
+        delete super.self       // calls Foo's finalizer on self
+        // additional cleanup
+    }
+
+The compiler rewrites ``delete super.self`` into ``delete cast<Foo>(self)``. See
+:ref:`Classes <classes>` for the full description of the ``super`` sugar — it applies
+identically to structs with inheritance.
+
 .. _structs_alignment:
 
 ---------
