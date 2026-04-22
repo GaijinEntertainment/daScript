@@ -2141,33 +2141,38 @@ namespace das
     }
 
     void Context::onAllocateString ( void * ptr, uint64_t size, bool tempString, const LineInfo & at ) {
-        if ( g_envTotal > 0 && *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-            (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent->onAllocateString(this, ptr, size, tempString, at);
-        }
+        if ( g_envTotal == 0 ) return;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onAllocateString(this, ptr, size, tempString, at);
+        });
     }
 
     void Context::onFreeString ( void * ptr, bool tempString, const LineInfo & at ) {
-        if ( g_envTotal > 0 && *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-            (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent->onFreeString(this, ptr, tempString, at);
-        }
+        if ( g_envTotal == 0 ) return;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onFreeString(this, ptr, tempString, at);
+        });
     }
 
     void Context::onAllocate ( void * ptr, uint64_t size, const LineInfo & at ) {
-        if ( g_envTotal > 0 && *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-            (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent->onAllocate(this, ptr, size, at);
-        }
+        if ( g_envTotal == 0 ) return;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onAllocate(this, ptr, size, at);
+        });
     }
 
     void Context::onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at ) {
-        if ( g_envTotal > 0 && *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-            (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent->onReallocate(this, ptr, size, newPtr, newSize, at);
-        }
+        if ( g_envTotal == 0 ) return;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onReallocate(this, ptr, size, newPtr, newSize, at);
+        });
     }
 
     void Context::onFree ( void * ptr, const LineInfo & at ) {
-        if ( g_envTotal > 0 && *daScriptEnvironment::g_threadLocalDebugAgent && (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent ) {
-            (*daScriptEnvironment::g_threadLocalDebugAgent)->debugAgent->onFree(this, ptr, at);
-        }
+        if ( g_envTotal == 0 ) return;
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onFree(this, ptr, at);
+        });
     }
 
     const LineInfo * SimFunction::getLineInfo() const { return &code->debugInfo; }

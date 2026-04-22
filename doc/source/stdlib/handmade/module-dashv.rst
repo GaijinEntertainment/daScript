@@ -12,9 +12,16 @@ All functions and symbols are in "dashv" module, use require to get access to it
 
     require dashv
 
+WebSocket client / server / channel objects are exposed to daScript as
+value-sized ``Handle<T>`` integers backed by ``HandleRegistry<T>``. For
+leak diagnostics on these handles (and an overview of the other
+built-in leak detectors) see :ref:`utils_mlk_handle_registry` in the
+:doc:`../../reference/utils/memory_leak_detection` guide.
+
 See also:
 
   * :ref:`dashv_boost <stdlib_dashv_boost>` — high-level wrapper classes
+  * :doc:`../../reference/utils/memory_leak_detection` — leak diagnostics cheat sheet
   * `Tutorial HV-01 — HTTP requests <https://github.com/GaijinEntertainment/daScript/blob/master/tutorials/dasHV/01_http_requests.das>`_
   * `Tutorial HV-02 — Advanced HTTP requests <https://github.com/GaijinEntertainment/daScript/blob/master/tutorials/dasHV/02_http_requests_advanced.das>`_
   * `Tutorial HV-03 — HTTP server <https://github.com/GaijinEntertainment/daScript/blob/master/tutorials/dasHV/03_http_server.das>`_
