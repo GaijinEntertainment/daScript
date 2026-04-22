@@ -26,6 +26,7 @@ option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 option(DAS_BUILD_DOCUMENTATION "Build HTML documentation via Sphinx during install" OFF)
+option(DAS_ENABLE_PIC "Build static libs as position-independent code (UNIX, required to link into shared objects)" ON)
 # RelWithDebInfo is permanently our heap-leak tracking / audit build.
 # DAS_TRACK_ALLOC=1 (and the global new/delete override) are auto-enabled below
 # via generator expressions; tracker source files are #if DAS_TRACK_ALLOC-gated
@@ -97,6 +98,11 @@ endif()
 ENDIF()
 
 SETUP_COMPILER()
+
+IF(UNIX AND DAS_ENABLE_PIC)
+    # On windows PIC is noop.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ENDIF()
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
