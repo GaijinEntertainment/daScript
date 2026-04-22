@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 // arcanoid live
 require glfw/glfw_boost
 require live/glfw_live
