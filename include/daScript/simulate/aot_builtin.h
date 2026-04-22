@@ -80,6 +80,8 @@ namespace das {
     DAS_API void builtin_array_lock ( Array & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_unlock ( Array & arr, Context * context, LineInfoArg * at );
     DAS_API void builtin_array_clear_lock ( const Array & arr, Context * );
+    DAS_API void builtin_array_tag ( Array & arr, const char * name, Context * context );
+    DAS_API void builtin_table_tag ( Table & tab, const char * name, Context * context );
     DAS_API void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     DAS_API void builtin_make_temp_array ( Array & arr, void * data, int size );
     DAS_API void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at );

@@ -978,6 +978,15 @@ namespace das
         const_cast<Table&>(arr).hopeless = 0;
     }
 
+    void builtin_table_tag ( Table & tab, const char * name, Context * context ) {
+        // Debug helper: tag the table's current heap block with `name` so it shows
+        // up in heap reports under that name. Requires `options track_allocations`
+        // (the heap's mark_comment is a no-op otherwise). The tag is preserved
+        // across realloc by TableHash::reserveInternal, which reads the previous
+        // tag before overwriting with the generic "table" default.
+        if ( tab.data && name ) context->heap->mark_comment(tab.data, name);
+    }
+
     bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
         if ( !it.iter ) context->throw_error_at(at, "calling first on empty iterator");
         else if ( it.iter->isOpen ) context->throw_error_at(at, "calling first on already open iterator");
@@ -2070,6 +2079,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_clear_lock")
                 ->args({"table","context"});
+        addExtern<DAS_BIND_FUN(builtin_table_tag)>(*this, lib, "tag_table",
+            SideEffects::modifyExternal, "builtin_table_tag")
+                ->args({"table","name","context"});
         addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
             SideEffects::modifyArgumentAndExternal, "builtin_table_keys")
                 ->args({"iterator","table","stride","context","at"});

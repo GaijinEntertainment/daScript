@@ -166,9 +166,19 @@ namespace das {
             (void)ptr; (void)what;
 #endif
         }
+        __forceinline const char * get_comment ( void * ptr ) const {
+#if DAS_TRACK_ALLOCATIONS
+            if ( trackAllocations ) return impl_get_comment(ptr);
+            return nullptr;
+#else
+            (void)ptr;
+            return nullptr;
+#endif
+        }
 #if DAS_TRACK_ALLOCATIONS
         virtual void impl_mark_location ( void *, const LineInfo * ) {}
         virtual void impl_mark_comment ( void *, const char * ) {}
+        virtual const char * impl_get_comment ( void * ) const { return nullptr; }
 #endif
         virtual void setTrackAllocations ( bool on ) { trackAllocations = on; }
         __forceinline bool isTrackingAllocations() const { return trackAllocations; }
@@ -285,6 +295,7 @@ namespace das {
 #if DAS_TRACK_ALLOCATIONS
         virtual void impl_mark_location ( void * ptr, const LineInfo * at ) override { model.mark_location(ptr,at); }
         virtual void impl_mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); }
+        virtual const char * impl_get_comment ( void * ptr ) const override { return model.get_comment(ptr); }
 #endif
     protected:
         MemoryModel model;
@@ -369,6 +380,7 @@ namespace das {
 #if DAS_TRACK_ALLOCATIONS
         virtual void impl_mark_location ( void * ptr, const LineInfo * at ) override { model.mark_location(ptr,at); }
         virtual void impl_mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); }
+        virtual const char * impl_get_comment ( void * ptr ) const override { return model.get_comment(ptr); }
 #endif
     protected:
         MemoryModel model;
