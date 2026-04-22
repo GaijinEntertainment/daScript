@@ -2,14 +2,14 @@
 
 ## Context
 
-Build the Sequence card/board game as a live-coded daslang application in `examples/daslive/sequence/`. The primary goal is **exercising and stress-testing live coding** — the game is the vehicle, not the destination. If live-reload bugs surface, we stop and fix those first.
+Build the Sequence card/board game as a live-coded daslang application in `examples/games/sequence/` (originally `examples/daslive/sequence/`). The primary goal is **exercising and stress-testing live coding** — the game is the vehicle, not the destination. If live-reload bugs surface, we stop and fix those first.
 
 The existing `main.das` (68 lines) already has a working card viewer with dasCards integration. We'll grow it incrementally, keeping the app live-reloadable at every phase.
 
 ## File Structure
 
 ```
-examples/daslive/sequence/
+examples/games/sequence/
   CLAUDE.md              -- project-specific instructions (Phase 0)
   main.das               -- rendering, window, input, animations, sound
   gameplay.das           -- board model, rules, state machine, win detection (module)
@@ -38,7 +38,7 @@ examples/daslive/sequence/
 ## Phases
 
 ### Phase 0: CLAUDE.md + Plan
-- Write `examples/daslive/sequence/CLAUDE.md` with project-specific instructions:
+- Write `examples/games/sequence/CLAUDE.md` with project-specific instructions:
   - Live coding is the priority; game is secondary
   - File structure and module boundaries
   - Jack color rules
@@ -46,7 +46,7 @@ examples/daslive/sequence/
   - Player modes (1 human + N bots)
   - Testing expectations
   - Current phase status
-- Copy this plan to `examples/daslive/sequence/PLAN.md` for reference
+- Copy this plan to `examples/games/sequence/PLAN.md` for reference
 - **Each subsequent phase**: update `CLAUDE.md` with current status, completed phases, and any new knowledge discovered during implementation
 
 ### Phase 1: Board Layout + Static Rendering
@@ -172,11 +172,11 @@ If live-reload breaks at any point, that becomes the immediate priority — fix 
 
 ## Critical Files
 
-- `examples/daslive/sequence/main.das` — main app (modify)
-- `examples/daslive/sequence/gameplay.das` — new, pure game logic module
-- `examples/daslive/sequence/bot_*.das` — new, one per AI
-- `examples/daslive/sequence/elo.das` — new, tournament system
-- `examples/daslive/sequence/test_*.das` — tests, grow each phase
+- `examples/games/sequence/main.das` — main app (modify)
+- `examples/games/sequence/gameplay.das` — new, pure game logic module
+- `examples/games/sequence/bot_*.das` — new, one per AI
+- `examples/games/sequence/elo.das` — new, tournament system
+- `examples/games/sequence/test_*.das` — tests, grow each phase
 - `e:\dasCards\cards\opengl_cards.das` — card rendering API (read-only reference)
 - `skills/daslang_live.md` — live coding patterns (read before each phase)
 - `skills/das_formatting.md` — formatting rules (read before writing .das)

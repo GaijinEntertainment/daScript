@@ -1171,6 +1171,9 @@ def public midi_shutdown() {
         }
         g_midi_sf2 = null
     }
+    // release sample bank and parsed MIDI files
+    delete g_midi_bank.sounds
+    delete g_midi_files
 }
 
 def public midi_is_playing() : bool {

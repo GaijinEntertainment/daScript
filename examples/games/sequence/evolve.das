@@ -4,11 +4,11 @@ options gen2
 // Supports both greedy and lookahead bots.
 //
 // Usage:
-//   bin/Release/daslang.exe examples/daslive/sequence/evolve.das -- --bot greedy
-//   bin/Release/daslang.exe examples/daslive/sequence/evolve.das -- --bot lookahead
-//   bin/Release/daslang.exe examples/daslive/sequence/evolve.das -- --bot lookahead --depth 3 --jack 4
+//   bin/Release/daslang.exe examples/games/sequence/evolve.das -- --bot greedy
+//   bin/Release/daslang.exe examples/games/sequence/evolve.das -- --bot lookahead
+//   bin/Release/daslang.exe examples/games/sequence/evolve.das -- --bot lookahead --depth 3 --jack 4
 //
-// JIT: bin/Release/daslang.exe -jit examples/daslive/sequence/evolve.das -- --bot lookahead
+// JIT: bin/Release/daslang.exe -jit examples/games/sequence/evolve.das -- --bot lookahead
 
 require elo
 require math

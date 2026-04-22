@@ -67,7 +67,7 @@ examples/**/modules/
 
 # Claude Code (local settings + runtime state)
 .claude/
-examples/daslive/sequence/modules/.daspkg.log
+examples/games/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h
 modules/dasAudio/dasModuleAudio.pdb

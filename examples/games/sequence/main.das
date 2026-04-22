@@ -16,6 +16,7 @@ require daslib/safe_addr
 require daslib/math_boost
 require opengl/opengl_ttf
 require daslib/fio
+require daslib/strings_boost
 require gameplay
 require bot_random
 require bot_greedy
@@ -1487,16 +1488,44 @@ def cmd_font_status(input : JsonValue?) : JsonValue? {
 [export]
 def shutdown() {
     print("sequence: shutdown\n")
+    sfx_shutdown()
+    if (ui_font_loaded) {
+        destroy_font_texture(ui_font)
+        destroy_font_texture(ui_font_small)
+        delete ui_font
+        delete ui_font_small
+        ui_font_loaded = false
+    }
     delete_chip_renderer(chip_renderer)
+    delete deck
+    delete game
+    delete anim_queue
     live_destroy_window()
+}
+
+var max_frame_limit = 0
+
+def parse_args() {
+    let args <- get_command_line_arguments()
+    for (i in range(length(args) - 1)) {
+        if (args[i] == "--max-frames") {
+            max_frame_limit = to_int(args[i + 1])
+        }
+    }
 }
 
 // Dual-mode: also works with regular daslang.exe
 [export]
 def main() {
+    parse_args()
     init()
+    var frame_count = 0
     while (!exit_requested()) {
         update()
+        frame_count ++
+        if (max_frame_limit > 0 && frame_count >= max_frame_limit) {
+            break
+        }
     }
     shutdown()
 }

@@ -323,9 +323,15 @@ namespace das {
         __forceinline void mark_comment ( void * ptr, const char * what ) {
             if ( trackAllocations ) bigStuffComment[ptr] = what;
         }
+        __forceinline const char * get_comment ( void * ptr ) const {
+            if ( !trackAllocations ) return nullptr;
+            auto it = bigStuffComment.find(ptr);
+            return it != bigStuffComment.end() ? it->second : nullptr;
+        }
 #else
         __forceinline void mark_location ( void *, const LineInfo * ) {}
         __forceinline void mark_comment ( void *, const char * ) {}
+        __forceinline const char * get_comment ( void * ) const { return nullptr; }
 #endif
     };
 

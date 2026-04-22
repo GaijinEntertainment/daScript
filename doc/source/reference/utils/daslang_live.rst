@@ -511,9 +511,9 @@ Examples
      - Minimal GLFW window with background color tuning.
    * - ``examples/daslive/triangle/``
      - DECS + OpenGL shaders, rotating triangle.
-   * - ``examples/daslive/arcanoid/``
+   * - ``examples/games/arcanoid/``
      - Full breakout game: DECS, audio, particles, 30+ live commands.
-   * - ``examples/daslive/sequence/``
+   * - ``examples/games/sequence/``
      - Card board game: multi-module, bot AI, tournament runner.
    * - ``examples/daslive/tank_game/``
      - 3D tank combat with dynamic lighting.

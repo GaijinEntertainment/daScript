@@ -1,0 +1,1 @@
+Labels the array's current heap block with ``name`` so it appears under that label in heap reports instead of the generic "array". The tag survives reallocation via ``reserve`` / ``resize`` / ``push``. Requires ``options track_allocations``; a no-op otherwise. Intended for narrowing down which of several module-level arrays is leaking.
