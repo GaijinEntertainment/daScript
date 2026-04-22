@@ -82,11 +82,13 @@ var @live snd_turn_chime : array<float>
 var @live audio_initialized = false
 var @live sfx_volume = 0.5
 
+var private g_audio_channels : AudioSystemChannels
+
 // --- Init / Play ---
 
 def init_audio() {
     if (!audio_initialized) {
-        audio_system_create()
+        g_audio_channels = audio_system_create()
         audio_initialized = true
     }
     // Card play: short click/snap
@@ -109,6 +111,23 @@ def init_audio() {
     snd_game_win <- gen_arpeggio(win_notes, 0.15, 0.3)
     // Turn chime: gentle single note
     snd_turn_chime <- gen_sine_sweep(880.0, 880.0, 0.06, 0.1)
+}
+
+def public sfx_shutdown() {
+    //! Drain audio thread, release sample streams, delete all sample buffers.
+    //! Safe to call multiple times.
+    if (!audio_initialized) {
+        return
+    }
+    audio_system_finalize(g_audio_channels.command, g_audio_channels.next_sid)
+    delete snd_chip_place
+    delete snd_chip_remove
+    delete snd_card_play
+    delete snd_card_draw
+    delete snd_sequence
+    delete snd_game_win
+    delete snd_turn_chime
+    audio_initialized = false
 }
 
 def play_sfx(samples : array<float>) {
