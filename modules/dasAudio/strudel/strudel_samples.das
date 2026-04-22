@@ -88,6 +88,7 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
     } else {
         to_log(LOG_WARNING, "load_sound: no audio files found in '{path}' for '{name}'\n")
     }
+    delete files
 }
 
 // Load a Dirt-Samples style directory structure.

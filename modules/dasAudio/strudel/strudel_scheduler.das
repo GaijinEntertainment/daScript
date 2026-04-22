@@ -887,7 +887,22 @@ def get_orbit_delay(var sched : Scheduler; orbit : int = 0) : ma_delay? {
 }
 
 def shutdown_scheduler(var sched : Scheduler) {
-    //! Release native resources owned by the scheduler (reverb/delay/chorus instances on every orbit bus).
+    //! Release every resource owned by the scheduler: native reverb/delay/chorus instances,
+    //! pre-rendered sample voices (each carrying a large PCM buffer), SF2/oscillator voice pools,
+    //! per-orbit effect buses and their scratch buffers, and the per-tick output buffer.
+    // pre-rendered sample voices — their `samples` arrays are the biggest leaked allocations
+    for (i in range(length(sched.voices))) {
+        if (sched.voices[i] != null) {
+            unsafe { delete sched.voices[i]; }
+            sched.voices[i] = null
+        }
+    }
+    delete sched.voices
+    // streaming oscillator / SF2 voices
+    delete sched.osc_voices
+    delete sched.sf2_voices
+    delete sched.sf2_meta
+    // per-orbit buses — free native effect instances then send/output scratch buffers
     for (bus in sched.orbit_buses) {
         if (bus != null) {
             if (bus.delay_proc != null) {
@@ -898,10 +913,33 @@ def shutdown_scheduler(var sched : Scheduler) {
                 conv_reverb_uninit(bus.reverb)
                 unsafe { delete bus.reverb; }
             }
+            delete bus.reverb_send_buf
+            delete bus.reverb_out_buf
+            delete bus.delay_send_buf
+            delete bus.delay_out_buf
         }
     }
+    for (i in range(length(sched.orbit_buses))) {
+        if (sched.orbit_buses[i] != null) {
+            unsafe { delete sched.orbit_buses[i]; }
+            sched.orbit_buses[i] = null
+        }
+    }
+    delete sched.orbit_buses
+    // shared chorus and its buffers
     if (sched.chorus != null) {
         unsafe { delete sched.chorus; }
+        sched.chorus = null
+    }
+    delete sched.chorus_send_buf
+    delete sched.chorus_out_buf
+    // per-tick scratch buffers
+    delete sched.voice_fx_buf
+    delete sched.output
+    // mixer — symmetric teardown to ma_volume_mixer_init in tick()
+    if (sched.mixer_ready) {
+        ma_volume_mixer_uninit(unsafe(addr(sched.mixer)))
+        sched.mixer_ready = false
     }
 }
 
