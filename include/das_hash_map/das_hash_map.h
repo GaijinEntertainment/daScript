@@ -230,12 +230,12 @@ public:
     // This is what makes `for (auto & kv : map)` and `for (auto & [k,v] : map)` bind
     // under clang; MSVC was lenient about prvalue-to-lvalue-ref.
     class iterator {
-        daslang_hash_map * owner_ = nullptr;
-        size_t             index_ = 0;
-        mutable typename std::aligned_storage<sizeof(reference), alignof(reference)>::type ref_storage_;
-        friend class daslang_hash_map;
-        friend class const_iterator;
     public:
+        // Aliases come first so `reference` below refers to the alias, not the
+        // enclosing daslang_hash_map::reference via injected-class-name lookup.
+        // GCC's [basic.scope.class] diagnostic (-fpermissive) fires otherwise,
+        // because the name's meaning would differ between enclosing-scope lookup
+        // (outer struct) and complete-class-scope lookup (the alias).
         using iterator_category = forward_iterator_tag;
         // pair<K, V> (not pair<const K, V>): matches ska's value_type contract and
         // matches what operator* actually yields (non-const K& inside reference).
@@ -243,7 +243,13 @@ public:
         using difference_type   = ptrdiff_t;
         using pointer           = daslang_hash_map::reference *;
         using reference         = daslang_hash_map::reference;
-
+    private:
+        daslang_hash_map * owner_ = nullptr;
+        size_t             index_ = 0;
+        mutable typename std::aligned_storage<sizeof(reference), alignof(reference)>::type ref_storage_;
+        friend class daslang_hash_map;
+        friend class const_iterator;
+    public:
         iterator () noexcept = default;
         iterator ( daslang_hash_map * o, size_t i ) noexcept : owner_(o), index_(i) {}
 
@@ -267,17 +273,18 @@ public:
     };
 
     class const_iterator {
-        const daslang_hash_map * owner_ = nullptr;
-        size_t                   index_ = 0;
-        mutable typename std::aligned_storage<sizeof(const_reference), alignof(const_reference)>::type ref_storage_;
-        friend class daslang_hash_map;
     public:
         using iterator_category = forward_iterator_tag;
         using value_type        = pair<K, V>;
         using difference_type   = ptrdiff_t;
         using pointer           = const daslang_hash_map::const_reference *;
         using reference         = daslang_hash_map::const_reference;
-
+    private:
+        const daslang_hash_map * owner_ = nullptr;
+        size_t                   index_ = 0;
+        mutable typename std::aligned_storage<sizeof(const_reference), alignof(const_reference)>::type ref_storage_;
+        friend class daslang_hash_map;
+    public:
         const_iterator () noexcept = default;
         const_iterator ( const daslang_hash_map * o, size_t i ) noexcept : owner_(o), index_(i) {}
         const_iterator ( const iterator & it ) noexcept : owner_(it.owner_), index_(it.index_) {}
