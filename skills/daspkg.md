@@ -28,6 +28,7 @@ The `--root` flag sets the project root directory (default: current directory). 
 | `list` | `list [--json] [--global]` | List installed packages |
 | `check` | `check [--json] [--global]` | Verify installed packages match lockfile |
 | `build` | `build [--global]` | Build native (CMake) packages |
+| `cleanup` | `cleanup [--force] [--global]` | Remove `modules/` and `daspkg.lock` to reset a project |
 | `doctor` | `doctor` | Check environment (git, cmake, gh) |
 | `introduce` | `introduce` | Register package in the public index (creates PR on daspkg-index) |
 | `withdraw` | `withdraw` | Remove package from the public index |
@@ -169,6 +170,28 @@ def initialize(project_path : string) {
 - Public index: `borisbat/daspkg-index` on GitHub
 - `introduce` creates PRs on the index repo (NOT on `GaijinEntertainment/daScript`)
 - `search` queries the index for matching packages
+
+## Resetting a Project (cleanup)
+
+Use `cleanup` to wipe a consumer project's daspkg state so the next `install` starts from scratch — useful when auditing packages or recovering from a bad partial install.
+
+```bash
+# dry-run: show what would be removed
+daspkg cleanup --root examples/graphics
+
+# actually remove
+daspkg cleanup --root examples/graphics --force
+```
+
+What `cleanup` removes:
+- `{root}/modules/` (recursively)
+- `{root}/daspkg.lock`
+- `.gitignore` entries daspkg had added (one line per non-global package in the lockfile)
+
+Safety rails:
+- Refuses to run in a directory that has neither `.das_package` nor `daspkg.lock` — prevents nuking arbitrary `modules/` dirs
+- `--force` is required to actually delete; without it, `cleanup` prints a plan and exits
+- `--global --force` removes every globally-installed daspkg package from `{das_root}/modules/` and the global lockfile (in-tree SDK modules are left alone since they're never listed in the global lockfile)
 
 ## Running Package Tests
 

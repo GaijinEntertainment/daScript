@@ -17,7 +17,8 @@ class GlfwGen : CppGenBind {
         let args <- array<string>(
             "-xc++-header",
             "-std=c++1z",
-            "-I{get_full_file_name(pfp)}"
+            "-I{get_full_file_name(pfp)}",
+            "-D_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH=1"
         )
         func_per_chunk = 20
         init_args(pfn, pfp, args)

@@ -121,7 +121,9 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
 def install_local(root, pkg_name, source : string; var lf : LockFile; is_global : bool = false) {
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let target = "{modules_dir}/{pkg_name}"
-    let full_source = get_full_file_name(source)
+    // relative "./" or "../" paths are resolved against `root`, not the current working directory
+    let is_relative = starts_with(source, "./") || starts_with(source, "../") || starts_with(source, ".\\") || starts_with(source, "..\\")
+    let full_source = is_relative ? get_full_file_name("{root}/{source}") : get_full_file_name(source)
     log_debug("install_local: '{pkg_name}' from '{full_source}' -> '{target}'")
 
     if (!fexist(full_source)) {
@@ -155,6 +157,26 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; is_global 
     return try_build_package(target, pkg_name, is_global)
 }
 
+// Resolve a dependency spec to a clone-able source.
+// Bare index names (e.g. "dasImgui") are looked up in the package index.
+// Local paths and git URLs are returned as-is.
+// Returns empty string on index-lookup failure.
+def resolve_dep_source(root, source : string) : string {
+    if (is_local_path(source)) {
+        return source
+    }
+    if (is_index_name(source)) {
+        let url = resolve_from_index(root, source)
+        if (empty(url)) {
+            to_log(LOG_ERROR, "Error: dependency '{source}' not found in the index\n")
+            return ""
+        }
+        log_debug("resolved dep '{source}' -> {url}")
+        return url
+    }
+    return source
+}
+
 def install_dependencies(root, pkg_name : string; var lf : LockFile; var visiting : table<string; bool>; is_global : bool = false) {
     if (key_exists(visiting, pkg_name)) {
         log("Warning: dependency cycle detected at '{pkg_name}' — skipping\n")
@@ -183,7 +205,12 @@ def install_dependencies(root, pkg_name : string; var lf : LockFile; var visitin
                 continue
             }
             log("  Installing dependency: {dep_name}...\n")
-            let drc = install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false, is_global = is_global])
+            let dep_source = resolve_dep_source(root, d.source)
+            if (empty(dep_source)) {
+                rc = 1
+                continue
+            }
+            let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global])
             if (drc != 0) {
                 rc = drc
             }
@@ -766,8 +793,15 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
         if (!has_package(lf, dep_name)) {
             // new dependency — install it
             log("  Installing new dependency: {dep_name}...\n")
+            let dep_source = resolve_dep_source(root, d.source)
+            if (empty(dep_source)) {
+                continue
+            }
             var visiting : table<string; bool>
-            install_git(root, dep_name, d.source, "", lf, visiting, [is_root = false, is_global = is_global])
+            let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global])
+            if (drc != 0) {
+                to_log(LOG_ERROR, "Error: failed to install new dependency '{dep_name}' (rc={drc})\n")
+            }
             continue
         }
         // check if installed version satisfies constraint
@@ -1061,5 +1095,102 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
         print("Some packages are missing — run 'daspkg install' to fix\n")
         return 1
     }
+    return 0
+}
+
+def private is_safe_pkg_name(name : string) : bool {
+    if (empty(name)) {
+        return false
+    }
+    if (name == "." || name == "..") {
+        return false
+    }
+    if (find(name, "/") >= 0 || find(name, "\\") >= 0) {
+        return false
+    }
+    return true
+}
+
+def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int {
+    if (is_global) {
+        if (!force) {
+            to_log(LOG_ERROR, "Error: --global cleanup requires --force (removes every globally-installed daspkg package)\n")
+            return 1
+        }
+        var glf : LockFile
+        let have_lock = read_global_lock_file(glf)
+        if (!have_lock) {
+            log("No global lock file — nothing to clean\n")
+            return 0
+        }
+        var removed_dirs = 0
+        var removed_files = 0
+        for (entry in glf.packages) {
+            if (!is_safe_pkg_name(entry.name)) {
+                to_log(LOG_ERROR, "Error: refusing to clean unsafe package name '{entry.name}' — skipping\n")
+                continue
+            }
+            let pkg_dir = "{get_das_root()}/modules/{entry.name}"
+            if (fexist(pkg_dir)) {
+                log("Removing {pkg_dir}...\n")
+                force_rmdir(pkg_dir)
+                removed_dirs ++
+            }
+        }
+        let lock_path = global_lock_file_path()
+        if (fexist(lock_path)) {
+            remove(lock_path)
+            log("Removed {lock_path}\n")
+            removed_files ++
+        }
+        log("Cleaned global: {removed_dirs} directories, {removed_files} files\n")
+        return 0
+    }
+    let pkg_path = "{root}/.das_package"
+    let lock_path = lock_file_path(root)
+    let modules_dir = "{root}/modules"
+    if (!fexist(pkg_path) && !fexist(lock_path)) {
+        to_log(LOG_ERROR, "Error: '{root}' has no .das_package or daspkg.lock — refusing to clean arbitrary directory\n")
+        return 1
+    }
+    var lf : LockFile
+    let have_lock = read_lock_file(root, lf)
+    if (!force) {
+        print("Would remove (pass --force to proceed):\n")
+        if (fexist(modules_dir)) {
+            print("  {modules_dir}/  (recursively)\n")
+        }
+        if (fexist(lock_path)) {
+            print("  {lock_path}\n")
+        }
+        if (have_lock) {
+            for (entry in lf.packages) {
+                if (!entry.global) {
+                    print("  .gitignore entry: modules/{entry.name}\n")
+                }
+            }
+        }
+        return 0
+    }
+    var removed_dirs = 0
+    var removed_files = 0
+    if (fexist(modules_dir)) {
+        log("Removing {modules_dir}...\n")
+        force_rmdir(modules_dir)
+        removed_dirs ++
+    }
+    if (fexist(lock_path)) {
+        remove(lock_path)
+        log("Removed {lock_path}\n")
+        removed_files ++
+    }
+    if (have_lock) {
+        for (entry in lf.packages) {
+            if (!entry.global) {
+                gitignore_remove(root, "modules/{entry.name}")
+            }
+        }
+    }
+    log("Cleaned: {removed_dirs} directories, {removed_files} files\n")
     return 0
 }

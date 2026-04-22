@@ -24,10 +24,12 @@ target_include_directories(dasModuleCounter PRIVATE
 if(WIN32)
     target_link_libraries(dasModuleCounter PRIVATE
         ${DASLANG_DIR}/lib/Release/libDaScriptDyn.lib
+        ${DASLANG_DIR}/lib/Release/libDaScriptDyn_runtime.lib
     )
 else()
     target_link_libraries(dasModuleCounter PRIVATE
         ${DASLANG_DIR}/lib/libDaScriptDyn.so
+        ${DASLANG_DIR}/lib/libDaScriptDyn_runtime.so
     )
 endif()
 

@@ -65,8 +65,8 @@ modules/.daspkg_cache/
 modules/.daspkg.log
 examples/**/modules/
 
-# Claude Code (local settings)
-.claude/settings.json
+# Claude Code (local settings + runtime state)
+.claude/
 examples/daslive/sequence/modules/.daspkg.log
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.cpp
 tutorials/integration/cpp/_standalone_ctx_generated/standalone_context.das.h

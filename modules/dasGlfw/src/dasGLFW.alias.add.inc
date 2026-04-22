@@ -12,12 +12,12 @@ alias_GLFWvkproc->alias = "GLFWvkproc";
 addAlias(alias_GLFWvkproc);
 
 // from GLFW/glfw3.h:1468:18
-auto alias_GLFWallocatefun = typeFactory<void *(*)(unsigned long, void *)>::make(lib);
+auto alias_GLFWallocatefun = typeFactory<void *(*)(unsigned long long, void *)>::make(lib);
 alias_GLFWallocatefun->alias = "GLFWallocatefun";
 addAlias(alias_GLFWallocatefun);
 
 // from GLFW/glfw3.h:1524:18
-auto alias_GLFWreallocatefun = typeFactory<void *(*)(void *, unsigned long, void *)>::make(lib);
+auto alias_GLFWreallocatefun = typeFactory<void *(*)(void *, unsigned long long, void *)>::make(lib);
 alias_GLFWreallocatefun->alias = "GLFWreallocatefun";
 addAlias(alias_GLFWreallocatefun);
 
