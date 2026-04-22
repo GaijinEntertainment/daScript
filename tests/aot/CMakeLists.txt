@@ -10,42 +10,25 @@ add_custom_target(test_aot_testing)
 SET(TESTING_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_TESTING_FILES}" TESTING_AOT_GENERATED_SRC test_aot_testing daslang)
 
-# AOT for daslib modules (library dependencies used by test files)
-SET(AOT_DASLIB_MODULE_FILES
-    daslib/archive.das
-    daslib/ast_boost.das
-    daslib/ast_cursor.das
-    daslib/ast_match.das
-    daslib/base64.das
-    daslib/bool_array.das
-    daslib/coroutines.das
-    daslib/debug_eval.das
-    daslib/decs.das
-    daslib/faker.das
-    daslib/fuzzer.das
-    daslib/json.das
-    daslib/json_boost.das
-    daslib/linq.das
-    daslib/linq_boost.das
-    daslib/lpipe.das
-    daslib/match.das
-    daslib/math_bits.das
-    daslib/random.das
-    daslib/regex.das
-    daslib/regex_boost.das
-    daslib/safe_addr.das
-    daslib/soa.das
-    daslib/spoof.das
-    daslib/linked_list.das
-    daslib/strings_boost.das
-    daslib/temp_strings.das
-    daslib/templates.das
-    daslib/templates_boost.das
-    daslib/type_traits.das
-    daslib/bitfield_trait.das
-    daslib/defer.das
-    daslib/uriparser_boost.das
-)
+# AOT all daslib .das files — catches codegen regressions for any module,
+# not just those used in tests/. Files marked `options no_aot` are silently skipped.
+FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "daslib/*.das")
+# Exclude modules that misbehave under batched AOT:
+#   aot_macro                  — [simulate_macro] fires, expects policies.aot_result
+#   debugger                   — required by others; error surfaces here
+#   profiler, ast_debug        — [_macro] installs thread-local debug agent at compile,
+#                                second module install panics on the first
+#   profiler_boost             — transitively requires profiler; installing the debug
+#                                agent in a batch perturbs SIM trees of subsequent
+#                                files, changing own-hashes so stubs don't match
+#                                runtime → error[50101] AOT link failed
+#   decs_state                 — [init, export] forks debug agent context during init
+#   aot_cpp, aot_standalone    — AST-codegen modules: rely on C++ bindings
+#                                (get_aot_hash_comment, visit_with_sort, aotFieldName,
+#                                 annotation_arguments, ExprBlock) lacking AOT header decls
+#   network                    — daslang class `Server` shadows C++ `das::Server`,
+#                                codegen resolves NetworkServer? to the daslang class
+list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network)\\.das$")
 
 add_custom_target(test_aot_daslib_modules)
 SET(DASLIB_MODULES_AOT_GENERATED_SRC)
