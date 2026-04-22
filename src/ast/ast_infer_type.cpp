@@ -2473,6 +2473,47 @@ namespace das {
         return Visitor::visit(expr);
     }
     ExpressionPtr InferTypes::visit(ExprDelete *expr) {
+        // sugar inside a finalizer:
+        //   delete super.self   ==>   delete cast<BaseClass>(self)   (alwaysSafe)
+        // lets the derived finalizer call the base class/struct finalizer without
+        // having to name the base type explicitly.
+        if (expr->subexpr->rtti_isField()) {
+            auto eField = static_cast<ExprField *>(expr->subexpr);
+            if (eField->name == "self" && eField->value->rtti_isVar()) {
+                auto eVar = static_cast<ExprVar *>(eField->value);
+                if (eVar->name == "super") {
+                    // finalizer shape: name=="finalize", exactly 1 arg named "self" of struct type
+                    if (!func || func->name != "finalize" || func->arguments.size() != 1) {
+                        error("delete super.self is only allowed inside operator delete (a finalizer)",
+                              "", "", expr->at, CompilationError::bad_delete);
+                        return Visitor::visit(expr);
+                    }
+                    auto &selfArg = func->arguments[0];
+                    if (selfArg->name != "self" || !selfArg->type || !selfArg->type->isStructure()) {
+                        error("delete super.self: finalizer's first argument must be 'self' of a structure type",
+                              "", "", expr->at, CompilationError::bad_delete);
+                        return Visitor::visit(expr);
+                    }
+                    auto selfStruct = selfArg->type->structType;
+                    auto baseStruct = selfStruct->parent;
+                    if (!baseStruct) {
+                        error("delete super.self: " + selfStruct->name + " has no base class or structure",
+                              "", "", expr->at, CompilationError::bad_delete);
+                        return Visitor::visit(expr);
+                    }
+                    reportAstChanged();
+                    auto selfVar = new ExprVar(expr->at, "self");
+                    auto castT = new TypeDecl(baseStruct);
+                    auto castExpr = new ExprCast(expr->at, selfVar, castT);
+                    auto newDel = new ExprDelete(expr->at, castExpr);
+                    newDel->alwaysSafe = true;
+                    newDel->native = expr->native;
+                    if (expr->sizeexpr)
+                        newDel->sizeexpr = expr->sizeexpr->clone();
+                    return newDel;
+                }
+            }
+        }
         if (!expr->subexpr->type)
             return Visitor::visit(expr);
         if (expr->sizeexpr && !expr->sizeexpr->type)
