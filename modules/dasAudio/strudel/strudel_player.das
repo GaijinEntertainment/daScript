@@ -820,6 +820,8 @@ def public strudel_shutdown() {
         g_sf2 = null
         g_sf2_path := ""
     }
+    // release sample bank (each Sample owns a large array<float>; table finalizer drops all variations)
+    delete g_bank.sounds
     // utilization stats
     if (g_tick_total_samples > 0ul) {
         let SPEED = g_tick_total_time / double(g_tick_total_samples)
