@@ -4,10 +4,10 @@
 
 ```bash
 # Live-reload mode (recommended — hot-reload on save, REST API on port 9090)
-bin/Release/daslang-live.exe examples/daslive/arcanoid/main.das
+bin/Release/daslang-live.exe examples/games/arcanoid/main.das
 
 # Standalone mode (no live reload, no REST API)
-bin/Release/daslang.exe examples/daslive/arcanoid/main.das
+bin/Release/daslang.exe examples/games/arcanoid/main.das
 ```
 
 Both modes use the same `main.das`. Under `daslang.exe`, the script's `main()` function runs the init/update/shutdown loop directly. Under `daslang-live.exe`, the host manages the lifecycle and enables hot-reload + REST API.

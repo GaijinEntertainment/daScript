@@ -284,6 +284,7 @@ other level) should be used instead.
 - `utils/mcp/` — MCP server for AI coding assistants (30 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
+- `examples/games/` — Full game examples (arcanoid, sequence) — run under daslang-live or daslang
 - `examples/daspkg/` — Package manager example projects
 - `examples/crash/` — Crash handler example (native + daslang stack traces)
 - `tests/live_host/` — Unit tests for dasLiveHost module (lifecycle, commands, store)

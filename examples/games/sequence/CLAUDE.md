@@ -80,7 +80,7 @@ In **cheat mode**, all players show the 4-row suit display. In **normal mode**, 
 
 Every phase adds tests. Run with:
 ```
-bin/Release/daslang.exe dastest/dastest.das -- --test examples/daslive/sequence/test_gameplay.das
+bin/Release/daslang.exe dastest/dastest.das -- --test examples/games/sequence/test_gameplay.das
 ```
 
 ## Current Status

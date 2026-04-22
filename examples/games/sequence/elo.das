@@ -10,8 +10,8 @@ require math
 require daslib/jobque_boost
 
 // ELO rating system + headless tournament runner.
-// Run: bin/Release/daslang.exe examples/daslive/sequence/elo.das
-// JIT: bin/Release/daslang.exe -jit examples/daslive/sequence/elo.das
+// Run: bin/Release/daslang.exe examples/games/sequence/elo.das
+// JIT: bin/Release/daslang.exe -jit examples/games/sequence/elo.das
 
 let ELO_K = 32.0
 let ELO_START = 1500.0
