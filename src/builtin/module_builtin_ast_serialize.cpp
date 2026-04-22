@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
+#include "daScript/ast/ast_visitor.h"
 #include <cstdarg>
 #include <stdexcept>
 #include <type_traits>
@@ -318,31 +319,6 @@ namespace das {
     AstSerializer & AstSerializer::operator << ( Type & baseType ) {
         dtag(HASH_TAG("Type"));
         serialize_small_enum(baseType);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
-        dtag(HASH_TAG("ExpressionPtr"));
-        bool is_null = expr == nullptr;
-        *this << is_null;
-        if ( is_null ) {
-            if ( !writing ) expr = nullptr;
-            return *this;
-        }
-        if ( writing ) {
-            uint32_t rtti = hash_tag(expr->__rtti);
-            DAS_ASSERT(rtti);
-            *this << rtti;
-            expr->serialize(*this);
-        } else {
-            uint32_t rtti = 0; *this << rtti;
-            auto itA = rttiHash2Annotation.find(rtti);
-            SERIALIZER_VERIFYF(itA != rttiHash2Annotation.end(), "annotation '%u' is not found", rtti);
-            auto annotation = itA->second;
-            expr = (Expression *) static_cast<TypeAnnotation*>(annotation)->factory();
-            expr->serialize(*this);
-        }
-        dtag(HASH_TAG("/ExpressionPtr"));
         return *this;
     }
 
@@ -1328,389 +1304,594 @@ namespace das {
     }
 
 // Expressions
+//
+// Per-node serialization lives in SerializeVisitor. AstSerializer::operator<<(ExpressionPtr&)
+// calls expr->dispatch(v), which selects the matching preVisit(ExprXxx*) override below.
+// Helper methods serializeXxx(...) replicate the old virtual inheritance chain
+// (ExprOp1 -> ExprOp -> ExprCallFunc -> ExprLooksLikeCall -> Expression) without
+// relying on virtual dispatch inside this visitor.
 
-    void ExprReader::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprReader"));
-        Expression::serialize(ser);
-        ser << macro << sequence;
+    class SerializeVisitor : public Visitor {
+        AstSerializer & ser;
+
+        void serializeBase          ( Expression * expr );
+        void serializeLooksLikeCall ( ExprLooksLikeCall * expr );
+        void serializeCallFunc      ( ExprCallFunc * expr );
+        void serializeOp            ( ExprOp * expr );
+        void serializeOp2           ( ExprOp2 * expr );
+        void serializeConst         ( ExprConst * expr );
+        void serializeMakeLocal     ( ExprMakeLocal * expr );
+        void serializeAt            ( ExprAt * expr );
+        void serializePtr2Ref       ( ExprPtr2Ref * expr );
+        void serializeField         ( ExprField * expr );
+        void serializeMakeArray     ( ExprMakeArray * expr );
+
+    public:
+        explicit SerializeVisitor ( AstSerializer & s ) : ser(s) {}
+        using Visitor::preVisit;
+
+        void preVisitExpression ( Expression            * expr ) override;
+        void preVisit ( ExprReader             * expr ) override;
+        void preVisit ( ExprLabel              * expr ) override;
+        void preVisit ( ExprGoto               * expr ) override;
+        void preVisit ( ExprRef2Value          * expr ) override;
+        void preVisit ( ExprRef2Ptr            * expr ) override;
+        void preVisit ( ExprPtr2Ref            * expr ) override;
+        void preVisit ( ExprAddr               * expr ) override;
+        void preVisit ( ExprNullCoalescing     * expr ) override;
+        void preVisit ( ExprDelete             * expr ) override;
+        void preVisit ( ExprAt                 * expr ) override;
+        void preVisit ( ExprSafeAt             * expr ) override;
+        void preVisit ( ExprBlock              * expr ) override;
+        void preVisit ( ExprVar                * expr ) override;
+        void preVisit ( ExprTag                * expr ) override;
+        void preVisit ( ExprField              * expr ) override;
+        void preVisit ( ExprSafeAsVariant      * expr ) override;
+        void preVisit ( ExprSwizzle            * expr ) override;
+        void preVisit ( ExprSafeField          * expr ) override;
+        void preVisit ( ExprLooksLikeCall      * expr ) override;
+        void preVisit ( ExprCallMacro          * expr ) override;
+        void preVisit ( ExprOp1                * expr ) override;
+        void preVisit ( ExprOp2                * expr ) override;
+        void preVisit ( ExprCopy               * expr ) override;
+        void preVisit ( ExprMove               * expr ) override;
+        void preVisit ( ExprClone              * expr ) override;
+        void preVisit ( ExprOp3                * expr ) override;
+        void preVisit ( ExprTryCatch           * expr ) override;
+        void preVisit ( ExprReturn             * expr ) override;
+        void preVisit ( ExprConst              * expr ) override;
+        void preVisit ( ExprConstPtr           * expr ) override;
+        void preVisit ( ExprConstEnumeration   * expr ) override;
+        void preVisit ( ExprConstBitfield      * expr ) override;
+        void preVisit ( ExprConstString        * expr ) override;
+        void preVisit ( ExprStringBuilder      * expr ) override;
+        void preVisit ( ExprLet                * expr ) override;
+        void preVisit ( ExprFor                * expr ) override;
+        void preVisit ( ExprUnsafe             * expr ) override;
+        void preVisit ( ExprWhile              * expr ) override;
+        void preVisit ( ExprWith               * expr ) override;
+        void preVisit ( ExprAssume             * expr ) override;
+        void preVisit ( ExprMakeBlock          * expr ) override;
+        void preVisit ( ExprMakeGenerator      * expr ) override;
+        void preVisit ( ExprYield              * expr ) override;
+        void preVisit ( ExprInvoke             * expr ) override;
+        void preVisit ( ExprAssert             * expr ) override;
+        void preVisit ( ExprQuote              * expr ) override;
+        void preVisit ( ExprTypeInfo           * expr ) override;
+        void preVisit ( ExprIs                 * expr ) override;
+        void preVisit ( ExprAscend             * expr ) override;
+        void preVisit ( ExprCast               * expr ) override;
+        void preVisit ( ExprNew                * expr ) override;
+        void preVisit ( ExprCall               * expr ) override;
+        void preVisit ( ExprIfThenElse         * expr ) override;
+        void preVisit ( ExprNamedCall          * expr ) override;
+        void preVisit ( ExprMakeStruct         * expr ) override;
+        void preVisit ( ExprMakeVariant        * expr ) override;
+        void preVisit ( ExprMakeArray          * expr ) override;
+        void preVisit ( ExprMakeTuple          * expr ) override;
+        void preVisit ( ExprArrayComprehension * expr ) override;
+        void preVisit ( ExprTypeDecl           * expr ) override;
+    };
+
+    void SerializeVisitor::serializeBase ( Expression * expr ) {
+        ser << expr->at
+            << expr->type
+            << expr->genFlags
+            << expr->flags
+            << expr->printFlags;
+        ser.dtag(HASH_TAG("ptr_ref_count"));
     }
 
-    void ExprLabel::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprLabel"));
-        Expression::serialize(ser);
-        ser << label << comment;
+    void SerializeVisitor::serializeLooksLikeCall ( ExprLooksLikeCall * expr ) {
+        serializeBase(expr);
+        ser << expr->name                   << expr->arguments;
+        ser << expr->argumentsFailedToInfer << expr->aliasSubstitution << expr->atEnclosure;
     }
 
-    void ExprGoto::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprGoto"));
-        Expression::serialize(ser);
-        ser << label << subexpr;
+    void SerializeVisitor::serializeCallFunc ( ExprCallFunc * expr ) {
+        serializeLooksLikeCall(expr);
+        ser.serializePointer(expr->func);
+        ser << expr->stackTop;
     }
 
-    void ExprRef2Value::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprRef2Value"));
-        Expression::serialize(ser);
-        ser << subexpr;
+    void SerializeVisitor::serializeOp ( ExprOp * expr ) {
+        serializeCallFunc(expr);
+        ser << expr->op;
     }
 
-    void ExprRef2Ptr::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprRef2Ptr"));
-        Expression::serialize(ser);
-        ser << subexpr;
+    void SerializeVisitor::serializeOp2 ( ExprOp2 * expr ) {
+        serializeOp(expr);
+        ser << expr->left;
+        ser << expr->right;
     }
 
-    void ExprPtr2Ref::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprPtr2Ref"));
-        Expression::serialize(ser);
-        ser << subexpr << unsafeDeref << assumeNoAlias;
+    void SerializeVisitor::serializeConst ( ExprConst * expr ) {
+        serializeBase(expr);
+        ser << expr->baseType << expr->value << expr->foldedNonConst;
     }
 
-    void ExprAddr::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprAddr"));
-        Expression::serialize(ser);
-        ser << target << funcType;
-        ser.serializePointer(func);
+    void SerializeVisitor::serializeMakeLocal ( ExprMakeLocal * expr ) {
+        serializeBase(expr);
+        ser << expr->makeType << expr->stackTop << expr->extraOffset << expr->makeFlags;
     }
 
-    void ExprNullCoalescing::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprNullCoalescing"));
-        ExprPtr2Ref::serialize(ser);
-        ser << defaultValue;
-    }
-
-    void ExprDelete::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprDelete"));
-        Expression::serialize(ser);
-        ser << subexpr << sizeexpr << native;
-    }
-
-    void ExprAt::serialize ( AstSerializer & ser ) {
+    void SerializeVisitor::serializeAt ( ExprAt * expr ) {
         ser.dtag(HASH_TAG("ExprAt"));
-        Expression::serialize(ser);
-        ser << subexpr << index;
-        ser << atFlags;
+        serializeBase(expr);
+        ser << expr->subexpr << expr->index;
+        ser << expr->atFlags;
     }
 
-    void ExprSafeAt::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprSafeAt"));
-        ExprAt::serialize(ser);
+    void SerializeVisitor::serializePtr2Ref ( ExprPtr2Ref * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr << expr->unsafeDeref << expr->assumeNoAlias;
     }
 
-    void ExprBlock::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprBlock"));
-        Expression::serialize(ser);
+    void SerializeVisitor::serializeField ( ExprField * expr ) {
+        ser.dtag(HASH_TAG("ExprField"));
+        serializeBase(expr);
+        ser << expr->value      << expr->name       << expr->atField
+            << expr->fieldIndex << expr->annotation << expr->derefFlags
+            << expr->fieldFlags;
 
         if ( ser.writing ) {
-            void * thisBlock = this;
+            bool has_field = expr->value->type && (
+                expr->value->type->isStructure() || ( expr->value->type->isPointer() && expr->value->type->firstType->isStructure() )
+            );
+            ser << has_field;
+            if ( !has_field ) return;
+            string mangledName;
+            if ( expr->value->type->isPointer() ) {
+                SERIALIZER_VERIFYF(expr->value->type->firstType->isStructure(), "expected to see structure field access via pointer");
+                mangledName = expr->value->type->firstType->structType->getMangledName();
+                ser << expr->value->type->firstType->structType->module;
+            } else {
+                SERIALIZER_VERIFYF(expr->value->type->isStructure(), "expected to see structure field access");
+                mangledName = expr->value->type->structType->getMangledName();
+                ser << expr->value->type->structType->module;
+            }
+            ser << mangledName;
+            if ( expr->annotation != nullptr && expr->annotation->getFieldOffset(expr->name) == static_cast<uint32_t>(-1) ) {
+                LOG(LogLevel::warning) << "das: serialize: Field '" << expr->name << "' not found in '" << expr->annotation->name << "'";
+            }
+        } else {
+            if ( expr->annotation != nullptr && expr->annotation->getFieldOffset(expr->name) == static_cast<uint32_t>(-1) ) {
+                SERIALIZER_VERIFYF(false, "Field '%s' not found in '%s'", expr->name.c_str(), expr->annotation->name.c_str());
+            }
+            bool has_field = false; ser << has_field;
+            if ( !has_field ) return;
+            Module * module = nullptr; ser << module;
+            string mangledName; ser << mangledName;
+            ser.fieldRefs.emplace_back(&expr->fieldRef, module, das::move(mangledName), expr->name);
+        }
+    }
+
+    void SerializeVisitor::serializeMakeArray ( ExprMakeArray * expr ) {
+        serializeMakeLocal(expr);
+        ser << expr->recordType << expr->values << expr->gen2;
+    }
+
+    void SerializeVisitor::preVisitExpression ( Expression * expr ) {
+        // ExprMakeLocal::dispatch routes here (no dedicated preVisit overload).
+        // ExprMakeLocal carries makeType/stackTop/extraOffset/makeFlags that
+        // serializeBase alone would drop, so detect it and use the proper helper.
+        if ( expr->rtti_isMakeLocal() ) {
+            serializeMakeLocal(static_cast<ExprMakeLocal*>(expr));
+            return;
+        }
+        serializeBase(expr);
+    }
+
+    void SerializeVisitor::preVisit ( ExprReader * expr ) {
+        ser.dtag(HASH_TAG("ExprReader"));
+        serializeBase(expr);
+        ser << expr->macro << expr->sequence;
+    }
+
+    void SerializeVisitor::preVisit ( ExprLabel * expr ) {
+        ser.dtag(HASH_TAG("ExprLabel"));
+        serializeBase(expr);
+        ser << expr->label << expr->comment;
+    }
+
+    void SerializeVisitor::preVisit ( ExprGoto * expr ) {
+        ser.dtag(HASH_TAG("ExprGoto"));
+        serializeBase(expr);
+        ser << expr->label << expr->subexpr;
+    }
+
+    void SerializeVisitor::preVisit ( ExprRef2Value * expr ) {
+        ser.dtag(HASH_TAG("ExprRef2Value"));
+        serializeBase(expr);
+        ser << expr->subexpr;
+    }
+
+    void SerializeVisitor::preVisit ( ExprRef2Ptr * expr ) {
+        ser.dtag(HASH_TAG("ExprRef2Ptr"));
+        serializeBase(expr);
+        ser << expr->subexpr;
+    }
+
+    void SerializeVisitor::preVisit ( ExprPtr2Ref * expr ) {
+        ser.dtag(HASH_TAG("ExprPtr2Ref"));
+        serializePtr2Ref(expr);
+    }
+
+    void SerializeVisitor::preVisit ( ExprAddr * expr ) {
+        ser.dtag(HASH_TAG("ExprAddr"));
+        serializeBase(expr);
+        ser << expr->target << expr->funcType;
+        ser.serializePointer(expr->func);
+    }
+
+    void SerializeVisitor::preVisit ( ExprNullCoalescing * expr ) {
+        ser.dtag(HASH_TAG("ExprNullCoalescing"));
+        serializePtr2Ref(expr);
+        ser << expr->defaultValue;
+    }
+
+    void SerializeVisitor::preVisit ( ExprDelete * expr ) {
+        ser.dtag(HASH_TAG("ExprDelete"));
+        serializeBase(expr);
+        ser << expr->subexpr << expr->sizeexpr << expr->native;
+    }
+
+    void SerializeVisitor::preVisit ( ExprAt * expr ) {
+        serializeAt(expr);
+    }
+
+    void SerializeVisitor::preVisit ( ExprSafeAt * expr ) {
+        ser.dtag(HASH_TAG("ExprSafeAt"));
+        serializeAt(expr);
+    }
+
+    void SerializeVisitor::preVisit ( ExprBlock * expr ) {
+        ser.dtag(HASH_TAG("ExprBlock"));
+        serializeBase(expr);
+
+        if ( ser.writing ) {
+            void * thisBlock = expr;
             ser << thisBlock;
         } else {
             void * thisBlock = nullptr; ser << thisBlock;
-            ser.exprBlockMap.emplace((uint64_t) thisBlock, this);
+            ser.exprBlockMap.emplace((uint64_t) thisBlock, expr);
         }
 
-        ser << list << finalList << returnType << arguments << stackTop
-            << stackVarTop << stackVarBottom << stackCleanVars << maxLabelIndex
-            << annotationData << annotationDataSid << blockFlags;
-        ser.serializePointer(inFunction);
+        ser << expr->list << expr->finalList << expr->returnType << expr->arguments << expr->stackTop
+            << expr->stackVarTop << expr->stackVarBottom << expr->stackCleanVars << expr->maxLabelIndex
+            << expr->annotationData << expr->annotationDataSid << expr->blockFlags;
+        ser.serializePointer(expr->inFunction);
 
-        serializeAnnotationList(ser, annotations);
+        serializeAnnotationList(ser, expr->annotations);
     }
 
-    void ExprVar::serialize ( AstSerializer & ser ) {
+    void SerializeVisitor::preVisit ( ExprVar * expr ) {
         ser.dtag(HASH_TAG("ExprVar"));
-        Expression::serialize(ser);
+        serializeBase(expr);
 
-        ser << name << argumentIndex << varFlags;
-        ser << pBlock;
+        ser << expr->name << expr->argumentIndex << expr->varFlags;
+        ser << expr->pBlock;
 
         // The variable is smart_ptr but we actually need
         // non-owning semantics
         if ( ser.writing ) {
-            bool inThisModule =  variable == nullptr // this happens with [generic] functions, for example
-                      || variable->module == nullptr
-                      || variable->module == ser.thisModule;
+            bool inThisModule =  expr->variable == nullptr // this happens with [generic] functions, for example
+                      || expr->variable->module == nullptr
+                      || expr->variable->module == ser.thisModule;
             ser << inThisModule;
             if ( inThisModule ) {
-                ser << variable; // serialize as smart pointer
+                ser << expr->variable; // serialize as smart pointer
             } else {
-                ser << variable->name;
-                ser << variable->module->nameHash;
+                ser << expr->variable->name;
+                ser << expr->variable->module->nameHash;
             }
         } else {
 
             bool inThisModule = false; ser << inThisModule;
             if ( inThisModule ) {
-                ser << variable;
+                ser << expr->variable;
             } else {
                 string varname;
                 uint64_t modname = 0;
                 ser << varname << modname;
                 auto mod = ser.moduleLibrary->findModuleByMangledNameHash(modname);
                 SERIALIZER_VERIFYF(mod, "expected to find module '%llu'", modname);
-                variable = mod->findVariable(varname);
+                expr->variable = mod->findVariable(varname);
             }
 
         }
     }
 
-    void ExprTag::serialize ( AstSerializer & ser ) {
+    void SerializeVisitor::preVisit ( ExprTag * expr ) {
         ser.dtag(HASH_TAG("ExprTag"));
-        Expression::serialize(ser);
-        ser << subexpr << value << name;
+        serializeBase(expr);
+        ser << expr->subexpr << expr->value << expr->name;
     }
 
-    void ExprField::serialize ( AstSerializer & ser ) {
-        ser.dtag(HASH_TAG("ExprField"));
-        Expression::serialize(ser);
-        ser << value      << name       << atField
-            << fieldIndex << annotation << derefFlags
-            << fieldFlags;
+    void SerializeVisitor::preVisit ( ExprField * expr ) {
+        serializeField(expr);
+    }
 
-        if ( ser.writing ) {
-            bool has_field = value->type && (
-                value->type->isStructure() || ( value->type->isPointer() && value->type->firstType->isStructure() )
-            );
-            ser << has_field;
-            if ( !has_field ) return;
-            string mangledName;
-            if ( value->type->isPointer() ) {
-                SERIALIZER_VERIFYF(value->type->firstType->isStructure(), "expected to see structure field access via pointer");
-                mangledName = value->type->firstType->structType->getMangledName();
-                ser << value->type->firstType->structType->module;
-            } else {
-                SERIALIZER_VERIFYF(value->type->isStructure(), "expected to see structure field access");
-                mangledName = value->type->structType->getMangledName();
-                ser << value->type->structType->module;
+    void SerializeVisitor::preVisit ( ExprSafeAsVariant * expr ) {
+        serializeField(expr);
+        ser << expr->skipQQ;
+    }
+
+    void SerializeVisitor::preVisit ( ExprSwizzle * expr ) {
+        serializeBase(expr);
+        ser << expr->value << expr->mask << expr->fields << expr->fieldFlags;
+    }
+
+    void SerializeVisitor::preVisit ( ExprSafeField * expr ) {
+        serializeField(expr);
+        ser << expr->skipQQ;
+    }
+
+    void SerializeVisitor::preVisit ( ExprLooksLikeCall * expr ) {
+        // ExprCallFunc::dispatch and ExprOp::dispatch route here (no dedicated
+        // preVisit overload). They carry func/stackTop/callFlags (and op for
+        // ExprOp) that serializeLooksLikeCall alone would drop, so detect them
+        // via __rtti and use the proper helper.
+        if ( expr->rtti_isCallFunc() ) {
+            if ( expr->__rtti && strcmp(expr->__rtti, "ExprOp") == 0 ) {
+                serializeOp(static_cast<ExprOp*>(expr));
+                return;
             }
-            ser << mangledName;
-            if ( annotation != nullptr && annotation->getFieldOffset(name) == static_cast<uint32_t>(-1) ) {
-                LOG(LogLevel::warning) << "das: serialize: Field '" << name << "' not found in '" << annotation->name << "'";
-            }
-        } else {
-            if ( annotation != nullptr && annotation->getFieldOffset(name) == static_cast<uint32_t>(-1) ) {
-                SERIALIZER_VERIFYF("Field '%s' not found in '%s'", name.c_str(), annotation->name.c_str());
-            }
-            bool has_field = false; ser << has_field;
-            if ( !has_field ) return;
-            Module * module = nullptr; ser << module;
-            string mangledName; ser << mangledName;
-            ser.fieldRefs.emplace_back(&fieldRef, module, das::move(mangledName), name);
+            serializeCallFunc(static_cast<ExprCallFunc*>(expr));
+            return;
         }
+        serializeLooksLikeCall(expr);
     }
 
-    void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {
-        ExprField::serialize(ser);
-        ser << skipQQ;
+    void SerializeVisitor::preVisit ( ExprCallMacro * expr ) {
+        serializeLooksLikeCall(expr);
+        ser << expr->macro;
+        ser.serializePointer(expr->inFunction);
     }
 
-    void ExprSwizzle::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << value << mask << fields << fieldFlags;
+    void SerializeVisitor::preVisit ( ExprOp1 * expr ) {
+        serializeOp(expr);
+        ser << expr->subexpr;
     }
 
-    void ExprSafeField::serialize ( AstSerializer & ser ) {
-        ExprField::serialize(ser);
-        ser << skipQQ;
+    void SerializeVisitor::preVisit ( ExprOp2 * expr ) {
+        serializeOp2(expr);
     }
 
-    void ExprLooksLikeCall::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << name                   << arguments;
-        ser << argumentsFailedToInfer << aliasSubstitution << atEnclosure;
+    void SerializeVisitor::preVisit ( ExprCopy * expr ) {
+        serializeOp2(expr);
+        ser << expr->copyFlags;
     }
 
-    void ExprCallMacro::serialize ( AstSerializer & ser ) {
-        ExprLooksLikeCall::serialize(ser);
-        ser << macro;
-        ser.serializePointer(inFunction);
+    void SerializeVisitor::preVisit ( ExprMove * expr ) {
+        serializeOp2(expr);
+        ser << expr->moveFlags;
     }
 
-    void ExprCallFunc::serialize ( AstSerializer & ser ) {
-        ExprLooksLikeCall::serialize(ser);
-        ser.serializePointer(func);
-        ser << stackTop;
+    void SerializeVisitor::preVisit ( ExprClone * expr ) {
+        serializeOp2(expr);
     }
 
-    void ExprOp::serialize ( AstSerializer & ser ) {
-        ExprCallFunc::serialize(ser);
-        ser << op;
+    void SerializeVisitor::preVisit ( ExprOp3 * expr ) {
+        serializeOp(expr);
+        ser << expr->subexpr << expr->left << expr->right;
     }
 
-    void ExprOp1::serialize ( AstSerializer & ser ) {
-        ExprOp::serialize(ser);
-        ser << subexpr;
+    void SerializeVisitor::preVisit ( ExprTryCatch * expr ) {
+        serializeBase(expr);
+        ser << expr->try_block << expr->catch_block;
     }
 
-    void ExprOp2::serialize ( AstSerializer & ser ) {
-        ExprOp::serialize(ser);
-        ser << left;
-        ser << right;
+    void SerializeVisitor::preVisit ( ExprReturn * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr    << expr->returnFlags << expr->stackTop << expr->refStackTop
+            << expr->returnFunc << expr->block       << expr->returnType;
     }
 
-    void ExprCopy::serialize ( AstSerializer & ser ) {
-        ExprOp2::serialize(ser);
-        ser << copyFlags;
+    void SerializeVisitor::preVisit ( ExprConst * expr ) {
+        serializeConst(expr);
     }
 
-    void ExprMove::serialize ( AstSerializer & ser ) {
-        ExprOp2::serialize(ser);
-        ser << moveFlags;
+    void SerializeVisitor::preVisit ( ExprConstPtr * expr ) {
+        serializeConst(expr);
+        ser << expr->isSmartPtr << expr->ptrType;
     }
 
-    void ExprClone::serialize ( AstSerializer & ser ) {
-        ExprOp2::serialize(ser);
+    void SerializeVisitor::preVisit ( ExprConstEnumeration * expr ) {
+        serializeConst(expr);
+        ser << expr->enumType << expr->text;
     }
 
-    void ExprOp3::serialize ( AstSerializer & ser ) {
-        ExprOp::serialize(ser);
-        ser << subexpr << left << right;
+    void SerializeVisitor::preVisit ( ExprConstBitfield * expr ) {
+        serializeConst(expr);
+        ser << expr->bitfieldType;
     }
 
-    void ExprTryCatch::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << try_block << catch_block;
+    void SerializeVisitor::preVisit ( ExprConstString * expr ) {
+        serializeConst(expr);
+        ser << expr->text;
     }
 
-    void ExprReturn::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << subexpr    << returnFlags << stackTop << refStackTop
-            << returnFunc << block       << returnType;
+    void SerializeVisitor::preVisit ( ExprStringBuilder * expr ) {
+        serializeBase(expr);
+        ser << expr->elements << expr->stringBuilderFlags;
     }
 
-    void ExprConst::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << baseType << value << foldedNonConst;
+    void SerializeVisitor::preVisit ( ExprLet * expr ) {
+        serializeBase(expr);
+        ser << expr->variables << expr->visibility << expr->atInit << expr->letFlags;
     }
 
-    void ExprConstPtr::serialize( AstSerializer & ser ) {
-        ExprConstT<void *,ExprConstPtr>::serialize(ser);
-        ser << isSmartPtr << ptrType;
+    void SerializeVisitor::preVisit ( ExprFor * expr ) {
+        serializeBase(expr);
+        ser << expr->iterators << expr->iteratorsAka << expr->iteratorsAt << expr->iteratorsTupleExpansion << expr->iteratorsTags
+            << expr->iteratorVariables << expr->sources << expr->body << expr->visibility
+            << expr->allowIteratorOptimization << expr->canShadow;
     }
 
-    void ExprConstEnumeration::serialize( AstSerializer & ser ) {
-        ExprConst::serialize(ser);
-        ser << enumType << text;
+    void SerializeVisitor::preVisit ( ExprUnsafe * expr ) {
+        serializeBase(expr);
+        ser << expr->body;
     }
 
-    void ExprConstBitfield::serialize( AstSerializer & ser ) {
-        ExprConst::serialize(ser);
-        ser << bitfieldType;
+    void SerializeVisitor::preVisit ( ExprWhile * expr ) {
+        serializeBase(expr);
+        ser << expr->cond << expr->body;
     }
 
-    void ExprConstString::serialize(AstSerializer& ser) {
-        ExprConst::serialize(ser);
-        ser << text;
+    void SerializeVisitor::preVisit ( ExprWith * expr ) {
+        serializeBase(expr);
+        ser << expr->with << expr->body;
     }
 
-    void ExprStringBuilder::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << elements << stringBuilderFlags;
+    void SerializeVisitor::preVisit ( ExprAssume * expr ) {
+        serializeBase(expr);
+        ser << expr->alias << expr->subexpr << expr->assumeType;
     }
 
-    void ExprLet::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << variables << visibility << atInit << letFlags;
+    void SerializeVisitor::preVisit ( ExprMakeBlock * expr ) {
+        serializeBase(expr);
+        ser << expr->capture << expr->captureAt << expr->block << expr->stackTop << expr->mmFlags;
     }
 
-    void ExprFor::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << iterators << iteratorsAka << iteratorsAt << iteratorsTupleExpansion << iteratorsTags
-            << iteratorVariables << sources << body << visibility
-            << allowIteratorOptimization << canShadow;
+    void SerializeVisitor::preVisit ( ExprMakeGenerator * expr ) {
+        serializeLooksLikeCall(expr);
+        ser << expr->iterType << expr->capture << expr->captureAt;
     }
 
-    void ExprUnsafe::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << body;
+    void SerializeVisitor::preVisit ( ExprYield * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr << expr->returnFlags;
     }
 
-    void ExprWhile::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << cond << body;
+    void SerializeVisitor::preVisit ( ExprInvoke * expr ) {
+        serializeLooksLikeCall(expr);
+        ser << expr->stackTop << expr->doesNotNeedSp << expr->isInvokeMethod << expr->cmresAlias;
     }
 
-    void ExprWith::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << with << body;
+    void SerializeVisitor::preVisit ( ExprAssert * expr ) {
+        serializeLooksLikeCall(expr);
+        ser << expr->isVerify;
     }
 
-    void ExprAssume::serialize(AstSerializer& ser) {
-        Expression::serialize(ser);
-        ser << alias << subexpr << assumeType;
+    void SerializeVisitor::preVisit ( ExprQuote * expr ) {
+        serializeLooksLikeCall(expr);
     }
 
-    void ExprMakeBlock::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << capture << captureAt << block << stackTop << mmFlags;
+    void SerializeVisitor::preVisit ( ExprTypeInfo * expr ) {
+        serializeBase(expr);
+        ser << expr->trait << expr->subexpr << expr->typeexpr << expr->subtrait << expr->extratrait << expr->macro;
     }
 
-    void ExprMakeGenerator::serialize(AstSerializer & ser) {
-        ExprLooksLikeCall::serialize(ser);
-        ser << iterType << capture << captureAt;
+    void SerializeVisitor::preVisit ( ExprIs * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr << expr->typeexpr;
     }
 
-    void ExprYield::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << subexpr << returnFlags;
+    void SerializeVisitor::preVisit ( ExprAscend * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr << expr->ascType << expr->stackTop << expr->ascendFlags;
     }
 
-    void ExprInvoke::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprInvoke>::serialize(ser);
-        ser << stackTop << doesNotNeedSp << isInvokeMethod << cmresAlias;
+    void SerializeVisitor::preVisit ( ExprCast * expr ) {
+        serializeBase(expr);
+        ser << expr->subexpr << expr->castType << expr->castFlags;
     }
 
-    void ExprAssert::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprAssert>::serialize(ser);
-        ser << isVerify;
+    void SerializeVisitor::preVisit ( ExprNew * expr ) {
+        serializeCallFunc(expr);
+        ser << expr->typeexpr << expr->initializer;
     }
 
-    void ExprQuote::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprQuote>::serialize(ser);
+    void SerializeVisitor::preVisit ( ExprCall * expr ) {
+        serializeCallFunc(expr);
+        ser << expr->doesNotNeedSp << expr->cmresAlias;
     }
 
-    template <typename It, typename SimNodeT, bool first>
-    void ExprTableKeysOrValues<It,SimNodeT,first>::serialize(AstSerializer & ser) {
-        ExprLooksLikeCall::serialize(ser);
+    void SerializeVisitor::preVisit ( ExprIfThenElse * expr ) {
+        serializeBase(expr);
+        ser << expr->cond << expr->if_true << expr->if_false << expr->ifFlags;
     }
 
-    template <typename It, typename SimNodeT>
-    void ExprArrayCallWithSizeOrIndex<It,SimNodeT>::serialize(AstSerializer & ser) {
-        ExprLooksLikeCall::serialize(ser);
+    void SerializeVisitor::preVisit ( ExprNamedCall * expr ) {
+        serializeBase(expr);
+        ser << expr->name << expr->nonNamedArguments << expr->arguments << expr->argumentsFailedToInfer;
     }
 
-    void ExprTypeInfo::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << trait << subexpr << typeexpr << subtrait << extratrait << macro;
+    void SerializeVisitor::preVisit ( ExprMakeStruct * expr ) {
+        serializeMakeLocal(expr);
+        ser << expr->structs << expr->block << expr->makeStructFlags;
+        ser.serializePointer(expr->constructor);
     }
 
-    void ExprIs::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << subexpr << typeexpr;
+    void SerializeVisitor::preVisit ( ExprMakeVariant * expr ) {
+        serializeMakeLocal(expr);
+        ser << expr->variants;
     }
 
-    void ExprAscend::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << subexpr << ascType << stackTop << ascendFlags;
+    void SerializeVisitor::preVisit ( ExprMakeArray * expr ) {
+        serializeMakeArray(expr);
     }
 
-    void ExprCast::serialize(AstSerializer & ser) {
-        Expression::serialize(ser);
-        ser << subexpr << castType << castFlags;
+    void SerializeVisitor::preVisit ( ExprMakeTuple * expr ) {
+        serializeMakeArray(expr);
+        ser << expr->isKeyValue << expr->recordNames;
     }
 
-    void ExprNew::serialize(AstSerializer & ser) {
-        ExprCallFunc::serialize(ser);
-        ser << typeexpr << initializer;
+    void SerializeVisitor::preVisit ( ExprArrayComprehension * expr ) {
+        serializeBase(expr);
+        ser << expr->exprFor << expr->exprWhere << expr->subexpr << expr->generatorSyntax << expr->tableSyntax;
     }
 
-    void ExprCall::serialize(AstSerializer & ser) {
-        ExprCallFunc::serialize(ser);
-        ser << doesNotNeedSp << cmresAlias;
+    void SerializeVisitor::preVisit ( ExprTypeDecl * expr ) {
+        serializeBase(expr);
+        ser << expr->typeexpr;
     }
 
-    void ExprIfThenElse::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << cond << if_true << if_false << ifFlags;
+    AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
+        dtag(HASH_TAG("ExpressionPtr"));
+        bool is_null = expr == nullptr;
+        *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) expr = nullptr;
+            return *this;
+        }
+        SerializeVisitor sv(*this);
+        if ( writing ) {
+            uint32_t rtti = hash_tag(expr->__rtti);
+            DAS_ASSERT(rtti);
+            *this << rtti;
+            expr->dispatch(sv);
+        } else {
+            uint32_t rtti = 0; *this << rtti;
+            auto itA = rttiHash2Annotation.find(rtti);
+            SERIALIZER_VERIFYF(itA != rttiHash2Annotation.end(), "annotation '%u' is not found", rtti);
+            auto annotation = itA->second;
+            expr = (Expression *) static_cast<TypeAnnotation*>(annotation)->factory();
+            expr->dispatch(sv);
+        }
+        dtag(HASH_TAG("/ExpressionPtr"));
+        return *this;
     }
 
     void MakeFieldDecl::serialize ( AstSerializer & ser ) {
@@ -1719,56 +1900,6 @@ namespace das {
 
     void MakeStruct::serialize( AstSerializer & ser ) {
         ser << static_cast <vector<MakeFieldDeclPtr> &> ( *this );
-    }
-
-    void ExprNamedCall::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << name << nonNamedArguments << arguments << argumentsFailedToInfer;
-    }
-
-    void ExprMakeLocal::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << makeType << stackTop << extraOffset << makeFlags;
-    }
-
-    void ExprMakeStruct::serialize ( AstSerializer & ser ) {
-        ExprMakeLocal::serialize(ser);
-        ser << structs << block << makeStructFlags;
-        ser.serializePointer(constructor);
-    }
-
-    void ExprMakeVariant::serialize ( AstSerializer & ser ) {
-        ExprMakeLocal::serialize(ser);
-        ser << variants;
-    }
-
-    void ExprMakeArray::serialize ( AstSerializer & ser ) {
-        ExprMakeLocal::serialize(ser);
-        ser << recordType << values << gen2;
-    }
-
-    void ExprMakeTuple::serialize ( AstSerializer & ser ) {
-        ExprMakeArray::serialize(ser);
-        ser << isKeyValue << recordNames;
-    }
-
-    void ExprArrayComprehension::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << exprFor << exprWhere << subexpr << generatorSyntax << tableSyntax;
-    }
-
-    void ExprTypeDecl::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-        ser << typeexpr;
-    }
-
-    void Expression::serialize ( AstSerializer & ser ) {
-        ser << at
-            << type
-            << genFlags
-            << flags
-            << printFlags;
-        ser.dtag(HASH_TAG("ptr_ref_count"));
     }
 
     void FileInfo::serialize ( AstSerializer & ser ) {
