@@ -1,0 +1,1 @@
+Labels the table's current heap block with ``name`` so it appears under that label in heap reports instead of the generic "table". The tag survives rehash / resize. Requires ``options track_allocations``; a no-op otherwise. Intended for narrowing down which of several module-level tables is leaking.

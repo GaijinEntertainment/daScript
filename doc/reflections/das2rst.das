@@ -154,7 +154,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%),
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%),
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%),
-        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report)%%),
+        group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report|tag_array|tag_table)%%),
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%),
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%),
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%),
