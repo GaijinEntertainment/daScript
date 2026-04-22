@@ -32,6 +32,7 @@ def print_usage() {
     print("  update-index                       Refresh all index metadata from repos\n")
     print("  build                              Build C/C++ packages\n")
     print("  check                              Verify installed packages\n")
+    print("  cleanup                            Remove modules/ and daspkg.lock for a fresh install\n")
     print("  doctor                             Check environment (git, cmake, gh)\n")
     print("\nOptions:\n")
     print("  --root <path>   Project root (default: current directory)\n")
@@ -46,7 +47,7 @@ def print_usage() {
 
 [export]
 def main() {
-    var args := get_command_line_arguments()
+    let args = get_command_line_arguments()
     let parsed = parse_args(args)
 
     if (empty(parsed.command)) {
@@ -91,6 +92,8 @@ def main() {
         rc = cmd_build(root, is_global)
     } elif (command == "check") {
         rc = cmd_check(root, parsed.json, is_global)
+    } elif (command == "cleanup") {
+        rc = cmd_cleanup(root, parsed.force, is_global)
     } elif (command == "doctor") {
         rc = cmd_doctor()
     } elif (command == "search") {

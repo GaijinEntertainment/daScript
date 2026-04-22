@@ -125,16 +125,28 @@ def parse_index_json(text : string; var index : table<string; IndexEntry>) : boo
     return true
 }
 
+var private g_cached_index : table<string; IndexEntry>
+var private g_cached_index_root : string
+
+def invalidate_index_cache() {
+    g_cached_index_root = ""
+    clear(g_cached_index)
+}
+
 def resolve_from_index(root, name : string) : string {
-    var index : table<string; IndexEntry>
-    if (!fetch_index(root, index)) {
-        return ""
+    if (g_cached_index_root != root) {
+        clear(g_cached_index)
+        if (!fetch_index(root, g_cached_index)) {
+            g_cached_index_root = ""
+            return ""
+        }
+        g_cached_index_root := root
     }
-    if (!(index |> key_exists(name))) {
+    if (!(g_cached_index |> key_exists(name))) {
         return ""
     }
     unsafe {
-        return index[name].url
+        return g_cached_index[name].url
     }
 }
 

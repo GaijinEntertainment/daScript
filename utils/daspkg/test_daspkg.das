@@ -117,6 +117,22 @@ def test_parse_args(t : T?) {
         let parsed = parse_args(["daslang.exe", "main.das", "--"])
         t |> success(empty(parsed.command))
     }
+    t |> run("cleanup command") @(t : T?) {
+        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup"])
+        t |> equal(parsed.command, "cleanup")
+        t |> success(!parsed.force)
+    }
+    t |> run("cleanup with force") @(t : T?) {
+        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup", "--force"])
+        t |> equal(parsed.command, "cleanup")
+        t |> success(parsed.force)
+    }
+    t |> run("cleanup with global and force") @(t : T?) {
+        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup", "--global", "--force"])
+        t |> equal(parsed.command, "cleanup")
+        t |> success(parsed.force)
+        t |> success(parsed.global_flag)
+    }
     t |> run("default root is dot") @(t : T?) {
         let parsed = parse_args(["daslang.exe", "main.das", "--", "list"])
         t |> equal(parsed.root, ".")
@@ -202,6 +218,112 @@ def test_cmd_remove(t : T?) {
         t |> success(read_lock_file(tmp_root, lf2))
         t |> success(!has_package(lf2, "testpkg"))
         // cleanup
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_cleanup(t : T?) {
+    t |> run("removes modules, lockfile, and gitignore entries") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cleanup"
+        force_rmdir(tmp_root)
+        mkdir(tmp_root)
+        // fake .git so gitignore_remove runs
+        mkdir("{tmp_root}/.git")
+        fwrite("{tmp_root}/.das_package", "options gen2\n")
+        mkdir("{tmp_root}/modules")
+        mkdir("{tmp_root}/modules/foo")
+        fwrite("{tmp_root}/modules/foo/dummy.txt", "x")
+        var lf : LockFile
+        set_package(lf, PackageEntry(name = "foo", source = "github.com/u/foo", root = true))
+        write_lock_file(tmp_root, lf)
+        fwrite("{tmp_root}/.gitignore", "modules/foo\nother-entry\n")
+        let rc = cmd_cleanup(tmp_root, true)
+        t |> equal(rc, 0)
+        t |> success(!fexist("{tmp_root}/modules"))
+        t |> success(!fexist("{tmp_root}/daspkg.lock"))
+        var content = ""
+        fopen("{tmp_root}/.gitignore", "rb") $(f) {
+            if (f != null) {
+                content = fread(f)
+            }
+        }
+        t |> equal(content, "other-entry\n")
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_cleanup_refuses_without_marker(t : T?) {
+    t |> run("refuses in dir without .das_package or lockfile") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cleanup_bare"
+        force_rmdir(tmp_root)
+        mkdir(tmp_root)
+        mkdir("{tmp_root}/modules")
+        mkdir("{tmp_root}/modules/foo")
+        let rc = cmd_cleanup(tmp_root, true)
+        t |> equal(rc, 1)
+        // modules untouched
+        t |> success(fexist("{tmp_root}/modules/foo"))
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_cleanup_no_lockfile(t : T?) {
+    t |> run("no-op on project with .das_package but no lockfile/modules") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cleanup_empty"
+        force_rmdir(tmp_root)
+        mkdir(tmp_root)
+        fwrite("{tmp_root}/.das_package", "options gen2\n")
+        let rc = cmd_cleanup(tmp_root, true)
+        t |> equal(rc, 0)
+        t |> success(fexist("{tmp_root}/.das_package"))
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_cleanup_preserves_user_files(t : T?) {
+    t |> run("leaves non-daspkg files alongside modules") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cleanup_preserve"
+        force_rmdir(tmp_root)
+        mkdir(tmp_root)
+        fwrite("{tmp_root}/.das_package", "options gen2\n")
+        fwrite("{tmp_root}/main.das", "// user file\n")
+        fwrite("{tmp_root}/README.md", "hello\n")
+        mkdir("{tmp_root}/modules")
+        mkdir("{tmp_root}/modules/foo")
+        var lf : LockFile
+        set_package(lf, PackageEntry(name = "foo", source = "github.com/u/foo", root = true))
+        write_lock_file(tmp_root, lf)
+        let rc = cmd_cleanup(tmp_root, true)
+        t |> equal(rc, 0)
+        t |> success(fexist("{tmp_root}/.das_package"))
+        t |> success(fexist("{tmp_root}/main.das"))
+        t |> success(fexist("{tmp_root}/README.md"))
+        t |> success(!fexist("{tmp_root}/modules"))
+        t |> success(!fexist("{tmp_root}/daspkg.lock"))
+        force_rmdir(tmp_root)
+    }
+}
+
+[test]
+def test_cmd_cleanup_without_force_dry_runs(t : T?) {
+    t |> run("without --force, modules and lockfile are preserved") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_cleanup_dryrun"
+        force_rmdir(tmp_root)
+        mkdir(tmp_root)
+        fwrite("{tmp_root}/.das_package", "options gen2\n")
+        mkdir("{tmp_root}/modules")
+        mkdir("{tmp_root}/modules/foo")
+        var lf : LockFile
+        set_package(lf, PackageEntry(name = "foo", source = "github.com/u/foo", root = true))
+        write_lock_file(tmp_root, lf)
+        let rc = cmd_cleanup(tmp_root, false)
+        t |> equal(rc, 0)
+        t |> success(fexist("{tmp_root}/modules/foo"))
+        t |> success(fexist("{tmp_root}/daspkg.lock"))
         force_rmdir(tmp_root)
     }
 }
