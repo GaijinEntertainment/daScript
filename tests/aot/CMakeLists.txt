@@ -244,6 +244,9 @@ SET(AOT_MATH_MODULE_FILES
 # AOT for module_tests test files
 FILE(GLOB AOT_MODULE_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/module_tests/*.das")
 
+# AOT for option test files (also houses Result<T, E> tests)
+FILE(GLOB AOT_OPTION_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/option/*.das")
+
 # AOT for regex test files
 FILE(GLOB AOT_REGEX_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/regex/*.das")
 
@@ -480,6 +483,10 @@ add_custom_target(test_aot_module_tests)
 SET(MODULE_TESTS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MODULE_TESTS_FILES}" MODULE_TESTS_AOT_GENERATED_SRC test_aot_module_tests daslang)
 
+add_custom_target(test_aot_option)
+SET(OPTION_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_OPTION_FILES}" OPTION_AOT_GENERATED_SRC test_aot_option daslang)
+
 add_custom_target(test_aot_regex)
 SET(REGEX_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_REGEX_FILES}" REGEX_AOT_GENERATED_SRC test_aot_regex daslang)
@@ -583,6 +590,7 @@ SOURCE_GROUP_FILES("aot generated" MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MODULE_TESTS_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" OPTION_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" REGEX_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" SAFE_ADDR_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DELEGATE_AOT_GENERATED_SRC)
@@ -644,6 +652,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${MATH_AOT_GENERATED_SRC}
     ${MATH_MODULES_AOT_GENERATED_SRC}
     ${MODULE_TESTS_AOT_GENERATED_SRC}
+    ${OPTION_AOT_GENERATED_SRC}
     ${REGEX_AOT_GENERATED_SRC}
     ${SAFE_ADDR_AOT_GENERATED_SRC}
     ${DELEGATE_AOT_GENERATED_SRC}
@@ -685,6 +694,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_linq test_aot_linq_modules
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
+    test_aot_option
     test_aot_regex
     test_aot_delegate test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
     test_aot_template test_aot_type_traits test_aot_uri
