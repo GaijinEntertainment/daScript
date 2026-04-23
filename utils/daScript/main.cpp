@@ -713,6 +713,9 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     // and done
     if ( pauseAfterDone ) getchar();
+    // Handle-leak dump runs inside Module::Shutdown, between module
+    // destruction (drains job threads) and DLL unload (invalidates the
+    // dumpHandleLeaks<T> function pointers registered from shared modules).
     Module::Shutdown();
     JobStatus::DumpJobQueLeaks();
     // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),

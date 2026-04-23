@@ -1156,7 +1156,7 @@ namespace das
         static Module * requireEx ( const string & name, bool allowPromoted );
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
-        static void Shutdown();
+        static void Shutdown( bool dumpHandleLeaks = true );
         static void Reset(bool debAg);
         static void ClearSharedModules();
         static void CollectSharedModules();

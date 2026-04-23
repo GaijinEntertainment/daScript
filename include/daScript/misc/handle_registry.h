@@ -23,15 +23,25 @@ namespace das {
 
     using HandleLeakDumpFn = void (*)();
 
+    // Definitions in src/misc/handle_registry.cpp — single instance across
+    // daslang.exe + all dasModule*.shared_module DLLs so registrations from any
+    // module are visible at dump time.
+    DAS_API vector<HandleLeakDumpFn> & handleRegistry_dumpHooks_impl ();
+    DAS_API mutex & handleRegistry_dumpMutex_impl ();
+    DAS_API void handleRegistry_registerDump_impl ( HandleLeakDumpFn fn );
+    DAS_API void handleRegistry_dumpAll_impl ();
+
     inline vector<HandleLeakDumpFn> & handleRegistry_dumpHooks () {
-        static vector<HandleLeakDumpFn> hooks;
-        return hooks;
+        return handleRegistry_dumpHooks_impl();
+    }
+    inline mutex & handleRegistry_dumpMutex () {
+        return handleRegistry_dumpMutex_impl();
     }
     inline void handleRegistry_registerDump ( HandleLeakDumpFn fn ) {
-        handleRegistry_dumpHooks().push_back(fn);
+        handleRegistry_registerDump_impl(fn);
     }
     inline void handleRegistry_dumpAll () {
-        for ( auto fn : handleRegistry_dumpHooks() ) fn();
+        handleRegistry_dumpAll_impl();
     }
 
     template <typename T>

@@ -756,12 +756,14 @@ include/daScript/misc/debug_break.h
 include/daScript/misc/instance_debugger.h
 include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
+include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
 src/misc/gc_node.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
 src/misc/memory_model.cpp
 src/misc/job_que.cpp
+src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
@@ -1275,6 +1277,7 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/hash.h
     include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
+    include/daScript/misc/handle_registry.h
     include/daScript/misc/macro.h
     include/daScript/misc/memory_model.h
     include/daScript/misc/network.h
