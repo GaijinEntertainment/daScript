@@ -545,11 +545,7 @@ class PrintVisitor : AstVisitor {
     }
     def override preVisitExprIfThenElseElseBlock(expr : ExprIfThenElse?; elseBlock : ExpressionPtr) {
         //! Prints the 'else' keyword before the else block.
-        if (elseBlock.__rtti == "ExprIfThenElse") {
-            write(*writer, " else ");
-        } else {
-            write(*writer, " else ");
-        }
+        write(*writer, " else ");
     }
 // for
     def override preVisitExprFor(expr : ExprFor?) {

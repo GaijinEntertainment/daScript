@@ -269,6 +269,9 @@ class LintVisitor : AstVisitor {
         if (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects)) {
             return false
         }
+        // daslang AST nodes are not shared — each Expression has exactly one parent, so
+        // pointer-equality between sibling operands (left vs right) is effectively never
+        // true. Structural compare via describe() is the only correct option here.
         return describe(a) == describe(b)
     }
 

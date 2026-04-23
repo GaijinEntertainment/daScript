@@ -1278,8 +1278,6 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
             } elif (tstr == "bool") {
                 let pv = unsafe(reinterpret<bool?> p8)
                 writer |> write(" {name}={*pv}")
-            } elif (tstr == "$::dasvector`ptr`Expression") {
-                pass
             } else {
                 pass
             }

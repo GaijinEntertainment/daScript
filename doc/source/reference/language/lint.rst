@@ -177,6 +177,101 @@ skips generic instantiations and compiler-generated functions.
     // Good — strips const (not flagged)
     var y = unsafe(reinterpret<int?>(const_ptr))
 
+LINT006 — division by zero (constant zero divisor)
+====================================================
+
+``x / 0`` and ``x % 0`` produce a runtime panic (integer) or ``inf`` / ``nan``
+(float). When the right-hand side is a literal zero, this is almost always a
+typo. Also covers the compound forms ``/=`` and ``%=``. Recognizes literal zero
+across ``int``, ``uint``, ``int64``, ``uint64``, ``float``, and ``double``.
+
+.. code-block:: das
+
+    // Bad
+    let y = x / 0                           // LINT006
+    x %= 0                                  // LINT006
+
+    // Good
+    let y = x / divisor
+
+LINT007 — identical left and right operands
+=============================================
+
+Both sides of a binary operator are the same expression. The result is trivial
+(``x == x`` is always true, ``x - x`` is always 0, ``x && x`` is just ``x``)
+and the code is almost always a copy-paste typo. Triggers on: ``==``, ``!=``,
+``<``, ``>``, ``<=``, ``>=``, ``-``, ``/``, ``%``, ``&&``, ``||``, ``&``,
+``|``, ``^``, ``-=``, ``/=``, ``%=``.
+
+.. code-block:: das
+
+    // Bad — author meant `size == capacity` or similar
+    if (size == size) { ... }               // LINT007
+
+    // Good
+    if (size == capacity) { ... }
+
+Operators like ``+`` and ``*`` are deliberately excluded: ``x + x`` is the
+common way to double a value and ``x * x`` is squaring, both of which are
+intentional.
+
+**NaN idiom.** ``x != x`` on ``float`` or ``double`` is the canonical IEEE 754
+NaN check — daslang has no dedicated ``is_nan`` helper for scalar floats.
+Suppress LINT007 on the one line that needs it:
+
+.. code-block:: das
+
+    def is_nan(x : float) : bool {
+        return x != x // nolint:LINT007 — canonical IEEE 754 NaN check
+    }
+
+**Note on constant folding.** The paranoid lint runs after optimization.
+``let x = 1; x == x`` is folded to ``true`` before lint sees it and will not
+fire. LINT007 catches cases where operands are runtime values (function
+parameters, field reads, function calls).
+
+Structural equality uses the expression pretty-printer: ``describe(left) ==
+describe(right)``. This catches both ``x`` vs ``x`` and ``a.b.c`` vs ``a.b.c``,
+at the cost of serializing both subtrees. Pointer-identity is not used as a
+fast path because daslang AST nodes are not shared — each ``Expression`` has
+exactly one parent, so sibling operands are always distinct nodes.
+
+LINT008 — both ternary branches equivalent
+============================================
+
+``cond ? x : x`` ignores ``cond`` and always produces ``x``. Copy-paste bug.
+
+.. code-block:: das
+
+    // Bad
+    let y = cond ? value : value            // LINT008
+
+    // Good
+    let y = cond ? then_value : else_value
+
+LINT009 — ``then`` branch equivalent to ``else`` branch
+=========================================================
+
+``if (c) { A } else { A }`` runs ``A`` regardless of ``c``. Usually the author
+copy-pasted one branch and forgot to edit the other. Caught even when ``A``
+has side effects — the structural pattern is suspicious regardless of purity.
+
+.. code-block:: das
+
+    // Bad
+    if (flag) {
+        x = 1                               // LINT009
+    } else {
+        x = 1
+    }
+
+    // Good
+    if (flag) {
+        x = 1
+    } else {
+        x = 2
+    }
+
 .. _perf_lint:
 
 -----------------
