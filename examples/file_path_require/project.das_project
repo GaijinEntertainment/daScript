@@ -1,0 +1,23 @@
+// project.das_project — example showing the chicken-and-egg use case:
+//
+// A .das_project file is itself a daslang script. Before its own module_get
+// callback is wired up, it can use file-path requires to pull in shared
+// helpers via the inner default FsFileAccess. Without file-path requires,
+// the project file would have to inline everything or rely on globally
+// installed module names.
+//
+// Try compiling main.das against this project:
+//   bin/Release/daslang.exe -das_project examples/file_path_require/project.das_project examples/file_path_require/main.das
+
+options gen2
+typedef module_info = tuple<string; string; string> const
+
+require ./shared_helpers.das
+
+[export]
+def module_get(req, from : string) : module_info {
+    // delegate to the default behavior — this project just demonstrates
+    // bootstrap. shared::shared_greeting() is callable here too.
+    let _ = shared_helpers::shared_greeting()
+    return ("", "", "")
+}

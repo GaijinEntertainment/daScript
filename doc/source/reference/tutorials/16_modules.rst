@@ -75,6 +75,17 @@ In the main file, import and use it::
 
 If the module file is in the same directory, ``require`` finds it by name.
 
+For ad-hoc local files you can also write a path directly::
+
+  require ./tutorial_helpers.das          // sibling file
+  require ../shared/utility.das           // parent-relative
+  require %/daslib/random.das as rng      // % expands to get_das_root()
+
+A require is treated as a file path when it both starts with ``./``, ``../``,
+or ``%/`` **and** ends in ``.das`` (or ``.das_project``). This works in default
+mode without a ``.das_project`` and is the simplest way to split a small
+project across files.
+
 Qualified calls
 ===============
 

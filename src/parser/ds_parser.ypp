@@ -791,6 +791,18 @@ require_module_name
         *$req = "%" + *$req;
         $$ = $req;
     }
+    |   '.' '/' require_module_name[req] {
+        *$req = "./" + *$req;
+        $$ = $req;
+    }
+    |   DOTDOT '/' require_module_name[req] {
+        *$req = "../" + *$req;
+        $$ = $req;
+    }
+    |   '%' '/' require_module_name[req] {
+        *$req = "%/" + *$req;
+        $$ = $req;
+    }
     |   require_module_name[req] '.' keyword_or_name[name] {
         *$req += ".";
         *$req += *$name;

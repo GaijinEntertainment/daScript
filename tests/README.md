@@ -656,8 +656,9 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 
 | File | Description | Expects errors |
 |---|---|---|
-| test_modules.das | Module system integration — compiles and runs 7 module scenarios via compile_file + make_file_access | |
+| test_modules.das | Module system integration — compiles and runs 9 module scenarios via compile_file + make_file_access (incl. file-path requires `./`, `../`, `%/`) | |
 | _modules/ | *(helper directory)* Module source files for test_modules.das (dastest skips `_`-prefixed dirs) | |
+| _modules/filepath/ | *(helper)* Fixture for file-path require tests — main.das exercises `./`, `../`, `%/` plus dedup; main_missing.das exercises the failure path | |
 
 ## math/
 

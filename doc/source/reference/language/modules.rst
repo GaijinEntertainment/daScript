@@ -25,6 +25,43 @@ The ``public`` modifier indicates that the included module is visible to everyth
 Module names may contain ``/`` and ``.`` symbols.
 The project is responsible for resolving module names into file names (see :ref:`Project <modules_project>`).
 
+-------------------
+File-path requires
+-------------------
+
+A require is treated as a literal file path when **both** conditions hold: it
+starts with one of the three recognized prefixes (``./``, ``../``, ``%/``) and
+ends in ``.das`` or ``.das_project``. Anything else continues to resolve as a
+module name through the normal path. ``%`` expands to ``get_das_root()``.
+
+.. code-block:: das
+
+    require ./helpers.das                     // relative to the current file
+    require ../shared/utility.das             // relative with .. segments
+    require %/daslib/random.das as rng        // % expands to get_das_root()
+
+Path resolution happens entirely on the filesystem — no ``module_get`` callback
+is consulted.
+
+The resolved file's own ``module X`` declaration **must match** the file stem;
+a mismatch is a hard compile error (``WrongModuleName``). When the file has no
+``module`` declaration, the stem is used as the module name. The same file
+required through several paths therefore dedupes to a single ``Module`` instance
+— ``require ./foo.das`` and ``require %/path/to/foo.das`` both produce the same
+module ``foo``.
+
+File-path requires are available:
+
+* In default mode (no ``.das_project``).
+* During ``.das_project`` bootstrap — the project file itself can use
+  ``require ./helpers.das`` to pull in shared code before its own
+  ``module_get`` callback is wired up. This solves a chicken-and-egg
+  problem when splitting project logic across files.
+
+In project mode, regular ``.das`` source files have their requires routed
+through ``module_get``; projects that want the same file-path convenience
+must implement it inside their own resolver.
+
 --------------
 Native modules
 --------------
