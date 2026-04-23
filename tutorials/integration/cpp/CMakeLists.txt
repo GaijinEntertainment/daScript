@@ -198,6 +198,13 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_22
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/22_namespace_integration.cpp
 )
 
+#################################
+# Tutorial 23 — Handle Registry (binding std::shared_ptr)
+#################################
+DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_23
+    ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/23_handle_registry.cpp
+)
+
 # Install C++ integration tutorial source files
 file(GLOB CPP_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/tutorials/integration/cpp/*.cpp
