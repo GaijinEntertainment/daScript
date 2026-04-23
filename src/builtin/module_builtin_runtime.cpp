@@ -983,10 +983,12 @@ namespace das
         // up in heap reports under that name. Requires `options track_allocations`
         // (the heap's mark_comment is a no-op otherwise). The tag is preserved
         // across realloc by TableHash::reserveInternal, which reads the previous
-        // tag before overwriting with the generic "table" default. Intern the tag
-        // into the context's string heap so the pointer stored in bigStuffComment
-        // stays valid even if the caller's `name` string is later freed or GC'd.
-        if ( tab.data && name ) context->heap->mark_comment(tab.data, context->intern(name));
+        // tag before overwriting with the generic "table" default. `name` is
+        // stored as-is in bigStuffComment; the caller owns its lifetime. The
+        // common case is a daslang literal (constStringHeap, never swept);
+        // dynamic daslang strings live in stringHeap, whose GC is skipped while
+        // track_allocations is on (see Context::collectHeap).
+        if ( tab.data && name ) context->heap->mark_comment(tab.data, name);
     }
 
     bool builtin_iterator_first ( Sequence & it, void * data, Context * context, LineInfoArg * at ) {
