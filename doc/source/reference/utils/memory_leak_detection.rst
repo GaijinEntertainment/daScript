@@ -321,6 +321,12 @@ empty hooks vector.
 (matches ``DumpJobQueLeaks`` precedent). Only ``ptr_ref_count`` leaks
 trigger ``exit(1)``.
 
+**Silencing all three exit-time dumps.** Pass ``--no-dump-leaks`` to
+``daslang.exe`` or ``daslang-live.exe`` and the JobStatus, HandleRegistry,
+and smart_ptr ``TextPrinter`` dumps all become quiet. The ``exit(1)`` on a
+smart_ptr leak is preserved --- it is a failure signal, not diagnostic
+noise. Default is on.
+
 **Manual query.** Still useful for in-process programmatic inspection ---
 for example, a long-running server that wants to log its own handle
 census periodically:

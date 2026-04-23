@@ -270,6 +270,14 @@ no callbacks are registered, and the dump iterates an empty hooks vector.
 (matches `DumpJobQueLeaks` precedent). Only `ptr_ref_count` leaks force
 `exit(1)`.
 
+**Silencing all three exit-time dumps:** pass `--no-dump-leaks` to
+`daslang.exe` / `daslang-live.exe` and the JobStatus, HandleRegistry, and
+smart_ptr TextPrinter dumps all become quiet (the exit(1) on smart_ptr
+leak is preserved — it's a failure signal, not diagnostic noise).
+Default is on. Use this in environments where pre-existing noisy leaks
+would drown out the signal you're looking for, or when another tool is
+consuming daslang output.
+
 ---
 
 ## Before reporting a leak

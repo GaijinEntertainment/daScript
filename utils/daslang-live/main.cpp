@@ -573,6 +573,7 @@ static void print_help() {
     tout << "  -track-allocations — track where heap allocations came from\n";
     tout << "  -heap-report      — dump heap contents on shutdown\n";
     tout << "  --no-dyn-modules  — skip loading dynamic modules\n";
+    tout << "  --no-dump-leaks   — silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
     tout << "  --                — separator for script arguments\n";
     tout << "  -h, --help        — this help\n";
 }
@@ -640,6 +641,7 @@ int main(int argc, char * argv[]) {
     string scriptFile;
     bool noDynamicModules = false;
     bool changeCwd = false;
+    bool dumpLeaks = true;
 
     // Parse args
     for (int i = 1; i < argc; i++) {
@@ -658,6 +660,10 @@ int main(int argc, char * argv[]) {
             heapReportAtExit = true;
         } else if (arg == "--no-dyn-modules") {
             noDynamicModules = true;
+        } else if (arg == "--dump-leaks") {
+            dumpLeaks = true;
+        } else if (arg == "--no-dump-leaks") {
+            dumpLeaks = false;
         } else if (arg == "-h" || arg == "--help") {
             print_help();
             return 0;
@@ -730,8 +736,10 @@ int main(int argc, char * argv[]) {
     // Handle-leak dump runs inside Module::Shutdown, between module
     // destruction (drains job threads) and DLL unload (invalidates the
     // dumpHandleLeaks<T> function pointers registered from shared modules).
-    Module::Shutdown();
-    JobStatus::DumpJobQueLeaks();
+    Module::Shutdown(dumpLeaks);
+    if ( dumpLeaks ) {
+        JobStatus::DumpJobQueLeaks();
+    }
     // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),
     // so it fires after all static destructors — cleaner than dumping here.
     release_single_instance();
