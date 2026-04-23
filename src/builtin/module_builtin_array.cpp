@@ -84,10 +84,12 @@ namespace das {
         // up in heap reports under that name. Requires `options track_allocations`
         // (the heap's mark_comment is a no-op otherwise). The tag is preserved
         // across realloc by array_reserve, which reads the previous tag before
-        // overwriting with the generic "array" default. Intern the tag into the
-        // context's string heap so the pointer stored in bigStuffComment stays
-        // valid even if the caller's `name` string is later freed or GC'd.
-        if ( arr.data && name ) context->heap->mark_comment(arr.data, context->intern(name));
+        // overwriting with the generic "array" default. `name` is stored as-is
+        // in bigStuffComment; the caller owns its lifetime. The common case is
+        // a daslang literal (constStringHeap, never swept); dynamic daslang
+        // strings live in stringHeap, whose GC is skipped while track_allocations
+        // is on (see Context::collectHeap).
+        if ( arr.data && name ) context->heap->mark_comment(arr.data, name);
     }
 
     void Module_BuiltIn::addArrayTypes(ModuleLibrary & lib) {
