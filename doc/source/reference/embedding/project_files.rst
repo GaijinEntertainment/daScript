@@ -167,6 +167,13 @@ Callback reference
      - **Required.** Resolve a ``require`` statement. ``req`` is the module path
        (e.g. ``"foo"`` or ``"daslib/json"``), ``from`` is the file containing
        the ``require``. Return ``(module_name, file_path, import_name)``.
+
+       File-path requires (``./foo.das``, ``../foo.das``, ``%/foo.das``) inside
+       regular ``.das`` source files are routed through this callback in project
+       mode — implement them here if you want the convenience. The
+       ``.das_project`` file itself can use file-path requires for bootstrap;
+       those are resolved by the inner default ``FsFileAccess`` before this
+       callback exists. See :ref:`File-path requires <modules>`.
    * - ``include_get(inc, from : string) : string``
      - Resolve an ``include`` directive. Return the absolute file path.
    * - ``module_allowed(mod, filename : string) : bool``
