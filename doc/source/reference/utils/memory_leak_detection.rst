@@ -53,7 +53,7 @@ At a glance
    * - 6
      - :ref:`HandleRegistry <utils_mlk_handle_registry>` (dasHV)
      - value-sized handles (WebSocket client/server/channel)
-     - *infrastructure exists, not auto-reporting today*
+     - automatic ``Handle<TypeName>`` dump at process exit
 
 
 Picking the right tool
@@ -280,36 +280,65 @@ value-sized ``Handle<T>`` integers backed by
 a ``std::shared_ptr<T>`` per handle. The registry is defined in
 ``include/daScript/misc/handle_registry.h``.
 
-**Current status.** The registry publishes ``live_count()``,
-``for_each_live(cb)``, and a module-wide
-``handleRegistry_dumpAll()`` / ``handleRegistry_registerDump(fn)`` pair,
-but **no call site invokes them at shutdown today**. The infrastructure is
-in place; the auto-report is not.
+**Automatic dump at process exit.** ``handleRegistry_dumpAll()`` runs
+inside ``Module::Shutdown(dumpLeaks)`` in both ``daslang.exe`` and
+``daslang-live.exe``, in the window between the module destructor loop
+(which drains job threads via ``Module_JobQue::~Module_JobQue``) and
+the ``DynamicModuleInfo`` teardown that unloads shared modules. That
+ordering is deliberate: before the window, live job threads legitimately
+hold handles; after it, the ``dumpHandleLeaks<T>`` function pointers
+registered from shared-module DLLs are dangling. Every handle type
+registered via ``addHandleAnnotation<T>`` auto-registers a per-type dump
+callback that walks ``HandleRegistry<T>::instance()`` and reports any
+live handles at that moment.
 
-**Manual query from C++.**
+**Sample output.**
+
+.. code-block:: none
+
+     Handle<WebSocketClient> idx=3 gen=1 (rc=1)
+     Handle<WebSocketServer> idx=0 gen=9 (rc=1)
+   total 1 leaked handles of type WebSocketClient
+   total 1 leaked handles of type WebSocketServer
+
+Columns are the slot index, generation counter (rolls on release and
+reacquire), and ``shared_ptr::use_count()`` at dump time. ``rc=1`` means
+the registry is the sole owner --- a classic forgotten-release bug.
+``rc>1`` means another strong reference is keeping the object alive;
+look for a forgotten capture.
+
+**How type names are resolved.** The dumper calls ``typeName<T>::name()``,
+which is specialized by ``MAKE_EXTERNAL_TYPE_FACTORY(Name, hv::Name)`` in
+``modules/dasHV/src/dasHV.h``. Adding a new handle type without
+``typeName<T>`` is a compile-time error on the first
+``addHandleAnnotation<T>`` call --- by design.
+
+**Disabled modules cost nothing.** When ``DAS_HV_DISABLED=ON`` the module
+TUs are not compiled; no callbacks get registered; the dump iterates an
+empty hooks vector.
+
+**Advisory, not fatal.** The dump prints but does not change exit code
+(matches ``DumpJobQueLeaks`` precedent). Only ``ptr_ref_count`` leaks
+trigger ``exit(1)``.
+
+**Silencing all three exit-time dumps.** Pass ``--no-dump-leaks`` to
+``daslang.exe`` or ``daslang-live.exe`` and the JobStatus, HandleRegistry,
+and smart_ptr ``TextPrinter`` dumps all become quiet. The ``exit(1)`` on a
+smart_ptr leak is preserved --- it is a failure signal, not diagnostic
+noise. Default is on.
+
+**Manual query.** Still useful for in-process programmatic inspection ---
+for example, a long-running server that wants to log its own handle
+census periodically:
 
 .. code-block:: cpp
 
    auto & reg = HandleRegistry<hv::WebSocketClient>::instance();
    if ( auto n = reg.live_count() ) {
        reg.for_each_live([](Handle<hv::WebSocketClient> h, auto & p){
-           // log h.value, p.get()
+           // log h.value, p.use_count(), p.get()
        });
    }
-
-**Wiring an automatic report.** Register per-type dump hooks in dasHV's
-module init:
-
-.. code-block:: cpp
-
-   handleRegistry_registerDump([]{
-       auto & reg = HandleRegistry<hv::WebSocketClient>::instance();
-       if ( auto n = reg.live_count() ) { /* log */ }
-   });
-
-Then call ``handleRegistry_dumpAll()`` from ``shutdownDebugAgent()`` or the
-program-teardown path. This is a small, tractable C++ change if the need
-arises for a production service.
 
 
 See also

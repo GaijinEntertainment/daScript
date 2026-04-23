@@ -4,6 +4,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/das_common.h"
 #include "daScript/daScriptModule.h"
+#include "daScript/misc/handle_registry.h"
 #include "daScript/simulate/simulate_fusion.h"
 
 #include <atomic>
@@ -195,7 +196,7 @@ namespace das {
         }
     }
 
-    void Module::Shutdown() {
+    void Module::Shutdown( bool dumpHandleLeaks ) {
         DAS_ASSERT(daScriptEnvironment::getOwned()!=nullptr);
         DAS_ASSERT(daScriptEnvironment::getBound()!=nullptr);
         g_envTotal --;
@@ -208,7 +209,12 @@ namespace das {
             m = m->next;
             delete pM;
         }
-        // Free allocated structures for dynamic modules.
+        // Window between module destruction (which drains job threads via
+        // Module_JobQue::~Module_JobQue) and DLL unload below: function
+        // pointers in dasModule*.shared_module DLLs are still valid, and any
+        // live job threads that were holding handles have exited. Dump here.
+        if ( dumpHandleLeaks ) handleRegistry_dumpAll();
+        // Free allocated structures for dynamic modules (unloads DLLs).
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
 
         clearGlobalAotLibrary();

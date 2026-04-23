@@ -420,6 +420,7 @@ void print_help() {
         << "    -dasroot <path> set path to daslang root folder (with daslib)\n"
         << "    --track-smart-ptr <id> track smart pointer with id\n"
         << "    --track-job-status <id> track JobStatus/Channel/LockBox with id\n"
+        << "    --no-dump-leaks  silence the JobStatus + HandleRegistry + smart_ptr leak dumps at exit (default: dump)\n"
         << "    --linear-stack-allocator  disable scoped stack allocator\n"
         << "    --das-wait-debugger wait for debugger to attach\n"
         << "    --das-profiler enable profiler\n"
@@ -492,6 +493,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     bool pauseAfterDone = false;
     bool dryRun = false;
     bool compileOnly = false;
+    bool dumpLeaks = true;
     string project_root;
     optional<format::FormatOptions> formatter;
     for ( int i=1; i < argc; ++i ) {
@@ -659,6 +661,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-dynamic-modules" ) {
                 noDynamicModules = true;
+            } else if ( cmd=="-dump-leaks" ) {
+                dumpLeaks = true;
+            } else if ( cmd=="-no-dump-leaks" ) {
+                dumpLeaks = false;
             } else if ( cmd=="h" || cmd=="-help" ) {
                 print_help();
                 return 0;
@@ -713,14 +719,21 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
     // and done
     if ( pauseAfterDone ) getchar();
-    Module::Shutdown();
-    JobStatus::DumpJobQueLeaks();
+    // Handle-leak dump runs inside Module::Shutdown, between module
+    // destruction (drains job threads) and DLL unload (invalidates the
+    // dumpHandleLeaks<T> function pointers registered from shared modules).
+    Module::Shutdown(dumpLeaks);
+    if ( dumpLeaks ) {
+        JobStatus::DumpJobQueLeaks();
+    }
     // das::dump_alloc_leaks is registered as an atexit handler via init_seg(lib),
     // so it fires after all static destructors — cleaner than dumping here.
     if ( g_smart_ptr_total!=0 ) {
-        TextPrinter tp;
-        tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
-        ptr_ref_count::DumpTrackPtr();
+        if ( dumpLeaks ) {
+            TextPrinter tp;
+            tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
+            ptr_ref_count::DumpTrackPtr();
+        }
         exit(1);
     }
     return exitCode;
