@@ -38,7 +38,7 @@ def get_remove_indices(args : AnnotationArgumentList) {
         }
     }
     if (length(indices) > 0) {
-        indices |> sort() <| $(a, b) => a >= b
+        indices |> sort() <| $(a, b) => a > b
     }
     return <- indices
 }
