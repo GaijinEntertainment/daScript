@@ -34,6 +34,10 @@ class LintVisitor : AstVisitor {
     //!   - LINT003: variable can be made const (var→let)
     //!   - LINT004: underscore-prefixed variable is actually used
     //!   - LINT005: redundant reinterpret<T>(x) where T matches source type
+    //!   - LINT006: division by zero (constant 0 divisor)
+    //!   - LINT007: left and right operands of binary operator are identical
+    //!   - LINT008: both branches of ternary ``?:`` are equivalent
+    //!   - LINT009: ``then`` branch equals ``else`` branch of ``if``
     astVisitorAdapter : VisitorAdapter?
     exprForTerminator : array<uint64>
     compile_time_errors : bool
@@ -228,6 +232,88 @@ class LintVisitor : AstVisitor {
     def override preVisitExprLet(expr : ExprLet?) : void {
         for (v in expr.variables) {
             validate_var(v, true)
+        }
+    }
+
+    // --- LINT006: division by zero, LINT007: same operands ---
+
+    def is_const_zero(expr : ExpressionPtr) : bool {
+        if (expr == null) {
+            return false
+        }
+        if (expr is ExprConstInt) {
+            return (expr as ExprConstInt).value == 0
+        }
+        if (expr is ExprConstUInt) {
+            return (expr as ExprConstUInt).value == 0u
+        }
+        if (expr is ExprConstInt64) {
+            return (expr as ExprConstInt64).value == 0l
+        }
+        if (expr is ExprConstUInt64) {
+            return (expr as ExprConstUInt64).value == 0ul
+        }
+        if (expr is ExprConstFloat) {
+            return (expr as ExprConstFloat).value == 0.0f
+        }
+        if (expr is ExprConstDouble) {
+            return (expr as ExprConstDouble).value == 0.0lf
+        }
+        return false
+    }
+
+    def expr_equal(a : ExpressionPtr; b : ExpressionPtr; require_pure : bool = true) : bool {
+        if (a == null || b == null) {
+            return false
+        }
+        if (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects)) {
+            return false
+        }
+        return describe(a) == describe(b)
+    }
+
+    def override preVisitExprOp2(expr : ExprOp2?) : void {
+        if (noLint || genericDepth > 0) {
+            return
+        }
+        let op = string(expr.op)
+        if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
+            self->lint_error("LINT006: division by zero ({op})", expr.at)
+            return
+        }
+        let op_same_suspicious = (
+            op == "==" || op == "!=" ||
+            op == "<"  || op == ">"  ||
+            op == "<=" || op == ">=" ||
+            op == "-"  || op == "/"  || op == "%" ||
+            op == "&&" || op == "||" ||
+            op == "&"  || op == "|"  || op == "^" ||
+            op == "-=" || op == "/=" || op == "%="
+        )
+        if (op_same_suspicious && expr_equal(expr.left, expr.right, false)) {
+            self->lint_error("LINT007: left and right operands of '{op}' are the same", expr.at)
+        }
+    }
+
+    // --- LINT008: ternary both branches equal ---
+
+    def override preVisitExprOp3(expr : ExprOp3?) : void {
+        if (noLint || genericDepth > 0) {
+            return
+        }
+        if (expr_equal(expr.left, expr.right, false)) {
+            self->lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
+        }
+    }
+
+    // --- LINT009: if-then-else branches equal ---
+
+    def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
+        if (noLint || genericDepth > 0) {
+            return
+        }
+        if (expr.if_false != null && expr_equal(expr.if_true, expr.if_false, false)) {
+            self->lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
         }
     }
 }
