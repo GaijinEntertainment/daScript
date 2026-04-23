@@ -162,6 +162,7 @@ build all C++ tutorials directly against the SDK — see
    tutorials/integration_cpp_20_standalone_contexts.rst
    tutorials/integration_cpp_21_threading.rst
    tutorials/integration_cpp_22_namespace_integration.rst
+   tutorials/integration_cpp_23_handle_registry.rst
 
 .. _tutorials_macros:
 
