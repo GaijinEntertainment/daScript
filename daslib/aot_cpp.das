@@ -2584,8 +2584,6 @@ class public CppAot : AstVisitor {
             if (length(expr.fields) == 1) {
                 if (expr._type.baseType != Type.tFloat) write(*ss, ")");
                 write(*ss, ")");
-            } elif (isSequencialMask(expr.fields)) {
-                write(*ss, ")");
             } else {
                 write(*ss, ")");
             }
@@ -3295,8 +3293,6 @@ class public CppAot : AstVisitor {
         if (!last) {
             if (call.name == "debug") {
                 write(*ss, "),(");
-            } elif (call.name == "assert" || call.name == "verify") {
-                write(*ss, ",");
             } else {
                 write(*ss, ",");
             }
