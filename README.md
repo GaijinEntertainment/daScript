@@ -37,8 +37,8 @@ git submodule update --init --recursive
 ## Building
 
 ```sh
-cmake -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build --target daslang --config RelWithDebInfo
+cmake -Bbuild -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target daslang --config Release
 ```
 
 ## AOT usage
