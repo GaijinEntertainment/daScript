@@ -151,6 +151,19 @@ jobs:
             architecture: 64
             architecture_string: x64
 
+          # RelWithDebInfo only on Windows x64
+          - target: windows
+            architecture: 64
+            cmake_preset: RelWithDebInfo
+            sanitizers: none
+            runner: windows-latest-fat
+            archive_ext: zip
+            build_system: cmake
+            cmake_generator: Visual Studio 17 2022
+            release_target: windows
+            release_arch: x86_64
+            architecture_string: x64
+
         exclude:
           - target: darwin15
             architecture: 32
