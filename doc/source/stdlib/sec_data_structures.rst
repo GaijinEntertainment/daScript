@@ -14,3 +14,5 @@ Container extensions, sorting, hash tables, linked lists, and specialized arrays
    generated/cuckoo_hash_table.rst
    generated/soa.rst
    generated/bool_array.rst
+   generated/option.rst
+   generated/result.rst

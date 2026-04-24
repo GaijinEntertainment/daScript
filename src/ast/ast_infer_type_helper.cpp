@@ -442,30 +442,31 @@ namespace das {
     }
     TypeDeclPtr InferTypes::inferPartialAliases(const TypeDeclPtr &decl, const TypeDeclPtr &passType, const FunctionPtr &fptr, AliasMap *aliases) const {
         if (decl->baseType == Type::typeDecl || decl->baseType == Type::typeMacro) {
-            for (auto &de : decl->dimExpr) {
+            auto resT = new TypeDecl(*decl);
+            for (auto &de : resT->dimExpr) {
                 if (de && de->rtti_isTypeDecl()) {
                     auto td = static_cast<ExprTypeDecl*>(de);
                     // since we don't have passType in typeexpr(3), we pass what we have
                     td->typeexpr = inferPartialAliases(td->typeexpr, td->typeexpr, fptr, aliases);
                 }
             }
-            if (decl->baseType == Type::typeMacro) {
-                auto tmn = decl->typeMacroName();
+            if (resT->baseType == Type::typeMacro) {
+                auto tmn = resT->typeMacroName();
                 auto tms = findTypeMacro(tmn);
                 if (tms.size() == 0) {
-                    return decl;
+                    return resT;
                 } else if (tms.size() > 1) {
-                    return decl;
+                    return resT;
                 } else {
-                    auto resType = tms[0]->visit(program, thisModule, decl, passType);
+                    auto resType = tms[0]->visit(program, thisModule, resT, passType);
                     if (!resType) {
-                        return decl;
+                        return resT;
                     }
-                    TypeDecl::applyAutoContracts(resType, decl);
+                    TypeDecl::applyAutoContracts(resType, resT);
                     return resType;
                 }
             }
-            return decl;
+            return resT;
         }
         if (decl->baseType == Type::autoinfer) {
             return decl;

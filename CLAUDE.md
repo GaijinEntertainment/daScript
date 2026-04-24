@@ -108,6 +108,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Feature leaks using the tracking system (`--track-job-status`, `DumpJobQueLeaks`, refcount tracing) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT build+test, format checklist) |
 | `skills/strudel_port.md` | Copy-pasting a strudel.cc pattern (user-level live-coding expression) into daslang |
+| `skills/gc_use_after_sweep.md` | Debugging crashes in `TypeDecl`/`Expression` copy-ctors (`bad_alloc`, `length_error`, `basic_string::_M_create`) — gc_node use-after-sweep, `DAS_GC_DEBUG`, `DAS_GC_BREAK_ON_ID`, copy-on-mutate fix pattern |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 

@@ -80,6 +80,7 @@ introduced in earlier tutorials.
    tutorials/49_async.rst
    tutorials/50_soa.rst
    tutorials/51_delegate.rst
+   tutorials/52_option_and_result.rst
 
 .. _tutorials_building_from_sdk:
 
