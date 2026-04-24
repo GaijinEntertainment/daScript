@@ -71,13 +71,26 @@ class DASObject(ObjectDescription):
         """
         sig = sig.strip()
         sig = sig.split("/*")[0].strip()
-        open_paranteses = sig.find('(')
+        # Look for lastest braces pair, e.g.:
+        # $Option(type<auto(TT)>)==(a: $Option(type<auto(TT)>); b: $Option(type<auto(TT)>)) : bool
         closed_paranteses = sig.rfind(')')
+        open_paranteses = -1
+        if closed_paranteses >= 0:
+            depth = 1
+            i = closed_paranteses - 1
+            while i >= 0:
+                ch = sig[i]
+                if ch == ')':
+                    depth += 1
+                elif ch == '(':
+                    depth -= 1
+                    if depth == 0:
+                        open_paranteses = i
+                        break
+                i -= 1
         if open_paranteses > 0 and closed_paranteses > open_paranteses:
-            # take substring from open to closed paranteses
-            member, arglist = sig[:closed_paranteses + 1].split('(', 1)
-            member = member.strip()
-            arglist = arglist[:-1].strip()
+            member = sig[:open_paranteses].strip()
+            arglist = sig[open_paranteses + 1:closed_paranteses].strip()
             retType = sig[closed_paranteses + 1:].strip()
         else:
             member = sig
@@ -128,9 +141,10 @@ class DASObject(ObjectDescription):
         # type: (Tuple[unicode, unicode], unicode, addnodes.desc_signature) -> None
         mod_name = self.env.ref_context.get('das:module')
         fullname = (mod_name and mod_name + '.' or '') + name_obj[0]
-        if fullname not in self.state.document.ids:
+        id_value = fullname.replace('$', '_S_')
+        if id_value not in self.state.document.ids:
             signode['names'].append(fullname)
-            signode['ids'].append(fullname.replace('$', '_S_'))
+            signode['ids'].append(id_value)
             signode['first'] = not self.names
             self.state.document.note_explicit_target(signode)
             objects = self.env.domaindata['das']['objects']
@@ -144,7 +158,7 @@ class DASObject(ObjectDescription):
         indextext = self.get_index_text(mod_name, name_obj)
         if indextext:
             self.indexnode['entries'].append(('single', indextext,
-                                              fullname.replace('$', '_S_'),
+                                              id_value,
                                               '', None))
 
     def get_index_text(self, objectname, name_obj):
