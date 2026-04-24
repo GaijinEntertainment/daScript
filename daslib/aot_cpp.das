@@ -4184,8 +4184,27 @@ def public aot(input : string; paranoid_validation : bool, cross_platform : bool
     var result = "";
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
-        compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            result = run_aot(program.get_ptr(), pctx.get_ptr(), cop)
+        set_aot();
+        compile_file(input, access, unsafe(addr(mg)), cop) $(ok; var program : smart_ptr<Program>; issues) {
+            if (!ok) {
+                print("failed to compile {input}\n{issues}\n")
+                return
+            }
+            // `options no_aot` only needs the program's module list to emit the
+            // "AOT disabled" comment -- skip simulate entirely so we don't leak
+            // host-side Contexts spawned by `[init]` load_folder()-style calls
+            // during simulation.
+            let no_aot = program._options |> find_arg("no_aot") ?as tBool ?? false
+            if (no_aot) {
+                result = run_aot(program.get_ptr(), null, cop)
+                return
+            }
+            simulate(program) $(sok; var pctx : smart_ptr<Context>; serrors) {
+                if (!sok) {
+                    panic("Failed to simulate {serrors}")
+                }
+                result = run_aot(program.get_ptr(), pctx.get_ptr(), cop)
+            }
         }
     }
     return result
