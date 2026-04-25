@@ -38,7 +38,14 @@ struct template Option {
 //! mutable source, use ``move_some`` instead.
 def some(v : auto(TT)) {
     typedef OT = $Option < TT - const >
-    return <- OT(_has_value = true, _value := v)
+    var o = default<OT>
+    o._has_value = true
+    static_if (typeinfo can_copy(o._value)) {
+        o._value = v
+    } else {
+        o._value <- clone_to_move(v)
+    }
+    return <- o
 }
 
 

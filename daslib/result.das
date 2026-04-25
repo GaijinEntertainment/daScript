@@ -48,7 +48,14 @@ struct template Result {
 [template(etype)]
 def ok(v : auto(TT); etype : auto(EE)) {
     typedef RT = $Result < TT - const; EE - const >
-    return <- RT(_is_ok = true, _value := v)
+    var r = default<RT>
+    r._is_ok = true
+    static_if (typeinfo can_copy(r._value)) {
+        r._value = v
+    } else {
+        r._value <- clone_to_move(v)
+    }
+    return <- r
 }
 
 //! Construct ``Result<T, E>`` by moving the value payload out of a mutable
@@ -70,7 +77,14 @@ def move_ok(var v : auto(TT); etype : auto(EE)) {
 [template(ttype)]
 def err(e : auto(EE); ttype : auto(TT)) {
     typedef RT = $Result < TT - const; EE - const >
-    return <- RT(_is_ok = false, _error := e)
+    var r = default<RT>
+    r._is_ok = false
+    static_if (typeinfo can_copy(r._error)) {
+        r._error = e
+    } else {
+        r._error <- clone_to_move(e)
+    }
+    return <- r
 }
 
 //! Construct ``Result<T, E>`` by moving the error payload out of a mutable
