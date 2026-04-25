@@ -679,7 +679,9 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | File | Description | Expects errors |
 |---|---|---|
 | test_option.das | `Option<T>` — some/none constructors, map/filter/and_then/or_else/or_value, unwrap family, operators `??`/`==`, zip, if_some/if_none, chaining | |
+| test_option_non_copyable.das | `Option<array<int>>` — every constructor/combinator/unwrap/operator with a non-copyable payload, plus `move_some` | |
 | test_result.das | `Result<T, E>` — ok/err constructors, map/map_err/and_then/or_else, unwrap family, operators `??`/`==`, to_option/err_to_option bridges, if_ok/if_err, chaining | |
+| test_result_non_copyable.das | `Result<array<int>, string>` — every constructor/combinator/unwrap/operator with a non-copyable T, plus `move_ok` and `move_err` | |
 
 ## regex/
 

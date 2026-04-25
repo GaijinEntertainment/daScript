@@ -15,8 +15,14 @@ require daslib/option public
 //!
 //! Functional API for modelling fallible computations where an
 //! error carries meaning (unlike a bare ``Option<T>`` that only says "missing").
-//! Compose via ``map`` / ``map_err`` / ``and_then`` / ``or_else``; extract via
-//! ``unwrap`` / ``unwrap_or`` / ``??``.
+//! Both the value side ``T`` and the error side ``E`` may be non-copyable
+//! (``array<T>``, ``table<K;V>``, lambdas) — combinators clone or move on the
+//! non-copyable branch via ``static_if (typeinfo can_copy(...))``.
+//!
+//! Construct via ``ok(v, type<E>)`` / ``err(e, type<T>)`` (clone), or
+//! ``move_ok(v, type<E>)`` / ``move_err(e, type<T>)`` to move out of a mutable
+//! source. Compose via ``map`` / ``map_err`` / ``and_then`` / ``or_else``;
+//! extract via ``unwrap`` / ``unwrap_or`` / ``??``.
 
 //! Tagged ``ok``/``err`` pair over payload ``T`` and error ``E``.
 //!
@@ -36,23 +42,59 @@ struct template Result {
 //! Construct ``Result<T, E>`` carrying successful ``v``. Pass the error type as a witness::
 //!
 //!     let r = ok(42, type<string>)
+//!
+//! For non-copyable ``T`` the payload is cloned; if you want to move out of a
+//! mutable source, use ``move_ok`` instead.
 [template(etype)]
 def ok(v : auto(TT); etype : auto(EE)) {
-    var r = default<$Result<TT -const; EE -const> >
+    typedef RT = $Result < TT - const; EE - const >
+    var r = default<RT>
     r._is_ok = true
-    r._value = v
-    return r
+    static_if (typeinfo can_copy(r._value)) {
+        r._value = v
+    } else {
+        r._value <- clone_to_move(v)
+    }
+    return <- r
+}
+
+//! Construct ``Result<T, E>`` by moving the value payload out of a mutable
+//! source. After ``move_ok(src, type<E>)`` the source is left empty
+//! (``length(src) == 0`` for arrays/tables). Useful for non-copyable
+//! payloads where ``ok`` would clone.
+[template(etype)]
+def move_ok(var v : auto(TT); etype : auto(EE)) {
+    typedef RT = $Result < TT - const; EE - const >
+    return <- RT(_is_ok = true, _value <- v)
 }
 
 //! Construct ``Result<T, E>`` carrying error ``e``. Pass the value type as a witness::
 //!
 //!     let r = err("boom", type<int>)
+//!
+//! For non-copyable ``E`` the error is cloned; if you want to move out of a
+//! mutable source, use ``move_err`` instead.
 [template(ttype)]
 def err(e : auto(EE); ttype : auto(TT)) {
-    var r = default<$Result<TT -const; EE -const> >
+    typedef RT = $Result < TT - const; EE - const >
+    var r = default<RT>
     r._is_ok = false
-    r._error = e
-    return r
+    static_if (typeinfo can_copy(r._error)) {
+        r._error = e
+    } else {
+        r._error <- clone_to_move(e)
+    }
+    return <- r
+}
+
+//! Construct ``Result<T, E>`` by moving the error payload out of a mutable
+//! source. After ``move_err(src, type<T>)`` the source is left empty
+//! (``length(src) == 0`` for arrays/tables). Useful for non-copyable error
+//! payloads where ``err`` would clone.
+[template(ttype)]
+def move_err(var e : auto(EE); ttype : auto(TT)) {
+    typedef RT = $Result < TT - const; EE - const >
+    return <- RT(_is_ok = false, _error <- e)
 }
 
 //! ``true`` iff the result is a successful ``ok``.
@@ -70,11 +112,19 @@ def map(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : auto(UU)>) {
     var out = default<$Result<UU -const; EE -const> >
     if (r._is_ok) {
         out._is_ok = true
-        out._value = invoke(f, r._value)
+        static_if (typeinfo can_copy(out._value)) {
+            out._value = invoke(f, r._value)
+        } else {
+            out._value <- invoke(f, r._value)
+        }
     } else {
-        out._error = r._error
+        static_if (typeinfo can_copy(out._error)) {
+            out._error = r._error
+        } else {
+            out._error := r._error
+        }
     }
-    return out
+    return <- out
 }
 
 //! Apply ``f`` to the err payload. ``ok`` stays ``ok`` (same ``T``).
@@ -82,32 +132,48 @@ def map_err(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : auto(FF)>) 
     var out = default<$Result<TT -const; FF -const> >
     if (r._is_ok) {
         out._is_ok = true
-        out._value = r._value
+        static_if (typeinfo can_copy(out._value)) {
+            out._value = r._value
+        } else {
+            out._value := r._value
+        }
     } else {
-        out._error = invoke(f, r._error)
+        static_if (typeinfo can_copy(out._error)) {
+            out._error = invoke(f, r._error)
+        } else {
+            out._error <- invoke(f, r._error)
+        }
     }
-    return out
+    return <- out
 }
 
 //! Monadic bind on the ok side — ``f`` returns the next ``Result``.
 def and_then(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : $Result<auto(UU); EE> >) {
     if (r._is_ok) {
-        return invoke(f, r._value)
+        return <- invoke(f, r._value)
     }
     var out = default<$Result<UU -const; EE -const> >
-    out._error = r._error
-    return out
+    static_if (typeinfo can_copy(out._error)) {
+        out._error = r._error
+    } else {
+        out._error := r._error
+    }
+    return <- out
 }
 
 //! Monadic bind on the err side — ``f`` can recover or re-map the error.
 def or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : $Result<TT; auto(FF)> >) {
     if (!r._is_ok) {
-        return invoke(f, r._error)
+        return <- invoke(f, r._error)
     }
     var out = default<$Result<TT -const; FF -const> >
     out._is_ok = true
-    out._value = r._value
-    return out
+    static_if (typeinfo can_copy(out._value)) {
+        out._value = r._value
+    } else {
+        out._value := r._value
+    }
+    return <- out
 }
 
 //! Extract the ok payload or panic when ``err``.
@@ -115,22 +181,38 @@ def unwrap(r : $Result < auto(TT); auto(EE) >) : TT {
     if (!r._is_ok) {
         panic("unwrap called on err")
     }
-    return r._value
+    static_if (typeinfo can_copy(r._value)) {
+        return r._value
+    } else {
+        return <- clone_to_move(r._value)
+    }
 }
 
 //! Extract the ok payload or return ``d`` when ``err``.
 def unwrap_or(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
-    return r._is_ok ? r._value : d
+    static_if (typeinfo can_copy(r._value)) {
+        return r._is_ok ? r._value : d
+    } else {
+        return <- clone_to_move(r._is_ok ? r._value : d)
+    }
 }
 
 //! Extract the ok payload or compute a fallback from the error via ``f``.
 def unwrap_or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : TT>) : TT {
-    return r._is_ok ? r._value : invoke(f, r._error)
+    static_if (typeinfo can_copy(r._value)) {
+        return r._is_ok ? r._value : invoke(f, r._error)
+    } else {
+        return <- clone_to_move(r._is_ok ? r._value : invoke(f, r._error))
+    }
 }
 
 //! Extract the ok payload or return ``default<T>`` when ``err``.
 def unwrap_or_default(r : $Result < auto(TT); auto(EE) >) : TT {
-    return r._is_ok ? r._value : default<TT>
+    static_if (typeinfo can_copy(r._value)) {
+        return r._is_ok ? r._value : default<TT>
+    } else {
+        return <- clone_to_move(r._is_ok ? r._value : default<TT>)
+    }
 }
 
 //! Extract the err payload or panic when ``ok``.
@@ -138,7 +220,11 @@ def unwrap_err(r : $Result < auto(TT); auto(EE) >) : EE {
     if (r._is_ok) {
         panic("unwrap_err called on ok")
     }
-    return r._error
+    static_if (typeinfo can_copy(r._error)) {
+        return r._error
+    } else {
+        return <- clone_to_move(r._error)
+    }
 }
 
 //! Extract the ok payload or panic with ``msg`` when ``err``. ``expect_value``
@@ -147,7 +233,11 @@ def expect_value(r : $Result < auto(TT); auto(EE) >; msg : string) : TT {
     if (!r._is_ok) {
         panic(msg)
     }
-    return r._value
+    static_if (typeinfo can_copy(r._value)) {
+        return r._value
+    } else {
+        return <- clone_to_move(r._value)
+    }
 }
 
 //! Extract the err payload or panic with ``msg`` when ``ok``.
@@ -155,7 +245,11 @@ def expect_err(r : $Result < auto(TT); auto(EE) >; msg : string) : EE {
     if (r._is_ok) {
         panic(msg)
     }
-    return r._error
+    static_if (typeinfo can_copy(r._error)) {
+        return r._error
+    } else {
+        return <- clone_to_move(r._error)
+    }
 }
 
 //! Invoke ``f`` with the ok payload when ``ok``; no-op when ``err``.
@@ -177,9 +271,13 @@ def to_option(r : $Result < auto(TT); auto(EE) >) {
     var o = default<$Option<TT -const> >
     if (r._is_ok) {
         o._has_value = true
-        o._value = r._value
+        static_if (typeinfo can_copy(o._value)) {
+            o._value = r._value
+        } else {
+            o._value := r._value
+        }
     }
-    return o
+    return <- o
 }
 
 //! Drop the ok side; ``err`` becomes ``some``, ``ok`` becomes ``none``.
@@ -187,14 +285,22 @@ def err_to_option(r : $Result < auto(TT); auto(EE) >) {
     var o = default<$Option<EE -const> >
     if (!r._is_ok) {
         o._has_value = true
-        o._value = r._error
+        static_if (typeinfo can_copy(o._value)) {
+            o._value = r._error
+        } else {
+            o._value := r._error
+        }
     }
-    return o
+    return <- o
 }
 
 //! Unwrap or default. Mirrors ``T? ?? default`` for value types.
 def operator ??(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
-    return r._is_ok ? r._value : d
+    static_if (typeinfo can_copy(r._value)) {
+        return r._is_ok ? r._value : d
+    } else {
+        return <- clone_to_move(r._is_ok ? r._value : d)
+    }
 }
 
 //! Structural equality: same tag, and the active payload compares equal.

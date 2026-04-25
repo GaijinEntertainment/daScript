@@ -12,7 +12,13 @@ require daslib/typemacro_boost
 
 //! Monadic ``Option<T>`` type — represents a value that may or may not be present.
 //!
-//! Functional API for modelling optional value.
+//! Functional API for modelling optional value. The payload may be any type,
+//! including non-copyable ones (``array<T>``, ``table<K;V>``, lambdas):
+//! constructors and combinators clone or move on the non-copyable branch via
+//! ``static_if (typeinfo can_copy(...))``.
+//!
+//! Construct via ``some(v)`` (clones the payload), ``move_some(v)`` (moves out
+//! of a mutable source), or ``none(type<T>)``.
 //!
 //! See also ``daslib/result`` for a ``Result<T, E>`` counterpart.
 
@@ -28,11 +34,29 @@ struct template Option {
 }
 
 //! Construct ``Option<T>`` carrying ``v``. Payload type is inferred from ``v``.
+//! For non-copyable ``T`` the payload is cloned; if you want to move out of a
+//! mutable source, use ``move_some`` instead.
 def some(v : auto(TT)) {
-    var o = default<$Option<TT -const> >
+    typedef OT = $Option < TT - const >
+    var o = default<OT>
     o._has_value = true
-    o._value = v
-    return o
+    static_if (typeinfo can_copy(o._value)) {
+        o._value = v
+    } else {
+        o._value <- clone_to_move(v)
+    }
+    return <- o
+}
+
+
+//! Construct ``Option<T>`` by moving the payload out of a mutable source.
+//! After ``move_some(src)`` the source is left empty (``length(src) == 0``
+//! for arrays/tables). Useful for non-copyable payloads where ``some`` would
+//! clone; for workhorse types (``int``, ``float``, ``string``, …) ``some`` is
+//! equivalent and cheaper to read.
+def move_some(var v : auto(TT)) {
+    typedef OT = $Option < TT - const >
+    return <- OT(_has_value = true, _value <- v)
 }
 
 //! Construct an empty ``Option<T>``. Pass the payload type as a witness::
@@ -58,9 +82,13 @@ def map(o : $Option < auto(TT) >; f : block<(v : TT) : auto(UU)>) {
     var r = default<$Option<UU -const> >
     if (o._has_value) {
         r._has_value = true
-        r._value = invoke(f, o._value)
+        static_if (typeinfo can_copy(r._value)) {
+            r._value = invoke(f, o._value)
+        } else {
+            r._value <- invoke(f, o._value)
+        }
     }
-    return r
+    return <- r
 }
 
 //! Monadic bind — ``f`` returns the next ``Option``; chains only when ``some``.
@@ -74,7 +102,11 @@ def and_then(o : $Option < auto(TT) >; f : block<(v : TT) : $Option<auto(UU)> >)
 //! Keep the payload only if ``p`` holds; otherwise turn ``some`` into ``none``.
 def filter(o : $Option < auto(TT) >; p : block<(v : TT) : bool>) {
     if (o._has_value && invoke(p, o._value)) {
-        return o
+        static_if (typeinfo can_copy(o._value)) {
+            return o
+        } else {
+            return <- clone_to_move(o)
+        }
     }
     return default<$Option<TT -const> >
 }
@@ -82,7 +114,11 @@ def filter(o : $Option < auto(TT) >; p : block<(v : TT) : bool>) {
 //! Fallback to ``f()`` when ``none``; ``some`` passes through unchanged.
 def or_else(o : $Option < auto(TT) >; f : block<() : $Option<TT> >) {
     if (o._has_value) {
-        return o
+        static_if (typeinfo can_copy(o._value)) {
+            return o
+        } else {
+            return <- clone_to_move(o)
+        }
     }
     return invoke(f)
 }
@@ -90,7 +126,11 @@ def or_else(o : $Option < auto(TT) >; f : block<() : $Option<TT> >) {
 //! Fallback to eager ``v`` when ``none``; ``some`` passes through unchanged.
 def or_value(o : $Option < auto(TT) >; v : TT) {
     if (o._has_value) {
-        return o
+        static_if (typeinfo can_copy(o._value)) {
+            return o
+        } else {
+            return <- clone_to_move(o)
+        }
     }
     return some(v)
 }
@@ -100,22 +140,38 @@ def unwrap(o : $Option < auto(TT) >) : TT {
     if (!o._has_value) {
         panic("unwrap called on none")
     }
-    return o._value
+    static_if (typeinfo can_copy(o._value)) {
+        return o._value
+    } else {
+        return <- clone_to_move(o._value)
+    }
 }
 
 //! Extract the payload or return ``d`` when ``none``.
 def unwrap_or(o : $Option < auto(TT) >; d : TT) : TT {
-    return o._has_value ? o._value : d
+    static_if (typeinfo can_copy(o._value)) {
+        return o._has_value ? o._value : d
+    } else {
+        return <- clone_to_move(o._has_value ? o._value : d)
+    }
 }
 
 //! Extract the payload or compute a fallback via ``f`` when ``none``.
 def unwrap_or_else(o : $Option < auto(TT) >; f : block<() : TT>) : TT {
-    return o._has_value ? o._value : invoke(f)
+    static_if (typeinfo can_copy(o._value)) {
+        return o._has_value ? o._value : invoke(f)
+    } else {
+        return <- clone_to_move(o._has_value ? o._value : invoke(f))
+    }
 }
 
 //! Extract the payload or return ``default<T>`` when ``none``.
 def unwrap_or_default(o : $Option < auto(TT) >) : TT {
-    return o._has_value ? o._value : default<TT>
+    static_if (typeinfo can_copy(o._value)) {
+        return o._has_value ? o._value : default<TT>
+    } else {
+        return <- clone_to_move(o._has_value ? o._value : default<TT>)
+    }
 }
 
 //! Extract the payload or panic with ``msg`` when ``none``. ``expect_value``
@@ -124,7 +180,11 @@ def expect_value(o : $Option < auto(TT) >; msg : string) : TT {
     if (!o._has_value) {
         panic(msg)
     }
-    return o._value
+    static_if (typeinfo can_copy(o._value)) {
+        return o._value
+    } else {
+        return <- clone_to_move(o._value)
+    }
 }
 
 //! Invoke ``f`` with the payload when ``some``; no-op when ``none``.
@@ -146,15 +206,27 @@ def zip(a : $Option < auto(TT) >; b : $Option < auto(UU) >) {
     var r = default<$Option<tuple<TT -const; UU -const> > >
     if (a._has_value && b._has_value) {
         r._has_value = true
-        r._value._0 = a._value
-        r._value._1 = b._value
+        static_if (typeinfo can_copy(a._value)) {
+            r._value._0 = a._value
+        } else {
+            r._value._0 := a._value
+        }
+        static_if (typeinfo can_copy(b._value)) {
+            r._value._1 = b._value
+        } else {
+            r._value._1 := b._value
+        }
     }
-    return r
+    return <- r
 }
 
 //! Unwrap or default. Mirrors ``T? ?? default`` for value types.
 def operator ??(o : $Option < auto(TT) >; d : TT) : TT {
-    return o._has_value ? o._value : d
+    static_if (typeinfo can_copy(o._value)) {
+        return o._has_value ? o._value : d
+    } else {
+        return <- clone_to_move(o._has_value ? o._value : d)
+    }
 }
 
 //! Structural equality: same tag, and when ``some``, equal payloads.
