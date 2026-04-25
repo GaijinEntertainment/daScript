@@ -1,13 +1,15 @@
 // Tutorial 52: Option<T> and Result<T, E>
 //
 // This tutorial covers:
-//   - Option<T> — "value or nothing" for value types
+//   - Option<T> — "value or nothing"
 //   - Result<T, E> — "value or error" for fallible computations
 //   - Functional composition: map, and_then, filter, or_else
 //   - Extraction: unwrap, unwrap_or, unwrap_or_else, unwrap_or_default
 //   - Operators: `??` (unwrap-or-default) and `==`
 //   - Chaining through `|>`
 //   - Bridging Result → Option via to_option / err_to_option
+//   - Non-copyable payloads (array<T>, table<K;V>, lambdas) +
+//     move_some / move_ok / move_err
 //
 // Run: daslang.exe tutorials/language/52_option_and_result.das
 
@@ -254,6 +256,41 @@ def test_result_chaining {
     print("err chain err = {on_err |> unwrap_err}\n")         // <boom>
 }
 
+// === Non-copyable payloads ===
+//
+// Option<T> and Result<T, E> work for any payload type. For non-copyable
+// types like array<T>, the constructors clone the payload by default. When
+// you actually want to drain a mutable source, use the move_* variants:
+// move_some / move_ok / move_err leave the source empty after the call.
+
+def test_non_copyable {
+    // some clones — the source is still intact afterwards. Because nothing
+    // mutates `src1`, it can be `let`.
+    let src1 <- [1, 2, 3]
+    let cloned = some(src1)
+    print("cloned len = {length(cloned |> unwrap)}, src1 len = {length(src1)}\n")
+    // cloned len = 3, src1 len = 3
+
+    // move_some moves — the source is empty afterwards. The source must be
+    // `var` because move_some takes `var v` and drains it.
+    var src2 <- [4, 5, 6]
+    let moved = move_some(src2)
+    print("moved len = {length(moved |> unwrap)}, src2 len = {length(src2)}\n")
+    // moved len = 3, src2 len = 0
+
+    // The same pair exists for Result on each side: ok/move_ok and err/move_err.
+    var payload <- [7, 8, 9]
+    let r = move_ok(payload, type<string>)
+    print("moved into ok, payload len = {length(payload)}\n")
+    // moved into ok, payload len = 0
+
+    // Combinators work transparently — map runs the block and clones
+    // (or moves) on the non-copyable branch as needed.
+    let lengths = some([10, 20, 30]) |> map() $(v : array<int>) { return length(v); }
+    print("mapped non-copyable -> {lengths |> unwrap}\n")
+    // mapped non-copyable -> 3
+}
+
 [export]
 def main {
     print("=== Option ===\n")
@@ -274,4 +311,7 @@ def main {
     test_result_or_else()
     test_result_to_option()
     test_result_chaining()
+
+    print("\n=== Non-copyable payloads ===\n")
+    test_non_copyable()
 }

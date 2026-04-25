@@ -16,8 +16,10 @@ error" for ordinary value types. They compose through the existing ``|>`` pipe.
 
 ``Option<T>`` models **absence**. ``Result<T, E>`` models **failure with a
 reason**. Prefer them over sentinel return values (``-1``, ``""``) or nullable
-pointers (``T?``) when the payload is a value type — structs, primitives,
-tuples.
+pointers (``T?``).
+
+The payload may be any type, including non-copyable ones (``array<T>``,
+``table<K;V>``, lambdas) — see `Non-copyable payloads`_.
 
 Prerequisites: familiarity with template structures, blocks, and the pipe
 operator ``|>``.
@@ -219,6 +221,47 @@ Bridging to Option
     err("x", type<int>)  |> err_to_option       // some("x")
 
 
+Non-copyable payloads
+======================
+
+``Option<T>`` and ``Result<T, E>`` work for any payload type, including
+non-copyable ones such as ``array<T>``, ``table<K;V>``, and lambdas. The
+constructors and combinators dispatch internally on
+``static_if (typeinfo can_copy(...))`` and clone (or move) on the non-copyable
+branch — call sites look identical to the workhorse-type case.
+
+.. code-block:: das
+
+    var arr <- [1, 2, 3]
+    let o = some(arr)               // arr is cloned; arr is still [1, 2, 3]
+    let n = o |> map() $(v : array<int>) { return length(v); }
+    // n |> unwrap == 3
+
+When you want to **move** a non-copyable payload into the option (instead of
+cloning it), use ``move_some``. After ``move_some(src)`` the source is left
+empty:
+
+.. code-block:: das
+
+    var src <- [1, 2, 3]
+    let o = move_some(src)          // src is now []
+    // o |> unwrap == [1, 2, 3]
+
+``Result`` provides the same pair on each side: ``ok`` / ``err`` clone, while
+``move_ok`` / ``move_err`` move:
+
+.. code-block:: das
+
+    var payload <- [4, 5, 6]
+    let r = move_ok(payload, type<string>)   // payload is now []
+    // r |> unwrap == [4, 5, 6]
+
+For workhorse types (``int``, ``float``, ``bool``, ``string``, …) ``move_some`` /
+``move_ok`` / ``move_err`` are equivalent to their non-``move`` siblings —
+prefer the plain form for readability and use the move-variants only when
+you genuinely want to drain a non-copyable source.
+
+
 API reference at a glance
 ==========================
 
@@ -228,7 +271,9 @@ Option<T>
 +-------------------------------+-------------------------------------------------+
 | Function                      | Meaning                                         |
 +===============================+=================================================+
-| ``some(v)``                   | Wrap a value                                    |
+| ``some(v)``                   | Wrap a value (clones non-copyable payload)      |
++-------------------------------+-------------------------------------------------+
+| ``move_some(v)``              | Wrap a value by moving out of a mutable source  |
 +-------------------------------+-------------------------------------------------+
 | ``none(type<T>)``             | Empty option of given payload type              |
 +-------------------------------+-------------------------------------------------+
@@ -275,9 +320,13 @@ Result<T, E>
 +---------------------------------+-------------------------------------------------+
 | Function                        | Meaning                                         |
 +=================================+=================================================+
-| ``ok(v, type<E>)``              | Wrap a success value                            |
+| ``ok(v, type<E>)``              | Wrap a success value (clones non-copyable)      |
 +---------------------------------+-------------------------------------------------+
-| ``err(e, type<T>)``             | Wrap an error                                   |
+| ``move_ok(v, type<E>)``         | Wrap success by moving out of a mutable source  |
++---------------------------------+-------------------------------------------------+
+| ``err(e, type<T>)``             | Wrap an error (clones non-copyable)             |
++---------------------------------+-------------------------------------------------+
+| ``move_err(e, type<T>)``        | Wrap error by moving out of a mutable source    |
 +---------------------------------+-------------------------------------------------+
 | ``is_ok(r)``, ``is_err(r)``     | Tag queries                                     |
 +---------------------------------+-------------------------------------------------+
