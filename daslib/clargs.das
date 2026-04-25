@@ -228,13 +228,10 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
 [unused_argument(t)]
 def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<string>) : Result<Option<string>; string> {
     let opt = find_flag_raw_value(args, arg_info)
-    if (is_some(opt)) {
-        return ok(some(unwrap(opt)), type<string>)
-    }
-    if (flag_present(args, arg_info)) {
+    if (is_none(opt) && flag_present(args, arg_info)) {
         return err("missing value", type<Option<string>>)
     }
-    return ok(none(type<string>), type<string>)
+    return ok(opt, type<string>)
 }
 
 [unused_argument(t)]
