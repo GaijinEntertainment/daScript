@@ -529,7 +529,7 @@ def document_module_delegate(root : string) {
 def document_module_option(root : string) {
     var mod = find_module("option")
     var groups <- array<DocGroup>(
-        group_by_regex("Constructors",  mod, %regex~(some|none)$%%),
+        group_by_regex("Constructors",  mod, %regex~(some|move_some|none)$%%),
         group_by_regex("Queries",       mod, %regex~(is_some|is_none)$%%),
         group_by_regex("Transforming",  mod, %regex~(map|and_then|filter|or_else|or_value)$%%),
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|expect_value)$%%),
@@ -543,7 +543,7 @@ def document_module_option(root : string) {
 def document_module_result(root : string) {
     var mod = find_module("result")
     var groups <- array<DocGroup>(
-        group_by_regex("Constructors",  mod, %regex~(ok|err)$%%),
+        group_by_regex("Constructors",  mod, %regex~(ok|err|move_ok|move_err)$%%),
         group_by_regex("Queries",       mod, %regex~(is_ok|is_err)$%%),
         group_by_regex("Transforming",  mod, %regex~(map|map_err|and_then|or_else)$%%),
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|unwrap_err|expect_value|expect_err)$%%),

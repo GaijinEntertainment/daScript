@@ -107,4 +107,39 @@ blk.list |> emplace_new <| qmacro_block() {
 }
 ```
 
+### Pattern-matching call shapes — never rely on leading `!`
+
+When a macro walks an AST and pattern-matches specific call shapes to
+route them differently (e.g. `_sql` detects nested
+`select_from(...)._any(...)` and emits SQL `EXISTS`, vs. `_none(...)`
+emitting `NOT EXISTS`), **do not rely on detecting `!expr` to flip the
+emitted output**. Boris's standing rule (2026-04-24): "we don't have
+leading `!` support" for AST walkers. The `!` often sits across
+intermediate AST nodes — parentheses, `if` expressions, local `let`
+bindings, constant-folded wrappers — that break a naive pattern match.
+Pattern-matching `!any(...)` is correct for some cases, silently wrong
+for any user that parenthesizes or refactors the condition.
+
+**Ship explicit positive/negative name pairs instead.** Convention:
+the negative form gets a `_not_` or `_no` prefix on the positive name.
+
+| Positive | Negative | Emits |
+|---|---|---|
+| `_any` | `_none` | `EXISTS` / `NOT EXISTS` |
+| `_in` | `_not_in` | `IN` / `NOT IN` |
+| `_is_null` | `_is_not_null` | `IS NULL` / `IS NOT NULL` |
+| `_between` | `_not_between` | `BETWEEN` / `NOT BETWEEN` |
+
+Same rule applies outside `_sql` — any macro that needs to discriminate
+"do X" vs "do NOT X" call shapes ships matched name pairs.
+
+**Does NOT apply to runtime `!`.** Plain daslang code with `!any(...)`
+or `!x._in(...)` compiles and evaluates fine when there's no
+AST-walking macro routing through that expression. The constraint is
+specifically for macro-expansion-time pattern matching.
+
+**Docs:** when documenting a macro with negated forms, list the
+positive/negative pair together — do not say "negate with `!`".
+Discoverability is part of the UX.
+
 This avoids parser issues with `qmacro_function` body that contains complex nested blocks or variable declarations.

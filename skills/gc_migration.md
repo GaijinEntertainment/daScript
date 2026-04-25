@@ -1,4 +1,14 @@
-# GC Migration Skill — smart_ptr to gc_node
+# GC Migration Skill — porting pre-migration code
+
+> **Status:** the in-tree daslang migration is **complete**. This skill
+> exists for porting older code that still uses the legacy
+> `smart_ptr<T>` AST patterns — external repositories, archived
+> branches, user projects on older daslang versions, copy-paste from
+> historical examples. New in-tree code should follow the post-migration
+> rules in CLAUDE.md ("AST nodes (gc_node)" section); reach for this
+> skill only when you encounter `smart_ptr<TypeDecl>` /
+> `smart_ptr<Expression>` / `var inscope <- new ExprXxx(...)` style in
+> code being ported.
 
 Read this skill file before migrating daslang code (`.das` files in external repositories, modules, or user projects) from the old `smart_ptr<T>` AST patterns to the new gc_node raw-pointer patterns. This covers **all migrated types** and the concrete code changes needed.
 

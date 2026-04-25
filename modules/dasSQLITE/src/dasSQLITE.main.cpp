@@ -63,6 +63,15 @@ int sqlite3_bind_text_ ( sqlite3_stmt * stmt, int index, const char * data ) {
     return sqlite3_bind_text(stmt, index, data, -1, SQLITE_TRANSIENT);
 }
 
+// pzTail-free wrapper: libsqlite3's pzTail (const char **) renders to daslang
+// as `string const?`, which the AOT codegen emits as `char * const *` instead
+// of `const char **` (the const lands on the wrong indirection level). We
+// don't use pzTail in any boost call, so dropping the parameter at the C++
+// boundary sidesteps the codegen bug entirely.
+int sqlite3_prepare_v2_no_tail ( sqlite3 * db, const char * sql, sqlite3_stmt ** stmt ) {
+    return sqlite3_prepare_v2(db, sql, -1, stmt, nullptr);
+}
+
 void Module_dasSQLITE::initMain() {
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
@@ -77,6 +86,9 @@ void Module_dasSQLITE::initMain() {
     addExtern<DAS_BIND_FUN(sqlite3_bind_text_)>(*this,lib,"sqlite3_bind_text",
         SideEffects::worstDefault, "sqlite3_bind_text_")
             ->args({"stmt","index","data"});
+    addExtern<DAS_BIND_FUN(sqlite3_prepare_v2_no_tail)>(*this,lib,"sqlite3_prepare_v2_no_tail",
+        SideEffects::worstDefault, "sqlite3_prepare_v2_no_tail")
+            ->args({"db","sql","stmt"});
 
     for ( auto & pfn : this->functions.each() ) {
         // ok, lets fix up everything returning uint8? into returning string# and make it unsafe operation

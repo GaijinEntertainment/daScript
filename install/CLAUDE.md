@@ -33,6 +33,9 @@ daslang was created at Gaijin Entertainment to solve a concrete problem: **inter
 - On Windows, check `$LASTEXITCODE` in PowerShell after every run. Exit code `0` = success, non-zero = error
 - Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault)
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse) — check exit code first
+- **Don't truncate output** with `head`/`tail` — daslang stack traces are easily clipped. Capture full output, then `grep` if needed
+- **`options log`** — append at the end of a `.das` file to dump the final post-compilation program text. Useful for confirming what the compiler actually produces (constant folding, generic reification, macro expansion).
+- **`options log_infer_passes`** — append at the end of a failing `.das` file for a per-pass infer-pipeline dump (which generics got reified, when finalize ran, where lookups missed). Smaller and more targeted than `options log` for template/generic reification bugs.
 
 ## Skill Files (REQUIRED)
 
@@ -43,8 +46,9 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/cpp_integration.md` | Embedding daslang in C++ host applications, binding types/functions/enums |
 | `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, functional, match, etc.), channels |
-| `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, smart_ptr ownership |
+| `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, gc_node AST-pointer patterns |
 | `skills/daspkg.md` | Creating `.das_package` manifests, package structure, daspkg commands |
+| `skills/clargs_usage.md` | Writing your own daslang command-line tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | Understanding `.das_module` descriptors, module resolution, `register_native_path`, `register_dynamic_module` |
 | `skills/daslang_live.md` | Working with `daslang-live`, live-reload lifecycle, REST API, `[live_command]`, persistent state |
 
@@ -64,27 +68,33 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets
 - **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`
-- **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture)
+- **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture). **Inline arrow form:** `@(x) => expr` (capture lambda) and `@@(x) => expr` (no-capture function pointer) — preferred for short transforms passed as arguments: `sometimes(pat, @@(x) => fast(x, 2.0lf))`
 - **Generator:** `$() { yield value; }` or `$ { yield value; }`
 - **Tuple `=>`:** `a => b` creates `tuple<auto;auto>`
 - **`typeinfo`:** `typeinfo trait_name(type<T>)` — trait name outside parens
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required
 - **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`
+- **Newlines inside `(...)`, `[...]`, `{...}` are free** — long pipe chains, multi-arg calls, array/table literals can wrap freely. Statement-level (no surrounding bracket) still requires one statement per line, so wrap the RHS in `(...)` if a `let x = a |> b |> c` needs to break across lines
+- **Inline literals over temp-var-and-push** — for short arrays consumed in one expression, write `stack([a, b, c])` rather than `var xs : array<T>; xs |> emplace(a); xs |> emplace(b); stack(xs)`. Faster in interpreted mode and easier to read; same applies to table literals
 
 ### Type modifiers
 
-- **`==const`** on a parameter type — accepts both const and non-const arguments: `def foo(self : MyStruct ==const)` — callers can pass `MyStruct` or `MyStruct const`
+- **`==const`** on a parameter type — propagates the caller's constness (NOT "always non-const"): `def foo(self : MyStruct ==const)` accepts either `MyStruct` or `MyStruct const`, and inside the body `self`'s constness matches what the caller passed. Use plain `Foo?` for non-const-only, `Foo const?` for const-only, `Foo? ==const` when you want the callee to accept either and inherit the caller's view
 - **`-const`** strips constness in type expressions — used with `reinterpret` for interior mutability: `unsafe(reinterpret<MyStruct? -const>(addr(self)))`
 - **Function pointer with explicit type:** `@@<(var self : T) : RetT> funcName` — specifies the exact parameter/return types of a function pointer literal
 
 ### Important defaults
 
-- `strict_smart_pointers` is ON — smart_ptr variables require `var inscope`
+- `strict_smart_pointers` is ON — but the only types that are still `smart_ptr` are `Program` (`ProgramPtr`), `Context` (`ContextPtr`), `FileAccess` (`FileAccessPtr`), and a few internals (`DebugAgentPtr`, `VisitorAdapterPtr` from `make_visitor`). Only those need `var inscope`. **All AST types** (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, every `Annotation` subclass) are now plain raw pointers (gc_node) — see "AST nodes (gc_node)" below
 - No implicit type promotion: `int + float` is a compile error — both sides must match
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
 - `int("123")` does NOT work — use `to_int` from `require strings`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
-- **`default<T>`** — the default (zero) value of type `T`: `default<int>` is `0`, `default<string>` is `""`, `default<float>` is `0.0f`
+- **`default<T>`** — the default (zero) value of type `T`: `default<int>` is `0`, `default<string>` is `""`, `default<float>` is `0.0f`. The body of the called function CAN use the value freely.
+- **`type<T>`** vs **`default<T>`** as a witness argument — they are **not** interchangeable:
+  - `type<T>` is a no-stack, no-construction compile-time type tag. The function body must NOT use the parameter (compile error if it does). Annotate with `[unused_argument(t)]`.
+  - `default<T>` is a real zero-value of `T`. The body can read/pass it. Use `default<T>` when the called function's body might touch the witness; use `type<T>` only when the parameter exists purely for overload discrimination.
+  - Smell: if you find yourself wanting to read a `type<T>` parameter inside the body, switch the call site to `default<T>` — don't rewrite the function.
 - **`typedecl(expr)`** — compile-time type-of expression, usable inside `default<>`: `default<typedecl(field)>` gives the zero value of `field`'s type. Useful in generic code with `static_if` to compare against defaults.
 - **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
 - **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
@@ -93,20 +103,41 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 - Most types (structs, arrays, tables) always pass by reference — `&` is unnecessary on them
 - Only **workhorse types** (`int`, `float`, `bool`, `string`, etc. — `isWorkhorseType` on the C++ side) pass by value
-- **`smart_ptr<T>` also passes by value (move)** — like workhorse types, needs explicit `&` for pass-by-reference
-  - `def foo(var p : ExpressionPtr)` — **moves** the caller's smart_ptr, zeroing it
-  - `def foo(var p : ExpressionPtr&)` — pass by **reference**, caller keeps ownership
-  - Without `&`, passing a `var inscope` smart_ptr zeroes it on entry, then `inscope` cleanup double-frees
+- **AST pointers (gc_node) pass by value** — `ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`, `MakeStructPtr`, `AnnotationPtr` and friends are all plain raw pointers. Passing them by value just copies the pointer — no refcount bump, no allocation. The underlying gc_node is owned by its `gc_root` (typically the Module), not by the caller.
+  - `def foo(p : ExpressionPtr)` — caller passes a pointer; both sides reference the same node
+  - `def foo(var p : ExpressionPtr)` — `var` lets you reassign `p` locally
+  - `def foo(var p : ExpressionPtr&)` — pass by reference, so `p = newExpr` propagates back
+- **The few remaining `smart_ptr<T>` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) **still use refcount semantics**. Variables holding them require `var inscope` for cleanup. This is the narrow remaining surface where the smart_ptr rules in older docs still apply
 - **`var s : string`** — writable local copy, changes do NOT propagate back to the caller
 - **`var s : string&`** — pass by reference, changes propagate back. Use `&` for string out-parameters
 - **`clone_string(s)`** — clones a string into the current context's heap. Required for cross-context calls where the source context may be destroyed
 - **`:=`** on strings performs a clone (allocates in current context). Plain `=` copies the pointer
 
+### AST nodes (gc_node) — unique ownership, clone to duplicate
+
+Every AST node lives at exactly one location. Multiple `ExpressionPtr` or `TypeDeclPtr` values pointing at the same node are **shared references to one object**, not independent copies. The garbage collector tracks the node by its address; sticking the same pointer in two places does not create a second node.
+
+- **Don't insert the same pointer into two parent expressions** — that creates aliasing. Both parents think they own the child, gc_collect walks it twice, mutations on one parent show up in the other.
+- **Use the matching `clone_*` to duplicate:**
+  - `clone_type(t)` for `TypeDeclPtr`
+  - `clone_expression(e)` for `ExpressionPtr` (recursive deep clone)
+  - `clone_function(f)` for `FunctionPtr` — note: still returns via move (`var x <- clone_function(f)`)
+  - `clone_variable(v)` for `VariablePtr`
+  - `clone_structure(s)` for `StructurePtr`
+- **Don't use `var inscope`** for AST pointer types — the gc_node owns its own lifetime via `gc_root`. `var inscope` is for the residual smart_ptr types only (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`).
+- **Don't use `<-`** when assigning AST pointers — plain `=` is correct (`fn.body = newBlock`, `td.firstType = elemType`). Keep `<-` only where the API still demands it (`clone_function`, `qmacro_function` returns).
+- **Tools/utilities that build AST at runtime** (outside the normal compile pipeline) must wrap the scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
+- **Don't use `clone_to_move`** on AST pointers as a substitute for `clone_*` — `clone_to_move` is the generic copy-then-move helper for non-copyable values like `array<T>`. For AST nodes the right call is the type-specific `clone_type` / `clone_expression` / etc.
+
+If you find yourself reading older guidance about `var inscope`, `<-`, or `clone_to_move` for AST types, the source is pre-migration — see `skills/das_macros.md` for the current rules.
+
 ### Memory and move semantics
 
 - daslang has garbage collection — `delete` is not required in most code
+- **No C++/Rust-style scope RAII for plain `var`** — a local `var arr : array<T>` declared in any scope (function body, if-block, loop body) does NOT finalize on scope exit; the heap allocation stays alive until the context tears down. To get cleanup you must either (a) declare with `var inscope` (smart_ptrs only — Program/Context/FileAccess), (b) call `delete arr` explicitly before scope exit, or (c) move ownership out via `<-`. Per-frame leaks in hot paths usually trace back to a local `var arr : array<...>` that was never deleted
 - `var inscope` declares automatic cleanup; struct fields need defaults or `@safe_when_uninitialized`
-- `<-` is memcpy+memset(0), NOT smart_ptr-aware — see `skills/das_macros.md` for smart_ptr patterns
+- `var inscope` is legal inside `for` / `while` loop bodies — the loop's `finally` runs per iteration (on fall-through, `continue`, `break`, `return`), so each iteration finalizes its own scoped variables
+- `<-` is memcpy+memset(0), NOT smart_ptr-aware. For the residual smart_ptrs (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`) it bypasses refcount handling. For AST raw pointers it just shuffles a pointer slot, harmless but stylistically wrong (use `=`)
 
 ### Context heaps and threading
 
@@ -138,6 +169,14 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Unqualified** `foo(x)`: resolves in the **defining** module — caller's overloads NOT visible.
 - This is why `:=` and `delete` emit `_::clone` / `_::finalize`
 
+### Dot as pseudo-pipe
+
+`a.foo(b)` is sugar for `foo(a, b)` — but **only when `a` is a struct/class value** (chains: `a.foo().bar(x)` ≡ `bar(foo(a), x)`).
+
+- **Works on:** struct / class values (incl. by-ref).
+- **Does NOT work on:** primitives (`let n = 5; n.double()` → "can't get field 'double' of int const&"), tuples/arrays, and **lambda typedefs**. For lambda-typed values you must use `|>`.
+- **When telling someone "use pipe here":** check the receiver type — for structs `.method()` is idiomatic, for lambdas only `|>` works.
+
 ### Table operations
 
 - `table[key]` **inserts** a default entry if missing — use `table?[key] ?? default` for safe lookup
@@ -146,6 +185,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Never use two `[]` lookups on the same table in one expression** — re-hashing can invalidate references
 - **Move-assign table literal:** `tab <- { "k" => v }` works for both `var tab <- { ... }` declarations and `tab <- { ... }` reassignment to existing variables
 - **Table comprehension move-assign:** `tab <- { for(x in range(5)); x => x*x }` — same move-assign rules apply
+- `table[key]` (read or assign) is **safe** — do NOT wrap in `unsafe(...)`. Some legacy daslib code has `unsafe(tab[k])`; do not propagate that pattern
 
 ### Iterators and `each`
 
@@ -164,7 +204,9 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - Lambda params can shadow function params — use distinct names
 - String builder requires `unsafe` or `options persistent_heap` if returned
 - Tuple field access: `t._0`, `t._1`, `t._2`
-- Annotations: `[export]`, `[private]`, `[test]`; `options no_aot`, `options rtti`
+- Annotations: `[export]`, `[test]`; `options no_aot`, `options rtti`
+- **Visibility is a prefix keyword, not an annotation:** `def private foo()`, `struct private Foo { ... }`, `enum private E { ... }`, `variable private x = 0`, `alias private X = Y`. There is **no** `[private]` annotation — it's a grammar error
+- **Field/variable annotations use `@name` only:** `@safe_when_uninitialized at : LineInfo`, `@sql_primary_key id : int64`. The `[name]` form is reserved for struct/function/global-level annotations and does NOT parse on a struct field
 - `require` uses forward slash: `require daslib/linq` — NOT backslash
 - `require foo public` — re-exports `foo` transitively
 - `[export] def main()` returns `void` — do NOT return values from main
@@ -180,19 +222,19 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 | Don't write | Write instead | Why |
 |---|---|---|
-| `string(x.__rtti) == "ExprFoo"` | `x is ExprFoo` | `is` works on both smart_ptr and raw ptrs |
-| `get_ptr(x) == null` | `x == null` | smart_ptr supports `==`/`!=` null directly |
-| `get_ptr(x).field` | `x.field` | smart_ptr auto-dereferences for field access |
+| `string(x.__rtti) == "ExprFoo"` | `x is ExprFoo` | `is` works directly on AST pointers |
+| `get_ptr(x) == null` | `x == null` | AST pointers compare to `null` directly (also still works for residual smart_ptrs) |
+| `get_ptr(x).field` | `x.field` | AST pointers auto-dereference for field access; `get_ptr` is leftover from the smart_ptr era |
 | `string(das_str) == "lit"` | `das_str == "lit"` | `das_string` compares directly with `string` |
 | `!empty(string(das_str))` | `!empty(das_str)` | `empty()` works on `das_string` |
 | `let v = string(x.name); $i(v)` | `$i(x.name)` | qmacro `$i`/`$f` accept `das_string` directly |
 | `var copy = val; $v(copy)` | `$v(val)` | qmacro `$v` works with `let` vars and loop vars |
 | `if (true) { ... }` | `{ ... }` | bare blocks create lexical scope in gen2 |
 | `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
-| `unsafe { (reinterpret<ExprBlock?> blk).list }` | `blk.list` | smart_ptr auto-dereferences |
-| `unsafe(reinterpret<T?> get_ptr(x))` | make param `var` + `get_ptr(x)` | `var` param gives non-const access, no reinterpret needed |
+| `unsafe { (reinterpret<ExprBlock?> blk).list }` | `blk.list` | AST pointers auto-dereference |
+| `unsafe(reinterpret<T?> x)` | make param `var` + plain `x` | `var` param gives non-const access, no reinterpret needed |
 
-**Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from smart_ptr field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
+**Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
 ## SDK Directory Layout
 
@@ -270,7 +312,7 @@ Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `
 ## Keywords Reference
 
 `aka` — variable name alias (`var a aka alpha = 42`)
-`inscope` — declares variable owns smart_ptr lifetime
+`inscope` — declares variable owns a smart_ptr lifetime; only relevant for the residual smart_ptr types (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`). AST pointers (gc_node) do NOT use `inscope`
 `is type<T>` — compile-time type check
 `expect` — suppress specific compilation errors
 `template` — generic type constraint in function signatures

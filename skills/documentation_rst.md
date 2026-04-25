@@ -73,6 +73,38 @@ To fix a stub:
 4. Regenerate: `bin/Release/daslang.exe doc/reflections/das2rst.das`
 5. Verify: `Select-String -Path "doc\source\stdlib\*.rst" -Pattern "// stub"` should return 0 matches
 
+### Handmade files are for C++ builtin modules ONLY — daslang modules use `//!`
+
+`doc/source/stdlib/handmade/*.rst` per-symbol files are **only** for
+C++ builtin modules (e.g. `audio`, `strings`, `math`, `stbimage`,
+`raster` — anything declared on the C++ side with no daslang source to
+read). For pure-daslang modules (anything under `daslib/*.das` or
+`modules/*/*.das`), per-symbol documentation comes from `//!` comments
+in the `.das` source.
+
+**If `das2rst` emits a `// stub` for a symbol in a daslang module, the
+fix is to add a `//!` comment in the `.das` source** — not to fill the
+handmade stub. Then regenerate; the stub disappears.
+
+The only handmade artifact allowed for a daslang module is a trivial
+one-line `module-<name>.rst` header (e.g. `module-strudel_midi.rst`
+contains just `Module strudel_midi`). The real module description goes
+in the `//!` comment at the top of the `.das` file.
+
+**Verification for daslang modules:** after regenerate, both must hold:
+
+```
+grep -rl "// stub" doc/source/stdlib/handmade/ | grep <module>   # must be empty
+```
+
+When planning doc work for a daslang module, do **not** include "fill
+handmade stubs" as a work step — fill the `//!` source comments
+instead.
+
+C++ modules (e.g. dasAudio's ~200 `function-audio-*.rst` files) are
+the normal case for handmade content; do not try to convert those to
+the daslang flow.
+
 ## RST Editing Conventions
 
 When editing RST files in `doc/source/reference/language/`:

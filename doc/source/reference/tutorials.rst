@@ -271,6 +271,27 @@ Run any tutorial from the project root::
    tutorials/dasStbImage_04_pixel_access_and_conversion.rst
    tutorials/dasStbImage_05_drawing_and_blending.rst
 
+.. _tutorials_sql:
+
+dasSQLITE (SQL) Tutorials
+=========================
+
+These tutorials cover the ``daslib/sql`` + ``sqlite/sqlite_boost`` API
+— RAII connection handling, the ``[sql_table]`` structure macro, and
+the typed CRUD helpers built on top of it.  The companion ``.das``
+files are in ``tutorials/sql/``.
+
+Run any tutorial from the project root::
+
+   daslang.exe tutorials/sql/01-version.das
+
+.. toctree::
+   :maxdepth: 1
+
+   tutorials/sql_01_hello.rst
+   tutorials/sql_02_insert_data.rst
+   tutorials/sql_03_last_row_id.rst
+
 .. _tutorials_dasaudio:
 
 dasAudio (Audio) Tutorials
