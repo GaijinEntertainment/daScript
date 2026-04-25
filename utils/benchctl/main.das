@@ -8,7 +8,7 @@ require daslib/defer
 require daslib/regex_boost
 require daslib/strings_boost
 
-require sql
+require dbio
 require utils
 require flags
 require benchstat
