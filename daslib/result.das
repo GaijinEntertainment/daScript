@@ -193,7 +193,7 @@ def unwrap_or(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : d
     } else {
-        return <- r._is_ok ? clone_to_move(r._value) : clone_to_move(d)
+        return <- clone_to_move(r._is_ok ? r._value : d)
     }
 }
 
@@ -202,7 +202,7 @@ def unwrap_or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : TT>)
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : invoke(f, r._error)
     } else {
-        return <- r._is_ok ? clone_to_move(r._value) : invoke(f, r._error)
+        return <- clone_to_move(r._is_ok ? r._value : invoke(f, r._error))
     }
 }
 
@@ -211,7 +211,7 @@ def unwrap_or_default(r : $Result < auto(TT); auto(EE) >) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : default<TT>
     } else {
-        return <- r._is_ok ? clone_to_move(r._value) : clone_to_move(default<TT>)
+        return <- clone_to_move(r._is_ok ? r._value : default<TT>)
     }
 }
 
@@ -299,7 +299,7 @@ def operator ??(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
     static_if (typeinfo can_copy(r._value)) {
         return r._is_ok ? r._value : d
     } else {
-        return <- r._is_ok ? clone_to_move(r._value) : clone_to_move(d)
+        return <- clone_to_move(r._is_ok ? r._value : d)
     }
 }
 
