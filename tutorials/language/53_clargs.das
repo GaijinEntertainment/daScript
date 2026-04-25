@@ -6,11 +6,14 @@
 //   - Bool flag shorthand (--flag sets true; --flag=false sets false)
 //   - Required flags with @clarg_required
 //   - Custom flag names with @clarg_name
+//   - Short flags with @clarg_short = "v"
 //   - Doc strings with @clarg_doc
 //   - Skipping fields with @clarg_skip
 //   - Error handling (parse_args returns "" on success, error message on failure)
-//   - Introspection with get_command_info for help generation
-//   - Reading process arguments with get_cli_arguments()
+//   - Introspection with get_command_info
+//   - Help rendering with print_help / format_help
+//   - Reading process arguments: get_cli_arguments() (after "--") vs
+//     get_program_args() (standalone tools, no separator)
 //
 // Run: daslang.exe tutorials/language/53_clargs.das
 
@@ -236,57 +239,156 @@ def test_error_handling() {
 }
 
 // ============================================================
-// Section 8: Introspection with get_command_info
+// Section 8: Short flags
+// ============================================================
+// @clarg_short = "X" attaches a single-character short flag,
+// callable as -X / -X value / -X=value.  All field types support
+// short flags; declaring two fields with the same short character
+// is a compile-time error.
+
+[CommandLineArgs]
+struct ServerConfig {
+    @clarg_short = "p"
+    @clarg_doc = "listen port"
+    port : int
+
+    @clarg_short = "v"
+    @clarg_doc = "verbose logging"
+    verbose : bool
+
+    @clarg_short = "t"
+    @clarg_doc = "tag (repeated)"
+    tags : array<string>
+}
+
+def test_short_flags() {
+    print("\n=== Short flags ===\n")
+
+    // Long form, short form, and mixed form all parse identically.
+    var a = ServerConfig()
+    parse_args(a, ["--port", "8080", "--verbose", "--tags=alpha", "--tags=beta"])
+
+    var b = ServerConfig()
+    parse_args(b, ["-p", "8080", "-v", "-t=alpha", "-t=beta"])
+
+    var c = ServerConfig()
+    parse_args(c, ["-p=8080", "--verbose", "-t", "alpha", "--tags=beta"])
+
+    print("  long-only port    = {a.port}, verbose = {a.verbose}, tags = {a.tags}\n")
+    print("  short-only port   = {b.port}, verbose = {b.verbose}, tags = {b.tags}\n")
+    print("  mixed port        = {c.port}, verbose = {c.verbose}, tags = {c.tags}\n")
+    // output:
+    //   long-only port    = 8080, verbose = true, tags = [alpha, beta]
+    //   short-only port   = 8080, verbose = true, tags = [alpha, beta]
+    //   mixed port        = 8080, verbose = true, tags = [alpha, beta]
+}
+
+// ============================================================
+// Section 9: Introspection with get_command_info
 // ============================================================
 // get_command_info(type<T>) returns a CommandInfo value
-// describing every parsed flag: name, type, doc string,
-// required status, and valid enum choices.
-// Use it to implement --help output.
-
-def print_help(info : CommandInfo) {
-    for (arg in info.args) {
-        let req = arg.is_required ? " (required)" : ""
-        let doc = !empty(arg.doc_string) ? "  — {arg.doc_string}" : ""
-        print("  {arg.flag_name}{req}{doc}\n")
-        if (!empty(arg.enum_values)) {
-            for (v in arg.enum_values) {
-                print("      {v}\n")
-            }
-        }
-    }
-}
+// describing every parsed flag: name, short name, type, doc string,
+// required status, array status, and valid enum choices.
 
 def test_introspection() {
     print("\n=== Introspection ===\n")
-    let info <- get_command_info(type<AppConfig>)
-    print("  AppConfig exposes {length(info.args)} flags:\n")
-    print_help(info)
+    let info <- get_command_info(type<ServerConfig>)
+    print("  ServerConfig exposes {length(info.args)} flags:\n")
+    for (arg in info.args) {
+        print("    {arg.short_flag_name}, {arg.flag_name}  ({arg.value_type})  {arg.doc_string}\n")
+    }
     // output:
-    //   AppConfig exposes 2 flags:
-    //     --output-dir  — Directory to write output files
-    //     --workers  — Number of parallel workers (default: 1)
+    //   ServerConfig exposes 3 flags:
+    //     -p, --port  (tInt)  listen port
+    //     -v, --verbose  (tBool)  verbose logging
+    //     -t, --tags  (tString)  tag (repeated)
 }
 
 // ============================================================
-// Section 9: Reading process arguments
+// Section 10: Help rendering with print_help / format_help
 // ============================================================
-// In a real program call parse_args(cfg) (no second argument)
-// to parse from the process command line.
+// The library renders a Usage / Flags block from CommandInfo.
+//   - print_help writes to stdout.
+//   - format_help returns the same text as a string (testable,
+//     redirectable into a logger or buffer).
 //
-// Arguments must come after "--" on the command line:
+// The macro intentionally does NOT auto-handle --help.  Add a
+// help : bool field with @clarg_short = "h" and check it after
+// parse_args; you control the exit policy.
+
+[CommandLineArgs]
+struct DemoConfig {
+    @clarg_short = "n"
+    @clarg_doc = "user's display name"
+    name : string
+
+    @clarg_doc = "iteration count"
+    count : int
+
+    @clarg_short = "v"
+    @clarg_doc = "verbose logging"
+    verbose : bool
+
+    @clarg_short = "h"
+    @clarg_doc = "show this help and exit"
+    help : bool
+}
+
+def test_help_rendering() {
+    print("\n=== Help rendering ===\n")
+    let info <- get_command_info(type<DemoConfig>)
+    print(format_help(info, "demo"))
+    // output:
+    //   Usage: demo [flags]
+    //
+    //   Flags:
+    //     -n, --name=STRING    user's display name
+    //         --count=INT      iteration count
+    //     -v, --verbose        verbose logging
+    //     -h, --help           show this help and exit
+}
+
+// ============================================================
+// Section 11: Reading process arguments
+// ============================================================
+// Two helpers feed argv into parse_args, depending on how the
+// program is invoked:
 //
-//   daslang.exe my_script.das -- --name Alice --count 5
+//   get_cli_arguments()    — script-style, returns the slice AFTER "--"
+//                            in argv.  Used when daslang itself is the
+//                            host:  daslang script.das -- --name Alice
+//                            parse_args(cfg) (the no-argument overload)
+//                            calls this internally.
 //
-// get_cli_arguments() returns only the slice after "--".
-// Without "--" it returns an empty array.
+//   get_program_args()     — standalone-tool style, returns argv[1..]
+//                            (everything after the program name).  Use
+//                            this for AOT'd binaries that own the full
+//                            argv themselves (no "--" separator).
+//
+// Both helpers also accept an explicit argv parameter, which makes the
+// "--" splitting and argv0 skipping testable in unit tests.
 
 def test_process_args() {
     print("\n=== Process CLI arguments ===\n")
-    let args = get_cli_arguments()
-    print("  CLI args passed to this tutorial: {length(args)}\n")
+
+    // Script-style: arguments after "--".
+    let script_args = get_cli_arguments()
+    print("  get_cli_arguments() returned {length(script_args)} entries\n")
     // Run as:
     //   daslang.exe tutorials/language/53_clargs.das -- --name foo
-    // to see: CLI args passed to this tutorial: 2
+    // to see: get_cli_arguments() returned 2 entries
+
+    // Standalone-tool style: full argv minus argv[0].
+    let prog_args = get_program_args()
+    print("  get_program_args() returned {length(prog_args)} entries\n")
+
+    // The split helpers are testable directly without poking the
+    // process state:
+    let scripted <- get_cli_arguments(["host", "script.das", "--", "--foo", "bar"])
+    print("  get_cli_arguments(synthetic) -> {length(scripted)} entries (foo, bar)\n")
+
+    let standalone <- get_program_args(["fmt.exe", "--write", "file.das"])
+    print("  get_program_args(synthetic) -> {length(standalone)} entries (--write, file.das)\n")
 }
 
 // ============================================================
@@ -302,6 +404,8 @@ def main() {
     test_required_flags()
     test_field_attributes()
     test_error_handling()
+    test_short_flags()
     test_introspection()
+    test_help_rendering()
     test_process_args()
 }

@@ -535,7 +535,7 @@ def document_module_option(root : string) {
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|expect_value)$%%),
         group_by_regex("Side effects",  mod, %regex~(if_some|if_none)$%%),
         group_by_regex("Pairing",       mod, %regex~(zip)$%%),
-        group_by_regex("Operators",     mod, %regex~(==|\?\?)$%%)
+        group_by_regex("Operators",     mod, %regex~(==|!=|\?\?)$%%)
     )
     document("Monadic Option<T> — a value-or-nothing tagged pair", mod, "option.rst", groups)
 }
@@ -549,7 +549,7 @@ def document_module_result(root : string) {
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|unwrap_err|expect_value|expect_err)$%%),
         group_by_regex("Side effects",  mod, %regex~(if_ok|if_err)$%%),
         group_by_regex("Bridges to Option", mod, %regex~(to_option|err_to_option)$%%),
-        group_by_regex("Operators",     mod, %regex~(==|\?\?)$%%)
+        group_by_regex("Operators",     mod, %regex~(==|!=|\?\?)$%%)
     )
     document("Monadic Result<T, E> — a value-or-error tagged pair", mod, "result.rst", groups)
 }

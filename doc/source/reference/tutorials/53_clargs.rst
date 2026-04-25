@@ -32,6 +32,7 @@ functions for it:
 
 * ``parse_args(var dst; args : array<string>) : string`` — parse a provided list
 * ``parse_args(var dst) : string`` — parse from the process command line
+  (post-``--`` slice; see *Reading process arguments* below)
 * ``get_command_info(type<T>) : CommandInfo`` — runtime flag metadata
 
 Field names map to flag names with underscores converted to dashes
@@ -164,8 +165,11 @@ Three field annotations fine-tune parsing behaviour:
 ``@clarg_name = "flag"``
     Overrides the auto-generated flag name.
 
+``@clarg_short = "X"``
+    Attaches a single-character short flag (see *Short flags* below).
+
 ``@clarg_doc = "text"``
-    Attaches a description used by help generators (see introspection below).
+    Attaches a description used by help generators (see *Help rendering* below).
 
 ``@clarg_skip``
     Excludes the field from CLI parsing entirely (set it in code directly).
@@ -218,81 +222,206 @@ Common error forms:
 * ``"--flag: invalid bool value: 'yes'"``
 
 
+Short flags
+============
+
+``@clarg_short = "X"`` attaches a single-character short flag.  Both the long
+and short forms are recognised by ``parse_args``, with identical value syntax
+(``-X value``, ``-X=value``, or bare ``-X`` for booleans):
+
+.. code-block:: das
+
+    [CommandLineArgs]
+    struct ServerConfig {
+        @clarg_short = "p"
+        @clarg_doc = "listen port"
+        port : int
+
+        @clarg_short = "v"
+        @clarg_doc = "verbose logging"
+        verbose : bool
+
+        @clarg_short = "t"
+        @clarg_doc = "tag (repeated)"
+        tags : array<string>
+    }
+
+    var cfg = ServerConfig()
+    parse_args(cfg, ["-p", "8080", "-v", "-t=alpha", "-t=beta"])
+    // cfg.port    == 8080
+    // cfg.verbose == true
+    // cfg.tags    == ["alpha", "beta"]
+
+Mixing long and short occurrences of an array flag preserves command-line order:
+``--tags=a -t b --tags=c`` collects ``["a", "b", "c"]``.
+
+Two fields cannot share a short flag.  ``@clarg_short`` must be exactly one
+character; both are compile-time errors from the macro.
+
+
 Introspection with ``get_command_info``
 ========================================
 
 ``get_command_info(type<T>)`` returns a ``CommandInfo`` value containing a
-``CommandArgumentInfo`` entry for each parsed flag.  Use it to implement
-``--help`` output without duplicating the flag list:
+``CommandArgumentInfo`` entry for each parsed flag — the same data the
+help renderer below uses, but exposed for programmatic inspection (custom
+help formats, validation rules, configuration dumps, etc.):
 
 .. code-block:: das
 
-    def print_help(info : CommandInfo) {
-        for (arg in info.args) {
-            let req = arg.is_required ? " (required)" : ""
-            let doc = !empty(arg.doc_string) ? "  — {arg.doc_string}" : ""
-            print("  {arg.flag_name}{req}{doc}\n")
-            if (!empty(arg.enum_values)) {
-                for (v in arg.enum_values) {
-                    print("      {v}\n")
-                }
-            }
-        }
+    let info <- get_command_info(type<ServerConfig>)
+    for (arg in info.args) {
+        print("  {arg.short_flag_name}, {arg.flag_name}  ({arg.value_type})  {arg.doc_string}\n")
     }
-
-    let info <- get_command_info(type<AppConfig>)
-    print_help(info)
     // output:
-    //   --output-dir  — Directory to write output files
-    //   --workers  — Number of parallel workers (default: 1)
+    //   -p, --port  (tInt)  listen port
+    //   -v, --verbose  (tBool)  verbose logging
+    //   -t, --tags  (tString)  tag (repeated)
 
 ``CommandArgumentInfo`` fields:
 
-+-----------------+------------------+---------------------------------------------+
-| Field           | Type             | Description                                 |
-+=================+==================+=============================================+
-| ``flag_name``   | ``string``       | Full flag string (e.g. ``"--output-dir"``)  |
-+-----------------+------------------+---------------------------------------------+
-| ``field_name``  | ``string``       | Struct field name                           |
-+-----------------+------------------+---------------------------------------------+
-| ``doc_string``  | ``string``       | ``@clarg_doc`` text, or ``""``              |
-+-----------------+------------------+---------------------------------------------+
-| ``is_required`` | ``bool``         | ``true`` if ``@clarg_required``             |
-+-----------------+------------------+---------------------------------------------+
-| ``is_array``    | ``bool``         | ``true`` for ``array<string>`` fields       |
-+-----------------+------------------+---------------------------------------------+
-| ``value_type``  | ``Type``         | Base type (``tString``, ``tInt``, etc.)     |
-+-----------------+------------------+---------------------------------------------+
-| ``enum_values`` | ``array<string>``| Entry names for enum fields, empty otherwise|
-+-----------------+------------------+---------------------------------------------+
++---------------------+------------------+--------------------------------------------------+
+| Field               | Type             | Description                                      |
++=====================+==================+==================================================+
+| ``flag_name``       | ``string``       | Full flag string (e.g. ``"--output-dir"``)       |
++---------------------+------------------+--------------------------------------------------+
+| ``short_flag_name`` | ``string``       | ``"-X"`` from ``@clarg_short``, or ``""``        |
++---------------------+------------------+--------------------------------------------------+
+| ``field_name``      | ``string``       | Struct field name                                |
++---------------------+------------------+--------------------------------------------------+
+| ``doc_string``      | ``string``       | ``@clarg_doc`` text, or ``""``                   |
++---------------------+------------------+--------------------------------------------------+
+| ``is_required``     | ``bool``         | ``true`` if ``@clarg_required``                  |
++---------------------+------------------+--------------------------------------------------+
+| ``is_array``        | ``bool``         | ``true`` for ``array<string>`` fields            |
++---------------------+------------------+--------------------------------------------------+
+| ``value_type``      | ``Type``         | Base type (``tString``, ``tInt``, etc.)          |
++---------------------+------------------+--------------------------------------------------+
+| ``enum_values``     | ``array<string>``| Entry names for enum fields, empty otherwise     |
++---------------------+------------------+--------------------------------------------------+
+
+
+Help rendering
+===============
+
+The library ships a ``--help`` renderer over ``CommandInfo``:
+
+* ``print_help(info, prog_name)`` — writes the formatted help to stdout.
+* ``format_help(info, prog_name) : string`` — returns the same text, useful
+  in tests or when redirecting into a logger.
+
+``parse_args`` does **not** auto-recognise ``--help`` — declare an explicit
+``help`` field and check it after parsing.  This keeps ``parse_args`` a pure
+parser and leaves the exit policy to the caller:
+
+.. code-block:: das
+
+    [CommandLineArgs]
+    struct DemoConfig {
+        @clarg_short = "n"
+        @clarg_doc = "user's display name"
+        name : string
+
+        @clarg_doc = "iteration count"
+        count : int
+
+        @clarg_short = "v"
+        @clarg_doc = "verbose logging"
+        verbose : bool
+
+        @clarg_short = "h"
+        @clarg_doc = "show this help and exit"
+        help : bool
+    }
+
+    [export]
+    def main() : int {
+        var cfg = DemoConfig()
+        let err = parse_args(cfg)
+        if (err != "") {
+            print("error: {err}\n")
+            return 1
+        }
+        if (cfg.help) {
+            print_help(get_command_info(type<DemoConfig>), "demo")
+            return 0
+        }
+        return 0
+    }
+
+The rendered output:
+
+.. code-block:: text
+
+    Usage: demo [flags]
+
+    Flags:
+      -n, --name=STRING    user's display name
+          --count=INT      iteration count
+      -v, --verbose        verbose logging
+      -h, --help           show this help and exit
+
+Format rules:
+
+* Per-flag line: ``-X, --long=PLACEHOLDER  doc_string``.  Fields with no
+  ``@clarg_short`` indent the short slot blank to keep the long flags vertically
+  aligned.
+* ``=PLACEHOLDER`` is the uppercased type name (``STRING`` / ``INT`` / ``FLOAT``
+  / ``ENUM``).  Bool flags omit it.
+* Enum values render inline as ``(V1|V2|V3)``.
+* ``(required)`` / ``(repeated)`` markers are appended to the doc column for
+  required flags and array flags respectively.
+* Defaults are not shown — ``CommandInfo`` does not currently carry them.
 
 
 Reading process arguments
 ==========================
 
-In a real program call ``parse_args(cfg)`` (no second argument) to parse from
-the process command line.  Arguments must follow ``--`` on the command line;
-``get_cli_arguments()`` returns only that suffix:
+Two helpers feed ``argv`` into ``parse_args``, depending on how the program is
+invoked.  Each has a zero-argument form (operating on the live process command
+line) and a one-argument form (taking an explicit ``argv`` array, useful in
+tests):
 
-.. code-block:: bash
+``get_cli_arguments() / get_cli_arguments(argv)`` — script-style
+    Returns the slice **after** the ``--`` separator in argv (or empty if no
+    ``--``).  This is what daslang script invocations look like, where daslang
+    itself owns argv up to the ``--`` and the script gets everything after:
 
-    daslang.exe my_script.das -- --name Alice --count 5
+    .. code-block:: bash
+
+        daslang.exe my_script.das -- --name Alice --count 5
+
+    The no-argument ``parse_args(cfg)`` overload generated by the macro calls
+    this internally.
+
+``get_program_args() / get_program_args(argv)`` — standalone-tool style
+    Returns ``argv[1..]`` — the full argv with the program name stripped.  Use
+    this for AOT'd binaries that own the full argv themselves and have no
+    ``--`` separator (das-fmt, daspkg, lint, aot-style tools):
+
+    .. code-block:: das
+
+        [export]
+        def main() : int {
+            var cfg = FmtConfig()
+            let err = parse_args(cfg, get_program_args())
+            if (err != "") {
+                print("error: {err}\n")
+                return 1
+            }
+            return 0
+        }
+
+The explicit-argv overloads make the splitting logic unit-testable without
+touching the live process state:
 
 .. code-block:: das
 
-    [export]
-    def main() {
-        var cfg = Config()
-        let err = parse_args(cfg)  // reads from process command line
-        if (err != "") {
-            print("error: {err}\n")
-            return
-        }
-        print("Hello, {cfg.name}!\n")
-    }
+    let scripted <- get_cli_arguments(["host", "script.das", "--", "--foo", "bar"])
+    // scripted == ["--foo", "bar"]
 
-Without ``--``, ``get_cli_arguments()`` returns an empty array and all fields
-keep their default values.
+    let standalone <- get_program_args(["fmt.exe", "--write", "file.das"])
+    // standalone == ["--write", "file.das"]
 
 
 .. seealso::

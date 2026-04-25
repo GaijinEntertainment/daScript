@@ -245,27 +245,26 @@ def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string
 
 [export]
 def main() : int {
-    // raw_args are still used in couple of places, but maybe
-    // we can replace that too, just need to find the best plan.
-    var raw_args <- get_command_line_arguments()
+    // ansi-colors detection scans full argv for --color / --no-color so the
+    // user can place either flag before or after the "--" separator.
+    log::init_log()
 
-    // init_log uses daslib ansi-colors, which relies on array<string> parsing.
-    log::init_log(raw_args)
+    // Captured for isolated-mode subprocess invocation; raw_args[0] is the
+    // daslang interpreter path and raw_args[1] is dastest.das.  Everything
+    // else for this main() comes from the parsed test_args below.
+    var raw_args <- get_command_line_arguments()
 
     var test_args = DastestArgs()
     let parse_err = parse_args(test_args)
     if (parse_err != "") {
-        unsafe {
-            log::red("command-line args: {parse_err}")
-            fio::exit(1)
-        }
+        log::red("command-line args: {parse_err}")
+        return 1
     }
 
-    var args <- get_command_line_arguments()
-    log::init_log(args)
-    let runIdx = args |> find_index("--run")
-    if (runIdx != -1) {
-        let res = suite::test_file(args[runIdx + 1], SuiteCtx(test_args))
+    if (!empty(test_args.run)) {
+        // Isolated-mode single-file: --run=<file> covers both `--run X` and
+        // `--run=X` forms because parse_args has already populated the field.
+        let res = suite::test_file(test_args.run, SuiteCtx(test_args))
         // Send full report with per-test details for isolated mode JSON collection
         var report = JsonTestReport(
             file = test_args.run,
