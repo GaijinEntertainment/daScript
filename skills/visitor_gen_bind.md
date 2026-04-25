@@ -156,3 +156,21 @@ Expression
 ```
 
 `ExprCall::visit()` does NOT go through `ExprLooksLikeCall::visit()` — it has its own implementation. So `canVisitLooksLikeCall` does NOT affect `ExprCall` nodes (they use `canVisitCall` instead).
+
+## Visitor returns: `return fun` or `return <- fun` — both fine post-migration
+
+Visitor override methods that return an AST pointer (`visitFunction` →
+`FunctionPtr`, `visitStructure` → `StructurePtr`, `visitVariable` →
+`VariablePtr`, `visitEnumeration` → `EnumerationPtr`,
+`visitExpression*` → `ExpressionPtr`, etc.) can use either
+`return fun` or `return <- fun`. Both are correct: every AST type is
+now a raw pointer (gc_node), so `<-` is a memcpy on a pointer slot —
+harmless. The codebase is mixed: `ast_cursor.das` uses `return fun`,
+`ast_print.das` / `lint.das` / `perf_lint.das` use `return <- fun`.
+
+**Historical note:** before the GC migration, smart_ptr-returning
+visitor overrides needed `return <- clone_to_move(fun)` to avoid
+stealing the safebox's reference. That rule no longer applies — there
+are no smart_ptr-returning visitor overrides in the current codebase.
+See `skills/gc_migration.md` for the full migration table if you're
+porting older `.das` code.

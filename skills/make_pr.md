@@ -2,6 +2,23 @@
 
 Before creating a pull request, complete ALL of the following steps in order. Do not skip steps. If any step fails, fix the issue before proceeding.
 
+## 0. Sync with origin/master and rebase the branch
+
+**Always do this first.** If you skip it, a stale local `master` will cause your squashed commit to absorb other already-merged PRs as if they were branch-original work — the PR ends up touching files it has no business touching.
+
+```bash
+git fetch origin master
+git diff --name-only master..origin/master | head -5    # quick sanity: is local behind?
+git rebase origin/master                                # bring branch on top of latest origin/master
+git diff --name-only origin/master..HEAD | head         # confirm only your files remain
+```
+
+After the rebase, every file in `git diff --name-only origin/master..HEAD` should be one you actually edited. If you see `daslib/option.das`, `daslib/result.das`, or anything else from a recently merged PR, your local `master` was behind — re-rebase or `git reset --hard` the branch and start over.
+
+**Why this matters:** `git reset --soft master` (used to squash N commits into one) collapses everything HEAD-back-to-master into the index. If local `master` is behind origin's by even one merge, that merge's content gets baked into your "single squashed commit" — invisibly. The PR diff against origin/master then shows the leak. Always rebase onto **origin/master** (not local `master`) before squashing.
+
+If a rebase produces conflicts on files that were independently changed on origin/master, resolve them by keeping origin/master's version (your branch's "modification" was an outdated copy of the same change) — verify with `git show origin/master:<path>` that the merged version subsumes yours.
+
 ## 1. Lint all changed `.das` files
 
 Run the unified lint utility on changed directories:
@@ -141,7 +158,21 @@ See `skills/documentation_rst.md` for full details on doc conventions, tutorial 
 
 Run the MCP `format_file` tool on every changed `.das` file. Verify each still compiles after formatting.
 
+**Format every changed `.das` file regardless of syntax era** — the formatter handles both gen2 and gen1 (`options gen2 = false`) cleanly, including `.das_project` files. CI fails on unformatted gen1 files (e.g. spacing around `=` in `options gen2 = false`), so don't skip them.
+
 Do NOT format files you didn't change — only format files that are part of the PR.
+
+### CI `das-fmt` ≠ MCP `format_file` — verify named-arg spacing
+
+CI's `extended_checks` job runs `./bin/Release/daslang ./das-fmt/dasfmt.das -- --path ./ --verify` (plus a compiled `das-fmt.exe` pass). The `das-fmt/dasfmt.das` file is NOT in the repo tree — CI fetches it externally — and it is **stricter** than MCP `format_file` on at least one rule:
+
+| MCP `format_file` accepts | CI `das-fmt` requires |
+|---|---|
+| `Foo(a=1, b=2)` | `Foo(a = 1, b = 2)` (spaces around `=` in named args) |
+
+`bin/Release/das-fmt.exe` built from `utils/dasFormatter/` is the **v1→v2 syntax converter**, NOT the same formatter — running it locally does not reproduce CI.
+
+**Before pushing:** mentally format named-arg constructor / call sites with spaces around `=`. If CI `extended_checks` fails on a format diff after MCP said "already formatted", fix the spacing and re-push (or amend, on a squashed branch).
 
 ## 6. Create the PR
 
@@ -149,10 +180,13 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 
 **Squashed branches:** If the user asked to squash the branch (single commit), keep it squashed. Any subsequent fixes (lint, test failures, formatting, CI issues) must be amended into the existing commit (`git commit --amend --no-edit`) and force-pushed — do NOT create new commits on a squashed branch.
 
+**Squash-from-multi-commit pattern (`git reset --soft master`)**: only safe AFTER step 0 has rebased onto `origin/master`. Otherwise the soft reset collapses the gap between local `master` and origin's into your one commit. If you forgot step 0 and already pushed a leaky PR, the fix is `git fetch origin master && git rebase origin/master && git push --force-with-lease` — git's 3-way merge drops files where your "modification" matches the already-merged content on origin/master.
+
 ## Quick reference
 
 | Step | Tool/Command | Fix policy |
 |---|---|---|
+| Sync | `git fetch origin master && git rebase origin/master` | Always run first; verify diff vs origin/master is clean |
 | Lint | `utils/lint/main.das` | Fix significant issues in changed files |
 | Tests | `dastest -- --test tests/` | Must pass. Fix own, fix obvious pre-existing, ask about unclear |
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |

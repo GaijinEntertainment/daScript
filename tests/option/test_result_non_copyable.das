@@ -196,6 +196,20 @@ def test_unwrap(t : T?) {
 }
 
 [test]
+def test_move_unwrap(t : T?) {
+    t |> run("move_unwrap moves the array out of ok, flips r to err state") @(t : T?) {
+        var r = ok(make_arr(5, 6), type<string>)
+        let arr <- r |> move_unwrap
+        t |> equal(length(arr), 2)
+        t |> equal(arr[0], 5)
+        t |> equal(arr[1], 6)
+        // Source is moved-from: tag flipped, payload zeroed.
+        t |> success(!r._is_ok)
+        t |> equal(length(r._value), 0)
+    }
+}
+
+[test]
 def test_expect(t : T?) {
     t |> run("expect_value on ok returns the array") @(t : T?) {
         let arr = ok(make_arr(7, 8), type<string>) |> expect_value("never fires")

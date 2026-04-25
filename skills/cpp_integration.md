@@ -352,3 +352,82 @@ See `skills/aot_testing.md` for the full AOT pipeline and testing infrastructure
 - Non-static methods (`isClassMethod=true`, `isStaticClassMethod=false`) — self is added implicitly during inference; name stays unqualified (e.g. `finalize`, `[]`)
 - `func.moreFlags.propertyFunction` — property accessor (name starts with `.\``)
 - `func.classParent` — pointer to the struct/class that owns the method
+
+## Diagnostic output: `TextPrinter`, never `fprintf(stderr, ...)`
+
+Use `TextPrinter` from `include/daScript/misc/string_writer.h` for any
+diagnostic, log, or leak-dump output — including temporary debug prints.
+
+```cpp
+#include "daScript/misc/string_writer.h"
+TextPrinter tp;
+tp << "leaked " << count << " handles\n";
+```
+
+`fprintf(stderr, ...)` has three concrete problems Boris flagged:
+
+- **No sink override** — `TextPrinter` can be subclassed/redirected;
+  `fprintf` writes wherever the OS `stderr` happens to point.
+- **`stderr` is not available on consoles** (Switch, PlayStation, Xbox)
+  — `TextPrinter` abstracts the output path so platform ports can route
+  the text.
+- **Platform divergence** in general — `TextPrinter` hides the
+  differences.
+
+Applies to permanent diagnostics AND temporary debug prints — don't
+leave `fprintf` scaffolding in the tree even if you plan to remove it.
+Canonical patterns: `src/misc/job_que.cpp` (`JobStatus::DumpJobQueLeaks`)
+and `include/daScript/ast/ast_handle.h` (`dumpHandleLeaks<T>`).
+
+## C-string builtins: guard `!str || !*str`
+
+In daslang, the empty string `""` is represented as `nullptr` at
+runtime. The interpreter always passes `null` for empty strings, but
+when a function is **AOT-compiled and constant-folded**, the C++ AOT
+output may pass an actual `""` (pointer to `'\0'`) instead of `null`.
+
+Any C++ builtin that takes `const char *` must therefore guard:
+
+```cpp
+// Wrong — only catches the interpreter case
+const char * find(const char * str, const char * needle) {
+    if (!str || !needle) return nullptr;
+    ...
+}
+
+// Right — also catches AOT-folded empty strings
+const char * find(const char * str, const char * needle) {
+    if (!str || !*str || !needle || !*needle) return nullptr;
+    ...
+}
+```
+
+Real bug: `strstr("","")` returned `0` (match) instead of `-1` (not
+found), changing semantics between interpreter and AOT. Diagnosed by
+diffing `options log_nodes` output between `daslang.exe` and
+`test_aot.exe` — the constant-folded values differed.
+
+Highest-risk surface: 2-arg overloads (no `Context*` parameter) used in
+constant-foldable expressions — `find`, `rfind`, `contains`, etc.
+
+## Searching C++ — prefer `mcp__cplusplus__*` over Bash/Grep
+
+For navigating C++ in this repo, default to the C++ MCP tools, not
+`Bash grep` / `rg` / the Grep tool. The MCP server builds a real C++
+index (~9k files) that resolves symbols, call graphs, class hierarchies,
+and overrides — plain text search misses overloads, virtual dispatch,
+macro-defined names, and cross-file relationships.
+
+- **First call of a session:** `mcp__cplusplus__set_project_directory`
+  with `d:\Work\daScript` (required before any other C++ MCP call).
+- **Refresh on demand:** `mcp__cplusplus__refresh_project` after
+  significant edits or when switching branches.
+- **Tool picks:**
+  - `search_symbols` / `search_functions` / `search_classes` — find by name
+  - `find_callers` / `find_callees` / `get_call_path` — call graphs
+  - `get_class_info` / `get_class_hierarchy` / `get_derived_classes` — OOP structure
+  - `get_function_signature` — exact signature including overloads
+  - `find_in_file` — scoped, symbol-aware file search
+- **Fall back to `Grep` only for:** string literals, comments, non-C++
+  files (CMake, shell, docs), or when the index is stale and refresh
+  is too slow.

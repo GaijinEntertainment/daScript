@@ -188,6 +188,19 @@ def unwrap(r : $Result < auto(TT); auto(EE) >) : TT {
     }
 }
 
+//! Destructively extract the ok payload, leaving ``r`` in the err state with
+//! the err side defaulted. Mirrors ``move_ok`` on the construction side. Use
+//! this instead of ``unwrap`` when ``T`` is non-copyable and you no longer need
+//! ``r`` — it avoids the deep clone that ``unwrap`` would otherwise perform.
+//! Panics when ``err``.
+def move_unwrap(var r : $Result < auto(TT); auto(EE) >) : TT {
+    if (!r._is_ok) {
+        panic("move_unwrap called on err")
+    }
+    r._is_ok = false
+    return <- r._value
+}
+
 //! Extract the ok payload or return ``d`` when ``err``.
 def unwrap_or(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
     static_if (typeinfo can_copy(r._value)) {
@@ -225,6 +238,17 @@ def unwrap_err(r : $Result < auto(TT); auto(EE) >) : EE {
     } else {
         return <- clone_to_move(r._error)
     }
+}
+
+//! Destructively extract the err payload, leaving ``r`` in the ok state with
+//! the ok side defaulted. Mirrors ``move_err`` on the construction side.
+//! Panics when ``ok``.
+def move_unwrap_err(var r : $Result < auto(TT); auto(EE) >) : EE {
+    if (r._is_ok) {
+        panic("move_unwrap_err called on ok")
+    }
+    r._is_ok = true
+    return <- r._error
 }
 
 //! Extract the ok payload or panic with ``msg`` when ``err``. ``expect_value``

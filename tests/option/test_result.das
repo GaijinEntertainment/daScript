@@ -129,6 +129,18 @@ def test_unwrap(t : T?) {
     t |> run("unwrap_err on err returns error") @(t : T?) {
         t |> equal(err("boom", type<int>) |> unwrap_err, "boom")
     }
+
+    t |> run("move_unwrap on copyable T returns value, flips r to err state") @(t : T?) {
+        var r = ok(42, type<string>)
+        t |> equal(r |> move_unwrap, 42)
+        t |> success(!r._is_ok)
+    }
+
+    t |> run("move_unwrap_err on copyable E returns error, flips r to ok state") @(t : T?) {
+        var r = err("boom", type<int>)
+        t |> equal(r |> move_unwrap_err, "boom")
+        t |> success(r._is_ok)
+    }
 }
 
 // ===========================

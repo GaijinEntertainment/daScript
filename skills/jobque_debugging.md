@@ -189,11 +189,51 @@ Audio apps must shut down in the correct order:
 
 If `audio_system_finalize` runs before `unset_status_update` is processed, the async command is lost and the ref leaks.
 
+## Stream-capturing jobs MUST release the captured ref
+
+When a `new_job() @() { ... }` lambda captures a `Stream?`, the jobque
+capture macro (`jobque_boost::capture_jobque_stream`) bumps the
+Stream's refcount on capture. The job body **must** drop that
+ref before it returns or the runtime panics:
+
+```
+Stream has not been released. missing stream|>release or stream|>notify_and_release
+```
+
+…and the Stream is then deleted while the outer scope still holds a
+handle, producing the secondary crash:
+
+```
+synch primitive deleted while being used (ref=1)
+```
+
+Two idioms balance the capture:
+
+- **`s |> release`** — when completion is signalled separately (e.g.
+  alongside a `with_wait_group` / JobStatus that the job also signals).
+  Use this when the consumer doesn't care about the Stream's own count.
+- **`s |> notify_and_release`** — when the Stream itself is the
+  completion signal (`with_stream(count)` form, consumer checks
+  `s.isReady`). Use this when the consumer is gated on the stream's
+  ready state.
+
+**Why this is easy to miss:** the symmetry with Channel / JobStatus /
+LockBox / Feature (all four jobque primitives auto-refcount on lambda
+capture as of #2438) means the rule is uniform — but the panic only
+fires at runtime from an inner lambda frame, so the crash message is
+not obviously tied to the forgotten release at the **top** of the job
+body. There is no RAII / `defer` wrapper that does it implicitly.
+
+When writing tutorials/examples that show "push from worker, drain on
+main": pair Stream with a separate wait group and use `s |> release`
+in the worker — don't rely on the stream's own count as the signal
+unless the consumer really wants `isReady`.
+
 ## Quick Checklist
 
 1. Build debug: `cmake --build build --config Debug --target daslang -- /nodeReuse:false`
 2. Run script, check exit output for leak dump
 3. If leaks found, rerun with `--track-job-status <id>` to get addRef/releaseRef trace
 4. Count refs: every addRef must have a matching releaseRef
-5. Check: early returns skipping cleanup? `release()` nulling pointer before further use? async unset on dead thread? missing `unset_status_update`?
+5. Check: early returns skipping cleanup? `release()` nulling pointer before further use? async unset on dead thread? missing `unset_status_update`? **Stream-capturing job missing `s |> release` or `s |> notify_and_release`?**
 6. Fix and verify: no leak lines in output, exit code 0

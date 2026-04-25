@@ -8,6 +8,7 @@ require daslib/strings_boost
 require strings public
 
 require daslib/option public
+require daslib/result public
 require daslib/enum_trait public
 
 struct public CommandArgumentInfo {
@@ -218,31 +219,29 @@ def public flag_present(args : array<string>; arg_info : CommandArgumentInfo) : 
 
 // For value-bearing flags (everything except bool), a bare "--flag" with no
 // following value token and no "=value" form is malformed input.  Each
-// parse_argument overload below distinguishes the three states:
-//   - found a value           -> populate dst
-//   - flag absent             -> leave dst at default (no error)
-//   - flag present, no value  -> return "missing value" so the caller surfaces
-//                                "{flag_name}: missing value" to the user
+// parse_argument overload below returns Result<Option<T>, string> distinguishing
+// three states:
+//   - ok(some(v))   — found and parsed a value
+//   - ok(none)      — flag absent; caller leaves the field at its default
+//   - err("...")    — parse error (e.g. "missing value", "invalid int value '...')
 
-def public parse_argument(var dst : string&; args : array<string>; arg_info : CommandArgumentInfo) : string {
+[unused_argument(t)]
+def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<string>) : Result<Option<string>; string> {
     let opt = find_flag_raw_value(args, arg_info)
-    if (is_some(opt)) {
-        dst = unwrap(opt)
-        return ""
+    if (is_none(opt) && flag_present(args, arg_info)) {
+        return err("missing value", type<Option<string>>)
     }
-    if (flag_present(args, arg_info)) {
-        return "missing value"
-    }
-    return ""
+    return ok(opt, type<string>)
 }
 
-def public parse_argument(var dst : int&; args : array<string>; arg_info : CommandArgumentInfo) : string {
+[unused_argument(t)]
+def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<int>) : Result<Option<int>; string> {
     let opt = find_flag_raw_value(args, arg_info)
     if (is_none(opt)) {
         if (flag_present(args, arg_info)) {
-            return "missing value"
+            return err("missing value", type<Option<int>>)
         }
-        return ""
+        return ok(none(type<int>), type<string>)
     }
     let raw_value = unwrap(opt)
     var result : ConversionResult
@@ -250,58 +249,58 @@ def public parse_argument(var dst : int&; args : array<string>; arg_info : Comma
     let parsed = int(raw_value, result, offset)
     // Reject both outright parse failures and trailing garbage ("42abc").
     if (result != ConversionResult.ok || offset != length(raw_value)) {
-        return "invalid int value '{raw_value}'"
+        return err("invalid int value '{raw_value}'", type<Option<int>>)
     }
-    dst = parsed
-    return ""
+    return ok(some(parsed), type<string>)
 }
 
 
-def public parse_argument(var dst : float&; args : array<string>; arg_info : CommandArgumentInfo) : string {
+[unused_argument(t)]
+def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<float>) : Result<Option<float>; string> {
     let opt = find_flag_raw_value(args, arg_info)
     if (is_none(opt)) {
         if (flag_present(args, arg_info)) {
-            return "missing value"
+            return err("missing value", type<Option<float>>)
         }
-        return ""
+        return ok(none(type<float>), type<string>)
     }
     let raw_value = unwrap(opt)
     var result : ConversionResult
     var offset = 0
     let parsed = float(raw_value, result, offset)
     if (result != ConversionResult.ok || offset != length(raw_value)) {
-        return "invalid float value '{raw_value}'"
+        return err("invalid float value '{raw_value}'", type<Option<float>>)
     }
-    dst = parsed
-    return ""
+    return ok(some(parsed), type<string>)
 }
 
-def public parse_argument(var dst : array<string>&; args : array<string>; arg_info : CommandArgumentInfo) : string {
+[unused_argument(t)]
+def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<array<string>>) : Result<Option<array<string>>; string> {
     var raw_values = find_array_flag_raw_values(args, arg_info)
     if (!empty(raw_values)) {
-        dst <- raw_values
-        return ""
+        var sm <- move_some(raw_values)
+        return move_ok(sm, type<string>)
     }
     if (flag_present(args, arg_info)) {
-        return "missing value"
+        return err("missing value", type<Option<array<string>>>)
     }
-    return ""
+    return ok(none(type<array<string>>), type<string>)
 }
 
-def public parse_argument(var dst : bool&; args : array<string>; arg_info : CommandArgumentInfo) : string {
+[unused_argument(t)]
+def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; t : type<bool>) : Result<Option<bool>; string> {
     let opt = find_bool_flag_raw_value(args, arg_info)
     if (is_none(opt)) {
-        return ""
+        return ok(none(type<bool>), type<string>)
     }
     let raw_value = unwrap(opt)
     if (raw_value == "true") {
-        dst = true
+        return ok(some(true), type<string>)
     } elif (raw_value == "false") {
-        dst = false
+        return ok(some(false), type<string>)
     } else {
-        return "invalid bool value: '{raw_value}'"
+        return err("invalid bool value: '{raw_value}'", type<Option<bool>>)
     }
-    return ""
 }
 
 // Help rendering.
@@ -532,12 +531,20 @@ class ArgsMacro : AstStructureAnnotation {
         return <- fn
     }
 
-    def make_simple_init_expr(i : int; arg : CommandArgumentInfo) : ExpressionPtr {
+    def make_simple_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int) : ExpressionPtr {
         return qmacro_block() {
             {
-                let err = parse_argument(dst.$f(arg.field_name), args, command_info.args[$v(i)])
-                if (err != "") {
-                    return "{$v(arg.flag_name)}: {err}"
+                var r <- parse_argument(args, command_info.args[$v(i)], type<$t(st.fields[field_index]._type)>)
+                if (r |> is_err) {
+                    return "{$v(arg.flag_name)}: {r |> unwrap_err}"
+                }
+                var opt <- r |> move_unwrap
+                if (opt |> is_some) {
+                    static_if (typeinfo can_copy(type<$t(st.fields[field_index]._type)>)) {
+                        dst.$f(arg.field_name) = opt |> unwrap
+                    } else {
+                        dst.$f(arg.field_name) <- opt |> move_unwrap
+                    }
                 }
             }
         }
@@ -566,11 +573,11 @@ class ArgsMacro : AstStructureAnnotation {
 
         var init_exprs : array<ExpressionPtr>
         for (i, arg in range(length(info.args)), info.args) {
+            let field_index = field_index_by_name[arg.field_name]
             if (arg.value_type != Type.tEnumeration) {
-                init_exprs |> push(make_simple_init_expr(i, arg))
+                init_exprs |> push(make_simple_init_expr(st, i, arg, field_index))
                 continue
             }
-            let field_index = field_index_by_name[arg.field_name]
             init_exprs |> push(make_enum_init_expr(st, i, arg, field_index))
         }
 

@@ -248,3 +248,56 @@ vec4f new_and_init(Context & context, SimNode_CallBase * call, vec4f * args) {
 addInterop<new_and_init, void *, vec4f>(*this, lib, "new_and_init",
     SideEffects::none, "new_and_init");
 ```
+
+## Diagnostic output: `TextPrinter`, never `fprintf(stderr, ...)`
+
+For any diagnostic, log, or leak-dump output from C++ code that hosts
+or extends daslang — including temporary debug prints — use
+`TextPrinter` from `include/daScript/misc/string_writer.h`.
+
+```cpp
+#include "daScript/misc/string_writer.h"
+TextPrinter tp;
+tp << "module " << modName << " loaded with " << count << " externs\n";
+```
+
+`fprintf(stderr, ...)` has three concrete problems:
+
+- **No sink override** — `TextPrinter` can be subclassed/redirected;
+  `fprintf` writes wherever the OS `stderr` happens to point.
+- **`stderr` is not available on consoles** (Switch, PlayStation, Xbox)
+  — `TextPrinter` abstracts the output path so platform ports can
+  route the text.
+- **Platform divergence** — `TextPrinter` hides the differences.
+
+Applies to permanent diagnostics AND temporary debug prints — don't
+leave `fprintf` scaffolding in code even if you plan to remove it.
+
+## C-string builtins: guard `!str || !*str`
+
+In daslang, the empty string `""` is represented as `nullptr` at
+runtime. The interpreter always passes `null` for empty strings, but
+when a function is **AOT-compiled and constant-folded**, the C++ AOT
+output may pass an actual `""` (pointer to `'\0'`) instead of `null`.
+
+Any C++ binding that takes `const char *` must therefore guard for
+both — or interpreter and AOT will diverge:
+
+```cpp
+// Wrong — only catches the interpreter case
+const char * find(const char * str, const char * needle) {
+    if (!str || !needle) return nullptr;
+    ...
+}
+
+// Right — also catches AOT-folded empty strings
+const char * find(const char * str, const char * needle) {
+    if (!str || !*str || !needle || !*needle) return nullptr;
+    ...
+}
+```
+
+Real bug pattern: `strstr("", "")` returned `0` (match) instead of
+`-1` (not found), changing semantics between interpreter and AOT.
+Highest-risk surface: 2-arg overloads (no `Context*` parameter) used
+in constant-foldable expressions — `find`, `rfind`, `contains`, etc.

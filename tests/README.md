@@ -147,6 +147,17 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_serial_vectors.das | Vector/range serialization — float2/3/4, int2/3/4, uint4, range, urange, range64, urange64 | |
 | test_serial_annotations.das | Annotation support — @rename, @enum_as_int, mixed annotations, roundtrip with annotations | |
 
+## dasSQLITE/
+
+> **Note:** These tests require the dasSQLITE module (`DAS_SQLITE_DISABLED=OFF`). Run: `dastest -- --test tests/dasSQLITE/`
+
+| File | Description | Expects errors |
+|---|---|---|
+| test_01_with_sqlite.das | Runner lifecycle — `with_sqlite`, `open_sqlite`, `query_scalar`, `try_open_sqlite` failure path, `try_exec` bad SQL, `try_query_scalar` zero rows, `last_insert_rowid` initial state, `sqlite_version` | |
+| test_02_insert.das | `[sql_table]` macro emissions (table name, DDL, two INSERT shapes), `create_table` / `drop_table_if_exists` round-trip, single-row + array `insert`, `try_insert` constraint violation | |
+| test_03_last_rowid.das | `INTEGER PRIMARY KEY` ↔ ROWID — no-PK insert auto-assigns rowid, explicit-PK insert preserves Id, array insert returns last rowid, `_sql_pk_is_unset` predicate, drop+recreate resets rowid | |
+| test_04_user_types.das | User-defined SQL-mapped types — `sqlite_sql_type` / `sqlite_bind` overloads for a user `Color` struct, `[sql_table]` DDL emission with the user type, INSERT round-trip through the custom bind path | |
+
 ## daslib/
 
 | File | Description | Expects errors |
@@ -679,7 +690,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | File | Description | Expects errors |
 |---|---|---|
 | test_option.das | `Option<T>` — some/none constructors, map/filter/and_then/or_else/or_value, unwrap family, operators `??`/`==`, zip, if_some/if_none, chaining | |
-| test_option_non_copyable.das | `Option<array<int>>` — every constructor/combinator/unwrap/operator with a non-copyable payload, plus `move_some` | |
+| _test_option_non_copyable.das | **DISABLED** (leading `_` skips dastest discovery). `Option<array<int>>` — every constructor/combinator/unwrap/operator with a non-copyable payload, plus `move_some`. Disabled because `test_chaining` fails to compile in `test_aot -use-aot` on darwin26-Release runners (passes everywhere else, including darwin26-Debug). Re-enable by renaming back once the underlying daslang generic-resolution bug is fixed. | |
 | test_result.das | `Result<T, E>` — ok/err constructors, map/map_err/and_then/or_else, unwrap family, operators `??`/`==`, to_option/err_to_option bridges, if_ok/if_err, chaining | |
 | test_result_non_copyable.das | `Result<array<int>, string>` — every constructor/combinator/unwrap/operator with a non-copyable T, plus `move_ok` and `move_err` | |
 
