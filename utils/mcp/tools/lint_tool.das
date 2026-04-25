@@ -8,7 +8,28 @@ require daslib/perf_lint
 require daslib/style_lint
 require strings
 
+def has_expect_directive(file : string) : bool {
+    // Files with `expect <code>:<count>` declare intentional compile errors
+    // for dastest. Lint cannot evaluate them — the program never reaches
+    // the AST stage paranoid/perf/style passes need. Skip them.
+    let text = fread(file)
+    if (empty(text)) {
+        return false
+    }
+    let lines <- text |> split("\n")
+    for (line in lines) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("expect ")) {
+            return true
+        }
+    }
+    return false
+}
+
 def do_lint_single(file : string; project : string = "") : string {
+    if (has_expect_directive(file)) {
+        return "SKIP {file} (intentional compile errors via `expect`)"
+    }
     return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
         if (!empty(issues)) {
@@ -91,8 +112,14 @@ def do_lint(file : string; project : string = "") : string {
     // batch mode
     var total_issues = 0
     var total_errors = 0
+    var total_skipped = 0
     let output = build_string() $(var w) {
         for (f in files) {
+            if (has_expect_directive(f)) {
+                total_skipped++
+                w |> write("SKIP {f} (intentional compile errors via `expect`)\n")
+                continue
+            }
             let result = do_lint_file(f, project)
             if (result.failed) {
                 total_errors++
@@ -105,7 +132,11 @@ def do_lint(file : string; project : string = "") : string {
                 w |> write("PASS {f}\n")
             }
         }
-        w |> write("\n{length(files)} files, {total_issues} issue(s), {total_errors} error(s)\n")
+        if (total_skipped > 0) {
+            w |> write("\n{length(files)} files, {total_issues} issue(s), {total_errors} error(s), {total_skipped} skipped\n")
+        } else {
+            w |> write("\n{length(files)} files, {total_issues} issue(s), {total_errors} error(s)\n")
+        }
     }
     return make_tool_result(output, total_errors > 0)
 }

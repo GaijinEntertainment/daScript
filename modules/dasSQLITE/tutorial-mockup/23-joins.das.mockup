@@ -1,0 +1,240 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "23-joins"
+// and § "SQL read-side prerequisites (daslib/linq rework)" in ../API_REWORK.md.
+//
+// Tutorial 23: multi-table joins — combine rows from two tables on a key.
+// The single biggest design gap in the existing tutorials, which all
+// read from one table.
+//
+// Four shapes ship:
+//
+//   (a) inner join — `_join(other, on, into)`. Rows must match on both
+//       sides. Equi-join only: the `on` predicate must be of the shape
+//       `(l, r) => l.field == r.field` (macro_error otherwise). The
+//       equi-join constraint is intentional — it preserves linq.das's
+//       hash-based O(n+m) backing fn and matches SQL's most common
+//       form. Arbitrary predicates (theta joins) are a footgun for
+//       both in-memory perf and SQL planner hints; require raw SQL.
+//
+//   (b) left join — `_left_join(other, on, into)`. Left side always
+//       present; right side is `Option<TB>` (none if no match). Uses
+//       the `daslib/option` prerequisite (PR #2471). Backed by a new
+//       `left_join` fn in `daslib/linq` (thin wrapper over
+//       `group_join` — unfolds the per-key array to (TA, Option<TB>)
+//       rows).
+//
+//   (c) relationship-aware navigation — `_select_many(_.Orders, into)`.
+//       Depends on tut 26's `@sql_has_many` metadata for `_.Orders`
+//       to auto-resolve to the foreign-key subquery. Macro form of
+//       linq.das's existing `select_many`; the navigation-property
+//       path. MOCKED HERE as a forward-reference — lock details in
+//       tut 26.
+//
+//   (d) three-table joins. Chained `._join(...)._join(...)`. Composes
+//       syntactically via LinqCall `recursive = [1]`, but the
+//       output-tuple spaghetti (`_._0.Id` keys into join-1's tuple)
+//       means it writes ugly past 2 tables. No linq/linq_boost gap
+//       — ergonomics issue, deferred.
+//
+// NOT SHIPPED in this rework: `_full_outer_join`, `_right_join`,
+// `_cross_join`. `RIGHT JOIN` is `_left_join` with swapped args;
+// `CROSS JOIN` reads as a footgun on accident and belongs in raw
+// SQL. `FULL OUTER` is rare — add on real demand.
+//
+// LINQ-BACKING AUDIT — ONE new `daslib/linq` fn needed (`left_join`);
+// everything else is `daslib/linq_boost` macro-only. First tut that
+// grows linq.das itself, but the addition is tiny (5-10 lines over
+// `group_join`). See project memory `project_dassqlite_phase2.md`
+// § tut 23 bucket B, and the prerequisites table in API_REWORK.md.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// Two-table schema for the join demos: users and their orders. One-to-
+// many relationship (one user, many orders); `Order.UserId` foreign-
+// keys to `User.Id`. Tut 26 adds the formal `@sql_has_many` metadata;
+// for this tutorial we don't rely on it — the joins work on raw
+// key matches.
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name : string
+    City : string
+}
+
+[sql_table(name="Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    UserId : int
+    Total  : float
+    When   : int64
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<Order>)
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+        db |> create_table(type<Order>)
+
+        // (assume tables are populated — omitted for clarity)
+
+        // --- (a) INNER JOIN — "users and their orders" --------------
+        // Three positional args: other chain, on predicate, into
+        // projection. `on=` must be equi-join of the shape `l.X == r.Y`
+        // — the macro extracts the two key exprs at compile time and
+        // synthesizes linq.das's
+        //   join(srca, srcb, keya=$(u) => u.Id, keyb=$(o) => o.UserId,
+        //        result=$(u, o) => (Name=u.Name, Total=o.Total))
+        //
+        // SQL:  SELECT u.Name, o.Total
+        //       FROM Users u INNER JOIN Orders o ON u.Id = o.UserId
+        let buyers <- _sql(db |> select_from(type<User>)
+            ._join(db |> select_from(type<Order>),
+                   on   = (u, o) => u.Id == o.UserId,
+                   into = (u, o) => (Name=u.Name, Total=o.Total)))
+        for (r in buyers) {
+            to_log(LOG_INFO, "{r.Name} bought {r.Total}\n")
+        }
+
+        // --- (a') equi-join constraint demo --------------------------
+        // Theta-join shape is rejected at compile time:
+        //   ._join(other, on = (u, o) => u.Id > o.UserId, ...)
+        //   → macro_error: _join requires an equi-join predicate of
+        //     the shape `left.X == right.Y`. For range joins, use
+        //     raw SQL via `exec` / `query_*`.
+        //
+        // Rationale: the backing `join` fn builds a hash table on the
+        // right-side keys (O(n+m)). Theta joins force O(n·m)
+        // nested-loop. If we accepted arbitrary predicates, users
+        // would silently pay the perf cliff; SQLite would also lose
+        // the planner hint. Easier to reject at compile time and
+        // point at the escape hatch.
+
+        // --- (a'') pre-filter + join + post-projection ---------------
+        // Chain composes normally: `_where` can sit on either side of
+        // the join; `_select` replaces the `into` projection if the
+        // user prefers chained form.
+        // SQL:  SELECT u.Name, o.Total
+        //       FROM Users u INNER JOIN Orders o ON u.Id = o.UserId
+        //       WHERE o.Total > ?
+        let threshold = 100.0f
+        let big_buyers <- _sql(db |> select_from(type<User>)
+            ._join(db |> select_from(type<Order>)._where(_.Total > threshold),
+                   on   = (u, o) => u.Id == o.UserId,
+                   into = (u, o) => (Name=u.Name, Total=o.Total)))
+        for (r in big_buyers) {
+            to_log(LOG_INFO, "big: {r.Name} / {r.Total}\n")
+        }
+
+        // --- (b) LEFT JOIN — "all users, orders if any" -------------
+        // Right-side projection parameter is `Option<Order>` — `none()`
+        // when the user has no orders, `some(o)` otherwise. The
+        // `into` lambda is responsible for handling the optional
+        // (via `option.unwrap_or(default)`, `option.map`, etc.).
+        //
+        // Macro synthesizes linq.das's (new) `left_join`:
+        //   left_join(srca, srcb, keya, keyb, result)
+        //     — for each TA: if matching TBs, emit one row per match
+        //       with Option::some(tb); if no matches, emit one row
+        //       with Option::none().
+        //
+        // SQL:  SELECT u.Name, IFNULL(o.Total, 0)
+        //       FROM Users u LEFT JOIN Orders o ON u.Id = o.UserId
+        let user_totals <- _sql(db |> select_from(type<User>)
+            ._left_join(db |> select_from(type<Order>),
+                        on   = (u, o) => u.Id == o.UserId,
+                        into = (u, o) => (
+                            Name=u.Name,
+                            Total=o |> unwrap_or(Order(Total=0.0f)).Total)))
+        for (r in user_totals) {
+            to_log(LOG_INFO, "{r.Name}: {r.Total}\n")
+        }
+
+        // --- (b') LEFT JOIN — preserving the optional in the output -
+        // The `into` projection can keep `Option<Order>` in the result
+        // tuple — useful when the caller wants to distinguish "user
+        // has no orders" from "user has an order of 0.0".
+        // The `Option<Order>` shape carries through to the returned
+        // row type.
+        let user_maybe_order <- _sql(db |> select_from(type<User>)
+            ._left_join(db |> select_from(type<Order>),
+                        on   = (u, o) => u.Id == o.UserId,
+                        into = (u, o) => (Name=u.Name, MaybeOrder=o)))
+        for (r in user_maybe_order) {
+            if (r.MaybeOrder |> is_some()) {
+                let o = r.MaybeOrder |> unwrap()
+                to_log(LOG_INFO, "{r.Name} ordered {o.Total}\n")
+            } else {
+                to_log(LOG_INFO, "{r.Name} has no orders\n")
+            }
+        }
+
+        // --- (c) three-table join ------------------------------------
+        // Chained `._join(...)._join(...)`. Registered as `recursive =
+        // [1]` so the inner chains compose, but the `on` predicate
+        // for the second join keys into the FIRST join's tuple output
+        // — that's `_._0.Id` if you named nothing, or field-accessed
+        // if you named the first `into`. Named tuples help but get
+        // verbose fast.
+        //
+        // PRAGMATIC GUIDANCE: two-table joins are the idiomatic
+        // shape. For three-or-more, consider raw SQL or splitting
+        // into two `_sql(...)` calls plus daslang-side stitching.
+        // Future: query-comprehension syntax (LINQ's
+        // `from u in users, o in orders, p in products …`) — no
+        // daslang analog yet; not in this rework.
+        //
+        // Mockup shown for completeness; discouraged in practice.
+        // (Assume a Product table exists with matching Order.ProductId.)
+        /*
+        let three_way <- _sql(db |> select_from(type<User>)
+            ._join(db |> select_from(type<Order>),
+                   on   = (u, o) => u.Id == o.UserId,
+                   into = (u, o) => tuple(u, o))
+            ._join(db |> select_from(type<Product>),
+                   on   = (uo, p) => uo._1.ProductId == p.Id,
+                   into = (uo, p) => (
+                       Name=uo._0.Name, Product=p.Name, Total=uo._1.Total)))
+        */
+
+        // --- (d) relationship-aware navigation -----------------------
+        // FORWARD REFERENCE TO TUT 26. When `User` has the metadata
+        //   @sql_has_many(type<Order>, by="UserId") Orders : array<Order>
+        // declared, the `_.Orders` reference inside a chain auto-
+        // resolves to the foreign-key sub-query. Macro form of
+        // linq.das's existing `select_many`.
+        //
+        // This mockup is a forward-reference only — lock the exact
+        // shape at tut 26. Three variants likely:
+        //   _select_many(_.Orders)                — flatten to Orders
+        //   _select_many(_.Orders, (u, o) => ...) — project per-pair
+        //   _include(_.Orders)                    — eager-load, keep User shape
+        //
+        // SQL:  SELECT u.Name, o.Total
+        //       FROM Users u INNER JOIN Orders o ON u.Id = o.UserId
+        /*
+        let buyers_nav <- _sql(db |> select_from(type<User>)
+            ._select_many(_.Orders, (u, o) => (Name=u.Name, Total=o.Total)))
+        */
+
+        // --- (e) try_ variant ----------------------------------------
+        // Same pattern as tut 19 — try-ness is on the outer `_sql`
+        // wrapper, not on `_join` / `_left_join` themselves. No
+        // `_try_join`.
+        let attempt <- _try_sql(db |> select_from(type<User>)
+            ._join(db |> select_from(type<Order>),
+                   on   = (u, o) => u.Id == o.UserId,
+                   into = (u, o) => (Name=u.Name, Total=o.Total)))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "join query failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let rows <- attempt |> unwrap()
+            to_log(LOG_INFO, "{rows |> length} joined rows\n")
+        }
+    }
+}

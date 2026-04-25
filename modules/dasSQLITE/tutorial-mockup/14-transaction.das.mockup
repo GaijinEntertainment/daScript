@@ -1,0 +1,94 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_REWORK.md.
+// Mirrors tutorial/14-transaction.das — explicit atomic transaction.
+// Also covers the 12/13 thread (auto-commit status query, default
+// auto-commit behavior) since 12/13/14 are one conceptual unit.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+[sql_table(name="Friends")]
+struct Friend {
+    @sql_primary_key Id : int
+    Name : string
+}
+
+[export]
+def main() {
+    with_sqlite(":memory:") <| $(db) {
+        // DROP sits outside the txn — matches tut 14's raw SQL where
+        // DROP is pre-BEGIN (idempotent, no rollback needed).
+        db |> drop_table_if_exists(type<Friend>)
+
+        // --- canonical form: 2-arg overload ----------------------------
+        // Genuine `with_transaction` use case: DDL + DML atomicity.
+        // `insert(array<T>)` already auto-wraps its batch in a txn
+        // (tut 02), but that only covers the INSERT side — for CREATE
+        // + INSERTs to commit-or-rollback as one unit we need the outer
+        // `with_transaction`. The inner batch-insert nests via SAVEPOINT.
+        //
+        // Emits BEGIN on entry, COMMIT on normal exit, ROLLBACK on
+        // panic / early-return via scope-exit cleanup.
+        //
+        // Two overloads (not one function with an optional middle arg):
+        // piping puts `db` as arg 1 and the block as the last arg, so a
+        // middle `mode` parameter with a default can't resolve from a
+        // no-mode call site. Distinct overloads resolve by arity. See
+        // API_REWORK.md § "12 + 13 + 14 — transactions" for rationale.
+        db |> with_transaction() <| $() {
+            db |> create_table(type<Friend>)
+            db |> insert([
+                Friend(Name="Tom"),
+                Friend(Name="Rebecca"),
+                Friend(Name="Jim"),
+                Friend(Name="Robert")
+            ])
+        }
+        to_log(LOG_INFO, "Last Id: {db |> last_insert_rowid()}\n")
+
+        // --- 3-arg overload: SQLite-specific lock-mode -----------------
+        // Lives under sqlite/sqlite_boost. The array-insert form alone
+        // can't express this — it's a read-modify-write: read the
+        // current max Id, derive a new one, write a new row based on
+        // it. Classic "transactions exist for this" scenario.
+        // `SqliteTxnMode.Immediate` takes the RESERVED lock at BEGIN so
+        // concurrent writers block immediately, not on first write —
+        // avoids the common "another writer raced us between the read
+        // and the write" bug. Deferred (the default) would still be
+        // correct but could surface as SQLITE_BUSY on the write.
+        db |> with_transaction(SqliteTxnMode.Immediate) <| $() {
+            let max_id = db |> query_scalar(
+                "SELECT COALESCE(MAX(Id), 0) FROM Friends", type<int>)
+            db |> insert(Friend(Id=max_id + 1, Name="Zack"))
+        }
+
+        // --- try_transaction: non-panic variant ------------------------
+        // Returns Result<void, string>. Use when the caller wants to
+        // retry on SQLITE_BUSY or log-and-continue on constraint
+        // violation rather than abort. Same two-overload shape as
+        // with_transaction (2-arg abstract in daslib/sql + 3-arg
+        // SQLite-specific in sqlite/sqlite_boost).
+        let result = db |> try_transaction() <| $() {
+            db |> insert(Friend(Name="Carol"))
+        }
+        if (result |> is_err()) {
+            to_log(LOG_ERROR, "txn failed: {result |> unwrap_err()}\n")
+        }
+
+        // --- 12's question: in_transaction() ---------------------------
+        // Thin wrapper around !sqlite3_get_autocommit. Rarely needed in
+        // app code — library code that wants "participate in an ambient
+        // txn if one is active, else start one" uses it. EF Core
+        // equivalent: `context.Database.CurrentTransaction != null`.
+        to_log(LOG_INFO, "currently in txn: {db |> in_transaction()}\n")
+
+        // --- 13's scenario: no special API -----------------------------
+        // Tut 13 demos the DEFAULT auto-commit behavior: a series of
+        // statements with no BEGIN/COMMIT commit one-by-one. Under this
+        // API that's simply what happens when you DON'T wrap with
+        // `with_transaction`. For batch atomicity either use
+        // `with_transaction` (mixed DDL+DML, read-modify-write) or
+        // `insert(array<T>)` (pure batch, auto-wraps internally).
+    }
+}

@@ -220,8 +220,10 @@ FILE(GLOB AOT_JSON_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/json/*.das")
 
 # AOT for linq test files
 FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/linq/*.das")
-# Exclude module files (they are compiled via DAS_AOT_LIB below)
-list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_")
+# Exclude module files (they are compiled via DAS_AOT_LIB below) and
+# expect-error tests (use `expect` to assert intentional macro_failed
+# diagnostics; AOT cannot compile them)
+list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_|_errors\\.das$")
 
 # Linq test module files (libraries required by linq tests)
 SET(AOT_LINQ_MODULE_FILES

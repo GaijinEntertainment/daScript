@@ -1,0 +1,267 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "30-migrations"
+// and § "30-migrations — decided" in ../API_REWORK.md.
+//
+// Tutorial 30: up-only versioned schema migrations.
+//
+// SCOPE STATEMENT (first line of the tutorial prose):
+//
+//   Migrations are one of the biggest topics in database tooling.
+//   Alembic, EF Core Migrations, Flyway, Liquibase, Rails AR,
+//   Diesel, sqitch — every serious DB library has a dedicated
+//   sub-project for it. Writing that story for daslang is far
+//   out of scope for v1. This tutorial ships the MVP: versioned
+//   up-only migrations with raw SQL inside, tracked in a
+//   `__schema_version` table, run by a single driver function.
+//   That is ENOUGH to make dasSQLITE honest for production —
+//   schema evolution is tracked, transactional, and repeatable.
+//   Everything else (down migrations, autogenerate, zero-downtime,
+//   squashing, branch/merge, repeatable migrations) is deferred.
+//   See the DEFERRED list at the bottom for how to think about
+//   each of those.
+//
+// SEPARATE MODULE: `daslib/sql_migrate`. Users who don't need
+// migrations don't `require` it. The migration symbols never
+// appear in their namespace. This lets the migration story
+// evolve on its own schedule without destabilizing core
+// dasSQLITE, and signals clearly that migrations are an
+// OPT-IN concern.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Sixth consecutive zero-
+// linq-prereq tut (25/26/27/28/29/30). See project memory
+// `project_dassqlite_phase2.md` § tut 30.
+
+require daslib/sql
+require daslib/sql_migrate                 // optional — only when you want migrations
+require sqlite/sqlite_boost
+require daslib/result
+require strings
+
+// --- the three migrations ---------------------------------------------
+// Annotation syntax:
+//
+//   [sql_migration(version=N)]                         // minimal
+//   [sql_migration(version=N, description="...")]     // with audit note
+//
+// Version numbers are ints; gaps allowed; runner sorts ascending.
+// Duplicate `version=N` across two migration functions → compile
+// error at annotation expansion (names both functions).
+//
+// The function takes a `SqlRunner` and may call any dasSQLITE
+// API inside. Raw SQL via `db |> exec(...)` is the default for
+// ALTER statements SQLite doesn't express in the typed API.
+
+[sql_table(name="users")]
+struct User {
+    @sql_primary_key Id : int
+    Name  : string
+    // Email added in migration 2 (see below). After applying v2
+    // the struct is updated to match — this is the `[sql_table]`
+    // "struct IS the current row" invariant from tut 25.
+    Email : string
+}
+
+[sql_migration(version=1)]
+def migration_001(db : SqlRunner) {
+    // Bootstrap — v1 had a simpler User (no Email). Note that
+    // the STRUCT above doesn't match v1 anymore. That's OK:
+    // migrations reference prior schemas via RAW SQL, not via
+    // frozen struct snapshots (a daslang-specific constraint —
+    // once you rewrite `struct User`, the old shape doesn't
+    // exist in code anymore). EF's autogenerate approach would
+    // need model snapshots; we deliberately skip that.
+    db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL)")
+}
+
+[sql_migration(version=2, description="add email column")]
+def migration_002(db : SqlRunner) {
+    db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
+}
+
+[sql_migration(version=3, description="index email; backfill unknowns")]
+def migration_003(db : SqlRunner) {
+    db |> exec("CREATE INDEX ix_users_email ON users(Email)")
+    db |> exec("UPDATE users SET Email='unknown@example.com' WHERE Email=''")
+}
+
+// --- the runner at app startup ----------------------------------------
+
+[export]
+def main() {
+    with_sqlite("app.db") <| $(db) {
+        // Strict form: panics if any migration fails. Appropriate
+        // for app startup — "can't run without the schema" is a
+        // must-fail-loud condition.
+        //
+        // Returns the number of migrations applied. 0 on a
+        // fully-up-to-date DB.
+        let n = db |> migrate_to_latest()
+        to_log(LOG_INFO, "applied {n} migration(s); schema now at version {db |> current_schema_version()}")
+
+        // The app's normal code runs against the up-to-date
+        // schema. Struct `User` matches the v3 shape.
+    }
+}
+
+// --- try_ variant for tools / CI / dry-inspection ---------------------
+
+def cli_status() {
+    with_sqlite("app.db") <| $(db) {
+        // Non-destructive inspection — no migrations run.
+        let applied = db |> current_schema_version()
+        let pending = db |> pending_migrations()
+        to_log(LOG_INFO, "current: v{applied}")
+        to_log(LOG_INFO, "pending: {length(pending)} migration(s)")
+        for (v in pending) {
+            to_log(LOG_INFO, "  v{v}")
+        }
+
+        // Full audit trail (one row per successfully-applied migration).
+        let history = db |> migration_history()
+        to_log(LOG_INFO, "history:")
+        for (r in history) {
+            to_log(LOG_INFO, "  v{r.version} {r.description} at {r.applied_at}")
+        }
+    }
+}
+
+def cli_upgrade() {
+    with_sqlite("app.db") <| $(db) {
+        // Result form: migrations still run, but a failure
+        // returns `Err(message)` instead of panicking. Suitable
+        // for CI / deploy tooling that wants to surface failures
+        // in a structured way.
+        match (db |> try_migrate_to_latest()) {
+            if Result::Ok(n): to_log(LOG_INFO, "ok, {n} applied")
+            if Result::Err(e): to_log(LOG_ERROR, "migration FAILED: {e}")
+        }
+    }
+}
+
+// --- __schema_version table (auto-created on first migrate_to_latest) -
+//
+//   CREATE TABLE __schema_version (
+//       version     INTEGER PRIMARY KEY,
+//       description TEXT    NOT NULL DEFAULT '',
+//       applied_at  INTEGER NOT NULL,            -- unix seconds
+//       success     INTEGER NOT NULL DEFAULT 1
+//   )
+//
+// One row per successfully-applied migration (multi-row, not
+// single-row-with-current-version — matches Flyway's audit
+// ergonomics at zero extra cost).
+//
+// PER-MIGRATION TRANSACTION. Each migration body runs inside
+//     BEGIN;
+//       <migration body>
+//       INSERT INTO __schema_version VALUES (...);
+//     COMMIT;
+// Any error inside rolls back the SQL + the audit insert as
+// one atomic unit. Fail-fast: runner aborts on the first error;
+// subsequent migrations do NOT run.
+
+// --- DUPLICATE VERSION = COMPILE ERROR --------------------------------
+// If a module defines two migrations with the same `version=N`,
+// the `[sql_migration]` macro rejects the second one at
+// expansion time, naming both functions:
+//
+//     [sql_migration(version=2)]
+//     def migration_002_a(db : SqlRunner) { ... }
+//
+//     [sql_migration(version=2)]      // <-- ERROR
+//     def migration_002_b(db : SqlRunner) { ... }
+//
+// Error shape (illustrative):
+//   duplicate [sql_migration(version=2)]
+//   note: already registered at migration_002_a
+//   hint: pick a different version number or merge the bodies
+
+// ======================================================================
+// DEFERRED / OUT OF SCOPE FOR V1 — HERE'S YOUR ESCAPE IF YOU NEED IT NOW
+// ======================================================================
+//
+// Listed with escape hatches so users hitting each one know
+// what to do today. Future-work modules (`daslib/sql_migrate_*`
+// or an eventual `dasSQL` layer) may revisit these.
+//
+// 1. DOWN MIGRATIONS / ROLLBACK.
+//    Escape: write an up-migration that un-does the previous one.
+//    Rationale: down migrations in every shipping framework are
+//    written, never run, and rot.
+//
+// 2. AUTOGENERATE FROM STRUCT DIFF (EF's `dotnet ef migrations add`).
+//    Escape: hand-write the ALTER. Rationale: requires a model-
+//    snapshot system daslang doesn't have. Future: a separate
+//    `daslib/sql_migrate_gen` module (name TBD).
+//
+// 3. MODEL SNAPSHOTS (v1's `User` shape preserved after v4).
+//    Escape: migrations always reference prior schemas via raw
+//    SQL, not via struct. The `[sql_table]` struct is always
+//    "current". Rationale: frozen-struct tooling is a daslang-
+//    language-level project, not a library feature.
+//
+// 4. SQLITE 12-STEP ALTER TABLE HELPER.
+//    `recreate_table(db, type<T>, copy_from=...)` for drop/rename
+//    column on pre-3.25 SQLite.
+//    Escape: write the 12 steps by hand, or require SQLite 3.25+.
+//    https://www.sqlite.org/lang_altertable.html#otheralter
+//    Rationale: highest-value helper but a mini-framework to get
+//    right. Deferred until there's a clear user need.
+//
+// 5. ZERO-DOWNTIME / EXPAND-CONTRACT PATTERN.
+//    Two-phase deploys where schema changes stay compatible with
+//    both old and new app versions running simultaneously.
+//    Escape: pair every destructive migration with a paired app-
+//    code release; document the sequence out-of-band.
+//
+// 6. DATA MIGRATIONS VS SCHEMA MIGRATIONS AS SEPARATE PHASES.
+//    MVP conflates them — both run in the same transactional
+//    body. Large data backfills inside a schema migration lock
+//    the DB for the duration. Escape: split large UPDATEs into
+//    chunked raw-SQL loops inside the migration.
+//
+// 7. SQUASHING / BASELINING.
+//    Collapsing migrations 1-100 into a single baseline after
+//    three years. Escape: none — keep all migrations in version
+//    control. Future: a `squash(db, through=N)` tool that
+//    rewrites `__schema_version` after verifying the collapsed
+//    schema matches.
+//
+// 8. ADVISORY LOCKS FOR CONCURRENT RUNNERS.
+//    If two processes call `migrate_to_latest` simultaneously,
+//    the MVP has no protection. SQLite's single-writer model
+//    makes this mostly-harmless (the second transaction fails),
+//    but a proper framework takes an advisory lock.
+//    Escape: coordinate deploys so only one process migrates.
+//
+// 9. MIGRATION TESTING HARNESS / DRY-RUN.
+//    Escape: point at a scratch DB (`:memory:` or a temp file),
+//    call `migrate_to_latest`, verify, discard. `pending_migrations`
+//    is the closest thing MVP offers to EF's `--dry-run`.
+//
+// 10. BRANCH/MERGE ACROSS DEVELOPERS.
+//     Git-style merges of concurrently-written migrations.
+//     Escape: gap-allowed version numbers + Slack coordination
+//     (team A uses 100-199, team B uses 200-299).
+//     Future: a DAG of migrations with explicit dependencies
+//     (sqitch style).
+//
+// 11. REPEATABLE MIGRATIONS (Flyway concept).
+//     Re-runnable migrations for views, functions, or seed data
+//     that may change every release. MVP ships only versioned
+//     one-shot migrations.
+//     Escape: put the "always current" bits into your app's
+//     startup code outside the migration system.
+//
+// 12. MULTI-DATABASE / MULTI-ATTACH MIGRATIONS.
+//     Migrations operating atomically across ATTACH-ed databases.
+//     Raw SQL works inside one migration, but there's no cross-
+//     DB ordering/coordination. Escape: migrate each DB from
+//     its own `with_sqlite` call.
+//
+// In short: MVP is ~100 lines of runtime + a macro. Anything
+// in this deferred list is its own project. If you hit one of
+// these and it's blocking, open an issue with a concrete use
+// case — that's the signal we use to prioritize the next
+// `daslib/sql_migrate_*` module.

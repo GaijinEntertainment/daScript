@@ -1,0 +1,256 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "31-views"
+// and § "31-views — decided" in ../API_REWORK.md.
+//
+// Tutorial 31: SQL views. Read-only `[sql_view]` sibling of
+// `[sql_table]` + LINQ-based view DDL (`_create_view`) built
+// on top of the `_sql` translator. Raw SQL remains the escape
+// for features the translator doesn't cover.
+//
+// CORE DECISION (locked 2026-04-24): we take EF's KEYLESS
+// entity + ToView(name) mapping verbatim, but DIVERGE on view
+// DDL. EF doesn't ship a LINQ-to-DDL helper ("views want
+// provider-specific SQL a LINQ pipeline would fight"); that
+// reasoning doesn't survive the daslang ethos argument. A
+// view body IS a SELECT by definition; our `_sql` translator
+// is the whole design investment from tuts 19/23/24. Forcing
+// users to raw SQL strings for a SELECT they could write
+// typed-and-checked is inconsistent and gives up compile-
+// time column/type validation. So we ship
+// `_create_view(type<V>, <pipeline>)` as the PRIMARY path.
+// Raw `exec("CREATE VIEW ...")` stays as the escape for
+// window functions, CTEs, SQLite-specific extensions.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Seventh consecutive
+// zero-linq-prereq tut (25/26/27/28/29/30/31). `_create_view`
+// is in dasSQLITE macros (the dasSQLITE column of the totals),
+// not `linq_boost` — it's a SQL-specific codegen wrapper over
+// the existing `_sql` translator.
+
+require daslib/sql
+require daslib/sql_migrate
+require sqlite/sqlite_boost
+
+// --- base tables (for the view to project over) -----------------------
+
+[sql_table(name="customers")]
+struct Customer {
+    @sql_primary_key Id : int
+    Name  : string
+    Email : string
+}
+
+[sql_table(name="orders")]
+struct Order {
+    @sql_primary_key Id : int
+    @sql_references(type="Customer")
+    CustomerId : int
+    Total      : float
+}
+
+// --- the view ---------------------------------------------------------
+// `[sql_view(name="...")]` is a read-only sibling of `[sql_table]`.
+// Same field shape (names, types, custom-type adapters). No
+// DDL is generated from this annotation alone — the VIEW
+// statement is emitted by `_create_view` inside a migration
+// (see migration_005 below).
+//
+// Views are KEYLESS by design — `@sql_primary_key` on a
+// `[sql_view]` field is a compile error. Natural-key columns
+// stay as plain fields; queries still work, join predicates
+// still work.
+
+[sql_view(name="v_order_summary")]
+struct OrderSummary {
+    CustomerName : string
+    Total        : float        // SUM over orders for this customer
+    NumOrders    : int          // COUNT per customer
+}
+
+// --- view DDL via `_create_view` (primary path) -----------------------
+// `_create_view(type<V>, <pipeline>)` is a call macro that
+// walks the `_sql`-style pipeline, generates the SELECT at
+// macro expansion, checks the final `_select` tuple's field
+// names and types against the `[sql_view]` struct, and emits
+//     db |> exec("CREATE VIEW v_name AS <translated SELECT>")
+// The column-match check is the main win over raw SQL: rename
+// a column in `struct Customer` and this migration fails at
+// COMPILE time, not when the migration runs months later in
+// production.
+
+[sql_migration(version=5, description="add order summary view")]
+def migration_005(db : SqlRunner) {
+    db |> _create_view(type<OrderSummary>,
+        select_from(type<Order>)
+            ._join(type<Customer>) $(o, c) => o.CustomerId == c.Id
+            ._group_by($(o, c) => c.Id)
+            ._select($(o, c) => (
+                CustomerName = c.Name,
+                Total        = _sum(o.Total),
+                NumOrders    = _count()
+            ))
+    )
+}
+
+// --- raw-SQL escape for translator-unsupported features ---------------
+// Window functions, recursive CTEs, and SQLite-specific
+// extensions aren't in the `_sql` translator's grammar. For
+// those, fall through to raw `exec`. This is the same escape
+// `_try_sql` uses for live queries — no separate mechanism.
+
+[sql_view(name="v_customer_rank")]
+struct CustomerRank {
+    CustomerId : int
+    Total      : float
+    Rank       : int                // produced by ROW_NUMBER() — no linq form
+}
+
+[sql_migration(version=6, description="add customer rank view (window fn)")]
+def migration_006(db : SqlRunner) {
+    // Raw SQL escape — `_create_view` can't express ROW_NUMBER()
+    // in v1. Column names and types are the user's responsibility
+    // here (no macro-time validation against the `[sql_view]`
+    // struct when raw SQL is used).
+    db |> exec("CREATE VIEW v_customer_rank AS
+                SELECT CustomerId,
+                       SUM(Total) AS Total,
+                       ROW_NUMBER() OVER (ORDER BY SUM(Total) DESC) AS Rank
+                FROM orders
+                GROUP BY CustomerId")
+}
+
+// --- dropping a view --------------------------------------------------
+// `drop_view_if_exists(type<V>)` reads the view name from the
+// annotation — same ergonomics as `drop_table_if_exists`. Used
+// in down-like scenarios or when a view is being restructured
+// (drop the old one, create the new one, both inside the same
+// migration).
+
+[sql_migration(version=7, description="replace v_customer_rank with tweaked version")]
+def migration_007(db : SqlRunner) {
+    db |> drop_view_if_exists(type<CustomerRank>)
+    db |> exec("CREATE VIEW v_customer_rank AS
+                SELECT CustomerId,
+                       SUM(Total) AS Total,
+                       DENSE_RANK() OVER (ORDER BY SUM(Total) DESC) AS Rank
+                FROM orders
+                GROUP BY CustomerId")
+}
+
+// --- transparent querying ---------------------------------------------
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> migrate_to_latest()
+
+        // `select_from(type<V>)` on a `[sql_view]` struct works
+        // exactly like `select_from(type<T>)` on a `[sql_table]`.
+        // The `_sql` translator emits `SELECT * FROM v_order_summary ...`;
+        // there is no "views branch" in the query pipeline.
+        let big = db |> _sql(
+            select_from(type<OrderSummary>)._where($ => _.Total > 100.0)
+                                            ._order_by($ => _.Total)
+        )
+        to_log(LOG_INFO, "big spenders: {length(big)}")
+
+        // Views JOIN with tables via the normal `_join` macro.
+        // The translator doesn't care which side is a view.
+        let enriched = db |> _sql(
+            select_from(type<OrderSummary>)
+                ._join(type<Customer>) $(s, c) => s.CustomerName == c.Name
+                ._select($(s, c) => (
+                    Name  = s.CustomerName,
+                    Total = s.Total,
+                    Email = c.Email
+                ))
+        )
+        to_log(LOG_INFO, "enriched rows: {length(enriched)}")
+
+        // Top 3 customers via the rank view.
+        let top3 = db |> _sql(
+            select_from(type<CustomerRank>)._where($ => _.Rank <= 3)
+                                            ._order_by($ => _.Rank)
+        )
+        to_log(LOG_INFO, "top 3: {length(top3)}")
+    }
+}
+
+// --- MUTATIONS AGAINST A VIEW = COMPILE ERROR -------------------------
+// The `[sql_view]` marker threads through mutation-path macros
+// (insert / update / delete / upsert) and is rejected at
+// expansion. Error names the view and points at the escape.
+//
+//     let row = OrderSummary(CustomerName="Alice", Total=99.0, NumOrders=1)
+//     db |> insert(row)                                        // macro_error
+//     db |> update(row)                                        // macro_error
+//     db |> delete_(row)                                       // macro_error
+//     db |> _update(type<OrderSummary>, _.Total > 0,
+//                   set(Total = 0.0))                          // macro_error
+//
+// Error shape (illustrative):
+//   cannot insert into `OrderSummary` — it is a [sql_view]
+//   note: views are read-only; mutate underlying tables (`Order`, `Customer`)
+//         and re-query the view
+
+// --- _create_view FAILURE MODES (COMPILE-TIME) ------------------------
+//
+// 1. Column count mismatch — tuple has N fields, struct has M.
+//    Error names both counts + names both sides.
+//
+// 2. Column name mismatch — tuple field `CustomerName` but
+//    struct field `Name`. Error names the offender.
+//
+//      // [sql_view] struct field: `Name`
+//      _select($(o, c) => (CustomerName = c.Name, ...))   // ERROR
+//
+// 3. Column type mismatch — tuple field emits `int64` but
+//    struct field is `string`. Error names both types.
+//
+// 4. Pipeline uses a `_sql`-untranslatable feature. Falls
+//    through to `_sql`'s normal failure path; error message
+//    suggests the raw-SQL escape.
+
+// --- FIELD-LEVEL ANNOTATIONS NOT APPLICABLE TO VIEWS ------------------
+// These all produce `macro_error` at `[sql_view]` expansion:
+//
+//     @sql_primary_key  — views are keyless by design
+//     @sql_references   — no FK constraint on a view column
+//     @sql_default      — no DEFAULT clause on view columns
+//     @sql_computed     — views ARE the computed expression
+//     @sql_unique       — no UNIQUE constraint on view columns
+//     [sql_index]       — CREATE INDEX on a view is SQLite-weird; use
+//                         an index on the underlying table
+//
+// Field-level annotations that DO apply (same as [sql_table]):
+//
+//     @sql_as(type<P>)  — custom-type adapter override (tut 29)
+//     // name override — field name → column name if differ
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 -----------------------------------
+//
+// 1. Updatable views via INSTEAD OF triggers. Tut 41 (triggers)
+//    territory. Adding a trigger on a view routes INSERTs to
+//    the underlying tables — the SQL standard pattern.
+//
+// 2. Materialized views. SQLite has none natively; common
+//    workaround is a table + triggers on the source tables
+//    (a mini-framework). Out of scope.
+//
+// 3. Runtime view-existence validation at `with_sqlite` /
+//    `open_sqlite`. Would walk `[sql_view]`-registered types
+//    and query `sqlite_master`. Nice-to-have; costs startup
+//    time; matches EF's non-choice.
+//
+// 4. Schema-qualified view names. SQLite uses ATTACH for
+//    multi-database (tut 36); no schema concept like Postgres.
+//    Irrelevant.
+//
+// 5. `alter_view` helper. SQLite doesn't support ALTER VIEW —
+//    drop + recreate is the standard pattern. A helper over
+//    that pair is ~2 lines; users write it inline.
+//
+// 6. `create_view_if_not_exists`. Drift-hiding footgun (silent
+//    skip when the definition has changed); raw SQL if
+//    genuinely needed.

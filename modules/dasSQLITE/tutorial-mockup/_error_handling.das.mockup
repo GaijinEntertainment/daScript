@@ -1,0 +1,107 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact; not yet compilable. See ../API_REWORK.md.
+//
+// Demonstrates the try_ / _opt variants for callers that want to handle
+// failure explicitly rather than panic. Depends on daslib/option +
+// daslib/result (PR #2471). Complements the numbered tutorial mockups,
+// which use the strict (panicking) forms.
+//
+// Naming convention throughout:
+//   - `foo(...)`      — panics on error (programmer-error default)
+//   - `try_foo(...)`  — Result<T, string> — (write-side: real errors)
+//   - `foo_opt(...)`  — Option<T>         — (read-side: 0 rows = none)
+//
+// Parameter-binding syntax settled at tutorial-mockup/05-parametrized.das.mockup:
+//   - Positional `?` placeholders   → variadic trailing args
+//       db |> query_scalar_opt(sql, type<T>, 3, "alice")
+//   - Named `:name` / `@name` / `$name` placeholders → named tuple
+//       db |> query_scalar_opt(sql, type<T>, (id=3, name="alice"))
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name : string
+}
+
+[export]
+def main() {
+    // ---------- try_open_sqlite: Result<SqlRunner, string> -------------
+    // Use when the path is user-supplied or otherwise unreliable. The
+    // strict `open_sqlite(path)` / `with_sqlite(path) <| ...` forms panic
+    // on the same failure.
+    var open_result = try_open_sqlite("maybe_missing.db")
+    if (open_result |> is_err()) {
+        to_log(LOG_ERROR, "could not open db: {open_result |> unwrap_err()}\n")
+        return
+    }
+    var inscope db = open_result |> unwrap()
+    db |> create_table(type<User>)
+
+    // ---------- try_insert: Result<int64, string> ----------------------
+    // Use when a PK / unique constraint could fire, or when the caller
+    // wants the errmsg. Strict `insert(row)` panics on the same failure.
+    let first = db |> try_insert(User(Id=1, Name="alice"))
+    first |> if_ok()  $(rowid) { to_log(LOG_INFO,  "inserted rowid={rowid}\n") }
+    first |> if_err() $(msg)   { to_log(LOG_ERROR, "insert failed: {msg}\n") }
+
+    // Explicit collision — strict `insert` would abort the program here.
+    // try_insert returns Err and execution continues.
+    let second = db |> try_insert(User(Id=1, Name="alice-dup"))
+    if (second |> is_err()) {
+        to_log(LOG_INFO, "duplicate Id rejected as expected: {second |> unwrap_err()}\n")
+    }
+
+    // Batch try_insert — failure on any row rolls back the whole txn.
+    let batch = db |> try_insert([
+        User(Id=2, Name="bob"),
+        User(Id=3, Name="carol"),
+        User(Id=2, Name="bob-dup")          // PK collision -> whole batch rolls back
+    ])
+    batch |> if_err() $(msg) {
+        to_log(LOG_ERROR, "batch rolled back: {msg}\n")
+    }
+
+    // ---------- query_scalar_opt: Option<T> ----------------------------
+    // Use when 0 rows is an expected outcome (lookup-by-id). Strict
+    // `query_scalar(...)` panics on 0 rows.
+    let maybe_name = db |> query_scalar_opt(
+        "SELECT Name FROM Users WHERE Id = ?", type<string>, 42)
+    // `??` supplies a default on none.
+    to_log(LOG_INFO, "user 42 is {maybe_name ?? "unknown"}\n")
+
+    // ---------- composition: map / if_some / and_then ------------------
+    // Option composes through map + if_some for value transforms.
+    db |> query_scalar_opt("SELECT Name FROM Users WHERE Id = ?", type<string>, 1)
+       |> map()     $(n) { return "hello, {n}" }
+       |> if_some() $(greeting) { to_log(LOG_INFO, "{greeting}\n") }
+
+    // query_one_opt returns the whole row as Option<User>. Chain with
+    // and_then to compose a lookup + a follow-up fallible op.
+    var mirrored = db |> query_one_opt(
+            "SELECT * FROM Users WHERE Id = ?", type<User>, 1)
+        |> and_then() $(u : User) {
+            // Insert a mirror row; convert Result back to Option so the
+            // chain stays Option<int64>. Callers that want the errmsg
+            // drop the to_option() and keep the whole chain Result.
+            return db |> try_insert(User(Name="mirror-of-{u.Name}"))
+                      |> to_option()
+        }
+    mirrored |> if_some() $(new_id) {
+        to_log(LOG_INFO, "mirror rowid={new_id}\n")
+    }
+
+    // ---------- try_exec: Result<void, string> (pending viability) -----
+    // If Result<void, E> isn't viable per the PR's template, this
+    // becomes Result<bool, string> with true on success. Settle at the
+    // time dasSQLITE integration ports against PR #2471.
+    let ddl_attempt = db |> try_exec("ALTER TABLE Users ADD COLUMN Email TEXT")
+    ddl_attempt |> if_err() $(msg) {
+        to_log(LOG_INFO, "schema already migrated or invalid: {msg}\n")
+    }
+}

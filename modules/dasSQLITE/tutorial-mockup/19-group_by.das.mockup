@@ -1,0 +1,210 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "19-group_by"
+// and § "SQL read-side prerequisites (daslib/linq rework)" in ../API_REWORK.md.
+//
+// Tutorial 19: GROUP BY + HAVING. Aggregate per bucket — "sales per
+// region", "users per signup-month", "orders per status". The natural
+// follow-up to tut 18's flat aggregates.
+//
+// Two shapes ship, for different use cases:
+//
+//   (a) flat SQL shape — one row per group, key + aggregates.
+//       Translatable by `_sql`; macro is `_group_by` and it *fuses*
+//       with the next `_select` so aggregate primitives in the
+//       projection (`_count()`, `_avg(_.X)`) are recognized as
+//       group-scope, not row-scope.
+//
+//   (b) lazy IGrouping shape — one row per group, but the row carries
+//       an `iterator<T>` over group members. Matches C# LINQ's
+//       `GroupBy(k).Select(g => ...)` pattern. Not SQL-translatable
+//       in general (per-group windowing has no direct SQL form), so
+//       `_group_by_lazy` is `macro_error` inside `_sql(...)`.
+//
+//   (c) `_having` — post-aggregate filter. In-memory it lowers to
+//       `where` on the grouped iterator; under `_sql` it emits a
+//       HAVING clause (pre-aggregate filters still go through
+//       `_where`).
+//
+// All three macros live in daslib/linq_boost (open Q flagged in
+// § SQL read-side prerequisites). They're useful for in-memory
+// pipelines too, not SQL-only.
+//
+// LINQ-BACKING AUDIT — no daslib/linq fn edits needed. The backing
+// `group_by(source, key, element_selector, result_selector)` already
+// exists (linq.das:1575-1610, returns iterator<result_selector(K,
+// iterator<E>)>). `_group_by` / `_group_by_lazy` synthesize the
+// right call; `_having` is pure macro sugar over `where` post-group.
+// See project memory `project_dassqlite_phase2.md` § tut 19 bucket B.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// Schema for the grouping demos: users with city / signup date / age.
+// A reporting table — "how many users per city", "average age per
+// city-year cohort", "cities with more than N users".
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name       : string
+    City       : string
+    Age        : int
+    SignupDate : int64   // unix seconds
+    IsAdmin    : bool
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+
+        // (assume table is populated — omitted for clarity)
+
+        // --- (a) flat SQL — per-city headcount + average age ---------
+        // Three chained macros: select_from → _group_by → _select.
+        // The `_select` after `_group_by` is *fused*: the macro walks
+        // the projection tuple, recognizes `_count()` / `_avg(_.Age)`
+        // as group-scope aggregates, and emits column+aggregate SQL.
+        //
+        // Outside `_sql(...)`, the same chain lowers to linq.das's
+        // group_by(src, key=$(u) => u.City, elem=$(u) => u,
+        //          result=$(city, grp) => (
+        //              City=city,
+        //              N=count(grp),
+        //              AvgAge=grp |> _select(_.Age) |> average()))
+        //
+        // SQL:  SELECT City, COUNT(*), AVG(Age) FROM Users GROUP BY City
+        let by_city <- _sql(db |> select_from(type<User>)
+            ._group_by(_.City)
+            ._select((City=_.City, N=_count(), AvgAge=_avg(_.Age))))
+        for (r in by_city) {
+            to_log(LOG_INFO, "{r.City}: {r.N} users, avg age {r.AvgAge}\n")
+        }
+
+        // --- (a') pre-aggregate filter still goes through _where -----
+        // `_where` is pre-GROUP BY (emits WHERE); `_having` is post-
+        // GROUP BY (emits HAVING). The macro routes correctly based
+        // on where in the chain the filter sits.
+        // SQL:  SELECT City, COUNT(*) FROM Users
+        //       WHERE IsAdmin = 0 GROUP BY City
+        let by_city_nonadmin <- _sql(db |> select_from(type<User>)
+            ._where(!_.IsAdmin)
+            ._group_by(_.City)
+            ._select((City=_.City, N=_count())))
+        for (r in by_city_nonadmin) {
+            to_log(LOG_INFO, "{r.City}: {r.N} non-admins\n")
+        }
+
+        // --- (b) HAVING — filter on the aggregate --------------------
+        // `_having` takes a boolean expression that refers to group-
+        // scope aggregates (and optionally the group key). Captured
+        // vars bind automatically, reusing `_where`'s rewriter.
+        // SQL:  SELECT City, COUNT(*) FROM Users
+        //       GROUP BY City HAVING COUNT(*) > ?
+        let threshold = 100
+        let popular <- _sql(db |> select_from(type<User>)
+            ._group_by(_.City)
+            ._having(_count() > threshold)
+            ._select((City=_.City, N=_count())))
+        for (r in popular) {
+            to_log(LOG_INFO, "popular city {r.City}: {r.N}\n")
+        }
+
+        // --- (c) multi-key grouping — named-tuple key ----------------
+        // The group key can be a named tuple literal. Each tuple
+        // field becomes a group-by column; SQL emits GROUP BY over
+        // all of them in order. Named-tuple literal (language
+        // prerequisite) makes this ergonomic: the key's field names
+        // surface directly in the result row via `_.City` / `_.Year`.
+        // SQL:  SELECT City, year(SignupDate) AS Year, COUNT(*)
+        //       FROM Users GROUP BY City, year(SignupDate)
+        let by_city_year <- _sql(db |> select_from(type<User>)
+            ._group_by((City=_.City, Year=year(_.SignupDate)))
+            ._select((City=_.City, Year=year(_.SignupDate), N=_count())))
+        for (r in by_city_year) {
+            to_log(LOG_INFO, "{r.City} {r.Year}: {r.N}\n")
+        }
+        // NOTE: `year(...)` must be in the SQL-translatable function
+        // table (cross-cutting § A in API_MISSING.md, tut 32). For
+        // backends without `year()`, the translator maps to
+        // `strftime('%Y', SignupDate)` or equivalent — per-provider
+        // dialect table handles it.
+
+        // --- (d) IGrouping shape — per-group iteration ---------------
+        // `_group_by_lazy` does NOT fuse with `_select`. The result
+        // is `array<tuple<Key; iterator<T>>>` — one row per bucket,
+        // each carrying an iterator over group members. Suitable for
+        // any per-group op that has no SQL equivalent: top-N per
+        // group, group-scoped filtering, emitting grouped JSON, etc.
+        //
+        // This form is IN-MEMORY ONLY. Putting it inside `_sql(...)`
+        // is a macro_error — we don't try to translate per-group
+        // windowing to SQL. If SQL is required, fetch the flat rows
+        // with (a) and regroup client-side, or use a window function
+        // (tut 32+ future work).
+        //
+        // Backing call synthesized:
+        //   group_by(db |> select_from(type<User>),
+        //            key = $(u) => u.City,
+        //            element_selector = $(u) => u,
+        //            result_selector = $(city, grp) => (City=city, Users=grp))
+        let lazy_by_city <- db |> select_from(type<User>)
+            ._group_by_lazy(_.City)
+        for (bucket in lazy_by_city) {
+            to_log(LOG_INFO, "city {bucket._0}:\n")
+            // inside the bucket, the iterator is a regular linq chain
+            // — take top 3 youngest
+            for (u in bucket._1 |> _order_by(_.Age) |> _take(3)) {
+                to_log(LOG_INFO, "  {u.Name} ({u.Age})\n")
+            }
+        }
+        // Tuple member names: `._0` is the group key, `._1` is the
+        // iterator. Future enhancement: named-tuple key/values
+        // (`bucket.Key` / `bucket.Users`) once the named-tuple literal
+        // prerequisite lands and `_group_by_lazy` can synthesize
+        // named output.
+
+        // --- (e) combined — aggregates per group, filtered, sorted ---
+        // The full reporting-query shape: pre-filter, group,
+        // post-filter on aggregates, project, order, limit.
+        //
+        // SQL:  SELECT City, COUNT(*) AS N, AVG(Age) AS AvgAge
+        //       FROM Users
+        //       WHERE SignupDate > ?
+        //       GROUP BY City
+        //       HAVING COUNT(*) >= ?
+        //       ORDER BY N DESC
+        //       LIMIT 10
+        let since = unix_now() - 86400l * 365l
+        let min_size = 5
+        let report <- _sql(db |> select_from(type<User>)
+            ._where(_.SignupDate > since)
+            ._group_by(_.City)
+            ._having(_count() >= min_size)
+            ._select((City=_.City, N=_count(), AvgAge=_avg(_.Age)))
+            ._order_by_desc(_.N)
+            ._take(10))
+        for (r in report) {
+            to_log(LOG_INFO, "{r.City}: {r.N} users, avg {r.AvgAge}\n")
+        }
+
+        // --- (f) try_ variant — non-panic ----------------------------
+        // Same macro, different terminal. `_sql(...)` yields
+        // `array<tuple<…>>` on happy path; `_try_sql(...)` yields
+        // `Result<array<tuple<…>>, string>`. No separate `_try_group_by`
+        // — the try-ness sits on the outer SQL wrapper, not the chain
+        // stage.
+        let attempt <- _try_sql(db |> select_from(type<User>)
+            ._group_by(_.City)
+            ._select((City=_.City, N=_count())))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "report failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let rows <- attempt |> unwrap()
+            to_log(LOG_INFO, "{rows |> length} cities\n")
+        }
+    }
+}

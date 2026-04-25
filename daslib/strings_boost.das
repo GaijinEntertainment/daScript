@@ -408,3 +408,106 @@ def public glob_match(pattern, text : string) : bool {
         return *pp == 0u8
     }
 }
+
+def private _text_match_is_word_byte(b : uint8) : bool {
+    let ch = int(b)
+    if (ch >= int(0x80)) {
+        return true
+    }
+    return is_alnum(ch) || ch == '_'
+}
+
+def private _text_match_reject_unsupported(query : string) {
+    peek_data(query) $(bytes : array<uint8> const#) {
+        for (b in bytes) {
+            if (b == uint8('"') || b == uint8(':')) {
+                panic("unsupported FTS5 query syntax in-memory; use SQL backend for the full grammar")
+            }
+        }
+    }
+    if (find(query, "NEAR(") >= 0) {
+        panic("unsupported FTS5 query syntax in-memory; use SQL backend for the full grammar")
+    }
+}
+
+def private _text_match_tokenize(text : string; var out : array<string>) {
+    let lowered = to_lower(text)
+    peek_data(lowered) $(bytes : array<uint8> const#) {
+        let n = length(bytes)
+        var i = 0
+        while (i < n) {
+            while (i < n && !_text_match_is_word_byte(bytes[i])) {
+                i++
+            }
+            if (i >= n) {
+                break
+            }
+            let start = i
+            while (i < n && _text_match_is_word_byte(bytes[i])) {
+                i++
+            }
+            out |> push(slice(lowered, start, i))
+        }
+    }
+}
+
+def public text_match(text, query : string) : bool {
+    //! Matches ``text`` against a small subset of the SQLite FTS5 query grammar.
+    //!
+    //! Supported:
+    //!
+    //! - Whitespace-separated terms combined with AND semantics (every term must match).
+    //! - ``term*`` suffix for prefix match — ``quick*`` matches ``quick`` and ``quickly``.
+    //! - Unicode word-boundary tokenization of ``text``: ASCII alphanumerics and ``_`` are
+    //!   word characters; bytes with the high bit set (UTF-8 continuation / lead bytes)
+    //!   are treated as word characters so multi-byte words stay intact.
+    //! - ASCII case-folding — ``a`` matches ``A``; non-ASCII bytes are compared as-is.
+    //!
+    //! Raises ``panic("unsupported FTS5 query syntax in-memory; use SQL backend for the full grammar")``
+    //! on any of: quoted phrases ``"..."``, column filters ``col:term``, ``NEAR(...)``, or
+    //! the explicit keywords ``AND`` / ``OR`` / ``NOT`` / ``NEAR`` appearing as whole-word tokens.
+    //!
+    //! Returns ``true`` when every query term matches at least one text token, or when the
+    //! query contains no terms.
+    _text_match_reject_unsupported(query)
+    var inscope tokens : array<string>
+    _text_match_tokenize(text, tokens)
+    let raw_terms = split_by_chars(query, " \t\n\r")
+    for (raw in raw_terms) {
+        if (empty(raw)) {
+            continue
+        }
+        if (raw == "AND" || raw == "OR" || raw == "NOT" || raw == "NEAR") {
+            panic("unsupported FTS5 query syntax in-memory; use SQL backend for the full grammar")
+        }
+        var base : string
+        var is_prefix = false
+        if (ends_with(raw, "*")) {
+            is_prefix = true
+            base = to_lower(slice(raw, 0, length(raw) - 1))
+        } else {
+            base = to_lower(raw)
+        }
+        if (empty(base)) {
+            continue
+        }
+        var found = false
+        for (tok in tokens) {
+            if (is_prefix) {
+                if (starts_with(tok, base)) {
+                    found = true
+                    break
+                }
+            } else {
+                if (tok == base) {
+                    found = true
+                    break
+                }
+            }
+        }
+        if (!found) {
+            return false
+        }
+    }
+    return true
+}

@@ -1,0 +1,121 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "15-update"
+// and § "E — Function form + macro form pair" for the naming convention.
+//
+// Tutorial 15: UPDATE in three forms:
+//   (a) by-PK update         — db |> update(row)
+//   (b) bulk update          — db |> _update(type<T>, where_expr, set_expr)
+//   (c) bulk RETURNING       — db |> _update_returning(...)
+//   (d) raw escape hatch     — db |> exec(...)
+//   (e) try_ non-panic variants
+//
+// Function/macro pair (per § E):
+//   def update(db, type<T>, where : block<(arg : T -&) : bool>;
+//                           set   : block<(arg : T -&) : auto>) : int
+//   def update_returning(db, type<T>, where, set) : array<T>
+// `_update` / `_update_returning` are macro sugar — wrap each block-arg
+// expression in $(_) => expr and forward positionally. Argument order is
+// the API contract; named-arg syntax in the def is self-documentation,
+// not a call-site requirement.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name      : string
+    Email     : string
+    Active    : bool
+    LastSeen  : int64
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+        let now_ts = unix_now()
+        db |> insert([
+            User(Id=1, Name="alice", Email="a@x.com", Active=true,  LastSeen=now_ts),
+            User(Id=2, Name="bob",   Email="b@x.com", Active=true,  LastSeen=now_ts -  90*86400),
+            User(Id=3, Name="carol", Email="c@x.com", Active=true,  LastSeen=now_ts - 200*86400),
+            User(Id=4, Name="dave",  Email="d@x.com", Active=false, LastSeen=now_ts - 400*86400)
+        ])
+
+        // --- (a) by-PK update: full-row replacement -------------------
+        // Pass a row; [sql_table] reads the @sql_primary_key field as
+        // the WHERE key and writes every other column. SQL emitted:
+        //   UPDATE Users SET Name=?, Email=?, Active=?, LastSeen=?
+        //   WHERE Id = ?
+        // Returns int (rows-affected; 1 on success, 0 if no row matched).
+        // Panics on SQL error. Non-panic: try_update.
+        let n = db |> update(User(Id=1, Name="alice",
+                                  Email="alice@new.com",
+                                  Active=true, LastSeen=now_ts))
+        to_log(LOG_INFO, "by-PK update affected {n} row(s)\n")
+
+        // --- (b) bulk update via _update macro -------------------------
+        // Three positional args: (type<T>, where_expr, set_expr).
+        // Macro expansion (mechanical):
+        //   _update(type<User>, _.LastSeen<cutoff, (Active=false))
+        //   →  update(type<User>,
+        //             $(_) => _.LastSeen<cutoff,
+        //             $(_) => (Active=false))
+        // Captured `cutoff` becomes a bind param. Returns int rows-affected.
+        // Argument order is positional — named-arg syntax in the def is
+        // self-documentation only; the macro reads positionally.
+        // SQL emitted:
+        //   UPDATE Users SET Active=?, LastSeen=? WHERE LastSeen < ?
+        let cutoff = now_ts - 365*86400
+        let stale = db |> _update(type<User>,
+            _.LastSeen < cutoff,
+            (Active=false, LastSeen=now_ts))
+        to_log(LOG_INFO, "marked {stale} stale users inactive\n")
+
+        // --- (c) bulk update RETURNING the post-update rows -----------
+        // Sibling fn `update_returning` / `_update_returning`. Always
+        // returns array<T> (RETURNING * — full row). Named-arg overload
+        // (`returning=type<T>`) doesn't fly because callers can choose
+        // positional, so distinct names are the honest path.
+        // For column projection, post-process with `_select`.
+        // SQL emitted:
+        //   UPDATE Users SET Active=?, LastSeen=? WHERE Id = ?
+        //   RETURNING Id, Name, Email, Active, LastSeen
+        let revived <- db |> _update_returning(type<User>,
+            _.Id == 4,
+            (Active=true, LastSeen=now_ts))
+        for (u in revived) {
+            to_log(LOG_INFO, "revived: {u.Name} (active={u.Active})\n")
+        }
+
+        // --- (d) raw-SQL escape hatch ----------------------------------
+        // For migrations or queries the macro can't translate. Same
+        // parameter binding as 05-parametrized: positional `?` →
+        // variadic trailing args, named placeholders → trailing tuple.
+        // `exec` returns void; rows-affected via `db |> changes()`.
+        db |> exec("UPDATE Users SET Email = ? WHERE Id = ?",
+                   "alice@updated.com", 1)
+        to_log(LOG_INFO, "raw-SQL update affected {db |> changes()} row(s)\n")
+
+        // --- (e) try_ variants for non-panic flow ----------------------
+        // 8-name expansion per cross-cutting § E:
+        //   update / _update / try_update / _try_update /
+        //   update_returning / _update_returning /
+        //   try_update_returning / _try_update_returning
+        // 0 rows-affected is NOT an error (row simply wasn't there);
+        // Err is reserved for genuine SQL failures (constraint, IO, BUSY).
+        let attempt = db |> try_update(User(Id=999, Name="ghost",
+                                            Email="", Active=false,
+                                            LastSeen=0))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "update failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let touched = attempt |> unwrap()
+            to_log(LOG_INFO, "ghost-update touched {touched} row(s)\n")
+        }
+    }
+}

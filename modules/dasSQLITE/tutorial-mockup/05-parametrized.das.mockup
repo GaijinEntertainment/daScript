@@ -1,0 +1,56 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact; not yet compilable. See ../API_REWORK.md.
+// Mirrors tutorial/05-parametrized.das — SELECT ... WHERE Id = ?.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+[sql_table(name="Cars")]
+struct Car {
+    @sql_primary_key Id : int
+    Name  : string
+    Price : int
+}
+
+[export]
+def main() {
+    let target = 3
+
+    with_sqlite("test.db") <| $(db) {
+        // --- LINQ form (primary) --------------------------------------
+        // Captured vars in the `_where` lambda become SQL bind params
+        // automatically. `_sql` walks the expression, classifies `_.Id`
+        // as a column and `target` as a captured non-column reference,
+        // and emits:
+        //   SELECT Id, Name, Price FROM Cars WHERE Id = ? LIMIT 1
+        //   binds: [target]
+        // `._first()` panics on empty. `._first_or_default()` /
+        // `._first_opt()` (Option<Car>) are the non-panic variants.
+        let car = _sql(db |> select_from(type<Car>)
+                         ._where(_.Id == target)
+                         ._first())
+        print("ID = {car.Id}, name = {car.Name}\n")
+
+        // --- Raw-SQL escape hatch (positional `?`) --------------------
+        // Variadic trailing args bind to positional placeholders in the
+        // order they appear. Mixed types are fine — no homogeneity
+        // constraint like array<...> would impose.
+        let raw = db |> query_one(
+            "SELECT Id, Name FROM Cars WHERE Id = ?", type<Car>, target)
+        print("ID = {raw.Id}, name = {raw.Name}\n")
+
+        // --- Raw-SQL escape hatch (named `:name` / `@name`) -----------
+        // The tuple's *field names* (left of `=`) are the matching key:
+        // the macro emits `sqlite3_bind_parameter_index(stmt, ":target")`
+        // for the field named `target`, then binds its value. Using a
+        // distinct local name on the right side here to make the
+        // field-name-vs-value split visible — they don't have to match.
+        let lookupId = 3
+        let named = db |> query_one(
+            "SELECT Id, Name FROM Cars WHERE Id = :target",
+            type<Car>,
+            (target=lookupId))
+        print("ID = {named.Id}, name = {named.Name}\n")
+    }
+}

@@ -700,7 +700,7 @@ namespace das {
             error("can only clone to a reference", "", "",
                   expr->at, CompilationError::cant_write_to_non_reference);
         } else if (expr->left->type->constant) {
-            error("can't write to a constant value " + expr->left->describe(), "", "",
+            error("can't write to a constant value " + expr->left->describe(), "type " + describeType(expr->left->type), "",
                   expr->at, CompilationError::cant_write_to_const);
         } else if (!expr->left->type->canClone()) {
             reportCantClone("type " + describeType(expr->left->type) + " can't be cloned from " + describeType(expr->right->type),

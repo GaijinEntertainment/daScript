@@ -1,0 +1,335 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "37-json"
+// and § "37-json — decided" in ../API_REWORK.md.
+//
+// Tutorial 37: JSON and BLOB columns — structured-but-not-columnar data.
+//
+// CROSS-PROVIDER. Unlike tuts 32-34/36, this tut's annotations
+// and macro-generated adapter codegen live in the abstract layer
+// `daslib/sql`. Only the provider-specific piece is how the
+// `_sql` walker renders a JSON path descent:
+//   SQLite  : json_extract(col, '$.path')
+//   PG      : col->>'path'         (or ->'path' for JSONB)
+//   MySQL   : col->>'$.path'
+//   MSSQL   : JSON_VALUE(col, '$.path')
+// Same walker rule, per-provider emitter spelling.
+//
+// WHY THIS TUT. The "30-column kitchen sink" bailout. Two
+// complementary annotations for structured data that doesn't
+// belong in its own columns:
+//
+//   @sql_json  : TEXT storage via daslib/json + daslib/json_boost.
+//                QUERYABLE from SQL with `json_extract`. Human-
+//                readable in `sqlite3` shell. Tolerant of schema
+//                drift — missing fields default, extras ignored.
+//
+//   @sql_blob  : BLOB storage via daslib/archive. OPAQUE to SQL
+//                but faster encode/decode and smaller on disk.
+//                Schema-FRAGILE — positional binary format; adding
+//                a field breaks old rows.
+//
+// Both ride tut 29's rail: when `[sql_table]` sees the annotation
+// on a field, it generates the tut-29 `sql_bind`/`sql_extract`
+// pair at the table-struct's module scope. No new storage class,
+// no registration table.
+//
+// KEY DESIGN CHOICE — EXPLICIT OPT-IN. No generic
+// `sql_bind $T where T : struct_or_tuple` ships. A struct/tuple-
+// typed column without an annotation stays a compile error
+// (tut 29 lock 7). Rationale: "is this column stored as JSON
+// or as opaque binary?" is a load-bearing decision (schema-drift
+// story + SQL queryability) — hiding it behind a default would
+// lock in the wrong answer half the time. The annotation also
+// signals intent at the call site.
+//
+// KEY DESIGN CHOICE — WALKER KEYS ON `@sql_json`, NOT ON TYPE
+// SHAPE. `[sql_table]` records per-field "@sql_json was here" in
+// the table metadata; `_sql` reads that flag. A user who writes
+// their own `sql_bind(MyStruct) : string` (CSV, protobuf-text,
+// whatever) gets string storage but NOT walker descent — they
+// use raw SQL for any structure-aware query. Only `@sql_json`
+// columns round-trip through JSON AND unlock the path-descent
+// emitter rule.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Twelfth consecutive zero-
+// linq-prereq tut (25-34, 36-37). `daslib/sql` gains two
+// annotations, `[sql_table]` adapter-pair codegen on annotation,
+// and one `_sql` walker rule. See `project_dassqlite_phase2.md`
+// § tut 37.
+
+require daslib/sql
+require daslib/json            // JV / read_json / write_json
+require daslib/json_boost      // from_JV
+require daslib/archive         // mem_archive_save / mem_archive_load
+require sqlite/sqlite_boost
+
+// --- @sql_json: TEXT-backed, queryable --------------------------------
+// `Prefs` is a tuple; `@sql_json` makes [sql_table] emit, at
+// module scope alongside the table, the tut-29 pair:
+//
+//     def sql_bind    (v : T) : string {
+//         return write_json(JV(v))
+//     }
+//     def sql_extract (v : string; type<T>) : T {
+//         var err = ""
+//         return from_JV(read_json(v, err), default<T>)
+//     }
+//
+// Storage: TEXT. Column tagged as @sql_json so `_sql` walker can
+// descend.
+
+[sql_table(name = "Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name                : string
+    @sql_json
+    Prefs : tuple<theme : string; lang : string; notify : bool>
+}
+
+[export]
+def main() {
+    with_sqlite("app.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+        db |> create_table(type<User>)
+
+        // Insert — tuple auto-serialized on bind:
+        //     INSERT INTO Users(Id, Name, Prefs)
+        //     VALUES (?, ?, ?)
+        //     with last param bound as
+        //     '{"theme":"dark","lang":"en","notify":true}'
+        db |> insert(User(
+            Id = 1,
+            Name = "alice",
+            Prefs = (theme = "dark", lang = "en", notify = true)))
+
+        // Select — parsed back into the tuple:
+        for (u in db |> select_from(type<User>)) {
+            to_log(LOG_INFO, "{u.Name}: theme={u.Prefs.theme}")
+        }
+    }
+}
+
+// --- _sql WALKS INTO @sql_json FIELDS ---------------------------------
+// When the walker sees `_.<json_col>.<path…>` where `<json_col>`
+// is `@sql_json`-tagged, it emits `json_extract(<col>, '$.<path…>')`
+// instead of treating `.<path>` as a struct field access. The
+// subfield's declared type drives result-side extraction via
+// tut 29's adapters.
+
+def dark_mode_users(db : SqlRunner) : array<User> {
+    return <- _sql(db |> select_from(type<User>)
+        ._where(_.Prefs.theme == "dark"))
+    // => SELECT Id, Name, Prefs FROM Users
+    //    WHERE json_extract(Prefs, '$.theme') = ?
+}
+
+def list_themes(db : SqlRunner) : array<string> {
+    return <- _sql(db |> select_from(type<User>)
+        ._select(_.Prefs.theme))
+    // => SELECT json_extract(Prefs, '$.theme') FROM Users
+}
+
+// Bool subfield — `json_extract` returns 0/1 for JSON booleans,
+// which rides tut 29's bool adapter on the extract side:
+
+def notifiable_count(db : SqlRunner) : int {
+    return _sql(db |> select_from(type<User>)
+        ._where(_.Prefs.notify == true)._count())
+    // => SELECT COUNT(*) FROM Users
+    //    WHERE json_extract(Prefs, '$.notify') = 1
+}
+
+// --- NESTED descent (structs inside structs) --------------------------
+
+struct Address {
+    City : string
+    Zip  : string
+}
+struct Profile {
+    Addr : Address
+    Bio  : string
+}
+
+[sql_table(name = "Accounts")]
+struct Account {
+    @sql_primary_key Id : int
+    @sql_json Profile   : Profile
+}
+
+def in_city(db : SqlRunner; city : string) : array<Account> {
+    return <- _sql(db |> select_from(type<Account>)
+        ._where(_.Profile.Addr.City == city))
+    // => SELECT Id, Profile FROM Accounts
+    //    WHERE json_extract(Profile, '$.Addr.City') = ?
+}
+
+// --- @sql_blob: binary archive, opaque to SQL -------------------------
+// `@sql_blob` generates the tut-29 pair via daslib/archive:
+//
+//     def sql_bind    (var v : T) : array<uint8> {
+//         return <- mem_archive_save(v)
+//     }
+//     def sql_extract (v : array<uint8>; type<T>) : T {
+//         var r = default<T>
+//         mem_archive_load(v, r)          // panics on failure
+//         return r
+//     }
+//
+// Storage: BLOB. Column is opaque to `_sql` — any
+// `_.blob_col.field` descent is a COMPILE ERROR. Users filter /
+// project in daslang after round-trip.
+//
+// Use when: hot path where JSON encode/decode overhead matters,
+// tight on-disk size, no need to filter INSIDE the column from
+// SQL, and T's schema is pinned (or migrated alongside the DB).
+
+struct SessionSnapshot {
+    last_scene   : string
+    unlocks      : array<int>
+    persistent   : table<string; int>
+    last_tick_ms : int64
+}
+
+[sql_table(name = "Sessions")]
+struct SessionRow {
+    @sql_primary_key UserId : int
+    StartedAt               : int64
+    @sql_blob State         : SessionSnapshot
+}
+
+def snapshot_session(db : SqlRunner; uid : int; var snap : SessionSnapshot) {
+    db |> insert(SessionRow(
+        UserId    = uid,
+        StartedAt = now_unix_seconds(),
+        State    <- snap))         // @sql_blob fields follow
+                                   // normal move/copy rules for T
+}
+
+// Trying to `_where(_.State.last_scene == "intro")` here is a
+// COMPILE ERROR — "cannot descend into @sql_blob column State;
+// filter in daslang after round-trip, or use raw SQL."
+
+// --- CHOOSING @sql_json vs @sql_blob ----------------------------------
+//
+// Feature                      | @sql_json        | @sql_blob
+// -----------------------------+------------------+-------------------
+// Storage class                 | TEXT             | BLOB
+// `_sql` field descent          | json_extract     | compile error
+// Queryable from SQL            | yes              | no
+// Encode/decode speed           | slower           | faster
+// On-disk size                  | larger           | smaller
+// Human-readable (sqlite3)      | yes              | no
+// Type breadth                  | daslib/json_boost| daslib/archive
+//                               |                  | (also smart_ptr,
+//                               |                  |  variant, matrix)
+// Schema drift tolerance        | HIGH — missing   | LOW — positional;
+//                               | fields default,  | adding a field
+//                               | extras ignored   | breaks old rows
+//
+// Rule of thumb:
+//   - Shape will evolve                     → @sql_json.
+//   - Shape is pinned / versioned schema    → @sql_blob fine.
+//   - Need SQL-side filter inside the col   → @sql_json only.
+
+// --- FAILURE SURFACING ------------------------------------------------
+// Both strict forms panic on bad stored data:
+//
+//   @sql_json : malformed text → read_json fails → sql_extract panics.
+//   @sql_blob : corrupt / schema-mismatched bytes → mem_archive_load
+//               (canfail=false) fails → panic.
+//
+// `try_select_from` / `try_query<T>` surface either as Err. No
+// DDL-level validation constraint is auto-added on either — the
+// strict extract is the gate.
+
+// --- GOTCHAS ----------------------------------------------------------
+//
+// 1. @sql_json TYPE FIDELITY. `tuple<…>` with optional/nullable
+//    fields loses the "absent" vs "null" distinction on round-
+//    trip — both come back as the default. Model with
+//    `Option<T>` (tut 25) if you need the distinction.
+//
+// 2. @sql_blob IS SCHEMA-FRAGILE. `daslib/archive` is positional
+//    binary. Adding / removing / reordering fields in
+//    `SessionSnapshot` and deploying against old DB rows →
+//    `mem_archive_load` fails. Treat @sql_blob schema changes
+//    as DB migrations (tut 30). @sql_json is the right default
+//    for drift-prone data.
+//
+// 3. JSON1 EXTENSION AVAILABILITY. SQLite's `json_extract`
+//    lives in the JSON1 extension — bundled in every mainstream
+//    build (Debian, macOS, Windows, Android, iOS, pysqlite3…),
+//    but technically a build-time option. On an unusual custom
+//    build without it: SQLITE_ERROR at query time — "no such
+//    function: json_extract". Fix: rebuild SQLite with
+//    `-DSQLITE_ENABLE_JSON1`.
+//
+// 4. INDEXING @sql_json PATHS. `json_extract(col, '$.foo')`
+//    scans the blob per row. SQLite supports expression indexes:
+//        CREATE INDEX idx_users_theme
+//            ON Users(json_extract(Prefs, '$.theme'))
+//    Raw DDL in v1; typed annotation deferred (DEFERRED § 2).
+//
+// 5. MUTATION INSIDE @sql_json. `UPDATE Users SET Prefs =
+//    json_set(Prefs, '$.theme', 'light')` stays on the SQL side.
+//    `_sql` can't emit it via `_update` + field-assignment chain
+//    in v1; use raw `exec` for in-place JSON mutation.
+//
+// 6. ARRAY SUBSCRIPT INSIDE JSON. `_.Tags[0]` → `'$[0]'` is
+//    NOT part of v1's walker rules. Raw SQL or deferred
+//    `_json_extract` escape (DEFERRED § 3).
+//
+// 7. @sql_blob TYPE LIMITS. Whatever `daslib/archive`'s
+//    `serialize` handles works — struct / tuple / array / table /
+//    variant / smart_ptr / matrix. Unsupported shapes (iterators,
+//    lambdas) fail at macro expansion when the generated
+//    `mem_archive_save` call tries to resolve.
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 -----------------------------------
+//
+// 1. IDEMPOTENT ADAPTER GENERATION. Two `@sql_json` (or
+//    `@sql_blob`) fields in the same module referring to the
+//    same structural tuple/struct type would double-generate
+//    the adapter pair. [sql_table] skips regeneration if the
+//    pair already exists in scope. Implementation detail.
+//
+// 2. @sql_json_index("$.path") ANNOTATION. Auto-emits the
+//    SQLite expression index. Cross-provider DDL diverges (PG's
+//    `(col->>'theme')`, MySQL generated columns); a clean
+//    abstract-layer annotation wants real usage before locking.
+//    Raw `CREATE INDEX` in v1.
+//
+// 3. _json_extract<T>(col, path) EXPLICIT ESCAPE. For paths the
+//    walker can't reach (array subscripts, new JSON operators).
+//    Ships when a wall is hit.
+//
+// 4. @sql_json(fast). Switches the generated body to
+//    `json_sprint` / `json_sscan` (limited-type fast path).
+//    Profile-driven; `JV`/`from_JV` is the correct-for-every-
+//    type default.
+//
+// 5. JSON PATCH / MERGE OPS INSIDE _update. `json_set` /
+//    `json_patch` / `json_remove` in `_sql` update chains.
+//    Nontrivial emitter work + partial-column update story;
+//    raw `exec` covers v1.
+//
+// 6. JSONB BINARY STORAGE (SQLite 3.45+). `@sql_json(binary)`
+//    picks the JSONB column type — slightly faster read, not
+//    human-readable. Ships when 3.45+ is broadly deployable.
+//
+// 7. @sql_blob COMPRESSION. `@sql_blob(zstd)` / `@sql_blob(lz4)`
+//    wraps archive bytes in a compression layer. Useful for
+//    large state blobs. Ships when asked.
+//
+// 8. @sql_blob VERSIONED FORMAT. Header tag + version byte so
+//    old rows can be read with fallback logic. Needs a
+//    daslib/archive schema-evolution story first.
+//
+// 9. CROSS-PROVIDER JSON PATH EMITTER. PG's `->>`, MySQL's
+//    `->>`, MSSQL's `JSON_VALUE`. Ships when a second backend
+//    lands; v1 emits SQLite `json_extract` syntax.
+//
+// 10. @sql_json_raw. A TEXT column that happens to hold JSON
+//    but whose declared daslang type is `string` (user-managed
+//    serialization). Niche; ships if asked.

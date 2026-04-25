@@ -1,0 +1,243 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "36-attach"
+// and § "36-attach — decided" in ../API_REWORK.md.
+//
+// Tutorial 36: ATTACH DATABASE — cross-DB queries on one connection.
+//
+// PROVIDER-SPECIFIC — SQLITE ONLY. Fourth consecutive tut in
+// `sqlite/sqlite_boost`. ATTACH has no cross-provider analog:
+// PG's foreign data wrappers, MSSQL's linked servers, MySQL's
+// FEDERATED engine all share the USE CASE (query across DB
+// boundaries) but diverge completely in API + semantics. Any
+// abstraction would be a false promise.
+//
+// WHY THIS TUT. Real ATTACH use cases:
+//   - PER-USER DATABASES. One `.db` file per user; attach at
+//     request time, query, detach. Scales better than one big
+//     DB for read-mostly per-tenant workloads.
+//   - ARCHIVE SPLITS. Hot tables in `app.db`, cold historical
+//     data in `archive.db`. Queries that span both join across
+//     the attach boundary.
+//   - IMPORT / EXPORT. Attach a source DB, `INSERT ... SELECT`
+//     into main, detach. No CSV export/import dance.
+//
+// KEY DESIGN CHOICE — schema qualification via RUNNER-WRAPPER.
+// `SqlRunner` carries a `schema_name` field (default `"main"`).
+// `with_schema(db, "archive")` returns a runner-copy qualified
+// to the archive schema; typed queries on the qualified runner
+// emit `archive.<table>` automatically. Rejected alternatives:
+//   (a) raw SQL only — surrenders type safety.
+//   (b) `[sql_table(schema="archive")]` — static, but
+//       ATTACH's `as_name` is picked at runtime.
+//   (c) per-method `schema=` parameter — API bloat per
+//       call site.
+// Runner-wrapper wins: single extension point, transparent
+// to every query method, decomposes cleanly.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Eleventh consecutive
+// zero-linq-prereq tut (25-34, 36). `sqlite/sqlite_boost` gains
+// 4 runtime functions + try_ variants, plus a minor
+// `SqlRunner.schema_name` field. See `project_dassqlite_phase2.md`
+// § tut 36.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+// --- base schema for examples -----------------------------------------
+// Same User struct used on both main.db and archive.db — the
+// archive is a historical copy of users who've been inactive
+// >1 year.
+
+[sql_table(name = "Users")]
+struct User {
+    @sql_primary_key Id   : int
+    Name                  : string
+    Email                 : string
+    Active                : bool
+    LastSeenUnix          : int64
+}
+
+// --- attach / detach primitives --------------------------------------
+// Minimal pair over SQLite's ATTACH / DETACH DDL.
+//
+//   attach(db; path; as_name)         — runtime ATTACH DATABASE
+//   detach(db; as_name)               — runtime DETACH DATABASE
+//   try_attach(...) / try_detach(...) — Result<void, string> variants
+
+[export]
+def main() {
+    with_sqlite("main.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+
+        // Manual attach/detach pair. `as_name` is the schema
+        // qualifier used in subsequent queries — pick any
+        // identifier.
+        db |> attach("archive.db", as_name = "archive")
+
+        // Build a runner qualified to the archive schema.
+        // `with_schema` returns a RUNNER COPY with the field
+        // set; no DB round-trip, no side effects.
+        let arch = db |> with_schema("archive")
+
+        // Typed query on the archive — _sql emits table names
+        // as `archive.Users`:
+        //
+        //     SELECT Id, Name, Email, Active, LastSeenUnix
+        //     FROM archive.Users
+        //     WHERE Active = ?
+        //
+        for (u in arch |> select_from(type<User>)._where(_.Active)) {
+            to_log(LOG_INFO, "archived active: {u.Name}")
+        }
+
+        db |> detach("archive")
+    }
+}
+
+// --- PREFERRED: with_attached block form ------------------------------
+// Auto-detach on exit (normal + exceptional paths). Block
+// receives the schema-qualified runner as a parameter; the
+// outer `db` stays in scope via capture for main-schema
+// queries.
+//
+//   with_attached(db; path; as_name) <| $(scoped : SqlRunner) { … }
+
+def archive_import_flow() {
+    with_sqlite("main.db") <| $(db) {
+        db |> with_attached("archive.db", as_name = "archive") <| $(arch) {
+            // Copy inactive users from main → archive:
+            let cutoff = now_unix_seconds() - 365l * 86400l
+            for (u in db |> select_from(type<User>)._where(_.LastSeenUnix < cutoff)) {
+                arch |> insert(u)
+                db  |> delete_(u)
+            }
+            // Block exits → auto-detach. Even if the loop panics
+            // mid-copy, the attachment is cleaned up.
+        }
+    }
+}
+
+// --- CROSS-SCHEMA QUERIES via raw SQL (v1 escape) ---------------------
+// v1 ships ONE-SCHEMA-PER-_sql-CHAIN. Cross-schema joins and
+// unions use raw SQL with qualified table names:
+
+def find_all_users_anywhere(db : SqlRunner) : array<User> {
+    return <- db |> query<User>(
+        "SELECT Id, Name, Email, Active, LastSeenUnix FROM main.Users
+         UNION
+         SELECT Id, Name, Email, Active, LastSeenUnix FROM archive.Users
+         ORDER BY Name")
+}
+
+// Cross-schema JOIN also raw-SQL in v1:
+def user_order_history(db : SqlRunner; uid : int) : array<tuple<Name : string; OrderId : int>> {
+    return <- db |> query<tuple<Name : string; OrderId : int>>(
+        "SELECT u.Name, o.Id
+         FROM main.Users u
+         JOIN archive.Orders o ON o.UserId = u.Id
+         WHERE u.Id = ?",
+        uid)
+}
+
+// Cross-schema typed joins are a DEFERRED item — see deferred
+// list. If you find yourself writing many cross-schema raw-SQL
+// joins, file an issue and we'll prioritize.
+
+// --- PER-USER DB USE CASE ---------------------------------------------
+// Attach the user's DB at request start, run queries, detach.
+// `as_name` is typically derived from the user id so two
+// simultaneous requests don't collide.
+
+def handle_user_request(db : SqlRunner; uid : int) {
+    let user_db_path = "users/{uid}.db"
+    let schema = "user_{uid}"
+
+    db |> with_attached(user_db_path, as_name = schema) <| $(user) {
+        // `user` is `db` qualified to `user_{uid}`. Queries on
+        // `user` emit `user_<uid>.<table>`; queries on `db`
+        // still hit main.
+        for (pref in user |> select_from(type<Preference>)) {
+            apply_preference(pref)
+        }
+    }
+}
+
+// --- FAILURE SURFACING ------------------------------------------------
+// `try_attach` returns Err on file-not-found, permission
+// issues, already-attached schema name, etc.
+//
+//   try_attach(db; path; as_name) : Result<void, string>
+//
+// Rare in production (usually file-not-found); use for fallible
+// paths where "archive unavailable" is a handled state.
+
+def try_archive_lookup(db : SqlRunner; id : int) : Option<User> {
+    let res <- db |> try_attach("archive.db", as_name = "archive")
+    if (res is Err) {
+        to_log(LOG_WARN, "archive unavailable, skipping: {res as Err}")
+        return <- none()
+    }
+    let arch = db |> with_schema("archive")
+    let user <- arch |> query_one_opt<User>(
+        "SELECT * FROM Users WHERE Id = ?", id)
+    db |> detach("archive")
+    return <- user
+}
+
+// --- GOTCHAS ----------------------------------------------------------
+//
+// 1. SCHEMA EXISTENCE NOT VALIDATED BY with_schema. `with_schema`
+//    is pure — no DB round-trip. If you call
+//    `with_schema(db, "nonexistent")` the wrapper is created
+//    fine; the SQLITE_ERROR surfaces when you run the first
+//    query against it. Runtime error text: "no such table:
+//    nonexistent.<table>". Attach first; then `with_schema`.
+//
+// 2. CONNECTION-BOUND ATTACHMENTS. An attachment lives on the
+//    one SqlRunner connection. Spawning a worker thread that
+//    gets a fresh connection means the worker does NOT see
+//    the parent's attachments — it must re-attach.
+//
+// 3. SQLITE ATTACH LIMIT. SQLite defaults to max 10 attached
+//    DBs per connection (`SQLITE_MAX_ATTACHED`, compile-time).
+//    Typical usage well below this, but batch-import flows
+//    attaching dozens should detach aggressively.
+//
+// 4. CROSS-DB TRANSACTIONS NEED WAL MODE. In non-WAL mode,
+//    writing to multiple attached DBs inside one transaction
+//    requires all DBs to be journaled on compatible media.
+//    WAL mode (tut 33's `apply_recommended_pragmas`) handles
+//    this transparently.
+//
+// 5. NAMING COLLISIONS. `as_name = "main"` or `"temp"` →
+//    SQLITE_ERROR (those names are reserved). `attach` surfaces
+//    the error in strict form (panic) / Err (try_).
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 ----------------------------------
+//
+// 1. CROSS-SCHEMA TYPED JOINS. `_sql(main |> select_from(type<User>)
+//    ._join(arch |> select_from(type<Order>), ...))` emitting
+//    `FROM main.Users JOIN archive.Orders`. Moderate `_sql`
+//    translator work — each select_from carries its runner;
+//    emitter qualifies per-subquery. Raw SQL covers v1; ship
+//    when a user asks or emitter work lands anyway.
+//
+// 2. MULTI-ATTACH IN A SINGLE CALL. `with_multi_attached(db,
+//    [("a.db", "a"), ("b.db", "b")]) <| $(runners) { … }`
+//    for complex merge flows. Users nest `with_attached` in v1
+//    (two-deep nesting is fine; beyond that, write raw ATTACH
+//    / DETACH).
+//
+// 3. PRAGMA-PER-ATTACHED-SCHEMA typed wrapper. `PRAGMA
+//    archive.table_info(x)` / `PRAGMA archive.integrity_check`
+//    via typed helpers. Users run raw `exec` / `query`.
+//
+// 4. ATTACH WITH CUSTOM OPEN FLAGS. Read-only attach
+//    (`'file:archive.db?mode=ro'`), URI-style paths with
+//    `vfs=` parameter. v1's `path` is a plain filesystem path.
+//    URI mode ships if users ask.
+//
+// 5. SCHEMA LISTING. `list_schemas(db) : array<string>` wrapper
+//    over `PRAGMA database_list`. Users run the pragma
+//    directly in v1 if they need introspection.

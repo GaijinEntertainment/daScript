@@ -1,0 +1,274 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "32-sql_functions"
+// and § "32-sql_functions — decided" in ../API_REWORK.md.
+//
+// Tutorial 32: user-defined scalar SQL functions.
+//
+// PROVIDER-SPECIFIC — SQLITE ONLY. This tutorial lives in
+// `sqlite/sqlite_boost`, not `daslib/sql`. SQLite's in-process
+// C-callback model (`sqlite3_create_function`) has no cross-
+// provider analog — PG/MySQL/MSSQL need server-side stored-
+// function DDL in a provider-specific procedural dialect
+// (PL/pgSQL, T-SQL, …), and no abstraction over those would
+// be honest. A daslang function you register here CANNOT be
+// used against any other SQL backend. If you write code that
+// depends on registered SQLite functions, your schema is not
+// portable.
+//
+// Also note: SQLite has NO stored-function DDL at all. No
+// `CREATE FUNCTION ... LANGUAGE plpgsql` equivalent, no
+// T-SQL procedures. Every user function is runtime-registered
+// via the C API. `register_function` here isn't one option
+// among many — it's the ONLY option.
+//
+// PER-CONNECTION LIFETIME. Functions registered on one
+// `sqlite3*` handle don't persist in the DB file; a new
+// connection starts with zero user functions. The idiomatic
+// pattern is to register inside the `with_sqlite` block
+// before any queries that use the function.
+//
+// V1 SCOPE: scalar functions only. Aggregates (xStep/xFinal
+// pair) and window functions (xStep/xFinal/xValue/xInverse)
+// are documented in the DEFERRED list.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Eighth consecutive
+// zero-linq-prereq tut (25-32). `sqlite/sqlite_boost` gains
+// one function + one C++ binding. See project memory
+// `project_dassqlite_phase2.md` § tut 32.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+
+// --- base schema (battles / weapons / targets) ------------------------
+// The running example is a game-analytics query: average
+// expected damage per weapon across recorded battles.
+
+[sql_table(name="weapons")]
+struct Weapon {
+    @sql_primary_key Id : int
+    Name        : string
+    BaseDamage  : float
+}
+
+[sql_table(name="targets")]
+struct Target {
+    @sql_primary_key Id : int
+    Name   : string
+    Armor  : Option<int>            // some targets have unknown armor
+}
+
+[sql_table(name="battles")]
+struct Battle {
+    @sql_primary_key Id : int
+    @sql_references(type="Weapon")
+    WeaponId : int
+    @sql_references(type="Target")
+    TargetId : int
+    CritMult : float                // 1.0 normal, 2.0 crit, etc.
+}
+
+// --- the user function ------------------------------------------------
+// Plain daslang function. No SQL-specific annotation (v1).
+//
+// Argument types are PRIMITIVES: `float`, `int`, `string`,
+// `array<uint8>`, plus their `Option<_>` forms for nullable
+// inputs. `int` and `float` widen to `int64` / `double` at
+// the marshal boundary; `bool` ships as 0/1.
+//
+// Custom types from tut 29 (DateTime, Guid, domain enums) are
+// NOT auto-marshaled in v1. Convert by hand inside the body
+// (`let dt = DateTime(unix_seconds=i)`). See the commented-
+// out `[sql_function]` future-extension block at the bottom.
+//
+// NULL handling:
+//   - plain `T` arg + SQL NULL input → function is NOT called,
+//     result is NULL (standard SQL NULL-propagation).
+//   - `Option<T>` arg + SQL NULL input → function IS called
+//     with `none()`; the user decides what to do.
+// This function uses `Option<int>` for armor — many targets
+// have unknown armor values, and we treat unknown as 0.
+
+def damage_formula(base : float; armor : Option<int>; crit_mult : float) : float {
+    let effective_armor = armor |> unwrap_or(0) - 5
+    let after_armor = max(1.0, base - float(max(0, effective_armor)) * 0.8)
+    return after_armor * crit_mult
+}
+
+// --- registering + using ---------------------------------------------
+
+[export]
+def main() {
+    with_sqlite("game.db") <| $(db) {
+        // Register on every connection. Per-connection
+        // lifetime is SQLite's native semantics — no way
+        // around it in v1. The future `[sql_function]` macro
+        // (see bottom) will thread registration into connect
+        // automatically.
+        db |> register_function("damage_formula", @@damage_formula,
+                                deterministic = true)
+
+        // `deterministic=true`: tells the planner the function
+        // is pure w.r.t. its args → results can be memoized
+        // across repeated invocations with identical args in
+        // the same statement, and the function is usable in
+        // index expressions. Non-determinism is the safer
+        // default, but most user functions are pure.
+        //
+        // `directonly=false` (default): function can be called
+        // from views, triggers, index expressions. Set
+        // `directonly=true` when the function has side effects
+        // or reads external state (filesystem, config) that an
+        // attacker shouldn't be able to invoke through a
+        // smuggled CHECK constraint or index definition.
+
+        // Use from raw SQL. V1 has NO `_sql(...)` integration
+        // for user functions — LINQ-aware user-function calls
+        // are a separate future tut (parallels EF Core's
+        // `HasDbFunction`; independent of this tut's layer-1
+        // registration work).
+        let avg = db |> query_scalar<float>(
+            "SELECT AVG(damage_formula(w.BaseDamage, t.Armor, b.CritMult))
+             FROM battles b
+             JOIN weapons w ON w.Id = b.WeaponId
+             JOIN targets t ON t.Id = b.TargetId")
+        to_log(LOG_INFO, "avg expected damage: {avg}")
+
+        // Also usable as a projection — one call per row
+        // produced.
+        let per_weapon = db |> query<tuple<Name : string; AvgDmg : float>>(
+            "SELECT w.Name,
+                    AVG(damage_formula(w.BaseDamage, t.Armor, b.CritMult)) AS AvgDmg
+             FROM battles b
+             JOIN weapons w ON w.Id = b.WeaponId
+             JOIN targets t ON t.Id = b.TargetId
+             GROUP BY w.Id
+             ORDER BY AvgDmg DESC")
+        for (r in per_weapon) {
+            to_log(LOG_INFO, "  {r.Name}: {r.AvgDmg}")
+        }
+    }
+}
+
+// --- NULL HANDLING DEMO -----------------------------------------------
+//
+// `damage_formula` above takes `armor : Option<int>`. Three
+// cases at the call site:
+//
+//   target_armor=10  (non-null)  → fn called with some(10), returns damage
+//   target_armor=NULL            → fn called with none(),   returns damage
+//                                  (user code does unwrap_or(0))
+//   base_damage=NULL (non-opt)   → fn NOT called, result is NULL
+//
+// Contrast: a strict-typed version with `armor : int` (no
+// Option) would propagate NULL — rows with unknown armor
+// silently drop from averages. That's the tut-25 row-shape
+// invariant in action; the function signature declares the
+// NULL-awareness contract, and the trampoline enforces it.
+
+// --- PANIC → SQL ERROR ------------------------------------------------
+//
+// If the daslang function panics (assert/verify fails, explicit
+// panic, divide-by-zero on integer, etc.), the trampoline
+// catches the panic and calls `sqlite3_result_error(ctx,
+// message, -1)`. SQLite's `sqlite3_step` returns SQLITE_ERROR
+// and the panic message becomes the SQL error text. From
+// dasSQLITE's side:
+//
+//   try_query_scalar<float>("SELECT damage_formula(…)") →
+//     Result::Err("my panic message")   if the fn panicked on any row
+//
+//   query_scalar<float>("SELECT damage_formula(…)") →
+//     panics with the SQLite error text
+//
+// Same path as any other SQL error — no special case for
+// user-function panics.
+
+// --- MULTIPLE OVERLOADS BY ARITY --------------------------------------
+//
+// SQLite keys functions by (name, nArg). You can register
+// `damage_formula` with 3 args AND a 2-arg version (omit
+// crit_mult, default to 1.0) under the same name — SQLite
+// picks the right overload by arity. Two `register_function`
+// calls, two daslang functions, one name. This isn't special
+// dasSQLITE machinery — it's just SQLite's native behavior.
+
+// --- CUSTOM TYPES: MANUAL CONVERSION IN V1 ----------------------------
+// Custom types from tut 29 aren't auto-marshaled. If you want
+// to pass a `DateTime` into a registered function, take `int64`
+// and convert inside the body:
+//
+//   def age_at(birthday_unix : int64; now_unix : int64) : int {
+//       let birthday = DateTime(unix_seconds = birthday_unix)
+//       let now      = DateTime(unix_seconds = now_unix)
+//       return int((now.unix_seconds - birthday.unix_seconds) / 31557600l)
+//   }
+//   db |> register_function("age_at", @@age_at, deterministic = true)
+//
+// Ugly but explicit. The future `[sql_function]` macro (below)
+// removes this boilerplate.
+
+// --- FUTURE V2: [sql_function] ANNOTATION MACRO -----------------------
+// NOT SHIPPED IN V1. Documented here as the clear extension
+// spot — three wins over the v1 manual path:
+//
+//   1. CUSTOM-TYPE ADAPTER COMPOSITION. Walks the fn signature
+//      and, for each non-primitive param, composes with tut
+//      29's `_::sql_extract` / `_::sql_bind`. Users write
+//      `DateTime`, `Guid`, domain enums directly in the
+//      signature.
+//
+//   2. AUTO-REGISTRATION ON CONNECT. Macro threads the
+//      registration into `with_sqlite`'s setup, so every new
+//      connection registers every `[sql_function]`-annotated
+//      fn automatically. Addresses the per-connection-
+//      re-registration caveat.
+//
+//   3. SINGLE SOURCE OF TRUTH. The annotation carries the
+//      SQL name, determinism flag, directonly flag — no drift
+//      between the definition and the registration site.
+//
+// Future shape (illustrative, not compilable):
+//
+//     [sql_function(name="age_at", deterministic=true)]
+//     def age_at(birthday : DateTime; now : DateTime) : int {
+//         return int((now.unix_seconds - birthday.unix_seconds) / 31557600l)
+//     }
+//
+// Ships when aggregates follow up, or when a user asks.
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 -----------------------------------
+//
+// 1. AGGREGATE FUNCTIONS. `xStep` + `xFinal`, per-group state
+//    via `sqlite3_aggregate_context`. EF-style accumulator
+//    pattern:
+//      register_aggregate(db, "median",
+//          seed  = [float](),
+//          step  = $(var acc; x : float) => acc |> emplace(x),
+//          final = $(var acc) => median_of(acc))
+//    ~40 lines of extra C++ trampoline. First logical
+//    follow-up tut.
+//
+// 2. WINDOW FUNCTIONS. `xValue` + `xInverse` for frame
+//    maintenance. SQLite 3.25+. Tut 31's ROW_NUMBER escape-
+//    hatch demo covers the "use raw SQL" pattern for now.
+//
+// 3. VARIADIC FUNCTIONS (`nArg = -1`). Would need either
+//    `array<sql_value>` parameter type or explicit overload
+//    registration. Daslang function pointers have fixed
+//    arity; variadic is a dedicated design call.
+//
+// 4. `[sql_function]` ANNOTATION MACRO. See future-extension
+//    block above.
+//
+// 5. LINQ-INTEGRATED USER FUNCTION CALLS (EF Core's
+//    `HasDbFunction` layer). Teaching `_sql` to recognize
+//    registered function names and emit typed calls from
+//    inside query chains — independent of this tut's layer-1
+//    work; lives in `daslib/sql`; future tut.
+//
+// 6. LOADABLE EXTENSIONS (`.load libfoo.so`). SQLite's
+//    C-extension mechanism for FTS5 / R-Tree / JSON1. Users
+//    call `sqlite3_load_extension` via the raw binding. Not
+//    part of the application-defined-functions story.

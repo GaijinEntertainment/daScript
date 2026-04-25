@@ -1,0 +1,135 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "16-delete"
+// and § "E — Function form + macro form pair" for the naming convention.
+//
+// Tutorial 16: DELETE, mirror of 15:
+//   (a) by-PK / by-id     — db |> delete_(row) / delete_by_id
+//   (b) bulk via macro    — db |> _delete(type<T>, where_expr)
+//   (c) bulk RETURNING    — db |> _delete_returning(...)
+//   (d) raw escape hatch
+//   (e) try_ non-panic variants
+// Plus a short ON DELETE CASCADE example (anticipates tut 26 — the FK
+// annotation syntax is provisional, but the cascade behavior +
+// PRAGMA foreign_keys=ON trap is the load-bearing concept).
+//
+// Naming note: `delete` is a daslang keyword (used for `delete arr` to
+// free smart_ptr / array memory), so the function form is `delete_`
+// with trailing underscore — same trick daslib/linq uses for `where_`.
+// The macro form `_delete` is fine because the leading underscore
+// disambiguates from the keyword. `delete_by_id` is a separate name
+// and needs no underscore.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name      : string
+    Email     : string
+    Active    : bool
+    LastSeen  : int64
+}
+
+// FK syntax provisional — see tut 26. Annotations like
+// @sql_foreign_key(ref=..., on_delete=...) use named-arg-looking syntax,
+// but unlike function calls they're parsed by [sql_table]'s structure
+// macro, which DOES define a named-slot grammar. Per § E: the
+// "argument order is the contract" rule applies to function calls,
+// not to macro-defined annotation grammars.
+[sql_table(name="Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    @sql_foreign_key(ref=type<User>, on_delete=Cascade)
+    UserId : int
+    Total  : int
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> set_pragma("foreign_keys", "ON")  // tut 33: OFF by default!
+
+        db |> drop_table_if_exists(type<Order>)
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+        db |> create_table(type<Order>)
+
+        let now_ts = unix_now()
+        db |> insert([
+            User(Id=1, Name="alice", Email="a@x.com", Active=true,  LastSeen=now_ts),
+            User(Id=2, Name="bob",   Email="b@x.com", Active=true,  LastSeen=now_ts -  90*86400),
+            User(Id=3, Name="carol", Email="c@x.com", Active=true,  LastSeen=now_ts - 200*86400),
+            User(Id=4, Name="dave",  Email="d@x.com", Active=false, LastSeen=now_ts - 400*86400)
+        ])
+        db |> insert([
+            Order(Id=10, UserId=1, Total=100),
+            Order(Id=11, UserId=4, Total=200),
+            Order(Id=12, UserId=4, Total=50)
+        ])
+
+        // --- (a) by-PK delete -----------------------------------------
+        // Two shapes. `delete_(row)` reads only the @sql_primary_key
+        // field, ignoring the rest — useful when you already have a
+        // loaded row. `delete_by_id(type<T>, id)` is the honest "I just
+        // have the id" form, no dummy struct.
+        // SQL:  DELETE FROM Users WHERE Id = ?
+        // Returns int (1 or 0). Panics on SQL error.
+        // Non-panic: try_delete_, try_delete_by_id.
+        let n1 = db |> delete_(User(Id=2, Name="bob", Email="b@x.com",
+                                    Active=true, LastSeen=0))
+        let n2 = db |> delete_by_id(type<User>, 3)
+        to_log(LOG_INFO, "by-PK deleted {n1+n2} row(s)\n")
+
+        // --- (b) bulk delete via _delete macro -------------------------
+        // Two positional args: (type<T>, where_expr).
+        // Macro expansion (mechanical):
+        //   _delete(type<User>, _.LastSeen<cutoff)
+        //   →  delete_(type<User>, $(_) => _.LastSeen<cutoff)
+        // Captured `cutoff` becomes a bind param. Cascades through any
+        // FK with ON DELETE CASCADE — dave's orders go too.
+        // SQL:  DELETE FROM Users WHERE LastSeen < ?
+        let cutoff = now_ts - 365*86400
+        let purged = db |> _delete(type<User>, _.LastSeen < cutoff)
+        to_log(LOG_INFO, "purged {purged} stale user(s); orders cascade\n")
+
+        // --- (c) bulk delete RETURNING the deleted rows ---------------
+        // Sibling fn `delete_returning` / `_delete_returning`, returns
+        // array<T> (the rows just deleted). Useful for audit logs, undo
+        // queues, "delete-and-publish" pipelines that need the bytes
+        // before they vanish.
+        // SQL:  DELETE FROM Users WHERE Active = 0
+        //       RETURNING Id, Name, Email, Active, LastSeen
+        let removed <- db |> _delete_returning(type<User>, _.Active == false)
+        for (u in removed) {
+            to_log(LOG_INFO, "deleted: {u.Name} ({u.Email})\n")
+        }
+
+        // --- (d) raw-SQL escape hatch ----------------------------------
+        // For migrations or queries the macro can't translate. Same
+        // parameter binding as 05-parametrized: positional `?` →
+        // variadic args, named placeholders → trailing tuple. `exec`
+        // returns void; rows-affected via `db |> changes()`.
+        db |> exec("DELETE FROM Users WHERE Email LIKE ?", "%@old.com")
+        to_log(LOG_INFO, "raw-SQL delete affected {db |> changes()} row(s)\n")
+
+        // --- (e) try_ variants for non-panic flow ----------------------
+        // 8-name expansion per cross-cutting § E:
+        //   delete_ / _delete / try_delete_ / _try_delete /
+        //   delete_returning / _delete_returning /
+        //   try_delete_returning / _try_delete_returning
+        // Plus by-id helpers: delete_by_id / try_delete_by_id.
+        // 0 rows-affected is NOT an error (row simply wasn't there);
+        // Err is reserved for genuine SQL failures.
+        let attempt = db |> try_delete_by_id(type<User>, 999)
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "delete failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let touched = attempt |> unwrap()
+            to_log(LOG_INFO, "ghost-delete touched {touched} row(s)\n")
+        }
+    }
+}

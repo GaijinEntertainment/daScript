@@ -1,0 +1,311 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "39-fts5"
+// and § "39-fts5 — decided" in ../API_REWORK.md.
+//
+// Tutorial 39: string predicates in _where — portable LIKE +
+// SQLite FTS5 full-text search.
+//
+// PORTABLE + SQLITE-SPECIFIC. Four string predicates all live
+// inside `_where(...)` (not as chain ops). Three are PORTABLE
+// (starts_with, ends_with, contains → LIKE) and work on every
+// SQL backend; one is SQLITE-ONLY (text_match + [sql_fts5] →
+// FTS5 MATCH) — the specialized tool for "LIKE isn't fast
+// enough; we have relevance ranking + query operators."
+//
+// WHY THIS TUT. "Find rows where this text column matches this
+// query" is the single most-requested query shape after
+// equality. Real-world cases:
+//   - Autocomplete:             starts_with(_.Name, typed_prefix)
+//   - File-extension filter:    ends_with(_.Path, ".das")
+//   - Substring search:         contains(_.Body, partial)
+//   - Full-text + ranking:      text_match(_.Body, "quick* AND fox")
+//                                + [sql_fts5]-annotated table.
+//
+// KEY DESIGN CHOICE — PREDICATES LIVE IN _where, NOT AS CHAIN
+// OPS. MATCH doesn't change result shape (unlike _group_by,
+// _join, _take — which DO change shape). It just filters. So
+// it's a predicate, same shape as == or <. No new chain
+// operator. This unifies LIKE and MATCH into one translator
+// rule family: "recognize known string-predicate functions
+// inside `_where` bodies, emit their SQL form."
+//
+// KEY DESIGN CHOICE — PORTABLE TRIO FREE, FTS5 AS THE ESCAPE.
+// starts_with/ends_with/contains already exist in
+// daslib/strings_boost (in-memory). `_sql` translator adds
+// rules that emit LIKE patterns with automatic escaping. Users
+// get native in-memory AND SQL LIKE from the same call site.
+// text_match is the FTS5 outlier — it also works in-memory
+// (via strings_boost subset parser), but in SQL it demands an
+// [sql_fts5]-indexed column.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Thirteenth zero-prereq
+// tut (25-34, 36-37, 39; 35 + 38 noted no-API). ONE prerequisite
+// in daslib/strings_boost (`text_match`) — new Phase 0.4 row.
+// `daslib/sql` adds translator rules + `[sql_fts5]` DDL +
+// `@sql_fts_rank` extraction. See `project_dassqlite_phase2.md`
+// § tut 39.
+
+require daslib/sql
+require daslib/strings_boost     // text_match + existing starts_with / ends_with / contains
+require sqlite/sqlite_boost
+
+// --- PORTABLE TRIO: starts_with / ends_with / contains --------------
+// Already daslib/strings_boost functions; `_sql` translator emits
+// LIKE patterns. In-memory use = existing string ops.
+
+[sql_table(name = "Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name                : string
+    Email               : string
+}
+
+def names_starting_with(db : SqlRunner; prefix : string) : array<User> {
+    return <- _sql(db |> select_from(type<User>)
+        ._where(_.Name |> starts_with(prefix)))
+    // => SELECT Id, Name, Email FROM Users
+    //    WHERE Name LIKE ? ESCAPE '\\'
+    //    -- param bound as "<prefix>%" with %/_/\ in <prefix> escaped
+}
+
+def emails_at_gaijin(db : SqlRunner) : array<User> {
+    return <- _sql(db |> select_from(type<User>)
+        ._where(_.Email |> ends_with("@gaijin.team")))
+    // => SELECT ... WHERE Email LIKE ? ESCAPE '\\'
+    //    -- param: "%@gaijin.team"
+}
+
+def search_name(db : SqlRunner; part : string) : array<User> {
+    return <- _sql(db |> select_from(type<User>)
+        ._where(_.Name |> contains(part)))
+    // => SELECT ... WHERE Name LIKE ? ESCAPE '\\'
+    //    -- param: "%<part>%" with <part>'s %/_/\ escaped
+}
+
+// --- LIKE ESCAPING ---------------------------------------------------
+// Translator auto-escapes %, _, \ in the user-supplied text via
+// ESCAPE '\\'. A user typing "50%" as a prefix filter matches
+// literal "50%", not "50" + anything. Noise-free at the API
+// level — users never see escape sequences.
+
+// --- FTS5 VIRTUAL TABLE DECLARATION ----------------------------------
+// [sql_fts5] marks a struct as an FTS5 virtual table. The
+// declaration drives two pieces of codegen:
+//   1. `create_table(type<Doc>)` emits
+//        CREATE VIRTUAL TABLE IF NOT EXISTS docs_idx USING fts5(
+//            Body,               -- string content column
+//            tokenize = 'unicode61'
+//        );
+//   2. the translator records "Body lives on an FTS5 index" so
+//      `text_match(_.Body, ...)` emits MATCH instead of rejecting.
+// Self-contained mode in v1 — FTS5 table holds both content and
+// index. External-content mode (joining back via rowid) deferred.
+
+[sql_fts5(name = "docs_idx")]
+struct Doc {
+    Body : string
+    @sql_fts_rank
+    Rank : float    // auto-populated from FTS5's hidden `rank`
+                    // column on SELECT; ignored on INSERT
+}
+
+[export]
+def main() {
+    with_sqlite("search.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+        db |> create_table(type<Doc>)
+
+        db |> insert(Doc(Body = "The quick brown fox jumps over the lazy dog"))
+        db |> insert(Doc(Body = "A swift red fox escaped the hounds at dawn"))
+        db |> insert(Doc(Body = "Quicksand swallowed the hiker's boot yesterday"))
+
+        for (hit in find_foxes(db)) {
+            to_log(LOG_INFO, "rank={hit.Rank}: {hit.Body}")
+        }
+    }
+}
+
+// --- text_match: FTS5 PREDICATE INSIDE _where ------------------------
+// text_match is a PORTABLE predicate (ships in strings_boost)
+// that ALSO gets translated to SQL when seen inside `_sql(...)`.
+// Three execution paths:
+//
+//   1. In-memory: strings_boost parses the query (subset) and
+//      tokenizes the text. Subset supported: whitespace-AND,
+//      `*` prefix, Unicode word-boundary + ASCII case-fold.
+//      Unsupported (NEAR, phrases, AND/OR/NOT, column filters)
+//      → panic "unsupported FTS5 query syntax in-memory; use
+//      SQL backend for the full grammar."
+//
+//   2. In _sql on an [sql_fts5] column: translator emits
+//      `col MATCH ?`. Full FTS5 query syntax supported (the
+//      DB does the parsing).
+//
+//   3. In _sql on a regular [sql_table] column: COMPILE ERROR,
+//      because in-memory scan with FTS5-subset grammar isn't
+//      what you want on a SQL query. Error text suggests
+//      `contains` (for LIKE-based substring) or adding
+//      `[sql_fts5]`.
+
+def find_foxes(db : SqlRunner) : array<Doc> {
+    return <- _sql(db |> select_from(type<Doc>)
+        ._where(_.Body |> text_match("quick* AND fox"))
+        ._order_by(_.Rank)           // FTS5 rank: LOWER = more relevant
+        ._take(20))
+    // => SELECT Body, rank FROM docs_idx
+    //    WHERE Body MATCH ?
+    //    ORDER BY rank
+    //    LIMIT 20
+}
+
+// FTS5 query syntax (passed through to MATCH):
+//   "quick fox"           whitespace-AND — both tokens
+//   "quick OR sleepy"     boolean OR
+//   "quick AND NOT fox"   boolean AND NOT
+//   "quick*"              prefix match
+//   "\"brown fox\""        phrase match
+//   "quick NEAR/5 fox"    proximity — within 5 tokens
+//   "Body:fox"            column filter (within the FTS schema)
+
+// --- IN-MEMORY text_match (strings_boost Phase 0.4) -----------------
+// Usable outside SQL:
+
+def log_line_hits(lines : array<string>; query : string) : array<string> {
+    var hits : array<string>
+    for (line in lines) {
+        if (line |> text_match(query)) {
+            hits |> push_clone(line)
+        }
+    }
+    return <- hits
+}
+
+// Supported in-memory subset:
+//   "quick fox"      both tokens (whitespace-AND)
+//   "quick*"         prefix
+//   ASCII case-fold, Unicode word-boundary
+//
+// Unsupported in-memory (fall through to panic):
+//   NEAR, AND/OR/NOT keywords, phrases, column filters.
+
+// --- text_match ON A NON-FTS5 STRUCT = COMPILE ERROR -----------------
+//
+//     [sql_table(name = "Articles")]          // regular table
+//     struct Article { Title : string }
+//
+//     _sql(db |> select_from(type<Article>)
+//         ._where(_.Title |> text_match("foo")))
+//
+// Translator error:
+//     text_match on a [sql_table] column cannot emit SQL.
+//     struct Article is not declared with [sql_fts5]; FTS5
+//     MATCH is unavailable.
+//     Options:
+//       - Use contains(_.Title, "foo") for LIKE-based search.
+//       - Annotate Article with [sql_fts5] for indexed full-text.
+//     An in-memory text_match scan inside a SQL query is not
+//     silently emitted.
+
+// --- CHOOSING THE RIGHT PREDICATE -------------------------------------
+//
+// Need                            | Predicate     | SQL emission
+// --------------------------------+---------------+-----------------------
+// Exact equality                   | ==            | col = ?
+// Starts with prefix               | starts_with   | col LIKE 'x%'
+// Ends with suffix                 | ends_with     | col LIKE '%x'
+// Contains substring               | contains      | col LIKE '%x%'
+// Full-text + relevance rank       | text_match    | col MATCH ?
+//                                  | + [sql_fts5]   | + order by rank
+//
+// Rule of thumb:
+//   - Short-column prefix lookup (names, SKUs, tags): starts_with
+//     + an index on the column (tut 27). LIKE with a literal
+//     leading prefix uses the B-tree index.
+//   - Substring search on small/medium tables: contains is fine;
+//     full scan at small scale is free.
+//   - Big document bodies, relevance ranking, query operators:
+//     text_match + [sql_fts5].
+
+// --- GOTCHAS ----------------------------------------------------------
+//
+// 1. CASE SENSITIVITY. SQLite LIKE is case-insensitive for
+//    ASCII only; case-SENSITIVE for non-ASCII without a custom
+//    collation. PG LIKE is case-sensitive (use ILIKE). FTS5's
+//    unicode61 tokenizer normalizes case across Unicode.
+//
+// 2. LEADING-% LIKE DOES A FULL SCAN. `contains` emits
+//    `LIKE '%x%'`, which can't use a B-tree index. Fine on
+//    small/medium tables; painful at scale. Switch to
+//    text_match + [sql_fts5].
+//
+// 3. LIKE ESCAPING IS AUTOMATIC. User input `%`, `_`, `\` is
+//    escaped via ESCAPE '\\'. `starts_with(_.Path, "50%")`
+//    matches literal "50%" prefixes, not "50"-anything.
+//
+// 4. FTS5 INSERT SHAPE. Inserting into an [sql_fts5] struct
+//    is an INSERT on the virtual table — content goes in,
+//    index is built automatically. @sql_fts_rank fields are
+//    ignored on INSERT (read-only columns).
+//
+// 5. FTS5 RANK DIRECTION. Rank is a POSITIVE cost (lower =
+//    more relevant). `_order_by(_.Rank)` gives most-relevant
+//    first. `_order_by_desc(_.Rank)` gives LEAST-relevant
+//    first — usually not what you want.
+//
+// 6. TOKENIZATION. Default unicode61 splits on Unicode word
+//    boundaries, case-folds. "C++" and "c#" both tokenize to
+//    "c" alone — code search needs a custom tokenizer
+//    (deferred). For code search in v1, raw CREATE VIRTUAL
+//    TABLE.
+//
+// 7. REBUILDING THE INDEX. If tokenizer changes or content is
+//    bulk-loaded outside the FTS insert path, rebuild via raw
+//    `INSERT INTO docs_idx(docs_idx) VALUES ('rebuild')`.
+//    Typed wrapper deferred.
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 -----------------------------------
+//
+// 1. EXTERNAL-CONTENT-TABLE MODE. `[sql_fts5(name="docs_idx",
+//    content_table="docs", content_column="body")]` — the FTS
+//    index references an external table via rowid. Useful
+//    when the content table already exists and duplicating it
+//    in the FTS table is wasteful. Joining FTS hits back to
+//    content is a normal rowid join. Ships when asked.
+//
+// 2. TOKENIZER CONFIG. `tokenize = "porter"` /
+//    `"ascii"` / `"unicode61 remove_diacritics 2"` through
+//    the annotation. v1 ships default unicode61 only; raw
+//    DDL for custom.
+//
+// 3. PREFIX INDEX (`prefix='2 3 4'` option). Faster prefix-
+//    term search at index-size cost. Niche; raw DDL in v1.
+//
+// 4. HIGHLIGHT / SNIPPET / OFFSETS HELPERS. FTS5's
+//    `highlight(table, col, open, close)`, `snippet(...)`,
+//    `offsets(...)` — result-side utilities for UI. Typed
+//    helpers ship when asked; raw exec covers v1.
+//
+// 5. BM25 CUSTOM WEIGHTS. `rank='bm25(10.0, 5.0)'` for
+//    per-column weighting. Raw DDL.
+//
+// 6. TYPED NEAR / PHRASE DSL. `text_match_near(_.Body,
+//    "quick", "fox", within = 5)` or a builder for the FTS5
+//    query expression. v1 users pass the query string raw.
+//
+// 7. REBUILD TYPED WRAPPER. `rebuild_fts5(db, type<Doc>)`
+//    over `INSERT INTO docs_idx(docs_idx) VALUES ('rebuild')`.
+//    Trivial sugar; ships if asked.
+//
+// 8. CROSS-PROVIDER FULL-TEXT. PG's `tsvector`/`to_tsquery`,
+//    MySQL's `MATCH AGAINST`, MSSQL's `CONTAINS`. Same shape
+//    (indexed text search with dedicated predicate) — ships
+//    per-provider when a second backend lands.
+//
+// 9. ILIKE / UNICODE CASE-INSENSITIVE. Portable trio is
+//    ASCII-CI via SQLite LIKE default. Unicode CI needs a
+//    collation; raw SQL in v1.
+//
+// 10. REGEX PREDICATE. `regex_match(_.Col, pattern)` to
+//    SQLite's optional REGEXP operator. Not always built in;
+//    ships via explicit extension-load if requested.

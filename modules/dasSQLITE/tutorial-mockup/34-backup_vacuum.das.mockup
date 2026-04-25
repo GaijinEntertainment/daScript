@@ -1,0 +1,263 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "34-backup_vacuum"
+// and § "34-backup_vacuum — decided" in ../API_REWORK.md.
+//
+// Tutorial 34: production operational hygiene.
+//
+// PROVIDER-SPECIFIC — SQLITE ONLY. Third consecutive tut in
+// `sqlite/sqlite_boost`. All three primitives here are SQLite
+// proprietary:
+//   - Online backup is SQLite's `sqlite3_backup_*` API — no
+//     cross-provider analog.
+//   - VACUUM semantics diverge per backend. PG's VACUUM is
+//     dead-tuple reclamation inside a live table, not whole-
+//     file rebuild. MySQL's OPTIMIZE TABLE is different again.
+//   - `PRAGMA integrity_check` is SQLite-only.
+//
+// WHY THIS TUT. The operational things you don't think about
+// until you ship:
+//   - BACKUP before risky migrations. Critical caveat:
+//     `cp app.db backup.db` on a LIVE DB is NOT safe. You can
+//     get a torn file (WAL checkpoint mid-update, page cache
+//     not flushed). The SQLite backup API reads pages through
+//     SQLite's locking + transaction machinery so the
+//     destination stays transactionally consistent even with
+//     active writers. This is the single most important thing
+//     this tut teaches.
+//   - VACUUM to reclaim free pages. Bulk DELETE / UPDATE work
+//     leaves the file bigger than its contents warrant; VACUUM
+//     rebuilds the file at minimal size.
+//   - INTEGRITY CHECK after a crash, on startup, before a
+//     migration. "Is my DB file OK?"
+//
+// LINQ-BACKING AUDIT — ZERO additions. Tenth consecutive zero-
+// linq-prereq tut (25-34). `sqlite/sqlite_boost` gains seven
+// runtime functions + matching `try_` variants. See
+// `project_dassqlite_phase2.md` § tut 34.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+// --- BACKUP: online, safe with concurrent writers --------------------
+// CRITICAL: `backup_to` is NOT a file copy.
+//
+// SQLite's online backup reads pages through the DB's locking +
+// transaction machinery. If another writer commits mid-backup,
+// the backup internally restarts the page copy; the caller sees
+// only a consistent final result. An OS-level file copy of a
+// live DB (`cp`, `CopyFile`, `System.IO.File.Copy`) can produce
+// a torn file: WAL checkpoint mid-update, page cache not
+// flushed. Use `backup_to`, never `fs_copy`.
+//
+// Two overloads:
+//
+//   backup_to(db; path : string) : void       // opens dest file, copies, closes
+//   backup_to(db; dest : SqlRunner) : void    // copies to an already-open runner
+//
+// Path form is the common case. Runner form supports backup to
+// `:memory:` (in-memory snapshot) and backup between two
+// already-open DBs.
+
+[export]
+def main() {
+    with_sqlite("app.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+
+        // … application work …
+
+        // Daily backup at shutdown (or run on a timer). Real
+        // code would format a date stamp; literal here for
+        // illustration.
+        db |> backup_to("backups/app-2026-04-24.db")
+    }
+}
+
+// --- BACKUP: in-memory snapshot form ---------------------------------
+// Use case: take a consistent read-only snapshot without
+// pausing writers. Typical for a "report run" that wants a
+// stable view and doesn't need to observe ongoing writes.
+
+def run_report_on_snapshot() {
+    with_sqlite("app.db") <| $(live) {
+        with_sqlite(":memory:") <| $(snap) {
+            live |> backup_to(snap)          // runner form
+            // `snap` now holds a consistent point-in-time copy.
+            // Build reports from it without contending with
+            // live writers.
+            let top <- snap |> query<Event>(
+                "SELECT * FROM Events ORDER BY At DESC LIMIT 1000")
+            for (e in top) {
+                // … emit report row …
+            }
+        }
+    }
+}
+
+// --- BACKUP: failure recovery ----------------------------------------
+// `try_backup_to` surfaces SQLITE_IOERR, destination-path
+// problems, disk-full, etc. as Err. Use when backup is best-
+// effort: log + continue rather than panic the whole job.
+
+def nightly_backup(db : SqlRunner; path : string) {
+    let res <- db |> try_backup_to(path)
+    if (res is Err) {
+        to_log(LOG_ERROR, "backup to {path} failed: {res as Err}")
+        // Continue the job; alert ops; don't crash.
+    }
+}
+
+// --- VACUUM: reclaim free pages --------------------------------------
+// VACUUM rebuilds the DB file, reclaiming unused pages that
+// accumulate from bulk DELETE / UPDATE work.
+//
+// CAVEATS:
+//   - Can take a long time on big DBs (full file rewrite).
+//   - Temporarily needs up to 2× the DB size in free disk
+//     space (old + new file side-by-side during the operation).
+//   - Takes a write lock — other writers block until completion.
+//   - CANNOT run inside a transaction (see in-transaction panic
+//     below).
+
+def monthly_maintenance() {
+    with_sqlite("app.db") <| $(db) {
+        db |> vacuum()      // synchronous; can take a long time
+    }
+}
+
+// --- VACUUM: in-transaction panic ------------------------------------
+// `vacuum` runtime-checks the transaction state and panics with
+// a clear message if called inside `with_transaction`:
+//
+//     with_sqlite("app.db") <| $(db) {
+//         db |> with_transaction() <| {
+//             db |> vacuum()
+//             // PANIC: "VACUUM cannot run inside an active
+//             //         transaction; commit or rollback first"
+//         }
+//     }
+//
+// `try_vacuum` returns the same message as Err:
+//
+//     let res <- db |> try_vacuum()
+//     // if called inside a transaction:
+//     //   res is Err
+//     //   res as Err == "VACUUM cannot run inside an active transaction; ..."
+//
+// Compile-time check was considered and deferred —
+// `with_transaction` lexical-scope awareness is too brittle
+// across lambdas / forwarding / conditional paths.
+
+// --- VACUUM INTO: compact snapshot -----------------------------------
+// `vacuum_into(db, path)` wraps SQLite 3.27+'s `VACUUM INTO`.
+// Produces a defragged / minimal-size copy, unlike `backup_to`
+// which may carry over free pages.
+//
+// When each applies:
+//
+//   backup_to(path)       — zero-downtime, allows concurrent
+//                           writers, output may have free pages.
+//   vacuum_into(path)     — briefly takes write lock on source,
+//                           output is defragged / minimal-size.
+//
+// Use `vacuum_into` for a "periodic compact snapshot." Use
+// `backup_to` for "hot backup under production load."
+
+def compact_snapshot() {
+    with_sqlite("app.db") <| $(db) {
+        db |> vacuum_into("snapshots/compact.db")
+    }
+}
+
+// --- INTEGRITY CHECK --------------------------------------------------
+// `integrity_check(db) : array<string>`
+//   - empty array  ⇒ healthy
+//   - non-empty    ⇒ list of SQLite-reported issues
+//
+// `quick_check(db) : array<string>` — same shape, faster:
+//   - skips UNIQUE / FOREIGN KEY / NOT NULL constraint checks
+//   - 5-10× faster on big DBs
+//   - still catches page-level corruption + malformed indexes
+//
+// Rule of thumb: `quick_check` for regular / frequent
+// monitoring; `integrity_check` before migrations or after
+// crashes.
+
+def startup_check(path : string) : Result<void, string> {
+    with_sqlite(path) <| $(db) {
+        let issues <- db |> integrity_check()
+        if (!empty(issues)) {
+            for (msg in issues) {
+                to_log(LOG_ERROR, "integrity: {msg}")
+            }
+            return <- Err("DB integrity check failed with {length(issues)} issue(s)")
+        }
+    }
+    return <- Ok()
+}
+
+// `try_integrity_check` / `try_quick_check` for the fallible
+// path (tool code: don't panic on a broken DB file; surface
+// the IO error to the caller):
+//
+//     let res <- db |> try_integrity_check()
+//     if (res is Err) {
+//         // … IO-level failure (disk unreadable, permissions) …
+//     } else {
+//         let issues = res as Ok
+//         // … same shape as strict form …
+//     }
+
+// --- OPTIMIZE: close-time hygiene ------------------------------------
+// `PRAGMA optimize` (SQLite 3.18+) selectively runs ANALYZE on
+// tables the query planner hasn't analyzed recently. Much
+// lighter than VACUUM — doesn't rewrite the file, just updates
+// planner statistics.
+//
+// Tut 33 deferred this to tut 34. Shipped as a STANDALONE
+// function, NOT auto-bundled into `apply_recommended_pragmas`:
+// `optimize` needs to run AFTER queries have built up stats,
+// so the natural spot is close time — opposite of setup-time
+// pragmas.
+//
+// Idiomatic pattern: last call before `with_sqlite` exits on
+// long-running processes; or periodically on a timer.
+
+def run_daemon() {
+    with_sqlite("app.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+
+        // … run daemon, serve queries …
+
+        db |> optimize()          // close-time hygiene
+    }
+}
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 ----------------------------------
+//
+// 1. BACKUP PROGRESS CALLBACK. `sqlite3_backup_step(bp, N)`
+//    with `sqlite3_backup_remaining` / `sqlite3_backup_pagecount`
+//    for UI progress reporting. Real use case (big-DB progress
+//    bars) but rare. Ships when asked.
+//
+// 2. ATTACH DATABASE INTEGRATION. `backup_to` / `vacuum` /
+//    `integrity_check` default to the `"main"` schema. Users
+//    with ATTACHed databases need multi-schema variants — tut
+//    36 territory.
+//
+// 3. PRAGMA foreign_key_check. Specialized integrity check
+//    that only verifies FK constraints. Users run
+//    `exec("PRAGMA foreign_key_check")` directly if needed.
+//
+// 4. COMPILE-TIME VACUUM-IN-TRANSACTION CHECK. Macro aware of
+//    `with_transaction` lexical scope. Too brittle across
+//    lambdas / forwarding / conditional paths. Runtime panic
+//    with clear message is the MVP.
+//
+// 5. AUTOMATIC PERIODIC OPTIMIZE. No daslang-level scheduler;
+//    users wire their own cadence (cron, job queue, daemon
+//    loop).
+//
+// 6. BACKUP CHUNK SIZE TUNING. v1 uses a sensible internal
+//    chunk (~100 pages/step). Exposed if the progress callback
+//    ships.

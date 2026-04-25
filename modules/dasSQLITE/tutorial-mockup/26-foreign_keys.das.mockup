@@ -1,0 +1,278 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "26-foreign_keys"
+// and § "26-foreign_keys — decided" in ../API_REWORK.md.
+//
+// Tutorial 26: foreign keys — DDL-only relationships (REFERENCES +
+// CASCADE). Navigation properties are deliberately NOT shipped.
+//
+// CORE DECISION (locked 2026-04-24): ship only the DDL-constraint
+// half of EF's FK story. Skip navigation properties entirely
+// (`@sql_has_many`, `@sql_belongs_to`, `_include`, dot-chain
+// traversal, `_select_many` nav-flatten).
+//
+// WHY SKIP NAV PROPERTIES:
+//   1. Query side already works without them. Tut 23's `_join`
+//      and tut 24's correlated `_any` / `_in` cover every pattern
+//      you'd express with a nav property. User writes the key
+//      predicate explicitly — more keystrokes, zero magic.
+//   2. Nav properties fight the tut-25 `[sql_table]` read-only
+//      invariant. They'd require either synthetic struct fields
+//      (violates "struct IS the row") or phantom fields resolved
+//      by macro (confusing — is `u.Orders` a field or a query?).
+//   3. No "live object graph" use case. EF navs are load-bearing
+//      because C# apps pass `User` objects around and traverse
+//      `.Orders` lazily. daslang code writes queries; there is
+//      no graph layer wanting navigation.
+//   4. Massive scope blow-up — EF navs drag in `Include`, lazy
+//      loading, loaded-vs-not-loaded state, change tracking.
+//      That is the *biggest* feature in EF; we cut it cleanly.
+//
+// WHAT WE SHIP (this tut): `@sql_references(type="Parent",
+// on_delete=..., on_update=...)` field annotation. Emits
+// `REFERENCES Parents(Id) ON DELETE <action> ON UPDATE <action>`
+// in DDL. That's the whole surface.
+//
+// CONSEQUENCE FOR TUT 23's BACKLOG: `_select_many` nav-flatten
+// macro is DROPPED from the prereqs table — it was a forward-
+// reference that had no motivation without navs. `select_many`
+// stays in `linq.das` as an in-memory array primitive; the SQL
+// sugar macro doesn't ship.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Like tut 25. No new
+// `daslib/linq` fns, no new `daslib/linq_boost` macros. All
+// work is internal to the `[sql_table]` structure macro's DDL
+// emitter, plus `with_sqlite` setting `PRAGMA foreign_keys=ON`
+// on connect. See project memory `project_dassqlite_phase2.md`
+// § tut 26.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// --- parent/child schema ----------------------------------------------
+// Classic 1:N — a User has many Orders. On the Order side, we
+// annotate the FK column with `@sql_references` naming the parent
+// type (as a string — annotations don't take `type<T>`) and the
+// integrity actions to apply when the parent row changes.
+//
+// Annotation syntax:
+//   @sql_references(type="TargetTypeName",
+//                   on_delete="cascade" | "set_null" | "set_default"
+//                              | "restrict" | "no_action",
+//                   on_update="...")      // same value set as on_delete
+//
+// Macro resolves `type="User"` at expansion time: finds the
+// `[sql_table]`-annotated struct named `User`, reads its
+// `[sql_table(name="...")]` to get the table name, finds its
+// `@sql_primary_key` field to get the column name. Emits
+// `REFERENCES Users(Id)`.
+//
+// Defaults when omitted:
+//   on_delete = "no_action"   (SQL standard — error on orphan)
+//   on_update = "no_action"
+
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name : string
+    Active : bool
+}
+
+[sql_table(name="Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    @sql_references(type="User", on_delete="cascade")
+    UserId : int
+    Total : float
+}
+// DDL emitted by `create_table(type<Order>)`:
+//   CREATE TABLE Orders (
+//     Id INTEGER PRIMARY KEY,
+//     UserId INTEGER NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+//     Total REAL NOT NULL
+//   )
+//
+// NOTE: order of `create_table` calls MATTERS — parent before
+// child, since Orders' FK clause names Users. Drop order is
+// reversed (children first). `drop_table_if_exists` + recreate
+// is the safe pattern.
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        // `with_sqlite` sets `PRAGMA foreign_keys=ON` on connect.
+        // SQLite ships this OFF by default for back-compat with
+        // pre-3.6.19 databases. Without the pragma, FK clauses
+        // are *parsed and stored* but not enforced — orphans and
+        // CASCADE silently no-op. dasSQLITE turns it on always;
+        // users who need it off can PRAGMA it back via raw exec.
+
+        // Drop in child-first order to avoid FK constraint errors.
+        db |> drop_table_if_exists(type<Order>)
+        db |> drop_table_if_exists(type<User>)
+
+        // Create parent first so the child's REFERENCES is valid.
+        db |> create_table(type<User>)
+        db |> create_table(type<Order>)
+
+        // --- seed data -----------------------------------------------
+        db |> insert(User(Id=1, Name="alice", Active=true))
+        db |> insert(User(Id=2, Name="bob",   Active=true))
+        db |> insert(Order(Id=100, UserId=1, Total=42.0f))
+        db |> insert(Order(Id=101, UserId=1, Total=99.0f))
+        db |> insert(Order(Id=102, UserId=2, Total=7.5f))
+
+        // --- (a) CASCADE delete demo ---------------------------------
+        // Deleting user 1 auto-deletes their orders (100, 101).
+        // The ON DELETE CASCADE clause propagates the row removal
+        // from Users to Orders automatically.
+        //
+        // SQL:  DELETE FROM Users WHERE Id = 1
+        //       (SQLite cascades internally: DELETE FROM Orders
+        //        WHERE UserId = 1)
+        db |> delete_(type<User>, where_expr = _.Id == 1)
+        // After this: Users has {2:bob}; Orders has {102:bob's}.
+
+        // Verify — order 100 is gone.
+        let alice_orders <- _sql(db |> select_from(type<Order>)
+            ._where(_.UserId == 1))
+        to_log(LOG_INFO, "alice orders after cascade: {alice_orders |> length}\n")
+        // Expected: 0
+
+        // --- (b) on_delete="set_null" requires Option<T> -------------
+        // Null-on-parent-delete only works if the FK column can
+        // hold NULL. `[sql_table]` emits `macro_error` if the
+        // annotation says `on_delete="set_null"` but the column
+        // type is plain `T` — the type would reject SQLite's
+        // attempt to write NULL (row shape violation per tut 25).
+        //
+        // Correct combination:
+        //
+        //   [sql_table(name="Comments")]
+        //   struct Comment {
+        //       @sql_primary_key Id : int
+        //       @sql_references(type="User", on_delete="set_null")
+        //       AuthorId : Option<int>      // nullable — must be
+        //       Body : string
+        //   }
+        //
+        // Wrong combination:
+        //
+        //   struct Bad {
+        //       @sql_references(type="User", on_delete="set_null")
+        //       UserId : int                // macro_error here
+        //   }
+        //
+        // Error: `on_delete="set_null"` requires column type
+        // `Option<T>` so the column can hold NULL. Either change
+        // the column type to `Option<int>` or pick a different
+        // on_delete action (`cascade`, `restrict`, `no_action`).
+
+        // --- (c) on_delete values -----------------------------------
+        // Full translation table (emitted verbatim after
+        // `ON DELETE` / `ON UPDATE`):
+        //
+        //   "cascade"      → CASCADE
+        //   "set_null"     → SET NULL       (requires Option<T>)
+        //   "set_default"  → SET DEFAULT    (needs @sql_default too)
+        //   "restrict"     → RESTRICT       (immediate check)
+        //   "no_action"    → NO ACTION      (deferred; SQL default)
+        //
+        // Unknown string → `macro_error` at annotation parse time
+        // with the valid list.
+
+        // --- (d) self-referential FK (tree / hierarchy) -------------
+        // `type="NodeTree"` resolving to the current struct works
+        // the same as cross-struct — macro looks up the type at
+        // expansion time in the surrounding scope. Column type is
+        // `Option<int>` because the root of the tree has no
+        // parent.
+        //
+        //   [sql_table(name="NodeTree")]
+        //   struct NodeTree {
+        //       @sql_primary_key Id : int
+        //       @sql_references(type="NodeTree", on_delete="cascade")
+        //       ParentId : Option<int>
+        //       Label : string
+        //   }
+        //
+        // DDL:
+        //   CREATE TABLE NodeTree (
+        //     Id INTEGER PRIMARY KEY,
+        //     ParentId INTEGER REFERENCES NodeTree(Id) ON DELETE CASCADE,
+        //     Label TEXT NOT NULL
+        //   )
+        //
+        // Note: FKs that point at the same table don't need a
+        // separate create order — a single `create_table` emits
+        // both the table and its self-reference.
+
+        // --- (e) querying across the relationship is explicit -------
+        // No nav properties. To get users-with-their-orders, you
+        // write an explicit `_join` or `_left_join` (tut 23), or
+        // an `_any` correlated subquery (tut 24). There is no
+        // `_include` and no `u.Orders` shortcut.
+        //
+        // SQL:  SELECT u.*, o.* FROM Users u
+        //       INNER JOIN Orders o ON o.UserId = u.Id
+        let users_with_orders <- _sql(db |> select_from(type<User>)
+            ._join(type<Order>, on = (u, o) => u.Id == o.UserId,
+                   into = (u, o) => (user=u, order=o)))
+        for (row in users_with_orders) {
+            to_log(LOG_INFO, "{row.user.Name}: order {row.order.Id} total {row.order.Total}\n")
+        }
+
+        // SQL:  SELECT * FROM Users u
+        //       WHERE EXISTS (SELECT 1 FROM Orders o WHERE o.UserId = u.Id)
+        let active_buyers <- _sql(db |> select_from(type<User>)
+            ._where(u => db |> select_from(type<Order>)
+                            ._any(o => o.UserId == u.Id)))
+        for (u in active_buyers) {
+            to_log(LOG_INFO, "{u.Name} has orders\n")
+        }
+
+        // --- (f) try_ variant ---------------------------------------
+        // FK violations surface as SQLite constraint errors at
+        // insert/update/delete time. `try_insert` turns them into
+        // `Result<int, string>` for graceful handling.
+        let orphan = Order(Id=999, UserId=9999, Total=1.0f)  // 9999 doesn't exist
+        let res = db |> try_insert(orphan)
+        if (res |> is_err()) {
+            to_log(LOG_ERROR, "orphan insert rejected: {res |> unwrap_err()}\n")
+            // Expected: "FOREIGN KEY constraint failed" or similar
+        }
+    }
+}
+
+// FUTURE / DEFERRED — documented here and in API_REWORK.md so the
+// scope boundary is explicit.
+//
+// (1) NAVIGATION PROPERTIES. `@sql_has_many`, `@sql_belongs_to`,
+//     `_include(_.Orders)`, dotted traversal in predicates
+//     (`_.User.Active`), implicit joins from dot-chain. Not
+//     shipped. Revisit if a concrete user workflow shows the
+//     explicit-join spelling is actually the bottleneck (current
+//     reading: explicit is fine, and probably clearer).
+//
+// (2) `_select_many` NAV-FLATTEN MACRO (forward-ref from tut 23).
+//     Was going to sugar `users._select_many(_.Orders)` → the
+//     flat array of all orders. Dropped along with navs.
+//     `select_many` as a plain linq.das fn stays — it takes
+//     explicit selectors and is useful for non-SQL array work.
+//
+// (3) COMPOSITE FOREIGN KEYS. Parent has composite PK; child FK
+//     references multiple columns. Shape would be
+//     `@sql_references(type="X", fields=["A", "B"])` or similar.
+//     Defer — composite PKs are rare in greenfield designs and
+//     SQLite handles them awkwardly anyway.
+//
+// (4) `on_delete="set_default"` interaction with `@sql_default`.
+//     Requires the default-value annotation from tut 28
+//     (defaults/computed). Will wire up once tut 28 lands.
+//
+// (5) DEFERRABLE constraints (`DEFERRABLE INITIALLY DEFERRED`).
+//     SQLite supports this; EF doesn't expose it. Add if a
+//     concrete use case surfaces — transactional bulk imports
+//     occasionally need it.

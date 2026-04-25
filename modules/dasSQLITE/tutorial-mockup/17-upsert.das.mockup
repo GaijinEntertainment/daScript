@@ -1,0 +1,177 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "17-upsert"
+// and § "E — Function form + macro form pair" for the naming convention.
+//
+// Tutorial 17: UPSERT — three SQLite shapes for "INSERT but if it
+// collides, do something":
+//   (a) INSERT OR IGNORE         — silent no-op on conflict
+//   (b) INSERT OR REPLACE        — wipe+reinsert on conflict (loses cols)
+//   (c) ON CONFLICT … DO UPDATE  — proper merge (the modern one, 3.24+)
+//   (d) UPSERT RETURNING         — capture the post-merge row
+//   (e) bulk upsert              — array overload of (c)
+//   (f) try_ non-panic variants
+//
+// (a) and (b) take no blocks — plain function calls, no macro form.
+// (c)–(e) take blocks (on_conflict, do_update) — function/macro pair
+// per § E.
+//
+// Function/macro pair for the merge form:
+//   def upsert(db, row,
+//              on_conflict : block<(arg : T -&) : auto>;
+//              do_update   : block<(existing : T -&; excluded : T -&) : auto>) : int
+//   def upsert_returning(...) : array<T>
+// Macro `_upsert` / `_upsert_returning` sugar `_` (existing row) and
+// `_excluded` (proposed row). When the macro detects `_excluded` in the
+// do_update AST, it synthesizes a two-arg block $(_; _excluded) => …
+// instead of a one-arg block $(_) => …. The on_conflict block stays
+// one-arg.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// Schema for the merge demos: a word-frequency table. Each row counts
+// how many times we've seen `Word`, plus first/last timestamps. The
+// natural upsert: "saw word X again — bump Hits, refresh Last."
+[sql_table(name="WordHits")]
+struct WordHit {
+    @sql_primary_key Id : int
+    Word  : string
+    Hits  : int
+    First : int64
+    Last  : int64
+}
+
+// Schema for the multi-column conflict-target demo.
+// `@sql_unique` on a single field declares a single-column UNIQUE
+// constraint; for composite uniqueness see tut 28's table-level
+// [sql_unique(...)] annotation.
+[sql_table(name="UserAccts")]
+struct UserAcct {
+    @sql_primary_key Id : int
+    @sql_unique Email : string
+    Name   : string
+    Tenant : string
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<WordHit>)
+        db |> drop_table_if_exists(type<UserAcct>)
+        db |> create_table(type<WordHit>)
+        db |> create_table(type<UserAcct>)
+
+        let now_ts = unix_now()
+
+        // --- (a) INSERT OR IGNORE — silent no-op on conflict ----------
+        // No blocks needed. SQLite emits the INSERT and silently
+        // ignores constraint violations (PK collision, UNIQUE
+        // violation). Returns int rows-affected (0 if ignored, 1 if
+        // inserted).
+        // SQL:  INSERT OR IGNORE INTO WordHits VALUES(?, ?, ?, ?, ?)
+        let n_first = db |> insert_or_ignore(
+            WordHit(Id=1, Word="hello", Hits=1, First=now_ts, Last=now_ts))
+        let n_again = db |> insert_or_ignore(
+            WordHit(Id=1, Word="hello", Hits=99, First=0, Last=0))     // ignored
+        to_log(LOG_INFO, "ignore form inserted {n_first}+{n_again} row(s)\n")
+
+        // Bulk overload — same fn, array<T>. Single transaction.
+        db |> insert_or_ignore([
+            WordHit(Id=1, Word="hello", Hits=99, First=0, Last=0),     // ignored
+            WordHit(Id=2, Word="world", Hits=1, First=now_ts, Last=now_ts)
+        ])
+
+        // --- (b) INSERT OR REPLACE — wipe-and-reinsert on conflict ----
+        // CAUTION: any column not in the new row gets its default —
+        // this is rarely what you want for partial updates. Use (c)
+        // for proper merging.
+        // SQL:  INSERT OR REPLACE INTO WordHits VALUES(?, ?, ?, ?, ?)
+        db |> insert_or_replace(
+            WordHit(Id=1, Word="hello", Hits=42, First=0, Last=now_ts))
+
+        // --- (c) ON CONFLICT … DO UPDATE — the proper merge -----------
+        // Three positional args: (row, on_conflict, do_update).
+        // Macro `_upsert` expansion (mechanical):
+        //   _upsert(WordHit(...), _.Id, (Hits=_.Hits+1, Last=_excluded.Last))
+        //   →  upsert(WordHit(...),
+        //             $(_) => _.Id,
+        //             $(_; _excluded) => (Hits=_.Hits+1, Last=_excluded.Last))
+        // Two-arg block synthesized because `_excluded` appears in the
+        // do_update body's AST.
+        //
+        // SQL emitted:
+        //   INSERT INTO WordHits VALUES(?, ?, ?, ?, ?)
+        //   ON CONFLICT(Id) DO UPDATE SET
+        //     Hits = WordHits.Hits + 1,
+        //     Last = excluded.Last
+        db |> _upsert(
+            WordHit(Id=1, Word="hello", Hits=1, First=now_ts, Last=now_ts),
+            _.Id,
+            (Hits = _.Hits + 1, Last = _excluded.Last))
+
+        // --- multi-column conflict target -----------------------------
+        // For a composite UNIQUE constraint, pass a tuple of column
+        // refs as the on_conflict block's body. The macro
+        // pattern-matches: tuple(_.Email, _.Tenant) → ON CONFLICT(Email, Tenant).
+        // Anything other than `_.Col` or `tuple(_.Col, ...)` is a
+        // macro_error — SQL ON CONFLICT requires column refs, not
+        // arbitrary expressions.
+        // SQL:  INSERT INTO UserAccts VALUES(?, ?, ?, ?)
+        //       ON CONFLICT(Email, Tenant) DO UPDATE SET Name = excluded.Name
+        db |> _upsert(
+            UserAcct(Id=1, Email="x@y.com", Name="alice", Tenant="acme"),
+            tuple(_.Email, _.Tenant),
+            (Name = _excluded.Name))
+
+        // --- (d) UPSERT RETURNING — capture the post-merge row --------
+        // Sibling fn `upsert_returning` / `_upsert_returning` returns
+        // array<T> (RETURNING * — typically 1 row, but the array shape
+        // matches `_update_returning` for consistency).
+        // SQL:  INSERT INTO WordHits VALUES(?, ?, ?, ?, ?)
+        //       ON CONFLICT(Id) DO UPDATE SET
+        //         Hits = WordHits.Hits + 1, Last = excluded.Last
+        //       RETURNING Id, Word, Hits, First, Last
+        let after <- db |> _upsert_returning(
+            WordHit(Id=1, Word="hello", Hits=1, First=now_ts, Last=now_ts),
+            _.Id,
+            (Hits = _.Hits + 1, Last = _excluded.Last))
+        for (w in after) {
+            to_log(LOG_INFO, "after upsert: {w.Word} count = {w.Hits}\n")
+        }
+
+        // --- (e) bulk upsert ------------------------------------------
+        // `_upsert` overloads on second positional arg type: single row
+        // vs array<T>. Array form runs in a single transaction. Same
+        // on_conflict / do_update blocks apply to every row in the
+        // batch.
+        let batch = [
+            WordHit(Id=2, Word="world",  Hits=1, First=now_ts, Last=now_ts),
+            WordHit(Id=3, Word="quick",  Hits=1, First=now_ts, Last=now_ts),
+            WordHit(Id=2, Word="world",  Hits=1, First=now_ts, Last=now_ts)  // collides → merge
+        ]
+        db |> _upsert(batch,
+            _.Id,
+            (Hits = _.Hits + 1, Last = _excluded.Last))
+
+        // --- (f) try_ variants for non-panic flow ---------------------
+        // 8-name expansion per cross-cutting § E:
+        //   upsert / _upsert / try_upsert / _try_upsert /
+        //   upsert_returning / _upsert_returning /
+        //   try_upsert_returning / _try_upsert_returning
+        // Plus simpler-form non-panic variants: try_insert_or_ignore,
+        // try_insert_or_replace.
+        let attempt = db |> _try_upsert(
+            WordHit(Id=1, Word="hello", Hits=1, First=now_ts, Last=now_ts),
+            _.Id,
+            (Hits = _.Hits + 1, Last = _excluded.Last))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "upsert failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let touched = attempt |> unwrap()
+            to_log(LOG_INFO, "upsert touched {touched} row(s)\n")
+        }
+    }
+}
