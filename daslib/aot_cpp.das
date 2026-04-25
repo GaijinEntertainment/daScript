@@ -413,13 +413,15 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         }
         // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
         // even when daslang marks the expression result as ref (stack temp). Skip the
-        // &/* suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
+        // & suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
+        // Keep the * suffix when substitute_ref is requested (e.g. iteration variables),
+        // since das_iterator::first(Context*, QQ*&) demands a real pointer regardless.
         let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
-        if (typeDecl.flags.ref && cfg.skip_ref == false && !valueHandle) {
-            if (cfg.substitute_ref == false) {
-                write(writer, " &");
-            } else {
+        if (typeDecl.flags.ref && cfg.skip_ref == false) {
+            if (cfg.substitute_ref) {
                 write(writer, " *");
+            } elif (!valueHandle) {
+                write(writer, " &");
             }
         }
     }
@@ -2374,7 +2376,7 @@ class public CppAot : AstVisitor {
     }
     def override visitExprConstRange64(var c : ExprConstRange64?) : ExpressionPtr {
         let val = c.getValue;
-        write(*ss, "range64({val.x:d},{val.y:d})");
+        write(*ss, "range64({val.x:d}ll,{val.y:d}ll)");
         return c;
     }
     def override visitExprConstInt3(var c : ExprConstInt3?) : ExpressionPtr {
@@ -2399,7 +2401,7 @@ class public CppAot : AstVisitor {
     }
     def override visitExprConstURange64(var c : ExprConstURange64?) : ExpressionPtr {
         let val = c.getValue;
-        write(*ss, "urange64({val.x:d},{val.y:d})");
+        write(*ss, "urange64({val.x:d}ull,{val.y:d}ull)");
         return c;
     }
     def override visitExprConstUInt3(var c : ExprConstUInt3?) : ExpressionPtr {
@@ -4178,8 +4180,27 @@ def public aot(input : string; paranoid_validation : bool, cross_platform : bool
     var result = "";
     using() $(var mg : ModuleGroup) {
         var inscope access <- make_file_access("")
-        compile_and_simulate(input, access, unsafe(addr(mg)), cop) $(program : ProgramPtr; var pctx : smart_ptr<Context>) {
-            result = run_aot(program.get_ptr(), pctx.get_ptr(), cop)
+        set_aot();
+        compile_file(input, access, unsafe(addr(mg)), cop) $(ok; var program : smart_ptr<Program>; issues) {
+            if (!ok) {
+                print("failed to compile {input}\n{issues}\n")
+                return
+            }
+            // `options no_aot` only needs the program's module list to emit the
+            // "AOT disabled" comment -- skip simulate entirely so we don't leak
+            // host-side Contexts spawned by `[init]` load_folder()-style calls
+            // during simulation.
+            let no_aot = program._options |> find_arg("no_aot") ?as tBool ?? false
+            if (no_aot) {
+                result = run_aot(program.get_ptr(), null, cop)
+                return
+            }
+            simulate(program) $(sok; var pctx : smart_ptr<Context>; serrors) {
+                if (!sok) {
+                    panic("Failed to simulate {serrors}")
+                }
+                result = run_aot(program.get_ptr(), pctx.get_ptr(), cop)
+            }
         }
     }
     return result

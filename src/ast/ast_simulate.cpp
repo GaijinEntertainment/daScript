@@ -1868,8 +1868,8 @@ namespace das
             }
             return result;
         } else if ( expr->subexpr->type->isGoodArrayType() ) {
-            auto prv = getE(expr->subexpr);
-            auto pidx = getE(expr->index);
+            auto prv = simulateExpression(expr->subexpr);
+            auto pidx = simulateExpression(expr->index);
             uint32_t stride = expr->subexpr->type->firstType->getSizeOf();
             if ( r2vType->baseType!=Type::none ) {
                 return context.code->makeValueNode<SimNode_ArrayAtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
@@ -1878,8 +1878,8 @@ namespace das
             }
         } else if ( expr->subexpr->type->isPointer() ) {
             uint32_t stride = expr->subexpr->type->firstType->getSizeOf();
-            auto prv = getE(expr->subexpr);
-            auto pidx = getE(expr->index);
+            auto prv = simulateExpression(expr->subexpr);
+            auto pidx = simulateExpression(expr->index);
             if ( r2vType->baseType!=Type::none ) {
                 switch ( expr->index->type->baseType ) {
                 case Type::tInt:    return context.code->makeValueNode<SimNode_PtrAtR2V_Int>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
@@ -1919,8 +1919,8 @@ namespace das
                 }
             }
             // regular scenario
-            auto prv = getE(expr->subexpr);
-            auto pidx = getE(expr->index);
+            auto prv = simulateExpression(expr->subexpr);
+            auto pidx = simulateExpression(expr->index);
             auto errorMessage = context.code->allocateName(", "+expr->describe());
             if ( r2vType->baseType!=Type::none ) {
                 return context.code->makeValueNode<SimNode_AtR2V>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset, range, errorMessage);
@@ -2327,14 +2327,14 @@ namespace das
         DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         if (expr->value->type->isPointer()) {
             if ( expr->unsafeDeref ) {
-                auto simV = getE(expr->value);
+                auto simV = simulateExpression(expr->value);
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->getR2VType(), at, simV, fieldOffset + extraOffset);
                 } else {
                     return context.code->makeNode<SimNode_FieldDeref>(at, simV, fieldOffset + extraOffset);
                 }
             } else {
-                auto simV = getE(expr->value);
+                auto simV = simulateExpression(expr->value);
                 auto errorMessage = context.code->allocateName(", "+expr->value->describe()+" is null");
                 if ( r2vType->baseType!=Type::none ) {
                     return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(r2vType->getR2VType(), at, simV, fieldOffset + extraOffset, errorMessage);
@@ -2346,7 +2346,7 @@ namespace das
             if ( auto chain = sv_trySimulate(expr->value, extraOffset + fieldOffset, r2vType) ) {
                 return chain;
             }
-            auto simV = getE(expr->value);
+            auto simV = simulateExpression(expr->value);
             if ( r2vType->baseType!=Type::none ) {
                 return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->getR2VType(), at, simV, extraOffset + fieldOffset);
             } else {
