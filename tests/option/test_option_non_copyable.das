@@ -165,6 +165,20 @@ def test_unwrap(t : T?) {
 }
 
 [test]
+def test_move_unwrap(t : T?) {
+    t |> run("move_unwrap moves the array out of Option, leaves it empty") @(t : T?) {
+        var o = some(make_arr(7, 8))
+        let arr <- o |> move_unwrap
+        t |> equal(length(arr), 2)
+        t |> equal(arr[0], 7)
+        t |> equal(arr[1], 8)
+        // Source is moved-from: tag flipped to none, payload zeroed.
+        t |> success(!o._has_value)
+        t |> equal(length(o._value), 0)
+    }
+}
+
+[test]
 def test_if_some_if_none(t : T?) {
     t |> run("if_some fires with the array") @(t : T?) {
         var seen = 0

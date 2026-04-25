@@ -148,6 +148,12 @@ def test_unwrap(t : T?) {
         t |> equal(none(type<string>) |> unwrap_or_default, "")
         t |> equal(some(5) |> unwrap_or_default, 5)
     }
+
+    t |> run("move_unwrap on copyable T returns value, leaves source none") @(t : T?) {
+        var o = some(42)
+        t |> equal(o |> move_unwrap, 42)
+        t |> success(!o._has_value)
+    }
 }
 
 // ===========================

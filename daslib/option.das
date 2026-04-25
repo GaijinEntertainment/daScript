@@ -147,6 +147,19 @@ def unwrap(o : $Option < auto(TT) >) : TT {
     }
 }
 
+//! Destructively extract the payload, leaving ``o`` empty. Mirrors ``move_some``
+//! on the construction side. Use this instead of ``unwrap`` when ``T`` is
+//! non-copyable (``array<T>``, ``table<K;V>``, lambdas) and you no longer need
+//! ``o`` — it avoids the deep clone that ``unwrap`` would otherwise perform.
+//! Panics when ``none``.
+def move_unwrap(var o : $Option < auto(TT) >) : TT {
+    if (!o._has_value) {
+        panic("move_unwrap called on none")
+    }
+    o._has_value = false
+    return <- o._value
+}
+
 //! Extract the payload or return ``d`` when ``none``.
 def unwrap_or(o : $Option < auto(TT) >; d : TT) : TT {
     static_if (typeinfo can_copy(o._value)) {

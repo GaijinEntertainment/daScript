@@ -537,16 +537,16 @@ class ArgsMacro : AstStructureAnnotation {
     def make_simple_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int) : ExpressionPtr {
         return qmacro_block() {
             {
-                let r = parse_argument(args, command_info.args[$v(i)], type<$t(st.fields[field_index]._type)>)
+                var r <- parse_argument(args, command_info.args[$v(i)], type<$t(st.fields[field_index]._type)>)
                 if (r |> is_err) {
                     return "{$v(arg.flag_name)}: {r |> unwrap_err}"
                 }
-                let opt = r |> unwrap
+                var opt <- r |> move_unwrap
                 if (opt |> is_some) {
                     static_if (typeinfo can_copy(type<$t(st.fields[field_index]._type)>)) {
                         dst.$f(arg.field_name) = opt |> unwrap
                     } else {
-                        dst.$f(arg.field_name) <- opt |> unwrap
+                        dst.$f(arg.field_name) <- opt |> move_unwrap
                     }
                 }
             }

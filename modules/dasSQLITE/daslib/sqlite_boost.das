@@ -395,11 +395,13 @@ def private ignore_sql_error(e : SqlError) : void {
 // to the user's struct type, a fixed family of helper functions consumed by
 // `create_table` / `drop_table_if_exists` / `insert` below.
 //
-// All generated function bodies emit `sqlite_sql_type(default<T>)` and
+// All generated function bodies emit `sqlite_sql_type(type<T>)` and
 // `sqlite_bind(stmt, idx, row.field)` calls — so primitive and user-defined
-// field types travel the same code path. Type resolution defers to each
-// generated function's own typecheck pass; the macro itself does not depend
-// on field types being fully resolved at apply() time.
+// field types travel the same code path. The witness on `sqlite_sql_type` is
+// a type tag for overload dispatch only; bodies must not read it. Type
+// resolution defers to each generated function's own typecheck pass; the
+// macro itself does not depend on field types being fully resolved at
+// apply() time.
 //
 // TODO: 5 of the 7 emitted helpers (_sql_table_name, _sql_drop_table_if_exists_sql,
 // _sql_create_table_sql, _sql_insert_with_pk_sql, _sql_insert_no_pk_sql) take
