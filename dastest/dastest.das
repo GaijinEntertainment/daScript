@@ -16,6 +16,7 @@ require fs
 require suite
 require log
 require math
+require dastest_clargs
 
 options multiple_contexts
 
@@ -48,15 +49,6 @@ var private failedFiles : array<FailedFile>
 var private timingOutliers : int = 0
 var private jsonFilePath : string
 var private jsonTestFile : string
-
-
-def private collect_input_paths(args : array<string>; var paths : array<string>) {
-    for (i in range(length(args) - 1)) {
-        if (args[i] == "--test") {
-            paths |> push <| args[i + 1]
-        }
-    }
-}
 
 
 def private collect_files_filtered(path, das_test_path : string; var cache : table<string; void?>; var files : array<string>) : bool {
@@ -253,14 +245,30 @@ def deserialize_path(var ctx : SuiteCtx, files : array<string>, in_file : string
 
 [export]
 def main() : int {
+    // raw_args are still used in couple of places, but maybe
+    // we can replace that too, just need to find the best plan.
+    var raw_args <- get_command_line_arguments()
+
+    // init_log uses daslib ansi-colors, which relies on array<string> parsing.
+    log::init_log(raw_args)
+
+    var test_args = DastestArgs()
+    let parse_err = parse_args(test_args)
+    if (parse_err != "") {
+        unsafe {
+            log::red("command-line args: {parse_err}")
+            fio::exit(1)
+        }
+    }
+
     var args <- get_command_line_arguments()
     log::init_log(args)
     let runIdx = args |> find_index("--run")
     if (runIdx != -1) {
-        let res = suite::test_file(args[runIdx + 1], SuiteCtx(args))
+        let res = suite::test_file(args[runIdx + 1], SuiteCtx(test_args))
         // Send full report with per-test details for isolated mode JSON collection
         var report = JsonTestReport(
-            file = args[runIdx + 1],
+            file = test_args.run,
             total = res.total,
             passed = res.passed,
             failed = res.failed,
@@ -274,12 +282,12 @@ def main() : int {
         return res.failed + res.errors
     }
 
-    log::failuresOnly = args |> has_value("--failures-only")
+    log::failuresOnly = test_args.failures_only
 
     var res : SuiteResult
     let startTime = ref_time_ticks()
 
-    let timeout = args |> get_float_arg("--timeout", 600.) // 10min
+    let timeout = test_args.timeout
     if (timeout > 0.) {
         unsafe {
             var mainCtx & = this_context()
@@ -304,15 +312,14 @@ def main() : int {
         }
     }
 
-    var inputPaths : array<string>
-    collect_input_paths(args, inputPaths)
+    var inputPaths := test_args.test_files
     var files : array<string>
     if (!collect_files(inputPaths, files)) {
         return 1
     }
 
-    timingOutliers = args |> get_int_arg("--timing-outliers", 0)
-    jsonFilePath = args |> get_str_arg("--json-file", "")
+    timingOutliers = test_args.timing_outliers
+    jsonFilePath = test_args.json_file
     if (!empty(jsonFilePath)) {
         suite::clear_test_results()
         if (length(files) == 1) {
@@ -329,14 +336,14 @@ def main() : int {
         }
     }
 
-    let isolatedMode = args |> has_value("--isolated-mode")
-    var ctx <- SuiteCtx(args)
+    let isolatedMode = test_args.isolated_mode
+    var ctx <- SuiteCtx(test_args)
     if (!ctx.cov_path |> empty()) {
         remove(ctx.cov_path)
     }
 
-    let ser_file = args |> get_str_arg("--ser", "")
-    let deser_file = args |> get_str_arg("--deser", "")
+    let ser_file = test_args.ser
+    let deser_file = test_args.deser
     if (!empty(ser_file)) {
         res = serialize_path(ctx, files, ser_file)
     } elif (!empty(deser_file)) {
@@ -363,8 +370,11 @@ def main() : int {
         }
     } else {
         let totalFiles = length(files)
-        let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", get_total_hw_threads() * 2)) // magic x2, os should be able to schedule sub processes in parallel
-        let testTimeout = args |> get_float_arg("--test-timeout", 0.)  // per-test timeout in seconds, 0 = no timeout
+        var totalThreads = test_args.isolated_mode_threads
+        if (totalThreads == 0) {
+            totalThreads = get_total_hw_threads() * 2
+        }
+        let testTimeout = test_args.test_timeout
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
         with_channel(totalFiles) $(inputChannel) {
             with_channel(totalFiles) $(outputChannel) {
@@ -428,7 +438,7 @@ def main() : int {
                         let jitstr = jit_enabled() ? "-jit" : ""
                         let aotstr = is_in_aot() ? "-use-aot" : ""
                         let benchstr = ctx.bench_enabled ? "--bench" : ""
-                        let singleTest = "{args[0]} {args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}"
+                        let singleTest = "{raw_args[0]} {raw_args[1]} {jitstr} {aotstr} -- --run {file} {benchstr} {log::useTtyColors ? " --color" : ""}"
                         inputChannel |> push_clone(IsoInput(uri = clone_string(uri), cmd = clone_string(singleTest)))
                         inputChannel |> notify()
                     }

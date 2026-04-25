@@ -296,6 +296,11 @@ FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/jit/*.das")
 # AOT for loops test files
 FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/loops/*.das")
 
+# AOT for daslib test files
+SET(AOT_DASLIB_TEST_FILES
+    tests/daslib/clargs_test.das
+)
+
 # AOT for language test files
 FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -543,6 +548,10 @@ add_custom_target(test_aot_language_modules)
 SET(LANGUAGE_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LANGUAGE_MODULE_FILES}" LANGUAGE_MODULES_AOT_GENERATED_SRC test_aot_language_modules daslang)
 
+add_custom_target(test_aot_daslib)
+SET(DASLIB_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_DASLIB_TEST_FILES}" DASLIB_AOT_GENERATED_SRC test_aot_daslib daslang)
+
 add_custom_target(test_aot_stbimage)
 SET(STBIMAGE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_STBIMAGE_FILES}" STBIMAGE_AOT_GENERATED_SRC test_aot_stbimage daslang)
@@ -607,6 +616,7 @@ SOURCE_GROUP_FILES("aot generated" LANGUAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LANGUAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DASLIB_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DECS_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" DASLIB_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STBIMAGE_MODULES_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" STRUDEL_MODULES_AOT_GENERATED_SRC)
@@ -669,6 +679,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${LANGUAGE_MODULES_AOT_GENERATED_SRC}
     ${DASLIB_MODULES_AOT_GENERATED_SRC}
     ${DECS_MODULES_AOT_GENERATED_SRC}
+    ${DASLIB_AOT_GENERATED_SRC}
     ${STBIMAGE_AOT_GENERATED_SRC}
     ${STBIMAGE_MODULES_AOT_GENERATED_SRC}
     ${STRUDEL_MODULES_AOT_GENERATED_SRC}
@@ -703,6 +714,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_loops
     test_aot_language test_aot_language_modules
     test_aot_daslib_modules test_aot_decs_modules
+    test_aot_daslib
     test_aot_stbimage test_aot_stbimage_modules
     test_aot_strudel
     test_aot_pugixml test_aot_pugixml_modules

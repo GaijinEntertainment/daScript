@@ -139,6 +139,7 @@ MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
         # Build command arguments: tool_arg input1 output1 tool_arg input2 output2 ...
         list(APPEND command_args ${dasAotToolArg} ${input_src} ${out_arg})
 
+        file(MAKE_DIRECTORY ${out_dir})
         set_source_files_properties(${out_src} PROPERTIES GENERATED TRUE)
     endforeach()
 
