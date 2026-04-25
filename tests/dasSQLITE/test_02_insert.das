@@ -89,3 +89,21 @@ def test_try_insert_constraint_violation(t : T?) {
         t |> success(r |> is_err, "duplicate PK must Err")
     }
 }
+
+[test]
+def test_try_insert_mixed_pk_array_rejected(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<Car>)
+        // Mixed PK presence: row 0 has Id=0 (unset), row 1 has Id=42 (set).
+        // Must Err without writing — array shape decides one INSERT statement;
+        // mixing rows would silently mis-bind columns.
+        let r = db |> try_insert([
+            Car(Name = "Tesla"),
+            Car(Id = 42, Name = "Ford")
+        ])
+        t |> success(r |> is_err, "mixed-PK array must Err")
+        // Nothing was inserted (validation runs before BEGIN).
+        let cnt = db |> query_scalar("SELECT COUNT(*) FROM Cars", type<string>)
+        t |> equal(cnt, "0", "mixed-PK array must not write any row")
+    }
+}

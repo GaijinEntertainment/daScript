@@ -334,16 +334,24 @@ def insert(db : SqlRunner; row : auto(TT)) : int64 {
 
 def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     //! Batched INSERT inside a single BEGIN IMMEDIATE / COMMIT transaction.
-    //! All rows must agree on PK presence — first row decides which INSERT statement is prepared.
-    //! Returns ``Ok(last_rowid)`` on success, ``Err(errmsg)`` on failure (after ROLLBACK).
+    //! All rows must agree on PK presence — first row decides which INSERT statement is prepared,
+    //! and the function validates uniformity up front. A mixed-PK array returns ``Err`` without
+    //! opening a transaction; partition such inputs at the call site.
+    //! Returns ``Ok(last_rowid)`` on success, ``Err(errmsg)`` on failure (after ROLLBACK if a
+    //! transaction was opened).
     if (empty(rows)) {
         return ok(int64(0), type<string>)
+    }
+    let pk_unset = _::_sql_pk_is_unset(rows[0])
+    for (i in 1..length(rows)) {
+        if (_::_sql_pk_is_unset(rows[i]) != pk_unset) {
+            return err("insert: rows mix PK-set and PK-unset (row 0 vs row {i}); partition the array before calling insert", type<int64>)
+        }
     }
     let begin_err = db |> try_exec("BEGIN IMMEDIATE")
     if (begin_err |> is_some) {
         return err(begin_err |> unwrap, type<int64>)
     }
-    let pk_unset = _::_sql_pk_is_unset(rows[0])
     let sql = pk_unset ? _::_sql_insert_no_pk_sql(rows[0]) : _::_sql_insert_with_pk_sql(rows[0])
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)

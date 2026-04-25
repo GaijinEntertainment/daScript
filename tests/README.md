@@ -156,6 +156,7 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | test_01_with_sqlite.das | Runner lifecycle — `with_sqlite`, `open_sqlite`, `query_scalar`, `try_open_sqlite` failure path, `try_exec` bad SQL, `try_query_scalar` zero rows, `last_insert_rowid` initial state, `sqlite_version` | |
 | test_02_insert.das | `[sql_table]` macro emissions (table name, DDL, two INSERT shapes), `create_table` / `drop_table_if_exists` round-trip, single-row + array `insert`, `try_insert` constraint violation | |
 | test_03_last_rowid.das | `INTEGER PRIMARY KEY` ↔ ROWID — no-PK insert auto-assigns rowid, explicit-PK insert preserves Id, array insert returns last rowid, `_sql_pk_is_unset` predicate, drop+recreate resets rowid | |
+| test_04_user_types.das | User-defined SQL-mapped types — `sqlite_sql_type` / `sqlite_bind` overloads for a user `Color` struct, `[sql_table]` DDL emission with the user type, INSERT round-trip through the custom bind path | |
 
 ## daslib/
 
