@@ -571,7 +571,12 @@ class SqlTableMacro : AstStructureAnnotation {
                 first = false
             }
         }
-        let sql = "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})"
+        // PK-only structs have no non-PK columns. SQLite rejects `INSERT INTO T () VALUES ()`,
+        // so fall back to `DEFAULT VALUES` — the canonical way to insert a row with all defaults
+        // (here, just the auto-assigned rowid).
+        let sql = (empty(cols)
+            ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
+            : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
         var fn = qmacro_function("_sql_insert_no_pk_sql") $(typ : $t(st)) : string {
             return $v(sql)
         }

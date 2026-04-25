@@ -107,3 +107,27 @@ def test_try_insert_mixed_pk_array_rejected(t : T?) {
         t |> equal(cnt, "0", "mixed-PK array must not write any row")
     }
 }
+
+[sql_table(name="Tags")]
+struct Tag {
+    @sql_primary_key Id : int
+}
+
+[test]
+def test_pk_only_struct_insert_uses_default_values(t : T?) {
+    // A struct with only an auto-assigned PK has no non-PK columns.
+    // The no-PK INSERT statement must emit `DEFAULT VALUES` (not the invalid
+    // `INSERT INTO T () VALUES ()`) so a row can be created with just the
+    // SQLite-assigned rowid.
+    let sql = _sql_insert_no_pk_sql(type<Tag>)
+    t |> equal(sql, "INSERT INTO \"Tags\" DEFAULT VALUES", "PK-only struct must use DEFAULT VALUES form")
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<Tag>)
+        let id1 = db |> insert(Tag())
+        t |> equal(id1, int64(1), "first DEFAULT-VALUES insert assigns rowid 1")
+        let id2 = db |> insert(Tag())
+        t |> equal(id2, int64(2), "second DEFAULT-VALUES insert assigns rowid 2")
+        let cnt = db |> query_scalar("SELECT COUNT(*) FROM Tags", type<string>)
+        t |> equal(cnt, "2", "two rows landed via DEFAULT VALUES")
+    }
+}
