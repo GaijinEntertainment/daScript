@@ -46,6 +46,24 @@ def is_skip_dir(name : string) : bool {
     return name |> starts_with(".")
 }
 
+def has_expect_directive(file : string) : bool {
+    // Files with `expect <code>:<count>` declare intentional compile errors
+    // for dastest. Lint cannot evaluate them — the program never reaches
+    // the AST stage paranoid/perf/style passes need. Skip them.
+    let text = fread(file)
+    if (empty(text)) {
+        return false
+    }
+    let lines <- text |> split("\n")
+    for (line in lines) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("expect ")) {
+            return true
+        }
+    }
+    return false
+}
+
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
     let st = stat(path)
     if (!st.is_valid) {
@@ -191,9 +209,17 @@ def main() {
     }
     var total_issues = 0
     var total_errors = 0
+    var total_skipped = 0
     for (file in files) {
         if (!quiet) {
             print("checking {file}...\n")
+        }
+        if (has_expect_directive(file)) {
+            total_skipped++
+            if (!quiet) {
+                print("SKIP {file} (intentional compile errors via `expect`)\n")
+            }
+            continue
         }
         let result = lint_file(file, run_paranoid, run_perf, run_style, postfix)
         if (result.failed) {
@@ -213,7 +239,11 @@ def main() {
         }
     }
     print("\n--- Summary ---\n")
-    print("{length(files)} files, {total_issues} issue(s), {total_errors} error(s)\n")
+    if (total_skipped > 0) {
+        print("{length(files)} files, {total_issues} issue(s), {total_errors} error(s), {total_skipped} skipped\n")
+    } else {
+        print("{length(files)} files, {total_issues} issue(s), {total_errors} error(s)\n")
+    }
     if (total_errors > 0) {
         return 1
     } elif (total_issues > 0) {

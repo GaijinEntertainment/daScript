@@ -372,7 +372,7 @@ def document_module_strings_boost(root : string) {
         group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%),
         group_by_regex("Formatting", mod, %regex~(wide|pad_left|pad_right|capitalize)$%%),
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq|contains|count|is_null_or_whitespace)$%%),
-        group_by_regex("Search", mod, %regex~(last_index_of|glob_match)$%%),
+        group_by_regex("Search and match", mod, %regex~(last_index_of|glob_match|text_match)$%%),
         group_by_regex("Replace", mod, %regex~(replace_multiple)$%%),
         group_by_regex("Prefix and suffix", mod, %regex~(trim_prefix|trim_suffix)$%%),
         group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%),
@@ -535,7 +535,7 @@ def document_module_option(root : string) {
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|expect_value)$%%),
         group_by_regex("Side effects",  mod, %regex~(if_some|if_none)$%%),
         group_by_regex("Pairing",       mod, %regex~(zip)$%%),
-        group_by_regex("Operators",     mod, %regex~(==|\?\?)$%%)
+        group_by_regex("Operators",     mod, %regex~(==|!=|\?\?)$%%)
     )
     document("Monadic Option<T> — a value-or-nothing tagged pair", mod, "option.rst", groups)
 }
@@ -549,7 +549,7 @@ def document_module_result(root : string) {
         group_by_regex("Extraction",    mod, %regex~(unwrap|unwrap_or|unwrap_or_else|unwrap_or_default|unwrap_err|expect_value|expect_err)$%%),
         group_by_regex("Side effects",  mod, %regex~(if_ok|if_err)$%%),
         group_by_regex("Bridges to Option", mod, %regex~(to_option|err_to_option)$%%),
-        group_by_regex("Operators",     mod, %regex~(==|\?\?)$%%)
+        group_by_regex("Operators",     mod, %regex~(==|!=|\?\?)$%%)
     )
     document("Monadic Result<T, E> — a value-or-error tagged pair", mod, "result.rst", groups)
 }
@@ -925,8 +925,9 @@ def document_module_linq(root : string) {
         group_by_regex("Aggregation operations", mod, %regex~(count.*|long_count.*|sum.*|min.*|max.*|average.*|aggregate.*)$%%),
         group_by_regex("Filtering data", mod, %regex~(where_.*)$%%),
         group_by_regex("Partitioning data", mod, %regex~(skip.*|take.*|chunk.*)$%%),
-        group_by_regex("Join and group operations", mod, %regex~(join.*|group_join.*|group.*)$%%),
-        group_by_regex("Querying data", mod, %regex~(all.*|any.*|contains.*)$%%),
+        group_by_regex("Joining", mod, %regex~(join.*|left_join.*|group_join.*)$%%),
+        group_by_regex("Grouping", mod, %regex~(group_by.*|having.*)$%%),
+        group_by_regex("Querying data", mod, %regex~(all.*|any.*|contains.*|none.*)$%%),
         group_by_regex("Element operations", mod, %regex~(first.*|last.*|single.*|element_at.*)$%%),
         group_by_regex("Transform operations", mod, %regex~(select.*|zip.*)$%%),
         group_by_regex("Conversion operations", mod, %regex~(to_table.*|to_sequence.*)$%%),

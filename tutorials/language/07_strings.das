@@ -13,6 +13,7 @@
 //   - Padding: pad_left, pad_right
 //   - Trimming: trim_prefix, trim_suffix, strip
 //   - capitalize, is_null_or_whitespace
+//   - Full-text query matching: text_match (FTS5 subset)
 //   - Formatted output with fmt
 //   - Building strings with build_string
 //
@@ -165,6 +166,77 @@ def main {
     print("is_null_or_whitespace(\"  \") = {is_null_or_whitespace("  ")}\n")
     print("is_null_or_whitespace(\"hi\") = {is_null_or_whitespace("hi")}\n")
 
+    // === Full-Text Query Matching — text_match ===
+    // text_match(text, query) implements a small in-memory subset of
+    // the SQLite FTS5 query grammar. Useful for client-side filtering
+    // that should match what an FTS5 index would do server-side.
+    //
+    // Supported subset:
+    //   - Whitespace-separated terms (AND semantics)
+    //   - "term*" prefix match
+    //   - ASCII case-folding (UTF-8 multi-byte words are kept intact)
+    //
+    // Anything outside that subset panics with a message asking the
+    // caller to use the SQL backend instead. Unsupported forms:
+    //   - "phrase" quoted phrases
+    //   - col:term column filters
+    //   - NEAR(...)
+    //   - AND / OR / NOT / NEAR as whole-word keywords
+
+    let doc = "The quick brown fox jumps over the lazy dog"
+
+    // AND semantics — both terms must appear
+    print("text_match \"quick fox\": {text_match(doc, "quick fox")}\n")
+    print("text_match \"quick cat\": {text_match(doc, "quick cat")}\n")
+    // output: text_match "quick fox": true
+    // output: text_match "quick cat": false
+
+    // Prefix match with *
+    print("text_match \"jump*\": {text_match(doc, "jump*")}\n")
+    // output: text_match "jump*": true
+
+    // ASCII case-folding
+    print("text_match \"QUICK\": {text_match(doc, "QUICK")}\n")
+    // output: text_match "QUICK": true
+
+    // Non-ASCII (UTF-8) words are tokenized as one unit
+    print("text_match utf8: {text_match("café", "café")}\n")
+    // output: text_match utf8: true
+
+    // Bare * (no base term) is ignored — empty query matches everything
+    print("text_match empty: {text_match(doc, "")}\n")
+    print("text_match \"*\": {text_match(doc, "*")}\n")
+    // output: text_match empty: true
+    // output: text_match "*": true
+
+    // Unsupported syntax panics — wrap in try/recover to demonstrate.
+    var rejected = false
+    try {
+        var _ignored = text_match(doc, "\"quick brown\"")
+    } recover {
+        rejected = true
+    }
+    print("quoted phrase rejected: {rejected}\n")
+    // output: quoted phrase rejected: true
+
+    rejected = false
+    try {
+        var _ignored = text_match(doc, "title:fox")
+    } recover {
+        rejected = true
+    }
+    print("column filter rejected: {rejected}\n")
+    // output: column filter rejected: true
+
+    rejected = false
+    try {
+        var _ignored = text_match(doc, "quick AND fox")
+    } recover {
+        rejected = true
+    }
+    print("AND keyword rejected: {rejected}\n")
+    // output: AND keyword rejected: true
+
     // === Formatted Output With fmt ===
     // fmt uses {fmt}-library style format specifiers (not printf)
     // fmt(format_spec, value) returns a formatted string
@@ -234,6 +306,16 @@ def main {
 // is_null_or_whitespace("") = true
 // is_null_or_whitespace("  ") = true
 // is_null_or_whitespace("hi") = false
+// text_match "quick fox": true
+// text_match "quick cat": false
+// text_match "jump*": true
+// text_match "QUICK": true
+// text_match utf8: true
+// text_match empty: true
+// text_match "*": true
+// quoted phrase rejected: true
+// column filter rejected: true
+// AND keyword rejected: true
 // fmt int: 42
 // fmt padded: 00007
 // fmt hex: ff

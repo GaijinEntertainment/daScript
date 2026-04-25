@@ -1,0 +1,276 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "29-custom_types"
+// and § "29-custom_types — decided" in ../API_REWORK.md.
+//
+// Tutorial 29: mapping daslang types that don't have native SQL
+// counterparts — DateTime, GUIDs, domain enums, JSON-backed
+// structs — onto SQLite's four storage classes (INTEGER, REAL,
+// TEXT, BLOB).
+//
+// CORE DECISION (locked 2026-04-24): NAME-BASED DISPATCH, no
+// registration API. Every SQL-addressable type T has a
+// bidirectional pair of named functions:
+//
+//   def sql_bind    (v : T) : P                  // T → primitive
+//   def sql_extract (v : P; type<T>) : T         // primitive → T
+//
+// where P is one of {int64, double, string, array<uint8>} — the
+// four SQLite storage classes. The RETURN TYPE of sql_bind IS
+// the storage type; the `[sql_table]` macro reads it via
+// `typedecl` and emits the matching `sqlite3_bind_*` /
+// `sqlite3_column_*` call.
+//
+// WHY NOT runtime `register_sql_type(...)`: the `[sql_table]`
+// macro runs at compile time and needs to emit type-correct
+// bind/column code. A runtime registration can't reach it.
+// Name-based dispatch sidesteps the problem entirely — the
+// definition IS the registration, overload resolution happens
+// naturally at macro expansion. Mirrors daslang's existing
+// `_::clone` / `_::finalize` convention.
+//
+// WHY NO THIRD FUNCTION `sql_column_type(type<T>)`: the return
+// type of `sql_bind` carries the information. Single source of
+// truth, no drift between "what you bind" and "what the column
+// is declared as".
+//
+// LINQ-BACKING AUDIT — ZERO additions. Fifth consecutive zero-
+// linq-prereq tut (25/26/27/28/29). Pure dasSQLITE work — macro
+// emission extension + stdlib-type passthrough overloads. See
+// project memory `project_dassqlite_phase2.md` § tut 29.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// --- domain type with custom adapter ----------------------------------
+// DateTime has no native SQL counterpart. Convention says store
+// as INTEGER unix seconds (indexable, compact, math-friendly).
+// User provides the pair next to the type definition.
+
+struct DateTime {
+    unix_seconds : int64
+}
+
+def sql_bind (dt : DateTime) : int64 {
+    return dt.unix_seconds
+}
+
+def sql_extract (v : int64; type<DateTime>) : DateTime {
+    return DateTime(unix_seconds = v)
+}
+
+// That's it. No registration call, no annotation, no boilerplate.
+// Because the [sql_table] macro emits `_::sql_bind(...)` and
+// `_::sql_extract(..., type<DateTime>)`, overload resolution
+// finds these definitions from the caller's module.
+
+// --- same DateTime, different storage (TEXT) --------------------------
+// If ISO8601 text is preferred — for human-readable sqlite3
+// shell output, or for compatibility with a schema that already
+// stores dates as strings — the user writes a second pair whose
+// sql_bind RETURNS `string` instead of `int64`. The [sql_table]
+// macro reads the return type and emits `sqlite3_bind_text` /
+// TEXT column instead.
+//
+// NOTE: shipping both pairs in the same module creates an
+// overload set for `sql_bind(DateTime)` — one returning int64,
+// one returning string. Daslang can't pick between them without
+// a hint at the call site (return-type overloading isn't a
+// thing). The `@sql_as(type<string>)` per-field annotation
+// tells the macro "route this field through the string-returning
+// overload" — see the DEFERRED section below; for now, pick one
+// storage form per type.
+/*
+def sql_bind (dt : DateTime) : string {
+    return to_iso8601(dt.unix_seconds)
+}
+def sql_extract (v : string; type<DateTime>) : DateTime {
+    return DateTime(unix_seconds = parse_iso8601(v))
+}
+*/
+
+// --- BLOB-backed adapter ---------------------------------------------
+// Guid → 16 raw bytes. Same pattern, different primitive: the
+// return type `array<uint8>` picks BLOB storage automatically.
+
+struct Guid {
+    bytes : array<uint8>    // always 16 bytes
+}
+
+def sql_bind (g : Guid) : array<uint8> {
+    return g.bytes
+}
+
+def sql_extract (v : array<uint8>; type<Guid>) : Guid {
+    return Guid(bytes = v)
+}
+
+// --- domain enum (auto-handled) --------------------------------------
+// Enums are covered by a single GENERIC overload shipped with
+// dasSQLITE, so the user writes ZERO adapter code — the enum
+// round-trips through INTEGER automatically:
+//
+//   def sql_bind $T (e : T) : int64 where T : enum { return int64(e) }
+//   def sql_extract $T (v : int64; type<T>) : T where T : enum {
+//       return T(v)
+//   }
+//
+// Tradeoff: reordering enum values silently corrupts data
+// (value 2 means something different in the new version).
+// Text-backed enums (`@sql_enum_as_string`) would be rename-
+// safe; DEFERRED until a user asks.
+
+enum OrderStatus {
+    Pending
+    Paid
+    Shipped
+    Cancelled
+}
+
+// --- schema using all three custom types -----------------------------
+
+[sql_table(name="orders")]
+struct Order {
+    @sql_primary_key Id : int
+    ExternalId : Guid           // BLOB column — round-trips through the Guid pair
+    PlacedAt   : DateTime       // INTEGER column — round-trips through the DateTime pair
+    Status     : OrderStatus    // INTEGER column — handled by the enum generic
+    Total      : float          // REAL column — standard-type passthrough
+}
+
+// Emitted DDL:
+//   CREATE TABLE orders (
+//     Id          INTEGER PRIMARY KEY,
+//     ExternalId  BLOB    NOT NULL,
+//     PlacedAt    INTEGER NOT NULL,
+//     Status      INTEGER NOT NULL,
+//     Total       REAL    NOT NULL
+//   )
+
+// --- standard-type passthroughs (shipped in the dasSQLITE module) -----
+// The user NEVER writes these. They're shown here purely to
+// illustrate that the same mechanism is used uniformly — there
+// are no "built-in" types that get special treatment. Every
+// SQL-addressable type goes through sql_bind / sql_extract.
+//
+//   def sql_bind (x : int)    : int64   { return int64(x) }
+//   def sql_bind (x : int64)  : int64   { return x }
+//   def sql_bind (x : int8)   : int64   { return int64(x) }
+//   def sql_bind (x : int16)  : int64   { return int64(x) }
+//   def sql_bind (x : uint)   : int64   { return int64(x) }
+//   def sql_bind (x : uint64) : int64   { return int64(x) }   // unsafe at very high values; flagged
+//   def sql_bind (x : bool)   : int64   { return x ? 1l : 0l }
+//   def sql_bind (x : float)  : double  { return double(x) }
+//   def sql_bind (x : double) : double  { return x }
+//   def sql_bind (s : string) : string  { return s }
+//   def sql_bind (b : array<uint8>) : array<uint8> { return b }
+//   // Matching sql_extract siblings omitted for brevity.
+
+// --- Option<T> composes automatically --------------------------------
+// Tut 25 already handles nullability: Option<DateTime> works
+// iff DateTime has the adapter pair. The [sql_table] macro
+// unwraps Option<T> to T, looks up the adapter, and emits
+// NULL-aware bind/read code. Zero extra work here.
+
+[sql_table(name="events")]
+struct Event {
+    @sql_primary_key Id : int
+    At       : DateTime                 // NOT NULL INTEGER
+    StartsAt : Option<DateTime>         // NULL INTEGER — uses same DateTime adapter under the Option
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<Event>)
+        db |> drop_table_if_exists(type<Order>)
+        db |> create_table(type<Order>)
+        db |> create_table(type<Event>)
+
+        // All three custom types bind transparently — the macro
+        // generates `sqlite3_bind_blob(..., sql_bind(o.ExternalId))`
+        // / `sqlite3_bind_int64(..., sql_bind(o.PlacedAt))` /
+        // `sqlite3_bind_int64(..., sql_bind(o.Status))` under the hood.
+        db |> insert(Order(
+            Id = 1,
+            ExternalId = Guid(bytes = [| for (_ in range(16)); uint8(0) |]),
+            PlacedAt = DateTime(unix_seconds = 1713000000l),
+            Status = OrderStatus.Paid,
+            Total = 99.5
+        ))
+
+        // SELECT round-trips the adapters in reverse:
+        // `sql_extract(sqlite3_column_blob(...), type<Guid>)` etc.
+        let orders = db |> _sql(
+            select_from(type<Order>)._where($ => _.Status == OrderStatus.Paid)
+        )
+        to_log(LOG_INFO, "paid orders: {length(orders)}")
+
+        // Option<DateTime> reads as Option — NULL column → None.
+        db |> insert(Event(Id = 1, At = DateTime(unix_seconds = 0l), StartsAt = none()))
+        let events = db |> _sql(select_from(type<Event>))
+        for (e in events) {
+            if (e.StartsAt |> is_none()) {
+                to_log(LOG_INFO, "event {e.Id} not scheduled")
+            }
+        }
+    }
+}
+
+// --- missing-adapter error (compile-time demo) -----------------------
+// If a [sql_table] struct has a field whose type has no
+// `sql_bind` / `sql_extract` pair in scope, the macro emits a
+// literal `_::sql_bind(obj.field)` call and overload resolution
+// FAILS naturally. The compiler error points at the exact
+// emission site and names the struct / field / type.
+//
+//   struct Color { r, g, b : float }
+//   [sql_table(name="styles")]
+//   struct Style {
+//       @sql_primary_key Id : int
+//       Bg : Color            // no sql_bind(Color) — compile error
+//   }
+//
+// Error shape (illustrative):
+//   cannot find matching function _::sql_bind(Color)
+//   note: required by [sql_table] macro expansion for
+//         field `Bg : Color` of struct `Style`
+//   hint: define `def sql_bind (v : Color) : string | int64 | double | array<uint8>`
+//         and a matching sql_extract(..., type<Color>) : Color
+//
+// No runtime "type not registered" error — this is all
+// compile-time. That's the whole point of the name-based design.
+
+// --- DEFERRED to follow-up session or user request -------------------
+//
+// @sql_as(type<P>) per-field override. Picks a specific
+// primitive-returning overload for ONE column when multiple
+// adapter shapes exist for the same type.
+//
+//     struct Meeting {
+//         @sql_primary_key Id : int
+//         At      : DateTime                // default adapter (INTEGER)
+//         @sql_as(type<string>)             // FUTURE — use string-returning overload
+//         HumanAt : DateTime                // would emit TEXT column with ISO8601
+//     }
+//
+// Ships when a user files an issue. Core case — one adapter
+// per type — covers the 95% path and doesn't need @sql_as.
+//
+// OTHER DEFERRED:
+//   - @sql_enum_as_string (rename-safe text storage for enums).
+//     Ship int-backed default; add on ask.
+//   - Fully-generic user-defined adapters (`$T` templated on
+//     traits other than `enum`). Enum is the one concession;
+//     further genericity deferred until concrete need surfaces.
+//   - Adapter validators (`def sql_validate(v : T) : bool` for
+//     CHECK constraints). Column-level CHECK stays in tut 28's
+//     string form for now.
+//   - Generic container adapters (Option<T> for arbitrary T,
+//     array<T> → JSON, tuple<…> → JSON). Fall out of the
+//     [sql_table] walker's recursion — not a tut-29 deliverable.
+//   - JSON columns specifically — tut 37 territory. Rides on
+//     top of the string-primitive adapter, plus a
+//     CHECK(json_valid(col)) constraint.

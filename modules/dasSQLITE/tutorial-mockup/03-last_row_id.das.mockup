@@ -1,0 +1,41 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_REWORK.md.
+// Mirrors tutorial/03-last_row_id.das — auto-increment PK, read last rowid.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+// Id is declared as @sql_primary_key on an int column, and [sql_table]
+// maps that to SQLite's `INTEGER PRIMARY KEY` (ROWID alias → auto-
+// increment on omitted-Id inserts). Constructing `Friend(Name="Tom")`
+// without an Id is legal: the macro emits `INSERT INTO Friends(Name)
+// VALUES(?)`, SQLite assigns the rowid.
+[sql_table(name="Friends")]
+struct Friend {
+    @sql_primary_key Id : int
+    Name : string
+}
+
+[export]
+def main() {
+    with_sqlite(":memory:") <| $(db) {
+        db |> create_table(type<Friend>)
+        // `insert(array<T>)` returns the last-inserted rowid (int64). For
+        // the single-row form `insert(T)`, the return is the newly-
+        // assigned rowid for that row. `db |> last_insert_rowid()` is
+        // also available as a standalone accessor.
+        // Panics on any failure. Non-panic variant:
+        //   db |> try_insert(rows) : Result<int64, string>
+        // (rolls back the transaction on first error) — see
+        // _error_handling.das.
+        let last_id = db |> insert([
+            Friend(Name="Tom"),
+            Friend(Name="Rebecca"),
+            Friend(Name="Jim"),
+            Friend(Name="Roger"),
+            Friend(Name="Robert")
+        ])
+        to_log(LOG_INFO, "The last Id of the inserted row is {last_id}\n")
+    }
+}

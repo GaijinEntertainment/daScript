@@ -30,7 +30,22 @@ namespace das {
     }
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
-        auto at = name.find("::");
+        // Find the first '::' that is NOT inside angle brackets — template-instance
+        // struct names like "Option<_wip_mod::Thing>" embed '::' inside '<...>',
+        // and we must not split there.
+        size_t at = string::npos;
+        int depth = 0;
+        for ( size_t i = 0; i + 1 < name.size(); ++i ) {
+            char c = name[i];
+            if ( c=='<' ) {
+                depth++;
+            } else if ( c=='>' ) {
+                if ( depth>0 ) depth--;
+            } else if ( depth==0 && c==':' && name[i+1]==':' ) {
+                at = i;
+                break;
+            }
+        }
         if ( at!=string::npos ) {
             moduleName = name.substr(0,at);
             funcName = name.substr(at+2);

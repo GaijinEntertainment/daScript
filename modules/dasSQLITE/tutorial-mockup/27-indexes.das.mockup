@@ -1,0 +1,154 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "27-indexes"
+// and § "27-indexes — decided" in ../API_REWORK.md.
+//
+// Tutorial 27: indexes — CREATE INDEX, when and why.
+//
+// SHAPE: stackable struct-level annotation `[sql_index(fields=...,
+// unique=..., name=...)]`. The `[sql_table]` macro reads every
+// `[sql_index]` attached to the struct and emits one
+// `CREATE [UNIQUE] INDEX` statement per annotation, immediately
+// after the CREATE TABLE statement, inside the same transaction.
+//
+// LINQ-BACKING AUDIT — ZERO additions. No new `daslib/linq` fn,
+// no new `daslib/linq_boost` macro. Purely internal work in the
+// `[sql_table]` structure macro's DDL emitter. Third consecutive
+// zero-linq-prereq tut (25, 26, 27). See project memory
+// `project_dassqlite_phase2.md` § tut 27.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+// --- annotation syntax (locked) ---------------------------------------
+//
+//   [sql_index(fields="ColName",
+//              unique=true | false,         // default false
+//              name="explicit_name")]       // default auto-generated
+//
+//   [sql_index(fields=["ColA", "ColB"], ...)]   // composite
+//
+// Stackable — multiple `[sql_index]` on one struct each produce
+// a separate CREATE INDEX statement.
+//
+// AUTO-NAMING: when `name=` is omitted, the macro generates
+// `idx_<table>_<col1>[_<col2>…]`. Matches SQLite convention
+// and keeps DDL deterministic for schema-diffing.
+//
+// FIELD VALIDATION: every string in `fields` must match a real
+// field in the struct. `fields=["NonExistent"]` → `macro_error`
+// at `[sql_table]` expansion with a list of valid field names.
+// Falls out of the field-introspection the macro already does
+// for column emission.
+
+// --- example 1: a composite B-tree + a unique + a single column ------
+// Users table — login by email (unique), list-by-city then sorted by
+// last-seen (composite), plus a lookup index on last-seen alone for
+// "who's been online in the last N minutes" queries.
+
+[sql_table(name="Users")]
+[sql_index(fields="Email", unique=true)]
+[sql_index(fields=["City", "LastSeen"])]
+[sql_index(fields="LastSeen")]
+struct User {
+    @sql_primary_key Id : int
+    Email    : string
+    Name     : string
+    City     : string
+    LastSeen : int64       // unix seconds
+}
+// DDL emitted by `create_table(type<User>)`:
+//   CREATE TABLE Users (
+//     Id INTEGER PRIMARY KEY,
+//     Email TEXT NOT NULL,
+//     Name TEXT NOT NULL,
+//     City TEXT NOT NULL,
+//     LastSeen INTEGER NOT NULL
+//   );
+//   CREATE UNIQUE INDEX idx_Users_Email ON Users(Email);
+//   CREATE INDEX idx_Users_City_LastSeen ON Users(City, LastSeen);
+//   CREATE INDEX idx_Users_LastSeen ON Users(LastSeen);
+//
+// All four statements run inside a single transaction — either all
+// succeed or the table creation rolls back.
+
+// --- example 2: explicit index name for migration compatibility ------
+// An app switching from an existing schema wants the generated
+// index to match the old hand-written name so migrations and
+// monitoring dashboards don't break.
+//
+// [sql_table(name="Sessions")]
+// [sql_index(fields=["UserId", "ExpiresAt"], name="ix_sess_user_exp")]
+// struct Session {
+//     @sql_primary_key Id : int
+//     UserId    : int
+//     Token     : string
+//     ExpiresAt : int64
+// }
+//
+// DDL:  CREATE INDEX ix_sess_user_exp ON Sessions(UserId, ExpiresAt);
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)      // emits CREATE TABLE + 3 CREATE INDEX
+
+        // --- query-side: indexes are transparent ---------------------
+        // User writes the same LINQ chain regardless of what's indexed.
+        // SQLite's planner picks the index automatically. Indexes are
+        // purely a performance concern; they never change query shape
+        // or semantics.
+        //
+        // SQL:  SELECT * FROM Users WHERE Email = ?      (uses idx_Users_Email)
+        let alice <- _sql(db |> select_from(type<User>)
+            ._where(_.Email == "alice@example.com")
+            ._first())
+
+        // SQL:  SELECT * FROM Users WHERE City = ? ORDER BY LastSeen DESC
+        //       (uses idx_Users_City_LastSeen for both filter and sort)
+        let sf_recent <- _sql(db |> select_from(type<User>)
+            ._where(_.City == "SF")
+            ._order_by_descending(_.LastSeen))
+
+        for (u in sf_recent) {
+            to_log(LOG_INFO, "{u.Name}\n")
+        }
+
+        // --- unique constraint surfaces as try_insert error ----------
+        // Attempting to insert a second row with an email that's
+        // already in the table fails the UNIQUE constraint. The
+        // `try_insert` variant captures it as `Result<int, string>`.
+        db |> insert(User(Id=1, Email="alice@example.com", Name="alice",
+                          City="SF", LastSeen=0l))
+        let dup = User(Id=2, Email="alice@example.com", Name="also alice",
+                       City="NY", LastSeen=0l)
+        let res = db |> try_insert(dup)
+        if (res |> is_err()) {
+            to_log(LOG_ERROR, "duplicate email rejected: {res |> unwrap_err()}\n")
+            // Expected: "UNIQUE constraint failed: Users.Email"
+        }
+    }
+}
+
+// FUTURE / DEFERRED — explicitly out of scope for this tut.
+//
+// (1) PARTIAL INDEXES.  SQLite supports
+//     `CREATE INDEX … WHERE <predicate>` — narrows the index to
+//     rows matching the predicate (e.g. only active users).
+//     Rare; SQLite-specific; EF doesn't expose it portably.
+//     Skip. Users needing it run `db |> exec("CREATE INDEX …
+//     WHERE …")` directly.
+//
+// (2) EXPRESSION INDEXES.  `CREATE INDEX … ON Users(lower(Email))`
+//     for case-insensitive lookup. Would require an expression
+//     parser inside the annotation — annotations only take literal
+//     values today. Skip; same raw-SQL escape hatch.
+//
+// (3) COVERING / INCLUDE COLUMNS.  PostgreSQL has
+//     `INCLUDE (col, col)` for non-key columns in the index leaf.
+//     SQLite doesn't. Out of scope.
+//
+// (4) DROP INDEX at schema-evolution time. `[sql_index]` is
+//     declarative and create-only. Schema migrations (tut 30) are
+//     where DROP / RENAME live.

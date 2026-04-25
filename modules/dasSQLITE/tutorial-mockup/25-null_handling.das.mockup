@@ -1,0 +1,239 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "25-null_handling"
+// and § "SQL read-side prerequisites (daslib/linq rework)" in ../API_REWORK.md.
+//
+// Tutorial 25: NULL handling — Option<T>, IS NULL, COALESCE, three-
+// valued logic.
+//
+// CORE DECISION (locked 2026-04-24): nullability is type-driven.
+//   - `T` field      → `NOT NULL` column
+//   - `Option<T>` field → nullable column
+// No `@sql_nullable` annotation ships. The field's daslang type is
+// the single source of truth; duplicating the signal in an
+// annotation would risk the two drifting out of sync.
+//
+// STRUCTURAL INVARIANT: `[sql_table]` is a READ-ONLY structure
+// macro — it introspects field types at compile time to emit DDL,
+// bind code, and reader code, but does NOT rewrite the struct.
+// A `User` struct with `Age : Option<int>` is a plain daslang
+// struct usable wherever you'd use any other struct; the SQL
+// mapping lives in the macro-generated helpers around it.
+//
+// LINQ-BACKING AUDIT — ZERO additions. Option<T> is a regular
+// container from PR #2471 (Phase 0.1 prereq); its API (is_some,
+// is_none, unwrap_or, map) is unchanged. The `_sql` emitter adds
+// recognition rules for these methods in predicate/projection
+// contexts, but that's 100% dasSQLITE-macro-internal — no
+// `daslib/linq` fn additions, no `daslib/linq_boost` macro
+// additions. First locked tut past bucket B with zero linq
+// prereqs. See project memory `project_dassqlite_phase2.md`
+// § tut 25.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// Schema demonstrating type-driven nullability. Mix of required and
+// optional fields. A user has an ID and Name (required), plus Age,
+// Nick, and DeletedAt that may be absent / NULL.
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int    // INTEGER PRIMARY KEY (implicitly NOT NULL)
+    Name      : string           // TEXT NOT NULL
+    Age       : Option<int>      // INTEGER
+    Nick      : Option<string>   // TEXT
+    DeletedAt : Option<int64>    // INTEGER (unix seconds) — soft-delete flag
+}
+// DDL emitted by `create_table(type<User>)`:
+//   CREATE TABLE Users (
+//     Id INTEGER PRIMARY KEY,
+//     Name TEXT NOT NULL,
+//     Age INTEGER,
+//     Nick TEXT,
+//     DeletedAt INTEGER
+//   )
+//
+// EDGE CASE — `Option<int>` on a primary key is `macro_error`:
+//   struct Bad { @sql_primary_key Id : Option<int> ... }
+//   → error: primary key column cannot be Option<T> — primary keys
+//     cannot be NULL in SQL. Use `int` (non-optional).
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+
+        // --- (a) INSERT — Option field binding -----------------------
+        // On write, `Option<T>` fields check `is_some()` and bind the
+        // underlying value; `is_none()` binds SQL NULL. The `insert`
+        // helper's generated code walks the struct fields and emits
+        // the right bind per field type at compile time.
+        //
+        // SQL:  INSERT INTO Users (Id, Name, Age, Nick, DeletedAt)
+        //       VALUES (?, ?, ?, ?, ?)
+        //       -- params: 1, "alice", 30, NULL, NULL
+        db |> insert(User(
+            Id        = 1,
+            Name      = "alice",
+            Age       = some(30),
+            Nick      = none(),
+            DeletedAt = none()
+        ))
+        db |> insert(User(
+            Id        = 2,
+            Name      = "bob",
+            Age       = none(),            // unknown age → NULL in DB
+            Nick      = some("bobby"),
+            DeletedAt = none()
+        ))
+
+        // --- (b) SELECT — reading nullable columns -------------------
+        // The generated reader for `Option<T>` fields checks
+        // `sqlite3_column_type(stmt, N) == SQLITE_NULL` and wraps
+        // accordingly. Non-optional fields panic at the bind-layer if
+        // the column yields NULL (row shape violation — nullable-in-
+        // DB but `T` in struct is unsound; the type system forbids it).
+        //
+        // SQL:  SELECT * FROM Users
+        for (u in db |> select_from(type<User>)) {
+            // u.Age / u.Nick / u.DeletedAt are `Option<T>` here —
+            // user must unwrap or pattern-match
+            if (u.Age |> is_some()) {
+                to_log(LOG_INFO, "{u.Name}: age {u.Age |> unwrap()}\n")
+            } else {
+                to_log(LOG_INFO, "{u.Name}: age unknown\n")
+            }
+        }
+
+        // --- (c) IS NULL / IS NOT NULL in _where ---------------------
+        // Option methods in `_where` predicates translate to SQL
+        // null-check operators. The `_sql` macro's AST walker
+        // recognizes `is_some` / `is_none` as pipe-call shapes and
+        // emits the right operator. Positive/negative are both
+        // explicit names (convention from tut 24) — no `!_.Col |>
+        // is_some()` detection.
+        //
+        // SQL:  SELECT * FROM Users WHERE Age IS NOT NULL
+        let known_age <- _sql(db |> select_from(type<User>)
+            ._where(_.Age |> is_some()))
+        for (u in known_age) {
+            to_log(LOG_INFO, "known age: {u.Name}\n")
+        }
+
+        // SQL:  SELECT * FROM Users WHERE DeletedAt IS NULL
+        let alive <- _sql(db |> select_from(type<User>)
+            ._where(_.DeletedAt |> is_none()))
+        for (u in alive) {
+            to_log(LOG_INFO, "alive: {u.Name}\n")
+        }
+
+        // --- (d) COALESCE via unwrap_or ------------------------------
+        // `_.Col |> unwrap_or(default)` translates to `COALESCE(Col,
+        // default)` (or `IFNULL(Col, default)` on SQLite — same thing
+        // with 2 args, aliased in the dialect table). The default
+        // value becomes a bind parameter if it's a captured local,
+        // or an inline literal if it's a constant.
+        //
+        // SQL:  SELECT * FROM Users
+        //       WHERE COALESCE(Age, 0) >= ?   -- 18 bound
+        let min_age = 18
+        let adults_or_unknown <- _sql(db |> select_from(type<User>)
+            ._where(_.Age |> unwrap_or(0) >= min_age))
+        for (u in adults_or_unknown) {
+            to_log(LOG_INFO, "adult: {u.Name}\n")
+        }
+
+        // --- (e) Option<T> carrying through projections --------------
+        // A projection that includes an `Option<T>` column keeps the
+        // `Option` wrapper in the result tuple field. No implicit
+        // unwrapping — user sees the same nullability discipline at
+        // projection sites as at row sites.
+        //
+        // SQL:  SELECT Name, Age FROM Users
+        //       -- returned as: array<tuple<Name:string; Age:Option<int>>>
+        let name_age <- _sql(db |> select_from(type<User>)
+            ._select((Name=_.Name, Age=_.Age)))
+        for (r in name_age) {
+            if (r.Age |> is_some()) {
+                to_log(LOG_INFO, "{r.Name}: {r.Age |> unwrap()}\n")
+            } else {
+                to_log(LOG_INFO, "{r.Name}: ?\n")
+            }
+        }
+
+        // --- (f) projection with COALESCE folded in -----------------
+        // If the user wants a non-nullable column in the result
+        // tuple, they unwrap at the projection step. Compiles both
+        // in-memory and under `_sql`.
+        //
+        // SQL:  SELECT Name, COALESCE(Age, 0) AS Age FROM Users
+        //       -- returned as: array<tuple<Name:string; Age:int>>
+        let name_age_or_zero <- _sql(db |> select_from(type<User>)
+            ._select((Name=_.Name, Age=_.Age |> unwrap_or(0))))
+        for (r in name_age_or_zero) {
+            to_log(LOG_INFO, "{r.Name}: {r.Age}\n")
+        }
+
+        // --- (g) UPDATE — writing a column to NULL -------------------
+        // Same bind rule on the write side. `none()` assigned to an
+        // `Option<T>` field binds SQL NULL. Useful for soft-clearing a
+        // field (e.g. un-deleting a user by resetting DeletedAt).
+        //
+        // SQL:  UPDATE Users SET DeletedAt = ? WHERE Id = ?
+        //       -- params: NULL, 1
+        db |> _update(type<User>,
+            where_expr = _.Id == 1,
+            set_expr   = (DeletedAt = none()))
+
+        // --- (h) three-valued-logic gotcha warning -------------------
+        // SQL's three-valued logic: `NULL = NULL` is NULL, NEVER TRUE.
+        // `NULL <> x` is also NULL. In WHERE, NULL-valued predicates
+        // are treated as false — so `WHERE Age = NULL` matches
+        // nothing. Users must use `Age IS NULL` instead (which is
+        // what `_.Age |> is_none()` emits).
+        //
+        // The API guides users toward the correct form: they CAN'T
+        // write `_.Age == none()` because that's an Option<int> ==
+        // Option<int> comparison, which compiles and works in-memory
+        // but under `_sql` translates to `Age = NULL` — semantically
+        // wrong. Either:
+        //   (a) ship an `_sql`-only diagnostic: compile-time
+        //       macro_error when `== none()` appears in a predicate,
+        //       with a fixit pointing at `|> is_none()`.
+        //   (b) translate `_.Col == none()` to `Col IS NULL` at the
+        //       macro level (user-friendly auto-fix).
+        // LEANING (a) — explicit is better than magic; see locked
+        // discussion in API_REWORK.md § 25.
+
+        // --- (i) try_ variant ---------------------------------------
+        let attempt <- _try_sql(db |> select_from(type<User>)
+            ._where(_.Age |> is_some()))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "nullable query failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let rows <- attempt |> unwrap()
+            to_log(LOG_INFO, "{rows |> length} users with known age\n")
+        }
+    }
+}
+
+// FUTURE / DEFERRED — `Option<T> == T` comparison operator.
+//
+// Currently `_.NullableCol == 5` doesn't compile (Option<int> ==
+// int has no overload). If PR #2471 ships `Option<T> == T` as an
+// overload (returning `Option<bool>` or three-valued), then under
+// `_sql` we could translate `_.Age == 5` directly to `Age = 5`,
+// letting SQLite's three-valued logic apply (NULL Age → NULL
+// predicate → falsy in WHERE).
+//
+// That's a PR #2471 scope question — not a dasSQLITE linq prereq.
+// Until / unless it lands, users write the explicit form:
+//   _.Age |> unwrap_or(sentinel) == 5     -- COALESCE-compare, defined
+//   _.Age |> is_some() && _.Age |> unwrap() == 5   -- strict, verbose
+//
+// The explicit form is also the safer default — forces the user
+// to think about "what if this is NULL?" instead of accidentally
+// getting NULL-propagation semantics they didn't read up on.

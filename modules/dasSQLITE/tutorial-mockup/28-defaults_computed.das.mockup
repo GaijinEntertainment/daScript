@@ -1,0 +1,234 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "28-defaults_computed"
+// and § "28-defaults_computed — decided" in ../API_REWORK.md.
+//
+// Tutorial 28: column defaults + generated (computed) columns.
+//
+// TWO ANNOTATIONS, symmetric shape:
+//
+//   @sql_default(value=<literal>)             — literal default value
+//   @sql_default(sql_fn="CURRENT_TIMESTAMP")  — whitelisted SQL built-in
+//   @sql_computed(sql="<expr>", stored=false) — generated column
+//
+// LINQ-BACKING AUDIT — ZERO additions. Fourth consecutive zero-linq-
+// prereq tut (25/26/27/28). Pure `[sql_table]` DDL emitter + bind-
+// code generator work. See project memory
+// `project_dassqlite_phase2.md` § tut 28.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// --- schema: both annotations in action -------------------------------
+// Orders has a computed Total (Price * Qty), an Active flag that
+// defaults to true, and a CreatedAt that defaults to SQLite's
+// CURRENT_TIMESTAMP built-in.
+
+[sql_table(name="Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    UserId : int
+    Price : float
+    Qty : int
+
+    @sql_computed(sql="Price * Qty")
+    Total : float                         // derived — read-only
+
+    @sql_default(value=true)
+    Active : bool
+
+    @sql_default(sql_fn="CURRENT_TIMESTAMP")
+    CreatedAt : string                    // ISO timestamp from SQLite
+}
+// DDL emitted by `create_table(type<Order>)`:
+//   CREATE TABLE Orders (
+//     Id INTEGER PRIMARY KEY,
+//     UserId INTEGER NOT NULL,
+//     Price REAL NOT NULL,
+//     Qty INTEGER NOT NULL,
+//     Total REAL GENERATED ALWAYS AS (Price * Qty) VIRTUAL,
+//     Active INTEGER NOT NULL DEFAULT 1,
+//     CreatedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+//   )
+//
+// VALIDATION — the expression in `@sql_computed(sql=...)` is passed
+// through to SQLite verbatim. SQLite parses and validates at
+// CREATE TABLE time: column references must exist, function names
+// must be real, types must compose under the operator. Typos
+// surface as `create_table` panics with the SQLite error message
+// (e.g. "no such column: Qnty"). Use `try_create_table` for
+// Result<void, string> handling during schema bring-up.
+//
+// This is intentional — see FUTURE § (1) for the principled
+// compile-time-validated alternative, which is out of v1 scope.
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<Order>)
+        db |> create_table(type<Order>)
+
+        // --- (a) macro-generated INSERT binds all fields -------------
+        // Our generated INSERT walks every NON-COMPUTED field and
+        // binds it. Defaults DO NOT fire from this path — we always
+        // write whatever the struct field holds, zero or not.
+        //
+        // SQL:  INSERT INTO Orders (Id, UserId, Price, Qty, Active, CreatedAt)
+        //       VALUES (?, ?, ?, ?, ?, ?)
+        //       -- Total excluded automatically (computed column)
+        //       -- params: 1, 100, 9.99, 3, true, ""
+        db |> insert(Order(
+            Id=1, UserId=100, Price=9.99f, Qty=3,
+            Active=true,         // explicit — default never considered
+            CreatedAt=""         // empty string — default never considered
+        ))
+        // Row 1 has CreatedAt="" in the DB — NOT the SQLite timestamp.
+
+        // --- (b) raw SQL INSERT omitting columns triggers defaults ---
+        // The DEFAULT clause fires when a column is absent from the
+        // INSERT's column list — which only happens via raw SQL
+        // today.
+        //
+        // SQL:  INSERT INTO Orders (Id, UserId, Price, Qty) VALUES (2, 100, 4.50, 2)
+        db |> exec("INSERT INTO Orders (Id, UserId, Price, Qty) VALUES (2, 100, 4.50, 2)")
+        // Row 2: Active=true (from DEFAULT 1), CreatedAt=<current ts>.
+
+        // --- (c) SELECT reads computed columns like any other --------
+        // `Total` was not written on INSERT (SQLite rejects writes to
+        // generated columns), but SQLite computes it on read. For a
+        // VIRTUAL column (the default), computation happens per query;
+        // for STORED, it was materialized on write.
+        //
+        // SQL:  SELECT * FROM Orders
+        for (o in db |> select_from(type<Order>)) {
+            to_log(LOG_INFO, "order {o.Id}: {o.Price} x {o.Qty} = {o.Total}\n")
+        }
+        // Expected:
+        //   order 1: 9.99 x 3 = 29.97
+        //   order 2: 4.50 x 2 = 9.00
+
+        // --- (d) UPDATE of a computed column → macro_error -----------
+        // Attempting to assign to a computed column at compile time:
+        //
+        //   db |> _update(type<Order>,
+        //       where_expr = _.Id == 1,
+        //       set_expr   = (Total = 100.0f))
+        //   → macro_error: `Total` is a computed column; SQLite
+        //     rejects writes to it. Update the source columns
+        //     (`Price`, `Qty`) and the computed value follows.
+        //
+        // (Writing Total via a struct-value-based update silently
+        // excludes it — symmetric with the INSERT path — so there's
+        // no runtime footgun.)
+
+        // --- (e) STORED vs VIRTUAL -----------------------------------
+        // Default is VIRTUAL (matches SQLite's default; recomputed on
+        // read, no disk cost). Use `stored=true` when the expression
+        // is expensive and reads dominate writes:
+        //
+        //   @sql_computed(sql="expensive_fn(x, y)", stored=true)
+        //   Derived : float
+        //
+        // STORED columns are materialized on INSERT/UPDATE, persisted
+        // on disk, read directly. Cheaper reads, more disk, and the
+        // expression is frozen at schema-time (changing it requires
+        // drop + recreate — neither VIRTUAL nor STORED can have their
+        // expression altered in place).
+    }
+}
+
+// --- on_delete="set_default" interaction (tut 26 check) --------------
+// Tut 26's `@sql_references(type="X", on_delete="set_default")` is
+// gated on this tut's `@sql_default`: the FK column must have a
+// default, otherwise SET DEFAULT has nothing to set. `[sql_table]`
+// rejects the combination at expansion:
+//
+//   struct Comment {
+//       @sql_primary_key Id : int
+//       @sql_references(type="User", on_delete="set_default")
+//       AuthorId : int             // no @sql_default
+//       Body : string
+//   }
+//   → macro_error: `on_delete="set_default"` requires `@sql_default`
+//     on column `AuthorId`. Either add a default value or pick a
+//     different on_delete action.
+//
+// Correct form:
+//
+//   struct Comment {
+//       @sql_primary_key Id : int
+//       @sql_default(value=0) @sql_references(type="User", on_delete="set_default")
+//       AuthorId : int
+//       Body : string
+//   }
+//
+// The FK is preserved pointing at a sentinel user (Id=0, typically a
+// "deleted user" placeholder row). Same check pattern as tut 25's
+// `Option<T>` + `@sql_primary_key` rejection and `on_delete="set_null"`
+// + plain-`T` rejection.
+
+// FUTURE / DEFERRED — scope boundary is explicit here.
+//
+// (1) @@FUNCTION-REFERENCE FORM FOR EXPRESSIONS.  Current string
+//     form punts validation to SQLite at create_table time. The
+//     principled long-term shape uses a regular daslang function:
+//
+//       def compute_total(r : Order) : float {
+//           return r.Price * float(r.Qty)
+//       }
+//
+//       [sql_table(name="Orders")]
+//       struct Order {
+//           ...
+//           @sql_computed(func=@@compute_total)
+//           Total : float
+//           ...
+//       }
+//
+//     Three wins over the string form:
+//       * Daslang compile-time validation — `r.Price` must be a
+//         real struct field, types must compose, return type must
+//         match the column.
+//       * The function is ALSO callable in-memory. Users can
+//         invoke `compute_total(row)` directly for local compute,
+//         bulk-insert pre-calculation, unit tests, debugging. One
+//         spelling, two consumers.
+//       * The `_sql` expression translator (built for read-side
+//         tuts 19/23/24) walks the function body and emits SQL.
+//         Same infrastructure handles `@sql_default(func=@@...)`,
+//         `@sql_index(on=@@...)` for expression indexes (tut 27
+//         deferral), and any future expression-taking annotation.
+//
+//     NOT v1. Annotation-parser extension to accept `@@func` +
+//     `_sql` applied to function bodies is real work. Revisit
+//     when a user files an issue or asks in person — string form
+//     is a fine MVP and the SQLite runtime error message is
+//     actionable.
+//
+// (2) DEFAULT-FIRING FROM THE MACRO INSERT PATH.  Today macro-
+//     generated INSERT binds every non-computed field; defaults
+//     never fire through it. Two fixes considered, both rejected:
+//       (a) Detect zero value and skip the column. Fragile —
+//           "zero" is type-dependent and users often want to
+//           write zero explicitly.
+//       (b) `insert_with_defaults(row, fields=["Id","Qty"])`
+//           variant taking an explicit field list. Verbose.
+//     Not shipping either. Raw SQL is the escape for users who
+//     want the default to fire.
+//
+// (3) `@sql_default(value=...)` only accepts daslang LITERALS —
+//     not expressions. `value=1+2` won't work (annotation parser
+//     takes values, not expressions). The whitelist of SQL
+//     built-ins (`sql_fn="CURRENT_TIMESTAMP"` etc.) covers the
+//     handful of useful non-literal defaults.
+//
+// (4) SQLITE 3.31+ REQUIRED for generated columns (2019-10-10).
+//     Older SQLite rejects `GENERATED ALWAYS AS` at CREATE TABLE.
+//     We're not back-porting via triggers — document as a
+//     minimum-version requirement.
+//
+// (5) `VIRTUAL` vs `STORED` changes need drop+recreate. Neither
+//     form supports ALTER TABLE on the expression. Schema
+//     migration (tut 30) territory when it surfaces.

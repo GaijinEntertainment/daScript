@@ -168,6 +168,21 @@ class private LinqAny : AstCallMacro_LinqPred2 {
     override predName = "any"
 }
 
+[call_macro(name="_none")]
+class private LinqNone : AstCallMacro_LinqPred2 {
+    //! implements _none(iterator, expression) shorthand notation
+    //! that expands into none(iterator, $(_) => expression)
+    //! for example::
+    //!
+    //!   each(foo)._none(_ < 0)
+    //!
+    //! Explicit name (rather than ``!_any(...)``) because downstream
+    //! AST walkers — notably the ``_sql`` translator that emits
+    //! ``NOT EXISTS (…)`` — cannot reliably pattern-match ``!expr``
+    //! across intermediate transforms.
+    override predName = "none"
+}
+
 [call_macro(name="_count")]
 class private LinqCount : AstCallMacro_LinqPred2 {
     //! implements _count(iterator, expression) shorthand notation
@@ -343,6 +358,292 @@ class private LinqUnionBy : AstCallMacro_LinqPredII2 {
     override predName = "union_by"
 }
 
+class private AstCallMacro_LinqContainsFlip : AstCallMacro {
+    //! Base call macro for ``_in`` / ``_not_in``.
+    //!
+    //! Rewrites ``x._in(subquery)`` into ``contains(subquery, x)`` —
+    //! i.e. flips arg order so the surface syntax reads "x is in collection"
+    //! while the backing function keeps its iterable-first signature.
+    //! ``_not_in`` additionally negates the result.
+    //!
+    //! Both forms are in-memory-useful on any ``array<T>`` / ``iterator<T>``;
+    //! under the ``_sql`` translator they emit ``x IN (…)`` and
+    //! ``x NOT IN (…)``. Separate positive / negative names (not
+    //! ``!x._in(...)``) because the ``_sql`` AST walker cannot reliably
+    //! pattern-match ``!expr`` across intermediate transforms.
+    opName = "_in"
+    negated = false
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 2, prog, call.at, "expecting {opName}(element, subquery)")
+        assume subquery = call.arguments[1]
+        assume subqueryType = subquery._type
+        macro_verify(subqueryType != null, prog, call.at, "subquery argument is not inferred yet")
+        macro_verify(subqueryType.isIterator || subqueryType.isGoodArrayType, prog, call.at, "expecting iterator or array as the subquery argument")
+        macro_verify(!subqueryType.firstType.isAutoOrAlias, prog, call.at, "subquery element type cannot be auto or alias")
+        var res : Expression?
+        if (negated) {
+            res = qmacro(!contains($e(subquery), $e(call.arguments[0])))
+        } else {
+            res = qmacro(contains($e(subquery), $e(call.arguments[0])))
+        }
+        res.force_at(call.at)
+        return res
+    }
+}
+
+[call_macro(name="_in")]
+class private LinqIn : AstCallMacro_LinqContainsFlip {
+    //! implements _in(element, subquery) shorthand notation
+    //! that expands into contains(subquery, element)
+    //! for example::
+    //!
+    //!   x._in([iterator for(y in 0..5); y])   // true if x is one of 0..4
+    override opName = "_in"
+    override negated = false
+}
+
+[call_macro(name="_not_in")]
+class private LinqNotIn : AstCallMacro_LinqContainsFlip {
+    //! implements _not_in(element, subquery) shorthand notation
+    //! that expands into !contains(subquery, element)
+    //! for example::
+    //!
+    //!   x._not_in([iterator for(y in 0..5); y])
+    //!
+    //! Separate name (not ``!x._in(...)``) so the ``_sql`` translator
+    //! can emit ``NOT IN`` without pattern-matching ``!expr``.
+    override opName = "_not_in"
+    override negated = true
+}
+
+struct private EquiJoinParts {
+    //! Result of parsing an equi-join ``on`` lambda body.
+    ok : bool
+    keya_body : Expression?
+    keyb_body : Expression?
+    larg_name : string
+    rarg_name : string
+}
+
+def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at : LineInfo) : EquiJoinParts {
+    //! Validate the ``on`` predicate of ``_join`` / ``_left_join`` and
+    //! extract the two key-selector bodies.
+    //!
+    //! Accepts only the canonical equi-join shape
+    //! ``$(l : TA, r : TB) => l.X == r.Y`` — a 2-arg lambda whose body
+    //! is a single ``==`` comparison. Anything else (theta joins,
+    //! ``AND``-chained multi-key equality, function calls on either
+    //! side) emits a ``macro_error`` pointing at raw SQL as the
+    //! escape hatch. The spec lives in
+    //! modules/dasSQLITE/API_REWORK.md "### 23-joins".
+    var parts : EquiJoinParts
+    if (on_pred == null || !(on_pred is ExprMakeBlock)) {
+        macro_error(prog, at, "equi-join `on` predicate must be a 2-arg lambda `(l, r) => l.X == r.Y`")
+        return parts
+    }
+    var mkblk = on_pred as ExprMakeBlock
+    if (mkblk._block == null || !(mkblk._block is ExprBlock)) {
+        macro_error(prog, on_pred.at, "equi-join `on` predicate must be a 2-arg lambda `(l, r) => l.X == r.Y`")
+        return parts
+    }
+    var blk = mkblk._block as ExprBlock
+    if (blk.arguments |> length != 2 || blk.list |> length != 1 || !(blk.list[0] is ExprReturn)) {
+        macro_error(prog, on_pred.at, "equi-join `on` predicate must be a 2-arg lambda with a single `return l.X == r.Y`")
+        return parts
+    }
+    var ret = blk.list[0] as ExprReturn
+    if (ret.subexpr == null || !(ret.subexpr is ExprOp2)) {
+        macro_error(prog, on_pred.at, "equi-join `on` predicate body must be a single `==` comparison `l.X == r.Y`")
+        return parts
+    }
+    var op2 = ret.subexpr as ExprOp2
+    if (op2.op != "==") {
+        macro_error(prog, on_pred.at, "equi-join `on` predicate must use `==` — theta joins and `&&`-chained multi-key equality are not supported; use raw SQL instead")
+        return parts
+    }
+    parts.ok = true
+    parts.keya_body = op2.left
+    parts.keyb_body = op2.right
+    parts.larg_name = string(blk.arguments[0].name)
+    parts.rarg_name = string(blk.arguments[1].name)
+    return parts
+}
+
+def private rename_var_in_expr(var src : Expression?; from_name, to_name : string) : Expression? {
+    //! Clone ``src`` and rename every ``ExprVar`` named ``from_name``
+    //! to ``to_name``. Same approach as fold_linq_cond.
+    var res = clone_expression(src)
+    var inscope rules : Template
+    rules |> renameVariable(from_name, to_name)
+    apply_template(rules, res.at, res)
+    return res
+}
+
+class private AstCallMacro_LinqJoinBase : AstCallMacro {
+    //! Base call macro for ``_join`` and ``_left_join`` equi-join sugar.
+    //!
+    //! Rewrites ``_join(srca, srcb, (l,r) => l.X == r.Y, into)`` into
+    //! ``join(srca, srcb, $(l:TA) => l.X, $(r:TB) => r.Y, into)``.
+    //!
+    //! Equi-join constraint (see modules/dasSQLITE/API_REWORK.md
+    //! "### 23-joins"): the ``on`` predicate must be a single ``==``
+    //! between one left-arg expression and one right-arg expression.
+    //! Theta joins and ``&&``-chained multi-key equality are
+    //! ``macro_error`` at the ``on`` argument. Side mapping is
+    //! positional — left side of ``==`` becomes the left key selector,
+    //! right side becomes the right. A reversed canonical form
+    //! (``r.Y == l.X``) surfaces as a type error on the generated
+    //! ``join`` call, which is still a compile-time diagnostic.
+    //!
+    //! The two key-selector bodies are cloned and their original
+    //! lambda-arg variable names are renamed to fresh
+    //! ``__la__`` / ``__lb__`` identifiers, so the synthesized
+    //! single-arg blocks have stable parameter names regardless of
+    //! what the user wrote.
+    fnName = "join"
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 4, prog, call.at, "expecting {fnName}(srca, srcb, on, into) — 4 arguments")
+        assume srcaType = call.arguments[0]._type
+        assume srcbType = call.arguments[1]._type
+        macro_verify(srcaType != null, prog, call.at, "first argument is not inferred yet")
+        macro_verify(srcbType != null, prog, call.at, "second argument is not inferred yet")
+        macro_verify(srcaType.isIterator || srcaType.isGoodArrayType, prog, call.at, "first argument must be an iterator or array")
+        macro_verify(srcbType.isIterator || srcbType.isGoodArrayType, prog, call.at, "second argument must be an iterator or array")
+        macro_verify(!srcaType.firstType.isAutoOrAlias, prog, call.at, "first argument element type cannot be auto or alias")
+        macro_verify(!srcbType.firstType.isAutoOrAlias, prog, call.at, "second argument element type cannot be auto or alias")
+        var parts = parse_equi_join_on(call.arguments[2], prog, call.at)
+        if (!parts.ok) {
+            return null
+        }
+        var iterTypeA = clone_iterator_type(srcaType)
+        var iterTypeB = clone_iterator_type(srcbType)
+        let la_fresh = "__la__"
+        let lb_fresh = "__lb__"
+        var keya_body = rename_var_in_expr(parts.keya_body, parts.larg_name, la_fresh)
+        var keyb_body = rename_var_in_expr(parts.keyb_body, parts.rarg_name, lb_fresh)
+        var res = qmacro($c(fnName)(
+            $e(call.arguments[0]),
+            $e(call.arguments[1]),
+            $($i(la_fresh) : $t(iterTypeA)) => $e(keya_body),
+            $($i(lb_fresh) : $t(iterTypeB)) => $e(keyb_body),
+            $e(call.arguments[3])
+        ))
+        res.force_at(call.at)
+        return res
+    }
+}
+
+[call_macro(name="_join")]
+class private LinqJoin : AstCallMacro_LinqJoinBase {
+    //! implements _join(srca, srcb, on, result) shorthand notation
+    //! that expands into join(srca, srcb, keya, keyb, result).
+    //! `on` must be an equi-join lambda `(l, r) => l.X == r.Y`.
+    //! for example::
+    //!
+    //!   each(persons)._join(each(pets),
+    //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
+    //!       $(p : Person, pet : Pet) => (p.name, pet.name))
+    override fnName = "join"
+}
+
+[call_macro(name="_left_join")]
+class private LinqLeftJoin : AstCallMacro_LinqJoinBase {
+    //! implements _left_join(srca, srcb, on, result) shorthand notation
+    //! that expands into left_join(srca, srcb, keya, keyb, result).
+    //! Same shape as _join, but `result`'s right-side parameter is
+    //! `Option<TB>` — `none` when the left row has no match,
+    //! `some(tb)` otherwise.
+    //! for example::
+    //!
+    //!   each(persons)._left_join(each(pets),
+    //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
+    //!       $(p : Person, pet : Option<Pet>) => (p.name, pet |> is_some))
+    override fnName = "left_join"
+}
+
+[call_macro(name="_group_by_lazy")]
+class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
+    //! implements _group_by_lazy(iterator, key) shorthand notation that
+    //! expands into group_by_lazy(iterator, $(_) => key). Yields one
+    //! ``tuple<key; array<elem>>`` per bucket — IGrouping shape, suitable
+    //! for in-memory per-group processing (top-N per group, group-scoped
+    //! filtering, grouped JSON emission). See spec
+    //! ``modules/dasSQLITE/API_REWORK.md "### 19-group_by"``.
+    //! for example::
+    //!
+    //!   each(people)._group_by_lazy(_.age)
+    override predName = "group_by_lazy"
+}
+
+[call_macro(name="_group_by")]
+class private LinqGroupBy : AstCallMacro_LinqPred2 {
+    //! implements _group_by(iterator, key) shorthand notation that
+    //! expands into group_by_lazy(iterator, $(_) => key) — same backing
+    //! function as ``_group_by_lazy``. In-memory both names are aliases:
+    //! the chain works identically with or without an outer ``_sql(...)``
+    //! wrapper. The two names exist so downstream macros (notably the
+    //! ``dasSQLITE`` ``_sql`` translator) can pattern-match on intent —
+    //! ``_group_by`` signals "I will aggregate, please emit ``GROUP BY``
+    //! in SQL", ``_group_by_lazy`` signals "I want IGrouping shape, do
+    //! per-group windowing in memory" (``macro_error`` inside ``_sql``).
+    //!
+    //! C#-style usage in plain in-memory chains — access the key via
+    //! ``_._0`` and the group elements via ``_._1`` in the next ``_select``::
+    //!
+    //!   arr._group_by(_.City)._select((
+    //!       City   = _._0,
+    //!       N      = _._1 |> length,
+    //!       AvgAge = _._1 |> _select(_.Age) |> average()))
+    //!
+    //! SQL-style sugar (``_count()`` / ``_sum(_.X)`` / ``_avg(_.X)`` etc.
+    //! recognised as group-scope) lives in the ``_sql`` macro only —
+    //! ``_sql`` walks the whole chain expression at once and rewrites
+    //! these conveniences during SQL emission.
+    override predName = "group_by_lazy"
+}
+
+[call_macro(name="_group_by_to_array")]
+class private LinqGroupByToArray : AstCallMacro_LinqPred2 {
+    //! implements _group_by_to_array(iterator, key) shorthand notation
+    //! that expands into group_by_lazy_to_array(iterator, $(_) => key).
+    //! Returns an ``array<tuple<key; array<elem>>>`` — same backing
+    //! function as ``_group_by_lazy_to_array``; see ``_group_by`` for
+    //! the rationale behind the two names.
+    override predName = "group_by_lazy_to_array"
+}
+
+[call_macro(name="_group_by_lazy_to_array")]
+class private LinqGroupByLazyToArray : AstCallMacro_LinqPred2 {
+    //! implements _group_by_lazy_to_array(iterator, key) shorthand notation
+    //! that expands into group_by_lazy_to_array(iterator, $(_) => key).
+    //! Returns an ``array<tuple<key; array<elem>>>`` instead of an iterator.
+    override predName = "group_by_lazy_to_array"
+}
+
+[call_macro(name="_having")]
+class private LinqHaving : AstCallMacro_LinqPred2 {
+    //! implements _having(iterator, expression) shorthand notation that
+    //! expands into having_(iterator, $(_) => expression).
+    //!
+    //! In-memory semantics are identical to ``_where`` — the dedicated
+    //! name lets the SQL translator emit a ``HAVING`` clause (vs.
+    //! ``WHERE``) without pattern-matching across intermediate transforms.
+    //! Pre-aggregate filters still go through ``_where``; chain position
+    //! (before vs. after ``_group_by``) selects the right one. See spec
+    //! ``modules/dasSQLITE/API_REWORK.md "### 19-group_by"``.
+    //! for example::
+    //!
+    //!   each(buckets)._having(_._1 |> length > 5)
+    override predName = "having_"
+}
+
+[call_macro(name="_having_to_array")]
+class private LinqHavingToArray : AstCallMacro_LinqPred2 {
+    //! implements _having_to_array(iterator, expression) shorthand notation
+    //! that expands into having_to_array(iterator, $(_) => expression).
+    override predName = "having_to_array"
+}
+
 [call_macro(name="_union_by_to_array")]
 class private LinqUnionByToArray : AstCallMacro_LinqPredII2 {
     //! implements _union_by_to_array(iterator1, iterator2, expression) shorthand notation
@@ -493,10 +794,16 @@ var private linqCalls = {
 // join operations
     "join" => LinqCall(name = "join", recursive = [1]),
     "join_to_array" => LinqCall(name = "join", recursive = [1]),
+    "left_join" => LinqCall(name = "left_join", recursive = [1]),
+    "left_join_to_array" => LinqCall(name = "left_join", recursive = [1]),
     "group_join" => LinqCall(name = "group_join", recursive = [1]),
     "group_join_to_array" => LinqCall(name = "group_join", recursive = [1]),
     "group_by" => LinqCall(name = "group_by"),
     "group_by_to_array" => LinqCall(name = "group_by"),
+    "group_by_lazy" => LinqCall(name = "group_by_lazy"),
+    "group_by_lazy_to_array" => LinqCall(name = "group_by_lazy"),
+    "having_" => LinqCall(name = "having_"),
+    "having_to_array" => LinqCall(name = "having_"),
 // querying data
     "any" => LinqCall(name = "any"),
     "all" => LinqCall(name = "all"),

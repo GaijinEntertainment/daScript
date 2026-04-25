@@ -1,0 +1,229 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "24-subqueries"
+// and § "SQL read-side prerequisites (daslib/linq rework)" in ../API_REWORK.md.
+//
+// Tutorial 24: subqueries — a query inside another query.
+//
+// Three SQL patterns to support:
+//
+//   (a) EXISTS / NOT EXISTS — "does the inner query yield any row?"
+//       Spelled `_any(...)` / `_none(...)`. Inverted form is a
+//       DISTINCT function, not leading-`!` on `_any`, because the
+//       `_sql` macro's AST walker cannot reliably pattern-match
+//       `!expr` to decide between EXISTS and NOT EXISTS. Explicit
+//       function names are AST-identifiable.
+//
+//   (b) IN / NOT IN — "is x one of the rows in this column
+//       subquery?" Spelled `x._in(subquery)` / `x._not_in(subquery)`.
+//       Same reason for the separate name: `!x._in(...)` isn't
+//       reliably walkable. `_in` sugars over linq.das's existing
+//       `contains(src, element)` with arg order flipped for
+//       SQL-native reading.
+//
+//   (c) correlated subquery — inner query references a column from
+//       the OUTER row. Resolved at macro expansion via lambda-param
+//       scope: anything bound by an outer `_where` / `_join` lambda
+//       becomes a qualified column reference (`outer.col`),
+//       anything free in the outer scope becomes a bind parameter.
+//       Pure macro work in the `_sql` emitter — no linq or
+//       linq_boost addition needed for correlation.
+//
+// LINQ-BACKING AUDIT — ONE new `daslib/linq` fn needed (`none`,
+// mirror of `any`). Everything else is `daslib/linq_boost`
+// macro-only. Second tut that grows linq.das (tut 23 added
+// `left_join`). See project memory `project_dassqlite_phase2.md`
+// § tut 24 bucket B, and the prerequisites table in API_REWORK.md.
+
+require daslib/sql
+require sqlite/sqlite_boost
+require daslib/option
+require daslib/result
+
+// Two-table schema identical to tut 23's: users and their orders.
+// Same relationship; subqueries vs. joins solve overlapping problems,
+// and the choice often reduces to SQL-planner preference. `IN` and
+// `EXISTS` forms often rewrite to joins under the hood; the API
+// exposes both so user can express intent directly.
+[sql_table(name="Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name   : string
+    Active : bool
+    City   : string
+}
+
+[sql_table(name="Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    UserId : int
+    Total  : float
+    When   : int64
+}
+
+[export]
+def main() {
+    with_sqlite("test.db") <| $(db) {
+        db |> drop_table_if_exists(type<Order>)
+        db |> drop_table_if_exists(type<User>)
+        db |> create_table(type<User>)
+        db |> create_table(type<Order>)
+
+        // (assume tables are populated — omitted for clarity)
+
+        // --- (a) EXISTS — "users who have placed any order" ----------
+        // Outer `_where` predicate body contains a nested
+        // `select_from(...)._any()` chain. The `_sql` macro recognizes
+        // the nested chain shape and emits `EXISTS (SELECT 1 …)`
+        // instead of compiling the inner as a scalar bool.
+        //
+        // `o.UserId == u.Id` inside the inner `_where` is a
+        // CORRELATED reference: `u` is the outer lambda's param, so
+        // the macro qualifies it as `users.id` in the emitted SQL.
+        //
+        // SQL:  SELECT u.* FROM Users u
+        //       WHERE EXISTS (SELECT 1 FROM Orders o WHERE o.UserId = u.Id)
+        let with_orders <- _sql(db |> select_from(type<User>)
+            ._where(u => db |> select_from(type<Order>)
+                            ._any(o => o.UserId == u.Id)))
+        for (u in with_orders) {
+            to_log(LOG_INFO, "{u.Name} has orders\n")
+        }
+
+        // --- (a') NOT EXISTS — "users who haven't ordered" ----------
+        // Explicit `_none(...)` function, NOT `!_any(...)`.
+        //
+        // WHY THE EXPLICIT NAME: the `_sql` macro walks the AST of
+        // the `_where` predicate and routes `_any` → EXISTS,
+        // `_none` → NOT EXISTS. Detecting `!expr` and conditionally
+        // negating the emitted SQL is fragile — any transform that
+        // sits between the `!` and the `_any` (parentheses, local
+        // binding, `if` expression) breaks the match. Explicit
+        // function names are AST-identifiable with zero ambiguity.
+        //
+        // `_none` ships as a function/macro pair in daslib/linq +
+        // daslib/linq_boost. The backing `none` fn is a new
+        // addition — mirror of `any` but returns true iff zero
+        // matches. Useful in its own right for in-memory code
+        // (`none(xs, _ < 0)` reads better than `!any(xs, _ < 0)`).
+        //
+        // SQL:  SELECT u.* FROM Users u
+        //       WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.UserId = u.Id)
+        let inactive_buyers <- _sql(db |> select_from(type<User>)
+            ._where(u => db |> select_from(type<Order>)
+                            ._none(o => o.UserId == u.Id)))
+        for (u in inactive_buyers) {
+            to_log(LOG_INFO, "{u.Name} has no orders\n")
+        }
+
+        // --- (b) IN — "orders from active users" --------------------
+        // Inner subquery yields a SINGLE-COLUMN projection (ID list);
+        // outer row's column is tested for membership. Spelled
+        // `x._in(subquery)` — SQL-native order "x is in collection".
+        //
+        // Sugars over linq.das's existing `contains(subquery, x)`
+        // with flipped args. In-memory semantics: fully evaluate the
+        // subquery, run `contains`. Under `_sql`: emit
+        //   x IN (SELECT col FROM …)
+        // — SQLite handles sub-evaluation lazily.
+        //
+        // SQL:  SELECT * FROM Orders
+        //       WHERE UserId IN (SELECT Id FROM Users WHERE Active=1)
+        let active_user_orders <- _sql(db |> select_from(type<Order>)
+            ._where(_.UserId._in(db |> select_from(type<User>)
+                                    ._where(_.Active)
+                                    ._select(_.Id))))
+        for (o in active_user_orders) {
+            to_log(LOG_INFO, "order {o.Id} total {o.Total}\n")
+        }
+
+        // --- (b') NOT IN — "orders NOT from active users" ----------
+        // Explicit `_not_in(...)` macro; same rationale as `_none`:
+        // `!x._in(...)` is not reliably AST-walkable across
+        // intermediate transforms.
+        //
+        // GOTCHA (SQL-specific, worth a comment in user code):
+        // `NOT IN` with NULLs is always NULL-never-TRUE.
+        // `x NOT IN (1, NULL)` is NULL, which treats as false in
+        // WHERE. Subqueries that can yield NULL IDs need
+        // `._where(_.Id |> is_some())` or similar upstream. Not an
+        // API issue — a SQL-semantics warning for the tutorial.
+        //
+        // SQL:  SELECT * FROM Orders
+        //       WHERE UserId NOT IN (SELECT Id FROM Users WHERE Active=0)
+        let loyal_orders <- _sql(db |> select_from(type<Order>)
+            ._where(_.UserId._not_in(db |> select_from(type<User>)
+                                        ._where(!_.Active)
+                                        ._select(_.Id))))
+        for (o in loyal_orders) {
+            to_log(LOG_INFO, "loyal order {o.Id}\n")
+        }
+
+        // --- (c) correlated subquery — outer column inside inner ----
+        // Inner `_avg(_.Total)` is scoped to orders from the SAME
+        // user as the outer `o` row. The inner `_where` references
+        // `o.UserId` where `o` is the OUTER lambda parameter — the
+        // macro's scope walker classifies it as a correlated column
+        // ref and emits `outer.UserId`, not a bind parameter.
+        //
+        // CLASSIFICATION RULE (pure macro, dasSQLITE `_sql`
+        // emitter):
+        //   - lambda param referenced inside its own body → column ref
+        //     with the current table alias
+        //   - outer lambda param referenced inside a nested lambda →
+        //     CORRELATED column ref, qualified with outer table alias
+        //   - free identifier (local `let`, closure var, function
+        //     arg) → BIND parameter
+        //
+        // SQL:  SELECT * FROM Orders o
+        //       WHERE o.Total > (
+        //         SELECT AVG(Total) FROM Orders o2 WHERE o2.UserId = o.UserId
+        //       )
+        let above_avg <- _sql(db |> select_from(type<Order>)
+            ._where(o => o.Total > _sql(db |> select_from(type<Order>)
+                                           ._where(o2 => o2.UserId == o.UserId)
+                                           ._select(_.Total)
+                                           ._avg())))
+        for (o in above_avg) {
+            to_log(LOG_INFO, "order {o.Id} above user's avg\n")
+        }
+
+        // --- (c') correlated with a captured local too --------------
+        // Mixed case: the inner query references BOTH an outer
+        // lambda param (correlated column) AND a local variable
+        // (bind parameter). The classifier distinguishes them by
+        // scope at macro expansion; emits the right SQL for each.
+        //
+        // SQL:  SELECT * FROM Orders o
+        //       WHERE o.When > ?   -- `since` bound
+        //         AND o.Total > (
+        //             SELECT AVG(Total) FROM Orders o2
+        //             WHERE o2.UserId = o.UserId
+        //               AND o2.When > ?   -- `since` bound again
+        //         )
+        let since = unix_now() - 86400l * 30l
+        let recent_above_avg <- _sql(db |> select_from(type<Order>)
+            ._where(o => o.When > since
+                      && o.Total > _sql(db |> select_from(type<Order>)
+                                           ._where(o2 => o2.UserId == o.UserId
+                                                      && o2.When > since)
+                                           ._select(_.Total)
+                                           ._avg())))
+        for (o in recent_above_avg) {
+            to_log(LOG_INFO, "recent above-avg order {o.Id}\n")
+        }
+
+        // --- (d) try_ variant ---------------------------------------
+        // Same pattern as tut 19 / 23: try-ness is on the outer
+        // `_sql` wrapper. No `_try_in` / `_try_none`.
+        let attempt <- _try_sql(db |> select_from(type<User>)
+            ._where(u => db |> select_from(type<Order>)
+                            ._any(o => o.UserId == u.Id)))
+        if (attempt |> is_err()) {
+            to_log(LOG_ERROR, "subquery failed: {attempt |> unwrap_err()}\n")
+        } else {
+            let rows <- attempt |> unwrap()
+            to_log(LOG_INFO, "{rows |> length} users with orders\n")
+        }
+    }
+}

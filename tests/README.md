@@ -753,6 +753,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | strings_properties.das | length, empty, starts_with, ends_with with fuzzing | |
 | strings_replace_multiple.das | replace_multiple — multiple replacements, special chars, empty | |
 | strings_search.das | find (string and char) with fuzzing | |
+| strings_text_match.das | text_match — FTS5-subset AND/prefix matcher, panic on unsupported syntax | |
 | strings_traits.das | is_alpha, is_new_line, is_white_space, is_number with fuzzing | |
 | temporary_intern_strings.das | temp_string with intern_strings option | |
 | temporary_strings.das | temp_string, build_temp_string — no heap allocations | |

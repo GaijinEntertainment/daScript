@@ -1,0 +1,203 @@
+options gen2
+// MOCKUP — aspirational API for dasSQLITE rework.
+// Design artifact, not yet compilable. See ../API_MISSING.md § "33-pragma"
+// and § "33-pragma — decided" in ../API_REWORK.md.
+//
+// Tutorial 33: SQLite runtime knobs.
+//
+// PROVIDER-SPECIFIC — SQLITE ONLY. Second consecutive tut (after
+// tut 32) that lives in `sqlite/sqlite_boost`, not `daslib/sql`.
+// PRAGMA is a SQLite-ism; other backends use wildly different
+// tuning APIs — PG's `SET`, MySQL's `SET GLOBAL`, MSSQL's
+// `sp_configure`. Names, types, and scopes all diverge. Any
+// cross-provider abstraction would be a false promise. If you
+// write code that depends on a SQLite pragma, your tuning isn't
+// portable.
+//
+// WHY THIS TUT. The four knobs below form WAL's operational
+// story — safe for archival single-process use out of the box,
+// wrong for essentially every multi-thread / multi-process app.
+// Missing ANY of them is a class of real-world bug:
+//   - no WAL           → readers block on writer
+//   - no busy_timeout  → occasional SQLITE_BUSY errors under load
+//   - no foreign_keys  → declared FKs are silently not enforced
+//   - no synchronous   → WAL slower than it needs to be (FULL
+//                        default is fsync-heavy; NORMAL is
+//                        WAL-safe)
+//
+// LINQ-BACKING AUDIT — ZERO additions. Ninth consecutive zero-
+// linq-prereq tut (25-33). `sqlite/sqlite_boost` gains three
+// `set_pragma` overloads + `apply_recommended_pragmas`. See
+// project memory `project_dassqlite_phase2.md` § tut 33.
+
+require daslib/sql
+require sqlite/sqlite_boost
+
+// --- typed set_pragma overloads ---------------------------------------
+// Three overloads on value type:
+//
+//   set_pragma(db; name; value : string) : void
+//   set_pragma(db; name; value : int64)  : void   (int widens)
+//   set_pragma(db; name; value : bool)   : void
+//
+// The right overload per pragma is obvious from the value kind:
+//
+//   journal_mode / synchronous / locking_mode / encoding → string
+//     (enum-ish modes: "WAL" / "NORMAL" / "EXCLUSIVE" / "UTF-8")
+//   busy_timeout / cache_size / mmap_size / page_size    → int64
+//     (milliseconds / pages / bytes)
+//   foreign_keys / recursive_triggers / defer_foreign_keys → bool
+//     (ON / OFF flags — see `bool → ON/OFF` note below)
+//
+// Booleans emit as `ON` / `OFF` on the wire. SQLite accepts
+// 0/1, YES/NO, TRUE/FALSE, ON/OFF interchangeably; ON/OFF reads
+// best in `options log` output and in panic-on-error text.
+
+[export]
+def main() {
+    with_sqlite("app.db") <| $(db) {
+        // Connection setup — set pragmas BEFORE any real work.
+        // Some pragmas (`journal_mode`, `foreign_keys`) cannot
+        // change inside an open transaction; doing so returns
+        // SQLITE_BUSY or silently no-ops. Always set at
+        // connection setup, outside `with_transaction`.
+        db |> set_pragma("journal_mode", "WAL")       // readers don't block writer
+        db |> set_pragma("busy_timeout", 5000)        // wait 5s on lock, then error
+        db |> set_pragma("foreign_keys", true)        // enable declared FKs
+        db |> set_pragma("synchronous", "NORMAL")     // WAL-safe durability
+
+        // … application work below, inside one or more transactions …
+        db |> exec("CREATE TABLE IF NOT EXISTS sessions (Id INTEGER PRIMARY KEY)")
+    }
+}
+
+// --- one-shot: apply_recommended_pragmas ------------------------------
+// Convenience for the four above — the shape most apps want.
+// Logs each applied pragma at `LOG_INFO` so production logs
+// show what tuning was applied.
+//
+// If you want different values (e.g. `synchronous=FULL` for
+// paranoid durability, or `journal_mode=TRUNCATE` for a non-
+// networked filesystem), call the four overloads yourself.
+// `apply_recommended_pragmas` is a shortcut, not a gate — the
+// four lines above are copy-pasteable.
+
+def run_app() {
+    with_sqlite("app.db") <| $(db) {
+        db |> apply_recommended_pragmas()
+        // LOG_INFO lines emitted:
+        //   pragma journal_mode = WAL
+        //   pragma busy_timeout = 5000
+        //   pragma foreign_keys = ON
+        //   pragma synchronous  = NORMAL
+
+        // … app body …
+    }
+}
+
+// --- failure surfacing: try_set_pragma --------------------------------
+// `Result<void, string>` variants for the fallible caller. Same
+// overload shape:
+//
+//   try_set_pragma(db; name; value : string) : Result<void, string>
+//   try_set_pragma(db; name; value : int64)  : Result<void, string>
+//   try_set_pragma(db; name; value : bool)   : Result<void, string>
+//
+// Also `try_apply_recommended_pragmas(db) : Result<void, string>`.
+//
+// Pragma writes rarely fail in isolation — SQLite's most common
+// failure is SQLITE_BUSY when `journal_mode` is set inside an
+// active transaction. `try_` form surfaces that as an error
+// string instead of panicking.
+
+def connect_with_recovery(path : string) : Result<void, string> {
+    with_sqlite(path) <| $(db) {
+        let res <- db |> try_apply_recommended_pragmas()
+        if (res is Err) {
+            to_log(LOG_ERROR, "pragma setup failed: {res as Err}")
+            return <- res
+        }
+        // … app work …
+    }
+    return <- Ok()
+}
+
+// --- READING PRAGMA VALUES --------------------------------------------
+// Intentionally NO `get_pragma(db, name)` helper. SQLite exposes
+// pragma reads via the existing query machinery — `PRAGMA foo`
+// (no `=`) returns a one-column result set, so tut 04's
+// `query_scalar` covers it directly:
+//
+//   let mode = db |> query_scalar<string>("PRAGMA journal_mode")
+//   let wait = db |> query_scalar<int>   ("PRAGMA busy_timeout")
+//   let fks  = db |> query_scalar<bool>  ("PRAGMA foreign_keys")
+//
+// Multi-row pragmas (`PRAGMA table_info(x)`,
+// `PRAGMA integrity_check`, `PRAGMA database_list`) use
+// `query<T>` normally — covered in tut 09 and tut 34.
+
+// --- GOTCHAS ----------------------------------------------------------
+//
+// 1. SILENT NO-OP ON UNKNOWN PRAGMA NAME. SQLite ignores unknown
+//    pragma names silently — no error code, no log line. A typo
+//    like `set_pragma("forein_keys", true)` does NOTHING and
+//    returns success. The dasSQLITE API CANNOT catch this at
+//    the binding layer; SQLite doesn't tell us. Only SQLite's
+//    docs (sqlite.org/pragma.html) are authoritative. If you
+//    suspect a pragma isn't taking effect, read it back with
+//    `query_scalar`.
+//
+// 2. JOURNAL_MODE CAN'T CHANGE INSIDE A TRANSACTION. SQLite
+//    returns SQLITE_BUSY. Strict form panics; `try_` form
+//    returns Err. Either way — set at connection setup.
+//
+// 3. FOREIGN_KEYS CAN'T CHANGE INSIDE A TRANSACTION. Unlike
+//    `journal_mode`, SQLite silently no-ops here instead of
+//    erroring. Same fix: set at connection setup.
+//
+// 4. PER-CONNECTION SCOPE FOR MOST PRAGMAS. `foreign_keys`,
+//    `busy_timeout`, `synchronous`, `cache_size` apply to the
+//    current connection only — a fresh `open_sqlite` starts
+//    with SQLite's defaults. `journal_mode` is the EXCEPTION —
+//    it's written into the DB header and persists across
+//    connections. Which is why you can set WAL once at DB
+//    creation, but the other three belong in every
+//    `with_sqlite` block.
+
+// --- DEFERRED / OUT OF SCOPE FOR V1 -----------------------------------
+//
+// 1. TYPED ENUM SURFACE. `set_journal_mode(JournalMode.WAL)` /
+//    `set_synchronous(Sync.NORMAL)` / etc. Catches typos in
+//    mode strings at compile time, but costs one enum + one
+//    wrapper per well-known pragma (~a dozen). v1's three
+//    typed overloads cover the shape. Typed enums ship if
+//    users ask.
+//
+// 2. OPEN-TIME NAMED-TUPLE BUNDLE.
+//      with_sqlite(path, pragmas = (journal_mode = "WAL",
+//                                        busy_timeout = 5000,
+//                                        foreign_keys = true)) <| $(db) { … }
+//    Needs phase 0.2 (named-tuple literal) and a demonstrated
+//    need. The post-open form is already four lines — not a
+//    huge win.
+//
+// 3. BESPOKE `get_pragma` HELPERS. Not needed; existing
+//    `query_scalar<T>` / `query<T>` covers all reads. See
+//    READING PRAGMA VALUES section above.
+//
+// 4. CROSS-PROVIDER "TUNING HOOK". `daslib/sql`-level
+//    `set_parameter` dispatching to per-provider
+//    implementations. Not worth designing before a second
+//    backend exists and a shared naming scheme can be
+//    extracted from real usage.
+//
+// 5. PRAGMA OPTIMIZE. `PRAGMA optimize` (SQLite 3.18+) runs
+//    ANALYZE selectively — lighter than VACUUM. Candidate for
+//    inclusion in `apply_recommended_pragmas` at CLOSE time
+//    (not connection setup). Deferred to tut 34's operational-
+//    hygiene scope.
+//
+// 6. `[sql_pragma]` ANNOTATION. Module-scoped declarative
+//    preferences, parallel to tut 32's future `[sql_function]`
+//    macro. Auto-applied on connect. Defer — runtime API is
+//    the MVP.
