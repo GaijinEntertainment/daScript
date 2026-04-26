@@ -42,6 +42,8 @@ Flags:
 | `-x / --no-fuzzy` | off | Skip MinHash pass — exact clusters only |
 | `--min-tokens` | 8 | Drop functions with fewer than N tokens (filters trivial wrappers) |
 | `-L / --lambdas-only` | off | Skip top-level functions, keep only lambdas — useful for clustering dastest `t \|> run("…") @(t) { … }` bodies |
+| `--export-functions` | (off) | Write all extracted functions to a JSON file and exit before clustering |
+| `--import-functions` | (off) | Load functions from a JSON file (produced by `--export-functions`) instead of compiling. Mutually exclusive with `--path` and `--export-functions` |
 | `-v / --verbose` | off | Per-file progress |
 | `-?` | | Help |
 
@@ -71,7 +73,11 @@ is real signal).
 | `cluster.das` | Exact-bucket clustering + fuzzy all-pairs with length gate |
 | `report.das` | JSON + stdout summary writer |
 | `main.das` | CLI (`daslib/clargs`), file scan, compile-and-collect orchestration |
+| `pipeline.das` | `compile_and_collect` / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite |
+| `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das` | Hand-crafted fixture for smoke-testing the visitor end-to-end |
+| `fixture/canonical_cases.das` | Narrowly-targeted fixture (one function per canonicalization concern) for unit-testing `CanonicalVisitor` |
+| `test_find_dupes.das` | dastest suite — run with `bin/daslang dastest/dastest.das -- --test utils/find_dupes/test_find_dupes.das` |
 
 Notes:
 
@@ -93,6 +99,34 @@ Notes:
 - Per-source-line dedup: a generic reified for N types becomes N
   FunctionPtrs all pointing at the same `(file, line)`. We keep the
   first to avoid the same source location being counted N times.
+
+## Export / import
+
+Compilation is the expensive step; the canonical-form computation is deterministic. To hand the function list off to an external tool (visualizer, custom clusterer), or to shard compilation across machines and merge later, dump the post-canonicalization records and reload them:
+
+```sh
+# compile + extract, write JSON, exit before clustering
+./bin/daslang utils/find_dupes/main.das -- -p tests --export-functions /tmp/funcs.json
+
+# skip compilation; cluster + report from JSON (--json still works as before)
+./bin/daslang utils/find_dupes/main.das -- --import-functions /tmp/funcs.json --json /tmp/dupes.json
+```
+
+`--import-functions` is mutually exclusive with both `--path` and `--export-functions`. `--export-functions` always exits before the clustering pass.
+
+The on-disk schema is a small envelope:
+
+```json
+{
+  "schema_version": 1,
+  "functions": [
+    { "name": "add_int", "file": "tests/foo.das", "line": 4,
+      "is_lambda": false, "canonical": "FN ARG <var_0> TYP …" }
+  ]
+}
+```
+
+MinHash signatures are not included — they're recomputed on import (deterministic and cheap). On import, `--no-fuzzy` and `--min-tokens` apply just like in the compile path.
 
 ## Out of scope
 
