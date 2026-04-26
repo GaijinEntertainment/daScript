@@ -55,8 +55,10 @@ one-line helpers. Everything after this assumes this vocabulary.
    companion `_sql_text(chain)` for inspecting the emitted SQL. First
    exposure to `_sql(...)` — deliberate: the macro is *the* read-side
    story and appears in every subsequent read tutorial. **Shipped:**
-   [04-select_all.das](tutorial/04-select_all.das) (chunk 2, branch
-   `dassqlite-chunk2-sql-macro`). Original mockup:
+   [tutorials/sql/04-select_all.das](../../tutorials/sql/04-select_all.das)
+   (chunk 2 introduced; relocated from `modules/dasSQLITE/tutorial/`
+   to the project-wide `tutorials/sql/` home in chunk 2.5). Original
+   mockup:
    [04-select_all.das.mockup](tutorial-mockup/04-select_all.das.mockup).
 
 ## Part 2 — Parameters + error handling rail
@@ -320,15 +322,15 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 
 | # | Title | Mockup | Status |
 |---|---|---|---|
-| 1 | Hello dasSQLITE | `01-version.das` | Has mockup |
-| 2 | Declare a table, insert rows | `02-insert_data.das` | Has mockup |
-| 3 | Auto-increment primary keys | `03-last_row_id.das` | Has mockup |
-| 4 | Read every row | `04-select_all.das` | Has mockup |
-| 5 | Parameters — positional + named | `05-parametrized.das` | Has mockup |
-| 6 | Error handling — `try_` / `_opt` | `_error_handling.das` | Has mockup |
-| 7 | Anatomy of `_sql` | — | **Needs mockup** |
-| 8 | `_where` — predicates | — | **Needs mockup** |
-| 9 | `_select` — projections | — | **Needs mockup** |
+| 1 | Hello dasSQLITE | `01-version.das` | **Shipped** (chunk 1) |
+| 2 | Declare a table, insert rows | `02-insert_data.das` | **Shipped** (chunk 1) |
+| 3 | Auto-increment primary keys | `03-last_row_id.das` | **Shipped** (chunk 1) |
+| 4 | Read every row | `04-select_all.das` | **Shipped** (chunk 2) |
+| 5 | Parameters — positional | `05-parametrized.das` | **Shipped** (chunk 3); named-tuple bind for `:name` placeholders deferred to chunk 4 |
+| 6 | Error handling — `try_` / `_opt` / `_try_sql` | `_error_handling.das` | **Shipped** (chunk 3) |
+| 7 | Anatomy of `_sql` | — | **Folded** into tut 8/9 inline comments + Appendix C (no standalone tutorial — see chunk-3 plan) |
+| 8 | `_where` — predicates + appendix-A operators | direct | **Shipped** (chunk 3) |
+| 9 | `_select` — single-column + named-tuple | direct | **Shipped** (chunk 3); struct-type projection (`_select(type<T2>)`) deferred to chunk 4 |
 | 10 | `_order_by` / `_then_by` | — | **Needs mockup** |
 | 11 | `_take` / `_skip` + keyset | — | **Needs mockup** |
 | 12 | `_distinct` + set ops | — | **Needs mockup** |

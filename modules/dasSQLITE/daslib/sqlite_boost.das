@@ -274,39 +274,249 @@ def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
     return default<TT>
 }
 
+// ============================================================================
+// query_scalar — read column 0 of the first row as ``TT``
+//
+// Generic over any type with a ``sqlite_read(stmt, col, type<TT>) : TT``
+// overload. Built-ins: string, int, int64, float, double, bool. User types
+// extend by adding their own ``sqlite_read`` overload — no registration step.
+//
+// `try_*` returns ``Result<TT, string>`` (prepare/step error or zero rows).
+// `query_scalar` is the strict variant — panics on err.
+// ============================================================================
+
 [unused_argument(t)]
-def try_query_scalar(db : SqlRunner; sql : string; t : type<string>) : Result<string, string> {
-    //! Prepares ``sql``, steps once, returns column 0 as ``string``.
+def try_query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT -const -#, string> {
+    //! Prepares ``sql``, steps once, returns column 0 as ``TT``.
     //! Returns ``Err(errmsg)`` on prepare/step error or zero rows.
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "query_scalar prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
-        return err(msg, type<string>)
+        return err(msg, type<TT -const -#>)
     }
     let src = sqlite3_step(stmt)
-    if (src != SQLITE_ROW) {
-        let msg = "query_scalar: expected one row, got rc={src}: {sqlite3_errmsg(db.sqlite_handle)}"
+    if (src == SQLITE_DONE) {
         sqlite3_finalize(stmt)
-        return err(msg, type<string>)
+        return err("query_scalar: expected one row, got 0 rows", type<TT -const -#>)
     }
-    var result : string
-    unsafe {
-        result := clone_string(sqlite3_column_text(stmt, 0))
+    if (src != SQLITE_ROW) {
+        let msg = "query_scalar: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<TT -const -#>)
     }
+    var result = sqlite_read(stmt, 0, type<TT -const -#>) // nolint:LINT003
     sqlite3_finalize(stmt)
-    return ok(result, type<string>)
+    return move_ok(result, type<string>)
 }
 
 [unused_argument(t)]
-def query_scalar(db : SqlRunner; sql : string; t : type<string>) : string {
+def query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -# {
     //! Strict variant of ``try_query_scalar``. Panics on prepare/step error or zero rows.
-    let r = db |> try_query_scalar(sql, type<string>)
+    let r = db |> try_query_scalar(sql, type<TT -const -#>)
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
     return r |> unwrap
+}
+
+// ============================================================================
+// query_scalar_opt — Option<TT> variant for "0 rows is expected"
+//
+// Returns ``some(val)`` if a row is found, ``none`` if zero rows. Panics
+// only on prepare/step failure (genuine errors). Use when 0 rows is a
+// normal outcome (lookups by primary key, etc.); use ``query_scalar`` when
+// 0 rows is a programmer error.
+// ============================================================================
+
+[unused_argument(t)]
+def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        sqlite3_finalize(stmt)
+        panic("query_scalar_opt prepare failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    }
+    let src = sqlite3_step(stmt)
+    if (src == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return none(type<TT -const -#>)
+    }
+    if (src != SQLITE_ROW) {
+        sqlite3_finalize(stmt)
+        panic("query_scalar_opt step failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    }
+    var result = sqlite_read(stmt, 0, type<TT -const -#>) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_some(result)
+}
+
+// ============================================================================
+// query_one — full-row read with positional bind args
+//
+// Each [sql_table] struct gets a generated ``_sql_read_row`` helper at macro
+// time; ``query_one`` family uses that to materialize the row. Bind args go
+// to positional placeholders in declaration order. Currently only 0..3
+// positional args are supported (one explicit overload per arity). 4+ args
+// and named-tuple bind (``query_one(sql, type<T>, (a=1, b=2, ...))`` for
+// ``:name`` placeholders) are deferred to chunk 4 — the named-tuple form
+// needs a ``[call_macro]`` to walk the trailing tuple's argNames.
+//
+// `try_*` returns ``Result<T, string>`` (bind/prepare/step errors AND zero
+// rows); strict panics on err; ``*_opt`` returns ``Option<T>`` (``none`` on
+// zero rows; panic only on bind/prepare/step error).
+// ============================================================================
+
+// All 12 public variants below delegate to one of three private impls
+// that take a `bind_blk : block<(var stmt : sqlite3_stmt?) : void>`,
+// invoked once after prepare. Each public wrapper supplies the right
+// bind block for its arity.
+
+def private try_query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                               bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<TT -const -#, string> {
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "query_one prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<TT -const -#>)
+    }
+    invoke(bind_blk, stmt)
+    let src = sqlite3_step(stmt)
+    if (src == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return err("query_one: expected one row, got 0 rows", type<TT -const -#>)
+    }
+    if (src != SQLITE_ROW) {
+        let msg = "query_one: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<TT -const -#>)
+    }
+    var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_ok(row, type<string>)
+}
+
+def private query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                           bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : TT -const -# {
+    var r <- try_query_one_impl(db, sql, type<TT -const -#>, bind_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
+def private query_one_opt_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                               bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Option<TT -const -#> {
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        sqlite3_finalize(stmt)
+        panic("query_one_opt prepare failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    }
+    invoke(bind_blk, stmt)
+    let src = sqlite3_step(stmt)
+    if (src == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return none(type<TT -const -#>)
+    }
+    if (src != SQLITE_ROW) {
+        sqlite3_finalize(stmt)
+        panic("query_one_opt step failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    }
+    var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_some(row)
+}
+
+// ---- try_query_one — Result<TT, string>; 0..3 positional args ----
+
+def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT -const -#, string> {
+    //! Zero-arg form. Errors on prepare/step failure or zero rows.
+    return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
+}
+
+def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Result<TT -const -#, string> {
+    //! 1-arg positional bind.
+    return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+    })
+}
+
+def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : Result<TT -const -#, string> {
+    //! 2-arg positional bind.
+    return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+    })
+}
+
+def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : Result<TT -const -#, string> {
+    //! 3-arg positional bind.
+    return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+        sqlite_bind(stmt, 3, arg2)
+    })
+}
+
+// ---- query_one (strict) — TT; 0..3 positional args; panics on err ----
+
+[unused_argument(t)]
+def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -# {
+    return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
+}
+
+[unused_argument(t)]
+def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : TT -const -# {
+    return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+    })
+}
+
+[unused_argument(t)]
+def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : TT -const -# {
+    return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+    })
+}
+
+[unused_argument(t)]
+def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : TT -const -# {
+    return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+        sqlite_bind(stmt, 3, arg2)
+    })
+}
+
+// ---- query_one_opt — Option<TT>; 0..3 positional args; panics only on prepare/step error ----
+
+def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
+    return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
+}
+
+def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Option<TT -const -#> {
+    return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+    })
+}
+
+def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : Option<TT -const -#> {
+    return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+    })
+}
+
+def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : Option<TT -const -#> {
+    return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, arg0)
+        sqlite_bind(stmt, 2, arg1)
+        sqlite_bind(stmt, 3, arg2)
+    })
 }
 
 // ============================================================================
@@ -528,6 +738,87 @@ def try_run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sq
 def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : array<TT -const -#> {
     //! Strict variant of ``try_run_select``. Panics on prepare/step failure.
     var r <- try_run_select(db, sql, bind_blk, row_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
+// ============================================================================
+// _sql macro runtime: single-row materializers (One / OneOpt)
+//
+// Used by `_sql(...)` chains that end in `_first()`, `_first_opt()`, or
+// `_count()` (and chunk-4 aggregates). One panics-on-empty (for `_first`,
+// `_count`, future `_sum`-on-empty); OneOpt returns Option<T>.
+// ============================================================================
+
+def try_run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<TT -const -#, string> {
+    //! Prepares ``sql``, runs ``bind_blk`` once, steps once, materializes
+    //! the first row via ``row_blk``. Returns ``Err(errmsg)`` on prepare or
+    //! step failure or zero rows.
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<TT -const -#>)
+    }
+    invoke(bind_blk, stmt)
+    let rc = sqlite3_step(stmt)
+    if (rc == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return err("_sql: expected one row, got 0 rows", type<TT -const -#>)
+    }
+    if (rc != SQLITE_ROW) {
+        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<TT -const -#>)
+    }
+    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_ok(row, type<string>)
+}
+
+def run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : TT -const -# {
+    //! Strict variant of ``try_run_select_one``. Panics on prepare/step failure or zero rows.
+    var r <- try_run_select_one(db, sql, bind_blk, row_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
+def try_run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<Option<TT -const -#>, string> {
+    //! Prepares ``sql``, runs ``bind_blk`` once, steps once. Returns
+    //! ``Ok(some(row))`` if a row is found, ``Ok(none)`` if zero rows, or
+    //! ``Err(errmsg)`` on prepare/step failure.
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<Option<TT -const -#>>)
+    }
+    invoke(bind_blk, stmt)
+    let rc = sqlite3_step(stmt)
+    if (rc == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return ok(none(type<TT -const -#>), type<string>)
+    }
+    if (rc != SQLITE_ROW) {
+        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<Option<TT -const -#>>)
+    }
+    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_ok(move_some(row), type<string>)
+}
+
+def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Option<TT -const -#> {
+    //! Strict variant of ``try_run_select_one_opt``. Panics on prepare/step failure;
+    //! returns ``none`` on zero rows (which is the expected empty case here).
+    var r <- try_run_select_one_opt(db, sql, bind_blk, row_blk)
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
@@ -794,7 +1085,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_select_all_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
-        let col_list = build_string() <| $(var w) {
+        let col_list = build_string() $(var w) {
             for (i in range(length(fields))) {
                 if (i > 0) {
                     w |> write(", ")

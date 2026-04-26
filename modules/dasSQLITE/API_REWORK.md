@@ -128,10 +128,145 @@ Struct-constructor and named-tuple `_select` projections; `_order_by`,
 `_join`, `_left_join`; `_in`, `_not_in`, `_any`, `_none`; the
 panic-free `_try_sql` variant. All planned, none in this PR.
 
+## Shipped — chunk 3: aggregate framework + _try_sql + tuts 5/6/8/9 (branch `dassqlite-chunk3-sql-framework`)
+
+Builds the discriminator infrastructure that aggregates (chunk 4's tut 13)
+will plug into, and ships the `_sql`-side surface for tutorials 5/6/8/9.
+The framework is proven end-to-end by a `_count` canary; chunk 4 broadens
+to `_sum`/`_avg`/`_min`/`_max` plus tutorials 10–13.
+
+### Framework rework — three discriminators in `analyze_chain`
+
+- **`Materializer`** enum threaded through `SqlQuery`:
+  - `Array` — default, returns `array<T>` via `run_select`
+  - `One` — single row, panics on empty (covers `_first`, `count()`)
+  - `OneOpt` — `Option<T>`, none on empty (covers `_first_opt`)
+- **`ProjectionShape`** enum:
+  - `FullRow` — default, `SELECT cols-of(rootT)`
+  - `SingleColumn` — `_select(_.Field)` (chunk 2)
+  - `NamedTuple` — `_select((Name=_.Name, Price=_.Price))` (new)
+  - `Aggregate` — `SELECT COUNT(*)` (canary) — chunk 4 broadens
+- **Function-call dispatch** in `pred_to_sql`: `(name, arity) -> SQL_template`.
+  Chunk 3 entries: `starts_with`/`ends_with`/`contains` (LIKE patterns),
+  `to_lower`/`to_upper` (case folding), `length`, `abs`. Chunk 4 adds
+  date/time + the aggregate row (`sum`, `avg`, etc.).
+
+### New chain operators
+
+- **`_first()`** — terminal. Plain function in `sqlite_linq.das`; recognized
+  in `analyze_chain`; emits ` LIMIT 1` and uses Materializer.One.
+- **`_first_opt()`** — terminal. Plain function in `sqlite_linq.das`; emits
+  ` LIMIT 1` and uses Materializer.OneOpt.
+- **`count()`** (no underscore — `_count` is reserved by linq_boost as a
+  predicate-form macro). Recognized in `analyze_chain`; sets
+  ProjectionShape.Aggregate and Materializer.One. **Canary** for the
+  framework — chunk 4 will land `_sum` / `_avg` / `_min` / `_max` in the
+  same shape.
+
+### `_try_sql(chain)` macro — non-panicking sibling of `_sql`
+
+Shares the analyzer with `_sql` (the visit body is factored into
+`emit_sql_macro_body(prog, call, isTry : bool)`). Difference: emits
+`try_run_*` runtime helpers wrapping the result in `Result<T, string>`
+(or `Result<Option<T>, string>` for OneOpt). Tut 6 demonstrates the full
+matrix.
+
+### Runtime additions in `sqlite_boost.das`
+
+- **`run_select_one` + `try_run_select_one`** — single-row materializer
+  (errors on 0 rows; one row -> T or Result<T,string>).
+- **`run_select_one_opt` + `try_run_select_one_opt`** — single-row Option
+  variant (0 rows = none).
+- **`query_one` + `try_query_one` + `query_one_opt`** — full-row read
+  with positional bind. 0/1/2/3-arg overloads; 4+ positional args is a
+  follow-up. Pattern mirrors chunk-1's `try_query_scalar` — `try_*` does
+  the work and returns `Result<T, string>`; strict panics on err; `_opt`
+  returns `Option<T>`.
+- **`query_scalar` overloads** for `int`, `int64`, `float`, `double`,
+  `bool`. (Chunk 1 shipped `string` only.) Each with `try_*` and `_opt`
+  siblings.
+
+### Deferred to chunk 4
+
+- **Named-tuple bind for `query_one(sql, type<T>, (id=…, name=…))`.**
+  Needs a `[call_macro]` to walk the trailing tuple's `argNames` at
+  compile time and emit unrolled `sqlite3_bind_parameter_index +
+  sqlite_bind` calls. Pattern is the `qmacro_function`-per-instantiation
+  used by chunk-1's `_sql_bind_row` for `[sql_table]` rows. Tut 5 ships
+  positional-bind only this chunk; the named-tuple form is a follow-up.
+- **Struct-type `_select(type<T2>)` projection.** Project a subset of
+  source fields into a different `[sql_table]` struct. Today users can
+  use named-tuple projection (`_select((A=_.A, B=_.B))`) to get the same
+  result with a tuple instead of a struct.
+- **4+ positional args for `query_one`.** Add overloads or a call_macro
+  in chunk 4 if a real use case shows up (rare in practice).
+- **Tutorial 7 ("Anatomy of `_sql`")** is folded into tuts 8/9 inline
+  comments + Appendix C below — no standalone tutorial.
+
 ### Surface in this PR
 
-- **Tutorial 04** is now real (`tutorial/04-select_all.das`) — first end-to-end
-  exposure to `_sql`.
+- **Tutorials 5, 6, 8, 9** under `tutorials/sql/`.
+- **22 new test files** under `tests/dasSQLITE/`:
+  - test_08 / test_09 — `_first`, `_first_opt`
+  - test_10 / test_11 — `query_one` positional (1/2/3-arg)
+  - test_13 — `query_one_opt`
+  - test_15..test_20 — `query_scalar` int/int64/double/bool + `_opt` + `try_*`
+  - test_21 — `_try_sql` (Result/Option/Result<Option> matrix)
+  - test_22 — `_select` named-tuple projection
+  - test_24..test_29 — `_where` operators (starts_with, ends_with,
+    contains, to_lower/to_upper, length, abs)
+  - test_30 / test_31 — `_count` canary (basic + with `_where`)
+- **151 dasSQLITE tests pass** interpreted (81 chunk-2 + 70 chunk-3).
+- AOT path stays green (CMake glob auto-picks new tests; reconfigure
+  required after adding the first new test of a chunk).
+
+## Appendix C — `_sql` translation boundary (the content tut 7 would have covered)
+
+What `_sql(chain)` translates and what it refuses, in one place. The
+macro walks the chain bottom-up after Mode-2 expansion has unfolded
+inner call_macros (`_where` → `where_(it, $(_:T) => body)`, etc.).
+
+**Translates:**
+
+- **Chain root:** `select_from(db, type<T>)` where `T` is a `[sql_table]`
+  struct.
+- **Chain operators:** `_to_array()`, `_first()`, `_first_opt()`,
+  `count()` (chunk 3); `_sum`/`_avg`/`_min`/`_max`/`_order_by`/`_take`/
+  `_skip`/`_distinct`/`_group_by`/`_having`/`_join`/`_left_join`/
+  subqueries (chunk 4+).
+- **Projections (`_select`):** `_.Field` (single column),
+  `(Name=_.Name, Price=_.Price)` (named tuple). Struct-type projection
+  is chunk 4.
+- **Predicates (`_where`):** column refs (`_.Field`), captured vars and
+  literals (auto-bound as `?`), comparisons (`==`, `!=`, `<`, `<=`, `>`,
+  `>=`), logic (`&&`, `||`, `!`), and the appendix-A function calls
+  (`starts_with`, `ends_with`, `contains`, `to_lower`, `to_upper`,
+  `length`, `abs`).
+
+**Refuses with a compile-time `macro_error` pointing at the offending
+node:**
+
+- Unknown function calls in `_where` (anything not in the dispatch table).
+- `_select` projections that aren't `_.Field` or named-tuple.
+- Multiple `_select` calls in one chain.
+- Multiple terminals in one chain (`_to_array() |> _first()` etc.).
+
+**Workarounds:**
+
+- Use `db |> exec(sql)` / `try_exec(sql)` for DDL and arbitrary
+  statements that don't fit the chain.
+- Use `db |> query_one(sql, type<T>, args…)` /
+  `db |> query_scalar(sql, type<T>)` for hand-written SELECT statements
+  that return rows.
+- The `_sql_text(chain)` companion macro returns the exact SQL string
+  that `_sql(chain)` would emit (with `?` placeholders) — useful for
+  inspecting generated SQL while debugging.
+
+### Surface in this PR
+
+- **Tutorial 04** is now real (`tutorials/sql/04-select_all.das` — relocated
+  from `modules/dasSQLITE/tutorial/` to the project-wide tutorials home in
+  chunk 2.5) — first end-to-end exposure to `_sql`.
 - **Tests:** `tests/dasSQLITE/test_05_sql_macro.das` (17 execution cases),
   `tests/dasSQLITE/test_06_sql_text.das` (19 SQL-string-emission cases),
   `tests/dasSQLITE/test_07_sql_composability.das` (10 user-wrapper cases),
