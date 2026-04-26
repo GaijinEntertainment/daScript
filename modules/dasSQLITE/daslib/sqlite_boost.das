@@ -10,6 +10,7 @@ require sqlite public
 
 require strings public
 require daslib/contracts
+require daslib/option public
 require daslib/sql public
 require daslib/ast_boost
 require daslib/templates
@@ -189,6 +190,14 @@ def sqlite_sql_type(witness : bool) : string {
 }
 
 [unused_argument(witness)]
+def sqlite_sql_type(witness : $Option < auto(TT) >) : string {
+    //! Option<T> nullability is type-driven — the column's SQL type comes from the inner ``T``.
+    //! Whether a NOT NULL constraint is emitted is decided at macro-expansion time by the
+    //! [sql_table] DDL emitter, not here.
+    return sqlite_sql_type(default<TT>)
+}
+
+[unused_argument(witness)]
 def sqlite_sql_type(witness : auto(TT)) : string {
     concept_assert(false, "sqlite_sql_type: unsupported field type. Define `def sqlite_sql_type(witness : YourType) : string` to extend.")
     return ""
@@ -216,6 +225,15 @@ def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : string) : void {
 
 def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : bool) : void {
     sqlite3_bind_int64(stmt, idx, value ? 1l : 0l)
+}
+
+def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : $Option < auto(TT) >) : void {
+    //! Option<T>: bind the underlying value when ``some``, SQL NULL when ``none``.
+    if (value._has_value) {
+        sqlite_bind(stmt, idx, value._value)
+    } else {
+        sqlite3_bind_null(stmt, idx)
+    }
 }
 
 [unused_argument(stmt, idx, value)]
@@ -266,6 +284,15 @@ def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<string>) : string {
 [unused_argument(t)]
 def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<bool>) : bool {
     return sqlite3_column_int(stmt, col) != 0
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<$Option<auto(TT)>>) : Option<TT -const -#> {
+    //! Option<T>: SQLITE_NULL → ``none``; otherwise read the inner ``T`` and wrap in ``some``.
+    if (sqlite3_column_type(stmt, col) == SQLITE_NULL) {
+        return none(type<TT -const -#>)
+    }
+    return some(sqlite_read(stmt, col, type<TT -const -#>))
 }
 
 [unused_argument(stmt, col, t)]
@@ -872,6 +899,28 @@ struct private FieldInfo {
     col_name : string
     is_pk : bool
     is_int_pk : bool
+    is_optional : bool
+}
+
+def private is_option_field_type(td : TypeDeclPtr) : bool {
+    //! Recognize ``Option<T>`` for the [sql_table] DDL emitter (drop NOT NULL,
+    //! reject @sql_primary_key on the field). Structure macros run before the
+    //! ``[template_structure]`` typemacro has been resolved, so a field
+    //! declared as ``Option<int>`` arrives as ``Type.typeMacro`` with the
+    //! macro name in ``dimExpr[0]``. We also accept the post-resolution form
+    //! (``Type.tStructure`` with structType.name == "Option", module ==
+    //! "option") so the helper works even if a later pass reaches it.
+    if (td == null) {
+        return false
+    }
+    if (td.baseType == Type.typeMacro && length(td.dimExpr) > 0 && (td.dimExpr[0] is ExprConstString)) {
+        return (td.dimExpr[0] as ExprConstString).value == "Option"
+    }
+    return (td.baseType == Type.tStructure
+        && td.structType != null
+        && td.structType.name == "Option"
+        && td.structType._module != null
+        && td.structType._module.name == "option")
 }
 
 [structure_macro(name=sql_table)]
@@ -882,11 +931,17 @@ class SqlTableMacro : AstStructureAnnotation {
         var fields : array<FieldInfo>
         for (field in st.fields) {
             let is_pk = find_bool_annotation(field.annotation, "sql_primary_key", false)
+            let is_optional = is_option_field_type(field._type)
+            if (is_pk && is_optional) {
+                errors := "[sql_table]: @sql_primary_key on field '{field.name}' must not be Option<T> — primary keys cannot be NULL in SQL. Use a non-optional type."
+                return false
+            }
             fields |> push(FieldInfo(
                 name = string(field.name),
                 col_name = string(field.name),
                 is_pk = is_pk,
-                is_int_pk = is_pk && (field._type.baseType == Type.tInt || field._type.baseType == Type.tInt64)
+                is_int_pk = is_pk && (field._type.baseType == Type.tInt || field._type.baseType == Type.tInt64),
+                is_optional = is_optional
             ))
         }
 
@@ -941,7 +996,10 @@ class SqlTableMacro : AstStructureAnnotation {
         for (i in range(length(fields))) {
             let info = fields[i]
             let prefix = i == 0 ? "\"{info.col_name}\" " : ", \"{info.col_name}\" "
-            let suffix = info.is_pk ? " PRIMARY KEY" : " NOT NULL"
+            // Nullability is type-driven: Option<T> fields drop NOT NULL.
+            // PK columns are implicitly NOT NULL in SQLite for INTEGER PRIMARY KEY,
+            // and rejected as Option<T> earlier in apply().
+            let suffix = info.is_pk ? " PRIMARY KEY" : (info.is_optional ? "" : " NOT NULL")
             write_exprs |> push(qmacro_expr(${ writer |> write($v(prefix)); }))
             write_exprs |> push(qmacro_expr(${ writer |> write(sqlite_sql_type(type<$t(st.fields[i]._type)>)); }))
             write_exprs |> push(qmacro_expr(${ writer |> write($v(suffix)); }))
@@ -1117,8 +1175,13 @@ class SqlTableMacro : AstStructureAnnotation {
             }))
         }
 
+        // `var row = default<$t(st)>` — explicit default so structs with
+        // Option<T> fields (which lack a builtin per-field default and rely
+        // on `@safe_when_uninitialized` only in the value position) still
+        // satisfy strict_smart_pointers' uninitialized-var check inside the
+        // generated `_sql_read_row` body.
         var fn = qmacro_function("_sql_read_row") $(stmt : sqlite3_stmt?; typ : $t(st)) : $t(st) {
-            var row : $t(st)
+            var row = default<$t(st)>
             $b(assign_exprs)
             return <- row
         }

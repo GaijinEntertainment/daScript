@@ -30,7 +30,7 @@ def test_count_with_where_filter(t : T?) {
         let n = _sql(db |> select_from(type<Car>)
                        |> _where(_.Price > cutoff)
                        |> count())
-        t |> equal(int(n), 3, "3 rows with Price > 150")
+        t |> equal(n, 3, "3 rows with Price > 150")
     }
 }
 
@@ -42,7 +42,7 @@ def test_count_with_no_matches_is_zero(t : T?) {
         let n = _sql(db |> select_from(type<Car>)
                        |> _where(_.Id == target)
                        |> count())
-        t |> equal(int(n), 0, "no matches -> 0")
+        t |> equal(n, 0, "no matches -> 0")
     }
 }
 

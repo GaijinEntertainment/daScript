@@ -123,4 +123,4 @@ Form                                                            When to use
 
     Previous tutorial: :ref:`tutorial_sql_parametrized`
 
-    Next tutorial: :ref:`tutorial_sql_where`
+    Next tutorial: :ref:`tutorial_sql_anatomy`

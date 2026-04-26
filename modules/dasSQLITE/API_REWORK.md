@@ -220,7 +220,149 @@ matrix.
 - AOT path stays green (CMake glob auto-picks new tests; reconfigure
   required after adding the first new test of a chunk).
 
-## Appendix C — `_sql` translation boundary (the content tut 7 would have covered)
+## Shipped — chunk 4: read-side depth — distinct/take/skip/order_by/aggregates/group_by/NULL (branch `dassqlite-chunk4-read-depth`)
+
+Chunk 4 broadens the chunk-3 framework with the rest of the read-side
+operators and ships tutorials 7, 10, 11, 12, 13, 14, 18. Set
+operations (UNION/INTERSECT/EXCEPT — tut 12 second half) and joins +
+subqueries (tuts 15–17) are deferred to chunk 5: they all need the
+same multi-source / multi-stage SqlQuery extension.
+
+### New chain operators (all in `analyze_chain` / `pred_to_sql`)
+
+- **`distinct()`** — sets `q.distinctFlag`; emits `SELECT DISTINCT`.
+- **`take(n)` / `skip(n)`** — bind expressions stashed in
+  `q.limitBindExpr` / `q.offsetBindExpr`; pushed *after* WHERE binds
+  in `emit_sql_macro_body`. Solo `skip(n)` emits `LIMIT -1 OFFSET ?`
+  to satisfy SQLite's OFFSET-requires-LIMIT rule. Single-row
+  terminals (`_first` / `_first_opt`) override `take`'s `LIMIT`.
+- **`_order_by(_.Col)` / `_order_by_descending(_.Col)`** — single-key
+  ASC/DESC. Tuple-key form `_order_by((_.k1, _.k2))` emits each
+  tuple field as its own `ORDER BY` column. Recurse-first on the
+  peel so downstream `seenGroupBy` is known when analyzing the key.
+  Mixed ASC/DESC across columns is **deferred** (D2).
+- **`sum` / `average` / `min` / `max`** — terminal column aggregates
+  via `peel_column_aggregate`. Recurse-first: peel the aggregate,
+  let the inner chain populate `selectCols`, then wrap
+  `selectCols[0]` in the SQL aggregate. AVG promotes to `double`;
+  SUM/MIN/MAX inherit the column type. LIMIT 1 suppressed for
+  aggregate Materializer.
+- **`_group_by(_.Col)` / `_group_by((_.k1, _.k2))`** — single- and
+  multi-key grouping via the existing linq.das `group_by_lazy`
+  lowering. Adds `ProjectionShape.GroupedNamedTuple` with parallel
+  `q.groupedSelectExprs` / `q.groupedSelectTypes`. Macro-side
+  recognition of the IGrouping shape: `_._0` for the group key
+  (single-key), `_._0._N` for multi-key, `_._1` for group rows;
+  `_._1 |> length` / `_._1 |> count` → `COUNT(*)` (result type
+  `int` not `int64` — matches daslang's `length`/`count` returns);
+  `_._1 |> select($(u : T) => u.Field) |> sum/average/min/max` →
+  `SUM("Field")` / etc.
+- **`_having(predicate)`** — recurse-first; rejected if
+  `!seenGroupBy` or wrong order. Bind exprs route to
+  `q.havingBindExprs` and slot in between WHERE and LIMIT in the
+  placeholder index sequence.
+- **NULL handling — Option<T> in `_where` predicates:**
+  `_.Col |> is_some` → `Col IS NOT NULL`;
+  `_.Col |> is_none` → `Col IS NULL`;
+  `_.Col |> unwrap_or(default)` → `COALESCE(Col, ?)` (default routed
+  through `pred_to_sql` so both captured locals and literals are
+  emitted as `?` binds — same default-parameterize behavior as the
+  rest of `_where`).
+
+### `[sql_table]` runtime extensions for `Option<T>`
+
+- `is_option_field_type(td)` recognizes both pre-resolution
+  (`Type.typeMacro` with `dimExpr[0]` ExprConstString = "Option")
+  and post-resolution (`Type.tStructure` with module=="option")
+  forms — structure macro runs before the `[template_structure]`
+  expansion, so the typemacro form is what actually shows up.
+- `sqlite_sql_type` / `sqlite_bind` / `sqlite_read` overloads for
+  `$Option<auto(TT)>`. Bind branches on `_has_value` and binds
+  `sqlite3_bind_null` for `none`. Read branches on
+  `sqlite3_column_type == SQLITE_NULL` and wraps in `some(v)` /
+  `none()`.
+- DDL emitter omits `NOT NULL` for `Option<T>` columns; rejects
+  `@sql_primary_key` on `Option<T>` via `errors:=`.
+- `_sql_read_row` body uses `var row = default<$t(st)>` so
+  Option-bearing user structs default-init cleanly under
+  `strict_smart_pointers`.
+
+### IGrouping shape vs the original mockup (locked 2026-04-26)
+
+The original `19-group_by.das.mockup` used aspirational syntax
+(`_count_all()`, `_sum(_.X)`, `_avg(_.X)`) inside the post-group
+`_select`. After `_group_by` lowers to `group_by_lazy`, the chain
+element is `tuple<KeyType; array<RowType>>`, so the next `_select`
+sees `_:tuple<...>` — `_.X` doesn't typecheck (the tuple has
+`_0`/`_1`, not `X`).
+
+Chunk 4 ships the **IGrouping shape** (matches existing
+`tests/linq/test_linq_group_by.das`):
+
+- `_._0` for the group key (single-key), `_._0._N` for multi-key
+- `_._1` for the group element array
+- `_._1 |> length` / `_._1 |> count` → `COUNT(*)`
+- `_._1 |> select($(u : RowType) => u.X) |> sum/average/min/max` →
+  the matching SQL aggregate
+
+The inner `select` lambda parameter is intentionally **named**
+(`$(u : User)` etc.), not `_` — the outer `_select` lambda already
+binds `_` to the group tuple, and daslang flags a same-name-
+different-type lambda nested inside as a shadowing error. Naming
+the inner parameter sidesteps it; the macro recognizes the body as
+`<param>.<field>` for any parameter name. This aligns with EF Core
+/ C# LINQ shape (`g.Key` ↔ `_._0`, `g.Count()` ↔ `_._1 |> length`,
+`g.Average(u => u.Age)` ↔ `_._1 |> select($(u) => u.Age) |> average`).
+
+### Deferred to chunk 5+
+
+- **Set operations (UNION / INTERSECT / EXCEPT)** — tut 12 second
+  half. Single-source `SqlQuery` today; needs `setOpKind` +
+  `setOpRhsQuery` plus the multi-stage emitter. Bundled with joins
+  and subqueries.
+- **`_join` / `_left_join`** (tuts 15-16) — multi-source FROM,
+  equi-join predicate extraction.
+- **Subqueries — `_in` / `_not_in` / `_any` / `_none`** (tut 17) —
+  nested SqlQuery walker, outer-lambda-param classifier for
+  correlated columns, scalar-subquery embedding in predicates.
+- **`_then_by` and multi-key ordering protocol (D1)** — needs an
+  `IOrderedEnumerable<T>`-equivalent in daslib/linq. Chunk-4
+  workaround: tuple-key `_order_by((_.k1, _.k2))` emits each tuple
+  field as its own `ORDER BY` column.
+- **Mixed ASC/DESC across columns (D2)** — `ORDER BY a ASC, b DESC`
+  in one chain step. Possible future syntax: marker-in-tuple
+  `_order_by(@(x) => (x.a, desc(x.b)))`. Out of chunk 4 scope; raw
+  SQL escape hatch handles it today.
+- **`Option<T> == none()` in `_sql` predicates (D4)** — currently
+  not translated. Lock decision (macro_error with fixit vs silent
+  rewrite to `IS NULL`) when a real test forces it; leaning
+  fixit-with-macro_error for explicit-over-magic.
+- **Projection-side `_.Col |> unwrap_or(d)` in `_select`** — the
+  predicate-side rule lands this chunk; the projection-side
+  COALESCE case requires extending `analyze_projection` beyond
+  plain `_.Field` shape and is deferred.
+
+### Surface in this PR
+
+- **Tutorials 7, 10, 11, 12, 13, 14, 18** under `tutorials/sql/`.
+- **6 new test files** under `tests/dasSQLITE/`:
+  - test_32 — `distinct`
+  - test_33 — `take` / `skip`
+  - test_34 — `_order_by` (single-key, descending, tuple-key)
+  - test_35 — column aggregates (sum/average/min/max)
+  - test_36 — `_group_by` + `_having` (single/multi-key, full reporting query)
+  - test_37 — NULL handling (DDL, round-trip, is_some / is_none /
+    unwrap_or in `_where`, full-row Option pass-through)
+- `failed_sql_macro.das` extended with bad10 (`_having` without
+  `_group_by`) and bad11 (bare scalar projection after `_group_by`).
+- **205/205 dasSQLITE tests pass** interpreted; chunk-2 (81),
+  chunk-3 (70), chunk-4 (54). AOT path stays green; lint clean.
+- New RST: `sql_07_anatomy.rst`, `sql_10_order_by.rst`,
+  `sql_11_take_skip.rst`, `sql_12_distinct.rst`,
+  `sql_13_aggregates.rst`, `sql_14_group_by.rst`,
+  `sql_18_null_handling.rst`. Sphinx `-W` clean.
+
+## Appendix C — `_sql` translation boundary (cross-reference for tutorial 7)
 
 What `_sql(chain)` translates and what it refuses, in one place. The
 macro walks the chain bottom-up after Mode-2 expansion has unfolded
