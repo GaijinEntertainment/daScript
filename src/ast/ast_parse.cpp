@@ -630,14 +630,30 @@ namespace das {
         return false;
     }
 
+    // `Function::lookup` keys cache entries by `intptr_t(structType)` via
+    // `getLookupHash(types)`. After gc sweep, freed Structure addresses can be
+    // reused by later allocations — a stale cached `false` then poisons the
+    // lookup for the new Structure at the same address, surfacing as a flaky
+    // "no matching functions or generics" on legitimate calls. Clear every
+    // function/generic cache before gc_guard sweeps.
+    static void clearAllFunctionLookups() {
+        Module::foreach([](Module * m) -> bool {
+            m->functions.foreach([](auto & fn) { fn->lookup.clear(); });
+            m->generics.foreach([](auto & fn) { fn->lookup.clear(); });
+            return true;
+        });
+    }
+
     struct GcCollectOnExit {
         gc_guard & scope;
         Program * prog = nullptr;
         GcCollectOnExit(gc_guard & s) : scope(s) {}
         GcCollectOnExit(gc_guard & s, Program * p) : scope(s), prog(p) {}
         ~GcCollectOnExit() {
-            if ( !prog ) return;
-            prog->thisModule->gc_collect(&scope.guard_root);
+            if ( prog ) {
+                prog->thisModule->gc_collect(&scope.guard_root);
+            }
+            clearAllFunctionLookups();
         }
     };
 
