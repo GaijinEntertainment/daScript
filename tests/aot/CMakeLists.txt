@@ -104,6 +104,7 @@ SET(AOT_DASSQLITE_MODULE_FILES)
 IF(NOT DAS_SQLITE_DISABLED)
     SET(AOT_DASSQLITE_MODULE_FILES
         modules/dasSQLITE/daslib/sqlite_boost.das
+        modules/dasSQLITE/daslib/sqlite_linq.das
     )
 ENDIF()
 
@@ -111,6 +112,8 @@ ENDIF()
 SET(AOT_DASSQLITE_FILES)
 IF(NOT DAS_SQLITE_DISABLED)
     FILE(GLOB AOT_DASSQLITE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasSQLITE/*.das")
+    # Exclude expect-error tests (they intentionally fail to compile)
+    list(FILTER AOT_DASSQLITE_FILES EXCLUDE REGEX "failed_")
 ENDIF()
 
 # AOT for strudel/audio module library files (required by strudel tests)

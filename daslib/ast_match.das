@@ -17,6 +17,26 @@ module ast_match shared public
 //! sub-expressions, constant values, and identifier names using the same tag
 //! system as ``qmacro`` but in reverse: ``$e`` clones a matched expression,
 //! ``$v`` extracts a constant value, ``$i`` extracts an identifier name.
+//!
+//! TODO — ExprRef2Value transparency. Post-inference, a read of a ``var``
+//! local can appear wrapped in ``ExprRef2Value(inner)`` (the ref-to-value
+//! adapter that fires when daslang dereferences a reference to consume its
+//! value). The current matcher is RTTI-strict, so a pattern like
+//! ``$e(lhs) == $e(rhs)`` matches the literal LHS/RHS shape but ``$e(rhs)``
+//! captures the wrapper, not the underlying ``ExprVar``/``ExprConst`` —
+//! callers that then check ``rhs is ExprVar`` will miss it. Two fixes:
+//!   1. **Auto-peel in $e capture** — ``generate_match`` could strip
+//!      ``ExprRef2Value`` wrappers when binding to ``$e(name)`` so the
+//!      captured expression is the underlying value.
+//!   2. **Auto-peel in fixed sub-patterns** — when matching a literal-shaped
+//!      sub-pattern (``a + b``), peel ``ExprRef2Value`` from the actual
+//!      before the RTTI guard fires.
+//! Either fix would let downstream callers (e.g. ``modules/dasSQLITE/daslib/
+//! sqlite_linq.das`` ``is_const_or_captured_var``) drop their own peel logic.
+//! Not urgent — current chunk-2 tests all pass because the captured-var
+//! inputs reach the macro before the wrapper is inserted — but the next
+//! complex case (struct-field reads, array indexing, anything that goes
+//! through more inference passes) will hit it.
 
 require daslib/ast public
 require daslib/rtti

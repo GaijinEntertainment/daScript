@@ -6,4 +6,8 @@ def initialize(project_path : string) {
     if (das_is_dll_build()) {
         register_dynamic_module("{project_path}/dasModuleSQLITE.shared_module", "Module_dasSQLITE")
     }
+    let sqlite_paths = ["sqlite_boost", "sqlite_linq"]
+    for (path in sqlite_paths) {
+        register_native_path("sqlite", "{path}", "{project_path}/daslib/{path}.das")
+    }
 }

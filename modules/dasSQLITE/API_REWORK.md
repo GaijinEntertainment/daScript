@@ -37,6 +37,110 @@ beyond SQL:
 Both prereqs are now done. The rework is unblocked on design **and**
 language impl; only the dasSQLITE-specific phases remain.
 
+## Shipped — chunk 2: `_sql` macro foundation (branch `dassqlite-chunk2-sql-macro`)
+
+- New module file `modules/dasSQLITE/daslib/sqlite_linq.das` housing `_sql(...)`
+  and the companion `_sql_text(...)` (SQL-text-debug macro — name decision
+  locked to `_sql_text`, returns `string`). Module registered in CMake via
+  `ADD_MODULE_DAS(sqlite daslib sqlite_linq)` and in `.das_module` via a new
+  `register_native_path` block that also backfills `sqlite_boost`.
+- Runtime shim: `sqlite_boost` adds the read-direction dispatch rail
+  `sqlite_read(stmt, col, type<T>) : T` (mirrors `sqlite_bind`), the
+  `select_from(db, type<T>) : array<T>` runtime entry, and the
+  `try_run_select` / `run_select` helpers the macro emits calls to. The
+  `[sql_table]` structure macro now also emits `_sql_select_all_sql` (full-row
+  SELECT string) and `_sql_read_row` (per-struct row materializer) for each
+  user table.
+- **Operator surface in chunk 2:** `select_from(type<T>)` (root) +
+  `_to_array()` (no-op terminal) + `_select(_.Field)` (single-column
+  projection) + `_where(predicate)` with bind capture (literals and free
+  variables → `?` placeholders; supports `==`, `!=`, `<`, `<=`, `>`, `>=`,
+  `&&`, `||`, `!`). Multiple `_where` calls in a chain compose AND-wise.
+
+### Architecture: Mode 2 inner-first expansion
+
+`_sql` (and `_sql_text`) run as plain `[call_macro]` decls with the
+**default `canVisitArgument=true`**. That contract — confirmed during
+chunk-2 development — means daslang's macro pass expands inner
+call_macros bottom-up *before* the outer `visit()` fires. By the time
+`_sql.visit` walks the chain, `_where(it, expr)` has already become
+`where_(it, $(_:T) => expr)`, `_select(it, expr)` has become
+`select(it, $(_:T) => expr)`, and any user-defined wrapper macro has
+cascaded into the same canonical `where_` / `select` shape.
+
+This makes the chain analyzer trivially small: it pattern-matches
+`select_from(...)` at the root, `where_` / `select` calls in the body
+(via `match_linq_call(node, "where_" | "select")` + `peel_lambda_body`),
+and `_to_array(...)` as the only outermost terminal. No per-operator
+macro plumbing — every chain stage is just a `linq` call by the time
+the analyzer sees it.
+
+The Mode 2 contract was nearly missed during development. An initial
+Mode-1 attempt added `canVisitArgument → false` overrides on `_sql` /
+`_sql_text` to guarantee raw-AST inputs, after a synthetic test seemed
+to show inner expansion not firing. The diagnosis was wrong: the real
+problem was that `sqlite_linq.das` didn't `require daslib/linq_boost
+public`, so `_where` / `_select` were unavailable as call_macros at
+user-file scope and produced unbound-`_` cascades. Adding the public
+require made Mode 2 work; the override is gone.
+
+**Composable user wrappers (proven by `test_07_sql_composability.das`):**
+a user can write `[call_macro(name="when_price_lt")]` that expands to
+`_where(it, _.Price < val)` and call `_sql(db |> select_from(type<Car>)
+|> when_price_lt(200))` — the wrapper expansion cascades through `_where`
+into `where_`, and the analyzer sees the same `where_` shape it would
+for a user-written `_where(_.Price < 200)`. The 10-test composability
+suite covers the baked-field form, the generic form
+(`when_lt(it, _.Field, val)` passing the field-ref through as an
+argument), wrapper-then-`_where` AND-composition, wrapper-then-`_select`
+projection composition, and two-wrapper AND chains.
+
+### Hardening / diagnostics
+
+- **Entry guards on `_sql` and `_sql_text`** use `macro_verify` (loud
+  failure with `{describe(arg)}`) rather than soft `return null`, so a
+  null `_type` on the chain argument — which means an inner call_macro
+  didn't expand because of a missing-require — surfaces immediately at
+  the call site instead of cascading into unrelated infer errors.
+- **`ExprRef2Value` peel** at the top of `analyze_projection`,
+  `pred_to_sql`, and `is_const_or_captured_var`: the typer wraps field
+  reads in `ExprRef2Value` after Mode-2 inner expansion, so the analyzer
+  unwraps it before pattern-matching shapes like `_.Field` or comparing
+  to `ExprVar`. (TODO in `daslib/ast_match.das`: add auto-peel inside
+  `qmatch` so callers don't need to do this manually.)
+
+### AOT status
+
+`sqlite_linq.das` is registered in `tests/aot/CMakeLists.txt`'s
+`AOT_DASSQLITE_MODULE_FILES` and AOT-codegens cleanly into
+`test_aot_dassqlite_modules_sqlite_linq.das.cpp`. Runtime AOT for
+dasSQLITE inherits whatever sqlite_boost AOT delivers — chunk-2 doesn't
+gate or worsen anything in that path. `failed_sql_macro.das` is excluded
+from the AOT glob via the same `list(FILTER ... EXCLUDE REGEX
+"failed_")` pattern used by `tests/decs/`, since expect-error tests
+intentionally fail to compile and would break AOT codegen.
+
+### Deferred to chunk 3+
+
+Struct-constructor and named-tuple `_select` projections; `_order_by`,
+`_take`, `_skip`, `_distinct`; aggregates (`_count`, `_sum`, `_avg`,
+`_min`, `_max`); `_first` / `_first_or_default`; `_group_by`, `_having`;
+`_join`, `_left_join`; `_in`, `_not_in`, `_any`, `_none`; the
+panic-free `_try_sql` variant. All planned, none in this PR.
+
+### Surface in this PR
+
+- **Tutorial 04** is now real (`tutorial/04-select_all.das`) — first end-to-end
+  exposure to `_sql`.
+- **Tests:** `tests/dasSQLITE/test_05_sql_macro.das` (17 execution cases),
+  `tests/dasSQLITE/test_06_sql_text.das` (19 SQL-string-emission cases),
+  `tests/dasSQLITE/test_07_sql_composability.das` (10 user-wrapper cases),
+  `tests/dasSQLITE/test_07_macros.das` (companion module defining
+  `when_price_lt` and `when_lt` wrapper call_macros),
+  `tests/dasSQLITE/failed_sql_macro.das` (`expect`-based macro-error cases).
+  `tests/dasSQLITE/test_04_user_types.das` extended with a `select_from`
+  round-trip exercising the user-side `sqlite_read` overload.
+
 ## SQL read-side prerequisites (daslib/linq + daslib/linq_boost rework)
 
 The `_sql(...)` chain is a thin SQL-emitting translator over daslib/linq.
