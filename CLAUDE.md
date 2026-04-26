@@ -93,6 +93,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/das_formatting.md` | Creating or modifying any `.das` file (tutorials, tests, daslib modules, utilities) |
 | `skills/writing_tests.md` | Writing or editing test files under `tests/` |
 | `skills/documentation_rst.md` | Editing RST files in `doc/source/`, editing `//!` doc-comments in `daslib/*.das`, writing tutorial RST pages |
+| `skills/tutorials.md` | Creating, moving, or restructuring tutorial `.das` files. **Always check before editing anything that looks like a tutorial** — tutorials live under `/tutorials/<area>/`, NEVER inside `modules/<X>/tutorial/` (which holds inherited examples) |
 | `skills/cpp_integration.md` | Writing or editing C++ files in `src/`, `modules/`, or `tutorials/integration/cpp/` |
 | `skills/daslib_modules.md` | Working with `daslib/` modules (linq, json, regex, functional, match, etc.), channels, or extending the standard library |
 | `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, gc_node AST-pointer patterns |
