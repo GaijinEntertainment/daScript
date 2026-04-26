@@ -143,3 +143,100 @@ positive/negative pair together — do not say "negate with `!`".
 Discoverability is part of the UX.
 
 This avoids parser issues with `qmacro_function` body that contains complex nested blocks or variable declarations.
+
+## `[call_macro]` entry-guard contract
+
+Every `[call_macro]` `class : AstCallMacro` declares an implicit contract
+about how its `visit()` sees its arguments. Get this wrong and you'll
+either expand against unresolved AST (and produce gibberish) or miss
+inner macro expansions entirely.
+
+### `canVisitArgument=true` is the default — inner-first expansion
+
+Daslang's macro pass walks each call_macro argument before firing the
+outer macro's `visit`. The walk runs the typer **and** any inner
+call_macros recursively. By the time `visit(call)` runs:
+
+- inner `_where(...)`, `_select(...)`, etc. — and any user-defined
+  wrapper that expands to one of them — have **already cascaded** into
+  their canonical `where_(...,$(_:T)=>...)` / `select(...)` shapes;
+- type-checked sub-expressions carry resolved `_type`;
+- field reads on those resolved types may be wrapped in
+  `ExprRef2Value` (the value-from-ref adapter the typer inserts);
+- raw arguments that genuinely can't type yet (e.g. `_.Field` outside
+  a lambda, where `_` is unbound) stay as raw AST with `null _type` —
+  the macro pass tolerates these because the outer macro is going to
+  rewrite them anyway.
+
+You almost never want to override this default. The Mode-1/Mode-2 story
+documented in `modules/dasSQLITE/API_REWORK.md` chunk-2 section is the
+cautionary tale: `_sql` shipped briefly with `canVisitArgument → false`
+overrides because a synthetic test seemed to show inner expansion not
+firing. The real cause was a missing `require daslib/linq_boost public`
+in `sqlite_linq.das` — without that, `_where` / `_select` weren't
+registered as call_macros at user-file scope, so they had nothing to
+expand into. Removing the override + adding the require made everything
+work. **If inner macros aren't expanding, look for a missing require
+before changing visit semantics.**
+
+### Entry guards: `macro_verify`, not `return null`
+
+When `visit()` must assume a property of its arguments (typed input,
+non-auto chain, expected arity), check it loudly with `macro_verify`,
+including a `{describe(arg)}` in the message:
+
+```
+[call_macro(name="_sql")]
+class private SqlMacro : AstCallMacro {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 1, prog, call.at,
+            "_sql expects one argument: a chain expression")
+        var argT = call.arguments[0]._type
+        macro_verify(argT != null, prog, call.at,
+            "_sql: chain argument has null _type — inner call_macros did not expand " +
+            "before this fired. Arg: {describe(call.arguments[0])}")
+        macro_verify(!argT.isAutoOrAlias, prog, call.at,
+            "_sql: chain type is auto/alias after _type is set — compiler bug")
+        // ... real work
+    }
+}
+```
+
+A null `_type` on the chain argument doesn't mean "Mode 2 is broken" —
+it means an inner call_macro that should have expanded didn't, almost
+always because the user didn't `require` the module that defines it.
+Loud failure tells the user that immediately; silent `return null`
+re-queues the macro and lets the daslang pipeline emit a confusing
+infer-time cascade instead.
+
+### Peel `ExprRef2Value` before `qmatch`
+
+Post-Mode-2-expansion AST walking will see field reads wrapped in
+`ExprRef2Value`. `qmatch` is RTTI-strict — it matches `ExprField` but
+not `ExprRef2Value(ExprField(...))`. Peel before matching:
+
+```
+if (node is ExprRef2Value) {
+    node = (node as ExprRef2Value).subexpr
+    if (node == null) {
+        macro_error(prog, at, "_where: ExprRef2Value with null subexpr")
+        return ""
+    }
+}
+// now `qmatch(node, _.$f(name))` etc. work as expected
+```
+
+Auto-peel inside `qmatch` itself is a TODO documented in
+`daslib/ast_match.das`. Until then, every analyzer entry point that
+takes an expression coming out of post-expansion (predicate body,
+projection body, classifier helpers like `is_const_or_captured_var`)
+needs the peel at the top.
+
+### When you really do need raw arguments
+
+If a macro genuinely needs un-expanded raw AST (rare — mostly for
+qmacro-only sugar that builds new code without inspecting it), override
+`canVisitArgument` to return `false` for those argument indices. Pair
+with a unit test that exercises the inner-macro composition case
+specifically — that's the path that breaks first when the override is
+wrong.

@@ -49,9 +49,15 @@ one-line helpers. Everything after this assumes this vocabulary.
    AUTOINCREMENT. Mockup: [03-last_row_id.das](tutorial-mockup/03-last_row_id.das.mockup).
 4. **Read every row** — iterate a table with
    `_sql(db |> select_from(type<Car>))`. Introduces: `select_from`, the
-   iterator result, `_to_array()` terminal. First exposure to `_sql(...)`
-   — deliberate: the macro is *the* read-side story and appears in every
-   subsequent read tutorial. Mockup: [04-select_all.das](tutorial-mockup/04-select_all.das.mockup).
+   `array<T>` result, `_to_array()` no-op terminal, single-column
+   projection via `_select(_.Field)`, filtering with `_where(predicate)`
+   (with bind capture for free variables and literals), and the
+   companion `_sql_text(chain)` for inspecting the emitted SQL. First
+   exposure to `_sql(...)` — deliberate: the macro is *the* read-side
+   story and appears in every subsequent read tutorial. **Shipped:**
+   [04-select_all.das](tutorial/04-select_all.das) (chunk 2, branch
+   `dassqlite-chunk2-sql-macro`). Original mockup:
+   [04-select_all.das.mockup](tutorial-mockup/04-select_all.das.mockup).
 
 ## Part 2 — Parameters + error handling rail
 

@@ -223,6 +223,57 @@ def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : auto(TT)) : void {
     concept_assert(false, "sqlite_bind: unsupported field type. Define `def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : YourType) : void` to extend.")
 }
 
+// ============================================================================
+// Read-side dispatch: sqlite_read
+//
+// Mirrors `sqlite_bind` for the read direction. `[sql_table]`-generated
+// `_sql_read_row` and the `_sql` macro's row materializer emit calls to
+// `sqlite_read(stmt, col, type<T>) : T` for every column. Built-in primitive
+// types are handled by the overloads below; user-defined types extend the
+// surface with their own overload — no registration step:
+//
+//     def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<MyType>) : MyType { ... }
+//
+// The generic catch-all fires `concept_assert(false, ...)` for any type that
+// doesn't have a specific overload. Reports at the caller's line.
+// ============================================================================
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<int>) : int {
+    return sqlite3_column_int(stmt, col)
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<int64>) : int64 {
+    return sqlite3_column_int64(stmt, col)
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<float>) : float {
+    return float(sqlite3_column_double(stmt, col))
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<double>) : double {
+    return sqlite3_column_double(stmt, col)
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<string>) : string {
+    return sqlite3_column_text_(stmt, col)
+}
+
+[unused_argument(t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<bool>) : bool {
+    return sqlite3_column_int(stmt, col) != 0
+}
+
+[unused_argument(stmt, col, t)]
+def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
+    concept_assert(false, "sqlite_read: unsupported field type. Define `def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<YourType>) : YourType` to extend.")
+    return default<TT>
+}
+
 [unused_argument(t)]
 def try_query_scalar(db : SqlRunner; sql : string; t : type<string>) : Result<string, string> {
     //! Prepares ``sql``, steps once, returns column 0 as ``string``.
@@ -395,6 +446,94 @@ def private ignore_sql_error(e : SqlError) : void {
     //! Discards a SqlError. Used by try_insert(array) to swallow ROLLBACK failures while preserving the original error.
 }
 
+[unused_argument(t)]
+def try_select_from(db : SqlRunner; t : type<auto(TT)>) : Result<array<TT -const -#>, string> {
+    //! Reads every row of the table backing ``T`` and materializes them as ``array<TT>``.
+    //! Compat-mode counterpart to the ``_sql(db |> select_from(type<T>))`` macro path:
+    //! when no chain operators or ``_sql`` wrapper is involved, this is what runs.
+    //! Returns ``Err(errmsg)`` on prepare or step failure.
+    //!
+    //! NOTE: uses a regular generic (`type<auto(TT)>`) rather than `[template]` so
+    //! the `type<T>` argument survives in the AST for `_sql` chain-pattern matching.
+    let sql = _::_sql_select_all_sql(type<TT -const -#>)
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "select_from prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    var inscope result : array<TT -const -#>
+    var rc = sqlite3_step(stmt)
+    while (rc == SQLITE_ROW) {
+        result |> emplace(_::_sql_read_row(stmt, type<TT -const -#>))
+        rc = sqlite3_step(stmt)
+    }
+    if (rc != SQLITE_DONE) {
+        let msg = "select_from step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    sqlite3_finalize(stmt)
+    return move_ok(result, type<string>)
+}
+
+[unused_argument(t)]
+def select_from(db : SqlRunner; t : type<auto(TT)>) : array<TT -const -#> {
+    //! Strict variant of ``try_select_from``. Panics with the libsqlite3 errmsg on failure.
+    var r <- db |> try_select_from(type<TT -const -#>)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
+// ============================================================================
+// _sql macro runtime: try_run_select / run_select
+//
+// The `_sql` macro emits a call to one of these. `bind_blk` runs once after
+// prepare to push bound values; `row_blk` is invoked per row to materialize
+// the typed result. Generic on the row type (`auto(TT)`) so the call site
+// determines whether the array is `array<Car>`, `array<string>`, or any
+// other projected shape.
+// ============================================================================
+
+def try_run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<array<TT -const -#>, string> {
+    //! Prepares ``sql``, runs ``bind_blk`` once, then steps the cursor and
+    //! materializes each row via ``row_blk``. Returns ``Err(errmsg)`` on
+    //! prepare or step failure.
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    invoke(bind_blk, stmt)
+    var inscope result : array<TT -const -#>
+    var rc = sqlite3_step(stmt)
+    while (rc == SQLITE_ROW) {
+        result |> push(invoke(row_blk, stmt))
+        rc = sqlite3_step(stmt)
+    }
+    if (rc != SQLITE_DONE) {
+        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    sqlite3_finalize(stmt)
+    return move_ok(result, type<string>)
+}
+
+def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : array<TT -const -#> {
+    //! Strict variant of ``try_run_select``. Panics on prepare/step failure.
+    var r <- try_run_select(db, sql, bind_blk, row_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
 // ============================================================================
 // [sql_table] structure macro
 //
@@ -474,6 +613,10 @@ class SqlTableMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_pk_unset)
         var fn_bind = make_bind_row_fn(st, fields)
         compiling_module() |> add_function(fn_bind)
+        var fn_select_all = make_select_all_sql_fn(st, table_name, fields)
+        compiling_module() |> add_function(fn_select_all)
+        var fn_read = make_read_row_fn(st, fields)
+        compiling_module() |> add_function(fn_read)
 
         return true
     }
@@ -644,6 +787,49 @@ class SqlTableMacro : AstStructureAnnotation {
             } else {
                 $b(no_pk_exprs)
             }
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_select_all_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        let col_list = build_string() <| $(var w) {
+            for (i in range(length(fields))) {
+                if (i > 0) {
+                    w |> write(", ")
+                }
+                w |> write("\"")
+                w |> write(fields[i].col_name)
+                w |> write("\"")
+            }
+        }
+        let sql = "SELECT {col_list} FROM \"{table_name}\""
+        var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st)) : string {
+            return $v(sql)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_read_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        var assign_exprs : array<ExpressionPtr>
+        assign_exprs |> reserve(length(fields))
+
+        for (i in range(length(fields))) {
+            let info = fields[i]
+            let col_idx = i
+            let field_name = info.name
+            assign_exprs |> push(qmacro_expr(${
+                row.$f(field_name) = sqlite_read(stmt, $v(col_idx), type<$t(st.fields[i]._type)>);
+            }))
+        }
+
+        var fn = qmacro_function("_sql_read_row") $(stmt : sqlite3_stmt?; typ : $t(st)) : $t(st) {
+            var row : $t(st)
+            $b(assign_exprs)
+            return <- row
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
