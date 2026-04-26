@@ -55,8 +55,10 @@ one-line helpers. Everything after this assumes this vocabulary.
    companion `_sql_text(chain)` for inspecting the emitted SQL. First
    exposure to `_sql(...)` — deliberate: the macro is *the* read-side
    story and appears in every subsequent read tutorial. **Shipped:**
-   [04-select_all.das](tutorial/04-select_all.das) (chunk 2, branch
-   `dassqlite-chunk2-sql-macro`). Original mockup:
+   [tutorials/sql/04-select_all.das](../../tutorials/sql/04-select_all.das)
+   (chunk 2 introduced; relocated from `modules/dasSQLITE/tutorial/`
+   to the project-wide `tutorials/sql/` home in chunk 2.5). Original
+   mockup:
    [04-select_all.das.mockup](tutorial-mockup/04-select_all.das.mockup).
 
 ## Part 2 — Parameters + error handling rail

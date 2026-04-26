@@ -130,8 +130,9 @@ panic-free `_try_sql` variant. All planned, none in this PR.
 
 ### Surface in this PR
 
-- **Tutorial 04** is now real (`tutorial/04-select_all.das`) — first end-to-end
-  exposure to `_sql`.
+- **Tutorial 04** is now real (`tutorials/sql/04-select_all.das` — relocated
+  from `modules/dasSQLITE/tutorial/` to the project-wide tutorials home in
+  chunk 2.5) — first end-to-end exposure to `_sql`.
 - **Tests:** `tests/dasSQLITE/test_05_sql_macro.das` (17 execution cases),
   `tests/dasSQLITE/test_06_sql_text.das` (19 SQL-string-emission cases),
   `tests/dasSQLITE/test_07_sql_composability.das` (10 user-wrapper cases),

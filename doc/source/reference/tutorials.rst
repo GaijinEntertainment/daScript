@@ -291,6 +291,7 @@ Run any tutorial from the project root::
    tutorials/sql_01_hello.rst
    tutorials/sql_02_insert_data.rst
    tutorials/sql_03_last_row_id.rst
+   tutorials/sql_04_select_all.rst
 
 .. _tutorials_dasaudio:
 

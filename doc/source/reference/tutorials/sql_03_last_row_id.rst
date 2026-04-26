@@ -103,3 +103,5 @@ Helper                                      Description
     Full source: :download:`tutorials/sql/03-last_row_id.das <../../../../tutorials/sql/03-last_row_id.das>`
 
     Previous tutorial: :ref:`tutorial_sql_insert_data`
+
+    Next tutorial: :ref:`tutorial_sql_select_all`
