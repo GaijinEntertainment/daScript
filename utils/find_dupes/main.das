@@ -12,6 +12,8 @@ require canonical
 require minhash
 require cluster
 require report
+require exchange
+require pipeline
 
 
 [CommandLineArgs]
@@ -46,15 +48,16 @@ struct Config {
     @clarg_doc = "Lambda-only mode: skip top-level functions, keep only lambdas (e.g. dastest run() bodies)"
     lambdas_only : bool
 
+    @clarg_doc = "Write all extracted functions to JSON and exit before clustering"
+    export_functions : string
+
+    @clarg_doc = "Load functions from a JSON file (produced by --export-functions) instead of compiling"
+    import_functions : string
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
     help : bool
-}
-
-
-def normalize_path(p : string) : string {
-    return p |> replace("\\", "/")
 }
 
 
@@ -140,102 +143,6 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 }
 
 
-// Walk one compiled program and append a FuncRecord per user
-// function (lambdas included; only builtIn / generated skipped).
-//
-// Generic-template functions (e.g. dastest's `equal<T>`) get reified
-// into every caller's module, so without filtering we see hundreds of
-// copies of the same library helpers. The file-source filter drops
-// any function whose `at.fileInfo` points outside the file we just
-// compiled, leaving only what was actually written in that file.
-def collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool; want_sigs : bool; min_tokens : int) {
-    let thisMod = get_this_module(program)
-    let source_norm = normalize_path(source_file)
-    for_each_function(thisMod, "") $(func) {
-        if (func.flags.builtIn) {
-            return
-        }
-        // Lambdas are emitted as `generated` synthesized functions
-        // (`__lambda_function_at_line_xxx`). Default mode skips them via
-        // the generated filter (the dispatcher already references them
-        // via ADDR). Lambda-only mode lets them through and drops the
-        // top-level functions instead.
-        if (lambdas_only) {
-            if (!func.flags._lambda) {
-                return
-            }
-        } else {
-            if (func.flags.generated) {
-                return
-            }
-        }
-        let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
-        // Normalize both sides — Windows runners and recursive scans can
-        // mix separators / `./` prefixes, and a literal mismatch silently
-        // drops every function from a file that compiled fine.
-        if (normalize_path(fn_file) != source_norm) {
-            return
-        }
-        // Generic templates get reified per type (e.g. `test_conversions`
-        // reified for int8, uint16, uint, uint64). Each reification is a
-        // distinct FunctionPtr but they all point at the same source
-        // (file, line). Keep the first; the rest are reported as
-        // duplicates against themselves which is just noise.
-        let loc = "{fn_file}:{int(func.at.line)}"
-        if (key_exists(seen_loc, loc)) {
-            return
-        }
-        seen_loc |> insert(loc, null)
-        let canon = canonicalize_function(func)
-        if (empty(canon)) {
-            return
-        }
-        let tokens <- tokenize_canonical(canon)
-        var rec = FuncRecord()
-        rec.ref.file = fn_file
-        rec.ref.name = string(func.name)
-        rec.ref.line = int(func.at.line)
-        rec.ref.is_lambda = func.flags._lambda
-        rec.canonical := canon
-        rec.token_count = length(tokens)
-        // Skip signature work when fuzzy is disabled or when the function
-        // is below the noise floor — fuzzy_pairs filters those out anyway.
-        if (want_sigs && rec.token_count >= min_tokens) {
-            rec.sig <- minhash_signature(tokens)
-        }
-        records |> emplace(rec)
-    }
-}
-
-
-def compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool; want_sigs : bool; min_tokens : int) : bool {
-    var inscope access <- make_file_access("")
-    var ok_compile = true
-    using() $(var mg : ModuleGroup) {
-        using() $(var cop : CodeOfPolicies) {
-            cop.ignore_shared_modules = true
-            cop.export_all = true
-            // Leave optimisations and infer-time folding ON: dastest macros
-            // (e.g. unroll) need constant folding to compile, and folded-equal
-            // expressions are exactly the kind of duplicate we want to catch.
-            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
-                if (!ok) {
-                    ok_compile = false
-                    if (verbose) {
-                        print("FAIL {file}\n  {issues}\n")
-                    } else {
-                        print("FAIL {file}\n")
-                    }
-                    return
-                }
-                collect_from_program(program, file, records, seen_loc, lambdas_only, want_sigs, min_tokens)
-            }
-        }
-    }
-    return ok_compile
-}
-
-
 [export]
 def main() {
     var cfg = Config()
@@ -249,8 +156,18 @@ def main() {
         print_help(get_command_info(type<Config>), "find_dupes")
         return
     }
-    if (length(cfg.path) == 0) {
-        print("error: at least one --path is required\n\n")
+    let importing = !empty(cfg.import_functions)
+    let exporting = !empty(cfg.export_functions)
+    if (importing && length(cfg.path) > 0) {
+        print("error: --import-functions and --path are mutually exclusive\n")
+        return
+    }
+    if (importing && exporting) {
+        print("error: --import-functions and --export-functions are mutually exclusive (transcode is a no-op)\n")
+        return
+    }
+    if (!importing && length(cfg.path) == 0) {
+        print("error: at least one --path is required (or pass --import-functions)\n\n")
         print_help(get_command_info(type<Config>), "find_dupes")
         return
     }
@@ -272,37 +189,75 @@ def main() {
     let threshold = cfg.threshold
     let top = cfg.top
     let min_tokens = cfg.min_tokens
-    let want_sigs = !cfg.no_fuzzy
-
-    var files : array<string>
-    var cache : table<string; void?>
-    for (p in cfg.path) {
-        scan_das_files(p, files, cache)
-    }
-    if (length(files) == 0) {
-        print("error: no .das files found under given paths\n")
-        return
-    }
-    print("scanning {length(files)} file(s)...\n")
+    // Skip MinHash signing in export-only mode: signatures aren't
+    // written to the export and clustering is skipped, so the work
+    // would be discarded. Saves O(tokens × 64) per function on big
+    // shard runs.
+    let want_sigs = !cfg.no_fuzzy && !exporting
 
     var records : array<FuncRecord>
-    var seen_loc : table<string; void?>
-    var n_failed = 0
-    var n_skipped = 0
-    for (i in range(length(files))) {
-        let file = files[i]
-        if (cfg.verbose) {
-            print("[{i + 1}/{length(files)}] {file}\n")
+    var files_scanned = 0
+
+    if (importing) {
+        var ierr : string
+        if (!read_import(cfg.import_functions, records, want_sigs, min_tokens, ierr)) {
+            print("error: {ierr}\n")
+            return
         }
-        if (has_expect_directive(file)) {
-            n_skipped++
-            continue
+        print("loaded {length(records)} function record(s) from {cfg.import_functions}\n")
+    } else {
+        var files : array<string>
+        var cache : table<string; void?>
+        for (p in cfg.path) {
+            scan_das_files(p, files, cache)
         }
-        if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
-            n_failed++
+        if (length(files) == 0) {
+            print("error: no .das files found under given paths\n")
+            return
+        }
+        print("scanning {length(files)} file(s)...\n")
+
+        var seen_loc : table<string; void?>
+        var n_failed = 0
+        var n_skipped = 0
+        for (i in range(length(files))) {
+            let file = files[i]
+            if (cfg.verbose) {
+                print("[{i + 1}/{length(files)}] {file}\n")
+            }
+            if (has_expect_directive(file)) {
+                n_skipped++
+                continue
+            }
+            if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
+                n_failed++
+            }
+        }
+        files_scanned = length(files)
+        print("collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
+
+        if (exporting) {
+            // In export mode, treat compile failures as fatal —
+            // sharding scripts that merge multiple exports must be able
+            // to detect partial-failure runs, same reason write
+            // failures panic below. Best-effort export would silently
+            // ship an incomplete corpus.
+            if (n_failed > 0) {
+                print("error: {n_failed} compile failure(s); refusing to write partial export\n")
+                panic("find_dupes export failed: {n_failed} compile failure(s)")
+            }
+            if (write_export(records, cfg.export_functions)) {
+                print("wrote {length(records)} function(s) to {cfg.export_functions}\n")
+                return
+            }
+            // Use `panic` to surface a non-zero exit code so scripts
+            // sharding compile-then-merge across machines can detect
+            // partial-failure runs. The `error:` prefix matches the
+            // format used elsewhere for usage errors in this CLI.
+            print("error: could not write export to {cfg.export_functions}\n")
+            panic("find_dupes export failed")
         }
     }
-    print("collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
 
     print("clustering exact matches...\n")
     var clusters <- exact_buckets(records, min_tokens)
@@ -315,7 +270,7 @@ def main() {
     }
 
     var rep : Report
-    rep.summary.files_scanned = length(files)
+    rep.summary.files_scanned = files_scanned
     rep.summary.functions_analyzed = length(records)
     rep.summary.threshold = threshold
     rep.summary.min_tokens = min_tokens

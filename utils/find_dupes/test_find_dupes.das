@@ -1,0 +1,792 @@
+options gen2
+options no_unused_function_arguments = false
+options no_unused_block_arguments = false
+
+require dastest/testing_boost public
+require strings
+require math
+require daslib/fio
+require daslib/json_boost
+
+require canonical
+require minhash
+require cluster
+require exchange
+require pipeline
+
+
+// ── helpers ──────────────────────────────────────────────────────────
+
+def make_record(name : string; canonical : string; line : int; want_sigs : bool) : FuncRecord {
+    var rec = FuncRecord()
+    rec.ref.name := name
+    rec.ref.file := "test.das"
+    rec.ref.line = line
+    rec.ref.is_lambda = false
+    rec.canonical := canonical
+    derive_sig_and_count(rec, want_sigs, 0)
+    return <- rec
+}
+
+
+def find_canonical_by_name(records : array<FuncRecord>; name : string) : string {
+    for (rec in records) {
+        if (rec.ref.name == name) {
+            return rec.canonical
+        }
+    }
+    return ""
+}
+
+
+def find_record_by_name(records : array<FuncRecord>; name : string) : int {
+    for (i in range(length(records))) {
+        if (records[i].ref.name == name) {
+            return i
+        }
+    }
+    return -1
+}
+
+
+def cluster_has_member(c : Cluster; name : string) : bool {
+    for (m in c.members) {
+        if (m.name == name) {
+            return true
+        }
+    }
+    return false
+}
+
+
+def find_cluster_with_member(clusters : array<Cluster>; name : string) : int {
+    for (i in range(length(clusters))) {
+        if (cluster_has_member(clusters[i], name)) {
+            return i
+        }
+    }
+    return -1
+}
+
+
+def compile_fixture(file : string; var records : array<FuncRecord>; lambdas_only : bool; want_sigs : bool) : bool {
+    var seen_loc : table<string; void?>
+    return compile_and_collect(file, records, seen_loc, false, lambdas_only, want_sigs, 0)
+}
+
+
+def fabs_f(x : float) : float {
+    return x < 0.0f ? -x : x
+}
+
+
+// Compile fixture/canonical_cases.das for the canonical-visitor tests.
+// Wraps the failure assertion so individual tests can early-return on
+// compile failure instead of cascading into "" == "" false positives.
+def compile_canonical_fixture(t : T?; var records : array<FuncRecord>) : bool {
+    let ok = compile_fixture(CANONICAL_FIXTURE, records, false, false)
+    t |> success(ok, "canonical_cases.das compiled")
+    return ok
+}
+
+
+// Look up a function's canonical AND assert it's non-empty in one call.
+// Defends against silent passes where the fixture changed (function
+// renamed, removed) and `find_canonical_by_name` returns "" — naked
+// `t |> equal(a, b)` would still pass for "" == "".
+def find_canonical_required(t : T?; records : array<FuncRecord>; name : string) : string {
+    let canon = find_canonical_by_name(records, name)
+    t |> success(!empty(canon), "canonical present for {name}")
+    return canon
+}
+
+
+// ── tokenize_canonical ───────────────────────────────────────────────
+
+[test]
+def test_tokenize_basic(t : T?) {
+    let toks <- tokenize_canonical("A B C")
+    t |> equal(length(toks), 3)
+    t |> equal(toks[0], "A")
+    t |> equal(toks[1], "B")
+    t |> equal(toks[2], "C")
+}
+
+
+[test]
+def test_tokenize_empty(t : T?) {
+    let toks <- tokenize_canonical("")
+    t |> equal(length(toks), 0)
+}
+
+
+[test]
+def test_tokenize_collapses_whitespace(t : T?) {
+    let toks <- tokenize_canonical("  A   B  ")
+    t |> equal(length(toks), 2)
+    t |> equal(toks[0], "A")
+    t |> equal(toks[1], "B")
+}
+
+
+[test]
+def test_tokenize_trailing_space(t : T?) {
+    // CanonicalVisitor.emit() always trails a space; tokenize must drop
+    // that empty tail, not produce a phantom "" token.
+    let toks <- tokenize_canonical("FN ENDFN ")
+    t |> equal(length(toks), 2)
+}
+
+
+// ── minhash + jaccard ────────────────────────────────────────────────
+
+[test]
+def test_minhash_signature_length(t : T?) {
+    var toks : array<string>
+    toks |> push("alpha")
+    toks |> push("beta")
+    toks |> push("gamma")
+    let sig <- minhash_signature(toks)
+    t |> equal(length(sig), 64)
+}
+
+
+[test]
+def test_minhash_padding_for_short_input(t : T?) {
+    // 1 token is below N_GRAM (=5) — padding kicks in so we still get
+    // a stable 64-slot signature.
+    var toks : array<string>
+    toks |> push("only_one")
+    let sig <- minhash_signature(toks)
+    t |> equal(length(sig), 64)
+}
+
+
+[test]
+def test_minhash_deterministic(t : T?) {
+    var toks_a : array<string>
+    var toks_b : array<string>
+    for (i in range(20)) {
+        toks_a |> push("token_{i}")
+        toks_b |> push("token_{i}")
+    }
+    let sig_a <- minhash_signature(toks_a)
+    let sig_b <- minhash_signature(toks_b)
+    var all_match = true
+    for (i in range(length(sig_a))) {
+        if (sig_a[i] != sig_b[i]) {
+            all_match = false
+        }
+    }
+    t |> success(all_match, "signatures of identical token lists must match slot-for-slot")
+}
+
+
+[test]
+def test_jaccard_identical(t : T?) {
+    var toks : array<string>
+    for (i in range(15)) {
+        toks |> push("t{i}")
+    }
+    let sig_a <- minhash_signature(toks)
+    let sig_b <- minhash_signature(toks)
+    t |> equal(jaccard_estimate(sig_a, sig_b), 1.0f)
+}
+
+
+[test]
+def test_jaccard_empty(t : T?) {
+    let empty_a : array<uint64>
+    let empty_b : array<uint64>
+    t |> equal(jaccard_estimate(empty_a, empty_b), 0.0f)
+}
+
+
+[test]
+def test_jaccard_length_mismatch(t : T?) {
+    var toks : array<string>
+    toks |> push("x")
+    toks |> push("y")
+    let sig <- minhash_signature(toks)
+    var short_sig : array<uint64>
+    short_sig |> push(0ul)
+    t |> equal(jaccard_estimate(sig, short_sig), 0.0f)
+}
+
+
+[test]
+def test_jaccard_unrelated_low(t : T?) {
+    // Not asserting exactly 0 — MinHash with K=64 has ~1.5% slot
+    // resolution and rare collisions are normal. Just check the
+    // estimate is far below "duplicate" territory.
+    var toks_a : array<string>
+    var toks_b : array<string>
+    for (i in range(30)) {
+        toks_a |> push("aaa_{i}")
+        toks_b |> push("zzz_{i + 1000}")
+    }
+    let sig_a <- minhash_signature(toks_a)
+    let sig_b <- minhash_signature(toks_b)
+    let j = jaccard_estimate(sig_a, sig_b)
+    t |> success(j < 0.3f, "unrelated inputs should have jaccard < 0.3, got {j}")
+}
+
+
+// ── exact_buckets ────────────────────────────────────────────────────
+
+[test]
+def test_exact_groups_duplicates(t : T?) {
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("a", "FN ARG <var_0> RET <var_0> ENDFN", 1, false)
+    records |> emplace <| make_record("b", "FN ARG <var_0> RET <var_0> ENDFN", 2, false)
+    records |> emplace <| make_record("c", "FN ARG <var_0> RET LIT ENDFN", 3, false)
+    records |> emplace <| make_record("d", "FN ARG <var_0> RET <var_0> ENDFN", 4, false)
+    var clusters <- exact_buckets(records, 0)
+    // 3 records share canonical → 1 cluster of size 3; record "c" is
+    // alone → not reported.
+    t |> equal(length(clusters), 1)
+    t |> equal(length(clusters[0].members), 3)
+    t |> success(cluster_has_member(clusters[0], "a"), "cluster contains a")
+    t |> success(cluster_has_member(clusters[0], "b"), "cluster contains b")
+    t |> success(cluster_has_member(clusters[0], "d"), "cluster contains d")
+    t |> success(!cluster_has_member(clusters[0], "c"), "cluster does NOT contain c")
+}
+
+
+[test]
+def test_exact_min_tokens_filter(t : T?) {
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("a", "FN ENDFN", 1, false)            // 2 tokens
+    records |> emplace <| make_record("b", "FN ENDFN", 2, false)            // 2 tokens
+    records |> emplace <| make_record("c", "FN BODY BLK STMT ENDBLK ENDFN", 3, false)
+    records |> emplace <| make_record("d", "FN BODY BLK STMT ENDBLK ENDFN", 4, false)
+    var clusters <- exact_buckets(records, 5)
+    // a/b at 2 tokens are below min_tokens=5; only c/d remain.
+    t |> equal(length(clusters), 1)
+    t |> equal(length(clusters[0].members), 2)
+    t |> success(cluster_has_member(clusters[0], "c"), "c clustered")
+    t |> success(cluster_has_member(clusters[0], "d"), "d clustered")
+}
+
+
+[test]
+def test_exact_assigns_cluster_id(t : T?) {
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("a", "FN X Y Z ENDFN", 1, false)
+    records |> emplace <| make_record("b", "FN X Y Z ENDFN", 2, false)
+    records |> emplace <| make_record("c", "FN P Q R ENDFN", 3, false)
+    var clusters <- exact_buckets(records, 0)
+    let i_a = find_record_by_name(records, "a")
+    let i_b = find_record_by_name(records, "b")
+    let i_c = find_record_by_name(records, "c")
+    t |> success(records[i_a].cluster_id >= 0, "a got a cluster_id")
+    t |> success(records[i_b].cluster_id >= 0, "b got a cluster_id")
+    t |> equal(records[i_a].cluster_id, records[i_b].cluster_id)
+    t |> equal(records[i_c].cluster_id, -1)
+}
+
+
+[test]
+def test_exact_singleton_not_reported(t : T?) {
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("solo", "FN UNIQUE STREAM ENDFN", 1, false)
+    var clusters <- exact_buckets(records, 0)
+    t |> equal(length(clusters), 0)
+}
+
+
+// ── sort_clusters / sort_pairs ───────────────────────────────────────
+
+[test]
+def test_sort_clusters_by_size(t : T?) {
+    var records : array<FuncRecord>
+    // Two clusters: AAA size 2, BBB size 3. After sort, BBB comes first.
+    records |> emplace <| make_record("a1", "FN AAA ENDFN", 1, false)
+    records |> emplace <| make_record("a2", "FN AAA ENDFN", 2, false)
+    records |> emplace <| make_record("b1", "FN BBB ENDFN", 3, false)
+    records |> emplace <| make_record("b2", "FN BBB ENDFN", 4, false)
+    records |> emplace <| make_record("b3", "FN BBB ENDFN", 5, false)
+    var clusters <- exact_buckets(records, 0)
+    sort_clusters(clusters)
+    t |> equal(length(clusters), 2)
+    t |> equal(length(clusters[0].members), 3)
+    t |> equal(length(clusters[1].members), 2)
+    t |> success(cluster_has_member(clusters[0], "b1"), "size-3 cluster ranked first")
+}
+
+
+[test]
+def test_sort_pairs_by_similarity(t : T?) {
+    var pairs : array<FuzzyPair>
+    var p1 : FuzzyPair
+    p1.similarity = 0.75f
+    p1.a.name := "low_a"
+    p1.a.file := "f"
+    p1.a.line = 1
+    p1.b.name := "low_b"
+    p1.b.file := "f"
+    p1.b.line = 2
+    var p2 : FuzzyPair
+    p2.similarity = 0.95f
+    p2.a.name := "hi_a"
+    p2.a.file := "f"
+    p2.a.line = 3
+    p2.b.name := "hi_b"
+    p2.b.file := "f"
+    p2.b.line = 4
+    pairs |> emplace(p1)
+    pairs |> emplace(p2)
+    sort_pairs(pairs)
+    t |> equal(pairs[0].similarity, 0.95f)
+    t |> equal(pairs[1].similarity, 0.75f)
+}
+
+
+// ── fuzzy_pairs ──────────────────────────────────────────────────────
+
+[test]
+def test_fuzzy_near_duplicates_pair(t : T?) {
+    var records : array<FuncRecord>
+    // Two long, very similar canonicals — differ in one operator token.
+    let canon_a = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> LIT STMT FOR FOR_VAR <var_2> <var_0> FOR_BODY BLK STMT OP2:+= <var_1> <var_2> ENDBLK STMT RET <var_1> ENDBLK ENDFN"
+    let canon_b = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> LIT STMT FOR FOR_VAR <var_2> <var_0> FOR_BODY BLK STMT OP2:*= <var_1> <var_2> ENDBLK STMT RET <var_1> ENDBLK ENDFN"
+    records |> emplace <| make_record("a", canon_a, 1, true)
+    records |> emplace <| make_record("b", canon_b, 2, true)
+    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    t |> equal(length(pairs), 1)
+    t |> success(pairs[0].similarity >= 0.7f, "similarity above threshold, got {pairs[0].similarity}")
+}
+
+
+[test]
+def test_fuzzy_skips_identical(t : T?) {
+    // Same canonical text → exact-cluster territory; fuzzy pass must
+    // skip them so they're not double-counted.
+    var records : array<FuncRecord>
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN"
+    records |> emplace <| make_record("a", canon, 1, true)
+    records |> emplace <| make_record("b", canon, 2, true)
+    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    t |> equal(length(pairs), 0)
+}
+
+
+[test]
+def test_fuzzy_skips_same_cluster(t : T?) {
+    // After exact_buckets stamps cluster_id on duplicates, fuzzy must
+    // skip intra-cluster pairs (avoids double-reporting).
+    var records : array<FuncRecord>
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN"
+    records |> emplace <| make_record("a", canon, 1, true)
+    records |> emplace <| make_record("b", canon, 2, true)
+    var clusters <- exact_buckets(records, 0)
+    t |> equal(length(clusters), 1)
+    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    t |> equal(length(pairs), 0)
+}
+
+
+[test]
+def test_fuzzy_length_ratio_gate(t : T?) {
+    // Very different lengths → length_ratio gate drops the pair regardless
+    // of MinHash similarity.
+    var records : array<FuncRecord>
+    records |> emplace <| make_record(
+        "short",
+        "FN ARG <var_0> TYP BODY BLK STMT RET <var_0> ENDBLK ENDFN",
+        1, true)
+    records |> emplace <| make_record(
+        "long",
+        "FN ARG <var_0> TYP ARG <var_1> TYP ARG <var_2> TYP TYP BODY BLK STMT LET LET_VAR <var_3> LIT STMT FOR FOR_VAR <var_4> <var_0> FOR_BODY BLK STMT OP2:+= <var_3> <var_4> ENDBLK STMT FOR FOR_VAR <var_5> <var_1> FOR_BODY BLK STMT OP2:*= <var_3> <var_5> ENDBLK STMT RET <var_3> ENDBLK ENDFN",
+        2, true)
+    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    t |> equal(length(pairs), 0)
+}
+
+
+[test]
+def test_fuzzy_min_tokens_filter(t : T?) {
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("a", "FN A B C ENDFN", 1, true)
+    records |> emplace <| make_record("b", "FN A B C ENDFN", 2, true)
+    var pairs <- fuzzy_pairs(records, 0.7f, 100)
+    t |> equal(length(pairs), 0)
+}
+
+
+// ── exchange (export/import round-trip) ──────────────────────────────
+//
+// Each test creates its own temp file via `create_temp_file_result`
+// so the suite is portable across platforms (Windows CI has no /tmp)
+// and immune to leftover files from previous runs. The `remove(path)`
+// at the end cleans up.
+
+def make_temp_export_path(t : T?) : string {
+    let r = create_temp_file_result("find_dupes_test", ".json")
+    if (!(r is value)) {
+        t |> failure("create_temp_file_result failed: {unsafe(r.error)}")
+        return ""
+    }
+    return unsafe(r.value)
+}
+
+
+[test]
+def test_export_import_basic(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("alpha", "FN A B C ENDFN", 10, false)
+    records |> emplace <| make_record("beta", "FN X Y Z ENDFN", 20, false)
+    records[1].ref.is_lambda = true
+
+    let wrote = write_export(records, path)
+    t |> success(wrote, "write_export returned true")
+
+    var loaded : array<FuncRecord>
+    var err : string
+    let read_ok = read_import(path, loaded, false, 0, err)
+    t |> success(read_ok, "read_import returned true; err={err}")
+    t |> equal(length(loaded), 2)
+    t |> equal(loaded[0].ref.name, "alpha")
+    t |> equal(loaded[0].ref.line, 10)
+    t |> equal(loaded[0].ref.is_lambda, false)
+    t |> equal(loaded[0].canonical, "FN A B C ENDFN")
+    t |> equal(loaded[1].ref.name, "beta")
+    t |> equal(loaded[1].ref.is_lambda, true)
+    remove(path)
+}
+
+
+[test]
+def test_export_import_recomputes_sig(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var records : array<FuncRecord>
+    records |> emplace <| make_record(
+        "x",
+        "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN",
+        1, false)
+    write_export(records, path)
+    var loaded : array<FuncRecord>
+    var err : string
+    read_import(path, loaded, true, 0, err)
+    t |> equal(length(loaded), 1)
+    t |> equal(length(loaded[0].sig), 64)
+    t |> success(loaded[0].token_count > 0, "token_count was recomputed")
+    remove(path)
+}
+
+
+[test]
+def test_export_import_skips_sig_when_no_fuzzy(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var records : array<FuncRecord>
+    records |> emplace <| make_record("x", "FN A B C D E F G H I J ENDFN", 1, false)
+    write_export(records, path)
+    var loaded : array<FuncRecord>
+    var err : string
+    read_import(path, loaded, false, 0, err)
+    t |> equal(length(loaded), 1)
+    t |> equal(length(loaded[0].sig), 0)
+    t |> success(loaded[0].token_count > 0, "token_count still computed")
+    remove(path)
+}
+
+
+[test]
+def test_import_missing_file(t : T?) {
+    // Create a temp file, immediately remove it — the path is now
+    // guaranteed-nonexistent and unique to this run.
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    remove(path)
+    var loaded : array<FuncRecord>
+    var err : string
+    let ok = read_import(path, loaded, false, 0, err)
+    t |> success(!ok, "read_import returns false for missing file")
+    t |> success(!empty(err), "error message set")
+}
+
+
+[test]
+def test_import_malformed_json(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint("this is not valid json !!!")
+        }
+    }
+    var loaded : array<FuncRecord>
+    var err : string
+    let ok = read_import(path, loaded, false, 0, err)
+    t |> success(!ok, "read_import returns false for garbage")
+    t |> success(!empty(err), "error message set")
+    remove(path)
+}
+
+
+[test]
+def test_import_bad_schema_version(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var bad = ExportEnvelope()
+    bad.schema_version = 99
+    let body = sprint_json(bad, false)
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    var loaded : array<FuncRecord>
+    var err : string
+    let ok = read_import(path, loaded, false, 0, err)
+    t |> success(!ok, "read_import rejects unknown schema_version")
+    t |> success(find(err, "schema_version") >= 0, "error mentions schema_version: {err}")
+    remove(path)
+}
+
+
+// ── derive_sig_and_count ─────────────────────────────────────────────
+
+[test]
+def test_derive_sig_and_count_no_sigs(t : T?) {
+    var rec = FuncRecord()
+    rec.canonical := "FN A B C D E ENDFN"
+    derive_sig_and_count(rec, false, 0)
+    t |> equal(rec.token_count, 7)
+    t |> equal(length(rec.sig), 0)
+}
+
+
+[test]
+def test_derive_sig_and_count_with_sigs(t : T?) {
+    var rec = FuncRecord()
+    rec.canonical := "FN A B C D E F G H I J K ENDFN"
+    derive_sig_and_count(rec, true, 0)
+    t |> equal(length(rec.sig), 64)
+}
+
+
+[test]
+def test_derive_sig_and_count_below_floor(t : T?) {
+    var rec = FuncRecord()
+    rec.canonical := "FN A B ENDFN"  // 4 tokens, below floor=100
+    derive_sig_and_count(rec, true, 100)
+    t |> equal(length(rec.sig), 0)
+    t |> equal(rec.token_count, 4)
+}
+
+
+// ── canonical visitor (compile fixture/canonical_cases.das) ──────────
+//
+// Each [test] re-compiles canonical_cases.das because non-copyable
+// `array<FuncRecord>` cannot be shared across `t |> run` lambda blocks
+// without unsafe-by-move capture. The fixture is small (~13 functions),
+// so per-test overhead is acceptable.
+
+let CANONICAL_FIXTURE = "utils/find_dupes/fixture/canonical_cases.das"
+
+
+[test]
+def test_canonical_alpha_rename(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_add_baseline")
+    let b = find_canonical_required(t, records, "case_add_renamed")
+    t |> equal(a, b)
+}
+
+
+[test]
+def test_canonical_type_collapse(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_add_baseline")
+    let c = find_canonical_required(t, records, "case_add_typed_float")
+    t |> equal(a, c)
+}
+
+
+[test]
+def test_canonical_literal_collapse(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_lit_one")
+    let b = find_canonical_required(t, records, "case_lit_big")
+    t |> equal(a, b)
+    t |> success(find(a, "LIT") >= 0, "LIT token present")
+}
+
+
+[test]
+def test_canonical_call_name_preserved(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_call_push")
+    let b = find_canonical_required(t, records, "case_call_reserve")
+    t |> success(a != b, "different called fns must produce different canonical")
+    t |> success(find(a, "push") >= 0, "case_call_push canonical mentions push")
+    t |> success(find(b, "reserve") >= 0, "case_call_reserve canonical mentions reserve")
+}
+
+
+[test]
+def test_canonical_field_marker(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_field_read")
+    t |> success(find(a, ".FLD") >= 0, ".FLD token present in: {a}")
+}
+
+
+[test]
+def test_canonical_swizzle_marker(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_swizzle")
+    t |> success(find(a, ".SWZ") >= 0, ".SWZ token present in: {a}")
+}
+
+
+[test]
+def test_canonical_for_vs_while(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let f = find_canonical_required(t, records, "case_for_loop")
+    let w = find_canonical_required(t, records, "case_while_loop")
+    t |> success(find(f, "FOR") >= 0, "FOR token in for-loop")
+    t |> success(find(w, "WHILE") >= 0, "WHILE token in while-loop")
+    t |> success(find(f, "WHILE") < 0, "no WHILE in for-loop")
+    t |> success(find(w, "FOR") < 0, "no FOR in while-loop")
+}
+
+
+[test]
+def test_canonical_lambda_emits_mk_blk(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let l = find_canonical_required(t, records, "case_lambda_use")
+    t |> success(find(l, "MK_BLK") >= 0, "MK_BLK present in lambda use: {l}")
+}
+
+
+[test]
+def test_canonical_let_var_token(t : T?) {
+    var records : array<FuncRecord>
+    if (!compile_canonical_fixture(t, records)) return
+    let a = find_canonical_required(t, records, "case_let_var")
+    t |> success(find(a, "LET_VAR") >= 0, "LET_VAR present in: {a}")
+}
+
+
+// ── end-to-end pipeline against fixture/synth.das ────────────────────
+
+let SYNTH_FIXTURE = "utils/find_dupes/fixture/synth.das"
+
+
+[test]
+def test_pipeline_synth_collects_functions(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(SYNTH_FIXTURE, records, false, false)
+    t |> success(ok, "synth.das compiled")
+    // 8 user functions + main = 9 records when min_tokens=0.
+    t |> equal(length(records), 9)
+    t |> success(find_record_by_name(records, "add_int") >= 0, "add_int present")
+    t |> success(find_record_by_name(records, "loop_sum") >= 0, "loop_sum present")
+    t |> success(find_record_by_name(records, "with_lambda") >= 0, "with_lambda present")
+}
+
+
+[test]
+def test_pipeline_synth_exact_clusters(t : T?) {
+    var records : array<FuncRecord>
+    compile_fixture(SYNTH_FIXTURE, records, false, false)
+    var clusters <- exact_buckets(records, 0)
+    sort_clusters(clusters)
+    t |> equal(length(clusters), 2)
+    // First cluster: the three add_* functions (largest)
+    t |> equal(length(clusters[0].members), 3)
+    t |> success(cluster_has_member(clusters[0], "add_int"), "add_int in first cluster")
+    t |> success(cluster_has_member(clusters[0], "add_int_renamed_args"), "add_int_renamed_args")
+    t |> success(cluster_has_member(clusters[0], "add_float"), "add_float")
+    // Second cluster: the two with_lambda variants
+    t |> equal(length(clusters[1].members), 2)
+    t |> success(cluster_has_member(clusters[1], "with_lambda"), "with_lambda")
+    t |> success(cluster_has_member(clusters[1], "with_lambda_renamed"), "with_lambda_renamed")
+}
+
+
+[test]
+def test_pipeline_synth_fuzzy_pair(t : T?) {
+    var records : array<FuncRecord>
+    compile_fixture(SYNTH_FIXTURE, records, false, true)
+    var clusters <- exact_buckets(records, 0)
+    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    t |> equal(length(pairs), 1)
+    let names_match = (
+        (pairs[0].a.name == "loop_sum" && pairs[0].b.name == "loop_product") ||
+        (pairs[0].a.name == "loop_product" && pairs[0].b.name == "loop_sum"))
+    t |> success(names_match, "loop_sum/loop_product pair (got {pairs[0].a.name} / {pairs[0].b.name})")
+    t |> success(pairs[0].similarity >= 0.7f, "similarity above threshold: {pairs[0].similarity}")
+}
+
+
+[test]
+def test_pipeline_lambdas_only_mode(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(SYNTH_FIXTURE, records, true, false)
+    t |> success(ok, "compile in lambdas-only mode")
+    // synth.das uses `$(...)` block syntax (not `@(...)` lambdas), so
+    // lambdas-only mode produces zero records. The point of this test
+    // is to verify the filter excludes top-level `def`s — no add_int,
+    // no main, regardless of how many actual lambdas the fixture has.
+    t |> equal(find_record_by_name(records, "add_int"), -1)
+    t |> equal(find_record_by_name(records, "main"), -1)
+    t |> equal(find_record_by_name(records, "loop_sum"), -1)
+    t |> equal(find_record_by_name(records, "with_lambda"), -1)
+    // Every surviving record (if any) must have is_lambda set.
+    for (rec in records) {
+        t |> success(rec.ref.is_lambda, "lambdas-only record has is_lambda=true: {rec.ref.name}")
+    }
+}
+
+
+[test]
+def test_pipeline_export_import_clusters_match(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var records_compiled : array<FuncRecord>
+    compile_fixture(SYNTH_FIXTURE, records_compiled, false, true)
+    write_export(records_compiled, path)
+
+    var records_imported : array<FuncRecord>
+    var err : string
+    let read_ok = read_import(path, records_imported, true, 0, err)
+    t |> success(read_ok, "read_import OK; err={err}")
+
+    var c_compiled <- exact_buckets(records_compiled, 0)
+    var c_imported <- exact_buckets(records_imported, 0)
+    sort_clusters(c_compiled)
+    sort_clusters(c_imported)
+    t |> equal(length(c_compiled), length(c_imported))
+    for (i in range(length(c_compiled))) {
+        t |> equal(c_compiled[i].canonical_sample, c_imported[i].canonical_sample)
+        t |> equal(length(c_compiled[i].members), length(c_imported[i].members))
+    }
+
+    var p_compiled <- fuzzy_pairs(records_compiled, 0.7f, 0)
+    var p_imported <- fuzzy_pairs(records_imported, 0.7f, 0)
+    sort_pairs(p_compiled)
+    sort_pairs(p_imported)
+    t |> equal(length(p_compiled), length(p_imported))
+    for (i in range(length(p_compiled))) {
+        let diff = fabs_f(p_compiled[i].similarity - p_imported[i].similarity)
+        t |> success(diff < 1.0e-5f, "similarity matches: {p_compiled[i].similarity} vs {p_imported[i].similarity}")
+        t |> equal(p_compiled[i].canonical_a, p_imported[i].canonical_a)
+        t |> equal(p_compiled[i].canonical_b, p_imported[i].canonical_b)
+    }
+    remove(path)
+}
