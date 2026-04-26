@@ -135,13 +135,48 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
 }
 
 
-// Sort clusters by member count descending (the biggest dupes first).
-def public sort_clusters(var clusters : array<Cluster>) {
-    sort(clusters) <| $(a, b) => length(a.members) > length(b.members)
+def member_key(m : MemberRef) : string {
+    return "{m.file}:{m.line}:{m.name}"
 }
 
 
-// Sort fuzzy pairs by similarity descending.
+// Sort clusters by member count descending; tie-break on token_count
+// desc, then canonical_sample, then first-member location. Without
+// tie-breakers `values(buckets)` iteration order leaks into the report
+// and diff-ing two runs becomes noisy.
+def public sort_clusters(var clusters : array<Cluster>) {
+    sort(clusters) $(a, b) {
+        let na = length(a.members)
+        let nb = length(b.members)
+        if (na != nb) {
+            return na > nb
+        }
+        if (a.token_count != b.token_count) {
+            return a.token_count > b.token_count
+        }
+        if (a.canonical_sample != b.canonical_sample) {
+            return a.canonical_sample < b.canonical_sample
+        }
+        if (na == 0) {
+            return false
+        }
+        return member_key(a.members[0]) < member_key(b.members[0])
+    }
+}
+
+
+// Sort fuzzy pairs by similarity descending; tie-break on (a, b)
+// member locations so pair ordering is reproducible across runs.
 def public sort_pairs(var pairs : array<FuzzyPair>) {
-    sort(pairs) <| $(a, b) => a.similarity > b.similarity
+    sort(pairs) $(a, b) {
+        if (a.similarity != b.similarity) {
+            return a.similarity > b.similarity
+        }
+        let ka = member_key(a.a)
+        let kb = member_key(b.a)
+        if (ka != kb) {
+            return ka < kb
+        }
+        return member_key(a.b) < member_key(b.b)
+    }
 }

@@ -53,12 +53,17 @@ struct Config {
 }
 
 
+def normalize_path(p : string) : string {
+    return p |> replace("\\", "/")
+}
+
+
 def is_daslib_skip(path : string; basename : string) : bool {
     // `daslib/debugger.das` and `daslib/profiler.das` install thread-local
     // agents at compile time; the second install in the same process throws
     // and aborts the scan. Match by daslib/ path suffix, not bare basename
     // — a project's own `myapp/debugger.das` should not be silently skipped.
-    let normalized = path |> replace("\\", "/")
+    let normalized = normalize_path(path)
     let prefix = "daslib/{basename}"
     return normalized == prefix || normalized |> ends_with("/{prefix}")
 }
@@ -145,6 +150,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 // compiled, leaving only what was actually written in that file.
 def collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool; want_sigs : bool; min_tokens : int) {
     let thisMod = get_this_module(program)
+    let source_norm = normalize_path(source_file)
     for_each_function(thisMod, "") $(func) {
         if (func.flags.builtIn) {
             return
@@ -164,7 +170,10 @@ def collect_from_program(program : ProgramPtr; source_file : string; var records
             }
         }
         let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
-        if (fn_file != source_file) {
+        // Normalize both sides — Windows runners and recursive scans can
+        // mix separators / `./` prefixes, and a literal mismatch silently
+        // drops every function from a file that compiled fine.
+        if (normalize_path(fn_file) != source_norm) {
             return
         }
         // Generic templates get reified per type (e.g. `test_conversions`
@@ -243,6 +252,18 @@ def main() {
     if (length(cfg.path) == 0) {
         print("error: at least one --path is required\n\n")
         print_help(get_command_info(type<Config>), "find_dupes")
+        return
+    }
+    if (cfg.threshold < 0.0f || cfg.threshold > 1.0f) {
+        print("error: --threshold must be in 0..1, got {cfg.threshold}\n")
+        return
+    }
+    if (cfg.top < 0) {
+        print("error: --top must be >= 0, got {cfg.top}\n")
+        return
+    }
+    if (cfg.min_tokens < 0) {
+        print("error: --min-tokens must be >= 0, got {cfg.min_tokens}\n")
         return
     }
     // Defaults live in the Config struct field initializers — clargs

@@ -44,7 +44,9 @@ def public write_json_report(report : Report; path : string) : bool {
 
 
 def member_label(m : MemberRef) : string {
-    let base = m.is_lambda ? "<lambda>" : m.name
+    // Synthetic lambda names already encode line:col, which makes
+    // multiple `@(...)` blocks on the same line distinguishable.
+    let base = m.is_lambda ? "<lambda> ({m.name})" : m.name
     return "{m.file}:{m.line}  {base}"
 }
 
