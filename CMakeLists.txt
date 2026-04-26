@@ -1666,6 +1666,14 @@ install(FILES ${AUDIO_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasAudio
 )
 
+# Install dasSQLITE tutorial .das files
+file(GLOB SQL_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/sql/*.das
+)
+install(FILES ${SQL_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/sql
+)
+
 # ── Documentation build (optional) ──────────────────────────────────────────
 if(DAS_BUILD_DOCUMENTATION)
     find_package(Python3 COMPONENTS Interpreter)

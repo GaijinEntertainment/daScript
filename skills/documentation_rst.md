@@ -174,7 +174,9 @@ After creating or modifying any RST files, stdlib documentation, or `daslib/*.da
 
 ## Tutorial RST conventions
 
-Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/language/` (language tutorials), `tutorials/dasStbImage/` (image tutorials), `tutorials/dasHV/` (HTTP tutorials), `tutorials/dasPUGIXML/` (XML tutorials), `tutorials/macros/` (macro tutorials), or `tutorials/integration/cpp/` (C++ integration tutorials).
+Tutorial source-file conventions (location, naming, header shape, install hooks) live in `skills/tutorials.md`. **Read that first** when adding or moving tutorials — overwriting the inherited examples under `modules/<X>/tutorial/` is a recurring mistake the source-side skill exists to prevent.
+
+Tutorial RST files live in `doc/source/reference/tutorials/` with companion `.das` files in `tutorials/<area>/`. Active areas: `language`, `macros`, `integration/c`, `integration/cpp`, `sql`, `dasAudio`, `dasHV`, `dasPEG`, `dasPUGIXML`, `dasStbImage`, `daStrudel`.
 
 - Each RST starts with a label: `.. _tutorial_name:` (e.g., `.. _tutorial_linq:`)
 - Include `.. index::` directive with relevant `single: Tutorial; Topic` entries
