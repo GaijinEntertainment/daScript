@@ -22,11 +22,11 @@ struct Config {
 
     @clarg_short = "t"
     @clarg_doc = "Fuzzy similarity threshold 0..1 (default 0.7)"
-    threshold : float
+    threshold : float = 0.7f
 
     @clarg_short = "n"
     @clarg_doc = "Top N entries shown in stdout summary (default 20)"
-    top : int
+    top : int = 20
 
     @clarg_doc = "Path to JSON report (optional)"
     json : string
@@ -36,7 +36,7 @@ struct Config {
     no_fuzzy : bool
 
     @clarg_doc = "Min token count per function for inclusion (default 8)"
-    min_tokens : int
+    min_tokens : int = 8
 
     @clarg_short = "v"
     @clarg_doc = "Per-file progress to stdout"
@@ -245,9 +245,12 @@ def main() {
         print_help(get_command_info(type<Config>), "find_dupes")
         return
     }
-    let threshold = cfg.threshold > 0.0f ? cfg.threshold : 0.7f
-    let top = cfg.top > 0 ? cfg.top : 20
-    let min_tokens = cfg.min_tokens > 0 ? cfg.min_tokens : 8
+    // Defaults live in the Config struct field initializers — clargs
+    // respects them when the flag is omitted, so 0 is now a legitimate
+    // user-supplied value (e.g. --min-tokens 0 to include all functions).
+    let threshold = cfg.threshold
+    let top = cfg.top
+    let min_tokens = cfg.min_tokens
     let want_sigs = !cfg.no_fuzzy
 
     var files : array<string>

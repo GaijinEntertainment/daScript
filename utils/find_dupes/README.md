@@ -36,7 +36,7 @@ Flags:
 | Flag | Default | Meaning |
 |---|---|---|
 | `-p / --path` | required | File or directory to scan; repeatable |
-| `-t / --threshold` | 0.7 | Fuzzy similarity floor (0..1). Combined Jaccard × length-ratio |
+| `-t / --threshold` | 0.7 | Fuzzy similarity floor (0..1). Score is `sqrt(jaccard × len_ratio)` plus a hard `len_ratio ≥ threshold` gate |
 | `-n / --top` | 20 | Top-N entries shown in stdout summary |
 | `--json` | (off) | Path for full JSON report |
 | `-x / --no-fuzzy` | off | Skip MinHash pass — exact clusters only |
