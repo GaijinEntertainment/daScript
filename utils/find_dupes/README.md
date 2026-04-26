@@ -6,10 +6,14 @@ collapsed), and reports:
 
 - **Exact-clone clusters** — functions that hash to the same canonical
   text. Pure structural duplicates, modulo names/types/values.
-- **Fuzzy near-duplicates** — pairs whose 64-slot MinHash signatures
-  match above a threshold AND whose token counts are within the same
-  threshold (the length gate suppresses MinHash false-positives on
-  highly periodic boilerplate).
+- **Fuzzy near-duplicates** — pairs scored as `sqrt(jaccard × len_ratio)`
+  on top of a 64-slot MinHash signature and a hard `len_ratio ≥ threshold`
+  gate. The length gate suppresses MinHash false-positives on highly
+  periodic boilerplate (otherwise a 4-statement and a 7-statement copy
+  of the same `t |> run(...)` block both look 100% identical to MinHash).
+  Note that the geometric mean admits Jaccard somewhat below `threshold`
+  when lengths match closely — this is intentional and biases toward
+  recall.
 
 Useful for surfacing test-suite boilerplate that could be factored,
 near-clones that drifted apart, or copy-pasted helpers that escaped

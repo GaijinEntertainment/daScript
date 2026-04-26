@@ -1,4 +1,5 @@
 options gen2
+options persistent_heap
 
 require daslib/clargs
 require daslib/ast
@@ -52,10 +53,23 @@ struct Config {
 }
 
 
-def is_skip_file(name : string) : bool {
-    // debugger/profiler install thread-local agents at compile time; the
-    // second install in the same process throws and aborts the scan.
-    return name == "builtin.das" || name == "debugger.das" || name == "profiler.das"
+def is_daslib_skip(path : string; basename : string) : bool {
+    // `daslib/debugger.das` and `daslib/profiler.das` install thread-local
+    // agents at compile time; the second install in the same process throws
+    // and aborts the scan. Match by daslib/ path suffix, not bare basename
+    // — a project's own `myapp/debugger.das` should not be silently skipped.
+    let normalized = path |> replace("\\", "/")
+    let prefix = "daslib/{basename}"
+    return normalized == prefix || normalized |> ends_with("/{prefix}")
+}
+
+
+def is_skip_file(path : string; basename : string) : bool {
+    if (basename == "builtin.das") {
+        return true
+    }
+    return (is_daslib_skip(path, "debugger.das")
+        || is_daslib_skip(path, "profiler.das"))
 }
 
 
@@ -89,7 +103,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         if (path |> ends_with(".das") && !cache |> key_exists(path)) {
             let last_slash = max(rfind(path, "/"), rfind(path, "\\"))
             let fname = last_slash >= 0 ? slice(path, last_slash + 1) : path
-            if (!is_skip_file(fname)) {
+            if (!is_skip_file(path, fname)) {
                 cache |> insert(path, null)
                 files |> push(path)
             }
@@ -113,7 +127,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         }
         if (fst.is_dir) {
             scan_das_files(full, files, cache)
-        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name) && !cache |> key_exists(full)) {
+        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(full, name) && !cache |> key_exists(full)) {
             cache |> insert(full, null)
             files |> push(full)
         }
@@ -129,7 +143,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
 // copies of the same library helpers. The file-source filter drops
 // any function whose `at.fileInfo` points outside the file we just
 // compiled, leaving only what was actually written in that file.
-def collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool) {
+def collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool; want_sigs : bool; min_tokens : int) {
     let thisMod = get_this_module(program)
     for_each_function(thisMod, "") $(func) {
         if (func.flags.builtIn) {
@@ -174,15 +188,18 @@ def collect_from_program(program : ProgramPtr; source_file : string; var records
         rec.ref.line = int(func.at.line)
         rec.ref.is_lambda = func.flags._lambda
         rec.canonical := canon
-        rec.canonical_hash = hash(canon)
         rec.token_count = length(tokens)
-        rec.sig <- minhash_signature(tokens)
+        // Skip signature work when fuzzy is disabled or when the function
+        // is below the noise floor — fuzzy_pairs filters those out anyway.
+        if (want_sigs && rec.token_count >= min_tokens) {
+            rec.sig <- minhash_signature(tokens)
+        }
         records |> emplace(rec)
     }
 }
 
 
-def compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool) : bool {
+def compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool; want_sigs : bool; min_tokens : int) : bool {
     var inscope access <- make_file_access("")
     var ok_compile = true
     using() $(var mg : ModuleGroup) {
@@ -202,7 +219,7 @@ def compile_and_collect(file : string; var records : array<FuncRecord>; var seen
                     }
                     return
                 }
-                collect_from_program(program, file, records, seen_loc, lambdas_only)
+                collect_from_program(program, file, records, seen_loc, lambdas_only, want_sigs, min_tokens)
             }
         }
     }
@@ -231,6 +248,7 @@ def main() {
     let threshold = cfg.threshold > 0.0f ? cfg.threshold : 0.7f
     let top = cfg.top > 0 ? cfg.top : 20
     let min_tokens = cfg.min_tokens > 0 ? cfg.min_tokens : 8
+    let want_sigs = !cfg.no_fuzzy
 
     var files : array<string>
     var cache : table<string; void?>
@@ -256,7 +274,7 @@ def main() {
             n_skipped++
             continue
         }
-        if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only)) {
+        if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
             n_failed++
         }
     }
@@ -273,12 +291,14 @@ def main() {
     }
 
     var rep : Report
-    rep.files_scanned = length(files)
-    rep.functions_analyzed = length(records)
-    rep.threshold = threshold
-    rep.min_tokens = min_tokens
+    rep.summary.files_scanned = length(files)
+    rep.summary.functions_analyzed = length(records)
+    rep.summary.threshold = threshold
+    rep.summary.min_tokens = min_tokens
     rep.exact_clusters <- clusters
     rep.fuzzy_pairs <- pairs
+    rep.summary.exact_clusters = length(rep.exact_clusters)
+    rep.summary.fuzzy_pairs = length(rep.fuzzy_pairs)
 
     print_summary(rep, top)
     if (!empty(cfg.json)) {

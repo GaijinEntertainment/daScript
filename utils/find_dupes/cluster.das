@@ -16,7 +16,6 @@ struct public MemberRef {
 struct public FuncRecord {
     ref : MemberRef
     canonical : string
-    canonical_hash : uint64
     sig : array<uint64>
     token_count : int
     cluster_id : int = -1
@@ -42,19 +41,22 @@ struct public FuzzyPair {
 // Build exact-clone clusters by grouping records with identical
 // canonical text. Mutates `records[i].cluster_id` so the fuzzy pass
 // can skip same-cluster pairs. Skips clusters of size 1.
+//
+// Bucket on the canonical string itself (not its 64-bit hash) so a
+// rare hash collision can't conflate two unrelated functions.
 def public exact_buckets(var records : array<FuncRecord>; min_tokens : int) : array<Cluster> {
-    var buckets : table<uint64; array<int>>
+    var buckets : table<string; array<int>>
     for (i in range(length(records))) {
-        let h = records[i].canonical_hash
         if (records[i].token_count < min_tokens) {
             continue
         }
-        if (key_exists(buckets, h)) {
-            buckets[h] |> push(i)
+        let key = records[i].canonical
+        if (key_exists(buckets, key)) {
+            buckets[key] |> push(i)
         } else {
             var lst : array<int>
             lst |> push(i)
-            buckets[h] <- lst
+            buckets[key] <- lst
         }
     }
     var out : array<Cluster>
@@ -101,7 +103,11 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
             if (records[i].cluster_id != -1 && records[i].cluster_id == records[j].cluster_id) {
                 continue
             }
-            if (records[i].canonical_hash == records[j].canonical_hash) {
+            // Same canonical text would already be in the exact-cluster
+            // set (caught above when both have a cluster_id). Compare on
+            // the string itself rather than the 64-bit hash to dodge any
+            // theoretical collision.
+            if (records[i].canonical == records[j].canonical) {
                 continue
             }
             let ti = float(records[i].token_count)
