@@ -76,7 +76,7 @@ A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Us
 
 ## MCP Server (AI Tool Integration)
 
-`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 29 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep, package management, and more. Uses stdio transport — no extra build dependencies.
+`utils/mcp/` contains an [MCP](https://modelcontextprotocol.io/) server exposing 30 compiler-backed tools to AI coding assistants: compilation diagnostics, type inspection, go-to-definition, find-references, AST dump, AOT generation, expression evaluation, parse-aware grep, package management, and more. Uses stdio transport — no extra build dependencies.
 
 Configure in `.mcp.json`:
 ```json

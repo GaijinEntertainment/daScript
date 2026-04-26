@@ -16,6 +16,12 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/daspkg.md` | `skills/daspkg.md` | Package manager usage |
 | `install/skills/dynamic_modules.md` | `skills/dynamic_modules.md` | `.das_module` descriptors |
 | `install/skills/daslang_live.md` | `skills/daslang_live.md` | Live-reload host |
+| `install/skills/clargs_usage.md` | `skills/clargs_usage.md` | Command-line argument parsing for user tools |
+| `install/skills/json.md` | `skills/json.md` | JSON read/write via `sprint_json`/`sscan_json` and `JV`/`from_JV` |
+| `install/skills/xml.md` | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` |
+| `install/skills/writing_tests.md` | `skills/writing_tests.md` | dastest framework usage for SDK consumers |
+| `install/skills/memory_leak_detection.md` | `skills/memory_leak_detection.md` | Heap / gc_node / smart_ptr / handle leak detection — runtime CLI flags |
+| `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
 
 ## What belongs in install instructions
@@ -63,6 +69,7 @@ The install CLAUDE.md derives from the repo CLAUDE.md but is NOT a copy. When up
 4. **New C++ integration patterns** — update BOTH `skills/cpp_integration.md` AND `install/skills/cpp_integration.md`; omit repo-internal codebase notes from the install version
 5. **Formatter changes** — update BOTH `skills/das_formatting.md` AND `install/skills/das_formatting.md`; use `bin/daslang` paths in the install version
 6. **MCP tool changes** (new tools, API changes) — update BOTH repo `CLAUDE.md` MCP section AND `install/CLAUDE.md` MCP section; use `bin/daslang` paths in install version. The MCP source files (`utils/mcp/`) are installed directly by CMake (gated on `NOT DAS_HV_DISABLED`)
+7. **Library / module skills** (`json.md`, `xml.md`, `daslib_modules.md`, etc.) — update BOTH repo and install versions. In the install version: drop `tests/` references (tests aren't shipped), drop repo-only doc paths (`doc/source/...`), drop CMake-flag / `.vscode/settings.json` build-config sections (install users get a pre-built binary — they cannot flip `DAS_*_DISABLED`), drop the "no `print` in tests/daslib" gotcha (a repo-development convention, not user-facing), drop `skills/tutorials.md` cross-references (not in install). Keep all `daslib/*.das`, `tutorials/`, `examples/`, `utils/mcp/`, `utils/daspkg/`, `modules/<X>/daslib/*.das` references — those all ship
 
 ## CMake install rules
 
@@ -91,6 +98,12 @@ After modifying install instructions:
    - `D:/daslang/skills/daspkg.md`
    - `D:/daslang/skills/dynamic_modules.md`
    - `D:/daslang/skills/daslang_live.md`
+   - `D:/daslang/skills/clargs_usage.md`
+   - `D:/daslang/skills/json.md`
+   - `D:/daslang/skills/xml.md`
+   - `D:/daslang/skills/writing_tests.md`
+   - `D:/daslang/skills/memory_leak_detection.md`
+   - `D:/daslang/skills/jobque_debugging.md`
    - `D:/daslang/utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
    - `D:/daslang/utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
 4. Spot-check that no repo-internal paths leaked into install files
