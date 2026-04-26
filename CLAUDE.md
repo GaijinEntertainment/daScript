@@ -113,6 +113,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/strudel_port.md` | Copy-pasting a strudel.cc pattern (user-level live-coding expression) into daslang |
 | `skills/gc_use_after_sweep.md` | Debugging crashes in `TypeDecl`/`Expression` copy-ctors (`bad_alloc`, `length_error`, `basic_string::_M_create`) — gc_node use-after-sweep, `DAS_GC_DEBUG`, `DAS_GC_BREAK_ON_ID`, copy-on-mutate fix pattern |
 | `skills/clargs_migration.md` | Editing any in-tree tool that still calls `get_command_line_arguments()` directly — migrate its argv parsing to `daslib/clargs` in the same PR (`utils/lint`, `utils/aot`, `utils/dasFormatter`, `utils/benchctl`, `utils/mcp`, `utils/daslang-live`, `daslib/debug`, `daslib/ansi_colors`, etc.) |
+| `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
+| `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
