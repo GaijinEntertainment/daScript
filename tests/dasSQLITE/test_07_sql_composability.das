@@ -48,7 +48,7 @@ def test_when_price_lt_sql_text(t : T?) {
     let with_wrapper = _sql_text(_db |> select_from(type<Car>) |> when_price_lt(200))
     let direct       = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price < 200))
     t |> equal(with_wrapper, direct, "when_price_lt and direct _where emit identical SQL")
-    t |> equal(with_wrapper, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE Price < ?",
+    t |> equal(with_wrapper, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE \"Price\" < ?",
         "wrapper round-trips through _where → where_ → analyzer with the expected SQL")
 }
 
@@ -89,7 +89,7 @@ def test_when_lt_sql_text(t : T?) {
 def test_when_lt_different_field(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> when_lt(_.Id, 3))
-    t |> equal(sql, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE Id < ?",
+    t |> equal(sql, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE \"Id\" < ?",
         "field-ref argument routes through to the right column")
 }
 
@@ -132,7 +132,7 @@ def test_wrapper_then_select(t : T?) {
 def test_wrapper_then_select_sql_text(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> when_price_lt(300) |> _select(_.Name))
-    t |> equal(sql, "SELECT \"Name\" FROM \"Cars\" WHERE Price < ?",
+    t |> equal(sql, "SELECT \"Name\" FROM \"Cars\" WHERE \"Price\" < ?",
         "wrapper-emitted WHERE composes with explicit _select projection")
 }
 

@@ -73,49 +73,49 @@ def test_sql_text_select_int_column(t : T?) {
 def test_sql_text_where_eq_literal(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Id == 5))
-    t |> equal(sql, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE Id = ?", "WHERE eq literal: ?")
+    t |> equal(sql, "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" WHERE \"Id\" = ?", "WHERE eq literal: ?")
 }
 
 [test]
 def test_sql_text_where_neq(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Id != 5))
-    t |> success(sql |> find("WHERE Id <> ?") >= 0, "WHERE != becomes <>")
+    t |> success(sql |> find("WHERE \"Id\" <> ?") >= 0, "WHERE != becomes <>")
 }
 
 [test]
 def test_sql_text_where_lt(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price < 200))
-    t |> success(sql |> find("WHERE Price < ?") >= 0, "WHERE < emits <")
+    t |> success(sql |> find("WHERE \"Price\" < ?") >= 0, "WHERE < emits <")
 }
 
 [test]
 def test_sql_text_where_le(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price <= 200))
-    t |> success(sql |> find("WHERE Price <= ?") >= 0, "WHERE <= emits <=")
+    t |> success(sql |> find("WHERE \"Price\" <= ?") >= 0, "WHERE <= emits <=")
 }
 
 [test]
 def test_sql_text_where_gt(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price > 200))
-    t |> success(sql |> find("WHERE Price > ?") >= 0, "WHERE > emits >")
+    t |> success(sql |> find("WHERE \"Price\" > ?") >= 0, "WHERE > emits >")
 }
 
 [test]
 def test_sql_text_where_ge(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price >= 200))
-    t |> success(sql |> find("WHERE Price >= ?") >= 0, "WHERE >= emits >=")
+    t |> success(sql |> find("WHERE \"Price\" >= ?") >= 0, "WHERE >= emits >=")
 }
 
 [test]
 def test_sql_text_where_string_literal(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Name == "BMW"))
-    t |> success(sql |> find("WHERE Name = ?") >= 0, "WHERE eq string literal also gets ? placeholder")
+    t |> success(sql |> find("WHERE \"Name\" = ?") >= 0, "WHERE eq string literal also gets ? placeholder")
 }
 
 [test]
@@ -123,7 +123,7 @@ def test_sql_text_where_captured_var(t : T?) {
     var _db = SqlRunner()
     let _target = 3
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Id == _target))
-    t |> success(sql |> find("WHERE Id = ?") >= 0, "captured var also yields ? placeholder")
+    t |> success(sql |> find("WHERE \"Id\" = ?") >= 0, "captured var also yields ? placeholder")
 }
 
 [test]
@@ -144,8 +144,8 @@ def test_sql_text_where_and(t : T?) {
     let _hi = 500
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price >= _lo && _.Price <= _hi))
     t |> success(sql |> find("AND") >= 0, "AND appears in compound WHERE")
-    t |> success(sql |> find("Price >= ?") >= 0, "first conjunct present")
-    t |> success(sql |> find("Price <= ?") >= 0, "second conjunct present")
+    t |> success(sql |> find("\"Price\" >= ?") >= 0, "first conjunct present")
+    t |> success(sql |> find("\"Price\" <= ?") >= 0, "second conjunct present")
 }
 
 [test]
@@ -168,7 +168,7 @@ def test_sql_text_where_not(t : T?) {
 def test_sql_text_where_then_select(t : T?) {
     var _db = SqlRunner()
     let sql = _sql_text(_db |> select_from(type<Car>) |> _where(_.Price > 100) |> _select(_.Name))
-    t |> equal(sql, "SELECT \"Name\" FROM \"Cars\" WHERE Price > ?", "_where + _select compose")
+    t |> equal(sql, "SELECT \"Name\" FROM \"Cars\" WHERE \"Price\" > ?", "_where + _select compose")
 }
 
 [test]

@@ -40,7 +40,7 @@ def main() {
 
         // ── Filter with _where (bind capture) ─────────────────────────
         // Free variables in the predicate become `?` bind parameters.
-        // Macro emits:  ... WHERE Price > ?     binds: [threshold]
+        // Macro emits:  ... WHERE "Price" > ?     binds: [threshold]
         let threshold = 200
         let pricey <- _sql(db |> select_from(type<Car>) |> _where(_.Price > threshold))
         to_log(LOG_INFO, "Cars priced over {threshold}:\n")

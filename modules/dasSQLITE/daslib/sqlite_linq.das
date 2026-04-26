@@ -353,7 +353,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     {
         var fieldName : string
         if (qmatch(node, _.$f(fieldName)).matched) {
-            return fieldName
+            return "\"{fieldName}\""
         }
     }
 
@@ -410,16 +410,11 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
 
 [macro_function]
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
-    // For chunk 2 we read the table name via the chunk-1 emitted helper at
-    // runtime. At macro-expansion time we cannot directly call the user's
-    // _::_sql_table_name (the helper lives in the user's module, not in
-    // sqlite_linq's macro context). Instead, emit a string concat or use the
-    // struct name as a default. For the SQL-text generation use the struct
-    // name; if [sql_table(name="...")] overrode it, the runtime helper still
-    // emits the right SQL (because the macro uses it via _::_sql_table_name).
-    //
-    // For chunk 2 minimum: use the [sql_table]-stored arg `name` if present,
-    // else the struct name.
+    // At macro-expansion time we cannot directly call the user's
+    // _::_sql_table_name helper because it lives in the user's module, not in
+    // sqlite_linq's macro context. Instead, derive the table name here from
+    // the struct metadata: use [sql_table(name="...")] when present, else
+    // fall back to the struct name.
     if (rootT == null || rootT.structType == null) {
         return ""
     }
@@ -483,8 +478,8 @@ class private SqlTextMacro : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "_sql_text expects one argument: a chain expression")
         var argT = call.arguments[0]._type
-        macro_verify(argT != null, prog, call.at, "_sql_text: chain argument has null _type — inner call_macros did not expand before this fired (daslang macro-pass bug). Arg: {describe(call.arguments[0])}")
-        macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after _type is set — compiler bug")
+        macro_verify(argT != null, prog, call.at, "_sql_text: chain argument is not inferred yet")
+        macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
         var q : SqlQuery
         if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
             return null
@@ -529,15 +524,15 @@ class private SqlMacro : AstCallMacro {
     //! user-defined wrapper macro (e.g. `when_its_cold(it)` →
     //! `_where(it, _.temp < 0)`) has cascaded into the same shape.
     //!
-    //! **Entry guard:** if `arguments[0]._type == null`, the inner chain
-    //! still has un-expanded macros somewhere — return null and let the
-    //! macro pass try again on the next iteration. If `_type` is set but
-    //! `isAutoOrAlias`, that's a compiler bug — fail loudly.
+    //! **Entry guard:** the chain argument's `_type` must be resolved before
+    //! `_sql` runs — if it's null, inner call_macros didn't expand (typically a
+    //! missing `require` for an operator/wrapper); if it's still auto/alias,
+    //! type inference didn't finish. Both fail loudly via `macro_verify`.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "_sql expects one argument: a chain expression")
         var argT = call.arguments[0]._type
-        macro_verify(argT != null, prog, call.at, "_sql: chain argument has null _type — inner call_macros did not expand before this fired (daslang macro-pass bug). Arg: {describe(call.arguments[0])}")
-        macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql: chain type is auto/alias after _type is set — compiler bug")
+        macro_verify(argT != null, prog, call.at, "_sql: chain argument is not inferred yet")
+        macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql: chain type is auto/alias after inference")
         var q : SqlQuery
         if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
             return null
