@@ -24,8 +24,36 @@ daslang was created at Gaijin Entertainment to solve a concrete problem: **inter
 
 - **Run a script:** `bin/daslang path/to/script.das`
 - **Compile-only check:** `bin/daslang -compile-only path/to/script.das` — compiles without simulation or execution. Use `-dry-run` to also simulate (but not execute).
-- **AOT generation:** `bin/daslang -aot input.das output.cpp`
+- **AOT generation:** `bin/daslang -aot input.das output.cpp` — emit C++ stubs ahead-of-time. Add `-aot-macros` to include macros in the output.
+- **JIT execution:** `bin/daslang -jit path/to/script.das` — compile to native via LLVM JIT before running. Available only in builds compiled with the JIT module. `bin/daslang -exe path/to/script.das -output out.exe` JITs to a standalone executable (implies `-dry-run`).
+- **AOT-linked execution:** `bin/daslang -use-aot path/to/script.das` — run with AOT stubs that have been linked into the binary (host-side flag).
+- **Pass arguments to the script:** everything after `--` is forwarded to the script. `bin/daslang script.das -- arg1 arg2`. Use `daslib/clargs` to parse them — see `skills/clargs_usage.md`.
 - **Example:** `bin/daslang examples/hello_world.das`
+
+### Project files (`.das_project`)
+
+A `.das_project` file is a daslang script the compiler runs at startup to control module resolution, includes, and sandboxing. Pass it with `-project`:
+
+```bash
+bin/daslang -project path/to/project.das_project script.das
+```
+
+The project script can export callbacks the compiler invokes during resolution:
+
+| Callback | Purpose |
+|---|---|
+| `module_get(req, from)` | Required. Returns `(module_name, file_path, import_alias)` for a `require` |
+| `include_get(inc, from)` | Resolve `#include` directives |
+| `module_allowed(mod, filename)` | Whitelist which modules a file may `require` |
+| `module_allowed_unsafe(mod, filename)` | Allow `unsafe` inside specific modules |
+| `option_allowed(opt, from)` | Whitelist `options` directives |
+| `annotation_allowed(ann, from)` | Whitelist annotations |
+
+The compiler sets `DAS_PAK_ROOT` to the project directory before evaluating callbacks. Project files can themselves `include other.das_project` to compose. If you hit "module not found" errors when your modules live outside `daslib/` or the script directory, you almost always need a `.das_project`.
+
+### Tutorials
+
+`tutorials/language/01_hello_world.das` through `tutorials/language/53_clargs.das` are an ordered tour of the language — start there when learning a new feature. Each tutorial is a runnable `.das` file with comments explaining the construct. Module-specific tutorials live alongside (`tutorials/dasPUGIXML/`, `tutorials/dasHV/`, `tutorials/dasAudio/`, `tutorials/sql/`, `tutorials/macros/`, `tutorials/integration/`).
 
 ### Debugging
 
@@ -51,6 +79,11 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/clargs_usage.md` | Writing your own daslang command-line tools — declarative argv parsing via `daslib/clargs` |
 | `skills/dynamic_modules.md` | Understanding `.das_module` descriptors, module resolution, `register_native_path`, `register_dynamic_module` |
 | `skills/daslang_live.md` | Working with `daslang-live`, live-reload lifecycle, REST API, `[live_command]`, persistent state |
+| `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
+| `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
+| `skills/writing_tests.md` | Writing tests for your daslang code with the bundled `dastest` framework (`bin/daslang dastest/dastest.das -- --test ...`) |
+| `skills/memory_leak_detection.md` | Diagnosing leaks — `--das-profiler-leaks`, `-track-allocations -heap-report`, `GC APP LEAK` reports, `--track-smart-ptr`, `HandleRegistry` dump |
+| `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Stream/Feature leaks using `DumpJobQueLeaks` and `--track-job-status <id>` refcount tracing |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
@@ -246,7 +279,7 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 - `examples/` — Example scripts
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
-- `utils/mcp/` — MCP server for AI coding assistants (29 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (30 tools, stdio transport, no extra deps)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
 - `tree-sitter-daslang/` — Tree-sitter grammar, shared library, and highlighting queries
@@ -294,6 +327,7 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 | `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
+| `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
 | `live_launch` | Manually starting `daslang-live` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |
