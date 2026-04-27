@@ -801,15 +801,15 @@ def test_candidate_filter_drops_pure_corpus_clusters(t : T?) {
     // Three identical records, none flagged as candidate. With the
     // filter active, the cluster should be dropped (no candidate
     // member). Without the filter, the cluster would be kept.
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN A B C D E F G H ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN A B C D E F G H ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN A B C D E F G H ENDFN", 3, false)
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A B C D E F G H ENDFN", 1, false),
+        <- make_record("b", "FN A B C D E F G H ENDFN", 2, false),
+        <- make_record("c", "FN A B C D E F G H ENDFN", 3, false)]
 
-    var legacy_clusters <- exact_buckets(records, 0)
+    let legacy_clusters <- exact_buckets(records, 0)
     t |> equal(length(legacy_clusters), 1)
 
-    var filtered <- exact_buckets(records, 0, true)
+    let filtered <- exact_buckets(records, 0, true)
     t |> equal(length(filtered), 0)
 }
 
@@ -819,13 +819,13 @@ def test_candidate_filter_keeps_mixed_clusters(t : T?) {
     // Same canonical, but one record is flagged. Cluster kept; all
     // three members reported (the filter is at the cluster level, not
     // member level).
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN A B C D E F G H ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN A B C D E F G H ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN A B C D E F G H ENDFN", 3, false)
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A B C D E F G H ENDFN", 1, false),
+        <- make_record("b", "FN A B C D E F G H ENDFN", 2, false),
+        <- make_record("c", "FN A B C D E F G H ENDFN", 3, false)]
     records[1].is_candidate = true
 
-    var clusters <- exact_buckets(records, 0, true)
+    let clusters <- exact_buckets(records, 0, true)
     t |> equal(length(clusters), 1)
     t |> equal(length(clusters[0].members), 3)
 }
@@ -836,15 +836,13 @@ def test_candidate_filter_intra_candidate_pair(t : T?) {
     // Two near-duplicate candidates, no corpus around them. With the
     // candidate filter active the pair must still appear (intra-PR
     // duplicates are real signal).
-    var records : array<FuncRecord>
-    records |> emplace <| make_record(
-        "a", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true)
-    records |> emplace <| make_record(
-        "b", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true)
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("b", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true)]
     records[0].is_candidate = true
     records[1].is_candidate = true
 
-    var pairs <- fuzzy_pairs(records, 0.7f, 0, true)
+    let pairs <- fuzzy_pairs(records, 0.7f, 0, true)
     t |> equal(length(pairs), 1)
     // Pair ordering: lower-index record is `a`.
     t |> equal(pairs[0].a.name, "a")
@@ -858,23 +856,19 @@ def test_candidate_filter_fuzzy_skips_pure_corpus(t : T?) {
     // resembles none of them. The pure-corpus pairs must NOT appear;
     // only pairs involving the candidate are eligible (and the
     // candidate is dissimilar to all → empty result).
-    var records : array<FuncRecord>
-    records |> emplace <| make_record(
-        "x", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true)
-    records |> emplace <| make_record(
-        "y", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true)
-    records |> emplace <| make_record(
-        "z", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT LIT ENDBLK ENDFN", 3, true)
-    // Candidate has a totally different shape — no fuzzy match expected.
-    records |> emplace <| make_record(
-        "cand", "FN ARG <var_0> TYP BODY BLK STMT FOR FOR_VAR <var_1> CALL:range LIT FOR_BODY BLK ENDBLK ENDBLK ENDFN", 4, true)
+    var records : array<FuncRecord> <- [
+        <- make_record("x", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("y", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true),
+        <- make_record("z", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT LIT ENDBLK ENDFN", 3, true),
+        // Candidate has a totally different shape — no fuzzy match expected.
+        <- make_record("cand", "FN ARG <var_0> TYP BODY BLK STMT FOR FOR_VAR <var_1> CALL:range LIT FOR_BODY BLK ENDBLK ENDBLK ENDFN", 4, true)]
     records[3].is_candidate = true
 
     // Sanity: without the filter, x/y/z would produce pairs.
-    var legacy <- fuzzy_pairs(records, 0.7f, 0)
+    let legacy <- fuzzy_pairs(records, 0.7f, 0)
     t |> success(length(legacy) >= 1, "legacy mode: at least one corpus pair: got {length(legacy)}")
 
-    var filtered <- fuzzy_pairs(records, 0.7f, 0, true)
+    let filtered <- fuzzy_pairs(records, 0.7f, 0, true)
     t |> equal(length(filtered), 0)
 }
 
@@ -883,10 +877,10 @@ def test_candidate_filter_fuzzy_skips_pure_corpus(t : T?) {
 def test_baseline_load_canonical_set(t : T?) {
     let path = make_temp_export_path(t)
     if (empty(path)) return
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN AAA ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN BBB ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN AAA ENDFN", 3, false) // dup canonical
+    let records : array<FuncRecord> <- [
+        <- make_record("a", "FN AAA ENDFN", 1, false),
+        <- make_record("b", "FN BBB ENDFN", 2, false),
+        <- make_record("c", "FN AAA ENDFN", 3, false)]// dup canonical
     write_export(records, path)
 
     var canonicals : table<string; void?>
@@ -926,12 +920,12 @@ def test_baseline_load_rejects_bad_schema(t : T?) {
 def test_drop_records_under_files(t : T?) {
     // Build a record set spanning two files; drop one file's records
     // and verify the other survives.
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN A ENDFN", 1, false)
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A ENDFN", 1, false),
+        <- make_record("b", "FN B ENDFN", 2, false),
+        <- make_record("c", "FN C ENDFN", 3, false)]
     records[0].ref.file := "src/keep.das"
-    records |> emplace <| make_record("b", "FN B ENDFN", 2, false)
     records[1].ref.file := "src/drop.das"
-    records |> emplace <| make_record("c", "FN C ENDFN", 3, false)
     records[2].ref.file := "src/drop.das"
 
     var against : table<string; void?>
@@ -949,10 +943,10 @@ def test_drop_records_under_files(t : T?) {
 def test_collect_candidate_refs(t : T?) {
     // Helper used by the per-candidate report writer and by the MCP
     // tool — verify it picks out exactly the flagged records.
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN A ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN B ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN C ENDFN", 3, false)
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A ENDFN", 1, false),
+        <- make_record("b", "FN B ENDFN", 2, false),
+        <- make_record("c", "FN C ENDFN", 3, false)]
     records[0].is_candidate = true
     records[2].is_candidate = true
 
@@ -967,13 +961,10 @@ def test_collect_candidate_refs(t : T?) {
 def test_per_candidate_rollup_shape(t : T?) {
     // Build a small report with one exact cluster and one fuzzy pair
     // both involving a candidate, then pivot via build_per_candidate_report.
-    var records : array<FuncRecord>
-    records |> emplace <| make_record(
-        "cand", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true)
-    records |> emplace <| make_record(
-        "exact_sib", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 2, true)
-    records |> emplace <| make_record(
-        "fuzzy_partner", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 3, true)
+    var records : array<FuncRecord> <- [
+        <- make_record("cand", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("exact_sib", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 2, true),
+        <- make_record("fuzzy_partner", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 3, true)]
     records[0].is_candidate = true
 
     var clusters <- exact_buckets(records, 0, true)
