@@ -1052,6 +1052,7 @@ if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
         daslib/regex_boost.das
         daslib/regex.das
         daslib/strings_boost.das
+        daslib/strings_convert.das
         daslib/templates_boost.das
         daslib/utf8_utils.das
     )

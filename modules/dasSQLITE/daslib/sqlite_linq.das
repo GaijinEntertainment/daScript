@@ -18,6 +18,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 require daslib/rtti
 require strings public
+require daslib/strings_convert
 
 // ============================================================================
 // _to_array passthrough
@@ -958,12 +959,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
                         && inner.name == "_0") {
                     if (length(outerName) > 1 && outerName |> starts_with("_")) {
                         let suffix = slice(outerName, 1, length(outerName))
-                        var keyIdx = -1
-                        try {
-                            keyIdx = to_int(suffix)
-                        } recover {
-                            keyIdx = -1
-                        }
+                        let keyIdx = try_to_int(suffix) ?? -1
                         if (keyIdx >= 0 && keyIdx < nKeys) {
                             let col = group_key_column_name(q, keyIdx)
                             var fieldType = lookup_struct_field_type(q.rootType, col)
@@ -1069,12 +1065,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
                     && inner.name == "_0"
                     && length(outerName) > 1 && outerName |> starts_with("_")) {
                 let suffix = slice(outerName, 1, length(outerName))
-                var keyIdx = -1
-                try {
-                    keyIdx = to_int(suffix)
-                } recover {
-                    keyIdx = -1
-                }
+                let keyIdx = try_to_int(suffix) ?? -1
                 if (keyIdx >= 0 && keyIdx < nKeys) {
                     q.orderByCols |> push("{q.groupByCols[keyIdx]} {direction}")
                     return true
