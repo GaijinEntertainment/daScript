@@ -84,11 +84,6 @@ struct public PerCandidateReport {
 }
 
 
-def member_id(m : MemberRef) : string {
-    return "{m.file}:{m.line}:{m.name}"
-}
-
-
 def make_match(m : MemberRef; similarity : float) : CandidateMatch {
     var cm = CandidateMatch()
     cm.name := m.name
@@ -110,7 +105,7 @@ def public build_per_candidate_report(report : Report;
                                       top_per_candidate : int) : PerCandidateReport {
     var cand_keys : table<string; int>
     for (i in range(length(candidate_refs))) {
-        let k = member_id(candidate_refs[i])
+        let k = member_key(candidate_refs[i])
         if (!key_exists(cand_keys, k)) {
             cand_keys |> insert(k, i)
         }
@@ -130,13 +125,13 @@ def public build_per_candidate_report(report : Report;
     // to multiple clusters across a multi-file rebuild — be permissive.
     for (c in report.exact_clusters) {
         for (m in c.members) {
-            let k = member_id(m)
+            let k = member_key(m)
             if (!key_exists(cand_keys, k)) {
                 continue
             }
             let idx = cand_keys[k]
             for (other in c.members) {
-                if (member_id(other) == k) {
+                if (member_key(other) == k) {
                     continue
                 }
                 rollups[idx].exact_matches |> emplace(make_match(other, 1.0f))
@@ -147,8 +142,8 @@ def public build_per_candidate_report(report : Report;
     // When BOTH endpoints are candidates, each side gets the other in
     // its rollup — the pair is symmetric, the rollup is per-candidate.
     for (p in report.fuzzy_pairs) {
-        let ka = member_id(p.a)
-        let kb = member_id(p.b)
+        let ka = member_key(p.a)
+        let kb = member_key(p.b)
         let a_is_cand = key_exists(cand_keys, ka)
         let b_is_cand = key_exists(cand_keys, kb)
         if (a_is_cand) {

@@ -194,7 +194,7 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
 }
 
 
-def member_key(m : MemberRef) : string {
+def public member_key(m : MemberRef) : string {
     return "{m.file}:{m.line}:{m.name}"
 }
 
