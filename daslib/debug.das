@@ -2474,12 +2474,20 @@ def init_stepping_debugger() {
         is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) {
         return
     }
+    let args <- get_command_line_arguments()
+    if (has_value(args, "--no-das-debug")) {
+        return
+    }
     set_single_step(this_context(), true)
 }
 
 [_macro]
 def private auto_start_debug() {
     if ((is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) {
+        return
+    }
+    let args <- get_command_line_arguments()
+    if (has_value(args, "--no-das-debug")) {
         return
     }
     this_context().category |= context_category_flags.debugger_attached
