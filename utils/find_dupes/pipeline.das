@@ -256,7 +256,7 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
     var kept_records : array<FuncRecord>
     kept_records |> reserve(length(records))
     for (r in records) {
-        let hit = classify(r.canonical)
+        let hit = classify(r.ref.name, r.canonical)
         if (empty(hit.name) || key_exists(kept, hit.name)) {
             kept_records |> push_clone(r)
             continue
