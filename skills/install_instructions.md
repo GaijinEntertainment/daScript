@@ -19,6 +19,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/clargs_usage.md` | `skills/clargs_usage.md` | Command-line argument parsing for user tools |
 | `install/skills/json.md` | `skills/json.md` | JSON read/write via `sprint_json`/`sscan_json` and `JV`/`from_JV` |
 | `install/skills/xml.md` | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` |
+| `install/skills/filesystem.md` | `skills/filesystem.md` | Filename & filesystem ops via `fio` / `daslib/fio` (path helpers, `stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
 | `install/skills/writing_tests.md` | `skills/writing_tests.md` | dastest framework usage for SDK consumers |
 | `install/skills/memory_leak_detection.md` | `skills/memory_leak_detection.md` | Heap / gc_node / smart_ptr / handle leak detection — runtime CLI flags |
 | `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
@@ -101,6 +102,7 @@ After modifying install instructions:
    - `D:/daslang/skills/clargs_usage.md`
    - `D:/daslang/skills/json.md`
    - `D:/daslang/skills/xml.md`
+   - `D:/daslang/skills/filesystem.md`
    - `D:/daslang/skills/writing_tests.md`
    - `D:/daslang/skills/memory_leak_detection.md`
    - `D:/daslang/skills/jobque_debugging.md`
