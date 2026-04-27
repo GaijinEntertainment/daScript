@@ -70,4 +70,4 @@ multi-row reads of arbitrary SQL).
 
     Previous tutorial: :ref:`tutorial_sql_take_skip`
 
-    Next tutorial: :ref:`tutorial_sql_aggregates`
+    Next tutorial: :ref:`tutorial_sql_set_ops`

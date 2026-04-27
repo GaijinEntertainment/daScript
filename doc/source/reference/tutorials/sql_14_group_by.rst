@@ -147,4 +147,4 @@ The chain mirrors SQL clause order one-for-one:
 
     Previous tutorial: :ref:`tutorial_sql_aggregates`
 
-    Next tutorial: :ref:`tutorial_sql_null_handling`
+    Next tutorial: :ref:`tutorial_sql_join`

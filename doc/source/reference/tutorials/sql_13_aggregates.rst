@@ -88,6 +88,6 @@ inside an inner ``select`` lambda over the group elements.
 
     Full source: :download:`tutorials/sql/13-aggregates.das <../../../../tutorials/sql/13-aggregates.das>`
 
-    Previous tutorial: :ref:`tutorial_sql_distinct`
+    Previous tutorial: :ref:`tutorial_sql_set_ops`
 
     Next tutorial: :ref:`tutorial_sql_group_by`

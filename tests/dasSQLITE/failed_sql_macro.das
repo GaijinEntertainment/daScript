@@ -7,7 +7,7 @@ options gen2
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field) and `some_unknown_func(_)`
 // hits the unresolved function. Those cascades are expected.
-expect 40104:13, 30304:2, 30503:3
+expect 40104:21, 30304:2, 30503:3
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -18,6 +18,13 @@ struct Car {
     @sql_primary_key Id : int
     Name  : string
     Price : int
+}
+
+[sql_table(name="Owners")]
+struct Owner {
+    @sql_primary_key Id : int
+    CarId : int
+    Name  : string
 }
 
 [export]
@@ -69,4 +76,61 @@ def main() {
     //     The meaningful form is `COUNT(DISTINCT col)` (DISTINCT inside the
     //     aggregate), which is not yet wired.
     let bad13 <- _sql(db |> select_from(type<Car>) |> distinct() |> count())
+
+    // 14. Theta join (non-`==` predicate in `on`). The locked equi-join
+    //     constraint requires `(l, r) => l.X == r.Y`; theta joins force
+    //     O(n*m) nested-loop and would lose SQLite's planner hint —
+    //     macro_error redirects users to raw SQL.
+    let bad14 <- _sql(db |> select_from(type<Car>)
+                        |> _join(db |> select_from(type<Owner>),
+                                 $(c : Car, o : Owner) => c.Id < o.CarId,
+                                 $(c : Car, o : Owner) => (Name = c.Name, Owner = o.Name)))
+
+    // 15. Multi-key equi join (`&&`-chained equality in `on`). Backing
+    //     `join` fn keys are single-column; multi-key would need a
+    //     tuple-key extension — deferred. Reject loud.
+    let bad15 <- _sql(db |> select_from(type<Car>)
+                        |> _join(db |> select_from(type<Owner>),
+                                 $(c : Car, o : Owner) => c.Id == o.CarId && c.Name == o.Name,
+                                 $(c : Car, o : Owner) => (Name = c.Name, Owner = o.Name)))
+
+    // 16. Two joins in one chain (3+ table). Chunk 5 ships single-join
+    //     only — the `q.joins` slot is one-deep. The second `_join`'s
+    //     `on` must be a valid single-column equi-join (`==`), or
+    //     linq_boost rejects it before sqlite_linq's multi-join guard
+    //     fires; here we equi-join on `.Name` (cosmetically meaningless
+    //     but well-formed) so the diagnostic comes from sqlite_linq.
+    let bad16 <- _sql(db |> select_from(type<Car>)
+                        |> _join(db |> select_from(type<Owner>),
+                                 $(c : Car, o : Owner) => c.Id == o.CarId,
+                                 $(c : Car, o : Owner) => o)
+                        |> _join(db |> select_from(type<Owner>),
+                                 $(t : Owner, o : Owner) => t.Id == o.Id,
+                                 $(t : Owner, o : Owner) => o))
+
+    // 17. Set-op nested inside a set-op — chunk 5 restricts to one set-op
+    //     per chain (chained set-ops would need parenthesization
+    //     bookkeeping not yet wired).
+    let bad17 <- _sql((db |> select_from(type<Car>) |> _select(_.Price))
+                       |> union((db |> select_from(type<Car>) |> _select(_.Price))
+                                |> union(db |> select_from(type<Car>) |> _select(_.Price))))
+
+    // 18. Set-op LHS with `_order_by` — emitted SQL is unparenthesized
+    //     `<lhs> UNION <rhs>`, so a per-side ORDER BY is a SQLite syntax
+    //     error. Reject at compile time; chunk 5 doesn't yet support a
+    //     trailing ORDER BY on the combined set-op result.
+    let bad18 <- _sql((db |> select_from(type<Car>) |> _select(_.Price) |> _order_by(_))
+                       |> union(db |> select_from(type<Car>) |> _select(_.Price)))
+
+    // 19. Set-op RHS with `take(n)` — same reason: per-side LIMIT is not
+    //     valid in unparenthesized compound query.
+    let bad19 <- _sql((db |> select_from(type<Car>) |> _select(_.Price))
+                       |> union(db |> select_from(type<Car>) |> _select(_.Price) |> take(5)))
+    // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
+    //  this round is also belt-and-suspenders — a daslang `contains` type-
+    //  check rejects mismatched element types before sqlite_linq even sees
+    //  the chain in most realistic shapes. We keep the macro_error path
+    //  live for the rare case where the row-vs-rowset shape type-checks
+    //  but produces a multi-column subquery; constructing that test
+    //  reliably is left for a future chunk.)
 }
