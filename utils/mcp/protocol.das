@@ -444,7 +444,7 @@ def handle_tools_list(id_json : string) : string {
             "threshold" => PropertySchema(_type = "string", description = "Fuzzy similarity floor 0..1 (default 0.7). Score is sqrt(jaccard × len_ratio)."),
             "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per function (default 8). Filters trivial wrappers."),
             "top" => PropertySchema(_type = "string", description = "Top-N similar matches per candidate (default 5)."),
-            "keep" => PropertySchema(_type = "string", description = "Comma-separated pattern names to KEEP despite the default-skip filter. Special value 'all' disables pattern filtering entirely. Default is empty — all known patterns are skipped (currently: 'dispatch'). The skipped count is reported in the envelope as `patterns_skipped`."),
+            "keep" => PropertySchema(_type = "string", description = "Comma-separated pattern names to KEEP despite the default-skip filter. Special value 'all' disables pattern filtering entirely. Default is empty — all known patterns are skipped (currently: 'visitor', 'dispatch', 'emit'). The skipped count per pattern is reported in the envelope as `patterns_skipped`."),
             "project" => PROJECT_PROP
         },
         ["paths", "corpus"]
