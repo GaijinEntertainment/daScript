@@ -152,6 +152,93 @@ def test_compile_check_glob_no_match(t : T?) {
     }
 }
 
+// ── parse_file_list ──────────────────────────────────────────────────
+
+def has_path(files : array<string>; suffix : string) : bool {
+    for (f in files) {
+        if (find(f, suffix) >= 0) {
+            return true
+        }
+    }
+    return false
+}
+
+[test]
+def test_parse_file_list(t : T?) {
+    t |> run("single plain file") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("utils/mcp/tests/_fixture_valid.das", files)
+        t |> equal(length(files), 1, "1 file")
+        t |> equal(files[0], "utils/mcp/tests/_fixture_valid.das", "passes through")
+    }
+    t |> run("single glob expands") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("utils/mcp/tests/_fixture_v*.das", files)
+        t |> success(length(files) >= 1, "at least one match")
+        t |> success(has_path(files, "_fixture_valid.das"), "valid fixture matched")
+    }
+    t |> run("comma list of plain files") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("a.das,b.das,c.das", files)
+        t |> equal(length(files), 3, "3 files")
+        t |> equal(files[0], "a.das", "first")
+        t |> equal(files[1], "b.das", "second")
+        t |> equal(files[2], "c.das", "third")
+    }
+    t |> run("comma list of globs (issue #2498 repro)") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("utils/find_dupes/*.das,utils/mcp/tests/*.das", files)
+        t |> success(has_path(files, "utils/find_dupes/"), "find_dupes glob expanded")
+        t |> success(has_path(files, "utils/mcp/tests/"), "mcp/tests glob expanded")
+    }
+    t |> run("mixed plain + glob") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("utils/mcp/tests/_fixture_valid.das,utils/mcp/tests/_fixture_e*.das", files)
+        t |> success(has_path(files, "_fixture_valid.das"), "plain file present")
+        t |> success(has_path(files, "_fixture_error.das"), "glob expanded")
+    }
+    t |> run("newline-delimited") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("a.das\nb.das\nc.das", files)
+        t |> equal(length(files), 3, "3 files")
+        t |> equal(files[0], "a.das", "first")
+        t |> equal(files[1], "b.das", "second")
+        t |> equal(files[2], "c.das", "third")
+    }
+    t |> run("mixed comma + newline + whitespace") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("  a.das , b.das \n c.das ", files)
+        t |> equal(length(files), 3, "3 files (whitespace stripped)")
+        t |> equal(files[0], "a.das", "first stripped")
+        t |> equal(files[2], "c.das", "third stripped")
+    }
+    t |> run("empty parts skipped") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("a.das,,\n,b.das", files)
+        t |> equal(length(files), 2, "2 non-empty files")
+    }
+    t |> run("single fast-path strips whitespace") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("  a.das  ", files)
+        t |> equal(length(files), 1, "1 file")
+        t |> equal(files[0], "a.das", "stripped")
+    }
+    t |> run("single fast-path skips empty/whitespace-only") <| @(t : T?) {
+        var files : array<string>
+        parse_file_list("   ", files)
+        t |> equal(length(files), 0, "no files for whitespace-only input")
+    }
+    t |> run("expand_glob preserves prior entries (no global re-sort)") <| @(t : T?) {
+        // Repro for the regression Copilot caught: expand_glob's sort()
+        // used to scramble entries pushed before it. Order must be
+        // preserved across (plain, glob, plain) sequences.
+        var files : array<string>
+        parse_file_list("zzz.das,utils/mcp/tests/_fixture_v*.das,aaa.das", files)
+        t |> equal(files[0], "zzz.das", "first plain stays first")
+        t |> equal(files[length(files) - 1], "aaa.das", "last plain stays last")
+    }
+}
+
 // ── list_functions ───────────────────────────────────────────────────
 
 [test]

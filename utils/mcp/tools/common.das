@@ -344,44 +344,50 @@ def expand_glob(pattern : string; var result : array<string>) {
         dir_part = slice(pattern, 0, last_slash)
         file_pattern = slice(pattern, last_slash + 1)
     }
+    var matches : array<string>
     dir(dir_part) $(fname) {
         if (fname == "." || fname == "..") {
             return
         }
         if (glob_match(file_pattern, fname)) {
             if (dir_part == ".") {
-                result |> push(fname)
+                matches |> push(fname)
             } else {
-                result |> push("{dir_part}/{fname}")
+                matches |> push("{dir_part}/{fname}")
             }
         }
     }
-    sort(result)
+    sort(matches)
+    result |> reserve(length(result) + length(matches))
+    for (m in matches) {
+        result |> push(m)
+    }
 }
 
-// Parse file argument: glob pattern, comma-separated list, or single file
+// Parse file argument: comma- or newline-separated list of files, dirs, and
+// globs (any part may contain `*` / `?` wildcards, expanded via expand_glob).
 def parse_file_list(file : string; var result : array<string>) {
-    if (find(file, "*") >= 0 || find(file, "?") >= 0) {
-        expand_glob(file, result)
-    } elif (find(file, ",") >= 0) {
-        var rest = file
-        while (!empty(rest)) {
-            let comma = find(rest, ",")
-            if (comma >= 0) {
-                let part = strip(slice(rest, 0, comma))
-                if (!empty(part)) {
-                    result |> push(part)
-                }
-                rest = slice(rest, comma + 1)
-            } else {
-                let part = strip(rest)
-                if (!empty(part)) {
-                    result |> push(part)
-                }
-                break
-            }
+    if (find(file, ",") < 0 && find(file, "\n") < 0) {
+        let part = strip(file)
+        if (empty(part)) {
+            return
         }
-    } else {
-        result |> push(file)
+        if (find(part, "*") >= 0 || find(part, "?") >= 0) {
+            expand_glob(part, result)
+        } else {
+            result |> push(part)
+        }
+        return
+    }
+    for (raw in split_by_chars(file, ",\n")) {
+        let part = strip(raw)
+        if (empty(part)) {
+            continue
+        }
+        if (find(part, "*") >= 0 || find(part, "?") >= 0) {
+            expand_glob(part, result)
+        } else {
+            result |> push(part)
+        }
     }
 }

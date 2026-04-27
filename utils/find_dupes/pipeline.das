@@ -308,6 +308,7 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>;
         using() $(var cop : CodeOfPolicies) {
             cop.ignore_shared_modules = true
             cop.export_all = true
+            cop.version_2_syntax = true
             // Leave optimisations and infer-time folding ON: dastest macros
             // (e.g. unroll) need constant folding to compile, and folded-equal
             // expressions are exactly the kind of duplicate we want to catch.

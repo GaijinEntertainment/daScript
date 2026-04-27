@@ -81,12 +81,8 @@ def public do_find_duplicates(paths : string; corpus : string;
         return make_tool_result("find_duplicates: top must be >= 0, got {top}", true)
     }
 
-    // `parse_file_list` only splits on commas and globs, so normalize
-    // newlines first — supports `git diff --name-only ... | …` style input
-    // that the README documents.
-    let paths_normalized = paths |> replace("\n", ",")
     var files : array<string>
-    parse_file_list(paths_normalized, files)
+    parse_file_list(paths, files)
     if (empty(files)) {
         return make_tool_result("find_duplicates: no files matched: {paths}", true)
     }

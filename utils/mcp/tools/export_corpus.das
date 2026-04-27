@@ -56,12 +56,8 @@ def public do_export_corpus(paths : string; out : string;
         return make_tool_result("export_corpus: min_tokens must be >= 0, got {min_tokens}", true)
     }
 
-    // `parse_file_list` expects comma- or glob-delimited input; normalize
-    // newlines first so `git ls-files | …` style piping works the same as
-    // the find_duplicates tool.
-    let paths_normalized = paths |> replace("\n", ",")
     var seeds : array<string>
-    parse_file_list(paths_normalized, seeds)
+    parse_file_list(paths, seeds)
     if (empty(seeds)) {
         return make_tool_result("export_corpus: no paths matched: {paths}", true)
     }
