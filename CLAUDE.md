@@ -115,6 +115,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/clargs_migration.md` | Editing any in-tree tool that still calls `get_command_line_arguments()` directly — migrate its argv parsing to `daslib/clargs` in the same PR (`utils/lint`, `utils/aot`, `utils/dasFormatter`, `utils/benchctl`, `utils/mcp`, `utils/daslang-live`, `daslib/debug`, `daslib/ansi_colors`, etc.) |
 | `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
 | `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
+| `skills/filesystem.md` | Any `.das` code that builds, splits, or normalizes a file path, or touches the filesystem (existence, listing, copy/rename/remove, temp files). **Rule:** path & filename operations MUST use `fio` helpers (`base_name`/`dir_name`/`extension`/`stem`/`path_join`/`normalize`/`is_absolute`/`relative`) — never hand-rolled `rfind`/`slice`/string-interp. Filesystem ops use `fio` / `daslib/fio` (`stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
@@ -308,6 +309,9 @@ other level) should be used instead.
 | `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
 | `unsafe { (reinterpret<ExprBlock?> blk).list }` | `blk.list` | AST pointers auto-dereference |
 | `unsafe(reinterpret<T?> x)` | make param `var` + plain `x` | `var` param gives non-const access, no reinterpret needed |
+| `let i = max(rfind(p, "/"), rfind(p, "\\")); slice(p, i+1)` | `base_name(p)` | `fio.base_name` is cross-platform; manual `rfind` misses Windows separators or trailing slashes |
+| `slice(p, 0, max(rfind(p, "/"), rfind(p, "\\")))` | `dir_name(p)` | same — use `fio.dir_name`/`parent`, never hand-roll directory splitting |
+| `"{a}/{b}"` for file paths | `path_join(a, b)` | handles separator collisions and platform separators |
 
 **Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
 
