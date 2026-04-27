@@ -54,7 +54,7 @@ struct Config {
     @clarg_doc = "Load functions from a JSON file (produced by --export-functions) instead of compiling"
     import_functions : string
 
-    @clarg_doc = "Path to baseline JSON (an --export-functions output) — B1 mode: tag records whose canonical is not in the baseline as candidates"
+    @clarg_doc = "Path to baseline JSON (an --export-functions output) — B1 mode: tag records whose member identity (file:line:name) is not in the baseline as candidates"
     baseline : string
 
     @clarg_doc = "Strict baseline: also drop clusters whose canonical exists in the baseline (only fully-new clusters survive)"
@@ -231,7 +231,10 @@ def tag_baseline_new_members(var records : array<FuncRecord>;
         if (r.is_candidate) {
             continue
         }
-        let mid = "{r.ref.file}:{r.ref.line}:{r.ref.name}"
+        // Path-normalize so a Windows-recorded baseline (`a\b.das`) and a
+        // Unix-runner record (`a/b.das`) collide instead of mass-tagging
+        // every file as new.
+        let mid = "{normalize_path(r.ref.file)}:{r.ref.line}:{r.ref.name}"
         if (!key_exists(baseline_members, mid)) {
             r.is_candidate = true
         }

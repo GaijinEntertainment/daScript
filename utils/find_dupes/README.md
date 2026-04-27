@@ -45,7 +45,7 @@ Flags:
 | `--export-functions` | (off) | Write all extracted functions to a JSON file and exit before clustering |
 | `--import-functions` | (off) | Load functions from a JSON file (produced by `--export-functions`) instead of compiling. Mutually exclusive with `--path` and `--export-functions` |
 | `-v / --verbose` | off | Per-file progress |
-| `--baseline` | (off) | B1: load corpus JSON; tag records whose canonical isn't in the baseline as candidates and filter to those |
+| `--baseline` | (off) | B1: load corpus JSON; tag records whose member identity (`file:line:name`) isn't in the baseline as candidates and filter to those |
 | `--baseline-strict` | off | B1 modifier: also drop clusters whose canonical exists in the baseline (only fully-new clusters survive) |
 | `--against` | (off) | B2 candidate path (file or directory). Repeatable. Compiled in-process; their functions are tagged candidates and the report is filtered |
 | `--against-from-stdin` | off | B2: read newline-delimited candidate paths from stdin (use with `git diff --name-only … \| find_dupes --against-from-stdin …`) |

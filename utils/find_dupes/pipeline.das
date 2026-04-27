@@ -8,9 +8,9 @@ require cluster
 require exchange
 
 
-def public normalize_path(p : string) : string {
-    return p |> replace("\\", "/")
-}
+// `normalize_path` lives in exchange.das — pulled in via `require exchange`
+// above so callers in this file (and downstream of `require pipeline`) keep
+// working unchanged.
 
 
 // Walk one compiled program and append a FuncRecord per user

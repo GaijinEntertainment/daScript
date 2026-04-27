@@ -91,12 +91,23 @@ def is_well_formed(ef : ExportedFunction) : bool {
 }
 
 
+// Slash-direction normalization for file paths. Lives here (rather than
+// in pipeline.das) because exchange is below pipeline in the dep graph
+// and `member_id` needs it. pipeline.das re-uses this via `require
+// exchange`, so callers see one canonical helper.
+def public normalize_path(p : string) : string {
+    return p |> replace("\\", "/")
+}
+
+
 // Stable member identity used to compare a freshly-extracted record
 // against a baseline. Same shape as cluster.das `member_key`, copied
 // here to avoid a require cycle (exchange already needs to know about
-// records but not about clustering helpers).
+// records but not about clustering helpers). Path is normalized so
+// Windows runs (mixed `\` and `/` from `fileInfo.name`) match Unix
+// baselines.
 def member_id(file : string; line : int; name : string) : string {
-    return "{file}:{line}:{name}"
+    return "{normalize_path(file)}:{line}:{name}"
 }
 
 
