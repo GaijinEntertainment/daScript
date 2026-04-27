@@ -1144,3 +1144,93 @@ def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
     t |> equal(length(records), 1)
     t |> success(records[0].is_candidate, "is_candidate flag preserved through filter")
 }
+
+
+// ── generics visibility (fixture/generics_cases.das) ─────────────────
+//
+// pipeline.das uses `for_each_function` which walks `module->functions`
+// only. Reified instances of called generics land there, so they ARE
+// visible (deduped per source line). Uncalled generic templates live
+// only in `module->generics` and are silently dropped — that's the gap.
+// `for_each_generic` (or `visit_with_generics`) is the matching API.
+
+let GENERICS_FIXTURE = "utils/find_dupes/fixture/generics_cases.das"
+
+
+[test]
+def test_generics_mono_baseline_visible(t : T?) {
+    // Sanity check: non-generic function reaches the records list.
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_mono_baseline")
+    t |> success(!empty(canon), "non-generic baseline visible")
+}
+
+
+// Called generic must be findable by source name (not by the mangled
+// `` `name`<hash> `` form daslang's reifier produces). The fix in
+// `collect_from_program` walks `for_each_generic` BEFORE
+// `for_each_function`, so the unmangled template wins the per-line
+// dedup; the reified copies are then suppressed by `seen_loc`.
+[test]
+def test_generics_called_visible(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_generic_called")
+    t |> success(!empty(canon),
+        "called generic must be findable by source-level name")
+    // Mangled reified copies must NOT leak into the records — there
+    // should only be one entry per template, under the source name.
+    var saw_mangled = false
+    for (rec in records) {
+        if (find(rec.ref.name, "case_generic_called") >= 0 && rec.ref.name != "case_generic_called") {
+            saw_mangled = true
+        }
+    }
+    t |> success(!saw_mangled,
+        "no mangled `name`<hash> reified copies should appear alongside the template")
+}
+
+
+// Uncalled generic must be visible. Templates with no call site never
+// reach `module->functions`; the fix walks `for_each_generic` so they
+// also produce a record.
+[test]
+def test_generics_uncalled_visible(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_generic_uncalled")
+    t |> success(!empty(canon),
+        "uncalled generic must be visible — for_each_generic must be walked alongside for_each_function")
+}
+
+
+// Sanity: the called and uncalled generics have identical bodies, so
+// after the fix they should have identical canonical token streams
+// (the canonicalizer collapses all types to `TYP`). This is what the
+// duplicate-detector ultimately cares about — that two structurally
+// identical generics will cluster.
+[test]
+def test_generics_called_and_uncalled_canonicalize_equal(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let a = find_canonical_required(t, records, "case_generic_called")
+    let b = find_canonical_required(t, records, "case_generic_uncalled")
+    t |> equal(a, b)
+}

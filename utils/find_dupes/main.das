@@ -190,7 +190,7 @@ def main() {
         return
     }
     if (err != "") {
-        print("error: {err}\n\n")
+        to_log(LOG_ERROR, "error: {err}\n\n")
         print_help(get_command_info(type<Config>), "find_dupes")
         return
     }
@@ -199,36 +199,36 @@ def main() {
     let has_against = length(cfg.against) > 0 || cfg.against_from_stdin
     let has_baseline = !empty(cfg.baseline)
     if (importing && length(cfg.path) > 0) {
-        print("error: --import-functions and --path are mutually exclusive\n")
+        to_log(LOG_ERROR, "error: --import-functions and --path are mutually exclusive\n")
         return
     }
     if (importing && exporting) {
-        print("error: --import-functions and --export-functions are mutually exclusive (transcode is a no-op)\n")
+        to_log(LOG_ERROR, "error: --import-functions and --export-functions are mutually exclusive (transcode is a no-op)\n")
         return
     }
     if (exporting && (has_against || has_baseline)) {
-        print("error: --export-functions is incompatible with --against / --baseline (export captures the raw corpus, not a filtered view)\n")
+        to_log(LOG_ERROR, "error: --export-functions is incompatible with --against / --baseline (export captures the raw corpus, not a filtered view)\n")
         return
     }
     if (cfg.baseline_strict && !has_baseline) {
-        print("error: --baseline-strict requires --baseline\n")
+        to_log(LOG_ERROR, "error: --baseline-strict requires --baseline\n")
         return
     }
     if (!importing && !has_against && length(cfg.path) == 0) {
-        print("error: at least one --path is required (or pass --import-functions, or --against)\n\n")
+        to_log(LOG_ERROR, "error: at least one --path is required (or pass --import-functions, or --against)\n\n")
         print_help(get_command_info(type<Config>), "find_dupes")
         return
     }
     if (cfg.threshold < 0.0f || cfg.threshold > 1.0f) {
-        print("error: --threshold must be in 0..1, got {cfg.threshold}\n")
+        to_log(LOG_ERROR, "error: --threshold must be in 0..1, got {cfg.threshold}\n")
         return
     }
     if (cfg.top < 0) {
-        print("error: --top must be >= 0, got {cfg.top}\n")
+        to_log(LOG_ERROR, "error: --top must be >= 0, got {cfg.top}\n")
         return
     }
     if (cfg.min_tokens < 0) {
-        print("error: --min-tokens must be >= 0, got {cfg.min_tokens}\n")
+        to_log(LOG_ERROR, "error: --min-tokens must be >= 0, got {cfg.min_tokens}\n")
         return
     }
     // Defaults live in the Config struct field initializers — clargs
@@ -249,7 +249,7 @@ def main() {
     if (has_against) {
         resolve_against_files(cfg.against, cfg.against_from_stdin, against_files)
         if (length(against_files) == 0) {
-            print("error: --against (or stdin) yielded no .das files\n")
+            to_log(LOG_ERROR, "error: --against (or stdin) yielded no .das files\n")
             return
         }
     }
@@ -261,14 +261,14 @@ def main() {
     if (importing) {
         var ierr : string
         if (!read_import(cfg.import_functions, records, want_sigs, min_tokens, ierr)) {
-            print("error: {ierr}\n")
+            to_log(LOG_ERROR, "error: {ierr}\n")
             return
         }
-        print("loaded {length(records)} function record(s) from {cfg.import_functions}\n")
+        to_log(LOG_INFO, "loaded {length(records)} function record(s) from {cfg.import_functions}\n")
         if (has_against) {
             let dropped = drop_records_under_files(records, against_files)
             if (dropped > 0) {
-                print("dropped {dropped} corpus record(s) overridden by --against paths\n")
+                to_log(LOG_INFO, "dropped {dropped} corpus record(s) overridden by --against paths\n")
             }
         }
     } else {
@@ -278,11 +278,11 @@ def main() {
             scan_das_files(p, files, cache)
         }
         if (length(files) == 0 && !has_against) {
-            print("error: no .das files found under given paths\n")
+            to_log(LOG_ERROR, "error: no .das files found under given paths\n")
             return
         }
         if (length(files) > 0) {
-            print("scanning {length(files)} file(s)...\n")
+            to_log(LOG_INFO, "scanning {length(files)} file(s)...\n")
         }
 
         var n_failed = 0
@@ -290,7 +290,7 @@ def main() {
         for (i in range(length(files))) {
             let file = files[i]
             if (cfg.verbose) {
-                print("[{i + 1}/{length(files)}] {file}\n")
+                to_log(LOG_INFO, "[{i + 1}/{length(files)}] {file}\n")
             }
             if (has_expect_directive(file)) {
                 n_skipped++
@@ -301,7 +301,7 @@ def main() {
             }
         }
         files_scanned = length(files)
-        print("collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
+        to_log(LOG_INFO, "collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
 
         if (exporting) {
             // In export mode, treat compile failures as fatal —
@@ -310,18 +310,18 @@ def main() {
             // failures panic below. Best-effort export would silently
             // ship an incomplete corpus.
             if (n_failed > 0) {
-                print("error: {n_failed} compile failure(s); refusing to write partial export\n")
+                to_log(LOG_ERROR, "error: {n_failed} compile failure(s); refusing to write partial export\n")
                 panic("find_dupes export failed: {n_failed} compile failure(s)")
             }
             if (write_export(records, cfg.export_functions)) {
-                print("wrote {length(records)} function(s) to {cfg.export_functions}\n")
+                to_log(LOG_INFO, "wrote {length(records)} function(s) to {cfg.export_functions}\n")
                 return
             }
             // Use `panic` to surface a non-zero exit code so scripts
             // sharding compile-then-merge across machines can detect
             // partial-failure runs. The `error:` prefix matches the
             // format used elsewhere for usage errors in this CLI.
-            print("error: could not write export to {cfg.export_functions}\n")
+            to_log(LOG_ERROR, "error: could not write export to {cfg.export_functions}\n")
             panic("find_dupes export failed")
         }
     }
@@ -373,7 +373,7 @@ def main() {
             n_against_compiled++
         }
         if (n_against_compiled > 0 || n_against_failed > 0 || n_against_skipped > 0) {
-            print("--against: compiled {n_against_compiled}, failed {n_against_failed}, skipped {n_against_skipped}\n")
+            to_log(LOG_INFO, "--against: compiled {n_against_compiled}, failed {n_against_failed}, skipped {n_against_skipped}\n")
         }
     }
 
@@ -387,10 +387,10 @@ def main() {
     if (has_baseline) {
         var berr : string
         if (!load_baseline_canonicals(cfg.baseline, baseline_canonicals, baseline_members, berr)) {
-            print("error: {berr}\n")
+            to_log(LOG_ERROR, "error: {berr}\n")
             return
         }
-        print("loaded {length(baseline_canonicals)} baseline canonical(s), {length(baseline_members)} member(s) from {cfg.baseline}\n")
+        to_log(LOG_INFO, "loaded {length(baseline_canonicals)} baseline canonical(s), {length(baseline_members)} member(s) from {cfg.baseline}\n")
         tag_baseline_new_members(records, baseline_members)
     }
 
@@ -423,24 +423,24 @@ def main() {
             parts |> push("{kv._1} {kv._0}")
         }
         let joined = parts |> join(", ")
-        print("patterns skipped: {joined} (--keep <name>|all to include)\n")
+        to_log(LOG_INFO, "patterns skipped: {joined} (--keep <name>|all to include)\n")
     }
 
     let filter_candidates = has_against || has_baseline
-    print("clustering exact matches...\n")
+    to_log(LOG_INFO, "clustering exact matches...\n")
     var clusters <- exact_buckets(records, min_tokens, filter_candidates)
     if (cfg.baseline_strict) {
         let before_strict = length(clusters)
         strict_drop_baseline_clusters(clusters, baseline_canonicals)
         let dropped_strict = before_strict - length(clusters)
         if (dropped_strict > 0) {
-            print("--baseline-strict: dropped {dropped_strict} cluster(s) whose canonical was already in baseline\n")
+            to_log(LOG_INFO, "--baseline-strict: dropped {dropped_strict} cluster(s) whose canonical was already in baseline\n")
         }
     }
     sort_clusters(clusters)
     var pairs : array<FuzzyPair>
     if (!cfg.no_fuzzy) {
-        print("scanning {length(records)} records for fuzzy near-duplicates (threshold {threshold})...\n")
+        to_log(LOG_INFO, "scanning {length(records)} records for fuzzy near-duplicates (threshold {threshold})...\n")
         pairs <- fuzzy_pairs(records, threshold, min_tokens, filter_candidates)
         sort_pairs(pairs)
     }
@@ -482,9 +482,9 @@ def main() {
             json_ok = write_json_report(rep, cfg.json)
         }
         if (json_ok) {
-            print("\nJSON report written to {cfg.json}\n")
+            to_log(LOG_INFO, "\nJSON report written to {cfg.json}\n")
         } else {
-            print("\nERROR: could not write JSON report to {cfg.json}\n")
+            to_log(LOG_ERROR, "\nERROR: could not write JSON report to {cfg.json}\n")
         }
     }
 
