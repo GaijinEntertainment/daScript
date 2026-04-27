@@ -9,7 +9,7 @@
  MCP Server --- AI Tool Integration
 ===========================================
 
-The daslang MCP server exposes 28 compiler-backed tools to AI coding
+The daslang MCP server exposes compiler-backed tools to AI coding
 assistants via the `Model Context Protocol <https://modelcontextprotocol.io/>`_.
 It provides compilation diagnostics, type inspection, go-to-definition,
 find-references, AST dump, AOT generation, expression evaluation,
@@ -57,8 +57,7 @@ session.
 Tools
 =====
 
-The server exposes 28 tools.  Each tool is invoked via MCP's
-``tools/call`` method.
+Each tool is invoked via MCP's ``tools/call`` method.
 
 Compilation and diagnostics
 ---------------------------
@@ -198,6 +197,30 @@ Parse-aware search (tree-sitter)
      - List all declarations in a file or set of files using
        tree-sitter.  Works on broken/incomplete code -- no compilation
        needed.  Conditional on ``sg`` CLI.
+
+Duplicate detection
+-------------------
+
+These tools wrap :ref:`utils_find_dupes` end-to-end (no shelling out).
+``export_corpus`` builds the corpus once over a body of code;
+``find_duplicates`` queries it.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Tool
+     - Description
+   * - ``export_corpus``
+     - Scan one or more ``.das`` files / directories / globs, compile
+       each in-process, and write a corpus JSON to ``out``.  Same shape
+       as ``find_dupes --export-functions``.
+   * - ``find_duplicates``
+     - Compare candidate file(s) against a pre-built corpus.  Returns
+       a per-candidate JSON envelope with corpus stats, pattern-skip
+       counts, and the top-N exact and fuzzy matches per candidate.
+       Supports ``keep`` to override the default pattern filter.
+
 
 Live-reload control
 -------------------

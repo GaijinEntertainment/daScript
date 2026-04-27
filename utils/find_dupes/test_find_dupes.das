@@ -13,6 +13,7 @@ require minhash
 require cluster
 require exchange
 require pipeline
+require patterns
 require report
 
 
@@ -997,4 +998,149 @@ def test_per_candidate_rollup_shape(t : T?) {
     t |> success(pcr.candidates[0].fuzzy_matches[0].similarity > 0.6f
         && pcr.candidates[0].fuzzy_matches[0].similarity < 1.0f,
         "fuzzy similarity in (0.6, 1.0): {pcr.candidates[0].fuzzy_matches[0].similarity}")
+}
+
+
+// ── patterns / classify ──────────────────────────────────────────────
+
+[test]
+def test_pattern_dispatch_three_identical_stmts(t : T?) {
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "dispatch")
+    t |> equal(hit.note, "3x repeated")
+}
+
+
+[test]
+def test_pattern_dispatch_two_identical_stmts(t : T?) {
+    // ≥ 2 is the documented threshold; verify the boundary fires.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "dispatch")
+    t |> equal(hit.note, "2x repeated")
+}
+
+
+[test]
+def test_pattern_single_stmt_not_dispatch(t : T?) {
+    // One statement is not a uniform-call list — keep the function.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_empty_body_not_dispatch(t : T?) {
+    let canon = "FN ARG <var_0> TYP BODY BLK ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_mixed_stmts_not_dispatch(t : T?) {
+    // Mixed call names (run / bench) — body isn't uniform, don't classify.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:bench <var_0> LIT ADDR ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_nested_block_not_dispatch(t : T?) {
+    // Outer body has ONE top-level statement — an if/then with two nested
+    // STMTs inside. The inner STMTs must not be treated as top-level
+    // boundaries; otherwise we'd wrongly count 2 identical "STMT CALL:foo"
+    // chunks and classify as dispatch.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT IF <var_0> THEN BLK STMT CALL:foo <var_0> ENDBLK ELSE BLK STMT CALL:foo <var_0> ENDBLK ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_real_code_not_dispatch(t : T?) {
+    // The "real test" canonical from strings_convert.das — long, mixed
+    // STMTs, definitely not a dispatcher.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> STMT RET OP2:+ <var_1> LIT ENDBLK ENDFN"
+    let hit = classify(canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_split_top_level_stmts_skips_nested(t : T?) {
+    // One top-level for-loop body containing N statements should yield
+    // exactly ONE chunk at the top level — confirms BLK depth tracking.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT FOR FOR_VAR <var_1> <var_0> FOR_BODY BLK STMT CALL:foo <var_1> STMT CALL:bar <var_1> ENDBLK ENDBLK ENDFN"
+    let stmts <- split_top_level_stmts(canon)
+    t |> equal(length(stmts), 1)
+}
+
+
+// ── apply_pattern_filter ─────────────────────────────────────────────
+
+[test]
+def test_apply_pattern_filter_drops_dispatch(t : T?) {
+    var records : array<FuncRecord> <- [
+        <- make_record("real",
+            "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, false),
+        <- make_record("dispatcher",
+            "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN", 2, false)]
+    let kept : table<string; void?>
+    var counts <- apply_pattern_filter(records, kept, false, false)
+    t |> equal(length(records), 1)
+    t |> equal(records[0].ref.name, "real")
+    t |> equal(length(counts), 1)
+    t |> success(key_exists(counts, "dispatch"), "dispatch counted")
+    t |> equal(counts["dispatch"], 1)
+}
+
+
+[test]
+def test_apply_pattern_filter_keep_all_passthrough(t : T?) {
+    // keep_all=true short-circuits classification entirely — both
+    // records survive, and skip_counts is empty.
+    var records : array<FuncRecord> <- [
+        <- make_record("real",
+            "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, false),
+        <- make_record("dispatcher",
+            "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN", 2, false)]
+    let kept : table<string; void?>
+    let counts <- apply_pattern_filter(records, kept, true, false)
+    t |> equal(length(records), 2)
+    t |> equal(length(counts), 0)
+}
+
+
+[test]
+def test_apply_pattern_filter_explicit_keep_dispatch(t : T?) {
+    // kept_set contains "dispatch" → dispatcher record is kept, no drops.
+    var records : array<FuncRecord> <- [
+        <- make_record("real",
+            "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, false),
+        <- make_record("dispatcher",
+            "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN", 2, false)]
+    var kept : table<string; void?>
+    kept |> insert("dispatch", null)
+    let counts <- apply_pattern_filter(records, kept, false, false)
+    t |> equal(length(records), 2)
+    t |> equal(length(counts), 0)
+}
+
+
+[test]
+def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
+    // Records that survive must keep their is_candidate flag (relied on
+    // by --against / --baseline modes).
+    var records : array<FuncRecord> <- [
+        <- make_record("real",
+            "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, false)]
+    records[0].is_candidate = true
+    let kept : table<string; void?>
+    let counts <- apply_pattern_filter(records, kept, false, false)
+    t |> equal(length(records), 1)
+    t |> success(records[0].is_candidate, "is_candidate flag preserved through filter")
 }

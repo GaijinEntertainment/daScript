@@ -85,6 +85,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/writing_tests.md` | Writing tests for your daslang code with the bundled `dastest` framework (`bin/daslang dastest/dastest.das -- --test ...`) |
 | `skills/memory_leak_detection.md` | Diagnosing leaks — `--das-profiler-leaks`, `-track-allocations -heap-report`, `GC APP LEAK` reports, `--track-smart-ptr`, `HandleRegistry` dump |
 | `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Stream/Feature leaks using `DumpJobQueLeaks` and `--track-job-status <id>` refcount tracing |
+| `skills/find_dupes.md` | Detecting duplicate / near-duplicate functions across a daslang codebase — building a corpus, asking "did I just write something that already exists?", or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `find_duplicates`) and the underlying CLI (`utils/find_dupes/main.das`) |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
@@ -283,7 +284,8 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 - `examples/` — Example scripts
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
-- `utils/mcp/` — MCP server for AI coding assistants (30 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/find_dupes/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `find_duplicates` MCP tools)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
 - `tree-sitter-daslang/` — Tree-sitter grammar, shared library, and highlighting queries
@@ -332,6 +334,8 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
 | `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
+| `export_corpus` | Running `utils/find_dupes/main.das --export-functions` from a shell to build a duplicate-detection corpus |
+| `find_duplicates` | Running `utils/find_dupes/main.das --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
 | `live_launch` | Manually starting `daslang-live` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

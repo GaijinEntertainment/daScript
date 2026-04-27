@@ -23,7 +23,9 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/writing_tests.md` | `skills/writing_tests.md` | dastest framework usage for SDK consumers |
 | `install/skills/memory_leak_detection.md` | `skills/memory_leak_detection.md` | Heap / gc_node / smart_ptr / handle leak detection — runtime CLI flags |
 | `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
+| `install/skills/find_dupes.md` | `skills/find_dupes.md` | Duplicate-function detection — corpus build, MCP tools (`export_corpus`, `find_duplicates`), CLI modes |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
+| `utils/find_dupes/` (whole dir) | `utils/find_dupes/` | Duplicate-function detector (canonicalizer, clusterer, MinHash, pattern filter) |
 
 ## What belongs in install instructions
 
@@ -106,6 +108,10 @@ After modifying install instructions:
    - `D:/daslang/skills/writing_tests.md`
    - `D:/daslang/skills/memory_leak_detection.md`
    - `D:/daslang/skills/jobque_debugging.md`
+   - `D:/daslang/skills/find_dupes.md`
    - `D:/daslang/utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
    - `D:/daslang/utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
+   - `D:/daslang/utils/find_dupes/main.das`
+   - `D:/daslang/utils/find_dupes/patterns.das`
+   - `D:/daslang/utils/find_dupes/fixture/synth.das`
 4. Spot-check that no repo-internal paths leaked into install files

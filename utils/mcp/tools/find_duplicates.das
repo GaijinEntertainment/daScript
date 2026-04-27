@@ -1,4 +1,5 @@
 options gen2
+options rtti
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
@@ -11,6 +12,23 @@ require ../../find_dupes/canonical.das
 require strings
 require math
 require daslib/strings_boost
+
+
+// `report` is a string holding the per-candidate report (already-serialized
+// JSON from `write_per_candidate_report`). `@embed` emits it as raw JSON,
+// preserving the existing nested-object envelope shape — no double-encoding.
+struct FindDuplicatesEnvelope {
+    corpus_records : int
+    corpus_dropped_for_override : int
+    candidate_files_compiled : int
+    candidate_files_failed : int
+    candidate_functions : int
+    candidate_functions_pre_filter : int
+    exact_clusters_kept : int
+    fuzzy_pairs_kept : int
+    patterns_skipped : table<string; int>
+    @embed report : string
+}
 
 
 def parse_float_default(s : string; default_val : float) : float {
@@ -42,9 +60,10 @@ def public do_find_duplicates(paths : string; corpus : string;
                               threshold_str : string;
                               min_tokens_str : string;
                               top_str : string;
+                              keep_str : string;
                               project : string) : string {
     if (empty(corpus)) {
-        return make_tool_result("find_duplicates: missing required 'corpus' parameter (path to a corpus.json produced by `find_dupes --export-functions`)", true)
+        return make_tool_result("find_duplicates: missing required 'corpus' parameter (path to a corpus.json produced by the `export_corpus` MCP tool or `find_dupes --export-functions`)", true)
     }
     if (empty(paths)) {
         return make_tool_result("find_duplicates: missing required 'paths' parameter (one or more .das files; comma- or newline-delimited, or a glob)", true)
@@ -115,12 +134,75 @@ def public do_find_duplicates(paths : string; corpus : string;
         n_compiled++
     }
 
+    // Count candidates BEFORE the pattern filter so we can distinguish
+    // "compile produced nothing" (real error) from "filter ate everything"
+    // (successful run, empty result). The CLI conflates these into
+    // `panic`; in MCP we want an actionable signal back to the caller.
+    var candidates_pre_filter = 0
+    for (r in records) {
+        if (r.is_candidate) {
+            candidates_pre_filter++
+        }
+    }
+
+    // Pattern filter — drops boilerplate shapes (e.g. dastest dispatch
+    // outer functions) before clustering so they don't pollute clusters
+    // or fuzzy pairs. `keep` is parsed identically to the CLI: a comma-
+    // separated list of pattern names to opt back in, or 'all' to disable
+    // filtering entirely. Default (empty) skips every known pattern.
+    var keep_all = false
+    var kept_set : table<string; void?>
+    if (!empty(keep_str)) {
+        let parts <- split_by_chars(keep_str, ", \t\n")
+        for (k in parts) {
+            if (empty(k)) {
+                continue
+            }
+            if (k == "all") {
+                keep_all = true
+                continue
+            }
+            if (!key_exists(kept_set, k)) {
+                kept_set |> insert(k, null)
+            }
+        }
+    }
+    var skip_counts <- apply_pattern_filter(records, kept_set, keep_all, false)
+
     let cand_refs <- collect_candidate_refs(records)
     if (empty(cand_refs)) {
-        let msg = (n_failed > 0
-            ? "find_duplicates: no candidate functions extracted (compile failed for {n_failed} file(s); first: {failed_files[0]})"
-            : "find_duplicates: no candidate functions extracted from {paths}")
-        return make_tool_result(msg, true)
+        // Real failure cases: compile error, or the file genuinely has
+        // no functions (header / forward-decls only). Both warrant an
+        // error envelope.
+        if (n_failed > 0) {
+            return make_tool_result(
+                "find_duplicates: no candidate functions extracted (compile failed for {n_failed} file(s); first: {failed_files[0]})",
+                true)
+        }
+        if (candidates_pre_filter == 0) {
+            return make_tool_result("find_duplicates: no candidate functions extracted from {paths}", true)
+        }
+        // Filter consumed every candidate. Skip clustering — every cluster
+        // and pair would be corpus-only and `write_per_candidate_report`
+        // gates on candidates anyway. Return the envelope directly so the
+        // caller sees `candidates_pre_filter` and `patterns_skipped` and
+        // can retry with `keep=…`.
+        var empty_envelope : FindDuplicatesEnvelope
+        empty_envelope.corpus_records = corpus_total
+        empty_envelope.corpus_dropped_for_override = dropped
+        empty_envelope.candidate_files_compiled = n_compiled
+        empty_envelope.candidate_files_failed = n_failed
+        empty_envelope.candidate_functions = 0
+        empty_envelope.candidate_functions_pre_filter = candidates_pre_filter
+        empty_envelope.exact_clusters_kept = 0
+        empty_envelope.fuzzy_pairs_kept = 0
+        empty_envelope.patterns_skipped <- skip_counts
+        var empty_rep : Report
+        empty_rep.summary.functions_analyzed = length(records)
+        empty_rep.summary.threshold = threshold
+        empty_rep.summary.min_tokens = min_tokens
+        empty_envelope.report = write_per_candidate_report(empty_rep, cand_refs, top)
+        return make_tool_result(sprint_json(empty_envelope, false), false)
     }
 
     var clusters <- exact_buckets(records, min_tokens, true)
@@ -139,19 +221,17 @@ def public do_find_duplicates(paths : string; corpus : string;
 
     // Wrap the per-candidate report in a small envelope so consumers can
     // see corpus stats and compile-failure counts without parsing stdout.
-    let pcr_body = write_per_candidate_report(rep, cand_refs, top)
-    let envelope = build_string() $(var w) {
-        w |> write("\{")
-        w |> write("\"corpus_records\": {corpus_total}, ")
-        w |> write("\"corpus_dropped_for_override\": {dropped}, ")
-        w |> write("\"candidate_files_compiled\": {n_compiled}, ")
-        w |> write("\"candidate_files_failed\": {n_failed}, ")
-        w |> write("\"candidate_functions\": {length(cand_refs)}, ")
-        w |> write("\"exact_clusters_kept\": {rep.summary.exact_clusters}, ")
-        w |> write("\"fuzzy_pairs_kept\": {rep.summary.fuzzy_pairs}, ")
-        w |> write("\"report\": ")
-        w |> write(pcr_body)
-        w |> write("\}")
-    }
-    return make_tool_result(envelope, n_failed > 0)
+    // `report` carries pre-serialized JSON via `@embed` — no double-encoding.
+    var envelope : FindDuplicatesEnvelope
+    envelope.corpus_records = corpus_total
+    envelope.corpus_dropped_for_override = dropped
+    envelope.candidate_files_compiled = n_compiled
+    envelope.candidate_files_failed = n_failed
+    envelope.candidate_functions = length(cand_refs)
+    envelope.candidate_functions_pre_filter = candidates_pre_filter
+    envelope.exact_clusters_kept = rep.summary.exact_clusters
+    envelope.fuzzy_pairs_kept = rep.summary.fuzzy_pairs
+    envelope.patterns_skipped <- skip_counts
+    envelope.report = write_per_candidate_report(rep, cand_refs, top)
+    return make_tool_result(sprint_json(envelope, false), n_failed > 0)
 }

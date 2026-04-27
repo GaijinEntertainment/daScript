@@ -116,6 +116,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
 | `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
 | `skills/filesystem.md` | Any `.das` code that builds, splits, or normalizes a file path, or touches the filesystem (existence, listing, copy/rename/remove, temp files). **Rule:** path & filename operations MUST use `fio` helpers (`base_name`/`dir_name`/`extension`/`stem`/`path_join`/`normalize`/`is_absolute`/`relative`) — never hand-rolled `rfind`/`slice`/string-interp. Filesystem ops use `fio` / `daslib/fio` (`stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
+| `skills/find_dupes.md` | Detecting duplicate / near-duplicate functions in repo code — building a corpus, asking "did I just write something that already exists?" during PR authoring/review, or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `find_duplicates`) and the underlying CLI (`utils/find_dupes/main.das`). Also read before editing/extending the find_dupes tool itself (adding a pattern matcher, extending the canonicalizer, wiring new MCP parameters) |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
 
@@ -329,7 +330,8 @@ other level) should be used instead.
 - `modules/` — External plugin modules
 - `modules/dasLiveHost/` — C++ module for live-reload host lifecycle (dynamic module)
 - `utils/daslang-live/` — Live-reloading application host (`daslang-live.exe`)
-- `utils/mcp/` — MCP server for AI coding assistants (30 tools, stdio transport, no extra deps)
+- `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/find_dupes/` — Cross-file duplicate-function detector — canonicalizer, MinHash, clusterer, pattern filter (also exposed via the `export_corpus` and `find_duplicates` MCP tools)
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
 - `examples/games/` — Full game examples (arcanoid, sequence) — run under daslang-live or daslang
@@ -368,6 +370,8 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
 | `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
+| `export_corpus` | Running `find_dupes --export-functions` from a shell to build a duplicate-detection corpus |
+| `find_duplicates` | Running `find_dupes --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
 | `live_launch` | Manually starting `daslang-live.exe` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

@@ -35,6 +35,7 @@ require tools/outline public
 require tools/aot public
 require tools/lint_tool public
 require tools/find_duplicates public
+require tools/export_corpus public
 require tools/live public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -424,6 +425,17 @@ def handle_tools_list(id_json : string) : string {
         ["file"]
     ))
     result.tools |> emplace(make_tool(
+        "export_corpus",
+        "Build a corpus.json from one or more .das files/dirs/globs. Output is the same shape `find_duplicates` expects: a JSON dump of every user function's canonical token stream and source location. Run this once over a body of code (e.g. 'daslib', 'tests', or your project) to produce a corpus, then point `find_duplicates` at it. This is the MCP-side replacement for `find_dupes --export-functions`; the whole workflow stays inside the MCP server with no shelling out.",
+        {
+            "paths" => PropertySchema(_type = "string", description = "Files, directories, or globs to scan. Comma- or newline-delimited. Directories are walked recursively. Skips `_*` directories, hidden directories, `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das`."),
+            "out" => PropertySchema(_type = "string", description = "Output corpus.json path. Overwrites if it exists. Refuses to write a partial corpus when any input file fails to compile (matches the CLI's --export-functions behavior)."),
+            "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per record (default 0 — keep every user function). Records below the threshold are dropped at export time. Most callers should leave this at 0 and let `find_duplicates --min-tokens` filter at query time."),
+            "project" => PROJECT_PROP
+        },
+        ["paths", "out"]
+    ))
+    result.tools |> emplace(make_tool(
         "find_duplicates",
         "Find functions in `paths` that duplicate or closely resemble functions in a pre-built corpus (an `--export-functions` JSON from `find_dupes`). Returns a per-candidate JSON report: each input function, its top exact-cluster siblings, and its top fuzzy partners with similarity scores. Use to answer 'did I just write something that already exists?' during PR authoring or review.",
         {
@@ -432,6 +444,7 @@ def handle_tools_list(id_json : string) : string {
             "threshold" => PropertySchema(_type = "string", description = "Fuzzy similarity floor 0..1 (default 0.7). Score is sqrt(jaccard × len_ratio)."),
             "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per function (default 8). Filters trivial wrappers."),
             "top" => PropertySchema(_type = "string", description = "Top-N similar matches per candidate (default 5)."),
+            "keep" => PropertySchema(_type = "string", description = "Comma-separated pattern names to KEEP despite the default-skip filter. Special value 'all' disables pattern filtering entirely. Default is empty — all known patterns are skipped (currently: 'dispatch'). The skipped count is reported in the envelope as `patterns_skipped`."),
             "project" => PROJECT_PROP
         },
         ["paths", "corpus"]
@@ -524,7 +537,7 @@ def get_string_arg(args : JsonValue?; name : string) : string {
     return ""
 }
 
-def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
+def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : string) : string {
     if (tool_name == "compile_check") {
         return do_compile_check(arg1, project, arg2 == "true")
     } elif (tool_name == "list_functions") {
@@ -570,7 +583,9 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "lint") {
         return do_lint(arg1, project)
     } elif (tool_name == "find_duplicates") {
-        return do_find_duplicates(arg1, arg2, arg3, arg4, arg5, project)
+        return do_find_duplicates(arg1, arg2, arg3, arg4, arg5, arg6, project)
+    } elif (tool_name == "export_corpus") {
+        return do_export_corpus(arg1, arg2, arg3, project)
     } elif (tool_name == "live_status") {
         return do_live_status(arg1)
     } elif (tool_name == "live_error") {
@@ -593,18 +608,18 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     }
 }
 
-def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : string {
-    log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5}")
+def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : string) : string {
+    log_tool(tool_name, "{arg1} {arg2} {arg3} {arg4} {arg5} {arg6}")
     let t0 = get_clock()
     var result : string
     // Live tools run on the main thread — they use system() and sleep() which
     // don't work well from new_thread, and they don't need compilation context
     if (starts_with(tool_name, "live_")) {
-        result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
+        result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project)
     } else {
         with_channel(1) $(ch) {
             new_thread() <| @() {
-                let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project)
+                let tool_result = dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project)
                 ch |> push_clone(ToolMessage(text = tool_result))
                 ch |> notify_and_release()
             }
@@ -625,7 +640,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         return json_rpc_error(id_json, -32602, "missing tool name")
     }
     let name = tool_name_val.value as _string
-    var arg1, arg2, arg3, arg4, arg5 : string
+    var arg1, arg2, arg3, arg4, arg5, arg6 : string
     let project = get_string_arg(args, "project")
     if (name == "compile_check") {
         arg1 = get_string_arg(args, "file")
@@ -758,6 +773,17 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg3 = get_string_arg(args, "threshold")
         arg4 = get_string_arg(args, "min_tokens")
         arg5 = get_string_arg(args, "top")
+        arg6 = get_string_arg(args, "keep")
+    } elif (name == "export_corpus") {
+        arg1 = get_string_arg(args, "paths")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
+        }
+        arg2 = get_string_arg(args, "out")
+        if (empty(arg2)) {
+            return json_rpc_error(id_json, -32602, "missing 'out' argument")
+        }
+        arg3 = get_string_arg(args, "min_tokens")
     } elif (name == "live_status") {
         arg1 = get_string_arg(args, "port")
     } elif (name == "live_error") {
@@ -792,7 +818,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } else {
         return json_rpc_error(id_json, -32602, "unknown tool: {name}")
     }
-    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5, project))
+    return json_rpc_response(id_json, run_tool(name, arg1, arg2, arg3, arg4, arg5, arg6, project))
 }
 
 // ── JSON-RPC dispatcher ──────────────────────────────────────────────

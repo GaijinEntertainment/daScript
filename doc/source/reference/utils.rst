@@ -7,8 +7,9 @@
 This section documents the command-line tools that ship with daslang:
 the live-reload application host, the test framework, the code coverage
 tool, the package manager, the MCP server for AI coding assistants,
-the runtime profiler and memory-leak tracker, and a cheat sheet for
-every built-in leak-detection mechanism.
+the cross-file duplicate-function detector, the runtime profiler and
+memory-leak tracker, and a cheat sheet for every built-in
+leak-detection mechanism.
 
 .. toctree::
    :maxdepth: 2
@@ -18,5 +19,6 @@ every built-in leak-detection mechanism.
    utils/dascov.rst
    utils/daspkg.rst
    utils/mcp.rst
+   utils/find_dupes.rst
    utils/profiler.rst
    utils/memory_leak_detection.rst
