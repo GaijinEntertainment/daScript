@@ -86,6 +86,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/memory_leak_detection.md` | Diagnosing leaks — `--das-profiler-leaks`, `-track-allocations -heap-report`, `GC APP LEAK` reports, `--track-smart-ptr`, `HandleRegistry` dump |
 | `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Stream/Feature leaks using `DumpJobQueLeaks` and `--track-job-status <id>` refcount tracing |
 | `skills/find_dupes.md` | Detecting duplicate / near-duplicate functions across a daslang codebase — building a corpus, asking "did I just write something that already exists?", or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `find_duplicates`) and the underlying CLI (`utils/find_dupes/main.das`) |
+| `skills/linq.md` | Any `.das` code that filters, maps, sorts, groups, aggregates, or otherwise transforms a sequence into another sequence, array, or table. Preference order: comprehension `[for (x in src); expr; where cond]` when one expression covers it → LINQ (`daslib/linq_boost` shorthand `_select` / `_where` / `_to_array`, or pipe-form `arr \|> where_(...) \|> ...`) for chains, lazy iterators, set ops, joins, aggregations → plain `for` loop for side-effecting iteration. Avoid `daslib/functional` (`map` / `filter` / `each` / `to_array`) for new code |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
