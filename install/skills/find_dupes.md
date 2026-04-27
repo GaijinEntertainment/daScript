@@ -86,7 +86,11 @@ Currently shipped patterns:
 
 | Name | Detects | Why it's boilerplate |
 |---|---|---|
+| `visitor` | Class-method whose hook starts with `visit`, `preVisit`, `postVisit`, `before`, or `after` (matched by name, regardless of body) | `AstVisitor` overrides — one method per AST node type by dispatch contract, so cross-class duplication is structural, not actionable. Catches the swarms in `aot_cpp`, `ast_print`, `templates_boost`, `rst_comment`, `perf_lint` |
 | `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | Test runners and dispatchers (`t \|> run("X") @(t) {…}` lists, `t \|> bench(…)` lists, repeated-init blocks). Lambda bodies are collapsed to `ADDR` upstream, so two `run` calls look identical regardless of what the lambdas actually do |
+| `emit` | 1..6 top-level statements, each a single trivial `CALL:foo(...)` (literal/var/field args only — no nested calls, no control flow) or a `RET ...` | Emitter shells like `def visitX(...) { write(*ss, ")") ; return that }`. Catches free-function variants that the name-based `visitor` matcher doesn't cover |
+
+Match order is name-first (`visitor`), then body-shape (`dispatch`, `emit`). A visitor method whose body fits the `emit` shape is still classified as `visitor` — the more semantic bucket wins.
 
 Override per-pattern with `keep="<name>"` (comma-separated for multiple), or disable filtering wholesale with `keep="all"`. Default (omit `keep`) skips every known pattern.
 
