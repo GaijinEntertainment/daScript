@@ -26,6 +26,7 @@ review.
 ./bin/daslang utils/find_dupes/main.das -- -p tests/strings -t 0.85 -n 20
 ./bin/daslang utils/find_dupes/main.das -- -p daslib --no-fuzzy --min-tokens 32
 ./bin/daslang utils/find_dupes/main.das -- -p tests -L --min-tokens 16    # cluster dastest run() bodies
+./bin/daslang utils/find_dupes/main.das -- -p tests --keep all            # disable pattern filter (legacy view)
 ./bin/daslang utils/find_dupes/main.das -- -?
 ```
 
@@ -51,9 +52,39 @@ Flags:
 | `--against-from-stdin` | off | B2: read newline-delimited candidate paths from stdin (use with `git diff --name-only … \| find_dupes --against-from-stdin …`) |
 | `--check` | off | Exit non-zero when the post-filter report contains any clusters/pairs (CI gate) |
 | `--flat` | off | In `--against` mode, force the flat clusters+pairs writer (default is the per-candidate rollup) |
+| `-k / --keep` | (off) | Pattern name to KEEP despite default skip (repeatable). Special value `all` disables pattern filtering entirely. See "Patterns" below |
 | `-?` | | Help |
 
 `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das` are skipped automatically — the latter two install thread-local debug agents at compile time, which would abort the scanner on second use.
+
+## Patterns (default-skip filter)
+
+A "pattern" is a structural shape that signals "this function is boilerplate, not real code" — typically a wrapper or dispatcher whose canonical token stream contains zero unique signal beyond its repetition count. Pattern-matched functions are dropped from clustering by default, on the theory that they explode cluster sizes and fuzzy-pair counts without surfacing real duplicates.
+
+Override per-pattern via `--keep <name>` (repeatable), or disable filtering wholesale via `--keep all`.
+
+Currently shipped patterns:
+
+| Name | Detects | Why it's boilerplate |
+|---|---|---|
+| `dispatch` | Function whose body is `N >= 2` byte-identical top-level statement chunks (`STMT … STMT … STMT …` with all chunks equal) | dastest's `t \|> run("X") @(t) { … }` outer functions. Lambda bodies are collapsed to `ADDR` upstream, so two `run` calls look identical regardless of what the lambdas do — the outer function carries zero unique structure beyond its call count. Same shape catches `t \|> bench(…)`, repeated-init blocks, and any uniform call list |
+
+Pattern detection lives in `patterns.das`. Adding a new pattern is a three-step change:
+
+1. Add a `try_<name>(canonical, var hit) : bool` predicate that returns `true` and populates `hit.name` / `hit.note` when matched.
+2. Add the call to `classify()` in priority order (more specific shapes first).
+3. Add at least one positive test and one negative test in `test_find_dupes.das` (under `── patterns / classify ──`).
+
+Pattern names are the user-visible contract — they appear in `--keep`, in the per-record `--verbose` skip log, and in the summary line. Pick a short, stable identifier.
+
+The summary line surfaces what was filtered:
+
+```
+collected 66 record(s); 0 compile failure(s), 1 skipped (expect-directive)
+patterns skipped: 35 dispatch (--keep <name>|all to include)
+```
+
+`--verbose` prints one `pattern-skip [name] file:line func (note)` line per filtered record — useful for confirming the filter isn't dropping real signal on a new corpus.
 
 ## Canonical form
 
@@ -79,7 +110,8 @@ is real signal).
 | `cluster.das` | Exact-bucket clustering + fuzzy all-pairs with length gate |
 | `report.das` | JSON + stdout summary writer |
 | `main.das` | CLI (`daslib/clargs`), file scan, compile-and-collect orchestration |
-| `pipeline.das` | `compile_and_collect` / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite |
+| `pipeline.das` | `compile_and_collect` / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite. `apply_pattern_filter` drops records matched by `patterns.das` |
+| `patterns.das` | Pattern matchers — `classify(canonical) → PatternHit`. Default-skipped shapes (dispatchers etc.); override via `--keep <name>` |
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das` | Hand-crafted fixture for smoke-testing the visitor end-to-end |
 | `fixture/canonical_cases.das` | Narrowly-targeted fixture (one function per canonicalization concern) for unit-testing `CanonicalVisitor` |

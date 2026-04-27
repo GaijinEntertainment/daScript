@@ -72,92 +72,14 @@ struct Config {
     @clarg_doc = "Force the flat clusters/pairs writer even when --against is active (default in --against mode is the per-candidate writer)"
     flat : bool
 
+    @clarg_short = "k"
+    @clarg_doc = "Pattern name to KEEP despite default skip (repeatable). Special value 'all' disables pattern filtering entirely. Known patterns: 'dispatch'."
+    keep : array<string>
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
     help : bool
-}
-
-
-def is_daslib_skip(path : string; basename : string) : bool {
-    // `daslib/debugger.das` and `daslib/profiler.das` install thread-local
-    // agents at compile time; the second install in the same process throws
-    // and aborts the scan. Match by daslib/ path suffix, not bare basename
-    // — a project's own `myapp/debugger.das` should not be silently skipped.
-    let normalized = normalize_path(path)
-    let prefix = "daslib/{basename}"
-    return normalized == prefix || normalized |> ends_with("/{prefix}")
-}
-
-
-def is_skip_file(path : string; basename : string) : bool {
-    if (basename == "builtin.das") {
-        return true
-    }
-    return (is_daslib_skip(path, "debugger.das")
-        || is_daslib_skip(path, "profiler.das"))
-}
-
-
-def is_skip_dir(name : string) : bool {
-    return name |> starts_with(".")
-}
-
-
-def has_expect_directive(file : string) : bool {
-    let text = fread(file)
-    if (empty(text)) {
-        return false
-    }
-    let lines <- text |> split("\n")
-    for (line in lines) {
-        let trimmed = line |> strip
-        if (trimmed |> starts_with("expect ")) {
-            return true
-        }
-    }
-    return false
-}
-
-
-def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
-    let st = stat(path)
-    if (!st.is_valid) {
-        return
-    }
-    if (st.is_reg) {
-        if (path |> ends_with(".das") && !cache |> key_exists(path)) {
-            let last_slash = max(rfind(path, "/"), rfind(path, "\\"))
-            let fname = last_slash >= 0 ? slice(path, last_slash + 1) : path
-            if (!is_skip_file(path, fname)) {
-                cache |> insert(path, null)
-                files |> push(path)
-            }
-        }
-        return
-    }
-    if (!st.is_dir) {
-        return
-    }
-    fio::dir(path) $(name) {
-        if (name == "." || name == "..") {
-            return
-        }
-        if (name |> starts_with("_") || is_skip_dir(name)) {
-            return
-        }
-        let full = "{path}/{name}"
-        let fst = stat(full)
-        if (!fst.is_valid) {
-            return
-        }
-        if (fst.is_dir) {
-            scan_das_files(full, files, cache)
-        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(full, name) && !cache |> key_exists(full)) {
-            cache |> insert(full, null)
-            files |> push(full)
-        }
-    }
 }
 
 
@@ -470,6 +392,38 @@ def main() {
         }
         print("loaded {length(baseline_canonicals)} baseline canonical(s), {length(baseline_members)} member(s) from {cfg.baseline}\n")
         tag_baseline_new_members(records, baseline_members)
+    }
+
+    // Pattern filter — drop functions that match a known "boring" shape
+    // (e.g. dastest dispatch outer functions whose body is N >= 2
+    // identical statement chunks). Default is "skip all known patterns";
+    // `--keep <name>` opts a specific pattern back in, `--keep all`
+    // disables filtering entirely. Sits before clustering so dropped
+    // records don't inflate cluster sizes or generate fuzzy pairs.
+    var keep_all = false
+    var kept_set : table<string; void?>
+    for (k in cfg.keep) {
+        if (k == "all") {
+            keep_all = true
+            continue
+        }
+        if (!key_exists(kept_set, k)) {
+            kept_set |> insert(k, null)
+        }
+    }
+    let skip_counts <- apply_pattern_filter(records, kept_set, keep_all, cfg.verbose)
+    if (length(skip_counts) > 0) {
+        var skip_pairs : array<tuple<string; int>>
+        for (k, v in keys(skip_counts), values(skip_counts)) {
+            skip_pairs |> push((k, v))
+        }
+        sort(skip_pairs) <| $(a, b) => a._0 < b._0
+        var parts : array<string>
+        for (kv in skip_pairs) {
+            parts |> push("{kv._1} {kv._0}")
+        }
+        let joined = parts |> join(", ")
+        print("patterns skipped: {joined} (--keep <name>|all to include)\n")
     }
 
     let filter_candidates = has_against || has_baseline

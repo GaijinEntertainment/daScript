@@ -1,4 +1,5 @@
 options gen2
+options rtti
 options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
@@ -30,6 +31,7 @@ require tools/outline public
 require tools/aot public
 require tools/lint_tool public
 require tools/find_duplicates public
+require tools/export_corpus public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -1284,7 +1286,7 @@ def test_find_duplicates_missing_corpus(t : T?) {
     t |> run("missing 'corpus' arg returns error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_find_duplicates("foo.das", "", "", "", "", ""), text, is_error)
+        let ok = parse_result(do_find_duplicates("foo.das", "", "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "corpus") >= 0, "should mention corpus: {text}")
@@ -1301,7 +1303,7 @@ def test_find_duplicates_missing_paths(t : T?) {
         }
         var text : string
         var is_error = false
-        let ok = parse_result(do_find_duplicates("", path, "", "", "", ""), text, is_error)
+        let ok = parse_result(do_find_duplicates("", path, "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
@@ -1324,7 +1326,7 @@ def test_find_duplicates_corpus_not_found(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            bogus, "", "", "", ""), text, is_error)
+            bogus, "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
     }
@@ -1341,16 +1343,17 @@ def test_find_duplicates_empty_corpus(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", "", ""), text, is_error)
+            path, "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should NOT be error: {text}")
         t |> success(find(text, "candidate_functions") >= 0, "envelope has candidate_functions: {text}")
         t |> success(find(text, "exact_clusters_kept") >= 0, "envelope has exact_clusters_kept")
         t |> success(find(text, "fuzzy_pairs_kept") >= 0, "envelope has fuzzy_pairs_kept")
+        t |> success(find(text, "patterns_skipped") >= 0, "envelope has patterns_skipped")
         t |> success(find(text, "\"report\"") >= 0, "envelope has nested report")
         // Empty corpus → no matches possible.
-        t |> success(find(text, "\"exact_clusters_kept\": 0") >= 0, "zero exact clusters: {text}")
-        t |> success(find(text, "\"fuzzy_pairs_kept\": 0") >= 0, "zero fuzzy pairs: {text}")
+        t |> success(find(text, "\"exact_clusters_kept\":0") >= 0, "zero exact clusters: {text}")
+        t |> success(find(text, "\"fuzzy_pairs_kept\":0") >= 0, "zero fuzzy pairs: {text}")
         remove(path)
     }
 }
@@ -1366,11 +1369,81 @@ def test_find_duplicates_bad_schema(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", "", ""), text, is_error)
+            path, "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "schema_version") >= 0, "mentions schema_version: {text}")
         remove(path)
+    }
+}
+
+
+// ── export_corpus ────────────────────────────────────────────────────
+
+
+[test]
+def test_export_corpus_missing_paths(t : T?) {
+    t |> run("missing 'paths' arg returns error envelope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_export_corpus("", "export_corpus_test_out.json", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
+    }
+}
+
+
+[test]
+def test_export_corpus_missing_out(t : T?) {
+    t |> run("missing 'out' arg returns error envelope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_export_corpus("foo.das", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "out") >= 0, "should mention out: {text}")
+    }
+}
+
+
+[test]
+def test_export_corpus_no_match(t : T?) {
+    t |> run("paths matching nothing yields error envelope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_export_corpus("does_not_exist_xyzzy.das", "export_corpus_test_out.json", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error: {text}")
+    }
+}
+
+
+[test]
+def test_export_corpus_writes_envelope(t : T?) {
+    t |> run("valid fixture produces a corpus and a populated envelope") <| @(t : T?) {
+        let r = create_temp_file_result("export_corpus_mcp_test", ".json")
+        if (!(r is value)) {
+            t |> failure("create_temp_file_result failed")
+            return
+        }
+        let out_path = unsafe(r.value)
+        // create_temp_file_result returns a path to a freshly-created temp
+        // file. write_export reopens it with "wb" and overwrites, so leaving
+        // the placeholder in place is the intended path.
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_export_corpus(fixture_path("_fixture_valid.das"), out_path, "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should NOT be error: {text}")
+        t |> success(find(text, "files_scanned") >= 0, "envelope has files_scanned: {text}")
+        t |> success(find(text, "records_written") >= 0, "envelope has records_written: {text}")
+        t |> success(find(text, "\"out\":") >= 0, "envelope echoes out path: {text}")
+        // Confirm the file actually exists and is non-empty.
+        let body = fread(out_path)
+        t |> success(!empty(body), "corpus file is non-empty")
+        t |> success(find(body, "\"schema_version\"") >= 0, "corpus has schema_version: {body}")
+        remove(out_path)
     }
 }
 

@@ -2,15 +2,119 @@ options gen2
 
 require daslib/ast
 require daslib/ast_boost
+require daslib/fio
+require daslib/strings_boost
 require strings
 require canonical
 require cluster
 require exchange
+require patterns
 
 
 // `normalize_path` lives in exchange.das — pulled in via `require exchange`
 // above so callers in this file (and downstream of `require pipeline`) keep
 // working unchanged.
+
+
+// ── filesystem scanning ──────────────────────────────────────────────
+//
+// Walks a directory tree (or accepts a single file) and collects `.das`
+// paths to compile. Lives here (rather than in `main.das`) so MCP tools
+// — which can't shell out to the CLI — can build a corpus end-to-end
+// from inside the same process.
+
+// `daslib/debugger.das` and `daslib/profiler.das` install thread-local
+// agents at compile time; the second install in the same process throws
+// and aborts the scan. Match by daslib/ path suffix, not bare basename
+// — a project's own `myapp/debugger.das` should not be silently skipped.
+def public is_daslib_skip(path : string; basename : string) : bool {
+    let normalized = normalize_path(path)
+    let prefix = "daslib/{basename}"
+    return normalized == prefix || normalized |> ends_with("/{prefix}")
+}
+
+
+def public is_skip_file(path : string; basename : string) : bool {
+    if (basename == "builtin.das") {
+        return true
+    }
+    return (is_daslib_skip(path, "debugger.das")
+        || is_daslib_skip(path, "profiler.das"))
+}
+
+
+def public is_skip_dir(name : string) : bool {
+    return name |> starts_with(".")
+}
+
+
+// `expect` directives mark intentionally-broken test files (the test
+// framework runs the compiler and checks the produced error). Skipping
+// avoids polluting the corpus with junk records from files that aren't
+// supposed to compile.
+def public has_expect_directive(file : string) : bool {
+    let text = fread(file)
+    if (empty(text)) {
+        return false
+    }
+    let lines <- text |> split("\n")
+    for (line in lines) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("expect ")) {
+            return true
+        }
+    }
+    return false
+}
+
+
+def public scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
+    let st = stat(path)
+    if (!st.is_valid) {
+        return
+    }
+    if (st.is_reg) {
+        if (path |> ends_with(".das")) {
+            // Normalize before keying/pushing so seeds spelled differently
+            // (`a/b/c.das` vs `a\b\c.das` on Windows, or with `./` segments)
+            // don't sneak duplicate entries past the cache.
+            let np = normalize_path(path)
+            if (!cache |> key_exists(np)) {
+                let fname = base_name(np)
+                if (!is_skip_file(np, fname)) {
+                    cache |> insert(np, null)
+                    files |> push(np)
+                }
+            }
+        }
+        return
+    }
+    if (!st.is_dir) {
+        return
+    }
+    fio::dir(path) $(name) {
+        if (name == "." || name == "..") {
+            return
+        }
+        if (name |> starts_with("_") || is_skip_dir(name)) {
+            return
+        }
+        let full = path_join(path, name)
+        let fst = stat(full)
+        if (!fst.is_valid) {
+            return
+        }
+        if (fst.is_dir) {
+            scan_das_files(full, files, cache)
+        } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(full, name)) {
+            let np = normalize_path(full)
+            if (!cache |> key_exists(np)) {
+                cache |> insert(np, null)
+                files |> push(np)
+            }
+        }
+    }
+}
 
 
 // Walk one compiled program and append a FuncRecord per user
@@ -94,6 +198,46 @@ def public drop_records_under_files(var records : array<FuncRecord>;
     }
     records <- kept
     return dropped
+}
+
+
+// Walk records, classify each by `patterns/classify`, and drop any whose
+// matched pattern is not in `kept`. Returns a per-pattern count of what
+// was dropped so the caller can surface a summary line.
+//
+// `keep_all == true` is the legacy passthrough — no classification, no
+// drops. Useful for `--keep all` and any future "pattern-skip is broken,
+// give me everything" escape hatch.
+//
+// In-place: rebuilds `records` to keep matched-and-not-kept entries out.
+// Uses push_clone to avoid worrying about non-copyable fields (`sig`).
+def public apply_pattern_filter(var records : array<FuncRecord>;
+                                kept : table<string; void?>;
+                                keep_all : bool;
+                                verbose : bool) : table<string; int> {
+    var skip_counts : table<string; int>
+    if (keep_all) {
+        return <- skip_counts
+    }
+    var kept_records : array<FuncRecord>
+    kept_records |> reserve(length(records))
+    for (r in records) {
+        let hit = classify(r.canonical)
+        if (empty(hit.name) || key_exists(kept, hit.name)) {
+            kept_records |> push_clone(r)
+            continue
+        }
+        if (verbose) {
+            print("  pattern-skip [{hit.name}]: {r.ref.file}:{r.ref.line} {r.ref.name} ({hit.note})\n")
+        }
+        if (key_exists(skip_counts, hit.name)) {
+            skip_counts[hit.name] = skip_counts[hit.name] + 1
+        } else {
+            skip_counts |> insert(hit.name, 1)
+        }
+    }
+    records <- kept_records
+    return <- skip_counts
 }
 
 

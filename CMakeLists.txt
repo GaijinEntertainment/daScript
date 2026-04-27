@@ -1486,6 +1486,18 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/b
 # Install lint (unified linter)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/lint/main.das DESTINATION utils/lint)
 
+# Install find_dupes (cross-file duplicate-function detector)
+file(GLOB DAS_FIND_DUPES_FILES ${PROJECT_SOURCE_DIR}/utils/find_dupes/*.das)
+install(FILES ${DAS_FIND_DUPES_FILES} DESTINATION utils/find_dupes)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/find_dupes/README.md
+    DESTINATION utils/find_dupes
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find_dupes/fixture/
+    DESTINATION utils/find_dupes/fixture
+    FILES_MATCHING PATTERN "*.das"
+)
+
 # Install daspkg (package manager)
 file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)

@@ -96,7 +96,11 @@ def is_well_formed(ef : ExportedFunction) : bool {
 // and `member_id` needs it. pipeline.das re-uses this via `require
 // exchange`, so callers see one canonical helper.
 def public normalize_path(p : string) : string {
-    return p |> replace("\\", "/")
+    // `fio::normalize` resolves `..`/`.` and uses the platform separator
+    // (backslash on Windows, forward slash on POSIX). The trailing
+    // `replace` lands on a canonical forward-slash form so a corpus
+    // exported on one OS matches candidates compiled on another.
+    return normalize(p) |> replace("\\", "/")
 }
 
 
