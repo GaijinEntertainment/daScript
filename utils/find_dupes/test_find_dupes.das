@@ -13,6 +13,7 @@ require minhash
 require cluster
 require exchange
 require pipeline
+require report
 
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -789,4 +790,211 @@ def test_pipeline_export_import_clusters_match(t : T?) {
         t |> equal(p_compiled[i].canonical_b, p_imported[i].canonical_b)
     }
     remove(path)
+}
+
+
+// ── candidate filter (B1 baseline + B2 against modes) ────────────────
+
+
+[test]
+def test_candidate_filter_drops_pure_corpus_clusters(t : T?) {
+    // Three identical records, none flagged as candidate. With the
+    // filter active, the cluster should be dropped (no candidate
+    // member). Without the filter, the cluster would be kept.
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A B C D E F G H ENDFN", 1, false),
+        <- make_record("b", "FN A B C D E F G H ENDFN", 2, false),
+        <- make_record("c", "FN A B C D E F G H ENDFN", 3, false)]
+
+    let legacy_clusters <- exact_buckets(records, 0)
+    t |> equal(length(legacy_clusters), 1)
+
+    let filtered <- exact_buckets(records, 0, true)
+    t |> equal(length(filtered), 0)
+}
+
+
+[test]
+def test_candidate_filter_keeps_mixed_clusters(t : T?) {
+    // Same canonical, but one record is flagged. Cluster kept; all
+    // three members reported (the filter is at the cluster level, not
+    // member level).
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A B C D E F G H ENDFN", 1, false),
+        <- make_record("b", "FN A B C D E F G H ENDFN", 2, false),
+        <- make_record("c", "FN A B C D E F G H ENDFN", 3, false)]
+    records[1].is_candidate = true
+
+    let clusters <- exact_buckets(records, 0, true)
+    t |> equal(length(clusters), 1)
+    t |> equal(length(clusters[0].members), 3)
+}
+
+
+[test]
+def test_candidate_filter_intra_candidate_pair(t : T?) {
+    // Two near-duplicate candidates, no corpus around them. With the
+    // candidate filter active the pair must still appear (intra-PR
+    // duplicates are real signal).
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("b", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true)]
+    records[0].is_candidate = true
+    records[1].is_candidate = true
+
+    let pairs <- fuzzy_pairs(records, 0.7f, 0, true)
+    t |> equal(length(pairs), 1)
+    // Pair ordering: lower-index record is `a`.
+    t |> equal(pairs[0].a.name, "a")
+    t |> equal(pairs[0].b.name, "b")
+}
+
+
+[test]
+def test_candidate_filter_fuzzy_skips_pure_corpus(t : T?) {
+    // Three near-duplicate corpus records and one candidate that
+    // resembles none of them. The pure-corpus pairs must NOT appear;
+    // only pairs involving the candidate are eligible (and the
+    // candidate is dissimilar to all → empty result).
+    var records : array<FuncRecord> <- [
+        <- make_record("x", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("y", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 2, true),
+        <- make_record("z", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT LIT ENDBLK ENDFN", 3, true),
+        // Candidate has a totally different shape — no fuzzy match expected.
+        <- make_record("cand", "FN ARG <var_0> TYP BODY BLK STMT FOR FOR_VAR <var_1> CALL:range LIT FOR_BODY BLK ENDBLK ENDBLK ENDFN", 4, true)]
+    records[3].is_candidate = true
+
+    // Sanity: without the filter, x/y/z would produce pairs.
+    let legacy <- fuzzy_pairs(records, 0.7f, 0)
+    t |> success(length(legacy) >= 1, "legacy mode: at least one corpus pair: got {length(legacy)}")
+
+    let filtered <- fuzzy_pairs(records, 0.7f, 0, true)
+    t |> equal(length(filtered), 0)
+}
+
+
+[test]
+def test_baseline_load_canonical_set(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    let records : array<FuncRecord> <- [
+        <- make_record("a", "FN AAA ENDFN", 1, false),
+        <- make_record("b", "FN BBB ENDFN", 2, false),
+        <- make_record("c", "FN AAA ENDFN", 3, false)]// dup canonical
+    write_export(records, path)
+
+    var canonicals : table<string; void?>
+    var members : table<string; void?>
+    var err : string
+    let ok = load_baseline_canonicals(path, canonicals, members, err)
+    t |> success(ok, "load_baseline_canonicals returned true; err={err}")
+    // Two distinct canonicals — duplicates collapse, matching exact-cluster equivalence.
+    t |> equal(length(canonicals), 2)
+    t |> success(key_exists(canonicals, "FN AAA ENDFN"), "AAA in set")
+    t |> success(key_exists(canonicals, "FN BBB ENDFN"), "BBB in set")
+    // Three members — `c` is a separate identity from `a` even though
+    // they share a canonical (member-level diff catches growth).
+    t |> equal(length(members), 3)
+    t |> success(key_exists(members, "test.das:1:a"), "a member-id present")
+    t |> success(key_exists(members, "test.das:2:b"), "b member-id present")
+    t |> success(key_exists(members, "test.das:3:c"), "c member-id present (the growth case)")
+    remove(path)
+}
+
+
+[test]
+def test_baseline_load_rejects_bad_schema(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    var bad = ExportEnvelope()
+    bad.schema_version = 99
+    let body = sprint_json(bad, false)
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    var canonicals : table<string; void?>
+    var members : table<string; void?>
+    var err : string
+    let ok = load_baseline_canonicals(path, canonicals, members, err)
+    t |> success(!ok, "load_baseline_canonicals rejects bad schema_version")
+    t |> success(find(err, "schema_version") >= 0, "error mentions schema_version: {err}")
+    remove(path)
+}
+
+
+[test]
+def test_drop_records_under_files(t : T?) {
+    // Build a record set spanning two files; drop one file's records
+    // and verify the other survives.
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A ENDFN", 1, false),
+        <- make_record("b", "FN B ENDFN", 2, false),
+        <- make_record("c", "FN C ENDFN", 3, false)]
+    records[0].ref.file := "src/keep.das"
+    records[1].ref.file := "src/drop.das"
+    records[2].ref.file := "src/drop.das"
+
+    var against : table<string; void?>
+    against |> insert("src/drop.das", null)
+
+    let dropped = drop_records_under_files(records, against)
+    t |> equal(dropped, 2)
+    t |> equal(length(records), 1)
+    t |> equal(records[0].ref.name, "a")
+    t |> equal(records[0].ref.file, "src/keep.das")
+}
+
+
+[test]
+def test_collect_candidate_refs(t : T?) {
+    // Helper used by the per-candidate report writer and by the MCP
+    // tool — verify it picks out exactly the flagged records.
+    var records : array<FuncRecord> <- [
+        <- make_record("a", "FN A ENDFN", 1, false),
+        <- make_record("b", "FN B ENDFN", 2, false),
+        <- make_record("c", "FN C ENDFN", 3, false)]
+    records[0].is_candidate = true
+    records[2].is_candidate = true
+
+    let refs <- collect_candidate_refs(records)
+    t |> equal(length(refs), 2)
+    t |> equal(refs[0].name, "a")
+    t |> equal(refs[1].name, "c")
+}
+
+
+[test]
+def test_per_candidate_rollup_shape(t : T?) {
+    // Build a small report with one exact cluster and one fuzzy pair
+    // both involving a candidate, then pivot via build_per_candidate_report.
+    var records : array<FuncRecord> <- [
+        <- make_record("cand", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 1, true),
+        <- make_record("exact_sib", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN", 2, true),
+        <- make_record("fuzzy_partner", "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT LIT ENDBLK ENDFN", 3, true)]
+    records[0].is_candidate = true
+
+    var clusters <- exact_buckets(records, 0, true)
+    sort_clusters(clusters)
+    var pairs <- fuzzy_pairs(records, 0.6f, 0, true)
+    sort_pairs(pairs)
+
+    var rep : Report
+    rep.exact_clusters <- clusters
+    rep.fuzzy_pairs <- pairs
+
+    let cand_refs <- collect_candidate_refs(records)
+    let pcr = build_per_candidate_report(rep, cand_refs, 5)
+
+    t |> equal(length(pcr.candidates), 1)
+    t |> equal(pcr.candidates[0].name, "cand")
+    t |> equal(length(pcr.candidates[0].exact_matches), 1)
+    t |> equal(pcr.candidates[0].exact_matches[0].name, "exact_sib")
+    t |> equal(pcr.candidates[0].exact_matches[0].similarity, 1.0f)
+    t |> equal(length(pcr.candidates[0].fuzzy_matches), 1)
+    t |> equal(pcr.candidates[0].fuzzy_matches[0].name, "fuzzy_partner")
+    t |> success(pcr.candidates[0].fuzzy_matches[0].similarity > 0.6f
+        && pcr.candidates[0].fuzzy_matches[0].similarity < 1.0f,
+        "fuzzy similarity in (0.6, 1.0): {pcr.candidates[0].fuzzy_matches[0].similarity}")
 }

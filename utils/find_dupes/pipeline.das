@@ -8,9 +8,9 @@ require cluster
 require exchange
 
 
-def public normalize_path(p : string) : string {
-    return p |> replace("\\", "/")
-}
+// `normalize_path` lives in exchange.das — pulled in via `require exchange`
+// above so callers in this file (and downstream of `require pipeline`) keep
+// working unchanged.
 
 
 // Walk one compiled program and append a FuncRecord per user
@@ -75,8 +75,56 @@ def public collect_from_program(program : ProgramPtr; source_file : string; var 
 }
 
 
-def public compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool; want_sigs : bool; min_tokens : int) : bool {
-    var inscope access <- make_file_access("")
+// Drop records whose `file` matches any path in `against_files` (paths
+// must already be normalized via `normalize_path`). Used after loading
+// a corpus when --against / candidate-mode is active, to override "the
+// old version of this file" with the freshly-compiled one. Returns the
+// count of dropped records.
+def public drop_records_under_files(var records : array<FuncRecord>;
+                                    against_files : table<string; void?>) : int {
+    var kept : array<FuncRecord>
+    kept |> reserve(length(records))
+    var dropped = 0
+    for (r in records) {
+        if (key_exists(against_files, normalize_path(r.ref.file))) {
+            dropped++
+            continue
+        }
+        kept |> push_clone(r)
+    }
+    records <- kept
+    return dropped
+}
+
+
+// Collect MemberRefs of all candidate records — used to feed the
+// per-candidate report writer.
+def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef> {
+    var out : array<MemberRef>
+    for (r in records) {
+        if (r.is_candidate) {
+            out |> push(r.ref)
+        }
+    }
+    return <- out
+}
+
+
+// `quiet=true` suppresses the "FAIL {file}" stdout print — required when
+// called from the MCP server (stdio transport reserves stdout for
+// JSON-RPC). The boolean return value is the caller's signal anyway. CLI
+// keeps the print for human visibility.
+//
+// `project` lets callers point at a `.das_project` for custom module
+// resolution, mirroring other compilation-based MCP tools. Empty string
+// preserves the original "no project" behavior.
+def public compile_and_collect(file : string; var records : array<FuncRecord>;
+                               var seen_loc : table<string; void?>;
+                               verbose : bool; lambdas_only : bool;
+                               want_sigs : bool; min_tokens : int;
+                               quiet : bool = false;
+                               project : string = "") : bool {
+    var inscope access <- make_file_access(project)
     var ok_compile = true
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
@@ -88,10 +136,12 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>; v
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     ok_compile = false
-                    if (verbose) {
-                        print("FAIL {file}\n  {issues}\n")
-                    } else {
-                        print("FAIL {file}\n")
+                    if (!quiet) {
+                        if (verbose) {
+                            print("FAIL {file}\n  {issues}\n")
+                        } else {
+                            print("FAIL {file}\n")
+                        }
                     }
                     return
                 }

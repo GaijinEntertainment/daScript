@@ -91,9 +91,82 @@ def is_well_formed(ef : ExportedFunction) : bool {
 }
 
 
+// Slash-direction normalization for file paths. Lives here (rather than
+// in pipeline.das) because exchange is below pipeline in the dep graph
+// and `member_id` needs it. pipeline.das re-uses this via `require
+// exchange`, so callers see one canonical helper.
+def public normalize_path(p : string) : string {
+    return p |> replace("\\", "/")
+}
+
+
+// Stable member identity used to compare a freshly-extracted record
+// against a baseline. Same shape as cluster.das `member_key`, copied
+// here to avoid a require cycle (exchange already needs to know about
+// records but not about clustering helpers). Path is normalized so
+// Windows runs (mixed `\` and `/` from `fileInfo.name`) match Unix
+// baselines.
+def member_id(file : string; line : int; name : string) : string {
+    return "{normalize_path(file)}:{line}:{name}"
+}
+
+
+// Read an exported envelope and project it down to two sets:
+//   * `canonicals`  — set of canonical texts (used by --baseline-strict
+//     to drop clusters whose canonical already existed in baseline).
+//   * `members`     — set of `file:line:name` identities (used by default
+//     baseline mode to tag records that DIDN'T exist in baseline as
+//     candidates). Member-level keying catches "growth" — a new copy of
+//     an already-tracked canonical added in a new location — which a
+//     pure canonical-set diff would miss (the canonical is in baseline,
+//     so the new member would never be flagged).
+//
+// Trade-off of `file:line:name`: an unrelated edit that shifts line
+// numbers will look like "new members" and surface those clusters in
+// the report. Acceptable for CI gating — re-checking touched code is
+// the right default; the user can ignore false positives the same way
+// they would for any line-based diff tool.
+def public load_baseline_canonicals(path : string;
+                                    var canonicals : table<string; void?>;
+                                    var members : table<string; void?>;
+                                    var error : string&) : bool {
+    let text = fread(path)
+    if (empty(text)) {
+        error := "could not read baseline file (empty or missing): {path}"
+        return false
+    }
+    var env = ExportEnvelope()
+    if (!sscan_json(text, env)) {
+        error := "could not parse baseline JSON: {path}"
+        return false
+    }
+    if (env.schema_version != EXCHANGE_SCHEMA_VERSION) {
+        error := "unsupported baseline schema_version {env.schema_version} (expected {EXCHANGE_SCHEMA_VERSION}): {path}"
+        return false
+    }
+    for (ef in env.functions) {
+        if (empty(ef.canonical)) {
+            continue
+        }
+        if (!key_exists(canonicals, ef.canonical)) {
+            canonicals |> insert(ef.canonical, null)
+        }
+        let mid = member_id(ef.file, ef.line, ef.name)
+        if (!key_exists(members, mid)) {
+            members |> insert(mid, null)
+        }
+    }
+    return true
+}
+
+
+// `quiet=true` suppresses the "skipped N malformed records" warning print —
+// required when called from the MCP server, whose stdio transport reserves
+// stdout for JSON-RPC. Default false preserves CLI behavior.
 def public read_import(path : string; var records : array<FuncRecord>;
                        want_sigs : bool; min_tokens : int;
-                       var error : string&) : bool {
+                       var error : string&;
+                       quiet : bool = false) : bool {
     let text = fread(path)
     if (empty(text)) {
         error := "could not read file (empty or missing): {path}"
@@ -124,7 +197,7 @@ def public read_import(path : string; var records : array<FuncRecord>;
         derive_sig_and_count(rec, want_sigs, min_tokens)
         records |> emplace(rec)
     }
-    if (skipped > 0) {
+    if (skipped > 0 && !quiet) {
         print("warning: skipped {skipped} malformed function record(s) during import\n")
     }
     return true

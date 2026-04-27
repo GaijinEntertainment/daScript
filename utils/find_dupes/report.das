@@ -51,6 +51,172 @@ def member_label(m : MemberRef) : string {
 }
 
 
+// Per-candidate JSON shape: "for each function in the focus set, here
+// are the existing functions it resembles." Used by --against mode and
+// the find_duplicates MCP tool — both want the result keyed on the
+// user's mental model ("what should I look at for *this* function I
+// just wrote") rather than the flat clusters/pairs view.
+
+struct public CandidateMatch {
+    name : string
+    file : string
+    line : int
+    is_lambda : bool
+    // 1.0 for exact-cluster siblings, < 1.0 (the geometric-mean score)
+    // for fuzzy matches. Using one struct for both keeps the JSON shape
+    // uniform.
+    similarity : float = 0.0f
+}
+
+
+struct public CandidateRollup {
+    name : string
+    file : string
+    line : int
+    is_lambda : bool
+    exact_matches : array<CandidateMatch>
+    fuzzy_matches : array<CandidateMatch>
+}
+
+
+struct public PerCandidateReport {
+    candidates : array<CandidateRollup>
+}
+
+
+def make_match(m : MemberRef; similarity : float) : CandidateMatch {
+    var cm = CandidateMatch()
+    cm.name := m.name
+    cm.file := m.file
+    cm.line = m.line
+    cm.is_lambda = m.is_lambda
+    cm.similarity = similarity
+    return <- cm
+}
+
+
+// Build the per-candidate pivot. `candidate_refs` is the caller's list
+// of focus-set members (typically `[r.ref for r in records if
+// r.is_candidate]`). The rollup includes one entry per candidate even
+// when it has no matches — useful for the MCP consumer that wants to
+// confirm "I checked these N functions and found nothing."
+def public build_per_candidate_report(report : Report;
+                                      candidate_refs : array<MemberRef>;
+                                      top_per_candidate : int) : PerCandidateReport {
+    var cand_keys : table<string; int>
+    for (i in range(length(candidate_refs))) {
+        let k = member_key(candidate_refs[i])
+        if (!key_exists(cand_keys, k)) {
+            cand_keys |> insert(k, i)
+        }
+    }
+    var rollups : array<CandidateRollup>
+    rollups |> reserve(length(candidate_refs))
+    for (cref in candidate_refs) {
+        var r = CandidateRollup()
+        r.name := cref.name
+        r.file := cref.file
+        r.line = cref.line
+        r.is_lambda = cref.is_lambda
+        rollups |> emplace(r)
+    }
+    // Exact siblings: walk every cluster the candidate belongs to,
+    // collecting the OTHER members. A candidate could in theory belong
+    // to multiple clusters across a multi-file rebuild — be permissive.
+    for (c in report.exact_clusters) {
+        for (m in c.members) {
+            let k = member_key(m)
+            if (!key_exists(cand_keys, k)) {
+                continue
+            }
+            let idx = cand_keys[k]
+            for (other in c.members) {
+                if (member_key(other) == k) {
+                    continue
+                }
+                rollups[idx].exact_matches |> emplace(make_match(other, 1.0f))
+            }
+        }
+    }
+    // Fuzzy partners: pairs where either endpoint matches a candidate.
+    // When BOTH endpoints are candidates, each side gets the other in
+    // its rollup — the pair is symmetric, the rollup is per-candidate.
+    for (p in report.fuzzy_pairs) {
+        let ka = member_key(p.a)
+        let kb = member_key(p.b)
+        let a_is_cand = key_exists(cand_keys, ka)
+        let b_is_cand = key_exists(cand_keys, kb)
+        if (a_is_cand) {
+            rollups[cand_keys[ka]].fuzzy_matches |> emplace(make_match(p.b, p.similarity))
+        }
+        if (b_is_cand) {
+            rollups[cand_keys[kb]].fuzzy_matches |> emplace(make_match(p.a, p.similarity))
+        }
+    }
+    // Trim to top_per_candidate (fuzzy_matches were inserted in
+    // sort_pairs order so they're already similarity-DESC; exact_matches
+    // are append-order, fine for stable diffs since clusters are sorted).
+    if (top_per_candidate >= 0) {
+        for (r in rollups) {
+            if (length(r.exact_matches) > top_per_candidate) {
+                unsafe(resize(r.exact_matches, top_per_candidate))
+            }
+            if (length(r.fuzzy_matches) > top_per_candidate) {
+                unsafe(resize(r.fuzzy_matches, top_per_candidate))
+            }
+        }
+    }
+    var out = PerCandidateReport()
+    out.candidates <- rollups
+    return <- out
+}
+
+
+def public write_per_candidate_report(report : Report;
+                                      candidate_refs : array<MemberRef>;
+                                      top_per_candidate : int) : string {
+    let pcr = build_per_candidate_report(report, candidate_refs, top_per_candidate)
+    return sprint_json(pcr, true)
+}
+
+
+def public print_per_candidate_summary(report : Report;
+                                       candidate_refs : array<MemberRef>;
+                                       top_per_candidate : int) {
+    let pcr = build_per_candidate_report(report, candidate_refs, top_per_candidate)
+    print("\n=== find_dupes per-candidate report ===\n")
+    print("candidates scanned: {length(pcr.candidates)}\n")
+    var n_with_hits = 0
+    for (r in pcr.candidates) {
+        if (length(r.exact_matches) > 0 || length(r.fuzzy_matches) > 0) {
+            n_with_hits++
+        }
+    }
+    print("candidates with matches: {n_with_hits}\n")
+    for (r in pcr.candidates) {
+        if (length(r.exact_matches) == 0 && length(r.fuzzy_matches) == 0) {
+            continue
+        }
+        let header = r.is_lambda ? "<lambda> ({r.name})" : r.name
+        print("\n* {r.file}:{r.line}  {header}\n")
+        if (length(r.exact_matches) > 0) {
+            print("  exact:\n")
+            for (m in r.exact_matches) {
+                let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name
+                print("    - {m.file}:{m.line}  {mhdr}\n")
+            }
+        }
+        if (length(r.fuzzy_matches) > 0) {
+            print("  fuzzy:\n")
+            for (m in r.fuzzy_matches) {
+                let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name
+                print("    - {m.similarity}  {m.file}:{m.line}  {mhdr}\n")
+            }
+        }
+    }
+}
+
+
 def public print_summary(report : Report; top : int) {
     print("\n=== find_dupes summary ===\n")
     print("files scanned     : {report.summary.files_scanned}\n")

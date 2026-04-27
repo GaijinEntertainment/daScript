@@ -29,6 +29,7 @@ require tools/grep_usage public
 require tools/outline public
 require tools/aot public
 require tools/lint_tool public
+require tools/find_duplicates public
 
 // helper: parse tool result JSON, return (text, isError)
 def parse_result(result : string; var text : string&; var is_error : bool&) : bool {
@@ -1256,6 +1257,120 @@ def test_lint_no_match(t : T?) {
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "no files matched") >= 0, "should mention no files matched")
+    }
+}
+
+// ── find_duplicates ──────────────────────────────────────────────────
+
+
+def make_temp_corpus_file(t : T?; body : string) : string {
+    let r = create_temp_file_result("find_dupes_mcp_test", ".json")
+    if (!(r is value)) {
+        t |> failure("create_temp_file_result failed")
+        return ""
+    }
+    let path = unsafe(r.value)
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    return path
+}
+
+
+[test]
+def test_find_duplicates_missing_corpus(t : T?) {
+    t |> run("missing 'corpus' arg returns error envelope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_find_duplicates("foo.das", "", "", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "corpus") >= 0, "should mention corpus: {text}")
+    }
+}
+
+
+[test]
+def test_find_duplicates_missing_paths(t : T?) {
+    t |> run("missing 'paths' arg returns error envelope") <| @(t : T?) {
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":1,\"functions\":[]\}")
+        if (empty(path)) {
+            return
+        }
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_find_duplicates("", path, "", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
+        remove(path)
+    }
+}
+
+
+[test]
+def test_find_duplicates_corpus_not_found(t : T?) {
+    t |> run("nonexistent corpus path is reported") <| @(t : T?) {
+        // Generate a portable temp path then immediately delete the file
+        // — the path is now guaranteed nonexistent and unique to this run,
+        // and works on Windows runners where /tmp doesn't exist.
+        let bogus = make_temp_corpus_file(t, "")
+        if (empty(bogus)) {
+            return
+        }
+        remove(bogus)
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
+            bogus, "", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+    }
+}
+
+
+[test]
+def test_find_duplicates_empty_corpus(t : T?) {
+    t |> run("empty corpus + valid candidate yields envelope with zero matches") <| @(t : T?) {
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":1,\"functions\":[]\}")
+        if (empty(path)) {
+            return
+        }
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
+            path, "", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(!is_error, "should NOT be error: {text}")
+        t |> success(find(text, "candidate_functions") >= 0, "envelope has candidate_functions: {text}")
+        t |> success(find(text, "exact_clusters_kept") >= 0, "envelope has exact_clusters_kept")
+        t |> success(find(text, "fuzzy_pairs_kept") >= 0, "envelope has fuzzy_pairs_kept")
+        t |> success(find(text, "\"report\"") >= 0, "envelope has nested report")
+        // Empty corpus → no matches possible.
+        t |> success(find(text, "\"exact_clusters_kept\": 0") >= 0, "zero exact clusters: {text}")
+        t |> success(find(text, "\"fuzzy_pairs_kept\": 0") >= 0, "zero fuzzy pairs: {text}")
+        remove(path)
+    }
+}
+
+
+[test]
+def test_find_duplicates_bad_schema(t : T?) {
+    t |> run("corpus with bad schema_version is rejected") <| @(t : T?) {
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":99,\"functions\":[]\}")
+        if (empty(path)) {
+            return
+        }
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
+            path, "", "", "", ""), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "schema_version") >= 0, "mentions schema_version: {text}")
+        remove(path)
     }
 }
 
