@@ -153,7 +153,9 @@ Snapshot the corpus once, commit the JSON, and on every PR re-scan + diff.
 ./bin/daslang utils/find_dupes/main.das -- -p tests --baseline tests_baseline.json --check
 ```
 
-A cluster appears in the report if (a) its canonical is brand-new (no record in the baseline had it), or (b) it gained a new member. Use `--baseline-strict` to drop case (b) — only new clusters survive. Pairs aren't strict-filtered (the baseline doesn't carry MinHash signatures), so strict is cluster-only.
+Records are tagged candidate when their **member identity** (`file:line:name`) is absent from the baseline. A cluster appears in the report if any of its members is a candidate, which catches both (a) brand-new canonicals and (b) growth — a new copy of an already-tracked canonical added in a new location. Use `--baseline-strict` to drop case (b) — strict additionally filters out clusters whose canonical was already in the baseline, so only fully-new canonicals survive. Pairs aren't strict-filtered (the baseline doesn't carry MinHash signatures), so strict is cluster-only.
+
+Note: `file:line:name` keying means an unrelated edit that shifts line numbers will look like a "new member" and surface its cluster — acceptable for CI, since touched code is the right default to re-check.
 
 `--check` turns the filtered report into a CI gate — non-zero exit when any cluster or pair survives the filter.
 

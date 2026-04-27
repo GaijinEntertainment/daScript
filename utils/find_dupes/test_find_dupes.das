@@ -884,13 +884,20 @@ def test_baseline_load_canonical_set(t : T?) {
     write_export(records, path)
 
     var canonicals : table<string; void?>
+    var members : table<string; void?>
     var err : string
-    let ok = load_baseline_canonicals(path, canonicals, err)
+    let ok = load_baseline_canonicals(path, canonicals, members, err)
     t |> success(ok, "load_baseline_canonicals returned true; err={err}")
     // Two distinct canonicals — duplicates collapse, matching exact-cluster equivalence.
     t |> equal(length(canonicals), 2)
     t |> success(key_exists(canonicals, "FN AAA ENDFN"), "AAA in set")
     t |> success(key_exists(canonicals, "FN BBB ENDFN"), "BBB in set")
+    // Three members — `c` is a separate identity from `a` even though
+    // they share a canonical (member-level diff catches growth).
+    t |> equal(length(members), 3)
+    t |> success(key_exists(members, "test.das:1:a"), "a member-id present")
+    t |> success(key_exists(members, "test.das:2:b"), "b member-id present")
+    t |> success(key_exists(members, "test.das:3:c"), "c member-id present (the growth case)")
     remove(path)
 }
 
@@ -908,8 +915,9 @@ def test_baseline_load_rejects_bad_schema(t : T?) {
         }
     }
     var canonicals : table<string; void?>
+    var members : table<string; void?>
     var err : string
-    let ok = load_baseline_canonicals(path, canonicals, err)
+    let ok = load_baseline_canonicals(path, canonicals, members, err)
     t |> success(!ok, "load_baseline_canonicals rejects bad schema_version")
     t |> success(find(err, "schema_version") >= 0, "error mentions schema_version: {err}")
     remove(path)

@@ -91,13 +91,33 @@ def is_well_formed(ef : ExportedFunction) : bool {
 }
 
 
-// Read an exported envelope and project it down to the set of canonical
-// strings. Used by --baseline mode to identify "what already exists" so
-// new records can be tagged as candidates. The set is keyed on the
-// canonical text — same key exact_buckets buckets on — so two functions
-// with identical canonicals collapse to one entry, matching the
-// exact-cluster equivalence relation.
-def public load_baseline_canonicals(path : string; var canonicals : table<string; void?>;
+// Stable member identity used to compare a freshly-extracted record
+// against a baseline. Same shape as cluster.das `member_key`, copied
+// here to avoid a require cycle (exchange already needs to know about
+// records but not about clustering helpers).
+def member_id(file : string; line : int; name : string) : string {
+    return "{file}:{line}:{name}"
+}
+
+
+// Read an exported envelope and project it down to two sets:
+//   * `canonicals`  — set of canonical texts (used by --baseline-strict
+//     to drop clusters whose canonical already existed in baseline).
+//   * `members`     — set of `file:line:name` identities (used by default
+//     baseline mode to tag records that DIDN'T exist in baseline as
+//     candidates). Member-level keying catches "growth" — a new copy of
+//     an already-tracked canonical added in a new location — which a
+//     pure canonical-set diff would miss (the canonical is in baseline,
+//     so the new member would never be flagged).
+//
+// Trade-off of `file:line:name`: an unrelated edit that shifts line
+// numbers will look like "new members" and surface those clusters in
+// the report. Acceptable for CI gating — re-checking touched code is
+// the right default; the user can ignore false positives the same way
+// they would for any line-based diff tool.
+def public load_baseline_canonicals(path : string;
+                                    var canonicals : table<string; void?>;
+                                    var members : table<string; void?>;
                                     var error : string&) : bool {
     let text = fread(path)
     if (empty(text)) {
@@ -119,6 +139,10 @@ def public load_baseline_canonicals(path : string; var canonicals : table<string
         }
         if (!key_exists(canonicals, ef.canonical)) {
             canonicals |> insert(ef.canonical, null)
+        }
+        let mid = member_id(ef.file, ef.line, ef.name)
+        if (!key_exists(members, mid)) {
+            members |> insert(mid, null)
         }
     }
     return true

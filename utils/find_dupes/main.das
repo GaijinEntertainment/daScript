@@ -218,16 +218,21 @@ def mark_records_as_candidates(var records : array<FuncRecord>;
 }
 
 
-// Walk records and tag any whose canonical is NOT in the baseline as a
-// candidate. Additive — does not clear existing candidate flags from
-// --against.
-def tag_baseline_new_canonicals(var records : array<FuncRecord>;
-                                baseline_canonicals : table<string; void?>) {
+// Walk records and tag any whose member identity (file:line:name) is
+// NOT in the baseline as a candidate. Member-level rather than
+// canonical-level so "growth" is caught: a new copy of an
+// already-tracked canonical at a new location surfaces as a candidate
+// (and the cluster containing it survives the filter), while unchanged
+// records stay invisible. Additive — does not clear existing candidate
+// flags from --against.
+def tag_baseline_new_members(var records : array<FuncRecord>;
+                             baseline_members : table<string; void?>) {
     for (r in records) {
         if (r.is_candidate) {
             continue
         }
-        if (!key_exists(baseline_canonicals, r.canonical)) {
+        let mid = "{r.ref.file}:{r.ref.line}:{r.ref.name}"
+        if (!key_exists(baseline_members, mid)) {
             r.is_candidate = true
         }
     }
@@ -447,16 +452,21 @@ def main() {
         }
     }
 
-    // B1 wiring: tag records whose canonical isn't in the baseline.
+    // B1 wiring: tag records whose member identity (file:line:name)
+    // isn't in the baseline. The canonical set is also loaded for
+    // --baseline-strict, which post-filters clusters whose canonical
+    // already existed in baseline (so only "brand-new canonical"
+    // clusters survive, not "existing canonical, new member" growth).
     var baseline_canonicals : table<string; void?>
+    var baseline_members : table<string; void?>
     if (has_baseline) {
         var berr : string
-        if (!load_baseline_canonicals(cfg.baseline, baseline_canonicals, berr)) {
+        if (!load_baseline_canonicals(cfg.baseline, baseline_canonicals, baseline_members, berr)) {
             print("error: {berr}\n")
             return
         }
-        print("loaded {length(baseline_canonicals)} baseline canonical(s) from {cfg.baseline}\n")
-        tag_baseline_new_canonicals(records, baseline_canonicals)
+        print("loaded {length(baseline_canonicals)} baseline canonical(s), {length(baseline_members)} member(s) from {cfg.baseline}\n")
+        tag_baseline_new_members(records, baseline_members)
     }
 
     let filter_candidates = has_against || has_baseline
@@ -491,10 +501,11 @@ def main() {
     let use_per_candidate = has_against && !cfg.flat
     if (use_per_candidate) {
         let cand_refs <- collect_candidate_refs(records)
-        // Default to a tighter top in per-candidate mode (matches what the
-        // MCP tool exposes); user can still override with --top.
-        let per_top = cfg.top == 20 ? 5 : cfg.top
-        print_per_candidate_summary(rep, cand_refs, per_top)
+        // `top` applies to both writers — same flag, no implicit
+        // mode-dependent default. Per-candidate mode used to halve the
+        // value behind the user's back, but that misfired when the user
+        // explicitly passed `--top 20` and silently downgraded it to 5.
+        print_per_candidate_summary(rep, cand_refs, top)
     } else {
         print_summary(rep, top)
     }
@@ -502,8 +513,7 @@ def main() {
         var json_ok = false
         if (use_per_candidate) {
             let cand_refs <- collect_candidate_refs(records)
-            let per_top = cfg.top == 20 ? 5 : cfg.top
-            let body = write_per_candidate_report(rep, cand_refs, per_top)
+            let body = write_per_candidate_report(rep, cand_refs, top)
             fopen(cfg.json, "wb") $(fw) {
                 if (fw == null) {
                     return
