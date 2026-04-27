@@ -11,6 +11,7 @@ require jobque
 require daslib/ast_boost
 require daslib/rst_comment
 require daslib/strings_boost
+require daslib/strings_convert
 require daslib/rst
 require daslib/functional
 require daslib/json
@@ -378,6 +379,13 @@ def document_module_strings_boost(root : string) {
         group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%),
         group_by_regex("Character traits", mod, %regex~(is_hex|is_tab_or_space)$%%))
     document("Boost package for string manipulation library", mod, "strings_boost.rst", groups)
+}
+
+def document_module_strings_convert(root : string) {
+    var mod = find_module("strings_convert")
+    var groups <- array<DocGroup>(
+        group_by_regex("Soft-failing conversions", mod, %regex~try_to_(int|uint|int8|uint8|int16|uint16|int64|uint64|float|double)$%%))
+    document("Soft-failing string-to-numeric conversions returning Result<T; ConversionError>", mod, "strings_convert.rst", groups)
 }
 
 
@@ -1653,6 +1661,7 @@ def main {
     document_module_stbimage_ttf(root)
     document_module_stringify(root)
     document_module_strings_boost(root)
+    document_module_strings_convert(root)
     document_module_temp_strings(root)
     document_module_templates_boost(root)
     document_module_templates(root)

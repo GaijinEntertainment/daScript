@@ -10,6 +10,7 @@ String manipulation, formatting, encoding, and temporary string utilities.
 
    generated/strings.rst
    generated/strings_boost.rst
+   generated/strings_convert.rst
    generated/temp_strings.rst
    generated/utf8_utils.rst
    generated/base64.rst

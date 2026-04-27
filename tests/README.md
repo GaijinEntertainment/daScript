@@ -775,6 +775,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | test_cpp_functions.das | C++ string functions — fmt, safe_unescape, to_lower_in_place, character_at | |
 | test_new_string_functions.das | New string utilities — contains, count_chars, pad_left/right, trim_chars | |
 | test_strings_boost_extra.das | Extra strings_boost — wide, is_character_at, eq, join overloads | |
+| test_strings_convert.das | `daslib/strings_convert` — `try_to_*` returning `Result<T; ConversionError>` | |
 
 ## template/
 
