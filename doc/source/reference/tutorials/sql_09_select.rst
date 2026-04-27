@@ -135,3 +135,5 @@ the same result via named-tuple projection.
     Full source: :download:`tutorials/sql/09-select.das <../../../../tutorials/sql/09-select.das>`
 
     Previous tutorial: :ref:`tutorial_sql_where`
+
+    Next tutorial: :ref:`tutorial_sql_order_by`

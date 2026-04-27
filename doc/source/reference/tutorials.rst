@@ -294,8 +294,15 @@ Run any tutorial from the project root::
    tutorials/sql_04_select_all.rst
    tutorials/sql_05_parametrized.rst
    tutorials/sql_06_error_handling.rst
+   tutorials/sql_07_anatomy.rst
    tutorials/sql_08_where.rst
    tutorials/sql_09_select.rst
+   tutorials/sql_10_order_by.rst
+   tutorials/sql_11_take_skip.rst
+   tutorials/sql_12_distinct.rst
+   tutorials/sql_13_aggregates.rst
+   tutorials/sql_14_group_by.rst
+   tutorials/sql_18_null_handling.rst
 
 .. _tutorials_dasaudio:
 

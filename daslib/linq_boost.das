@@ -593,12 +593,19 @@ class private LinqGroupBy : AstCallMacro_LinqPred2 {
     //!   arr._group_by(_.City)._select((
     //!       City   = _._0,
     //!       N      = _._1 |> length,
-    //!       AvgAge = _._1 |> _select(_.Age) |> average()))
+    //!       AvgAge = _._1 |> select($(u : Person) => u.Age) |> average()))
     //!
-    //! SQL-style sugar (``_count()`` / ``_sum(_.X)`` / ``_avg(_.X)`` etc.
-    //! recognised as group-scope) lives in the ``_sql`` macro only —
-    //! ``_sql`` walks the whole chain expression at once and rewrites
-    //! these conveniences during SQL emission.
+    //! The inner ``select`` lambda parameter is intentionally **named**
+    //! (``$(u : Person)``), not ``_`` — the outer ``_select`` lambda
+    //! already binds ``_`` to the group tuple, and daslang flags a
+    //! same-name-different-type lambda nested inside as a shadowing
+    //! error. Naming the inner parameter sidesteps it.
+    //!
+    //! The ``_sql`` macro recognises this same shape (``_._0`` as the
+    //! group key column, ``_._1 |> length`` as ``COUNT(*)``,
+    //! ``_._1 |> select($(u:T) => u.X) |> sum()`` as ``SUM("X")``, and
+    //! the same pattern for ``average``/``min``/``max``) and emits
+    //! ``GROUP BY`` plus the corresponding SQL aggregates.
     override predName = "group_by_lazy"
 }
 

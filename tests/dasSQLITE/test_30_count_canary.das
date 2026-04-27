@@ -25,7 +25,9 @@ def private fixture(db : SqlRunner) {
 // ──────────────────────────────────────────────────────────────────────────
 // _count canary — proves the aggregate framework path:
 //   - ProjectionShape.Aggregate sets the SELECT-list to "COUNT(*)"
-//   - Materializer.One reads back a single int64
+//   - Materializer.One reads back a single int (matches daslang's
+//     `length(arr)`/`count(arr)` return type; SQLite COUNT(*) is int64
+//     internally but `sqlite_read(stmt, 0, type<int>)` narrows it)
 //
 // `_count` is reserved as a 2-arg call_macro in linq_boost (predicate form,
 // chunk 4 territory). For the bare aggregate we use linq.das's `count(src)`
@@ -33,11 +35,11 @@ def private fixture(db : SqlRunner) {
 // ──────────────────────────────────────────────────────────────────────────
 
 [test]
-def test_count_returns_int64_total(t : T?) {
+def test_count_returns_total(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
         let n = _sql(db |> select_from(type<Car>) |> count())
-        t |> equal(int(n), 5, "5 rows total")
+        t |> equal(n, 5, "5 rows total")
     }
 }
 
@@ -46,7 +48,7 @@ def test_count_on_empty_table_is_zero(t : T?) {
     with_sqlite(":memory:") $(db) {
         db |> create_table(type<Car>)
         let n = _sql(db |> select_from(type<Car>) |> count())
-        t |> equal(int(n), 0, "empty table counts 0")
+        t |> equal(n, 0, "empty table counts 0")
     }
 }
 
@@ -68,7 +70,7 @@ def test_count_after_select_returns_same_total(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
         let n = _sql(db |> select_from(type<Car>) |> _select(_.Name) |> count())
-        t |> equal(int(n), 5, "_select(_.Name) |> count() returns row total, not column count")
+        t |> equal(n, 5, "_select(_.Name) |> count() returns row total, not column count")
     }
 }
 

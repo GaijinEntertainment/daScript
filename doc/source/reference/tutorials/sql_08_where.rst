@@ -139,6 +139,6 @@ node. For those cases, drop down to the raw-SQL escape hatch
 
     Full source: :download:`tutorials/sql/08-where.das <../../../../tutorials/sql/08-where.das>`
 
-    Previous tutorial: :ref:`tutorial_sql_error_handling`
+    Previous tutorial: :ref:`tutorial_sql_anatomy`
 
     Next tutorial: :ref:`tutorial_sql_select`

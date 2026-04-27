@@ -99,7 +99,9 @@ part re-uses the same [sql_table] from Part 1.
    the `options log` story for debugging, the raw-SQL escape hatch
    via `db |> exec(sql, …)` / `try_exec` for DDL and for statements
    the macro can't (or shouldn't) translate. Appendix C documents the
-   full translation-failure policy. Mockup: **none yet — write new**.
+   full translation-failure policy. **Shipped:**
+   [tutorials/sql/07-anatomy.das](../../tutorials/sql/07-anatomy.das)
+   (chunk 4).
 8. **`_where` — predicates** — filtering with captured-variable bind
    params. Introduces: the `_where` block macro, the captured-var-to-
    bind rewriter, `_.Col` column sugar, translatable string predicates
@@ -110,20 +112,36 @@ part re-uses the same [sql_table] from Part 1.
    `(Name=_.Name, Price=_.Price)` or to an existing struct type.
    Introduces: named-tuple projections, how `_sql` passes tuple field
    names through to column aliases. Mockup: **none yet — write new**.
-10. **`_order_by` / `_then_by`** — single- and multi-column ordering,
-    ASC via `_order_by(expr)` / DESC via `_order_by_descending(expr)`.
-    Covers API_MISSING §20. Mockup: **none yet — write new**.
-11. **`_take` / `_skip` + keyset pagination** — offset/limit pagination
-    and the faster keyset variant. Covers API_MISSING §21. Mockup:
-    **none yet — write new**.
-12. **`_distinct` + set operations** — DISTINCT, UNION / INTERSECT /
-    EXCEPT. Covers API_MISSING §22. Mockup: **none yet — write new**.
-13. **Aggregates — `_count` / `_sum` / `_avg` / `_min` / `_max`** — terminal
-    aggregates on the whole source. Establishes the primitives group-by
-    builds on. Covers API_MISSING §18. Mockup: **none yet — write new**.
+10. **`_order_by` / `_order_by_descending`** — single-column ordering
+    via `_.Field`, multi-column via tuple-key `(_.k1, _.k2)`. Mixed
+    ASC/DESC across columns and a multi-key `_then_by` protocol are
+    deferred (D1/D2 in the chunk-4 plan). Covers API_MISSING §20.
+    **Shipped:** [tutorials/sql/10-order_by.das](../../tutorials/sql/10-order_by.das) (chunk 4).
+11. **`take` / `skip` (LIMIT / OFFSET)** — offset/limit pagination via
+    the linq.das primitives, no `_`-prefixed wrappers needed. Bind
+    ordering: WHERE binds first, then HAVING, then LIMIT/OFFSET.
+    Single-row terminals (`_first`/`_first_opt`) override `take`.
+    Keyset pagination is a future concept tut. Covers API_MISSING §21.
+    **Shipped:** [tutorials/sql/11-take_skip.das](../../tutorials/sql/11-take_skip.das) (chunk 4).
+12. **`distinct`** — DISTINCT row dedupe. Set operations (UNION /
+    INTERSECT / EXCEPT) **deferred to chunk 5** alongside joins and
+    subqueries — they need a multi-source emitter. Covers API_MISSING §22.
+    **Shipped:** [tutorials/sql/12-distinct.das](../../tutorials/sql/12-distinct.das) (chunk 4).
+13. **Aggregates — `count` / `sum` / `average` / `min` / `max`** —
+    terminal aggregates on the whole source. `count` stands alone;
+    the four column-driven aggregates compose with `_select(_.Col)`
+    upstream. AVG promotes to `double`; SUM/MIN/MAX inherit the
+    column type. Covers API_MISSING §18.
+    **Shipped:** [tutorials/sql/13-aggregates.das](../../tutorials/sql/13-aggregates.das) (chunk 4).
 14. **`_group_by` + `_having`** — aggregate per bucket, post-aggregate
-    filter. Introduces: `_group_by` / `_group_by_lazy`, fusion with the
-    next `_select`, HAVING emission. Mockup: [19-group_by.das](tutorial-mockup/19-group_by.das.mockup).
+    filter. Group rows surface as IGrouping-shaped tuples (`_._0` =
+    key, `_._1` = group rows); aggregates over the group use
+    `_._1 |> length` / `_._1 |> select($(u : T) => u.X) |> sum`
+    (etc.). The chunk-4 mockup `19-group_by.das.mockup` was based on
+    aspirational `_count_all()` / `_sum(_.X)` / `_avg(_.X)` syntax
+    that does not typecheck after `_group_by` lowers — see
+    API_REWORK §19 for the IGrouping-shape lock-in. **Shipped:**
+    [tutorials/sql/14-group_by.das](../../tutorials/sql/14-group_by.das) (chunk 4).
 15. **`_join` — inner equi-join** — join two tables on `(l, r) => l.X == r.Y`.
     Introduces: the equi-join-only constraint, `into` projection. Mockup:
     [23-joins.das](tutorial-mockup/23-joins.das.mockup) (first half).
@@ -140,7 +158,11 @@ part re-uses the same [sql_table] from Part 1.
     predicates emit IS NOT NULL / IS NULL, `|> unwrap_or(x)` emits
     COALESCE, `Option<T>` carries through projections to result tuples.
     Introduces: three-valued logic, why daslang uses `Option<T>`
-    instead of nullable pointers for SQL columns. Mockup: [25-null_handling.das](tutorial-mockup/25-null_handling.das.mockup).
+    instead of nullable pointers for SQL columns. The original mockup
+    `25-null_handling.das.mockup` shipped largely as designed; the
+    `_.Col == none()` diagnostic and projection-side `unwrap_or` are
+    deferred (D4 in the chunk-4 plan). **Shipped:**
+    [tutorials/sql/18-null_handling.das](../../tutorials/sql/18-null_handling.das) (chunk 4).
 
 ## Part 4 — Writes
 
@@ -328,18 +350,18 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 4 | Read every row | `04-select_all.das` | **Shipped** (chunk 2) |
 | 5 | Parameters — positional | `05-parametrized.das` | **Shipped** (chunk 3); named-tuple bind for `:name` placeholders deferred to chunk 4 |
 | 6 | Error handling — `try_` / `_opt` / `_try_sql` | `_error_handling.das` | **Shipped** (chunk 3) |
-| 7 | Anatomy of `_sql` | — | **Folded** into tut 8/9 inline comments + Appendix C (no standalone tutorial — see chunk-3 plan) |
+| 7 | Anatomy of `_sql` | `07-anatomy.das` | **Shipped** (chunk 4) |
 | 8 | `_where` — predicates + appendix-A operators | direct | **Shipped** (chunk 3) |
-| 9 | `_select` — single-column + named-tuple | direct | **Shipped** (chunk 3); struct-type projection (`_select(type<T2>)`) deferred to chunk 4 |
-| 10 | `_order_by` / `_then_by` | — | **Needs mockup** |
-| 11 | `_take` / `_skip` + keyset | — | **Needs mockup** |
-| 12 | `_distinct` + set ops | — | **Needs mockup** |
-| 13 | Aggregates | — | **Needs mockup** |
-| 14 | `_group_by` + `_having` | `19-group_by.das` | Has mockup |
+| 9 | `_select` — single-column + named-tuple | direct | **Shipped** (chunk 3); struct-type projection (`_select(type<T2>)`) deferred to chunk 5 |
+| 10 | `_order_by` / `_order_by_descending` (+ tuple key) | `10-order_by.das` | **Shipped** (chunk 4); `_then_by` and per-column ASC/DESC mix deferred |
+| 11 | `take` / `skip` (LIMIT / OFFSET) | `11-take_skip.das` | **Shipped** (chunk 4); keyset pagination is a future concept tut |
+| 12 | `distinct` (set ops deferred) | `12-distinct.das` | **Shipped** (chunk 4); UNION/INTERSECT/EXCEPT punted to chunk 5 alongside joins/subqueries |
+| 13 | Aggregates — `count` / `sum` / `average` / `min` / `max` | `13-aggregates.das` | **Shipped** (chunk 4) |
+| 14 | `_group_by` + `_having` | `14-group_by.das` (`19-group_by.das.mockup` superseded — IGrouping shape, see API_REWORK §19) | **Shipped** (chunk 4) |
 | 15 | `_join` — inner equi-join | `23-joins.das` | Has mockup |
 | 16 | `_left_join` — outer | `23-joins.das` | Has mockup (shared) |
 | 17 | Subqueries | `24-subqueries.das` | Has mockup |
-| 18 | NULL handling — `Option<T>` | `25-null_handling.das` | Has mockup |
+| 18 | NULL handling — `Option<T>` | `18-null_handling.das` (`25-null_handling.das.mockup` shipped largely as designed; `_.Col == none()` diagnostic + projection-side `unwrap_or` deferred) | **Shipped** (chunk 4) |
 | 19 | UPDATE | `15-update.das` | Has mockup |
 | 20 | DELETE | `16-delete.das` | Has mockup |
 | 21 | UPSERT | `17-upsert.das` | Has mockup |
