@@ -67,12 +67,14 @@ Currently shipped patterns:
 
 | Name | Detects | Why it's boilerplate |
 |---|---|---|
+| `visitor` | Class-method whose hook name starts with `visit`, `preVisit`, `postVisit`, `before`, or `after` (matched by name, regardless of body) | `AstVisitor` overrides — the dispatch contract requires one method per AST node type, so cross-class duplication at the canonical level is structural. Common in `daslib/aot_cpp.das`, `daslib/ast_print.das`, `daslib/templates_boost.das`, `daslib/rst_comment.das`, `daslib/perf_lint.das` |
 | `dispatch` | Function whose body is `N >= 2` byte-identical top-level statement chunks (`STMT … STMT … STMT …` with all chunks equal) | dastest's `t \|> run("X") @(t) { … }` outer functions. Lambda bodies are collapsed to `ADDR` upstream, so two `run` calls look identical regardless of what the lambdas do — the outer function carries zero unique structure beyond its call count. Same shape catches `t \|> bench(…)`, repeated-init blocks, and any uniform call list |
+| `emit` | 1..6 top-level statements, each a single trivial `CALL:foo(...)` (only literal/var/field args — no nested calls, no control flow) or a single `RET ...` | Emitter shells like `def visitX(...) { write(*ss, ")") ; return that }` — non-visitor variants of the same pattern (free-function literal-emit wrappers). The visitor matcher covers the named-by-convention case; this one catches the body-shape case for free functions or unconventionally-named class methods |
 
 Pattern detection lives in `patterns.das`. Adding a new pattern is a three-step change:
 
-1. Add a `try_<name>(canonical, var hit) : bool` predicate that returns `true` and populates `hit.name` / `hit.note` when matched.
-2. Add the call to `classify()` in priority order (more specific shapes first).
+1. Add a `try_<name>(name?, canonical, var hit) : bool` predicate that returns `true` and populates `hit.name` / `hit.note` when matched. Body-shape matchers take only the canonical; name-shape matchers take both. Match order in `classify()` is name-first, then body-shape (more specific → more general).
+2. Wire it into `classify(name, canonical)` in priority order (more specific shapes first; name-based matchers usually win over body-shape matchers).
 3. Add at least one positive test and one negative test in `test_find_dupes.das` (under `── patterns / classify ──`).
 
 Pattern names are the user-visible contract — they appear in `--keep`, in the per-record `--verbose` skip log, and in the summary line. Pick a short, stable identifier.
@@ -111,7 +113,7 @@ is real signal).
 | `report.das` | JSON + stdout summary writer |
 | `main.das` | CLI (`daslib/clargs`), file scan, compile-and-collect orchestration |
 | `pipeline.das` | `compile_and_collect` / `collect_from_program` — compile-and-extract orchestration, shared by `main.das` and the test suite. `apply_pattern_filter` drops records matched by `patterns.das` |
-| `patterns.das` | Pattern matchers — `classify(canonical) → PatternHit`. Default-skipped shapes (dispatchers etc.); override via `--keep <name>` |
+| `patterns.das` | Pattern matchers — `classify(name, canonical) → PatternHit`. Default-skipped shapes (visitor methods, dispatchers, emitters); override via `--keep <name>` |
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das` | Hand-crafted fixture for smoke-testing the visitor end-to-end |
 | `fixture/canonical_cases.das` | Narrowly-targeted fixture (one function per canonicalization concern) for unit-testing `CanonicalVisitor` |

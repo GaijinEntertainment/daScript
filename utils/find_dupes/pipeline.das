@@ -117,6 +117,70 @@ def public scan_das_files(path : string; var files : array<string>; var cache : 
 }
 
 
+// Process one function (template OR reified) and append a FuncRecord
+// if it survives the filters. Shared by the `for_each_generic` and
+// `for_each_function` walks below — they only differ in which list they
+// iterate, not in how each entry is filtered/canonicalized.
+//
+// The per-source-line `seen_loc` dedup serves two purposes:
+//   1. Generic templates and their reified instances share the same
+//      `(file, line)`. Walking generics FIRST means the unmangled
+//      template name wins; the reified copies (stored under the
+//      mangled `` `name`<hash> `` form) are then skipped here.
+//   2. A generic reified for N types appears N times in
+//      `module->functions`. Only the first survives; the others are
+//      pure noise (perfect duplicates of themselves).
+def private collect_one_function(var func : FunctionPtr;
+                                 source_norm : string;
+                                 var records : array<FuncRecord>;
+                                 var seen_loc : table<string; void?>;
+                                 lambdas_only : bool;
+                                 want_sigs : bool;
+                                 min_tokens : int) {
+    if (func.flags.builtIn) {
+        return
+    }
+    // Lambdas are emitted as `generated` synthesized functions
+    // (`__lambda_function_at_line_xxx`). Default mode skips them via
+    // the generated filter (the dispatcher already references them
+    // via ADDR). Lambda-only mode lets them through and drops the
+    // top-level functions instead.
+    if (lambdas_only) {
+        if (!func.flags._lambda) {
+            return
+        }
+    } else {
+        if (func.flags.generated) {
+            return
+        }
+    }
+    let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
+    // Normalize slash direction — Windows runners can mix `\` and
+    // `/`, and a literal mismatch silently drops every function
+    // from a file that compiled fine.
+    if (normalize_path(fn_file) != source_norm) {
+        return
+    }
+    let loc = "{fn_file}:{int(func.at.line)}"
+    if (key_exists(seen_loc, loc)) {
+        return
+    }
+    seen_loc |> insert(loc, null)
+    let canon = canonicalize_function(func)
+    if (empty(canon)) {
+        return
+    }
+    var rec = FuncRecord()
+    rec.ref.file = fn_file
+    rec.ref.name = string(func.name)
+    rec.ref.line = int(func.at.line)
+    rec.ref.is_lambda = func.flags._lambda
+    rec.canonical := canon
+    derive_sig_and_count(rec, want_sigs, min_tokens)
+    records |> emplace(rec)
+}
+
+
 // Walk one compiled program and append a FuncRecord per user
 // function (lambdas included; only builtIn / generated skipped).
 //
@@ -125,56 +189,26 @@ def public scan_das_files(path : string; var files : array<string>; var cache : 
 // copies of the same library helpers. The file-source filter drops
 // any function whose `at.fileInfo` points outside the file we just
 // compiled, leaving only what was actually written in that file.
+//
+// Templates are walked BEFORE reified functions: an uncalled generic
+// only exists in `module->generics` (so without this pass we lose it
+// entirely), and a called generic exists in BOTH lists — visiting the
+// template first lets the source-name version win the per-line dedup
+// over the mangled `` `name`<hash> `` reification.
 def public collect_from_program(program : ProgramPtr; source_file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; lambdas_only : bool; want_sigs : bool; min_tokens : int) {
     let thisMod = get_this_module(program)
     let source_norm = normalize_path(source_file)
+    // Generic templates can't be lambdas — skip the generics walk in
+    // lambdas-only mode entirely.
+    if (!lambdas_only) {
+        for_each_generic(thisMod, "") $(func) {
+            collect_one_function(func, source_norm, records, seen_loc,
+                                 lambdas_only, want_sigs, min_tokens)
+        }
+    }
     for_each_function(thisMod, "") $(func) {
-        if (func.flags.builtIn) {
-            return
-        }
-        // Lambdas are emitted as `generated` synthesized functions
-        // (`__lambda_function_at_line_xxx`). Default mode skips them via
-        // the generated filter (the dispatcher already references them
-        // via ADDR). Lambda-only mode lets them through and drops the
-        // top-level functions instead.
-        if (lambdas_only) {
-            if (!func.flags._lambda) {
-                return
-            }
-        } else {
-            if (func.flags.generated) {
-                return
-            }
-        }
-        let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
-        // Normalize slash direction — Windows runners can mix `\` and
-        // `/`, and a literal mismatch silently drops every function
-        // from a file that compiled fine.
-        if (normalize_path(fn_file) != source_norm) {
-            return
-        }
-        // Generic templates get reified per type (e.g. `test_conversions`
-        // reified for int8, uint16, uint, uint64). Each reification is a
-        // distinct FunctionPtr but they all point at the same source
-        // (file, line). Keep the first; the rest are reported as
-        // duplicates against themselves which is just noise.
-        let loc = "{fn_file}:{int(func.at.line)}"
-        if (key_exists(seen_loc, loc)) {
-            return
-        }
-        seen_loc |> insert(loc, null)
-        let canon = canonicalize_function(func)
-        if (empty(canon)) {
-            return
-        }
-        var rec = FuncRecord()
-        rec.ref.file = fn_file
-        rec.ref.name = string(func.name)
-        rec.ref.line = int(func.at.line)
-        rec.ref.is_lambda = func.flags._lambda
-        rec.canonical := canon
-        derive_sig_and_count(rec, want_sigs, min_tokens)
-        records |> emplace(rec)
+        collect_one_function(func, source_norm, records, seen_loc,
+                             lambdas_only, want_sigs, min_tokens)
     }
 }
 
@@ -222,13 +256,13 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
     var kept_records : array<FuncRecord>
     kept_records |> reserve(length(records))
     for (r in records) {
-        let hit = classify(r.canonical)
+        let hit = classify(r.ref.name, r.canonical)
         if (empty(hit.name) || key_exists(kept, hit.name)) {
             kept_records |> push_clone(r)
             continue
         }
         if (verbose) {
-            print("  pattern-skip [{hit.name}]: {r.ref.file}:{r.ref.line} {r.ref.name} ({hit.note})\n")
+            to_log(LOG_INFO, "  pattern-skip [{hit.name}]: {r.ref.file}:{r.ref.line} {r.ref.name} ({hit.note})\n")
         }
         if (key_exists(skip_counts, hit.name)) {
             skip_counts[hit.name] = skip_counts[hit.name] + 1
@@ -282,9 +316,9 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>;
                     ok_compile = false
                     if (!quiet) {
                         if (verbose) {
-                            print("FAIL {file}\n  {issues}\n")
+                            to_log(LOG_ERROR, "FAIL {file}\n  {issues}\n")
                         } else {
-                            print("FAIL {file}\n")
+                            to_log(LOG_ERROR, "FAIL {file}\n")
                         }
                     }
                     return

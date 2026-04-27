@@ -172,6 +172,16 @@ Currently shipped patterns:
    * - Name
      - Detects
      - Why it's boilerplate
+   * - ``visitor``
+     - Class-method whose hook name starts with ``visit``,
+       ``preVisit``, ``postVisit``, ``before``, or ``after``
+       (matched by name, regardless of body)
+     - ``AstVisitor`` overrides --- the dispatch contract requires
+       one method per AST node type, so cross-class duplication at
+       the canonical level is structural, not actionable.  Common
+       in ``daslib/aot_cpp.das``, ``daslib/ast_print.das``,
+       ``daslib/templates_boost.das``, ``daslib/rst_comment.das``,
+       ``daslib/perf_lint.das``.
    * - ``dispatch``
      - Function whose body is N >= 2 byte-identical top-level
        statement chunks
@@ -180,11 +190,24 @@ Currently shipped patterns:
        ``run`` calls look identical regardless of what the lambdas
        do.  Same shape catches ``t |> bench(…)``, repeated-init
        blocks, and any uniform call list.
+   * - ``emit``
+     - 1..6 top-level statements, each a single trivial
+       ``CALL:foo(...)`` (literal/var/field args only --- no nested
+       calls, no control flow) or a ``RET ...``
+     - Emitter shells like
+       ``def visitX(...) { write(*ss, ")") ; return that }``.
+       Catches free-function emitter wrappers that the ``visitor``
+       matcher (which is name-based) doesn't cover.
+
+Match order in ``classify()`` is name-first
+(``visitor``), then body-shape (``dispatch``, ``emit``) --- the
+first match wins.  A visitor method whose body happens to fit the
+``emit`` shape is still classified as ``visitor``.
 
 The summary line surfaces what was filtered::
 
-   collected 66 record(s); 0 compile failure(s), 1 skipped (expect-directive)
-   patterns skipped: 35 dispatch (--keep <name>|all to include)
+   collected 3097 record(s); 0 compile failure(s), 0 skipped (expect-directive)
+   patterns skipped: 6 dispatch, 90 emit, 601 visitor (--keep <name>|all to include)
 
 ``--verbose`` prints one ``pattern-skip [name] file:line func (note)``
 line per filtered record --- useful for confirming the filter isn't
@@ -381,9 +404,10 @@ Implementation
        and the test suite.  Also hosts ``apply_pattern_filter``
        and the filesystem scan helpers
    * - ``patterns.das``
-     - Pattern matchers --- ``classify(canonical) → PatternHit``.
-       Default-skipped shapes (dispatchers etc.); override via
-       ``--keep <name>``
+     - Pattern matchers ---
+       ``classify(name, canonical) → PatternHit``.
+       Default-skipped shapes (visitor methods, dispatchers,
+       emitters); override via ``--keep <name>``
    * - ``exchange.das``
      - On-disk JSON schema + writer/reader for
        ``--export-functions`` / ``--import-functions``

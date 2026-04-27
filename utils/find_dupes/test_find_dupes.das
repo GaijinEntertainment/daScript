@@ -1006,7 +1006,7 @@ def test_per_candidate_rollup_shape(t : T?) {
 [test]
 def test_pattern_dispatch_three_identical_stmts(t : T?) {
     let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "dispatch")
     t |> equal(hit.note, "3x repeated")
 }
@@ -1016,7 +1016,7 @@ def test_pattern_dispatch_three_identical_stmts(t : T?) {
 def test_pattern_dispatch_two_identical_stmts(t : T?) {
     // ≥ 2 is the documented threshold; verify the boundary fires.
     let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "dispatch")
     t |> equal(hit.note, "2x repeated")
 }
@@ -1026,7 +1026,7 @@ def test_pattern_dispatch_two_identical_stmts(t : T?) {
 def test_pattern_single_stmt_not_dispatch(t : T?) {
     // One statement is not a uniform-call list — keep the function.
     let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "")
 }
 
@@ -1034,7 +1034,7 @@ def test_pattern_single_stmt_not_dispatch(t : T?) {
 [test]
 def test_pattern_empty_body_not_dispatch(t : T?) {
     let canon = "FN ARG <var_0> TYP BODY BLK ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "")
 }
 
@@ -1043,7 +1043,7 @@ def test_pattern_empty_body_not_dispatch(t : T?) {
 def test_pattern_mixed_stmts_not_dispatch(t : T?) {
     // Mixed call names (run / bench) — body isn't uniform, don't classify.
     let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:bench <var_0> LIT ADDR ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "")
 }
 
@@ -1055,7 +1055,7 @@ def test_pattern_nested_block_not_dispatch(t : T?) {
     // boundaries; otherwise we'd wrongly count 2 identical "STMT CALL:foo"
     // chunks and classify as dispatch.
     let canon = "FN ARG <var_0> TYP BODY BLK STMT IF <var_0> THEN BLK STMT CALL:foo <var_0> ENDBLK ELSE BLK STMT CALL:foo <var_0> ENDBLK ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "")
 }
 
@@ -1065,8 +1065,80 @@ def test_pattern_real_code_not_dispatch(t : T?) {
     // The "real test" canonical from strings_convert.das — long, mixed
     // STMTs, definitely not a dispatcher.
     let canon = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> STMT RET OP2:+ <var_1> LIT ENDBLK ENDFN"
-    let hit = classify(canon)
+    let hit = classify("", canon)
     t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_visitor_visit_method(t : T?) {
+    // Visitor methods classify by NAME alone, regardless of body — the
+    // dispatch contract makes cross-class duplication structural.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> STMT RET <var_1> ENDBLK ENDFN"
+    let hit = classify("CppAot`visitExprCopy", canon)
+    t |> equal(hit.name, "visitor")
+    t |> equal(hit.note, "visitExprCopy")
+}
+
+
+[test]
+def test_pattern_visitor_previsit_method(t : T?) {
+    let canon = "FN ARG <var_0> TYP BODY BLK ENDBLK ENDFN"
+    let hit = classify("PrintVisitor`preVisitExprBlock", canon)
+    t |> equal(hit.name, "visitor")
+}
+
+
+[test]
+def test_pattern_visitor_before_after_hooks(t : T?) {
+    // RstComment uses `before*`/`after*` lifecycle hooks — same family.
+    let canon = "FN ARG <var_0> TYP BODY BLK ENDBLK ENDFN"
+    let hit = classify("RstComment`beforeStructure", canon)
+    t |> equal(hit.name, "visitor")
+    let hit2 = classify("RstComment`afterEnumerationEntries", canon)
+    t |> equal(hit2.name, "visitor")
+}
+
+
+[test]
+def test_pattern_non_visitor_keeps(t : T?) {
+    // A class method whose hook name doesn't match the visitor prefix
+    // set must NOT be skipped — `apply` is a macro entry point, not
+    // a visitor override.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> ENDBLK ENDFN"
+    let hit = classify("SqlMacro`apply", canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_free_function_not_visitor(t : T?) {
+    // Free function whose name happens to start with `visit` (no
+    // backtick) must not be classified — visitor matcher requires the
+    // class-qualified shape.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT RET <var_0> ENDBLK ENDFN"
+    let hit = classify("visitNode", canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_visitor_wins_over_emit(t : T?) {
+    // A visitor method whose body happens to fit the `emit` shape
+    // gets classified under the more semantic `visitor` bucket.
+    let canon = "FN ARG <var_0> TYP ARG <var_1> TYP BODY BLK STMT CALL:write P2R <var_0> .FLD LIT STMT RET <var_1> ENDBLK ENDFN"
+    let hit = classify("CppAot`visitExprCopy", canon)
+    t |> equal(hit.name, "visitor")
+}
+
+
+[test]
+def test_pattern_emit_when_no_visitor_name(t : T?) {
+    // Same body as visitor_wins_over_emit, but a free function name
+    // — `emit` matcher fires.
+    let canon = "FN ARG <var_0> TYP ARG <var_1> TYP BODY BLK STMT CALL:write P2R <var_0> .FLD LIT STMT RET <var_1> ENDBLK ENDFN"
+    let hit = classify("emit_close_paren", canon)
+    t |> equal(hit.name, "emit")
 }
 
 
@@ -1143,4 +1215,99 @@ def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
     let counts <- apply_pattern_filter(records, kept, false, false)
     t |> equal(length(records), 1)
     t |> success(records[0].is_candidate, "is_candidate flag preserved through filter")
+}
+
+
+// ── generics visibility (fixture/generics_cases.das) ─────────────────
+//
+// pipeline.das walks BOTH `for_each_generic` (templates) AND
+// `for_each_function` (reified instances) so generics are visible
+// regardless of whether they're called. The walk order matters: the
+// generics pass runs first, so a called generic is recorded under its
+// source-level name (the unmangled template wins the per-source-line
+// `seen_loc` dedup against the reified `` `name`<hash> `` copies).
+//
+// Historical gap: pre-fix, only `for_each_function` was walked, so
+// uncalled generics were invisible and called generics surfaced under
+// the mangled symbol. The tests below pin both directions.
+
+let GENERICS_FIXTURE = "utils/find_dupes/fixture/generics_cases.das"
+
+
+[test]
+def test_generics_mono_baseline_visible(t : T?) {
+    // Sanity check: non-generic function reaches the records list.
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_mono_baseline")
+    t |> success(!empty(canon), "non-generic baseline visible")
+}
+
+
+// Called generic must be findable by source name (not by the mangled
+// `` `name`<hash> `` form daslang's reifier produces). The fix in
+// `collect_from_program` walks `for_each_generic` BEFORE
+// `for_each_function`, so the unmangled template wins the per-line
+// dedup; the reified copies are then suppressed by `seen_loc`.
+[test]
+def test_generics_called_visible(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_generic_called")
+    t |> success(!empty(canon),
+        "called generic must be findable by source-level name")
+    // Mangled reified copies must NOT leak into the records — there
+    // should only be one entry per template, under the source name.
+    var saw_mangled = false
+    for (rec in records) {
+        if (find(rec.ref.name, "case_generic_called") >= 0 && rec.ref.name != "case_generic_called") {
+            saw_mangled = true
+        }
+    }
+    t |> success(!saw_mangled,
+        "no mangled `name`<hash> reified copies should appear alongside the template")
+}
+
+
+// Uncalled generic must be visible. Templates with no call site never
+// reach `module->functions`; the fix walks `for_each_generic` so they
+// also produce a record.
+[test]
+def test_generics_uncalled_visible(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let canon = find_canonical_by_name(records, "case_generic_uncalled")
+    t |> success(!empty(canon),
+        "uncalled generic must be visible — for_each_generic must be walked alongside for_each_function")
+}
+
+
+// Sanity: the called and uncalled generics have identical bodies, so
+// after the fix they should have identical canonical token streams
+// (the canonicalizer collapses all types to `TYP`). This is what the
+// duplicate-detector ultimately cares about — that two structurally
+// identical generics will cluster.
+[test]
+def test_generics_called_and_uncalled_canonicalize_equal(t : T?) {
+    var records : array<FuncRecord>
+    let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
+    t |> success(ok, "generics_cases.das compiled")
+    if (!ok) {
+        return
+    }
+    let a = find_canonical_required(t, records, "case_generic_called")
+    let b = find_canonical_required(t, records, "case_generic_uncalled")
+    t |> equal(a, b)
 }

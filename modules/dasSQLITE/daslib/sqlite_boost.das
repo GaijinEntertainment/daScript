@@ -400,12 +400,25 @@ def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<
 // invoked once after prepare. Each public wrapper supplies the right
 // bind block for its arity.
 
-def private try_query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
-                               bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<TT -const -#, string> {
+// Shared prepare/bind/step/finalize body for single-row Result-returning
+// reads. Both `try_query_one_impl` (struct-typed reads via
+// `_sql_read_row`) and `try_run_select_one` (caller-supplied row block
+// via the `_sql` macro) used to inline this whole loop verbatim. Pulled
+// up here so they share one implementation; the differences collapse to
+// (a) the row materializer block and (b) the user-visible error prefix.
+def private try_one_row(db : SqlRunner; sql : string;
+                        bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                        row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
+                        err_prefix : string) : Result<TT -const -#, string> {
+    // Error format is normalized to `{err_prefix}: <what>` across all
+    // three failure paths. The pre-refactor inlined messages were
+    // inconsistent (`query_one: step failed` had a colon,
+    // `_sql step failed` did not — likewise for `prepare failed`); the
+    // unified shape replaces both. No consumers parse these strings.
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
-        let msg = "query_one prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
         return err(msg, type<TT -const -#>)
     }
@@ -413,16 +426,26 @@ def private try_query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
     let src = sqlite3_step(stmt)
     if (src == SQLITE_DONE) {
         sqlite3_finalize(stmt)
-        return err("query_one: expected one row, got 0 rows", type<TT -const -#>)
+        return err("{err_prefix}: expected one row, got 0 rows", type<TT -const -#>)
     }
     if (src != SQLITE_ROW) {
-        let msg = "query_one: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
         return err(msg, type<TT -const -#>)
     }
-    var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
+    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
     sqlite3_finalize(stmt)
     return move_ok(row, type<string>)
+}
+
+[unused_argument(t)]
+def private try_query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                               bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<TT -const -#, string> {
+    return <- try_one_row(db, sql, bind_blk,
+                          $(stmt : sqlite3_stmt?) {
+                              return _::_sql_read_row(stmt, type<TT -const -#>)
+                          },
+                          "query_one")
 }
 
 def private query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
@@ -783,27 +806,7 @@ def try_run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt 
     //! Prepares ``sql``, runs ``bind_blk`` once, steps once, materializes
     //! the first row via ``row_blk``. Returns ``Err(errmsg)`` on prepare or
     //! step failure or zero rows.
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
-    }
-    invoke(bind_blk, stmt)
-    let rc = sqlite3_step(stmt)
-    if (rc == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return err("_sql: expected one row, got 0 rows", type<TT -const -#>)
-    }
-    if (rc != SQLITE_ROW) {
-        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
-    }
-    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_ok(row, type<string>)
+    return <- try_one_row(db, sql, bind_blk, row_blk, "_sql")
 }
 
 def run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : TT -const -# {

@@ -20,12 +20,52 @@ struct public PatternHit {
 // otherwise. Patterns are tried in priority order — the first match
 // wins, which means more specific shapes should be checked before
 // more general ones.
-def public classify(canonical : string) : PatternHit {
+def public classify(name : string; canonical : string) : PatternHit {
     var hit = PatternHit()
+    // Visitor methods are recognized by name (`<Class>`<hook>`) — the
+    // body of a real visitor override is structurally constrained by
+    // the dispatch contract, not by the algorithm. Check first so that
+    // a visitor whose body happens to match `dispatch`/`emit` is still
+    // classified under the more semantic `visitor` bucket.
+    if (try_visitor(name, hit)) {
+        return hit
+    }
     if (try_dispatch(canonical, hit)) {
         return hit
     }
+    if (try_emit(canonical, hit)) {
+        return hit
+    }
     return hit
+}
+
+
+// Visitor methods follow a fixed naming convention: a class-qualified
+// method name (`<Class>`<hook>`) where the hook starts with one of
+// `visit`, `preVisit`, `postVisit`, `before`, or `after`. These are
+// `AstVisitor` overrides whose body shape is dictated by the dispatch
+// contract (one method per AST node type), so cross-class duplication
+// at the canonical level is structural — the function name carries
+// the dispatch, not the body. Common in `daslib/aot_cpp.das`,
+// `daslib/ast_print.das`, `daslib/templates_boost.das`,
+// `daslib/rst_comment.das`, `daslib/perf_lint.das`, etc. Use
+// `--keep visitor` to include them.
+def try_visitor(name : string; var hit : PatternHit) : bool {
+    let bt = find(name, "`")
+    if (bt < 0) {
+        return false
+    }
+    let method = slice(name, bt + 1)
+    if (method |> starts_with("preVisit")
+            || method |> starts_with("postVisit")
+            || method |> starts_with("visit")
+            || method |> starts_with("before")
+            || method |> starts_with("after")) {
+        hit.name := "visitor"
+        hit.note := "{method}"
+        return true
+    }
+    return false
 }
 
 
@@ -48,6 +88,79 @@ def try_dispatch(canonical : string; var hit : PatternHit) : bool {
     }
     hit.name := "dispatch"
     hit.note := "{length(stmts)}x repeated"
+    return true
+}
+
+
+// Emit shape: the function body is a small number (1..6) of top-level
+// statements, each being either a single trivial `CALL:foo(...)` (only
+// literal/var/field args — no control flow, no nested calls) or a
+// single trivial `RET ...`. Catches the visitor-pattern boilerplate
+// in `daslib/aot_cpp.das`, `daslib/ast_print.das`, etc., where ~50
+// `def override visitExprXxx(...) { write(*ss, ")") ; return that }`
+// methods all collapse to byte-identical canonical streams that just
+// emit a string and return. The function name is what carries the
+// dispatch (one override per AST node type), so the body duplication
+// is structurally required and not actionable.
+def try_emit(canonical : string; var hit : PatternHit) : bool {
+    let stmts <- split_top_level_stmts(canonical)
+    if (length(stmts) == 0 || length(stmts) > 6) {
+        return false
+    }
+    var emit_count = 0
+    for (stmt in stmts) {
+        let toks <- tokenize_canonical(stmt)
+        if (length(toks) < 2) {
+            return false
+        }
+        if (toks[0] != "STMT" && toks[0] != "FIN_STMT") {
+            return false
+        }
+        let head = toks[1]
+        if (head == "RET") {
+            // Plain return of a var/null/literal — accept.
+            if (!emit_args_trivial(toks, 2, length(toks))) {
+                return false
+            }
+            continue
+        }
+        if (head |> starts_with("CALL:")) {
+            // A single top-level call with only trivial args.
+            if (!emit_args_trivial(toks, 2, length(toks))) {
+                return false
+            }
+            emit_count++
+            continue
+        }
+        return false
+    }
+    if (emit_count == 0) {
+        return false
+    }
+    hit.name := "emit"
+    hit.note := "{emit_count} trivial-call stmt(s)"
+    return true
+}
+
+
+// Args of a trivial-emit statement may only contain literals, var/sym
+// refs, field reads, pointer dereferences (P2R), unary operators, and
+// string-builder pieces (MK_STR, SBLD). Anything else (a nested call,
+// a control-flow keyword, OP2 arithmetic, lambda) means the statement
+// is doing real work — not boilerplate.
+def emit_args_trivial(toks : array<string>; lo, hi : int) : bool {
+    for (i in range(lo, hi)) {
+        let tok = toks[i]
+        if (tok |> starts_with("<var_") || tok == "<sym>") {
+            continue
+        }
+        if (tok == ".FLD" || tok == "P2R" || tok == "LIT" || tok == "MK_STR"
+                || tok == "SBLD" || tok == "ENDSBLD"
+                || tok |> starts_with("OP1:")) {
+            continue
+        }
+        return false
+    }
     return true
 }
 

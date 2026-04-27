@@ -184,33 +184,33 @@ def public print_per_candidate_summary(report : Report;
                                        candidate_refs : array<MemberRef>;
                                        top_per_candidate : int) {
     let pcr = build_per_candidate_report(report, candidate_refs, top_per_candidate)
-    print("\n=== find_dupes per-candidate report ===\n")
-    print("candidates scanned: {length(pcr.candidates)}\n")
+    to_log(LOG_INFO, "\n=== find_dupes per-candidate report ===\n")
+    to_log(LOG_INFO, "candidates scanned: {length(pcr.candidates)}\n")
     var n_with_hits = 0
     for (r in pcr.candidates) {
         if (length(r.exact_matches) > 0 || length(r.fuzzy_matches) > 0) {
             n_with_hits++
         }
     }
-    print("candidates with matches: {n_with_hits}\n")
+    to_log(LOG_INFO, "candidates with matches: {n_with_hits}\n")
     for (r in pcr.candidates) {
         if (length(r.exact_matches) == 0 && length(r.fuzzy_matches) == 0) {
             continue
         }
         let header = r.is_lambda ? "<lambda> ({r.name})" : r.name
-        print("\n* {r.file}:{r.line}  {header}\n")
+        to_log(LOG_INFO, "\n* {r.file}:{r.line}  {header}\n")
         if (length(r.exact_matches) > 0) {
-            print("  exact:\n")
+            to_log(LOG_INFO, "  exact:\n")
             for (m in r.exact_matches) {
                 let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name
-                print("    - {m.file}:{m.line}  {mhdr}\n")
+                to_log(LOG_INFO, "    - {m.file}:{m.line}  {mhdr}\n")
             }
         }
         if (length(r.fuzzy_matches) > 0) {
-            print("  fuzzy:\n")
+            to_log(LOG_INFO, "  fuzzy:\n")
             for (m in r.fuzzy_matches) {
                 let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name
-                print("    - {m.similarity}  {m.file}:{m.line}  {mhdr}\n")
+                to_log(LOG_INFO, "    - {m.similarity}  {m.file}:{m.line}  {mhdr}\n")
             }
         }
     }
@@ -218,34 +218,34 @@ def public print_per_candidate_summary(report : Report;
 
 
 def public print_summary(report : Report; top : int) {
-    print("\n=== find_dupes summary ===\n")
-    print("files scanned     : {report.summary.files_scanned}\n")
-    print("functions analyzed: {report.summary.functions_analyzed}\n")
-    print("exact clusters    : {length(report.exact_clusters)}\n")
-    print("fuzzy pairs       : {length(report.fuzzy_pairs)}  (threshold {report.summary.threshold})\n")
-    print("min tokens        : {report.summary.min_tokens}\n")
+    to_log(LOG_INFO, "\n=== find_dupes summary ===\n")
+    to_log(LOG_INFO, "files scanned     : {report.summary.files_scanned}\n")
+    to_log(LOG_INFO, "functions analyzed: {report.summary.functions_analyzed}\n")
+    to_log(LOG_INFO, "exact clusters    : {length(report.exact_clusters)}\n")
+    to_log(LOG_INFO, "fuzzy pairs       : {length(report.fuzzy_pairs)}  (threshold {report.summary.threshold})\n")
+    to_log(LOG_INFO, "min tokens        : {report.summary.min_tokens}\n")
     let n_ex = top < length(report.exact_clusters) ? top : length(report.exact_clusters)
     if (n_ex > 0) {
-        print("\n--- top {n_ex} exact-clone clusters ---\n")
+        to_log(LOG_INFO, "\n--- top {n_ex} exact-clone clusters ---\n")
         for (i in range(n_ex)) {
             let size = length(report.exact_clusters[i].members)
             let tcount = report.exact_clusters[i].token_count
-            print("\n[{i + 1}] size={size} tokens={tcount}\n")
-            print("    {report.exact_clusters[i].canonical_sample}\n")
+            to_log(LOG_INFO, "\n[{i + 1}] size={size} tokens={tcount}\n")
+            to_log(LOG_INFO, "    {report.exact_clusters[i].canonical_sample}\n")
             for (m in report.exact_clusters[i].members) {
-                print("    - {member_label(m)}\n")
+                to_log(LOG_INFO, "    - {member_label(m)}\n")
             }
         }
     }
     let n_fz = top < length(report.fuzzy_pairs) ? top : length(report.fuzzy_pairs)
     if (n_fz > 0) {
-        print("\n--- top {n_fz} fuzzy pairs ---\n")
+        to_log(LOG_INFO, "\n--- top {n_fz} fuzzy pairs ---\n")
         for (i in range(n_fz)) {
-            print("\n[{i + 1}] similarity={report.fuzzy_pairs[i].similarity}\n")
-            print("    a: {member_label(report.fuzzy_pairs[i].a)}\n")
-            print("    b: {member_label(report.fuzzy_pairs[i].b)}\n")
-            print("    a canonical: {report.fuzzy_pairs[i].canonical_a}\n")
-            print("    b canonical: {report.fuzzy_pairs[i].canonical_b}\n")
+            to_log(LOG_INFO, "\n[{i + 1}] similarity={report.fuzzy_pairs[i].similarity}\n")
+            to_log(LOG_INFO, "    a: {member_label(report.fuzzy_pairs[i].a)}\n")
+            to_log(LOG_INFO, "    b: {member_label(report.fuzzy_pairs[i].b)}\n")
+            to_log(LOG_INFO, "    a canonical: {report.fuzzy_pairs[i].canonical_a}\n")
+            to_log(LOG_INFO, "    b canonical: {report.fuzzy_pairs[i].canonical_b}\n")
         }
     }
 }

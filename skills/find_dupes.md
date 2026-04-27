@@ -91,7 +91,11 @@ Currently shipped:
 
 | Name | Detects | Why it's boilerplate |
 |---|---|---|
+| `visitor` | Class-method whose hook starts with `visit`, `preVisit`, `postVisit`, `before`, or `after` (matched by name, regardless of body) | `AstVisitor` overrides — one method per AST node type by dispatch contract, so cross-class duplication is structural. Catches the swarms in `aot_cpp`, `ast_print`, `templates_boost`, `rst_comment`, `perf_lint` |
 | `dispatch` | Body is N >= 2 byte-identical top-level statement chunks | dastest's `t \|> run("X") @(t) {…}` lists, `t \|> bench(…)` lists, repeated-init blocks. Lambda bodies collapse to `ADDR` upstream, so two `run` calls look identical regardless of what the lambdas do |
+| `emit` | 1..6 top-level statements, each a single trivial `CALL:foo(...)` (literal/var/field args only — no nested calls, no control flow) or a `RET ...` | Emitter shells like `def visitX(...) { write(*ss, ")") ; return that }`. Catches free-function variants that the name-based `visitor` matcher doesn't cover |
+
+Match order is name-first (`visitor`), then body-shape (`dispatch`, `emit`). A visitor method whose body fits the `emit` shape is still classified as `visitor` — the more semantic bucket wins.
 
 Override per-pattern with `keep="<name>"` (comma-separated for multiple), or disable filtering wholesale with `keep="all"`. Default (omit `keep`) skips every known pattern.
 
@@ -164,8 +168,8 @@ The pipeline is **shared** between the CLI (`main.das`) and the MCP tools — th
 
 Three-step change in `patterns.das` + `test_find_dupes.das`:
 
-1. **Predicate.** Add a `try_<name>(canonical : string; var hit : PatternHit) : bool` in `patterns.das`. Return `true` and populate `hit.name` (the user-visible identifier) and `hit.note` (a short human-readable summary, shown in `--verbose`) when the pattern matches.
-2. **Wire it.** Add the call to `classify()` in priority order — *more specific shapes first*. The first match wins.
+1. **Predicate.** Add a `try_<name>(...)` in `patterns.das`. Return `true` and populate `hit.name` (the user-visible identifier) and `hit.note` (a short human-readable summary, shown in `--verbose`) when the pattern matches. Body-shape matchers take `(canonical : string; var hit : PatternHit)`; name-shape matchers take `(name : string; var hit : PatternHit)` (see `try_visitor`).
+2. **Wire it.** Add the call to `classify(name, canonical)` in priority order — *more specific shapes first*. Name-based checks usually win over body-shape checks (a visitor method whose body fits `emit` should still be classified `visitor`).
 3. **Tests.** Add at least one positive test and one negative test in `test_find_dupes.das` under the `── patterns / classify ──` section. The negative test should be a real-looking canonical that should NOT match (mixed statements, nested blocks, single statement) — guard against the predicate over-firing.
 
 Pattern names are the user-visible contract: they appear in `--keep`, the `--verbose` skip log, the summary line, and the MCP envelope's `patterns_skipped` map. Pick a short, stable identifier.

@@ -202,7 +202,7 @@ def public read_import(path : string; var records : array<FuncRecord>;
         records |> emplace(rec)
     }
     if (skipped > 0 && !quiet) {
-        print("warning: skipped {skipped} malformed function record(s) during import\n")
+        to_log(LOG_WARNING, "warning: skipped {skipped} malformed function record(s) during import\n")
     }
     return true
 }
