@@ -1,0 +1,1 @@
+Asserts that the given Expression gc_node is alive (not swept, not deleted), fatal-erroring with the node's gc_id when called on a stale pointer. Pass-through for null. Pair with the DAS_GC_DEBUG=1 build flag (memory-poisoning sweep mode) to localize use-after-sweep bugs to the first call site that observes a stale pointer.

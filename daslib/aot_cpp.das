@@ -10,7 +10,6 @@ require daslib/strings_boost
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/linq_boost
-require daslib/functional
 
 require daslib/ast_print_flags
 require daslib/aot_constants
@@ -322,20 +321,20 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 write(writer, "Table");
             }
         } elif (baseType == Type.tTuple) {
-            let types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
-                return s;
-            }), ",")
+            let types = (each(typeDecl.argTypes)
+                ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
+                .to_array()
+                ._fold()) |> join(",")
             if (cfg.cross_platform) {
                 write(writer, "AutoTuple<{types}>")
             } else {
                 write(writer, "TTuple<{int(typeDecl.tupleSize)},{types}>")
             }
         } elif (baseType == Type.tVariant) {
-            let types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, DescribeConfig(cross_platform = cfg.cross_platform), useAlias);
-                return s
-            }), ",")
+            let types = (each(typeDecl.argTypes)
+                ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
+                .to_array()
+                ._fold()) |> join(",")
             if (cfg.cross_platform) {
                 write(writer, "AutoVariant<{types}>");
             } else {
@@ -396,17 +395,20 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
                 type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
             }
             let extra_comma = length(typeDecl.argTypes) != 0 ? "," : "";
-            let arg_types = join(map(each(typeDecl.argTypes), @(arg) {
-                let s : string = describeCppTypeEx(arg, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias);
-                return s
-            }), ",")
+            let arg_types = (each(typeDecl.argTypes)
+                ._select(describeCppTypeEx(_, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias))
+                .to_array()
+                ._fold()) |> join(",")
             write(writer, "{maybe_const}{das_to_cppString(baseType)} DAS_COMMENT(({type_name}{extra_comma}{arg_types}))");
         } else {
             write(writer, das_to_cppString(baseType));
         }
-        let args <- to_array(map(each(typeDecl.dim).reverse(), @(itd) { return ",{itd}>"; }))
-        reverse(args);
-        write(writer, "{join(args, "")}")
+        // dim is stored outer-first; C++ TDim<TDim<base,inner>,outer> emits dims
+        // inner-first, so walk dim in reverse.
+        let dim_count = length(typeDecl.dim)
+        for (i in 0..dim_count) {
+            write(writer, ",{typeDecl.dim[dim_count - 1 - i]}>")
+        }
 
         if (cfg.skip_const == false && typeDecl.flags.constant) {
             write(writer, " const ");
@@ -606,17 +608,19 @@ class public AotDebugInfoHelper {
 
     def writeDim(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
         if (info.dimSize > 0u) {
-            let dims = (range(info.dimSize) |> each()
-                        |> map(@(i : int) { return "{unsafe(info.dim[i]):d}"; })
-                        |> join(", "))
+            let dims = (each(range(info.dimSize))
+                ._select("{unsafe(info.dim[_]):d}")
+                .to_array()
+                ._fold()) |> join(", ")
             write(*writer, "uint32_t {typeInfoName(info)}_dim{suffix}[{info.dimSize:d}] = \{ {dims} \};\n");
         }
     }
     def writeArgNames(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
         if (info.argCount > 0u && info.argNames != null) {
-            let dims = (range(info.argCount) |> each()
-                        |> map(@(i : int) { return "\"{unsafe(info.argNames[i])}\""; })
-                        |> join(", "))
+            let dims = (each(range(info.argCount))
+                ._select("\"{unsafe(info.argNames[_])}\"")
+                .to_array()
+                ._fold()) |> join(", ")
             let name = "{typeInfoName(info)}_arg_names{suffix}"
             let (_, succ) = info2Name.emplace(name, dims)
             if (succ) {
@@ -626,9 +630,10 @@ class public AotDebugInfoHelper {
     }
     def writeArgTypes(var writer : StringBuilderWriter?; info : TypeInfo?; suffix : string = "") {
         if (info.argCount > 0u && info.argTypes != null) {
-            let dims = (range(info.argCount) |> each()
-                        |> map(@(i : int) { return "&{typeInfoName(unsafe(info.argTypes[i]))}"; })
-                        |> join(", "))
+            let dims = (each(range(info.argCount))
+                ._select("&{typeInfoName(unsafe(info.argTypes[_]))}")
+                .to_array()
+                ._fold()) |> join(", ")
             let name = "{typeInfoName(info)}_arg_types{suffix}"
             let (_, succ) = info2TypeName.emplace(name, dims)
             if (succ) {
@@ -745,10 +750,10 @@ class public AotDebugInfoHelper {
                 }
             }
         }
-        let fields = (info.count |> range()
-                                 |> each()
-                                 |> map(@(id : int) { return "&{structInfoName(info)}_field_{id}"; })
-                                 |> join(", "))
+        let fields = (each(range(info.count))
+            ._select("&{structInfoName(info)}_field_{_}")
+            .to_array()
+            ._fold()) |> join(", ")
         write(*writer, "VarInfo * {structInfoName(info)}_fields[{info.count:d}] =  \{ {fields} \};\n");
     }
 
@@ -775,9 +780,10 @@ class public AotDebugInfoHelper {
             write(*writer, "VarInfo {funcInfoName(info)}_field_{fi} =  \{ {describeCppVarFuncInfo(string(info.name), fld,suffix)} \};\n");
         }
 
-        let fields = (info.count |> range() |> each()
-                                |> map(@(id : int) { return "&{funcInfoName(info)}_field_{id}"; })
-                                |> join(", "))
+        let fields = (each(range(info.count))
+            ._select("&{funcInfoName(info)}_field_{_}")
+            .to_array()
+            ._fold()) |> join(", ")
         write(*writer, "VarInfo * {funcInfoName(info)}_fields[{info.count:d}] =  \{ {fields} \};\n");
     }
     def describeCppFuncInfo(info : FuncInfo?) {
@@ -796,9 +802,10 @@ class public AotDebugInfoHelper {
             let val = unsafe(einfo.fields[v]);
             write(*writer, "EnumValueInfo {enumInfoName(einfo)}_value_{v} = \{ \"{val.name}\", {val.value} \};\n")
         }
-        let enum_vals = (einfo.count |> range() |> each()
-                                    |> map(@(id : int) { return "&{enumInfoName(einfo)}_value_{id}"; })
-                                    |> join(", "))
+        let enum_vals = (each(range(einfo.count))
+            ._select("&{enumInfoName(einfo)}_value_{_}")
+            .to_array()
+            ._fold()) |> join(", ")
         write(*writer, "EnumValueInfo * {enumInfoName(einfo)}_values [] = \{ {enum_vals} \};\n");
     }
     def describeCppEnumInfo(info : EnumInfo?) {
@@ -1092,24 +1099,20 @@ def public describeCppFunc(fn : FunctionPtr; var collector : BlockVariableCollec
             }
             */
             let prefix = fn.arguments |> empty() ? "" : ", "
-            let args_str = (
-                fn.arguments
-                |> each()
-                |> map(@(arg : Variable?) : string {
-                    return build_string() $(writer2) {
-                        if (isLocalVec(arg._type)) {
-                            describeLocalCppType(unsafe(addr(writer2)), arg._type, cross_platform);
-                        } else {
-                            write(writer2, "{describeCppType(arg._type, DescribeConfig(cross_platform=cross_platform))}");
-                        }
-                        write(writer2, " {(arg._type.isRefType) ? "& " : ""}");
-                        if (collector != null) {
-                            write(writer2, "{collector.getVarName(arg)}");
-                        }
+            let args_str = (each(fn.arguments)
+                ._select(build_string() $(writer2) {
+                    if (isLocalVec(_._type)) {
+                        describeLocalCppType(unsafe(addr(writer2)), _._type, cross_platform);
+                    } else {
+                        write(writer2, "{describeCppType(_._type, DescribeConfig(cross_platform=cross_platform))}");
+                    }
+                    write(writer2, " {(_._type.isRefType) ? "& " : ""}");
+                    if (collector != null) {
+                        write(writer2, "{collector.getVarName(_)}");
                     }
                 })
-                |> join(", ")
-            )
+                .to_array()
+                ._fold()) |> join(", ")
             write(writer, " ( Context * __context__{prefix}{args_str} )");
     }
 }
@@ -1993,14 +1996,10 @@ class public CppAot : AstVisitor {
     }
 // is variant
     def stringify_variadic_types(types : dasvector`ptr`TypeDecl) {
-        return (types |> each()
-                    |> map(@(t : TypeDeclPtr) : string {
-                        return describeCppTypeEx(t,
-                            DescribeConfig(redundant_const = true,
-                            cross_platform = cross_platform),
-                            CpptUseAlias.no);
-                    })
-                    |> join(","))
+        return (each(types)
+            ._select(describeCppTypeEx(_, DescribeConfig(redundant_const = true, cross_platform = cross_platform), CpptUseAlias.no))
+            .to_array()
+            ._fold()) |> join(",")
     }
 
     def get_variant_field(field_type : TypeDeclPtr; index : int; is_pointer : bool = false) {
@@ -2563,9 +2562,10 @@ class public CppAot : AstVisitor {
                 if (isSequencialMask(expr.fields)) {
                     write(*ss, "das_swizzle_seq<{type_str},{value_str},{expr.fields[0]:d}>::swizzle(");
                 } else {
-                    let field_str = (expr.fields |> each()
-                                                 |> map(@(f) { return "{f:d}"; })
-                                                 |> join(","));
+                    let field_str = (each(expr.fields)
+                        ._select("{_:d}")
+                        .to_array()
+                        ._fold()) |> join(",")
                     write(*ss, "das_swizzle<{type_str},{value_str},{field_str}>::swizzle(");
                 }
             }
@@ -2604,13 +2604,10 @@ class public CppAot : AstVisitor {
 // string builder
     def outputCallTypeInfo(nArgs : uint; elements : dasvector`ptr`Expression) {
         let debug_info_name = "__tinfo_{debugInfoGlobal++:d}";
-        let tinfo_str = (
-            elements |> each()
-                        |> map(@(arg) {
-                        return "&{typeInfoName(helper.helper |> make_type_info(null, arg._type))}";
-                        })
-                        |> join(", ")
-        )
+        let tinfo_str = (each(elements)
+            ._select("&{typeInfoName(helper.helper |> make_type_info(null, _._type))}")
+            .to_array()
+            ._fold()) |> join(", ")
         let (val, succ) = cachedTi.emplace(debug_info_name, tinfo_str)
         if (!succ) {
             return val
@@ -3109,11 +3106,10 @@ class public CppAot : AstVisitor {
                 write(*ss, "_cmres");
             }
             let type_str = describeCppType(blk.returnType, DescribeConfig(skip_const = true, cross_platform = cross_platform));
-            let args = (
-                each(blk.arguments)
-                .map(@(arg) { return "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}{arg._type.isRefType && !arg._type.flags.ref ? " &" : ""}"; })
-                .join(",")
-            )
+            let args = (each(blk.arguments)
+                ._select("{describeCppType(_._type,DescribeConfig(cross_platform=cross_platform))}{_._type.isRefType && !_._type.flags.ref ? " &" : ""}")
+                .to_array()
+                ._fold()) |> join(",")
             let maybe_comma = args |> empty() ? "" : ",";
             write(*ss, "<{type_str}{maybe_comma}{args}>(__context__,{blk.stackTop:d},");
         }
@@ -3244,14 +3240,10 @@ class public CppAot : AstVisitor {
             }
             if (length(call.arguments) > 1) {
                 unsafe {
-                let args = (range(1, length(call.arguments))
-                        |> each()
-                        |> map(@capture(& call) (id : int) {
-                            assume arg = call.arguments[id];
-                            let is_ref = (arg._type.isRefType && !arg._type.flags.ref);
-                            return "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}{is_ref ? " &" : ""}";
-                        })
-                        |> join(","))
+                let args = (each(range(1, length(call.arguments)))
+                    ._select("{describeCppType(call.arguments[_]._type, DescribeConfig(cross_platform=cross_platform))}{(call.arguments[_]._type.isRefType && !call.arguments[_]._type.flags.ref) ? " &" : ""}")
+                    .to_array()
+                    ._fold()) |> join(",")
                 write(*ss, "<{args}>");
                 }
             }

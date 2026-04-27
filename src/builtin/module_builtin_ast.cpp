@@ -1248,6 +1248,12 @@ namespace das {
         addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
             SideEffects::none, "clone_type")
                 ->arg("type");
+        addExtern<DAS_BIND_FUN(verify_typedecl_gc)>(*this, lib,  "verify_typedecl_gc",
+            SideEffects::worstDefault, "verify_typedecl_gc")
+                ->arg("type");
+        addExtern<DAS_BIND_FUN(verify_expression_gc)>(*this, lib,  "verify_expression_gc",
+            SideEffects::worstDefault, "verify_expression_gc")
+                ->arg("expression");
         addExtern<DAS_BIND_FUN(get_variant_field_offset)>(*this, lib,  "get_variant_field_offset",
             SideEffects::none, "get_variant_field_offset")
                 ->args({"variant","index","context","at"});

@@ -511,6 +511,8 @@ namespace das {
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return value ? new TypeDecl(*value) : nullptr; }
+    __forceinline void verify_typedecl_gc ( TypeDeclPtr value ) { if ( value ) value->gc_verify(); }
+    __forceinline void verify_expression_gc ( ExpressionPtr value ) { if ( value ) value->gc_verify(); }
     __forceinline StructurePtr clone_structure ( const Structure * value ) { return value ? value->clone() : nullptr; }
     __forceinline VariablePtr clone_variable ( VariablePtr value ) { return value ? value->clone() : nullptr; }
     DAS_API void forceAtRaw ( Expression * expr, const LineInfo & at );
