@@ -110,8 +110,21 @@ def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef
 }
 
 
-def public compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool; want_sigs : bool; min_tokens : int) : bool {
-    var inscope access <- make_file_access("")
+// `quiet=true` suppresses the "FAIL {file}" stdout print — required when
+// called from the MCP server (stdio transport reserves stdout for
+// JSON-RPC). The boolean return value is the caller's signal anyway. CLI
+// keeps the print for human visibility.
+//
+// `project` lets callers point at a `.das_project` for custom module
+// resolution, mirroring other compilation-based MCP tools. Empty string
+// preserves the original "no project" behavior.
+def public compile_and_collect(file : string; var records : array<FuncRecord>;
+                               var seen_loc : table<string; void?>;
+                               verbose : bool; lambdas_only : bool;
+                               want_sigs : bool; min_tokens : int;
+                               quiet : bool = false;
+                               project : string = "") : bool {
+    var inscope access <- make_file_access(project)
     var ok_compile = true
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
@@ -123,10 +136,12 @@ def public compile_and_collect(file : string; var records : array<FuncRecord>; v
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
                     ok_compile = false
-                    if (verbose) {
-                        print("FAIL {file}\n  {issues}\n")
-                    } else {
-                        print("FAIL {file}\n")
+                    if (!quiet) {
+                        if (verbose) {
+                            print("FAIL {file}\n  {issues}\n")
+                        } else {
+                            print("FAIL {file}\n")
+                        }
                     }
                     return
                 }

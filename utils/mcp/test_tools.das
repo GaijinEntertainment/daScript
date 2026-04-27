@@ -1284,7 +1284,7 @@ def test_find_duplicates_missing_corpus(t : T?) {
     t |> run("missing 'corpus' arg returns error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_find_duplicates("foo.das", "", "", "", ""), text, is_error)
+        let ok = parse_result(do_find_duplicates("foo.das", "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "corpus") >= 0, "should mention corpus: {text}")
@@ -1301,7 +1301,7 @@ def test_find_duplicates_missing_paths(t : T?) {
         }
         var text : string
         var is_error = false
-        let ok = parse_result(do_find_duplicates("", path, "", "", ""), text, is_error)
+        let ok = parse_result(do_find_duplicates("", path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
@@ -1313,10 +1313,18 @@ def test_find_duplicates_missing_paths(t : T?) {
 [test]
 def test_find_duplicates_corpus_not_found(t : T?) {
     t |> run("nonexistent corpus path is reported") <| @(t : T?) {
+        // Generate a portable temp path then immediately delete the file
+        // — the path is now guaranteed nonexistent and unique to this run,
+        // and works on Windows runners where /tmp doesn't exist.
+        let bogus = make_temp_corpus_file(t, "")
+        if (empty(bogus)) {
+            return
+        }
+        remove(bogus)
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            "/tmp/nonexistent_find_dupes_corpus_xyz123.json", "", "", ""), text, is_error)
+            bogus, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
     }
@@ -1333,7 +1341,7 @@ def test_find_duplicates_empty_corpus(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", ""), text, is_error)
+            path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should NOT be error: {text}")
         t |> success(find(text, "candidate_functions") >= 0, "envelope has candidate_functions: {text}")
@@ -1358,7 +1366,7 @@ def test_find_duplicates_bad_schema(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_find_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", ""), text, is_error)
+            path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "schema_version") >= 0, "mentions schema_version: {text}")

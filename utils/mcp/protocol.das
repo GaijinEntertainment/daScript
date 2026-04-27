@@ -427,11 +427,12 @@ def handle_tools_list(id_json : string) : string {
         "find_duplicates",
         "Find functions in `paths` that duplicate or closely resemble functions in a pre-built corpus (an `--export-functions` JSON from `find_dupes`). Returns a per-candidate JSON report: each input function, its top exact-cluster siblings, and its top fuzzy partners with similarity scores. Use to answer 'did I just write something that already exists?' during PR authoring or review.",
         {
-            "paths" => PropertySchema(_type = "string", description = "One or more .das files to compare against the corpus. Comma-separated list or glob (e.g. 'daslib/perf_lint.das' or 'src/foo/*.das'). Directories are not expanded — use a glob."),
+            "paths" => PropertySchema(_type = "string", description = "One or more .das files to compare against the corpus. Comma- or newline-delimited list, or a glob (e.g. 'daslib/perf_lint.das' or 'src/foo/*.das'). Directories are not expanded — use a glob. Newline support lets `git diff --name-only` output be piped in directly."),
             "corpus" => PropertySchema(_type = "string", description = "Path to a corpus.json produced by `find_dupes --export-functions`. Records whose `file` matches a `paths` entry are dropped from the corpus and replaced by the freshly-compiled version (so the candidate file is compared against the rest of the world, not against itself)."),
             "threshold" => PropertySchema(_type = "string", description = "Fuzzy similarity floor 0..1 (default 0.7). Score is sqrt(jaccard × len_ratio)."),
             "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per function (default 8). Filters trivial wrappers."),
-            "top" => PropertySchema(_type = "string", description = "Top-N similar matches per candidate (default 5).")
+            "top" => PropertySchema(_type = "string", description = "Top-N similar matches per candidate (default 5)."),
+            "project" => PROJECT_PROP
         },
         ["paths", "corpus"]
     ))
@@ -569,7 +570,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
     } elif (tool_name == "lint") {
         return do_lint(arg1, project)
     } elif (tool_name == "find_duplicates") {
-        return do_find_duplicates(arg1, arg2, arg3, arg4, arg5)
+        return do_find_duplicates(arg1, arg2, arg3, arg4, arg5, project)
     } elif (tool_name == "live_status") {
         return do_live_status(arg1)
     } elif (tool_name == "live_error") {

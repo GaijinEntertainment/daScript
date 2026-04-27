@@ -33,15 +33,21 @@ def parse_int_default(s : string; default_val : int) : int {
 // resemble (or duplicate) functions already in the corpus. Output is
 // the per-candidate JSON shape: one entry per candidate function with
 // its top-N exact-cluster siblings and fuzzy partners.
+//
+// stdio transport reserves stdout for JSON-RPC, so every helper called
+// here must run in quiet mode — `read_import(..., quiet=true)` and
+// `compile_and_collect(..., quiet=true)`. Failure counts surface only
+// via the returned envelope.
 def public do_find_duplicates(paths : string; corpus : string;
                               threshold_str : string;
                               min_tokens_str : string;
-                              top_str : string) : string {
+                              top_str : string;
+                              project : string) : string {
     if (empty(corpus)) {
         return make_tool_result("find_duplicates: missing required 'corpus' parameter (path to a corpus.json produced by `find_dupes --export-functions`)", true)
     }
     if (empty(paths)) {
-        return make_tool_result("find_duplicates: missing required 'paths' parameter (one or more .das files, comma-separated or glob)", true)
+        return make_tool_result("find_duplicates: missing required 'paths' parameter (one or more .das files; comma- or newline-delimited, or a glob)", true)
     }
     let threshold = parse_float_default(threshold_str, 0.7f)
     let min_tokens = parse_int_default(min_tokens_str, 8)
@@ -56,39 +62,49 @@ def public do_find_duplicates(paths : string; corpus : string;
         return make_tool_result("find_duplicates: top must be >= 0, got {top}", true)
     }
 
+    // `parse_file_list` only splits on commas and globs, so normalize
+    // newlines first — supports `git diff --name-only ... | …` style input
+    // that the README documents.
+    let paths_normalized = paths |> replace("\n", ",")
     var files : array<string>
-    parse_file_list(paths, files)
+    parse_file_list(paths_normalized, files)
     if (empty(files)) {
         return make_tool_result("find_duplicates: no files matched: {paths}", true)
     }
-    // Build the candidate file set (normalized for comparison).
+    // Build the candidate file set (normalized for comparison) AND keep a
+    // sorted list for deterministic compile order — table key iteration is
+    // unordered, which would make compile order (and per-candidate report
+    // order) non-reproducible across runs.
     var against_files : table<string; void?>
+    var against_files_sorted : array<string>
     for (f in files) {
         let n = normalize_path(f)
         if (!key_exists(against_files, n)) {
             against_files |> insert(n, null)
+            against_files_sorted |> push(n)
         }
     }
+    sort(against_files_sorted)
 
     // Load the corpus. want_sigs=true because we need MinHash signatures
     // for fuzzy matching — both sides of every comparison must have one.
     var records : array<FuncRecord>
     var ierr : string
-    if (!read_import(corpus, records, true, min_tokens, ierr)) {
+    if (!read_import(corpus, records, true, min_tokens, ierr, true)) {
         return make_tool_result("find_duplicates: {ierr}", true)
     }
     let corpus_total = length(records)
     let dropped = drop_records_under_files(records, against_files)
 
     // Compile the candidate files in-process and tag the freshly-pushed
-    // records as candidates.
+    // records as candidates. Iterate the sorted list, not the table.
     var seen_loc : table<string; void?>
     var n_failed = 0
     var n_compiled = 0
     var failed_files : array<string>
-    for (af in keys(against_files)) {
+    for (af in against_files_sorted) {
         let before = length(records)
-        if (!compile_and_collect(af, records, seen_loc, false, false, true, min_tokens)) {
+        if (!compile_and_collect(af, records, seen_loc, false, false, true, min_tokens, true, project)) {
             n_failed++
             failed_files |> push(af)
             continue

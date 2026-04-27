@@ -185,6 +185,7 @@ def read_stdin_paths(var paths : array<string>) {
 def resolve_against_files(against : array<string>; from_stdin : bool;
                           var out_set : table<string; void?>) {
     var raw : array<string>
+    raw |> reserve(length(against))
     for (p in against) {
         raw |> push(p)
     }
@@ -403,7 +404,16 @@ def main() {
         var n_against_failed = 0
         var n_against_skipped = 0
         var n_against_compiled = 0
-        for (af in keys(against_files)) {
+        // Sort the candidate file list so compile-and-report order is
+        // deterministic across runs — `keys(table)` iteration order is
+        // unspecified, which would make the per-candidate output (and the
+        // exit-code-driven CI behavior of `--check`) non-reproducible.
+        var against_files_sorted : array<string>
+        for (k in keys(against_files)) {
+            against_files_sorted |> push(k)
+        }
+        sort(against_files_sorted)
+        for (af in against_files_sorted) {
             // Skip files already extracted (either via `-p` or, post-drop,
             // we already removed any that came from the corpus). Re-scan
             // current records to detect coverage.

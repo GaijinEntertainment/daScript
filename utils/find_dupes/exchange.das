@@ -125,9 +125,13 @@ def public load_baseline_canonicals(path : string; var canonicals : table<string
 }
 
 
+// `quiet=true` suppresses the "skipped N malformed records" warning print —
+// required when called from the MCP server, whose stdio transport reserves
+// stdout for JSON-RPC. Default false preserves CLI behavior.
 def public read_import(path : string; var records : array<FuncRecord>;
                        want_sigs : bool; min_tokens : int;
-                       var error : string&) : bool {
+                       var error : string&;
+                       quiet : bool = false) : bool {
     let text = fread(path)
     if (empty(text)) {
         error := "could not read file (empty or missing): {path}"
@@ -158,7 +162,7 @@ def public read_import(path : string; var records : array<FuncRecord>;
         derive_sig_and_count(rec, want_sigs, min_tokens)
         records |> emplace(rec)
     }
-    if (skipped > 0) {
+    if (skipped > 0 && !quiet) {
         print("warning: skipped {skipped} malformed function record(s) during import\n")
     }
     return true
