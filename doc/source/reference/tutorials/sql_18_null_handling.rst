@@ -170,3 +170,5 @@ to the outer success/failure wrapper:
     Full source: :download:`tutorials/sql/18-null_handling.das <../../../../tutorials/sql/18-null_handling.das>`
 
     Previous tutorial: :ref:`tutorial_sql_subqueries`
+
+    Next tutorial: :ref:`tutorial_sql_update`

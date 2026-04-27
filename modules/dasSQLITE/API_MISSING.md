@@ -30,7 +30,20 @@ The existing tutorials cover Create (02 INSERT) and Read (04 SELECT). They
 say nothing about Update, Delete, or Upsert — the other half of the four
 verbs every CRUD app needs.
 
-### 15-update — "change existing rows"
+### 15-update — "change existing rows" (**SHIPPED in chunk 6**)
+
+> **Update:** Shipped as tutorial 19 in chunk 6. Macro form named
+> `_sql_update` / `_sql_try_update` / `_sql_update_returning` /
+> `_sql_try_update_returning` (the `_sql_` prefix overrides the bare
+> `_update` from the strawman below). Function form: `update(row)` /
+> `try_update(row)`. See [API_REWORK.md § "Shipped — chunk 6"] for the
+> implementation summary, [tutorials/sql/19-update.das] for the live
+> tutorial, and tests/dasSQLITE/test_43..45 for runtime coverage.
+> Open questions below remain accurate as **future** considerations:
+> optimistic concurrency tokens (deferred), bulk RETURNING projection
+> (deferred — post-process with `_select`), `exec` parameter binding
+> (deferred to a small follow-up chunk).
+
 
 **What it teaches.** `UPDATE` — three flavors. (a) Update one row by primary
 key: `UPDATE users SET email=? WHERE id=?`. (b) Update many rows matching a
@@ -127,7 +140,17 @@ expression into `$(_) => expr` and forward positionally.
   `_select`: `db |> _update_returning(...) |> _select(_.Name)`. Avoids
   yet-another-function-name like `update_returning_select`.
 
-### 16-delete — "remove rows"
+### 16-delete — "remove rows" (**SHIPPED in chunk 6**)
+
+> **Update:** Shipped as tutorial 20 in chunk 6. Macro form named
+> `_sql_delete` / `_sql_try_delete` / `_sql_delete_returning` /
+> `_sql_try_delete_returning`. Function form: `delete_(row)` /
+> `delete_by_id(type<T>, id)` plus `try_*` variants. The CASCADE FK
+> example from the original strawman is deferred to tutorial 23
+> (foreign keys), since `@sql_references` is chunk 8+ surface.
+> See [API_REWORK.md § "Shipped — chunk 6"] for the implementation
+> summary and tests/dasSQLITE/test_46..48 for runtime coverage.
+
 
 **What it teaches.** `DELETE` — by PK, by predicate, in bulk; observing
 ON DELETE CASCADE side effects through declared foreign keys.

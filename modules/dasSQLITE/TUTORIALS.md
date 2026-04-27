@@ -168,19 +168,26 @@ part re-uses the same [sql_table] from Part 1.
 
 The read story is complete. Now the write side.
 
-19. **UPDATE** — `db |> update(row)` for whole-row,
-    `_sql(..._update(...))` for partial/filtered updates, the
-    `_update_returning` / `update_returning` variants for RETURNING
-    clauses, `db |> changes()` for rows-affected counts. Introduces
-    the strict / `try_update` / `try_update_returning` fan-out on the
-    write side. Mockup: [15-update.das](tutorial-mockup/15-update.das.mockup).
-20. **DELETE** — `db |> delete_(row)` by PK,
-    `db |> delete_by_id(type<T>, id)` for the PK-only shortcut,
-    `_sql(..._delete())` for filtered deletes, `_delete_returning` /
-    `delete_returning` for RETURNING clauses, `db |> changes()` for
-    rows-affected counts. Strict / `try_delete_` /
-    `try_delete_by_id` / `try_delete_returning` fan-out. Mockup:
-    [16-delete.das](tutorial-mockup/16-delete.das.mockup).
+19. **UPDATE** — `db |> update(row)` for whole-row by-PK,
+    `_sql_update(type<T>, where, set)` for predicate-based bulk updates,
+    `_sql_update_returning` for RETURNING, `db |> changes()` for
+    rows-affected counts. Macro form carries the `_sql_` prefix so SQL
+    provenance stays visible at the call site. Strict / `try_update` /
+    `_sql_try_update` / `*_returning` / `_sql_try_*_returning` fan-out
+    on the write side. **Shipped:**
+    [tutorials/sql/19-update.das](../../tutorials/sql/19-update.das)
+    (chunk 6). Original mockup:
+    [15-update.das.mockup](tutorial-mockup/15-update.das.mockup).
+20. **DELETE** — `db |> delete_(row)` by PK (trailing underscore: `delete`
+    is a daslang keyword), `db |> delete_by_id(type<T>, id)` for the
+    PK-only shortcut, `_sql_delete(type<T>, where)` for predicate-based
+    bulk deletes, `_sql_delete_returning` for RETURNING, `db |> changes()`
+    for rows-affected counts. Strict / `try_delete_` / `try_delete_by_id`
+    / `_sql_try_delete` / `*_returning` / `_sql_try_*_returning` fan-out.
+    **Shipped:**
+    [tutorials/sql/20-delete.das](../../tutorials/sql/20-delete.das)
+    (chunk 6). Original mockup:
+    [16-delete.das.mockup](tutorial-mockup/16-delete.das.mockup).
 21. **UPSERT — INSERT ON CONFLICT** — `db |> upsert(row, on_conflict=…,
     do_update=…)` and the `array<T>` overload; `insert_or_ignore` /
     `insert_or_replace` as the no-update / clobber shortcuts;
@@ -188,14 +195,20 @@ The read story is complete. Now the write side.
     `@sql_unique` field annotation for declaring conflict keys without
     a full `[sql_index(unique=true)]`; strict / `try_insert_or_ignore`
     / `try_insert_or_replace` / `try_upsert` / `try_upsert_returning`
-    fan-out. Mockup: [17-upsert.das](tutorial-mockup/17-upsert.das.mockup).
-22. **Transactions** — `db |> with_transaction() <| $ { … }` block,
+    fan-out. **Deferred to chunk 7** (carries its own substantial
+    surface — the `_excluded` AST sentinel, multi-column conflict
+    targets, `@sql_unique`, four "INSERT OR X" variants, bulk overload).
+    Mockup: [17-upsert.das](tutorial-mockup/17-upsert.das.mockup).
+22. **Transactions** — `db |> with_transaction() { … }` block,
     `with_transaction(mode=…)` for IMMEDIATE / EXCLUSIVE, rollback on
-    panic/early return, nested transaction behavior, autocommit
-    default, `db |> in_transaction()` introspection, `try_transaction`
-    for explicit error handling. Inherited tutorials 12/13/14 are
-    merged into one conceptual tutorial per API_REWORK decision.
-    Mockup: [14-transaction.das](tutorial-mockup/14-transaction.das.mockup).
+    panic/early return, nested transaction behavior (automatic
+    SAVEPOINT fallback via `das_sp`), autocommit default,
+    `db |> in_transaction()` introspection, `try_transaction` for
+    explicit error handling. Inherited tutorials 12/13/14 are merged
+    into one conceptual tutorial per API_REWORK decision. **Shipped:**
+    [tutorials/sql/22-transactions.das](../../tutorials/sql/22-transactions.das)
+    (chunk 6). Original mockup:
+    [14-transaction.das.mockup](tutorial-mockup/14-transaction.das.mockup).
 
 ## Part 5 — Schema richness
 
@@ -362,10 +375,10 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 16 | `_left_join` — outer | `23-joins.das` | Has mockup (shared) |
 | 17 | Subqueries | `24-subqueries.das` | Has mockup |
 | 18 | NULL handling — `Option<T>` | `18-null_handling.das` (`25-null_handling.das.mockup` shipped largely as designed; `_.Col == none()` diagnostic + projection-side `unwrap_or` deferred) | **Shipped** (chunk 4) |
-| 19 | UPDATE | `15-update.das` | Has mockup |
-| 20 | DELETE | `16-delete.das` | Has mockup |
-| 21 | UPSERT | `17-upsert.das` | Has mockup |
-| 22 | Transactions | `14-transaction.das` | Has mockup |
+| 19 | UPDATE | `15-update.das` | **Shipped** (chunk 6); macros named `_sql_update` / `_sql_try_update` / `_sql_update_returning` / `_sql_try_update_returning`; raw `exec` parameter binding deferred to a later chunk |
+| 20 | DELETE | `16-delete.das` | **Shipped** (chunk 6); macros named `_sql_delete` / `_sql_try_delete` / `_sql_delete_returning` / `_sql_try_delete_returning`; CASCADE FK example deferred to tut 23 |
+| 21 | UPSERT | `17-upsert.das` | Has mockup — deferred to chunk 7 (the `_excluded` AST sentinel, multi-column conflict targets, `@sql_unique`, INSERT OR IGNORE/REPLACE shortcuts, bulk overload all carry their own surface) |
+| 22 | Transactions | `14-transaction.das` | **Shipped** (chunk 6); two-arity overload, `SqliteTxnMode` enum (Deferred/Immediate/Exclusive), savepoint nesting via `das_sp` name |
 | 23 | Foreign keys | `26-foreign_keys.das` | Has mockup |
 | 24 | Indexes | `27-indexes.das` | Has mockup |
 | 25 | Defaults + computed | `28-defaults_computed.das` | Has mockup |

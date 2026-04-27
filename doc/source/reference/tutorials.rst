@@ -307,6 +307,9 @@ Run any tutorial from the project root::
    tutorials/sql_16_left_join.rst
    tutorials/sql_17_subqueries.rst
    tutorials/sql_18_null_handling.rst
+   tutorials/sql_19_update.rst
+   tutorials/sql_20_delete.rst
+   tutorials/sql_22_transactions.rst
 
 .. _tutorials_dasaudio:
 
