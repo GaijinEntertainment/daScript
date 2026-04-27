@@ -300,8 +300,12 @@ Run any tutorial from the project root::
    tutorials/sql_10_order_by.rst
    tutorials/sql_11_take_skip.rst
    tutorials/sql_12_distinct.rst
+   tutorials/sql_12b_set_ops.rst
    tutorials/sql_13_aggregates.rst
    tutorials/sql_14_group_by.rst
+   tutorials/sql_15_join.rst
+   tutorials/sql_16_left_join.rst
+   tutorials/sql_17_subqueries.rst
    tutorials/sql_18_null_handling.rst
 
 .. _tutorials_dasaudio:
