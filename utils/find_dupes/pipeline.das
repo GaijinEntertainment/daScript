@@ -75,6 +75,41 @@ def public collect_from_program(program : ProgramPtr; source_file : string; var 
 }
 
 
+// Drop records whose `file` matches any path in `against_files` (paths
+// must already be normalized via `normalize_path`). Used after loading
+// a corpus when --against / candidate-mode is active, to override "the
+// old version of this file" with the freshly-compiled one. Returns the
+// count of dropped records.
+def public drop_records_under_files(var records : array<FuncRecord>;
+                                    against_files : table<string; void?>) : int {
+    var kept : array<FuncRecord>
+    kept |> reserve(length(records))
+    var dropped = 0
+    for (r in records) {
+        if (key_exists(against_files, normalize_path(r.ref.file))) {
+            dropped++
+            continue
+        }
+        kept |> push_clone(r)
+    }
+    records <- kept
+    return dropped
+}
+
+
+// Collect MemberRefs of all candidate records — used to feed the
+// per-candidate report writer.
+def public collect_candidate_refs(records : array<FuncRecord>) : array<MemberRef> {
+    var out : array<MemberRef>
+    for (r in records) {
+        if (r.is_candidate) {
+            out |> push(r.ref)
+        }
+    }
+    return <- out
+}
+
+
 def public compile_and_collect(file : string; var records : array<FuncRecord>; var seen_loc : table<string; void?>; verbose : bool; lambdas_only : bool; want_sigs : bool; min_tokens : int) : bool {
     var inscope access <- make_file_access("")
     var ok_compile = true

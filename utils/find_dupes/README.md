@@ -45,6 +45,12 @@ Flags:
 | `--export-functions` | (off) | Write all extracted functions to a JSON file and exit before clustering |
 | `--import-functions` | (off) | Load functions from a JSON file (produced by `--export-functions`) instead of compiling. Mutually exclusive with `--path` and `--export-functions` |
 | `-v / --verbose` | off | Per-file progress |
+| `--baseline` | (off) | B1: load corpus JSON; tag records whose canonical isn't in the baseline as candidates and filter to those |
+| `--baseline-strict` | off | B1 modifier: also drop clusters whose canonical exists in the baseline (only fully-new clusters survive) |
+| `--against` | (off) | B2 candidate path (file or directory). Repeatable. Compiled in-process; their functions are tagged candidates and the report is filtered |
+| `--against-from-stdin` | off | B2: read newline-delimited candidate paths from stdin (use with `git diff --name-only … \| find_dupes --against-from-stdin …`) |
+| `--check` | off | Exit non-zero when the post-filter report contains any clusters/pairs (CI gate) |
+| `--flat` | off | In `--against` mode, force the flat clusters+pairs writer (default is the per-candidate rollup) |
 | `-?` | | Help |
 
 `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das` are skipped automatically — the latter two install thread-local debug agents at compile time, which would abort the scanner on second use.
@@ -128,10 +134,53 @@ The on-disk schema is a small envelope:
 
 MinHash signatures are not included — they're recomputed on import (deterministic and cheap). On import, `--no-fuzzy` and `--min-tokens` apply just like in the compile path.
 
+## Modes
+
+The flat report from `-p` is the firehose — useful once on a new corpus to
+calibrate, less useful day-to-day. Two filtered modes are layered on top
+via a single `is_candidate` flag inside `FuncRecord`. A cluster or fuzzy
+pair is **kept** iff at least one of its members is a candidate.
+
+### B1 — baseline diff (CI gate)
+
+Snapshot the corpus once, commit the JSON, and on every PR re-scan + diff.
+
+```sh
+# one-off: build the baseline (commit this)
+./bin/daslang utils/find_dupes/main.das -- -p tests --export-functions tests_baseline.json
+
+# CI: scan again, surface only what isn't in the baseline
+./bin/daslang utils/find_dupes/main.das -- -p tests --baseline tests_baseline.json --check
+```
+
+A cluster appears in the report if (a) its canonical is brand-new (no record in the baseline had it), or (b) it gained a new member. Use `--baseline-strict` to drop case (b) — only new clusters survive. Pairs aren't strict-filtered (the baseline doesn't carry MinHash signatures), so strict is cluster-only.
+
+`--check` turns the filtered report into a CI gate — non-zero exit when any cluster or pair survives the filter.
+
+### B2 — PR-files / interactive
+
+"Did I just write something that already exists?" Compare a file list against a pre-built corpus:
+
+```sh
+./bin/daslang utils/find_dupes/main.das -- \
+    --import-functions tests_baseline.json --against tests/strings/new_helper.das
+
+# git pipeline:
+git diff --name-only master | grep '\.das$' | \
+    ./bin/daslang utils/find_dupes/main.das -- \
+        --import-functions tests_baseline.json --against-from-stdin
+```
+
+When `--against` and `--import-functions` are both set, corpus records whose `file` matches any candidate path are dropped first, then the candidate is freshly compiled — so the file is compared against the rest of the world, never against its own stale copy in the baseline. Look for the `dropped N corpus records overridden` line.
+
+The default writer in `--against` mode is a per-candidate rollup ("for each function in the focus set, here are its top siblings"). Use `--flat` to revert to the legacy clusters+pairs view.
+
+### MCP integration
+
+The `find_duplicates` tool in the [daslang MCP server](../mcp/) wraps B2 mode for AI assistants. Pass `paths` (newline- or comma-delimited, or a glob) and `corpus` (the JSON from `--export-functions`); receive a per-candidate JSON envelope. Used by Claude Code et al. during PR review.
+
 ## Out of scope
 
 - LSH / banding (4.4K² is fine; revisit at >50K functions).
 - Embedding-based similarity (would need an external service).
 - Auto-fix or refactor suggestions — discovery only.
-- CI integration — first read what it finds; promote findings to lint
-  rules later.

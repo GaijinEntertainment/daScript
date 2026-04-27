@@ -34,6 +34,7 @@ require tools/grep_usage public
 require tools/outline public
 require tools/aot public
 require tools/lint_tool public
+require tools/find_duplicates public
 require tools/live public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -423,6 +424,18 @@ def handle_tools_list(id_json : string) : string {
         ["file"]
     ))
     result.tools |> emplace(make_tool(
+        "find_duplicates",
+        "Find functions in `paths` that duplicate or closely resemble functions in a pre-built corpus (an `--export-functions` JSON from `find_dupes`). Returns a per-candidate JSON report: each input function, its top exact-cluster siblings, and its top fuzzy partners with similarity scores. Use to answer 'did I just write something that already exists?' during PR authoring or review.",
+        {
+            "paths" => PropertySchema(_type = "string", description = "One or more .das files to compare against the corpus. Comma-separated list or glob (e.g. 'daslib/perf_lint.das' or 'src/foo/*.das'). Directories are not expanded — use a glob."),
+            "corpus" => PropertySchema(_type = "string", description = "Path to a corpus.json produced by `find_dupes --export-functions`. Records whose `file` matches a `paths` entry are dropped from the corpus and replaced by the freshly-compiled version (so the candidate file is compared against the rest of the world, not against itself)."),
+            "threshold" => PropertySchema(_type = "string", description = "Fuzzy similarity floor 0..1 (default 0.7). Score is sqrt(jaccard × len_ratio)."),
+            "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per function (default 8). Filters trivial wrappers."),
+            "top" => PropertySchema(_type = "string", description = "Top-N similar matches per candidate (default 5).")
+        },
+        ["paths", "corpus"]
+    ))
+    result.tools |> emplace(make_tool(
         "live_status",
         "Get status of a running daslang-live instance (fps, uptime, paused, dt, has_error). Returns 503 JSON with compilation error if the script failed to compile.",
         { "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)") },
@@ -555,6 +568,8 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, project : string) : s
         return do_aot(arg1, arg2, project)
     } elif (tool_name == "lint") {
         return do_lint(arg1, project)
+    } elif (tool_name == "find_duplicates") {
+        return do_find_duplicates(arg1, arg2, arg3, arg4, arg5)
     } elif (tool_name == "live_status") {
         return do_live_status(arg1)
     } elif (tool_name == "live_error") {
@@ -730,6 +745,18 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
+    } elif (name == "find_duplicates") {
+        arg1 = get_string_arg(args, "paths")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
+        }
+        arg2 = get_string_arg(args, "corpus")
+        if (empty(arg2)) {
+            return json_rpc_error(id_json, -32602, "missing 'corpus' argument")
+        }
+        arg3 = get_string_arg(args, "threshold")
+        arg4 = get_string_arg(args, "min_tokens")
+        arg5 = get_string_arg(args, "top")
     } elif (name == "live_status") {
         arg1 = get_string_arg(args, "port")
     } elif (name == "live_error") {

@@ -91,6 +91,40 @@ def is_well_formed(ef : ExportedFunction) : bool {
 }
 
 
+// Read an exported envelope and project it down to the set of canonical
+// strings. Used by --baseline mode to identify "what already exists" so
+// new records can be tagged as candidates. The set is keyed on the
+// canonical text — same key exact_buckets buckets on — so two functions
+// with identical canonicals collapse to one entry, matching the
+// exact-cluster equivalence relation.
+def public load_baseline_canonicals(path : string; var canonicals : table<string; void?>;
+                                    var error : string&) : bool {
+    let text = fread(path)
+    if (empty(text)) {
+        error := "could not read baseline file (empty or missing): {path}"
+        return false
+    }
+    var env = ExportEnvelope()
+    if (!sscan_json(text, env)) {
+        error := "could not parse baseline JSON: {path}"
+        return false
+    }
+    if (env.schema_version != EXCHANGE_SCHEMA_VERSION) {
+        error := "unsupported baseline schema_version {env.schema_version} (expected {EXCHANGE_SCHEMA_VERSION}): {path}"
+        return false
+    }
+    for (ef in env.functions) {
+        if (empty(ef.canonical)) {
+            continue
+        }
+        if (!key_exists(canonicals, ef.canonical)) {
+            canonicals |> insert(ef.canonical, null)
+        }
+    }
+    return true
+}
+
+
 def public read_import(path : string; var records : array<FuncRecord>;
                        want_sigs : bool; min_tokens : int;
                        var error : string&) : bool {

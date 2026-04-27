@@ -19,6 +19,12 @@ struct public FuncRecord {
     sig : array<uint64>
     token_count : int
     cluster_id : int = -1
+    // Set true on records that came from the user's "focus set"
+    // (e.g. PR files, or new functions vs. a baseline). When any
+    // record is flagged, exact_buckets and fuzzy_pairs filter their
+    // output to only entries that include at least one candidate.
+    // Runtime/derived flag — never serialized in ExportedFunction.
+    is_candidate : bool = false
 }
 
 
@@ -44,7 +50,8 @@ struct public FuzzyPair {
 //
 // Bucket on the canonical string itself (not its 64-bit hash) so a
 // rare hash collision can't conflate two unrelated functions.
-def public exact_buckets(var records : array<FuncRecord>; min_tokens : int) : array<Cluster> {
+def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
+                         filter_candidates : bool = false) : array<Cluster> {
     var buckets : table<string; array<int>>
     for (i in range(length(records))) {
         if (records[i].token_count < min_tokens) {
@@ -69,12 +76,27 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int) : ar
         c.canonical_sample := records[idxs[0]].canonical
         c.token_count = records[idxs[0]].token_count
         c.members |> reserve(length(idxs))
+        var cluster_has_candidate = false
         for (i in idxs) {
+            // Always assign cluster_id, even for clusters we'll drop —
+            // fuzzy_pairs uses cluster_id to skip same-canonical pairs,
+            // and that semantics shouldn't depend on the filter.
             records[i].cluster_id = cluster_idx
             c.members |> push(records[i].ref)
+            if (records[i].is_candidate) {
+                cluster_has_candidate = true
+            }
+        }
+        cluster_idx++
+        // Drop clusters with no candidate members ONLY when the caller
+        // requested filtering. Auto-detecting "any candidate exists"
+        // would silently fall back to legacy mode in baseline runs
+        // where genuinely zero records are new (e.g. CI on an unchanged
+        // branch), which is the wrong default for a CI gate.
+        if (filter_candidates && !cluster_has_candidate) {
+            continue
         }
         out |> emplace(c)
-        cluster_idx++
     }
     return <- out
 }
@@ -88,47 +110,84 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int) : ar
 // boilerplate block repeated N times) has a tiny shingle set, so 4x
 // and 7x repetitions both estimate Jaccard = 1.0 even though they're
 // not the same function. Gate the report on a length ratio too.
-def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_tokens : int) : array<FuzzyPair> {
+// Inner-body helper: the per-pair filtering and emit logic, shared by
+// the legacy O(N²) loop and the candidate-restricted loop. `lo` and
+// `hi` must satisfy lo < hi so the emitted pair's (a, b) ordering
+// matches the legacy report.
+def fuzzy_emit_if_match(records : array<FuncRecord>; lo : int; hi : int;
+                        threshold : float; min_tokens : int;
+                        var out : array<FuzzyPair>) {
+    if (records[lo].token_count < min_tokens || records[hi].token_count < min_tokens) {
+        return
+    }
+    if (records[lo].cluster_id != -1 && records[lo].cluster_id == records[hi].cluster_id) {
+        return
+    }
+    // Same canonical text would already be in the exact-cluster set
+    // (caught above when both have a cluster_id). Compare on the string
+    // itself rather than the 64-bit hash to dodge any theoretical
+    // collision.
+    if (records[lo].canonical == records[hi].canonical) {
+        return
+    }
+    let tl = float(records[lo].token_count)
+    let th = float(records[hi].token_count)
+    let len_ratio = tl < th ? tl / th : th / tl
+    if (len_ratio < threshold) {
+        return
+    }
+    let s = jaccard_estimate(records[lo].sig, records[hi].sig)
+    // Geometric mean of MinHash similarity and length similarity:
+    // periodic code with very different lengths drops out.
+    let combined = sqrt(s * len_ratio)
+    if (combined >= threshold) {
+        var p = FuzzyPair()
+        p.similarity = combined
+        p.a = records[lo].ref
+        p.b = records[hi].ref
+        p.canonical_a := records[lo].canonical
+        p.canonical_b := records[hi].canonical
+        out |> emplace(p)
+    }
+}
+
+
+def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_tokens : int;
+                       filter_candidates : bool = false) : array<FuzzyPair> {
     var out : array<FuzzyPair>
     out |> reserve(64)
     let n = length(records)
-    for (i in range(n)) {
-        if (records[i].token_count < min_tokens) {
-            continue
+    if (!filter_candidates) {
+        for (i in range(n)) {
+            for (j in range(i + 1, n)) {
+                fuzzy_emit_if_match(records, i, j, threshold, min_tokens, out)
+            }
         }
-        for (j in range(i + 1, n)) {
-            if (records[j].token_count < min_tokens) {
+        return <- out
+    }
+    // Candidate-restricted path: outer iterates flagged records only,
+    // inner iterates all. Saves O(N²) → O(K·N) when K = |candidates|
+    // << N. Dedup rule: when both endpoints are candidates, only emit
+    // during the iteration whose outer index is smaller — `candidate_indices`
+    // is built in ascending order, so when records[j].is_candidate &&
+    // j < i, the pair was already emitted at iteration j.
+    var candidate_indices : array<int>
+    for (i in range(n)) {
+        if (records[i].is_candidate) {
+            candidate_indices |> push(i)
+        }
+    }
+    for (i in candidate_indices) {
+        for (j in range(n)) {
+            if (j == i) {
                 continue
             }
-            if (records[i].cluster_id != -1 && records[i].cluster_id == records[j].cluster_id) {
+            if (records[j].is_candidate && j < i) {
                 continue
             }
-            // Same canonical text would already be in the exact-cluster
-            // set (caught above when both have a cluster_id). Compare on
-            // the string itself rather than the 64-bit hash to dodge any
-            // theoretical collision.
-            if (records[i].canonical == records[j].canonical) {
-                continue
-            }
-            let ti = float(records[i].token_count)
-            let tj = float(records[j].token_count)
-            let len_ratio = ti < tj ? ti / tj : tj / ti
-            if (len_ratio < threshold) {
-                continue
-            }
-            let s = jaccard_estimate(records[i].sig, records[j].sig)
-            // Geometric mean of MinHash similarity and length similarity:
-            // periodic code with very different lengths drops out.
-            let combined = sqrt(s * len_ratio)
-            if (combined >= threshold) {
-                var p = FuzzyPair()
-                p.similarity = combined
-                p.a = records[i].ref
-                p.b = records[j].ref
-                p.canonical_a := records[i].canonical
-                p.canonical_b := records[j].canonical
-                out |> emplace(p)
-            }
+            let lo = i < j ? i : j
+            let hi = i < j ? j : i
+            fuzzy_emit_if_match(records, lo, hi, threshold, min_tokens, out)
         }
     }
     return <- out
