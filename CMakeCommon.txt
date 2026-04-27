@@ -135,6 +135,12 @@ MACRO(SETUP_COMPILER)
 	ELSEIF(APPLE)
 		ADD_DEFINITIONS(-DITS_PLATFORM_APPLE=1)
 		ADD_DEFINITIONS(-Wall -Wextra -pedantic)
+		# Treat signed integer overflow as two's-complement wrap.
+		# daslang signed arithmetic is defined to wrap. AOT lowers it to plain C++
+		# `int * int` / `int + int`, which is UB at the C++ level and AppleClang 21+
+		# exploits it (e.g. the LCG step in daslib/random.das becomes miscompiled).
+		# -fwrapv makes the C++ output faithfully match daslang's semantics.
+		ADD_COMPILE_OPTIONS(-fwrapv)
 		# UNCOMMENT FOR ASAN
 		# ADD_DEFINITIONS("-fsanitize=thread")
 		# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
