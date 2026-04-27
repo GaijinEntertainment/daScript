@@ -16,8 +16,9 @@ def case_generic_called(a, b : auto(T)) : T {
 
 
 // Generic template that is NEVER called — stays in `module->generics`
-// only. `for_each_function` (used by find_dupes) does not iterate that
-// list, so this function is currently invisible to the tool.
+// only. Was invisible to the tool before `collect_from_program` started
+// walking `for_each_generic` alongside `for_each_function`; the
+// `test_generics_uncalled_visible` regression test pins that fix.
 def case_generic_uncalled(a, b : auto(T)) : T {
     return a + b
 }

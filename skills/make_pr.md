@@ -33,6 +33,37 @@ git diff --name-only master -- '*.das' | xargs bin/Release/daslang.exe utils/lin
 
 Fix significant issues (unused variables that indicate bugs, performance warnings in hot paths). Use `// nolint:CODE` comments to suppress false positives (LINT001-004, PERF001-011, STYLE001-010). Minor lint warnings in unchanged code can be ignored unless trivial to fix.
 
+## 1.5. Check for duplicates against the corpus
+
+Run `find_dupes` against the **changed `.das` files only**, with a pre-built corpus of the rest of the tree. This is the "did I just write something that already exists?" check — catches structural copy-paste before review.
+
+```bash
+# One-off: build the corpus over the rest of the tree (re-build occasionally as the codebase drifts)
+bin/Release/daslang.exe utils/find_dupes/main.das -- -p daslib -p tests -p utils --export-functions /tmp/corpus.json
+
+# Per-PR: compare the diff against the corpus
+git diff --name-only origin/master..HEAD -- '*.das' | \
+  bin/Release/daslang.exe utils/find_dupes/main.das -- \
+    --import-functions /tmp/corpus.json --against-from-stdin
+```
+
+Or via MCP (preferred when available):
+
+```
+mcp__daslang__export_corpus(paths="daslib,tests,utils", out="/tmp/corpus.json")
+mcp__daslang__find_duplicates(paths="<git-diff list>", corpus="/tmp/corpus.json")
+```
+
+**Triage policy:**
+- **Exact match (similarity 1.0)** with an existing function — almost always a real concern. Either (a) reuse the existing one, (b) document why a sibling is needed, or (c) extract a shared helper.
+- **Fuzzy ≥0.85** — eyeball both. Often a refactor target (siblings that should share a private helper).
+- **Fuzzy 0.7–0.85** — usually noise (tutorial-shape similarity, "open DB → query → print" patterns). Scan but don't treat as blocking.
+- **Pattern-skipped** (`visitor`, `dispatch`, `emit`) — already filtered; no action.
+
+Skip this step for PRs that only touch tests, fixtures, or generated files.
+
+See `skills/find_dupes.md` for the full workflow including B1 baseline / CI gate modes.
+
 ## 2. Run all tests
 
 ```bash
@@ -194,7 +225,14 @@ Pick a cadence — either ping the user when something interesting happens, or u
 - `gh api repos/<owner>/<repo>/pulls/<PR>/comments` — inline review comments
 - `gh api repos/<owner>/<repo>/pulls/<PR>/reviews` — review-level state (`COMMENTED` / `CHANGES_REQUESTED` / `APPROVED`)
 
-When CI is green AND Copilot has left a `COMMENTED`-state review (or a human approved), surface and stop polling — there's something to react to.
+**Wait for whichever comes first** — Copilot review OR CI completion. Copilot usually returns in ~5 minutes; the full CI matrix takes 20-30 minutes. Don't wait for the slower one when the faster one already gives you something to act on.
+
+Cadence guidance:
+- **First poll: ~5 minutes.** Copilot review almost always lands by then. If both Copilot has left `COMMENTED` AND CI has visible progress, surface and stop.
+- **If Copilot done, CI still pending:** triage the comments and start fixing while CI grinds on the rest of the matrix. Re-poll CI on amend/force-push.
+- **If Copilot still pending after 5 min:** poll again at ~10 min. Rare, but happens on long diffs.
+
+Stop polling and surface as soon as: (a) Copilot has left a `COMMENTED`-state review (something to react to), (b) any CI check has gone red (something to fix), or (c) CI is fully green AND Copilot is done.
 
 ### 7b. CI failure handling
 

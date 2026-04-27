@@ -74,7 +74,7 @@ Currently shipped patterns:
 Pattern detection lives in `patterns.das`. Adding a new pattern is a three-step change:
 
 1. Add a `try_<name>(name?, canonical, var hit) : bool` predicate that returns `true` and populates `hit.name` / `hit.note` when matched. Body-shape matchers take only the canonical; name-shape matchers take both. Match order in `classify()` is name-first, then body-shape (more specific → more general).
-2. Add the call to `classify()` in priority order (more specific shapes first).
+2. Wire it into `classify(name, canonical)` in priority order (more specific shapes first; name-based matchers usually win over body-shape matchers).
 3. Add at least one positive test and one negative test in `test_find_dupes.das` (under `── patterns / classify ──`).
 
 Pattern names are the user-visible contract — they appear in `--keep`, in the per-record `--verbose` skip log, and in the summary line. Pick a short, stable identifier.

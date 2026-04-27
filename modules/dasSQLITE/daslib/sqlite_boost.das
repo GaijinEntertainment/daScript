@@ -410,10 +410,15 @@ def private try_one_row(db : SqlRunner; sql : string;
                         bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                         row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
                         err_prefix : string) : Result<TT -const -#, string> {
+    // Error format is normalized to `{err_prefix}: <what>` across all
+    // three failure paths. The pre-refactor inlined messages were
+    // inconsistent (`query_one: step failed` had a colon,
+    // `_sql step failed` did not — likewise for `prepare failed`); the
+    // unified shape replaces both. No consumers parse these strings.
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
-        let msg = "{err_prefix} prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
         return err(msg, type<TT -const -#>)
     }
@@ -424,7 +429,7 @@ def private try_one_row(db : SqlRunner; sql : string;
         return err("{err_prefix}: expected one row, got 0 rows", type<TT -const -#>)
     }
     if (src != SQLITE_ROW) {
-        let msg = "{err_prefix} step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
         return err(msg, type<TT -const -#>)
     }

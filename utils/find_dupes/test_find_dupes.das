@@ -1220,11 +1220,16 @@ def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
 
 // ── generics visibility (fixture/generics_cases.das) ─────────────────
 //
-// pipeline.das uses `for_each_function` which walks `module->functions`
-// only. Reified instances of called generics land there, so they ARE
-// visible (deduped per source line). Uncalled generic templates live
-// only in `module->generics` and are silently dropped — that's the gap.
-// `for_each_generic` (or `visit_with_generics`) is the matching API.
+// pipeline.das walks BOTH `for_each_generic` (templates) AND
+// `for_each_function` (reified instances) so generics are visible
+// regardless of whether they're called. The walk order matters: the
+// generics pass runs first, so a called generic is recorded under its
+// source-level name (the unmangled template wins the per-source-line
+// `seen_loc` dedup against the reified `` `name`<hash> `` copies).
+//
+// Historical gap: pre-fix, only `for_each_function` was walked, so
+// uncalled generics were invisible and called generics surfaced under
+// the mangled symbol. The tests below pin both directions.
 
 let GENERICS_FIXTURE = "utils/find_dupes/fixture/generics_cases.das"
 
