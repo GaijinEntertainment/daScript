@@ -5,6 +5,8 @@ options no_unused_block_arguments = false
 
 require common public
 require daslib/fio
+require daslib/strings_convert
+require daslib/result
 
 
 // `export_corpus` shells out to `daslang utils/detect-dupe/main.das`
@@ -48,7 +50,15 @@ def public do_export_corpus(paths : string; out : string;
         cmd += " -p \"{resolve_path(s)}\""
     }
     if (!empty(min_tokens_str)) {
-        cmd += " --min-tokens {min_tokens_str}"
+        let parsed = try_to_int(min_tokens_str)
+        if (is_err(parsed)) {
+            return make_tool_result("export_corpus: 'min_tokens' must be a non-negative integer (got '{min_tokens_str}')", true)
+        }
+        let n = unwrap(parsed)
+        if (n < 0) {
+            return make_tool_result("export_corpus: 'min_tokens' must be >= 0 (got {n})", true)
+        }
+        cmd += " --min-tokens {n}"
     }
     var output : string
     let exit_code = run_and_capture(cmd, output, 0.0)

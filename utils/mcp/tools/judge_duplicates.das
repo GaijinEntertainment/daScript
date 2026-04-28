@@ -5,6 +5,8 @@ options no_unused_block_arguments = false
 
 require common public
 require daslib/fio
+require daslib/strings_convert
+require daslib/result
 
 // Subprocess dispatch: the find-dupe judge requires the `anthropic/anthropic`
 // daspkg, which isn't linked into the MCP server's daslang process. Calling
@@ -75,6 +77,9 @@ def public run_find_dupe_judge(input_path : string;
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
+    }
+    if (!(empty(model) || model == "haiku" || model == "sonnet")) {
+        return make_tool_result("judge_duplicates: 'model' must be 'haiku' or 'sonnet' (got '{model}')", true)
     }
     if (empty(input_path)) {
         return make_tool_result("judge_duplicates: missing required 'input' parameter (path to detect-dupe JSON report)", true)
@@ -150,7 +155,17 @@ def public do_judge_duplicates(input_path : string;
                                max_clusters_str : string;
                                positives_only_str : string;
                                dry_run_str : string) : string {
-    let max_clusters = empty(max_clusters_str) ? 0 : to_int(max_clusters_str)
+    var max_clusters = 0
+    if (!empty(max_clusters_str)) {
+        let parsed = try_to_int(max_clusters_str)
+        if (is_err(parsed)) {
+            return make_tool_result("judge_duplicates: 'max_clusters' must be a non-negative integer (got '{max_clusters_str}')", true)
+        }
+        max_clusters = unwrap(parsed)
+        if (max_clusters < 0) {
+            return make_tool_result("judge_duplicates: 'max_clusters' must be >= 0 (got {max_clusters})", true)
+        }
+    }
     let positives_only = positives_only_str == "true" || positives_only_str == "1"
     let dry_run = dry_run_str == "true" || dry_run_str == "1"
     return run_find_dupe_judge(input_path, out_dir, model, 8, max_clusters,

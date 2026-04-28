@@ -5,6 +5,8 @@ options no_unused_block_arguments = false
 
 require common public
 require daslib/fio
+require daslib/strings_convert
+require daslib/result
 
 
 // `detect_duplicates` shells out to `daslang utils/detect-dupe/main.das`
@@ -56,19 +58,47 @@ def public do_detect_duplicates(paths : string; corpus : string;
         cmd += " --against \"{resolve_path(f)}\""
     }
     if (!empty(threshold_str)) {
-        cmd += " -t {threshold_str}"
+        let parsed = try_to_float(threshold_str)
+        if (is_err(parsed)) {
+            return make_tool_result("detect_duplicates: 'threshold' must be a number in [0, 1] (got '{threshold_str}')", true)
+        }
+        let t = unwrap(parsed)
+        if (t < 0.0 || t > 1.0) {
+            return make_tool_result("detect_duplicates: 'threshold' must be in [0, 1] (got {t})", true)
+        }
+        cmd += " -t {t}"
     }
     if (!empty(min_tokens_str)) {
-        cmd += " --min-tokens {min_tokens_str}"
+        let parsed = try_to_int(min_tokens_str)
+        if (is_err(parsed)) {
+            return make_tool_result("detect_duplicates: 'min_tokens' must be a non-negative integer (got '{min_tokens_str}')", true)
+        }
+        let n = unwrap(parsed)
+        if (n < 0) {
+            return make_tool_result("detect_duplicates: 'min_tokens' must be >= 0 (got {n})", true)
+        }
+        cmd += " --min-tokens {n}"
     }
     if (!empty(top_str)) {
-        cmd += " -n {top_str}"
+        let parsed = try_to_int(top_str)
+        if (is_err(parsed)) {
+            return make_tool_result("detect_duplicates: 'top' must be a positive integer (got '{top_str}')", true)
+        }
+        let n = unwrap(parsed)
+        if (n < 1) {
+            return make_tool_result("detect_duplicates: 'top' must be >= 1 (got {n})", true)
+        }
+        cmd += " -n {n}"
     }
     if (!empty(keep_str)) {
         for (k in split_by_chars(keep_str, ", \t\n")) {
-            if (!empty(k)) {
-                cmd += " -k {k}"
+            if (empty(k)) {
+                continue
             }
+            if (!(k == "all" || k == "visitor" || k == "dispatch" || k == "emit")) {
+                return make_tool_result("detect_duplicates: 'keep' token must be one of all/visitor/dispatch/emit (got '{k}')", true)
+            }
+            cmd += " -k {k}"
         }
     }
     var output : string

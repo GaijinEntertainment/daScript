@@ -5,6 +5,8 @@ options no_unused_block_arguments = false
 
 require common public
 require daslib/fio
+require daslib/strings_convert
+require daslib/result
 require judge_duplicates
 
 
@@ -37,8 +39,33 @@ def public do_find_dupe(paths : string;
     if (!detect_dupe_st.is_valid || !detect_dupe_st.is_reg) {
         return make_tool_result("find_dupe: utils/detect-dupe/main.das not found at {detect_dupe_main}", true)
     }
+    if (!(empty(model) || model == "haiku" || model == "sonnet")) {
+        return make_tool_result("find_dupe: 'model' must be 'haiku' or 'sonnet' (got '{model}')", true)
+    }
     let dry_run = dry_run_str == "true" || dry_run_str == "1"
-    let max_clusters = empty(max_clusters_str) ? 0 : to_int(max_clusters_str)
+    var max_clusters = 0
+    if (!empty(max_clusters_str)) {
+        let parsed = try_to_int(max_clusters_str)
+        if (is_err(parsed)) {
+            return make_tool_result("find_dupe: 'max_clusters' must be a non-negative integer (got '{max_clusters_str}')", true)
+        }
+        max_clusters = unwrap(parsed)
+        if (max_clusters < 0) {
+            return make_tool_result("find_dupe: 'max_clusters' must be >= 0 (got {max_clusters})", true)
+        }
+    }
+    var threshold_arg = ""
+    if (!empty(threshold_str)) {
+        let parsed = try_to_float(threshold_str)
+        if (is_err(parsed)) {
+            return make_tool_result("find_dupe: 'threshold' must be a number in [0, 1] (got '{threshold_str}')", true)
+        }
+        let t = unwrap(parsed)
+        if (t < 0.0 || t > 1.0) {
+            return make_tool_result("find_dupe: 'threshold' must be in [0, 1] (got {t})", true)
+        }
+        threshold_arg = " -t {t}"
+    }
     var resolved_out = resolve_path(empty(out_dir) ? "{get_das_root()}/_mcp_find_dupe_{ref_time_ticks()}" : out_dir)
     mkdir(resolved_out)
     let dupes_json = path_join(resolved_out, "dupes.json")
@@ -48,9 +75,7 @@ def public do_find_dupe(paths : string;
         stage1_cmd += " -p \"{resolve_path(f)}\""
     }
     stage1_cmd += " --json \"{dupes_json}\""
-    if (!empty(threshold_str)) {
-        stage1_cmd += " -t {threshold_str}"
-    }
+    stage1_cmd += threshold_arg
     var stage1_out : string
     let stage1_rc = run_and_capture(stage1_cmd, stage1_out, 0.0)
     if (stage1_rc != 0) {
