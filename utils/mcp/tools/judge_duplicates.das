@@ -11,8 +11,9 @@ require daslib/fio
 // the CLI as a child process keeps the dependency local to that process and
 // surfaces a clean install hint when the package isn't there.
 
-// Return shape: an envelope with stdout, exit_code, and the parsed JSON
-// verdicts (or the dry-run text). `@embed` lets the verdict JSON pass through
+// Return shape: an envelope with exit_code, output paths, the embedded
+// verdict JSON (or "" on dry-run / failure), and the tail of subprocess
+// stdout for diagnostics. `@embed` lets the verdict JSON pass through
 // without double-encoding.
 struct JudgeDuplicatesEnvelope {
     exit_code : int
@@ -148,8 +149,7 @@ def public do_judge_duplicates(input_path : string;
                                model : string;
                                max_clusters_str : string;
                                positives_only_str : string;
-                               dry_run_str : string;
-                               project : string) : string {
+                               dry_run_str : string) : string {
     let max_clusters = empty(max_clusters_str) ? 0 : to_int(max_clusters_str)
     let positives_only = positives_only_str == "true" || positives_only_str == "1"
     let dry_run = dry_run_str == "true" || dry_run_str == "1"

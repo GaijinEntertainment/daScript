@@ -21,8 +21,7 @@ struct ExportCorpusEnvelope {
 
 
 def public do_export_corpus(paths : string; out : string;
-                            min_tokens_str : string;
-                            project : string) : string {
+                            min_tokens_str : string) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)

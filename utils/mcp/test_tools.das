@@ -1373,7 +1373,7 @@ def test_detect_duplicates_missing_corpus(t : T?) {
     t |> run("missing 'corpus' arg returns error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_detect_duplicates("foo.das", "", "", "", "", "", ""), text, is_error)
+        let ok = parse_result(do_detect_duplicates("foo.das", "", "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "corpus") >= 0, "should mention corpus: {text}")
@@ -1390,7 +1390,7 @@ def test_detect_duplicates_missing_paths(t : T?) {
         }
         var text : string
         var is_error = false
-        let ok = parse_result(do_detect_duplicates("", path, "", "", "", "", ""), text, is_error)
+        let ok = parse_result(do_detect_duplicates("", path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
@@ -1413,7 +1413,7 @@ def test_detect_duplicates_corpus_not_found(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_detect_duplicates(fixture_path("_fixture_valid.das"),
-            bogus, "", "", "", "", ""), text, is_error)
+            bogus, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
     }
@@ -1430,7 +1430,7 @@ def test_detect_duplicates_empty_corpus(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_detect_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", "", "", ""), text, is_error)
+            path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should NOT be error: {text}")
         t |> success(find(text, "\"exit_code\":0") >= 0, "envelope has exit_code 0: {text}")
@@ -1451,7 +1451,7 @@ def test_detect_duplicates_bad_schema(t : T?) {
         var text : string
         var is_error = false
         let ok = parse_result(do_detect_duplicates(fixture_path("_fixture_valid.das"),
-            path, "", "", "", "", ""), text, is_error)
+            path, "", "", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "schema_version") >= 0, "mentions schema_version: {text}")
@@ -1468,7 +1468,7 @@ def test_export_corpus_missing_paths(t : T?) {
     t |> run("missing 'paths' arg returns error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_export_corpus("", "export_corpus_test_out.json", "", ""), text, is_error)
+        let ok = parse_result(do_export_corpus("", "export_corpus_test_out.json", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "paths") >= 0, "should mention paths: {text}")
@@ -1481,7 +1481,7 @@ def test_export_corpus_missing_out(t : T?) {
     t |> run("missing 'out' arg returns error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_export_corpus("foo.das", "", "", ""), text, is_error)
+        let ok = parse_result(do_export_corpus("foo.das", "", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "out") >= 0, "should mention out: {text}")
@@ -1494,7 +1494,7 @@ def test_export_corpus_no_match(t : T?) {
     t |> run("paths matching nothing yields error envelope") <| @(t : T?) {
         var text : string
         var is_error = false
-        let ok = parse_result(do_export_corpus("does_not_exist_xyzzy.das", "export_corpus_test_out.json", "", ""), text, is_error)
+        let ok = parse_result(do_export_corpus("does_not_exist_xyzzy.das", "export_corpus_test_out.json", ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error: {text}")
     }
@@ -1515,7 +1515,7 @@ def test_export_corpus_writes_envelope(t : T?) {
         // the placeholder in place is the intended path.
         var text : string
         var is_error = false
-        let ok = parse_result(do_export_corpus(fixture_path("_fixture_valid.das"), out_path, "", ""), text, is_error)
+        let ok = parse_result(do_export_corpus(fixture_path("_fixture_valid.das"), out_path, ""), text, is_error)
         t |> success(ok, "parse result JSON")
         t |> success(!is_error, "should NOT be error: {text}")
         t |> success(find(text, "\"exit_code\":0") >= 0, "envelope has exit_code 0: {text}")

@@ -24,8 +24,7 @@ def public do_detect_duplicates(paths : string; corpus : string;
                                 threshold_str : string;
                                 min_tokens_str : string;
                                 top_str : string;
-                                keep_str : string;
-                                project : string) : string {
+                                keep_str : string) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)

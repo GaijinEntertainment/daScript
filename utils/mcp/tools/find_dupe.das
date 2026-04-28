@@ -19,8 +19,7 @@ def public do_find_dupe(paths : string;
                         model : string;
                         threshold_str : string;
                         max_clusters_str : string;
-                        dry_run_str : string;
-                        project : string) : string {
+                        dry_run_str : string) : string {
     let exe = get_daslang_exe()
     if (empty(exe)) {
         return make_tool_result("Cannot determine daslang executable path", true)
