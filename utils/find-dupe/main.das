@@ -5,6 +5,9 @@ require daslib/clargs
 require daslib/fio
 require daslib/algorithm
 require daslib/jobque_boost
+// `anthropic/anthropic` is fetched at runtime by daspkg, not built in.
+// If this require fails with "module not found", run from project root:
+//   bin/daslang utils/daspkg/main.das -- install --root utils/find-dupe
 require anthropic/anthropic
 require cluster_input
 require source_extract
@@ -24,8 +27,8 @@ struct Config {
     input : string
 
     @clarg_short = "o"
-    @clarg_doc = "output directory (default ./look-at-dupes-out)"
-    out : string = "./look-at-dupes-out"
+    @clarg_doc = "output directory (default ./find-dupe-out)"
+    out : string = "./find-dupe-out"
 
     @clarg_doc = "model: haiku | sonnet (default haiku)"
     model : string = "haiku"
@@ -292,7 +295,7 @@ def update_summary(var s : OutputSummary; row : VerdictRow) {
 def run_pipeline(cfg : Config) : int {
     if (empty(cfg.input)) {
         to_log(LOG_ERROR, "error: --input is required (path to find_dupes JSON report)\n\n")
-        print_help(get_command_info(type<Config>), "look-at-dupes")
+        print_help(get_command_info(type<Config>), "find-dupe")
         return 2
     }
     if (cfg.model != "haiku" && cfg.model != "sonnet") {
@@ -466,8 +469,8 @@ def run_pipeline(cfg : Config) : int {
         }
     }
     mkdir(cfg.out)
-    let json_path = path_join(cfg.out, "look_at_dupes_verdicts.json")
-    let md_path = path_join(cfg.out, "look_at_dupes_verdicts.md")
+    let json_path = path_join(cfg.out, "find_dupe_verdicts.json")
+    let md_path = path_join(cfg.out, "find_dupe_verdicts.md")
     // Build the report payload to write — filtered down to actionable
     // rows when --positives-only is set. Always a fresh struct so we
     // don't disturb `output.summary` (printed below).
@@ -493,7 +496,7 @@ def run_pipeline(cfg : Config) : int {
         return 3
     }
     let s & = unsafe(output.summary)
-    to_log(LOG_INFO, "look-at-dupes done.\n")
+    to_log(LOG_INFO, "find-dupe done.\n")
     to_log(LOG_INFO, "  total: {s.total}  judged: {s.judged}  skipped: {s.skipped}\n")
     to_log(LOG_INFO, "  real: {s.real}  partial: {s.partial}  false_positive: {s.false_positive}  errored: {s.errored}\n")
     to_log(LOG_INFO, "  tokens: in={s.input_tokens}  out={s.output_tokens}  cost={cost_estimate(cfg.model, s.input_tokens, s.output_tokens)}\n")
@@ -508,12 +511,12 @@ def main() {
     var cfg = Config()
     let err = parse_args(cfg)
     if (cfg.help) {
-        print_help(get_command_info(type<Config>), "look-at-dupes")
+        print_help(get_command_info(type<Config>), "find-dupe")
         return
     }
     if (err != "") {
         to_log(LOG_ERROR, "error: {err}\n\n")
-        print_help(get_command_info(type<Config>), "look-at-dupes")
+        print_help(get_command_info(type<Config>), "find-dupe")
         return
     }
     if (cfg.smoke_test) {
@@ -526,6 +529,6 @@ def main() {
     // inside run_pipeline, so the panic message is just a short tag.
     let rc = run_pipeline(cfg)
     if (rc != 0) {
-        panic("look-at-dupes failed (exit code {rc})")
+        panic("find-dupe failed (exit code {rc})")
     }
 }

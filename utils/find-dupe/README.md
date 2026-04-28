@@ -1,8 +1,8 @@
-# look-at-dupes — AI judge for find_dupes clusters
+# find-dupe — AI judge for find_dupes clusters
 
 `utils/find_dupes` produces clusters of suspected duplicate functions (exact + fuzzy). On a real codebase those clusters mix **real duplicates** with **false positives** — pattern-matching boilerplate, generic accessors, shared-shape glue code that happens to canonicalize alike. Manually triaging clusters is the bottleneck for actually deleting duplicates.
 
-`look-at-dupes` feeds each cluster's actual source to Claude (via the `das-claude` daspkg, module `anthropic/anthropic`) and asks it to **partition** the cluster into real-duplicate groups vs false positives, with a one-line reason. Output is JSON (machine, for CI gates / future tooling) + Markdown (human, for review).
+`find-dupe` feeds each cluster's actual source to Claude (via the `das-claude` daspkg, module `anthropic/anthropic`) and asks it to **partition** the cluster into real-duplicate groups vs false positives, with a one-line reason. Output is JSON (machine, for CI gates / future tooling) + Markdown (human, for review).
 
 > ⚠️ **Sends source code to Anthropic's API.** Each cluster's full function bodies (verbatim, with file paths and line numbers) are uploaded as part of every judge call. Do **not** run this tool on proprietary, confidential, or otherwise restricted code unless your project's data-handling policy permits sending that source to Anthropic. Anthropic's API terms apply (see [anthropic.com/legal](https://www.anthropic.com/legal)). Use `--dry-run` to preview cluster size and token estimates without making any API calls.
 
@@ -12,10 +12,10 @@ The default model is **Claude Haiku 4.5** — cheap, fast, and reliable for "are
 
 ```bash
 # from the project root
-bin/daslang utils/daspkg/main.das -- install --root utils/look-at-dupes
+bin/daslang utils/daspkg/main.das -- install --root utils/find-dupe
 ```
 
-This fetches `das-claude` per `.das_package` and unpacks it under `utils/look-at-dupes/modules/`.
+This fetches `das-claude` per `.das_package` and unpacks it under `utils/find-dupe/modules/`. If you skip this step, `bin/daslang utils/find-dupe/main.das` fails at compile time with `module 'anthropic/anthropic' not found` — re-run the install command above.
 
 ## API key
 
@@ -30,7 +30,7 @@ echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshenv
 Verify the wiring with the built-in smoke test:
 
 ```bash
-bin/daslang utils/look-at-dupes/main.das -- --smoke-test
+bin/daslang utils/find-dupe/main.das -- --smoke-test
 ```
 
 Expect:
@@ -49,19 +49,19 @@ Smoke test PASSED.
    bin/daslang utils/find_dupes/main.das -- -p <paths> --json ./dupes.json
    ```
 
-2. **Dry-run** look-at-dupes for a cost preview (no API calls):
+2. **Dry-run** find-dupe for a cost preview (no API calls):
    ```bash
-   bin/daslang utils/look-at-dupes/main.das -- --input ./dupes.json --dry-run -v
+   bin/daslang utils/find-dupe/main.das -- --input ./dupes.json --dry-run -v
    ```
    Output: cluster counts, estimated input/output tokens, dollar estimate.
 
 3. **Live run** to produce verdicts:
    ```bash
-   bin/daslang utils/look-at-dupes/main.das -- --input ./dupes.json -v
+   bin/daslang utils/find-dupe/main.das -- --input ./dupes.json -v
    ```
-   Writes `look_at_dupes_verdicts.json` (machine) and `look_at_dupes_verdicts.md` (human) to `./look-at-dupes-out/` (override with `--out`).
+   Writes `find_dupe_verdicts.json` (machine) and `find_dupe_verdicts.md` (human) to `./find-dupe-out/` (override with `--out`).
 
-> **Run from the project root.** `find_dupes` records source paths relative to its cwd. `look-at-dupes` extracts each function's body from disk using those paths, so its cwd must match.
+> **Run from the project root.** `find_dupes` records source paths relative to its cwd. `find-dupe` extracts each function's body from disk using those paths, so its cwd must match.
 
 > **Cross-platform paths.** Examples use cwd-relative paths (`./dupes.json`) so they work on Linux, macOS, and Windows alike. If you'd rather drop intermediates in the OS tempdir, substitute your shell's convention — `$TMPDIR/dupes.json` (zsh/bash on macOS), `/tmp/dupes.json` (Linux), or `%TEMP%\dupes.json` (PowerShell/cmd) — none of those are required by the tool.
 
@@ -70,11 +70,13 @@ Smoke test PASSED.
 | Flag | Default | Description |
 |---|---|---|
 | `-i`, `--input` | (required) | find_dupes JSON report file |
-| `-o`, `--out` | `./look-at-dupes-out` | output directory |
+| `-o`, `--out` | `./find-dupe-out` | output directory |
 | `--model` | `haiku` | `haiku` (Haiku 4.5) or `sonnet` (Sonnet 4.6) |
 | `--min-lines` | `6` | skip clusters where every member is shorter than this |
 | `--max-clusters` | `0` | hard cap on clusters analyzed (0 = no cap) |
 | `--sort-by` | `default` | `default` (composite), `size`, or `fuzzy_first` |
+| `--parallel` | `8` | concurrent judge calls (1 = sequential) |
+| `--positives-only` | off | filter reports to actionable rows only: real + partial |
 | `--dry-run` | off | estimate tokens & cost without making API calls |
 | `--smoke-test` | off | one-shot API call to verify the env wiring |
 | `-v`, `--verbose` | off | per-cluster progress to stdout |
@@ -84,7 +86,7 @@ The default sort puts fuzzy pairs first (highest AI value), then larger clusters
 
 ## Output shape
 
-**`look_at_dupes_verdicts.json`** — top-level fields:
+**`find_dupe_verdicts.json`** — top-level fields:
 
 | Field | Type | |
 |---|---|---|
@@ -95,12 +97,21 @@ The default sort puts fuzzy pairs first (highest AI value), then larger clusters
 
 Each `VerdictRow` carries `cluster_id`, `kind` (`exact`/`fuzzy`), `similarity` (for fuzzy), `members` (with file/line/end_line), `verdict` (`real`/`partial`/`false_positive`/`skipped`/`error`), `groups` (the partition), `false_positives` (indices), `reason`, and per-call token usage.
 
-**`look_at_dupes_verdicts.md`** — human-readable, per-cluster sections with verdict tag, reason, member list, partition, and the original source (collapsed under `<details>`).
+**`find_dupe_verdicts.md`** — human-readable, per-cluster sections with verdict tag, reason, member list, partition, and the original source (collapsed under `<details>`).
+
+## MCP integration
+
+Two MCP tools shell out to this CLI so AI assistants can run the full pipeline without leaving the chat:
+
+- `judge_duplicates` — takes a find_dupes JSON report path; returns the verdict envelope.
+- `find_dupe` — convenience: runs find_dupes against `paths`, then judges the resulting clusters.
+
+Both surface a structured "anthropic daspkg not installed" error with the install command when the subprocess fails for that reason. See `doc/source/reference/utils/find_dupe.rst` and `utils/mcp/README.md` for parameter details.
 
 ## Tests
 
 ```bash
-bin/daslang dastest/dastest.das -- --test utils/look-at-dupes/tests
+bin/daslang dastest/dastest.das -- --test utils/find-dupe/tests
 ```
 
 Hermetic — no API calls. Validates `parse_verdict`, `classify_verdict`, `extract_source`, and `read_input_report`. Test fixtures use `daslib/fio`'s `create_temp_file_result(prefix, ext)` so they're cross-platform clean. Wired into `run_utils_tests` via `utils/CMakeLists.txt`.

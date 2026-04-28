@@ -36,6 +36,8 @@ require tools/aot public
 require tools/lint_tool public
 require tools/find_duplicates public
 require tools/export_corpus public
+require tools/judge_duplicates public
+require tools/find_dupe public
 require tools/live public
 
 let HEAP_COLLECT_THRESHOLD = 1024ul * 1024ul  // 1 MB
@@ -450,6 +452,34 @@ def handle_tools_list(id_json : string) : string {
         ["paths", "corpus"]
     ))
     result.tools |> emplace(make_tool(
+        "judge_duplicates",
+        "AI judge for find_dupes clusters. Takes a find_dupes JSON report and asks Claude (Haiku 4.5 by default) to partition each cluster into real-duplicate groups vs false positives, with a one-line reason per cluster. Returns an envelope with the embedded verdict JSON. Shells out to `daslang utils/find-dupe/main.das` — requires `daspkg install --root utils/find-dupe` first (fetches the `anthropic/anthropic` package) and the `ANTHROPIC_API_KEY` env var. WARNING: sends source code to Anthropic's API — only run on code your data-handling policy permits sharing.",
+        {
+            "input" => PropertySchema(_type = "string", description = "Path to a find_dupes JSON report (produced by `find_duplicates` MCP tool or `find_dupes --json <path>`)."),
+            "out" => PropertySchema(_type = "string", description = "Output directory for find_dupe_verdicts.json + .md. Defaults to a fresh temp dir under the project root."),
+            "model" => PropertySchema(_type = "string", description = "`haiku` (default — Claude Haiku 4.5) or `sonnet` (Claude Sonnet 4.6)."),
+            "max_clusters" => PropertySchema(_type = "string", description = "Hard cap on clusters analyzed after the worth-it gate (default 0 = no cap). Useful for cost control on large reports."),
+            "positives_only" => PropertySchema(_type = "string", description = "If `true`, the verdict report keeps only `real`+`partial` rows. Summary still reflects all clusters."),
+            "dry_run" => PropertySchema(_type = "string", description = "If `true`, estimate cluster count and token cost without making any API calls. Recommended as a first step."),
+            "project" => PROJECT_PROP
+        },
+        ["input"]
+    ))
+    result.tools |> emplace(make_tool(
+        "find_dupe",
+        "Convenience wrapper: runs `find_dupes` against `paths` to produce a duplicate-cluster JSON, then hands it off to the AI judge in one call. Same daspkg + API-key requirement as `judge_duplicates`. Use this when starting fresh on a directory or PR; use `find_duplicates` + `judge_duplicates` separately when you already have a curated corpus.",
+        {
+            "paths" => PropertySchema(_type = "string", description = "Files / directories / globs to scan (comma- or newline-delimited, same syntax as `find_duplicates`)."),
+            "out" => PropertySchema(_type = "string", description = "Output directory. Stores the intermediate `dupes.json` and the verdict report. Defaults to a fresh temp dir under the project root."),
+            "model" => PropertySchema(_type = "string", description = "`haiku` (default) or `sonnet`."),
+            "threshold" => PropertySchema(_type = "string", description = "Fuzzy similarity floor 0..1 (default 0.7) — passed through to find_dupes."),
+            "max_clusters" => PropertySchema(_type = "string", description = "Hard cap on clusters judged (default 0 = no cap)."),
+            "dry_run" => PropertySchema(_type = "string", description = "If `true`, run find_dupes normally but skip the API calls — returns a token+cost estimate instead of verdicts."),
+            "project" => PROJECT_PROP
+        },
+        ["paths"]
+    ))
+    result.tools |> emplace(make_tool(
         "live_status",
         "Get status of a running daslang-live instance (fps, uptime, paused, dt, has_error). Returns 503 JSON with compilation error if the script failed to compile.",
         { "port" => PropertySchema(_type = "string", description = "Live API port (default: 9090)") },
@@ -586,6 +616,10 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
         return do_find_duplicates(arg1, arg2, arg3, arg4, arg5, arg6, project)
     } elif (tool_name == "export_corpus") {
         return do_export_corpus(arg1, arg2, arg3, project)
+    } elif (tool_name == "judge_duplicates") {
+        return do_judge_duplicates(arg1, arg2, arg3, arg4, arg5, arg6, project)
+    } elif (tool_name == "find_dupe") {
+        return do_find_dupe(arg1, arg2, arg3, arg4, arg5, arg6, project)
     } elif (tool_name == "live_status") {
         return do_live_status(arg1)
     } elif (tool_name == "live_error") {
@@ -784,6 +818,26 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'out' argument")
         }
         arg3 = get_string_arg(args, "min_tokens")
+    } elif (name == "judge_duplicates") {
+        arg1 = get_string_arg(args, "input")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'input' argument")
+        }
+        arg2 = get_string_arg(args, "out")
+        arg3 = get_string_arg(args, "model")
+        arg4 = get_string_arg(args, "max_clusters")
+        arg5 = get_string_arg(args, "positives_only")
+        arg6 = get_string_arg(args, "dry_run")
+    } elif (name == "find_dupe") {
+        arg1 = get_string_arg(args, "paths")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
+        }
+        arg2 = get_string_arg(args, "out")
+        arg3 = get_string_arg(args, "model")
+        arg4 = get_string_arg(args, "threshold")
+        arg5 = get_string_arg(args, "max_clusters")
+        arg6 = get_string_arg(args, "dry_run")
     } elif (name == "live_status") {
         arg1 = get_string_arg(args, "port")
     } elif (name == "live_error") {

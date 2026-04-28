@@ -247,6 +247,11 @@ modes are layered on top via a single ``is_candidate`` flag inside
 ``FuncRecord``.  A cluster or fuzzy pair is **kept** iff at least
 one of its members is a candidate.
 
+An AI judge (:ref:`utils_find_dupe`) can consume the resulting JSON
+report and triage clusters into real duplicates, partial matches, and
+false positives --- useful when a flat report is too noisy to walk
+manually.
+
 
 B1 --- baseline diff (CI gate)
 ------------------------------

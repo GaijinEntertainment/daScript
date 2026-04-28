@@ -557,7 +557,7 @@ def test_import_bad_schema_version(t : T?) {
 
 // is_well_formed must reject v2 records that are missing or have a
 // degenerate `end_line` — otherwise downstream consumers (e.g.
-// look-at-dupes' source extractor) silently fall back to
+// find-dupe's source extractor) silently fall back to
 // single-line peeks. Build a v2 envelope by hand so the writer's
 // out-of-the-box defaults don't paper over the missing field.
 [test]

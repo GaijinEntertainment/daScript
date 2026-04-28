@@ -73,7 +73,7 @@ SET(DAS_UTILS_TO_TEST
     mcp
     lint
     find_dupes
-    look-at-dupes/tests
+    find-dupe/tests
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

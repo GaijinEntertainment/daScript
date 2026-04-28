@@ -11,7 +11,7 @@ require judge
 // Output JSON shape — distinct from the find_dupes input shape.
 // `schema_version` lets future bumps reject older readers loudly,
 // same convention as utils/find_dupes/exchange.das.
-let public LOOK_AT_DUPES_SCHEMA_VERSION = 1
+let public FIND_DUPE_SCHEMA_VERSION = 1
 
 
 enum public VerdictKind {
@@ -54,7 +54,7 @@ struct public OutputSummary {
 
 
 struct public OutputReport {
-    schema_version : int = LOOK_AT_DUPES_SCHEMA_VERSION
+    schema_version : int = FIND_DUPE_SCHEMA_VERSION
     model : string
     summary : OutputSummary
     verdicts : array<VerdictRow>
@@ -152,7 +152,7 @@ def public write_markdown_report(report : OutputReport;
             return
         }
         ok = true
-        fw |> fprint("# look-at-dupes verdicts\n\n")
+        fw |> fprint("# find-dupe verdicts\n\n")
         fw |> fprint("**Model:** `{report.model}`  \n")
         let s & = unsafe(report.summary)
         fw |> fprint("**Summary:** {s.judged} judged / {s.total} total  \n")

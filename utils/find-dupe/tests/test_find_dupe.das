@@ -242,7 +242,7 @@ def test_extract_source_inverted_range(t : T?) {
 // macOS, `/tmp` on Linux), so tests don't hardcode `/tmp` and break
 // the Windows extended_checks runner.
 def make_temp_input_file(t : T?; body : string) : string {
-    let r = create_temp_file_result("look_at_dupes_test", ".json")
+    let r = create_temp_file_result("find_dupe_test", ".json")
     if (!(r is value)) {
         t |> failure("create_temp_file_result failed")
         return ""

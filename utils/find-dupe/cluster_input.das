@@ -7,8 +7,8 @@ require daslib/fio
 // Shadow structs mirroring the JSON shape produced by
 // `utils/find_dupes/main.das --json <path>`. We don't `require` the
 // real `cluster.das` / `report.das` from find_dupes because module
-// resolution from `utils/look-at-dupes/` doesn't see them, and copying
-// their definitions here keeps look-at-dupes free of any cross-tree
+// resolution from `utils/find-dupe/` doesn't see them, and copying
+// their definitions here keeps find-dupe free of any cross-tree
 // dependency on find_dupes' internals (only the on-disk JSON contract).
 //
 // Field names MUST match find_dupes' Cluster / FuzzyPair / Summary /

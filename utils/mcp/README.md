@@ -30,6 +30,15 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 | `outline` | List all declarations (functions, structs, classes, enums, bitfields, variants, globals, typedefs) in a file or set of files using tree-sitter. Works on broken/incomplete code — no compilation needed. Conditional on `sg` CLI |
 | `aot` | Generate AOT (ahead-of-time) C++ code for a `.das` file or a single function. Without `function`, returns full AOT output. With `function`, extracts that function's C++ only. Overloaded names return a disambiguation list with mangled names for exact selection |
 
+### Duplicate Detection
+
+| Tool | Description |
+|---|---|
+| `export_corpus` | Scan one or more `.das` files / directories / globs, compile each in-process, and write a corpus JSON to `out`. Same shape as `find_dupes --export-functions` |
+| `find_duplicates` | Compare candidate file(s) against a pre-built corpus. Returns a per-candidate JSON envelope with corpus stats, pattern-skip counts, and the top-N exact and fuzzy matches per candidate. Supports `keep` to override the default pattern filter |
+| `judge_duplicates` | AI judge: take a `find_dupes` JSON report and ask Claude to partition each cluster into real / partial / false_positive verdicts. Shells out to `daslang utils/find-dupe/main.das` — requires `daspkg install --root utils/find-dupe` first (the `anthropic/anthropic` package) and `ANTHROPIC_API_KEY`. WARNING: sends source to Anthropic's API |
+| `find_dupe` | Convenience: run `find_dupes` against `paths` and judge the resulting clusters in one call. Same daspkg + API-key requirement as `judge_duplicates` |
+
 ### Live-Reload Control
 
 These tools interact with a running `daslang-live.exe` instance via its REST API (default port 9090). All accept an optional `port` parameter.

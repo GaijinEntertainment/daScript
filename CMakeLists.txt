@@ -1498,18 +1498,18 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find_dupes/fixture/
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install look-at-dupes (AI judge for find_dupes clusters via das-claude).
+# Install find-dupe (AI judge for find_dupes clusters via das-claude).
 # Not built into all_utils_exe — it depends on the das-claude daspkg
 # package fetched at runtime, which isn't available at build time.
-file(GLOB DAS_LOOK_AT_DUPES_FILES ${PROJECT_SOURCE_DIR}/utils/look-at-dupes/*.das)
-install(FILES ${DAS_LOOK_AT_DUPES_FILES} DESTINATION utils/look-at-dupes)
+file(GLOB DAS_FIND_DUPE_FILES ${PROJECT_SOURCE_DIR}/utils/find-dupe/*.das)
+install(FILES ${DAS_FIND_DUPE_FILES} DESTINATION utils/find-dupe)
 install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/look-at-dupes/README.md
-    ${PROJECT_SOURCE_DIR}/utils/look-at-dupes/.das_package
-    DESTINATION utils/look-at-dupes
+    ${PROJECT_SOURCE_DIR}/utils/find-dupe/README.md
+    ${PROJECT_SOURCE_DIR}/utils/find-dupe/.das_package
+    DESTINATION utils/find-dupe
 )
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/look-at-dupes/tests/
-    DESTINATION utils/look-at-dupes/tests
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find-dupe/tests/
+    DESTINATION utils/find-dupe/tests
     FILES_MATCHING PATTERN "*.das"
 )
 

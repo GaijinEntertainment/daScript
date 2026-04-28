@@ -1,5 +1,8 @@
 options gen2
 
+// `anthropic/anthropic` is fetched at runtime by daspkg, not built in.
+// If this require fails with "module not found", run from project root:
+//   bin/daslang utils/daspkg/main.das -- install --root utils/find-dupe
 require anthropic/anthropic
 require cluster_input
 require judge
