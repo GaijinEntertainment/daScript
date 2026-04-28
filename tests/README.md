@@ -457,7 +457,6 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_call_depth.das | Recursive default argument expansion — max call depth exceeded | **expect** `41000:1` `30301:50` |
 | failed_capture_self.das | Capturing `self` in lambda fails | **expect** `30508` `30124` |
 | failed_constants.das | Out-of-range numeric literal errors | **expect** `10006:12` `10010:4` |
-| failed_if_one_liner_multiline.das | One-liner if/else/elif body on separate line is an error | **expect** `20000:7` |
 | failed_table_lookup_collision.das | Table lookup collision lint — same table indexed twice in one expression | **expect** `40216:7` |
 | finally.das | `finally` blocks — exceptions, loops, nested, return | |
 | for_const_array.das | For-loop over `fixed_array` constant | |
