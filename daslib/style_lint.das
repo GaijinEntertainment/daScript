@@ -21,6 +21,7 @@ module style_lint shared private
 //!   STYLE010 — if (true) should be a bare block
 //!   STYLE011 — variable declaration followed by immediate assignment
 //!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
+//!   STYLE013 — struct var with default/empty init followed by a run of field assignments
 
 require daslib/ast_boost
 require strings
@@ -388,6 +389,7 @@ class StyleLintVisitor : AstVisitor {
         }
         if (expr is ExprLet) {
             self->check_style012_array_init(blk, expr as ExprLet)
+            self->check_style013_struct_field_init(blk, expr as ExprLet)
         }
     }
 
@@ -437,6 +439,85 @@ class StyleLintVisitor : AstVisitor {
                 self->style_warning("STYLE012: array<T> initialized by a run of push/emplace calls; use an array literal `var a <- [x, <-y, z]` (or `var a <- array<T>(x, y, z)` when you need an explicit element type, e.g. for polymorphic upcasts)", v.at)
             }
         }
+    }
+
+    // --- STYLE013: struct var with default/empty init then a run of field assignments ---
+
+    def check_style013_struct_field_init(blk : ExprBlock?; elet : ExprLet?) : void {
+        if (current_function != null && current_function.fromGeneric != null) {
+            return
+        }
+        var idx = -1
+        let n = length(blk.list)
+        for (k in range(n)) {
+            if (blk.list[k] == elet) {
+                idx = k
+                break
+            }
+        }
+        if (idx < 0 || idx + 1 >= n) {
+            return
+        }
+        for (v in elet.variables) {
+            if (v.flags.generated || v.flags.inScope) {
+                continue
+            }
+            if (v._type == null || v._type.baseType != Type.tStructure) {
+                continue
+            }
+            if (length(v._type.dim) != 0) {
+                continue
+            }
+            if (!self->is_default_struct_init(v)) {
+                continue
+            }
+            var count = 0
+            for (j in range(idx + 1, n)) {
+                if (!self->is_field_assign_of(blk.list[j], v)) {
+                    break
+                }
+                count++
+            }
+            if (count >= 2) {
+                self->style_warning("STYLE013: struct var (default-init or uninitialized) followed by a run of field assignments; use a named-argument constructor `var a = Foo(bar = ..., far = ...)`", v.at)
+            }
+        }
+    }
+
+    def is_default_struct_init(v : Variable?) : bool {
+        //! True for `var a : Foo` (no init) or `var a = Foo()` (zero-arg MakeStruct).
+        //! False for any non-empty constructor or non-MakeStruct init — those are
+        //! "modify an existing value" cases, not the bug we want to flag.
+        return true if (v.init == null)
+        return false if (!(v.init is ExprMakeStruct))
+        var ms = v.init as ExprMakeStruct
+        if (ms._block != null) {
+            return false
+        }
+        for (row in ms.structs) {
+            for (_mf in *row) {
+                // any field present → not the zero-arg constructor
+                return false
+            }
+        }
+        return true
+    }
+
+    def is_field_assign_of(stmt : Expression?; target : Variable?) : bool {
+        var lhs : Expression? = null
+        if (stmt is ExprCopy) {
+            lhs = (stmt as ExprCopy).left
+        } elif (stmt is ExprClone) {
+            lhs = (stmt as ExprClone).left
+        } elif (stmt is ExprMove) {
+            lhs = (stmt as ExprMove).left
+        } else {
+            return false
+        }
+        return false if (lhs == null || !(lhs is ExprField))
+        let src = (lhs as ExprField).value
+        return false if (src == null || !(src is ExprVar))
+        return (src as ExprVar).variable == target
     }
 
     def is_push_or_emplace_of(call : ExprCall?; target : Variable?) : bool {

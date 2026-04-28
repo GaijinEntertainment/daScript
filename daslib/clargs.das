@@ -465,9 +465,10 @@ class ArgsMacro : AstStructureAnnotation {
             if (find_bool_annotation(field.annotation, "clarg_skip", false)) {
                 continue
             }
-            var arg : CommandArgumentInfo
-            arg.field_name = "{field.name}"
-            arg.flag_name = clargs_flag_name(find_string_annotation(field.annotation, "clarg_name", arg.field_name))
+            var arg = CommandArgumentInfo(
+                field_name = "{field.name}",
+                flag_name = clargs_flag_name(find_string_annotation(field.annotation, "clarg_name", "{field.name}"))
+            )
             let short_char = find_string_annotation(field.annotation, "clarg_short", "")
             if (!empty(short_char)) {
                 if (length(short_char) != 1) {
