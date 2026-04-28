@@ -28,7 +28,7 @@ def test_macro_emits_create_ddl(t : T?) {
 def test_macro_emits_insert_shapes(t : T?) {
     let with_pk = _sql_insert_with_pk_sql(type<Car>)
     let no_pk = _sql_insert_no_pk_sql(type<Car>)
-    t |> equal(with_pk, "INSERT INTO \"Cars\" VALUES (?, ?, ?)", "with-PK insert form")
+    t |> equal(with_pk, "INSERT INTO \"Cars\" (\"Id\", \"Name\", \"Price\") VALUES (?, ?, ?)", "with-PK insert form (chunk 7: column-list form is now mandatory so computed columns can be skipped)")
     t |> equal(no_pk, "INSERT INTO \"Cars\" (\"Name\", \"Price\") VALUES (?, ?)", "no-PK insert form")
 }
 

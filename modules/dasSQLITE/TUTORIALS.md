@@ -188,17 +188,20 @@ The read story is complete. Now the write side.
     [tutorials/sql/20-delete.das](../../tutorials/sql/20-delete.das)
     (chunk 6). Original mockup:
     [16-delete.das.mockup](tutorial-mockup/16-delete.das.mockup).
-21. **UPSERT — INSERT ON CONFLICT** — `db |> upsert(row, on_conflict=…,
-    do_update=…)` and the `array<T>` overload; `insert_or_ignore` /
-    `insert_or_replace` as the no-update / clobber shortcuts;
-    `upsert_returning` / `_upsert_returning` for RETURNING; the
-    `@sql_unique` field annotation for declaring conflict keys without
-    a full `[sql_index(unique=true)]`; strict / `try_insert_or_ignore`
-    / `try_insert_or_replace` / `try_upsert` / `try_upsert_returning`
-    fan-out. **Deferred to chunk 7** (carries its own substantial
-    surface — the `_excluded` AST sentinel, multi-column conflict
-    targets, `@sql_unique`, four "INSERT OR X" variants, bulk overload).
-    Mockup: [17-upsert.das](tutorial-mockup/17-upsert.das.mockup).
+21. **UPSERT — INSERT ON CONFLICT** — `_sql_upsert(row, on_conflict,
+    do_update)` macro for the proper merge form (`ON CONFLICT(...) DO
+    UPDATE SET ...`); `_excluded.Col` for the proposed-row sentinel;
+    single-column (`_.Id`) and composite (`tuple(_.A, _.B)`) conflict
+    targets; `_sql_upsert_returning` for capturing the post-merge row;
+    `try_` siblings for non-panic flow. Plain functions
+    `insert_or_ignore` / `insert_or_replace` (single + bulk + `try_`)
+    for the simpler "ignore conflict" / "wipe-and-reinsert" cases. The
+    `@sql_unique` field annotation declares a single-column UNIQUE for
+    the conflict key; composite uniqueness uses `[sql_index(unique =
+    true, fields = (...))]` (tut 24). **Shipped:**
+    [tutorials/sql/21-upsert.das](../../tutorials/sql/21-upsert.das)
+    (chunk 7). Original mockup:
+    [17-upsert.das.mockup](tutorial-mockup/17-upsert.das.mockup).
 22. **Transactions** — `db |> with_transaction() { … }` block,
     `with_transaction(mode=…)` for IMMEDIATE / EXCLUSIVE, rollback on
     panic/early return, nested transaction behavior (automatic
@@ -215,21 +218,38 @@ The read story is complete. Now the write side.
 Once CRUD and `_sql` feel natural, richer schema annotations fit in without
 new syntax to teach.
 
-23. **Foreign keys** — `@sql_references(type="T", on_delete=…)`. DDL-only
-    FK constraints + CASCADE; navigation properties deliberately not
-    shipped (per API_REWORK tut 26 decision). Mockup:
-    [26-foreign_keys.das](tutorial-mockup/26-foreign_keys.das.mockup).
-24. **Indexes** — stackable struct-level `[sql_index(fields=…,
-    unique=…, name=…)]`. Emits `CREATE [UNIQUE] INDEX` per annotation;
-    query side is transparent (SQLite picks indexes automatically).
-    Note: `@sql_unique` (tut 21) is the field-level shortcut for a
-    single-column UNIQUE constraint — use `[sql_index]` when the
-    uniqueness spans multiple columns or when you want a non-unique
-    index for query perf. Mockup: [27-indexes.das](tutorial-mockup/27-indexes.das.mockup).
-25. **Defaults + computed columns** — `@sql_default(value=…)` /
-    `@sql_default(sql_fn="CURRENT_TIMESTAMP")` / `@sql_computed(sql=…)`.
-    Bind-code excludes computed fields from INSERT/UPDATE. Mockup:
-    [28-defaults_computed.das](tutorial-mockup/28-defaults_computed.das.mockup).
+23. **Foreign keys** — per-field decorators `@sql_references = "Parent"`
+    + optional `@sql_on_delete` / `@sql_on_update` (cascade / set_null /
+    set_default / restrict / no_action). DDL-only FK constraints +
+    CASCADE; navigation properties deliberately not shipped (per
+    API_REWORK tut 26 decision). `with_sqlite` enables `PRAGMA
+    foreign_keys = ON` on every connection so the constraints actually
+    fire. **Shipped:**
+    [tutorials/sql/23-foreign_keys.das](../../tutorials/sql/23-foreign_keys.das)
+    (chunk 7). Original mockup:
+    [26-foreign_keys.das.mockup](tutorial-mockup/26-foreign_keys.das.mockup).
+24. **Indexes** — sibling annotation `[sql_table, sql_index(fields = ...,
+    unique = ..., name = ...)]` (must live in the same bracket as
+    `[sql_table]`, with `[sql_table]` first). Emits `CREATE [UNIQUE]
+    INDEX` per annotation; query side is transparent (SQLite picks
+    indexes automatically). Auto-naming is `idx_<table>_<col1>_<col2>`
+    when `name` is omitted. Composite UNIQUE via `[sql_index(unique =
+    true, fields = (...))]` is the prerequisite for upsert composite-
+    conflict targets. **Shipped:**
+    [tutorials/sql/24-indexes.das](../../tutorials/sql/24-indexes.das)
+    (chunk 7). Original mockup:
+    [27-indexes.das.mockup](tutorial-mockup/27-indexes.das.mockup).
+25. **Defaults + computed columns** — three default sources: native
+    daslang field initializer (`Active : bool = true` becomes
+    `DEFAULT 1`), `@sql_default_fn = "CURRENT_TIMESTAMP"` for SQLite
+    built-ins (CURRENT_TIMESTAMP / CURRENT_DATE / CURRENT_TIME), and
+    `@sql_computed = "expression"` for generated columns (default
+    VIRTUAL; add `@sql_stored = true` for STORED). Bind-code excludes
+    computed fields from INSERT/UPDATE; SELECT reads them as ordinary
+    columns. **Shipped:**
+    [tutorials/sql/25-defaults_computed.das](../../tutorials/sql/25-defaults_computed.das)
+    (chunk 7). Original mockup:
+    [28-defaults_computed.das.mockup](tutorial-mockup/28-defaults_computed.das.mockup).
 26. **Custom type adapters** — name-based `bind_X` / `extract_X` pair;
     no registration step; `DateTime`, enums, GUIDs via this rail.
     Mockup: [29-custom_types.das](tutorial-mockup/29-custom_types.das.mockup).
@@ -377,11 +397,11 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 18 | NULL handling — `Option<T>` | `18-null_handling.das` (`25-null_handling.das.mockup` shipped largely as designed; `_.Col == none()` diagnostic + projection-side `unwrap_or` deferred) | **Shipped** (chunk 4) |
 | 19 | UPDATE | `15-update.das` | **Shipped** (chunk 6); macros named `_sql_update` / `_sql_try_update` / `_sql_update_returning` / `_sql_try_update_returning`; raw `exec` parameter binding deferred to a later chunk |
 | 20 | DELETE | `16-delete.das` | **Shipped** (chunk 6); macros named `_sql_delete` / `_sql_try_delete` / `_sql_delete_returning` / `_sql_try_delete_returning`; CASCADE FK example deferred to tut 23 |
-| 21 | UPSERT | `17-upsert.das` | Has mockup — deferred to chunk 7 (the `_excluded` AST sentinel, multi-column conflict targets, `@sql_unique`, INSERT OR IGNORE/REPLACE shortcuts, bulk overload all carry their own surface) |
+| 21 | UPSERT | `21-upsert.das` | **Shipped** (chunk 7); `_sql_upsert` / `_sql_try_upsert` / `_sql_upsert_returning` / `_sql_try_upsert_returning`, `_excluded` sentinel, single + composite conflict targets via `tuple(_.A, _.B)`, plain-fn `insert_or_ignore` / `insert_or_replace` (single + bulk + `try_` for both) |
 | 22 | Transactions | `14-transaction.das` | **Shipped** (chunk 6); two-arity overload, `SqliteTxnMode` enum (Deferred/Immediate/Exclusive), savepoint nesting via `das_sp` name |
-| 23 | Foreign keys | `26-foreign_keys.das` | Has mockup |
-| 24 | Indexes | `27-indexes.das` | Has mockup |
-| 25 | Defaults + computed | `28-defaults_computed.das` | Has mockup |
+| 23 | Foreign keys | `23-foreign_keys.das` | **Shipped** (chunk 7); `@sql_references = "Parent"` + optional `@sql_on_delete` / `@sql_on_update` (cascade / set_null / set_default / restrict / no_action); `with_sqlite` enables `PRAGMA foreign_keys = ON` |
+| 24 | Indexes | `24-indexes.das` | **Shipped** (chunk 7); `[sql_table, sql_index(fields = ..., unique = ..., name = ...)]` sibling annotation, single + composite, auto-name `idx_<table>_<col1>_<col2>` |
+| 25 | Defaults + computed | `25-defaults_computed.das` | **Shipped** (chunk 7); native field init for literal defaults (`Active : bool = true`), `@sql_default_fn` for SQL built-ins (CURRENT_TIMESTAMP / CURRENT_DATE / CURRENT_TIME), `@sql_computed = "expr"` (+ optional `@sql_stored = true`) |
 | 26 | Custom type adapters | `29-custom_types.das` | Has mockup |
 | 27 | BLOB round-trip | — | **Needs mockup** (merges inherited 07+08) |
 | 28 | JSON columns | `37-json.das` | Has mockup |

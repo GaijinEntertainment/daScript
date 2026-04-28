@@ -132,4 +132,6 @@ struct field. ``SqlError = Option<string>`` is the workaround:
 
     Full source: :download:`tutorials/sql/22-transactions.das <../../../../tutorials/sql/22-transactions.das>`
 
-    Previous tutorial: :ref:`tutorial_sql_delete`
+    Previous tutorial: :ref:`tutorial_sql_upsert`
+
+    Next tutorial: :ref:`tutorial_sql_foreign_keys`

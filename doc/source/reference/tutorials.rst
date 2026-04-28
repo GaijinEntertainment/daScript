@@ -309,7 +309,11 @@ Run any tutorial from the project root::
    tutorials/sql_18_null_handling.rst
    tutorials/sql_19_update.rst
    tutorials/sql_20_delete.rst
+   tutorials/sql_21_upsert.rst
    tutorials/sql_22_transactions.rst
+   tutorials/sql_23_foreign_keys.rst
+   tutorials/sql_24_indexes.rst
+   tutorials/sql_25_defaults_computed.rst
 
 .. _tutorials_dasaudio:
 

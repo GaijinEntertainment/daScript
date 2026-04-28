@@ -342,9 +342,6 @@ malformed-call diagnostics. Total dasSQLITE suite: **271 tests passing**
 
 ### Deferred to chunk 7+
 
-- **UPSERT** (tut 21) — `_excluded` AST sentinel, multi-column conflict
-  targets, `@sql_unique` field annotation, INSERT OR IGNORE / INSERT OR
-  REPLACE shortcuts, bulk overload.
 - **`exec` parameter binding** — `db |> exec(sql, args...)` doesn't
   exist; users must inline values into the SQL string for raw escape
   hatch with dynamic data, or stick to the macro forms. Adding
@@ -357,6 +354,182 @@ malformed-call diagnostics. Total dasSQLITE suite: **271 tests passing**
 - **Projection-side `_select` after `_sql_update_returning`** — for
   RETURNING column projection, post-process the result with a chain
   `|> _select(...)` instead of inventing a `update_returning_select`.
+
+## Shipped — chunk 7: UPSERT + schema annotations (branch `dassqlite-chunk7-upsert-schema`)
+
+Chunk 7 ships **tutorials 21 (UPSERT), 23 (foreign keys), 24 (indexes),
+25 (defaults + computed columns)**. UPSERT was deferred from chunk 6
+because it carries its own substantial macro surface; the three schema
+tutorials were already at the front of "Part 5 — schema richness" in the
+plan and naturally co-shipped because the upsert composite-conflict path
+needs `[sql_index(unique = true, ...)]` from tut 24.
+
+### UPSERT macros (`sqlite_linq.das`)
+
+- `_sql_upsert(row, on_conflict, do_update)` — INSERT … ON CONFLICT …
+  DO UPDATE SET …, returns rows-affected `int`.
+- `_sql_try_upsert(...)` — same, returns `Result<int, string>`.
+- `_sql_upsert_returning(...)` / `_sql_try_upsert_returning(...)` —
+  capture the post-merge row(s) as `array<T>` (always one row in
+  practice; the array shape mirrors `_sql_update_returning`).
+- `on_conflict` accepts `_.Col` (single) or `tuple(_.A, _.B, ...)`
+  (composite); validated against the struct's fields at macro-expansion.
+- `do_update` is a named-tuple `(Col = expr, ...)`. `_` is the existing
+  row; `_excluded` is the proposed-row sentinel (added to `pred_to_sql`
+  via the new `SqlQuery.upsertMode` flag). Computed columns and unknown
+  column names are rejected with macro_error; duplicate column names too.
+- Arithmetic operators (`+ - * / %`) added to `pred_to_sql` so the do-
+  update SET clause can express `Hits = _.Hits + 1`.
+
+### Plain "INSERT OR X" functions (`sqlite_boost.das`)
+
+- `insert_or_ignore(row)` / `insert_or_ignore(rows)` — single + bulk;
+  `try_` siblings return `Result<int, string>`.
+- `insert_or_replace(row)` / `insert_or_replace(rows)` — same fan-out.
+- All implemented via runtime substitution of `OR IGNORE` / `OR
+  REPLACE` against the existing `_sql_insert_with_pk_sql` /
+  `_sql_insert_no_pk_sql` strings — no new generated helpers needed.
+
+### Schema annotations on `[sql_table]` (`sqlite_boost.das`)
+
+Per-field decorators (every `@xxx = value` is a separate scalar line):
+
+- **`@sql_unique`** — single-column UNIQUE in the column DDL.
+- **`@sql_default_fn = "FN"`** — whitelisted SQL built-ins
+  (`CURRENT_TIMESTAMP`, `CURRENT_DATE`, `CURRENT_TIME`); emits
+  ` DEFAULT FN`.
+- **Native field initializer for literal defaults** — `Active : bool =
+  true` becomes ` DEFAULT 1`. Supported literals: bool / int / int64 /
+  float / double / string. Non-literal initializers are silently dropped
+  from the DDL but still construct in daslang.
+- **`@sql_computed = "expression"`** — generated column. Default storage
+  VIRTUAL; add **`@sql_stored = true`** for STORED. Computed columns are
+  excluded from INSERT and UPDATE bind paths automatically; SELECT reads
+  them as ordinary columns.
+- **`@sql_references = "Parent"`** + optional **`@sql_on_delete`** /
+  **`@sql_on_update`** — one of `cascade` / `set_null` / `set_default` /
+  `restrict` / `no_action`. Resolves the parent struct's table name and
+  PK column at macro-expansion. `with_sqlite` enables `PRAGMA
+  foreign_keys = ON` so the constraints actually fire.
+
+Validation rules enforced at `[sql_table]` apply (each emits
+`error[30111]`):
+
+- `@sql_primary_key` ≠ `@sql_computed` (SQLite rejects PK on a generated
+  column).
+- `@sql_computed` ≠ field initializer (the SQL expression provides the
+  value).
+- `@sql_computed` ≠ `@sql_default_fn`.
+- field initializer ≠ `@sql_default_fn` (pick one).
+- `@sql_default_fn` value must be in the whitelist.
+- `@sql_on_delete` / `@sql_on_update` value must be in the whitelist.
+- `@sql_on_delete` / `@sql_on_update` without `@sql_references`.
+- `on_delete = "set_null"` requires `Option<T>` column.
+- `on_delete = "set_default"` requires a field initializer or
+  `@sql_default_fn`.
+- `@sql_references` referencing a struct that doesn't exist or has no
+  `@sql_primary_key`.
+
+### `[sql_index]` sibling annotation
+
+- Shape: `[sql_table(name = "..."), sql_index(fields = ..., unique =
+  ..., name = ...)]` (must live in the same bracket as `[sql_table]`,
+  comma-separated, with `[sql_table]` first).
+- `fields` accepts a single string or a tuple of strings. `unique`
+  defaults to `false`. `name` defaults to `idx_<table>_<col1>_<col2>`.
+- `[sql_index]` rewrites the `_sql_create_indexes_sql` helper that
+  `[sql_table]` emits (per Boris's body-rewrite suggestion) — each
+  `[sql_index].apply()` parses the const-string return of the existing
+  helper, appends a new `CREATE INDEX` statement, and replaces the
+  body. This forces source order: `[sql_table]` must precede every
+  `[sql_index]` because the body-rewrite needs the helper to already
+  exist.
+- Unknown field names and missing `fields=` are rejected with
+  `error[30111]`.
+
+### Tutorials
+
+- [tutorials/sql/21-upsert.das](../../tutorials/sql/21-upsert.das) —
+  `insert_or_ignore` / `_or_replace`, single + composite `_sql_upsert`,
+  `_sql_upsert_returning`, `_sql_try_upsert`.
+- [tutorials/sql/23-foreign_keys.das](../../tutorials/sql/23-foreign_keys.das)
+  — CASCADE delete, SET NULL with `Option<T>`, FK violation through
+  `try_insert`.
+- [tutorials/sql/24-indexes.das](../../tutorials/sql/24-indexes.das) —
+  unique + composite + named indexes, query-side transparency, UNIQUE
+  violation through `try_insert`.
+- [tutorials/sql/25-defaults_computed.das](../../tutorials/sql/25-defaults_computed.das)
+  — native init defaults, `@sql_default_fn`, VIRTUAL + STORED computed
+  columns.
+
+### Tests
+
+9 new test files: `test_52_insert_or_ignore.das`,
+`test_53_insert_or_replace.das`, `test_54_upsert_single_col.das`,
+`test_55_upsert_composite.das`, `test_56_upsert_returning.das`,
+`test_57_sql_unique.das`, `test_58_sql_references.das`,
+`test_59_sql_index.das`, `test_60_defaults_computed.das`. Plus three
+new failed-test files: `failed_sql_table_schema.das` (12 [sql_table]
+validation rules), `failed_sql_index.das` (4 [sql_index] validation
+rules), `failed_sql_upsert.das` (10 _sql_upsert macro_errors). Total
+dasSQLITE suite: **309 tests passing** (271 pre-chunk-7 + 38 new).
+
+### Deferred to chunk 8+
+
+- **Bulk `array<T>` upsert** — `_sql_upsert` rejects `array<T>` as the
+  row argument with macro_error; pass single rows in a transaction loop
+  for now. Adding the bulk overload is straightforward but each row
+  needs its own bind cycle plus the same SQL prepared statement reused.
+- **Composite foreign keys** — `@sql_references` resolves a single PK
+  column. Composite PK targets would need a `fields = ("A", "B")`
+  syntax extension. Rare in greenfield SQLite designs.
+- **Partial / expression indexes** — SQLite supports `CREATE INDEX …
+  WHERE …` and `CREATE INDEX … ON T(lower(Email))`. Both are SQLite-
+  specific; users needing them run raw `db |> exec("CREATE INDEX …")`.
+- **Function-reference form for `@sql_computed`** — current shape passes
+  the SQL expression as a string; SQLite validates at CREATE TABLE
+  time. The principled long-term shape uses `@sql_computed(func =
+  @@compute_total)` so a regular daslang function with daslang
+  compile-time validation provides the expression. Punted; SQLite's
+  runtime error message is actionable enough as MVP.
+- **DEFAULT-firing from the macro INSERT path** — the macro INSERT
+  always names every non-computed column, so the SQL DEFAULT clause
+  only fires from raw `exec`. Detecting "user wants the default" from
+  a struct field value is fragile (zero-detection) or verbose (explicit
+  field list). Raw SQL is the escape hatch.
+- **Pre-existing duplicate cleanup pass** — `find_duplicates` over
+  `sqlite_boost.das` + `sqlite_linq.das` flagged five real merge
+  candidates carried over from chunks 3 / 6, none of which are chunk-7
+  surface but all of which would land cleanly together:
+    1. `validate_outer_update_args` (`sqlite_linq.das:3353`) ≡
+       `validate_outer_delete_args` (`:3367`) — exact dupe; differs
+       only in `length(call.arguments) != 4` vs `!= 3` and the arg-
+       name list in the error message. Collapse to
+       `validate_outer_args(prog, call, rootT, expectedArity, sigText)`.
+    2. `make_insert_with_pk_sql_fn` (`sqlite_boost.das:1951`) vs
+       `make_insert_no_pk_sql_fn` (`:1995`) — 0.96 fuzzy. Both emit
+       `INSERT INTO "T" (...) VALUES (?,?,...)`; the only structural
+       difference is whether the PK column is in the column list.
+       Single helper taking an `include_pk : bool`.
+    3. `find_bool_annotation` (`sqlite_boost.das:1353`) ≡
+       `find_string_annotation` (`:1361`) — identical loops differing
+       only in the typed accessor literal (`bValue` vs `sValue`).
+       Generic `find_annotation<T>(args, name, default)`.
+    4. `try_run_dml_returning` (`sqlite_boost.das:1213`) ≡
+       `try_run_select` (`:1270`) — identical bodies. One should
+       call the other (or share a `run_step_collect` helper).
+    5. **12-way `canVisitArgument` cluster** across
+       `Sql{Update,TryUpdate,UpdateReturning,TryUpdateReturning,
+       Delete,TryDelete,DeleteReturning,TryDeleteReturning,
+       Upsert,TryUpsert,UpsertReturning,TryUpsertReturning}Macro` —
+       every override returns `argIndex == 0`. Class-hierarchy
+       fan-out can't share without a parent class. Introduce
+       `class abstract OuterArgZeroMacro : AstCallMacro` (or
+       similar) and re-parent all 12.
+  Cleanup is independent of any new feature work and can be its own
+  small chunk; targeting it together with chunk 7's `bulk array<T>
+  upsert` (`Sql{Upsert,…}Macro` would change anyway) is one
+  reasonable bundle.
 
 ## Shipped — chunk 4: read-side depth — distinct/take/skip/order_by/aggregates/group_by/NULL (branch `dassqlite-chunk4-read-depth`)
 
