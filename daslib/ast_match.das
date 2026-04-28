@@ -591,6 +591,21 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
             return true
         }
     }
+    // ExprField / ExprSafeField / ExprIsVariant / ExprAsVariant / ExprSafeAsVariant —
+    // typer-resolved field metadata. The .name string carries the user-visible field
+    // identifier and is sufficient for matching; fieldIndex / fieldRef / annotation /
+    // derefFlags / fieldFlags are typer caches whose presence diverges between a
+    // qmacro pattern (defaults) and a typed source (resolved indices/refs), so they
+    // would force every qmatch against typed source to fail.
+    if (rtti_name == "ExprField" || rtti_name == "ExprSafeField"
+            || rtti_name == "ExprIsVariant" || rtti_name == "ExprAsVariant"
+            || rtti_name == "ExprSafeAsVariant") {
+        if (field_name == "fieldIndex" || field_name == "fieldRef"
+                || field_name == "annotation" || field_name == "atField"
+                || field_name == "derefFlags" || field_name == "fieldFlags") {
+            return true
+        }
+    }
     // ExprCall/ExprOp*/ExprLooksLikeCall — resolved function reference
     if (field_name == "func" || field_name == "atEnclosure" || field_name == "stackTop"
         || field_name == "doesNotNeedSp" || field_name == "cmresAlias"

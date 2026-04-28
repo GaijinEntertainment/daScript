@@ -408,12 +408,18 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
         return ""
     }
     var ret = blk.list[0] as ExprReturn
-    var argName : string
+    var receiver : ExpressionPtr
     var fieldName : string
-    if (!extract_arg_field(ret.subexpr, argName, fieldName)) {
+    // Require the receiver be an ExprVar — `$e(recv).$f(field)` matches any
+    // ExprField, including nested chains like `l.opt.X` whose receiver is
+    // itself an ExprField. Without the explicit ExprVar gate, qmatch would
+    // silently accept the chain and we would extract a meaningless argName.
+    if (!qmatch(ret.subexpr, $e(receiver).$f(fieldName)).matched
+            || receiver == null || !(receiver is ExprVar)) {
         macro_error(prog, at, "_sql: _join key selector body must be `<arg>.Field` (column ref); computed key expressions are not yet translatable to SQL — use raw SQL or restructure the join")
         return ""
     }
+    let argName = string((receiver as ExprVar).name)
     if (argName != expectedArgName) {
         macro_error(prog, at, "_sql: _join key selector references arg `{argName}`, expected `{expectedArgName}` — the on-clause must read `(l, r) => l.X == r.Y` referring to the join's own params, not outer captures")
         return ""
@@ -1166,27 +1172,6 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
 // ============================================================================
 
 [macro_function]
-def private extract_arg_field(var node : ExpressionPtr; var argName : string&; var fieldName : string&) : bool {
-    //! Extract `<argName>.<fieldName>` from an ExprField-rooted-at-ExprVar node.
-    //! Peels ExprRef2Value wrappers. Returns true on match; populates the
-    //! out-strings via reference. Used by analyze_projection / pred_to_sql to
-    //! handle both single-source (`_.Col`) and multi-source (`u.Col`) shapes
-    //! through one extractor.
-    var n = peel_ref2val(node)
-    if (n == null || !(n is ExprField)) {
-        return false
-    }
-    var ef = n as ExprField
-    var recv = peel_ref2val(ef.value)
-    if (recv == null || !(recv is ExprVar)) {
-        return false
-    }
-    argName = string((recv as ExprVar).name)
-    fieldName = string(ef.name)
-    return true
-}
-
-[macro_function]
 def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
                                      var argName : string&; positive : bool) : string {
     //! If `node` is a bare `ExprVar` whose name maps to a joined source
@@ -1196,11 +1181,18 @@ def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
     //!   positive = false (`is_none`)  → `"alias"."rightCol" IS NULL`
     //! Returns "" otherwise — caller falls through to the default
     //! is_some/is_none translation (which expects a column ref).
-    var n = peel_ref2val(node)
-    if (n == null || !(n is ExprVar)) {
+    if (!q.seenJoin) {
         return ""
     }
-    if (!q.seenJoin) {
+    // Require a bare ExprVar — `qmatch(node, $i(argName))` would match any
+    // expression and capture an empty (or worse, foreign) name from
+    // ExprField/ExprCall receivers, opening rare collisions with join-arg
+    // names. Use an inline shape check instead.
+    var n = node
+    if (n is ExprRef2Value) {
+        n = (n as ExprRef2Value).subexpr
+    }
+    if (n == null || !(n is ExprVar)) {
         return ""
     }
     argName = string((n as ExprVar).name)
@@ -1246,8 +1238,10 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
         macro_error(prog, at, "_sql: _select: missing projection")
         return false
     }
-    // After Mode-2 expansion the typer may wrap field reads in ExprRef2Value
-    // (the value-from-ref adapter). Peel it before pattern-matching.
+    // Peel the ExprRef2Value wrapper the typer inserts around field reads
+    // post-Mode-2 — qmatch in the single-column branch below auto-peels, but
+    // the multi-shape `is ExprMakeTuple` dispatch further down needs a
+    // peeled body to compare RTTI directly.
     if (body is ExprRef2Value) {
         body = (body as ExprRef2Value).subexpr
         if (body == null) {
@@ -1257,10 +1251,15 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
     }
 
     // Single-column form: <argname>.FieldName  (`_` in single-source, `u`/`o` etc. after a join).
+    // Receiver must be ExprVar — `$e(recv).$f(field)` would otherwise accept
+    // nested chains (`_.opt.X`, `a.b.c`) and silently extract the inner
+    // field name as the argName.
     {
-        var argName : string
+        var receiver : ExpressionPtr
         var fieldName : string
-        if (extract_arg_field(body, argName, fieldName)) {
+        if (qmatch(body, $e(receiver).$f(fieldName)).matched
+                && receiver != null && receiver is ExprVar) {
+            let argName = string((receiver as ExprVar).name)
             let srcIdx = resolve_proj_arg_to_source(q, argName, prog, at)
             if (srcIdx < 0) {
                 return false
@@ -1300,12 +1299,16 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
             q.projRecordNames |> clear
             for (i in range(length(mkTup.values))) {
                 var val = mkTup.values[i]
+                // Peel for the `val is ExprCall` dispatch below; the
+                // qmatch column-ref branch peels independently.
                 if (val is ExprRef2Value) {
                     val = (val as ExprRef2Value).subexpr
                 }
-                var argName : string
+                var receiver : ExpressionPtr
                 var fieldName : string
-                if (extract_arg_field(val, argName, fieldName)) {
+                if (qmatch(val, $e(receiver).$f(fieldName)).matched
+                        && receiver != null && receiver is ExprVar) {
+                    let argName = string((receiver as ExprVar).name)
                     let srcIdx = resolve_proj_arg_to_source(q, argName, prog, at)
                     if (srcIdx < 0) {
                         return false
@@ -1388,42 +1391,6 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
 // ============================================================================
 
 [macro_function]
-def private peel_ref2val(var node : ExpressionPtr) : ExpressionPtr {
-    //! Strip a single ``ExprRef2Value`` wrapper that the typer inserts
-    //! around field reads after Mode-2 inner expansion. Returns ``node``
-    //! unchanged if not wrapped.
-    if (node != null && node is ExprRef2Value) {
-        var sub = (node as ExprRef2Value).subexpr
-        if (sub != null) {
-            return sub
-        }
-    }
-    return node
-}
-
-[macro_function]
-def private is_underscore_field(var node : ExpressionPtr; expectedField : string) : bool {
-    //! True if ``node`` is the ExprField ``_.<expectedField>`` (the lambda
-    //! parameter ``_`` followed by a specific tuple-index or struct field).
-    //! Inlined manually rather than via qmatch — qmatch inside helper
-    //! functions called from a macro_function body did not match reliably
-    //! in this context.
-    var n = peel_ref2val(node)
-    if (n == null || !(n is ExprField)) {
-        return false
-    }
-    var ef = n as ExprField
-    if (ef.name != expectedField) {
-        return false
-    }
-    var recv = peel_ref2val(ef.value)
-    if (recv == null || !(recv is ExprVar)) {
-        return false
-    }
-    return (recv as ExprVar).name == "_"
-}
-
-[macro_function]
 def private group_key_column_name(q : SqlQuery; idx : int) : string {
     //! Return the unquoted column name of the idx-th group-by key.
     //! ``q.groupByCols[idx]`` is already SQL-quoted (e.g. ``"\"City\""``);
@@ -1444,7 +1411,10 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
     //! aggregate (even on column-resolution failure — caller checks
     //! ``empty(sqlOut)``); false if the node isn't one of the recognized
     //! aggregate forms.
-    var n = peel_ref2val(node)
+    var n = node
+    if (n is ExprRef2Value) {
+        n = (n as ExprRef2Value).subexpr
+    }
     if (n == null || !(n is ExprCall)) {
         return false
     }
@@ -1464,7 +1434,7 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
     // narrows to int via sqlite3_column_int — fine for any plausible row
     // count and matches the user's projection-tuple inferred type.
     if ((fname == "length" || fname == "count") && argc == 1
-            && is_underscore_field(call.arguments[0], "_1")) {
+            && qmatch(call.arguments[0], _._1).matched) {
         sqlOut = "COUNT(*)"
         typeOut = new TypeDecl(at = at, baseType = Type.tInt)
         return true
@@ -1479,43 +1449,44 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
         var inner : ExpressionPtr = call.arguments[0]
         var innerCall = match_linq_call(inner, "select")
         if (innerCall != null && innerCall.arguments |> length == 2
-                && is_underscore_field(innerCall.arguments[0], "_1")) {
+                && qmatch(innerCall.arguments[0], _._1).matched) {
             var lamBody = peel_lambda_body(innerCall.arguments[1])
             if (lamBody == null) {
                 macro_error(prog, at, "_sql: aggregate's inner select lambda has unexpected shape")
                 return true
             }
-            lamBody = peel_ref2val(lamBody)
             // Body must be `<param>.<field>` — an ExprField rooted at a
             // single ExprVar (the lambda's parameter, whatever its name).
-            if (lamBody != null && lamBody is ExprField) {
-                var ef = lamBody as ExprField
-                var recv = peel_ref2val(ef.value)
-                if (recv != null && recv is ExprVar) {
-                    let col = string(ef.name)
-                    var sqlOp = ""
-                    if (fname == "sum") {
-                        sqlOp = "SUM"
-                    } elif (fname == "average") {
-                        sqlOp = "AVG"
-                    } elif (fname == "min") {
-                        sqlOp = "MIN"
-                    } else {
-                        sqlOp = "MAX"
-                    }
-                    sqlOut = "{sqlOp}(\"{col}\")"
-                    if (fname == "average") {
-                        typeOut = new TypeDecl(at = at, baseType = Type.tDouble)
-                    } else {
-                        var colType = lookup_struct_field_type(q.rootType, col)
-                        if (colType == null) {
-                            macro_error(prog, at, "_sql: cannot resolve column '{col}' in {fname}(...)")
-                            return true
-                        }
-                        typeOut = colType
-                    }
-                    return true
+            // The receiver gate is load-bearing here: without it,
+            // `$(u : User) => u.opt.X` would over-match with col="X" and
+            // emit a silently-wrong SUM("X") referring to a sibling column
+            // on the root type. Pin the receiver to ExprVar.
+            var receiver : ExpressionPtr
+            var col : string
+            if (qmatch(lamBody, $e(receiver).$f(col)).matched
+                    && receiver != null && receiver is ExprVar) {
+                var sqlOp = ""
+                if (fname == "sum") {
+                    sqlOp = "SUM"
+                } elif (fname == "average") {
+                    sqlOp = "AVG"
+                } elif (fname == "min") {
+                    sqlOp = "MIN"
+                } else {
+                    sqlOp = "MAX"
                 }
+                sqlOut = "{sqlOp}(\"{col}\")"
+                if (fname == "average") {
+                    typeOut = new TypeDecl(at = at, baseType = Type.tDouble)
+                } else {
+                    var colType = lookup_struct_field_type(q.rootType, col)
+                    if (colType == null) {
+                        macro_error(prog, at, "_sql: cannot resolve column '{col}' in {fname}(...)")
+                        return true
+                    }
+                    typeOut = colType
+                }
+                return true
             }
             macro_error(prog, at, "_sql: aggregate's inner select body must be `<param>.<field>`; got: {describe(lamBody)}")
             return true
@@ -1530,7 +1501,15 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         macro_error(prog, at, "_sql: _select after _group_by: missing projection")
         return false
     }
-    body = peel_ref2val(body)
+    // Peel for the multi-shape `is ExprMakeTuple` dispatch — qmatch in the
+    // per-element branches below auto-peels independently.
+    if (body is ExprRef2Value) {
+        body = (body as ExprRef2Value).subexpr
+        if (body == null) {
+            macro_error(prog, at, "_sql: _select after _group_by: ExprRef2Value with null subexpr")
+            return false
+        }
+    }
     if (!(body is ExprMakeTuple)) {
         macro_error(prog, at, "_sql: _select after _group_by must be a named-tuple projection — `(Key=_._0, N=_._1 |> length, AvgX=_._1 |> select($(u:T) => u.X) |> average)`. Got: {describe(body)}")
         return false
@@ -1548,62 +1527,52 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
     q.projRecordNames |> clear
     let nKeys = length(q.groupByCols)
     for (i in range(length(mkTup.values))) {
-        var val = peel_ref2val(mkTup.values[i])
+        var val = mkTup.values[i]
+        // No explicit ExprRef2Value peel here: qmatch auto-peels at every
+        // dispatch level, try_translate_group_aggregate peels its own
+        // input, and describe() unwraps the shell for diagnostic output.
 
-        // Inspect ExprField shapes — `_.<f>` (single-key key ref) and
-        // `_._0._<n>` (multi-key key component). Both have an outer
-        // ExprField; differentiate by recursing on the receiver.
-        if (val != null && val is ExprField) {
-            var ef = val as ExprField
-            var recv = peel_ref2val(ef.value)
-            let outerName = string(ef.name)
-            // Case A: receiver is ExprVar("_") — direct `_.<f>` (so `_._0` for single-key).
-            if (recv != null && recv is ExprVar
-                    && (recv as ExprVar).name == "_"
-                    && nKeys == 1
-                    && outerName == "_0") {
-                let col = group_key_column_name(q, 0)
-                var fieldType = lookup_struct_field_type(q.rootType, col)
-                if (fieldType == null) {
-                    macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
+        // Recognized group-key projection shapes:
+        //   single-key:  `_._0`
+        //   multi-key:   `_._0._<n>`  (n = key column index)
+        // Case A: single-key `_._0` — direct group-key reference.
+        if (nKeys == 1 && qmatch(val, _._0).matched) {
+            let col = group_key_column_name(q, 0)
+            var fieldType = lookup_struct_field_type(q.rootType, col)
+            if (fieldType == null) {
+                macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
+                return false
+            }
+            q.groupedSelectExprs |> push("\"{col}\"")
+            q.groupedSelectTypes |> push(fieldType)
+            q.projRecordNames |> push(string(tupT.argNames[i]))
+            continue
+        }
+        // Case B: multi-key `_._0._<n>` — capture the trailing field name and parse the suffix.
+        if (nKeys > 1) {
+            var outerName : string
+            if (qmatch(val, _._0.$f(outerName)).matched) {
+                if (length(outerName) > 1 && outerName |> starts_with("_")) {
+                    let suffix = slice(outerName, 1, length(outerName))
+                    let keyIdx = try_to_int(suffix) ?? -1
+                    if (keyIdx >= 0 && keyIdx < nKeys) {
+                        let col = group_key_column_name(q, keyIdx)
+                        var fieldType = lookup_struct_field_type(q.rootType, col)
+                        if (fieldType == null) {
+                            macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
+                            return false
+                        }
+                        q.groupedSelectExprs |> push("\"{col}\"")
+                        q.groupedSelectTypes |> push(fieldType)
+                        q.projRecordNames |> push(string(tupT.argNames[i]))
+                        continue
+                    }
+                    macro_error(prog, at, "_sql: multi-key group has {nKeys} keys; `_._0.{outerName}` is out of range")
                     return false
                 }
-                q.groupedSelectExprs |> push("\"{col}\"")
-                q.groupedSelectTypes |> push(fieldType)
-                q.projRecordNames |> push(string(tupT.argNames[i]))
-                continue
             }
-            // Case B: receiver is itself `_._0` — multi-key form `_._0._<n>`.
-            if (nKeys > 1 && recv != null && recv is ExprField) {
-                var inner = recv as ExprField
-                var innerRecv = peel_ref2val(inner.value)
-                if (innerRecv != null && innerRecv is ExprVar
-                        && (innerRecv as ExprVar).name == "_"
-                        && inner.name == "_0") {
-                    if (length(outerName) > 1 && outerName |> starts_with("_")) {
-                        let suffix = slice(outerName, 1, length(outerName))
-                        let keyIdx = try_to_int(suffix) ?? -1
-                        if (keyIdx >= 0 && keyIdx < nKeys) {
-                            let col = group_key_column_name(q, keyIdx)
-                            var fieldType = lookup_struct_field_type(q.rootType, col)
-                            if (fieldType == null) {
-                                macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
-                                return false
-                            }
-                            q.groupedSelectExprs |> push("\"{col}\"")
-                            q.groupedSelectTypes |> push(fieldType)
-                            q.projRecordNames |> push(string(tupT.argNames[i]))
-                            continue
-                        }
-                        macro_error(prog, at, "_sql: multi-key group has {nKeys} keys; `_._0.{outerName}` is out of range")
-                        return false
-                    }
-                }
-            }
-            // Multi-key reject: `_._0` (whole key tuple) is ambiguous in projection.
-            if (nKeys > 1 && recv != null && recv is ExprVar
-                    && (recv as ExprVar).name == "_"
-                    && outerName == "_0") {
+            // Multi-key reject: `_._0` alone (whole key tuple) is ambiguous in projection.
+            if (qmatch(val, _._0).matched) {
                 macro_error(prog, at, "_sql: multi-key group: `_._0` refers to the whole key tuple; use `_._0._N` to access the N-th key column")
                 return false
             }
@@ -1715,9 +1684,8 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         }
         for (i in range(length(mkTup.values))) {
             var val = mkTup.values[i]
-            if (val is ExprRef2Value) {
-                val = (val as ExprRef2Value).subexpr
-            }
+            // qmatch auto-peels ExprRef2Value; describe() does the same for
+            // the diagnostic — no explicit peel needed here.
             var fieldName : string
             if (qmatch(val, _.$f(fieldName)).matched) {
                 q.orderByCols |> push("\"{fieldName}\" {direction}")
@@ -1768,9 +1736,8 @@ def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog
         }
         for (i in range(length(mkTup.values))) {
             var val = mkTup.values[i]
-            if (val is ExprRef2Value) {
-                val = (val as ExprRef2Value).subexpr
-            }
+            // qmatch auto-peels ExprRef2Value; describe() does the same for
+            // the diagnostic — no explicit peel needed here.
             var fieldName : string
             if (qmatch(val, _.$f(fieldName)).matched) {
                 q.groupByCols |> push("\"{fieldName}\"")
@@ -1968,48 +1935,48 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     // Multi-source: look up arg → source idx → emit `"talias"."Col"`. Unrecognized
     // arg names in multi-source mode are a `macro_error` — they're either the
     // group-key shape (`_._0`) handled below, or genuinely unbound (caller bug).
+    // Pin the receiver to ExprVar — `$e(recv).$f(field)` would otherwise match
+    // nested chains (`a.b.c`) and silently treat the inner field name as the
+    // arg, which can collide with a real join-arg name in multi-source mode.
     {
-        var n2 = peel_ref2val(node)
-        if (n2 != null && n2 is ExprField) {
-            var ef = n2 as ExprField
-            var recv = peel_ref2val(ef.value)
-            if (recv != null && recv is ExprVar) {
-                let argName = string((recv as ExprVar).name)
-                let fieldName = string(ef.name)
-                // Alias-qualification is driven by `rootAlias` being non-
-                // empty, NOT by `seenJoin`. The two are intentionally
-                // decoupled: the right-side subQ analyzed by
-                // `process_join_call` runs with `rootAlias = "t1"` but
-                // `seenJoin = false` so `_where` in the inner chain qualifies
-                // columns ("t1"."Col") without dragging in multi-source
-                // projection-arg-lookup semantics.
-                if (!empty(q.rootAlias)) {
-                    var srcIdx = lookup_arg_source(q, argName)
-                    // Pre-join `_where` always references the root (source 0)
-                    // through `_`. The arg-binding stack is only populated
-                    // for the `into` projection's named 2-arg lambda; outside
-                    // that scope, treat `_` as source 0.
-                    if (srcIdx < 0 && argName == "_") {
-                        srcIdx = 0
-                    }
-                    if (srcIdx >= 0) {
-                        return column_sql_for_alias(source_alias_for_idx(q, srcIdx), fieldName)
-                    }
-                    // Not bound to any source — fall through to other patterns
-                    // (e.g. `_._0` group-key references which keep their own
-                    // recognition path below).
-                } else {
-                    // Single-source: only `_` is bound. Match the legacy emission.
-                    if (argName == "_") {
-                        return "\"{fieldName}\""
-                    }
-                    // Upsert-only sentinel: `_excluded.Col` → SQLite's
-                    // ``excluded.col`` reference to the proposed row inside
-                    // ON CONFLICT DO UPDATE SET. Gated on q.upsertMode so
-                    // unrelated chains don't accidentally accept it.
-                    if (q.upsertMode && argName == "_excluded") {
-                        return "excluded.\"{fieldName}\""
-                    }
+        var receiver : ExpressionPtr
+        var fieldName : string
+        if (qmatch(node, $e(receiver).$f(fieldName)).matched
+                && receiver != null && receiver is ExprVar) {
+            let argName = string((receiver as ExprVar).name)
+            // Alias-qualification is driven by `rootAlias` being non-
+            // empty, NOT by `seenJoin`. The two are intentionally
+            // decoupled: the right-side subQ analyzed by
+            // `process_join_call` runs with `rootAlias = "t1"` but
+            // `seenJoin = false` so `_where` in the inner chain qualifies
+            // columns ("t1"."Col") without dragging in multi-source
+            // projection-arg-lookup semantics.
+            if (!empty(q.rootAlias)) {
+                var srcIdx = lookup_arg_source(q, argName)
+                // Pre-join `_where` always references the root (source 0)
+                // through `_`. The arg-binding stack is only populated
+                // for the `into` projection's named 2-arg lambda; outside
+                // that scope, treat `_` as source 0.
+                if (srcIdx < 0 && argName == "_") {
+                    srcIdx = 0
+                }
+                if (srcIdx >= 0) {
+                    return column_sql_for_alias(source_alias_for_idx(q, srcIdx), fieldName)
+                }
+                // Not bound to any source — fall through to other patterns
+                // (e.g. `_._0` group-key references which keep their own
+                // recognition path below).
+            } else {
+                // Single-source: only `_` is bound. Match the legacy emission.
+                if (argName == "_") {
+                    return "\"{fieldName}\""
+                }
+                // Upsert-only sentinel: `_excluded.Col` → SQLite's
+                // ``excluded.col`` reference to the proposed row inside
+                // ON CONFLICT DO UPDATE SET. Gated on q.upsertMode so
+                // unrelated chains don't accidentally accept it.
+                if (q.upsertMode && argName == "_excluded") {
+                    return "excluded.\"{fieldName}\""
                 }
             }
         }
@@ -3626,50 +3593,40 @@ def private analyze_upsert_conflict_inner(var node : ExpressionPtr; rootT : Type
         macro_error(prog, at, "_sql_upsert: on_conflict is null")
         return false
     }
+    // Single column form: `_.Col` — qmatch auto-peels any ExprRef2Value layers.
+    {
+        var col : string
+        if (qmatch(node, _.$f(col)).matched) {
+            conflictCols |> push(col)
+            return validate_conflict_cols(rootT, conflictCols, prog, at)
+        }
+    }
+    // Peel for the multi-shape `is ExprMakeTuple` and ExprField fallthroughs.
     var n = node
     if (n is ExprRef2Value) {
         n = (n as ExprRef2Value).subexpr
     }
-    // Single column form: `_.Col`
     if (n is ExprField) {
-        let ef = n as ExprField
-        var recv = ef.value
-        if (recv is ExprRef2Value) {
-            recv = (recv as ExprRef2Value).subexpr
-        }
-        if (recv != null && recv is ExprVar && (recv as ExprVar).name == "_") {
-            conflictCols |> push(string(ef.name))
-            return validate_conflict_cols(rootT, conflictCols, prog, at)
-        }
+        // ExprField that didn't match `_.<f>` — receiver isn't `_`.
         macro_error(prog, at, "_sql_upsert: on_conflict column ref must be `_.Col`; got {describe(node)}")
         return false
     }
     // Tuple form: `tuple(_.A, _.B, ...)` or `(_.A, _.B, ...)` — both parse as ExprMakeTuple.
     if (n is ExprMakeTuple) {
-        let mkt = n as ExprMakeTuple
+        var mkt = n as ExprMakeTuple
         if (length(mkt.values) == 0) {
             macro_error(prog, at, "_sql_upsert: on_conflict tuple is empty")
             return false
         }
-        for (sub in mkt.values) {
-            var s = sub
-            if (s is ExprRef2Value) {
-                s = (s as ExprRef2Value).subexpr
+        for (idx in range(length(mkt.values))) {
+            var sm = mkt.values[idx]
+            var col : string
+            if (qmatch(sm, _.$f(col)).matched) {
+                conflictCols |> push(col)
+                continue
             }
-            if (s == null || !(s is ExprField)) {
-                macro_error(prog, at, "_sql_upsert: on_conflict tuple elements must be `_.Col`; got {describe(sub)}")
-                return false
-            }
-            let ef = s as ExprField
-            var recv = ef.value
-            if (recv is ExprRef2Value) {
-                recv = (recv as ExprRef2Value).subexpr
-            }
-            if (recv == null || !(recv is ExprVar) || (recv as ExprVar).name != "_") {
-                macro_error(prog, at, "_sql_upsert: on_conflict tuple element receiver must be `_`; got {describe(sub)}")
-                return false
-            }
-            conflictCols |> push(string(ef.name))
+            macro_error(prog, at, "_sql_upsert: on_conflict tuple elements must be `_.Col`; got {describe(mkt.values[idx])}")
+            return false
         }
         return validate_conflict_cols(rootT, conflictCols, prog, at)
     }
@@ -3785,6 +3742,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         argSourceIdx <- [0],
         upsertMode = true
     )
+    setSqlClauses |> reserve(length(setSqlClauses) + length(mkTup.values))
     for (i in range(length(mkTup.values))) {
         let colName = recordNames[i]
         var val = mkTup.values[i]
@@ -3794,6 +3752,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         }
         setSqlClauses |> push("\"{colName}\" = {valSql}")
     }
+    setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
     for (b in setQ.bindExprs) {
         setBindExprs |> push(b)
     }
@@ -3879,6 +3838,7 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
     //    which uses indices 1..N_row), then SET binds at N_row+1, N_row+2, ...
     var rowClone = clone_expression(rowE)
     var bindStmts : array<ExpressionPtr>
+    bindStmts |> reserve(1 + length(setBindExprs))
     bindStmts |> push <| qmacro_expr(${
         _::_sql_bind_row(_sql_stmt, $e(rowClone), true);
     })
