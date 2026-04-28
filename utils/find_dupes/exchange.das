@@ -17,6 +17,7 @@ struct public ExportedFunction {
     name : string
     file : string
     line : int
+    end_line : int
     is_lambda : bool
     canonical : string
 }
@@ -33,7 +34,12 @@ struct public ExportEnvelope {
 }
 
 
-let public EXCHANGE_SCHEMA_VERSION = 1
+// v2 (2026-04-27): added `end_line` to ExportedFunction so consumers
+// can extract the full function body from disk by line range. Required
+// by `utils/look-at-dupes/`. v1 readers reject v2 files (and vice
+// versa) via the explicit version check in `read_import` /
+// `load_baseline_canonicals`.
+let public EXCHANGE_SCHEMA_VERSION = 2
 
 
 // Single source of truth for "given a canonical string, finish
@@ -64,6 +70,7 @@ def public write_export(records : array<FuncRecord>; path : string) : bool {
         ef.name := rec.ref.name
         ef.file := rec.ref.file
         ef.line = rec.ref.line
+        ef.end_line = rec.ref.end_line
         ef.is_lambda = rec.ref.is_lambda
         ef.canonical := rec.canonical
         env.functions |> emplace(ef)
@@ -83,11 +90,20 @@ def public write_export(records : array<FuncRecord>; path : string) : bool {
 
 // An imported function record is "well-formed" when it has a non-empty
 // canonical (the only field that affects clustering), a non-empty name
-// and file (so reports are interpretable), and a non-negative line.
+// and file (so reports are interpretable), and a sane line range.
 // Empty canonicals are the dangerous case: with `--min-tokens 0` they
 // would all collide in a single fake exact-cluster.
+//
+// `line` must be a real 1-based line, and `end_line` must cover at
+// least the start line. v1 envelopes (no `end_line` field) are
+// rejected upstream by the `schema_version` check, so requiring v2's
+// `end_line` here doesn't break legacy data — a malformed v2 record
+// missing `end_line` defaults to 0 and gets rejected by this check
+// instead of silently degrading downstream consumers (e.g.
+// `look-at-dupes` would fall back to single-line source extraction).
 def is_well_formed(ef : ExportedFunction) : bool {
-    return !empty(ef.canonical) && !empty(ef.name) && !empty(ef.file) && ef.line >= 0
+    return (!empty(ef.canonical) && !empty(ef.name) && !empty(ef.file)
+        && ef.line >= 1 && ef.end_line >= ef.line)
 }
 
 
@@ -196,6 +212,7 @@ def public read_import(path : string; var records : array<FuncRecord>;
         rec.ref.name := ef.name
         rec.ref.file := ef.file
         rec.ref.line = ef.line
+        rec.ref.end_line = ef.end_line
         rec.ref.is_lambda = ef.is_lambda
         rec.canonical := ef.canonical
         derive_sig_and_count(rec, want_sigs, min_tokens)

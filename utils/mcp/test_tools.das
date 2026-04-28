@@ -1384,7 +1384,7 @@ def test_find_duplicates_missing_corpus(t : T?) {
 [test]
 def test_find_duplicates_missing_paths(t : T?) {
     t |> run("missing 'paths' arg returns error envelope") <| @(t : T?) {
-        let path = make_temp_corpus_file(t, "\{\"schema_version\":1,\"functions\":[]\}")
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":2,\"functions\":[]\}")
         if (empty(path)) {
             return
         }
@@ -1423,7 +1423,7 @@ def test_find_duplicates_corpus_not_found(t : T?) {
 [test]
 def test_find_duplicates_empty_corpus(t : T?) {
     t |> run("empty corpus + valid candidate yields envelope with zero matches") <| @(t : T?) {
-        let path = make_temp_corpus_file(t, "\{\"schema_version\":1,\"functions\":[]\}")
+        let path = make_temp_corpus_file(t, "\{\"schema_version\":2,\"functions\":[]\}")
         if (empty(path)) {
             return
         }

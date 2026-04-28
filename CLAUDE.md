@@ -292,8 +292,12 @@ This is the post-migration state. If you find yourself reading older guidance ab
 - **`is`/`as` on handled types checks EXACT type**, not C++ inheritance — `expr is ExprField` is `false` when `expr` is `ExprSafeField`. `as` on wrong type crashes. Must handle each concrete type explicitly.
 - `#pragma optimize` in AOT-generated code must be wrapped in `#ifdef _MSC_VER` — Clang warns on unknown pragmas
 - **Macro-generated struct variables** need `default<$t(st)>` initialization (not `var x : $t(st)`) — avoids "uninitialized variable" errors for structs without field defaults
-- `print` should not be used in `tests` and in `daslib` folders. `to_log(LOG_INFO)` (or
-other level) should be used instead.
+- `print` should not be used in `tests`, `daslib`, or `utils` folders. `to_log(LOG_INFO)` (or
+other level) should be used instead. CI pipes `to_log` through the same stdout the user
+sees, so there is no behavior loss — the win is consistent log levels (`LOG_INFO`,
+`LOG_WARNING`, `LOG_ERROR`) and the ability to filter / route output later. See
+`utils/find_dupes/main.das` for the canonical pattern (zero `print()` calls; everything
+flows through `to_log`).
 
 
 ### Code style — prefer idiomatic forms

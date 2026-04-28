@@ -1,0 +1,14 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("look-at-dupes")
+    package_description("AI judge for find_dupes clusters — partitions duplicate suspects into real / partial / false-positive via the Claude Messages API")
+}
+
+[export]
+def dependencies(version : string) {
+    require_package("das-claude")
+}

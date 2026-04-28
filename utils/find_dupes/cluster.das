@@ -9,6 +9,7 @@ struct public MemberRef {
     file : string
     name : string
     line : int
+    end_line : int
     is_lambda : bool
 }
 
