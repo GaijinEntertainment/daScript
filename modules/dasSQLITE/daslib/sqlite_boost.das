@@ -111,8 +111,14 @@ def open_sqlite(path : string) : SqlRunner {
 }
 
 def with_sqlite(path : string; blk : block<(db : SqlRunner) : void>) : void {
-    //! RAII helper. Opens the DB, invokes the block, finalizes on exit (including on panic / early return).
+    //! RAII helper. Opens the DB, sets ``PRAGMA foreign_keys=ON`` (SQLite ships
+    //! it OFF by default for back-compat with pre-3.6.19 databases — without
+    //! the pragma, FK clauses are parsed and stored but not enforced), invokes
+    //! the block, finalizes on exit (including on panic / early return). Users
+    //! who need FKs disabled can ``db |> exec("PRAGMA foreign_keys=OFF")`` from
+    //! inside the block.
     var inscope db = open_sqlite(path)
+    db |> exec("PRAGMA foreign_keys = ON")
     invoke(blk, db)
 }
 
@@ -652,9 +658,19 @@ def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(
 
 [template(t)]
 def try_create_table(db : SqlRunner; t : auto(TT)) : SqlError {
-    //! Emits CREATE TABLE for the type ``T`` based on its `[sql_table]` definition.
-    //! Returns ``none`` on success, ``some(errmsg)`` on failure.
-    return db |> try_exec(_::_sql_create_table_sql(type<TT>))
+    //! Emits CREATE TABLE (and any ``[sql_index(...)]`` CREATE INDEX statements
+    //! attached to the struct) for the type ``T`` based on its `[sql_table]`
+    //! definition. Returns ``none`` on success, ``some(errmsg)`` on failure.
+    let table_sql = _::_sql_create_table_sql(type<TT>)
+    let err = db |> try_exec(table_sql)
+    if (err |> is_some) {
+        return err
+    }
+    let indexes_sql = _::_sql_create_indexes_sql(type<TT>)
+    if (empty(indexes_sql)) {
+        return none(type<string>)
+    }
+    return db |> try_exec(indexes_sql)
 }
 
 [template(t)]
@@ -792,6 +808,177 @@ def insert(db : SqlRunner; rows : array<auto(TT)>) : int64 {
 [unused_argument(e)]
 def private ignore_sql_error(e : SqlError) : void {
     //! Discards a SqlError. Used by try_insert(array) to swallow ROLLBACK failures while preserving the original error.
+}
+
+// ============================================================================
+// INSERT OR IGNORE / INSERT OR REPLACE
+//
+// Variants of ``insert`` that change SQLite's conflict resolution. Both reuse
+// the per-struct ``_sql_insert_with_pk_sql`` / ``_sql_insert_no_pk_sql`` SQL
+// emitters and ``_sql_bind_row`` bind code; the only difference is a textual
+// ``OR IGNORE`` / ``OR REPLACE`` modifier inserted after ``INSERT`` and a
+// rows-affected return (via ``sqlite3_changes``) rather than ``last_insert_rowid``.
+//
+// ``OR IGNORE``: silent no-op on PK / UNIQUE violation. Returns 0 for the
+//   conflicting row, 1 for the inserted row.
+// ``OR REPLACE``: deletes the conflicting row, then inserts the new one. Be
+//   careful — any column not in the new row gets its DEFAULT (rarely what you
+//   want for partial updates; tut 21's UPSERT ON CONFLICT DO UPDATE is the
+//   proper merge form).
+// ============================================================================
+
+def private with_or_clause(plain_sql : string; or_clause : string) : string {
+    //! Insert `OR IGNORE` / `OR REPLACE` between `INSERT` and `INTO` /
+    //! `DEFAULT VALUES`. The plain SQL always begins with ``INSERT `` so the
+    //! substitution target is unambiguous.
+    if (empty(or_clause)) {
+        return plain_sql
+    }
+    return replace(plain_sql, "INSERT ", "INSERT {or_clause} ")
+}
+
+def private try_insert_or(db : SqlRunner; row : auto(TT); or_clause : string) : Result<int, string> {
+    //! Shared body for `try_insert_or_ignore` / `try_insert_or_replace` (single row).
+    //! Returns ``Ok(rows_affected)`` — 0 if the row was IGNORE-d, 1 otherwise.
+    let pk_unset = _::_sql_pk_is_unset(row)
+    let plain_sql = pk_unset ? _::_sql_insert_no_pk_sql(row) : _::_sql_insert_with_pk_sql(row)
+    let sql = with_or_clause(plain_sql, or_clause)
+    let r = db |> try_step_dml(sql, $(var stmt : sqlite3_stmt?) {
+        _::_sql_bind_row(stmt, row, !pk_unset)
+    }, "insert_or_{or_clause}")
+    if (r |> is_err) {
+        return err(r |> unwrap_err, type<int>)
+    }
+    return ok(sqlite3_changes(db.sqlite_handle), type<string>)
+}
+
+def private try_insert_or(db : SqlRunner; rows : array<auto(TT)>; or_clause : string) : Result<int, string> {
+    //! Shared body for `try_insert_or_ignore` / `try_insert_or_replace` (bulk).
+    //! Wraps the per-row prepared-statement loop in a transaction (BEGIN/COMMIT
+    //! at the outer level, SAVEPOINT/RELEASE when nested). Returns the SUM of
+    //! per-statement ``sqlite3_changes`` over the batch.
+    if (empty(rows)) {
+        return ok(0, type<string>)
+    }
+    let pk_unset = _::_sql_pk_is_unset(rows[0])
+    for (i in 1..length(rows)) {
+        if (_::_sql_pk_is_unset(rows[i]) != pk_unset) {
+            return err("insert_or_{or_clause}: rows mix PK-set and PK-unset (row 0 vs row {i}); partition the array before calling", type<int>)
+        }
+    }
+    let was_in_txn = db |> in_transaction()
+    let begin_sql = was_in_txn ? "SAVEPOINT das_inso_sp" : "BEGIN IMMEDIATE"
+    let begin_err = db |> try_exec(begin_sql)
+    if (begin_err |> is_some) {
+        return err(begin_err |> unwrap, type<int>)
+    }
+    let plain_sql = pk_unset ? _::_sql_insert_no_pk_sql(rows[0]) : _::_sql_insert_with_pk_sql(rows[0])
+    let sql = with_or_clause(plain_sql, or_clause)
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "insert_or_{or_clause} prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        if (was_in_txn) {
+            db |> try_exec("ROLLBACK TO das_inso_sp") |> ignore_sql_error
+            db |> try_exec("RELEASE das_inso_sp") |> ignore_sql_error
+        } else {
+            db |> try_exec("ROLLBACK") |> ignore_sql_error
+        }
+        return err(msg, type<int>)
+    }
+    var total_changes = 0
+    for (row in rows) {
+        sqlite3_reset(stmt)
+        sqlite3_clear_bindings(stmt)
+        _::_sql_bind_row(stmt, row, !pk_unset)
+        let src = sqlite3_step(stmt)
+        if (src != SQLITE_DONE) {
+            let msg = "insert_or_{or_clause} step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+            sqlite3_finalize(stmt)
+            if (was_in_txn) {
+                db |> try_exec("ROLLBACK TO das_inso_sp") |> ignore_sql_error
+                db |> try_exec("RELEASE das_inso_sp") |> ignore_sql_error
+            } else {
+                db |> try_exec("ROLLBACK") |> ignore_sql_error
+            }
+            return err(msg, type<int>)
+        }
+        total_changes += sqlite3_changes(db.sqlite_handle)
+    }
+    sqlite3_finalize(stmt)
+    let commit_sql = was_in_txn ? "RELEASE das_inso_sp" : "COMMIT"
+    let commit_err = db |> try_exec(commit_sql)
+    if (commit_err |> is_some) {
+        if (was_in_txn) {
+            db |> try_exec("ROLLBACK TO das_inso_sp") |> ignore_sql_error
+            db |> try_exec("RELEASE das_inso_sp") |> ignore_sql_error
+        } else {
+            db |> try_exec("ROLLBACK") |> ignore_sql_error
+        }
+        return err(commit_err |> unwrap, type<int>)
+    }
+    return ok(total_changes, type<string>)
+}
+
+def try_insert_or_ignore(db : SqlRunner; row : auto(TT)) : Result<int, string> {
+    //! Single-row INSERT OR IGNORE. Returns ``Ok(1)`` when the row was
+    //! inserted, ``Ok(0)`` when a PK / UNIQUE violation was silently ignored.
+    return <- db |> try_insert_or(row, "OR IGNORE")
+}
+
+def insert_or_ignore(db : SqlRunner; row : auto(TT)) : int {
+    //! Strict variant of ``try_insert_or_ignore(row)``. Panics on SQL error.
+    let r = db |> try_insert_or_ignore(row)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_insert_or_ignore(db : SqlRunner; rows : array<auto(TT)>) : Result<int, string> {
+    //! Bulk INSERT OR IGNORE inside a single transaction. Returns the sum of
+    //! per-row changes — total rows actually inserted (ignored rows count 0).
+    return <- db |> try_insert_or(rows, "OR IGNORE")
+}
+
+def insert_or_ignore(db : SqlRunner; rows : array<auto(TT)>) : int {
+    //! Strict variant of ``try_insert_or_ignore(array<T>)``. Panics on SQL error (after ROLLBACK).
+    let r = db |> try_insert_or_ignore(rows)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_insert_or_replace(db : SqlRunner; row : auto(TT)) : Result<int, string> {
+    //! Single-row INSERT OR REPLACE. Returns ``Ok(rows_affected)`` — typically
+    //! 1; can be more when CASCADE deletes ripple from a PK collision.
+    return <- db |> try_insert_or(row, "OR REPLACE")
+}
+
+def insert_or_replace(db : SqlRunner; row : auto(TT)) : int {
+    //! Strict variant of ``try_insert_or_replace(row)``. Panics on SQL error.
+    let r = db |> try_insert_or_replace(row)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_insert_or_replace(db : SqlRunner; rows : array<auto(TT)>) : Result<int, string> {
+    //! Bulk INSERT OR REPLACE inside a single transaction. Returns the sum of
+    //! per-row changes.
+    return <- db |> try_insert_or(rows, "OR REPLACE")
+}
+
+def insert_or_replace(db : SqlRunner; rows : array<auto(TT)>) : int {
+    //! Strict variant of ``try_insert_or_replace(array<T>)``. Panics on SQL error (after ROLLBACK).
+    let r = db |> try_insert_or_replace(rows)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
 }
 
 // ============================================================================
@@ -1179,12 +1366,84 @@ def private find_string_annotation(args : AnnotationArgumentList; argn : string;
     return default_value
 }
 
+def private find_string_array_annotation(args : AnnotationArgumentList; argn : string) : array<string> {
+    //! Reads a parens-list field annotation `@argn=("A","B",...)` or the bare single
+    //! `@argn="A"` form. The parser flattens parens-lists into multiple flat entries
+    //! all sharing the parent name, so a single by-name walk handles both shapes.
+    return <- [for (a in args); string(a.sValue); where a.name == argn && a.basicType == Type.tString]
+}
+
+// Whitelisted SQL-side default functions (`@sql_default_fn=...`). These are
+// deliberately enumerated rather than passed-through verbatim — typo-detection
+// at macro-expansion time gives a clearer error than a runtime SQLite parse error.
+let private SQL_DEFAULT_FN_WHITELIST = ["CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME"]
+
+let private SQL_FK_ACTION_WHITELIST = ["cascade", "set_null", "set_default", "restrict", "no_action"]
+
+def private fk_action_to_sql(action : string) : string {
+    //! Map `@sql_on_delete` / `@sql_on_update` value to its DDL form.
+    //! Caller has already validated against `SQL_FK_ACTION_WHITELIST`.
+    if (action == "cascade") {
+        return "CASCADE"
+    } elif (action == "set_null") {
+        return "SET NULL"
+    } elif (action == "set_default") {
+        return "SET DEFAULT"
+    } elif (action == "restrict") {
+        return "RESTRICT"
+    }
+    return "NO ACTION"
+}
+
+def private sql_quote_string_literal(s : string) : string {
+    //! Wrap `s` in single quotes, doubling any embedded single quote. Used for
+    //! string-typed `field : string = "default"` initializers in the DDL emitter.
+    let escaped = replace(s, "'", "''")
+    return "'{escaped}'"
+}
+
+def private literal_init_to_default_clause(init : ExpressionPtr) : string {
+    //! Translate a daslang field initializer expression to `" DEFAULT <literal>"`.
+    //! Returns `""` when the expression is null or not a recognized literal — non-
+    //! literal initializers (e.g. `some(5)` for `Option<int>`) are silently
+    //! ignored so the daslang in-memory default still compiles, just without an
+    //! SQL-side counterpart.
+    if (init == null) {
+        return ""
+    }
+    if (init is ExprConstBool) {
+        return (init as ExprConstBool).getValue ? " DEFAULT 1" : " DEFAULT 0"
+    }
+    if (init is ExprConstInt) {
+        return " DEFAULT {(init as ExprConstInt).getValue}"
+    }
+    if (init is ExprConstInt64) {
+        return " DEFAULT {(init as ExprConstInt64).getValue}"
+    }
+    if (init is ExprConstFloat) {
+        return " DEFAULT {(init as ExprConstFloat).getValue}"
+    }
+    if (init is ExprConstDouble) {
+        return " DEFAULT {(init as ExprConstDouble).getValue}"
+    }
+    if (init is ExprConstString) {
+        return " DEFAULT {sql_quote_string_literal(string((init as ExprConstString).value))}"
+    }
+    return ""
+}
+
 struct private FieldInfo {
     name : string
     col_name : string
     is_pk : bool
     is_int_pk : bool
     is_optional : bool
+    is_unique : bool
+    is_computed : bool
+    is_stored : bool                //!< false → VIRTUAL (SQLite default), true → STORED
+    computed_sql : string           //!< body of `GENERATED ALWAYS AS (...)`; non-empty iff is_computed
+    default_clause : string         //!< pre-built ` DEFAULT <expr>` or `""` when no default applies
+    references_clause : string      //!< pre-built ` REFERENCES "T"("Pk") ON DELETE X ON UPDATE Y` or `""`
 }
 
 def private is_option_field_type(td : TypeDeclPtr) : bool {
@@ -1208,6 +1467,230 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
         && td.structType._module.name == "option")
 }
 
+def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
+    //! Walk every `[sql_index(...)]` on ``st`` and concatenate the CREATE INDEX
+    //! statements. Each `fields=` entry is cross-checked against ``field_names``.
+    //! On validation failure, sets ``ok = false``, populates ``errors``, and
+    //! returns ``""``. Returns ``""`` when no indexes are present (also with
+    //! ``ok = true``) so the caller can skip a sqlite3_exec call.
+    ok = true
+    var stmt_count = 0
+    let sql = build_string() $(var w) {
+        for (ann in st.annotations) {
+            if (string(ann.annotation.name) != "sql_index") {
+                continue
+            }
+            let idx_name_arg = find_string_annotation(ann.arguments, "name", "")
+            let is_unique = find_bool_annotation(ann.arguments, "unique", false)
+            let cols = find_string_array_annotation(ann.arguments, "fields")
+            if (length(cols) == 0) {
+                errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
+                ok = false
+                return
+            }
+            for (col in cols) {
+                var found = false
+                for (fn in field_names) {
+                    if (fn == col) {
+                        found = true
+                    }
+                }
+                if (!found) {
+                    errors := "[sql_index]: field '{col}' is not a column of struct '{st.name}'. Available: {field_names}"
+                    ok = false
+                    return
+                }
+            }
+            let auto_name = build_string() $(var w2) {
+                w2 |> write("idx_")
+                w2 |> write(table_name)
+                for (col in cols) {
+                    w2 |> write("_")
+                    w2 |> write(col)
+                }
+            }
+            let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
+            let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
+            if (stmt_count > 0) {
+                w |> write("; ")
+            }
+            stmt_count++
+            w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
+            for (j in range(length(cols))) {
+                if (j > 0) {
+                    w |> write(", ")
+                }
+                w |> write("\"")
+                w |> write(cols[j])
+                w |> write("\"")
+            }
+            w |> write(")")
+        }
+    }
+    return sql
+}
+
+def private extract_string_return(var fn : FunctionPtr) : string {
+    //! Read back a `return "literal"` body emitted by `qmacro_function ... {
+    //! return $v(sql) }`. Returns the string value or `""` when the body
+    //! doesn't match the expected single-return-of-string-literal shape.
+    if (fn == null || fn.body == null || !(fn.body is ExprBlock)) {
+        return ""
+    }
+    let blk = fn.body as ExprBlock
+    if (length(blk.list) == 0) {
+        return ""
+    }
+    let stmt = blk.list[0]
+    if (!(stmt is ExprReturn)) {
+        return ""
+    }
+    let ret = stmt as ExprReturn
+    let val = ret.subexpr
+    if (val == null || !(val is ExprConstString)) {
+        return ""
+    }
+    return string((val as ExprConstString).value)
+}
+
+def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPtr {
+    //! Locate a `[sql_table]`-generated helper function by name whose first
+    //! parameter type resolves to ``st``. Returns ``null`` when no overload
+    //! matches the struct (e.g. ``[sql_index]`` was placed before its
+    //! ``[sql_table]`` and the helper isn't generated yet).
+    var found : FunctionPtr
+    for_each_function(compiling_module(), name) $(var fn) {
+        if (length(fn.arguments) > 0
+                && fn.arguments[0]._type != null
+                && fn.arguments[0]._type.structType == st) {
+            found = fn
+        }
+    }
+    return found
+}
+
+[structure_macro(name=sql_index)]
+class SqlIndexMacro : AstStructureAnnotation {
+    //! Stackable struct-level annotation:
+    //!   ``[sql_index(fields="ColName", unique=true, name="explicit_name")]``
+    //!   ``[sql_index(fields=("A", "B"))]``
+    //! Reads the per-struct ``_sql_create_indexes_sql`` helper that
+    //! `[sql_table]` previously emitted (must appear earlier in the same
+    //! annotation list — typically ``[sql_table(...), sql_index(...), ...]``)
+    //! and rewrites its body to append one ``CREATE [UNIQUE] INDEX``
+    //! statement per annotation, joined by ``;``.
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        let cols = find_string_array_annotation(args, "fields")
+        if (length(cols) == 0) {
+            errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
+            return false
+        }
+        let is_unique = find_bool_annotation(args, "unique", false)
+        let idx_name_arg = find_string_annotation(args, "name", "")
+
+        // Cross-check every named column against the struct's fields.
+        for (col in cols) {
+            var has_field = false
+            for (field in st.fields) {
+                if (field.name == col) {
+                    has_field = true
+                }
+            }
+            if (!has_field) {
+                errors := "[sql_index]: field '{col}' is not a column of struct '{st.name}'."
+                return false
+            }
+        }
+
+        // Locate the per-struct `_sql_create_indexes_sql` placeholder emitted
+        // by [sql_table]. Source-order rule: [sql_table] must precede
+        // [sql_index] in the annotation list.
+        var idx_fn = find_struct_helper_fn("_sql_create_indexes_sql", st)
+        if (idx_fn == null) {
+            errors := "[sql_index] on struct '{st.name}': no [sql_table] declared earlier in the annotation list. Use `[sql_table(...), sql_index(...), ...]` order so the index helper is in scope."
+            return false
+        }
+        var name_fn = find_struct_helper_fn("_sql_table_name", st)
+        if (name_fn == null) {
+            errors := "[sql_index] on struct '{st.name}': cannot resolve table name (no [sql_table] visible). Same source-order rule as above."
+            return false
+        }
+        let table_name = extract_string_return(name_fn)
+        if (empty(table_name)) {
+            errors := "[sql_index] on struct '{st.name}': internal — _sql_table_name body did not match expected shape."
+            return false
+        }
+
+        // Build the CREATE INDEX statement for THIS annotation.
+        let auto_name = build_string() $(var w) {
+            w |> write("idx_")
+            w |> write(table_name)
+            for (col in cols) {
+                w |> write("_")
+                w |> write(col)
+            }
+        }
+        let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
+        let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
+        let this_stmt = build_string() $(var w) {
+            w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
+            for (j in range(length(cols))) {
+                if (j > 0) {
+                    w |> write(", ")
+                }
+                w |> write("\"")
+                w |> write(cols[j])
+                w |> write("\"")
+            }
+            w |> write(")")
+        }
+
+        // Read the current accumulated SQL (empty after [sql_table], or the
+        // result of earlier [sql_index] applies on the same struct), append
+        // this statement, and replace fn.body.
+        let prev_sql = extract_string_return(idx_fn)
+        let new_sql = empty(prev_sql) ? this_stmt : "{prev_sql}; {this_stmt}"
+        idx_fn.body = qmacro_block() {
+            return $v(new_sql)
+        }
+        idx_fn.body |> force_at(st.at)
+        return true
+    }
+}
+
+def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string) : tuple<tab_name : string; pk_col : string; found : bool> {
+    //! Resolve `@sql_references="ParentName"` to the parent struct's
+    //! `[sql_table(name=...)]` table name and `@sql_primary_key` column. Walks
+    //! `compiling_module()`; self-reference (`parent_name == st.name`) short-
+    //! circuits to the current struct since `[sql_table]` is being applied to
+    //! it right now.
+    var found_st : StructurePtr
+    if (st.name == parent_name) {
+        found_st = st
+    } else {
+        for_each_structure(compiling_module()) $(var ps) {
+            if (string(ps.name) == parent_name) {
+                found_st = ps
+            }
+        }
+    }
+    if (found_st == null) {
+        return ("", "", false)
+    }
+    var tab = string(found_st.name)
+    for (ann in found_st.annotations) {
+        if (ann.annotation.name == "sql_table") {
+            tab = find_string_annotation(ann.arguments, "name", tab)
+        }
+    }
+    for (pf in found_st.fields) {
+        if (find_bool_annotation(pf.annotation, "sql_primary_key", false)) {
+            return (tab, string(pf.name), true)
+        }
+    }
+    return (tab, "", false)
+}
+
 [structure_macro(name=sql_table)]
 class SqlTableMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
@@ -1215,27 +1698,143 @@ class SqlTableMacro : AstStructureAnnotation {
 
         var fields : array<FieldInfo>
         for (field in st.fields) {
+            let fname = string(field.name)
             let is_pk = find_bool_annotation(field.annotation, "sql_primary_key", false)
+            let is_unique = find_bool_annotation(field.annotation, "sql_unique", false)
             let is_optional = is_option_field_type(field._type)
+
+            // @sql_computed expression
+            let computed_sql = find_string_annotation(field.annotation, "sql_computed", "")
+            let is_computed = !empty(computed_sql)
+            let is_stored = find_bool_annotation(field.annotation, "sql_stored", false)
+
+            // Defaults — native daslang field init OR @sql_default_fn (mutually exclusive)
+            let sql_default_fn = find_string_annotation(field.annotation, "sql_default_fn", "")
+
+            // Foreign key — @sql_references + optional @sql_on_delete / @sql_on_update
+            let references = find_string_annotation(field.annotation, "sql_references", "")
+            let on_delete = find_string_annotation(field.annotation, "sql_on_delete", "no_action")
+            let on_update = find_string_annotation(field.annotation, "sql_on_update", "no_action")
+            let has_on_delete_attr = !empty(find_string_annotation(field.annotation, "sql_on_delete", ""))
+            let has_on_update_attr = !empty(find_string_annotation(field.annotation, "sql_on_update", ""))
+
+            // ---- validation ----
             if (is_pk && is_optional) {
-                errors := "[sql_table]: @sql_primary_key on field '{field.name}' must not be Option<T> — primary keys cannot be NULL in SQL. Use a non-optional type."
+                errors := "[sql_table]: @sql_primary_key on field '{fname}' must not be Option<T> — primary keys cannot be NULL in SQL. Use a non-optional type."
                 return false
             }
+            if (is_computed && is_pk) {
+                errors := "[sql_table]: field '{fname}' cannot be both @sql_primary_key and @sql_computed — SQLite rejects PRIMARY KEY on a generated column."
+                return false
+            }
+            if (is_computed && field.init != null) {
+                errors := "[sql_table]: field '{fname}' is @sql_computed; remove the daslang field initializer (the SQL expression provides the value)."
+                return false
+            }
+            if (is_computed && !empty(sql_default_fn)) {
+                errors := "[sql_table]: field '{fname}' is @sql_computed; @sql_default_fn does not apply (computed columns derive their value from the expression)."
+                return false
+            }
+            if (field.init != null && !empty(sql_default_fn)) {
+                errors := "[sql_table]: field '{fname}' has both a daslang field initializer and @sql_default_fn — pick one. Use the field init for literal defaults, @sql_default_fn for SQL built-ins like CURRENT_TIMESTAMP."
+                return false
+            }
+            if (!empty(sql_default_fn)) {
+                var fn_ok = false
+                for (allowed in SQL_DEFAULT_FN_WHITELIST) {
+                    if (allowed == sql_default_fn) {
+                        fn_ok = true
+                    }
+                }
+                if (!fn_ok) {
+                    errors := "[sql_table]: field '{fname}' @sql_default_fn=\"{sql_default_fn}\" is not in the supported set (CURRENT_TIMESTAMP / CURRENT_DATE / CURRENT_TIME). Use raw SQL via `db |> exec(...)` for other expressions."
+                    return false
+                }
+            }
+            if ((has_on_delete_attr || has_on_update_attr) && empty(references)) {
+                errors := "[sql_table]: field '{fname}' has @sql_on_delete / @sql_on_update without @sql_references — these annotations only apply to a foreign-key relationship."
+                return false
+            }
+            if (!empty(references)) {
+                var od_ok = false
+                var ou_ok = false
+                for (allowed in SQL_FK_ACTION_WHITELIST) {
+                    if (allowed == on_delete) {
+                        od_ok = true
+                    }
+                    if (allowed == on_update) {
+                        ou_ok = true
+                    }
+                }
+                if (!od_ok) {
+                    errors := "[sql_table]: field '{fname}' @sql_on_delete=\"{on_delete}\" must be one of cascade / set_null / set_default / restrict / no_action."
+                    return false
+                }
+                if (!ou_ok) {
+                    errors := "[sql_table]: field '{fname}' @sql_on_update=\"{on_update}\" must be one of cascade / set_null / set_default / restrict / no_action."
+                    return false
+                }
+                if (on_delete == "set_null" && !is_optional) {
+                    errors := "[sql_table]: field '{fname}' @sql_on_delete=\"set_null\" requires column type Option<T> so the column can hold NULL. Either change the column type or pick a different action (cascade / restrict / no_action)."
+                    return false
+                }
+                if (on_delete == "set_default" && field.init == null && empty(sql_default_fn)) {
+                    errors := "[sql_table]: field '{fname}' @sql_on_delete=\"set_default\" requires a daslang field initializer (`{fname} : T = <literal>`) or @sql_default_fn. Otherwise SET DEFAULT has nothing to set."
+                    return false
+                }
+            }
+
+            // ---- DDL fragment construction ----
+            var default_clause = ""
+            if (!empty(sql_default_fn)) {
+                default_clause = " DEFAULT {sql_default_fn}"
+            } elif (field.init != null) {
+                default_clause = literal_init_to_default_clause(field.init)
+            }
+
+            var references_clause = ""
+            if (!empty(references)) {
+                let pk_lookup = find_parent_table_and_pk(st, references)
+                if (!pk_lookup.found) {
+                    if (empty(pk_lookup.tab_name)) {
+                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" — no struct named '{references}' is visible in this module."
+                    } else {
+                        errors := "[sql_table]: field '{fname}' @sql_references=\"{references}\" — parent struct '{references}' has no @sql_primary_key field; FK target column cannot be resolved."
+                    }
+                    return false
+                }
+                references_clause = " REFERENCES \"{pk_lookup.tab_name}\"(\"{pk_lookup.pk_col}\") ON DELETE {fk_action_to_sql(on_delete)} ON UPDATE {fk_action_to_sql(on_update)}"
+            }
+
             fields |> push(FieldInfo(
-                name = string(field.name),
-                col_name = string(field.name),
+                name = fname,
+                col_name = fname,
                 is_pk = is_pk,
                 is_int_pk = is_pk && (field._type.baseType == Type.tInt || field._type.baseType == Type.tInt64),
-                is_optional = is_optional
+                is_optional = is_optional,
+                is_unique = is_unique,
+                is_computed = is_computed,
+                is_stored = is_stored,
+                computed_sql = computed_sql,
+                default_clause = default_clause,
+                references_clause = references_clause
             ))
         }
 
+        // [sql_index] sibling-annotation processing happens in finish() —
+        // st.annotations is not yet populated during apply(). The helper
+        // function `_sql_create_indexes_sql` is added to the module there.
         var fn_table_name = make_table_name_fn(st, table_name)
         compiling_module() |> add_function(fn_table_name)
         var fn_drop = make_drop_sql_fn(st, table_name)
         compiling_module() |> add_function(fn_drop)
         var fn_create = make_create_table_sql_fn(st, table_name, fields)
         compiling_module() |> add_function(fn_create)
+        // Empty `_sql_create_indexes_sql` placeholder. Sibling [sql_index]
+        // annotations rewrite this body to accumulate CREATE INDEX statements.
+        // User-facing source order requirement: [sql_table, sql_index, ...].
+        var fn_indexes = make_create_indexes_sql_fn(st, "")
+        compiling_module() |> add_function(fn_indexes)
         var fn_ins_pk = make_insert_with_pk_sql_fn(st, table_name, fields)
         compiling_module() |> add_function(fn_ins_pk)
         var fn_ins_nopk = make_insert_no_pk_sql_fn(st, table_name, fields)
@@ -1260,6 +1859,7 @@ class SqlTableMacro : AstStructureAnnotation {
         return true
     }
 
+
     def make_table_name_fn(var st : StructurePtr; table_name : string) : FunctionPtr {
         var fn = qmacro_function("_sql_table_name") $(typ : $t(st)) : string {
             return $v(table_name)
@@ -1279,6 +1879,19 @@ class SqlTableMacro : AstStructureAnnotation {
         return <- fn
     }
 
+    def make_create_indexes_sql_fn(var st : StructurePtr; indexes_sql : string) : FunctionPtr {
+        //! Per-struct helper returning the concatenated CREATE INDEX statements
+        //! for every `[sql_index(...)]` attached to the struct, joined by ``;``.
+        //! Returns ``""`` when the struct has no indexes; ``try_create_table``
+        //! short-circuits sqlite3_exec on empty input.
+        var fn = qmacro_function("_sql_create_indexes_sql") $(typ : $t(st)) : string {
+            return $v(indexes_sql)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
     def make_create_table_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
         var write_exprs : array<ExpressionPtr>
         write_exprs |> reserve(3 * length(fields) + 2)
@@ -1289,10 +1902,30 @@ class SqlTableMacro : AstStructureAnnotation {
         for (i in range(length(fields))) {
             let info = fields[i]
             let prefix = i == 0 ? "\"{info.col_name}\" " : ", \"{info.col_name}\" "
-            // Nullability is type-driven: Option<T> fields drop NOT NULL.
-            // PK columns are implicitly NOT NULL in SQLite for INTEGER PRIMARY KEY,
-            // and rejected as Option<T> earlier in apply().
-            let suffix = info.is_pk ? " PRIMARY KEY" : (info.is_optional ? "" : " NOT NULL")
+            // Compose the column suffix:
+            //   - computed: ` GENERATED ALWAYS AS (...) VIRTUAL|STORED` and nothing
+            //     else; SQLite rejects NOT NULL / DEFAULT / UNIQUE / FK on a
+            //     generated column.
+            //   - PK: ` PRIMARY KEY`. UNIQUE is implied; DEFAULT may still fire if
+            //     the user gave a literal init.
+            //   - Otherwise: NOT NULL (unless Option<T>), UNIQUE, DEFAULT,
+            //     REFERENCES — in DDL order.
+            var suffix = ""
+            if (info.is_computed) {
+                let storage = info.is_stored ? "STORED" : "VIRTUAL"
+                suffix = " GENERATED ALWAYS AS ({info.computed_sql}) {storage}"
+            } else {
+                if (info.is_pk) {
+                    suffix = " PRIMARY KEY"
+                } elif (!info.is_optional) {
+                    suffix = " NOT NULL"
+                }
+                if (info.is_unique && !info.is_pk) {
+                    suffix += " UNIQUE"
+                }
+                suffix += info.default_clause
+                suffix += info.references_clause
+            }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(prefix)); }))
             write_exprs |> push(qmacro_expr(${ writer |> write(sqlite_sql_type(type<$t(st.fields[i]._type)>)); }))
             write_exprs |> push(qmacro_expr(${ writer |> write($v(suffix)); }))
@@ -1310,28 +1943,14 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_insert_with_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
-        let placeholders = build_string() $(var w) {
-            for (i in range(length(fields))) {
-                if (i > 0) {
-                    w |> write(", ")
-                }
-                w |> write("?")
-            }
-        }
-        let sql = "INSERT INTO \"{table_name}\" VALUES ({placeholders})"
-        var fn = qmacro_function("_sql_insert_with_pk_sql") $(typ : $t(st)) : string {
-            return $v(sql)
-        }
-        fn.flags |= FunctionFlags.generated
-        fn.body |> force_at(st.at)
-        return <- fn
-    }
-
-    def make_insert_no_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // Always emit explicit column list so computed (GENERATED) columns can be
+        // skipped — SQLite rejects writes to generated columns. Without computed
+        // columns this is functionally equivalent to the previous positional
+        // `INSERT INTO T VALUES (?,?,...)` form.
         let cols = build_string() $(var w) {
             var first = true
             for (info in fields) {
-                if (info.is_pk) {
+                if (info.is_computed) {
                     continue
                 }
                 if (!first) {
@@ -1346,7 +1965,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let placeholders = build_string() $(var w) {
             var first = true
             for (info in fields) {
-                if (info.is_pk) {
+                if (info.is_computed) {
                     continue
                 }
                 if (!first) {
@@ -1356,9 +1975,48 @@ class SqlTableMacro : AstStructureAnnotation {
                 first = false
             }
         }
-        // PK-only structs have no non-PK columns. SQLite rejects `INSERT INTO T () VALUES ()`,
-        // so fall back to `DEFAULT VALUES` — the canonical way to insert a row with all defaults
-        // (here, just the auto-assigned rowid).
+        let sql = (empty(cols)
+            ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
+            : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
+        var fn = qmacro_function("_sql_insert_with_pk_sql") $(typ : $t(st)) : string {
+            return $v(sql)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_insert_no_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        let cols = build_string() $(var w) {
+            var first = true
+            for (info in fields) {
+                if (info.is_pk || info.is_computed) {
+                    continue
+                }
+                if (!first) {
+                    w |> write(", ")
+                }
+                w |> write("\"")
+                w |> write(info.col_name)
+                w |> write("\"")
+                first = false
+            }
+        }
+        let placeholders = build_string() $(var w) {
+            var first = true
+            for (info in fields) {
+                if (info.is_pk || info.is_computed) {
+                    continue
+                }
+                if (!first) {
+                    w |> write(", ")
+                }
+                w |> write("?")
+                first = false
+            }
+        }
+        // PK-only / all-computed structs have no non-PK bindable columns. SQLite
+        // rejects `INSERT INTO T () VALUES ()`, so fall back to `DEFAULT VALUES`.
         let sql = (empty(cols)
             ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
             : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
@@ -1397,23 +2055,31 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // Bind indices follow the column-list emitted by `_sql_insert_with_pk_sql`
+        // / `_sql_insert_no_pk_sql` — both skip computed columns. The index is
+        // a running counter over bindable (non-computed) columns; it is NOT
+        // the field's position in `fields`.
         var with_pk_exprs : array<ExpressionPtr>
         var no_pk_exprs : array<ExpressionPtr>
         with_pk_exprs |> reserve(length(fields))
         no_pk_exprs |> reserve(length(fields))
 
-        for (i in range(length(fields))) {
-            let info = fields[i]
-            let with_idx = i + 1
+        var with_pk_idx = 0
+        for (info in fields) {
+            if (info.is_computed) {
+                continue
+            }
+            with_pk_idx++
+            let wi = with_pk_idx
             let field_name = info.name
             with_pk_exprs |> push(qmacro_expr(${
-                sqlite_bind(stmt, $v(with_idx), row.$f(field_name));
+                sqlite_bind(stmt, $v(wi), row.$f(field_name));
             }))
         }
 
         var no_pk_idx = 0
         for (info in fields) {
-            if (info.is_pk) {
+            if (info.is_pk || info.is_computed) {
                 continue
             }
             no_pk_idx++
@@ -1514,7 +2180,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let set_clause = build_string() $(var w) {
             var first = true
             for (info in fields) {
-                if (info.is_pk) {
+                if (info.is_pk || info.is_computed) {
                     continue
                 }
                 if (!first) {
@@ -1526,11 +2192,11 @@ class SqlTableMacro : AstStructureAnnotation {
                 first = false
             }
         }
-        // PK-only struct (no SET columns): `UPDATE T SET WHERE pk=?` is invalid
-        // SQL. Stub panics at call time with a clear message.
+        // PK-only / all-computed struct (no SET columns): `UPDATE T SET WHERE pk=?`
+        // is invalid SQL. Stub panics at call time with a clear message.
         if (empty(set_clause)) {
             let st_name = string(st.name)
-            let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK field is missing. Add at least one non-PK column, or use raw `exec`."
+            let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
             var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
                 panic($v(msg))
                 return ""
@@ -1589,9 +2255,9 @@ class SqlTableMacro : AstStructureAnnotation {
 
         var bind_exprs : array<ExpressionPtr>
         var bind_idx = 0
-        // Non-PK columns first.
+        // Non-PK, non-computed columns first.
         for (i in range(length(fields))) {
-            if (fields[i].is_pk) {
+            if (fields[i].is_pk || fields[i].is_computed) {
                 continue
             }
             bind_idx++

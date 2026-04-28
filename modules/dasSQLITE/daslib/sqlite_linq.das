@@ -181,6 +181,7 @@ struct private SqlQuery {
     argNames    : array<string>
     argSourceIdx : array<int>             //!< parallel to argNames
     dbExpr      : ExpressionPtr
+    upsertMode  : bool                    //!< _upsert do_update body context — recognize `_excluded.Col` as the SQLite ``excluded.col`` proposed-row reference. Only set inside `emit_upsert_body`.
 }
 
 // ============================================================================
@@ -1914,6 +1915,40 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             return "{pred_to_sql(lhs, q, prog, at)} >= {pred_to_sql(rhs, q, prog, at)}"
         }
     }
+    // Arithmetic operators — SQL uses the same `+ - * / %` syntax as daslang.
+    // Used in DO UPDATE SET RHS (e.g. `Hits = _.Hits + 1`) and any other
+    // expression-position SET / projection. Parens around recursive calls keep
+    // precedence safe in the emitted SQL.
+    {
+        var lhs, rhs : ExpressionPtr
+        if (qmatch(node, $e(lhs) + $e(rhs)).matched) {
+            return "({pred_to_sql(lhs, q, prog, at)}) + ({pred_to_sql(rhs, q, prog, at)})"
+        }
+    }
+    {
+        var lhs, rhs : ExpressionPtr
+        if (qmatch(node, $e(lhs) - $e(rhs)).matched) {
+            return "({pred_to_sql(lhs, q, prog, at)}) - ({pred_to_sql(rhs, q, prog, at)})"
+        }
+    }
+    {
+        var lhs, rhs : ExpressionPtr
+        if (qmatch(node, $e(lhs) * $e(rhs)).matched) {
+            return "({pred_to_sql(lhs, q, prog, at)}) * ({pred_to_sql(rhs, q, prog, at)})"
+        }
+    }
+    {
+        var lhs, rhs : ExpressionPtr
+        if (qmatch(node, $e(lhs) / $e(rhs)).matched) {
+            return "({pred_to_sql(lhs, q, prog, at)}) / ({pred_to_sql(rhs, q, prog, at)})"
+        }
+    }
+    {
+        var lhs, rhs : ExpressionPtr
+        if (qmatch(node, $e(lhs) % $e(rhs)).matched) {
+            return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
+        }
+    }
 
     // Column reference: <argname>.ColName  (ExprField rooted at any lambda param).
     // Single-source: emit unqualified `"Col"` (only `_` is bound).
@@ -1954,6 +1989,13 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     // Single-source: only `_` is bound. Match the legacy emission.
                     if (argName == "_") {
                         return "\"{fieldName}\""
+                    }
+                    // Upsert-only sentinel: `_excluded.Col` → SQLite's
+                    // ``excluded.col`` reference to the proposed row inside
+                    // ON CONFLICT DO UPDATE SET. Gated on q.upsertMode so
+                    // unrelated chains don't accidentally accept it.
+                    if (q.upsertMode && argName == "_excluded") {
+                        return "excluded.\"{fieldName}\""
                     }
                 }
             }
@@ -3461,5 +3503,400 @@ class private SqlTryDeleteReturningMacro : AstCallMacro {
             return null
         }
         return emit_delete_body(prog, call, rootT, true, true)
+    }
+}
+
+// ============================================================================
+// _sql_upsert / _sql_try_upsert / _sql_upsert_returning / _sql_try_upsert_returning
+//
+// SQLite INSERT...ON CONFLICT DO UPDATE — the proper merge form. Three positional
+// args after ``db``:
+//   - row : T (single-row only for v1; bulk overload deferred to a follow-up)
+//   - on_conflict : either `_.Col` (single column) or `tuple(_.C1, _.C2, ...)` (composite)
+//   - do_update : named-tuple literal `(Col=expr, ...)` referencing `_` (existing row)
+//                 and/or `_excluded` (proposed row — SQLite's built-in sentinel)
+//
+// Like `_sql_update`, args 1..3 stay raw (canVisitArgument=true only for arg 0,
+// the db). The do_update walker runs `pred_to_sql` with `q.upsertMode = true` so
+// `_excluded.Col` resolves to SQLite's `excluded.col`; `_.Col` resolves to the
+// unqualified column reference (existing-row in DO UPDATE SET context).
+// ============================================================================
+
+[macro_function]
+def private is_field_computed(field) : bool {
+    let v = find_arg(field.annotation, "sql_computed")
+    if (v is tString) {
+        return !empty(v as tString)
+    }
+    return false
+}
+
+[macro_function]
+def private validate_outer_upsert_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
+    if (length(call.arguments) != 4) {
+        macro_error(prog, call.at, "{call.name}: expected (db, row, on_conflict, do_update) — got {length(call.arguments)} args")
+        return false
+    }
+    var rowE = call.arguments[1]
+    if (rowE._type == null || rowE._type.structType == null) {
+        macro_error(prog, call.at, "{call.name}: second argument must be a [sql_table] struct value (got {describe(rowE._type)})")
+        return false
+    }
+    if (rowE._type.isGoodArrayType) {
+        macro_error(prog, call.at, "{call.name}: bulk array<T> upsert is deferred to a follow-up — pass a single row for now and call inside a transaction loop if you need batching")
+        return false
+    }
+    rootT = clone_type(rowE._type)
+    return true
+}
+
+[macro_function]
+def private analyze_upsert_conflict(var conflictExpr : ExprCallMacro?; rootT : TypeDeclPtr;
+                                    var conflictCols : array<string>&;
+                                    prog : ProgramPtr; at : LineInfo) : bool {
+    //! Extract the conflict-target column list from the on_conflict expression.
+    //! Accepted shapes:
+    //!     _.Col              → single column
+    //!     tuple(_.A, _.B)    → composite
+    //! Anything else is a macro_error.
+    var node : ExpressionPtr = conflictExpr
+    return analyze_upsert_conflict_inner(node, rootT, conflictCols, prog, at)
+}
+
+[macro_function]
+def private analyze_upsert_conflict_inner(var node : ExpressionPtr; rootT : TypeDeclPtr;
+                                          var conflictCols : array<string>&;
+                                          prog : ProgramPtr; at : LineInfo) : bool {
+    if (node == null) {
+        macro_error(prog, at, "_sql_upsert: on_conflict is null")
+        return false
+    }
+    var n = node
+    if (n is ExprRef2Value) {
+        n = (n as ExprRef2Value).subexpr
+    }
+    // Single column form: `_.Col`
+    if (n is ExprField) {
+        let ef = n as ExprField
+        var recv = ef.value
+        if (recv is ExprRef2Value) {
+            recv = (recv as ExprRef2Value).subexpr
+        }
+        if (recv != null && recv is ExprVar && (recv as ExprVar).name == "_") {
+            conflictCols |> push(string(ef.name))
+            return validate_conflict_cols(rootT, conflictCols, prog, at)
+        }
+        macro_error(prog, at, "_sql_upsert: on_conflict column ref must be `_.Col`; got {describe(node)}")
+        return false
+    }
+    // Tuple form: `tuple(_.A, _.B, ...)` or `(_.A, _.B, ...)` — both parse as ExprMakeTuple.
+    if (n is ExprMakeTuple) {
+        let mkt = n as ExprMakeTuple
+        if (length(mkt.values) == 0) {
+            macro_error(prog, at, "_sql_upsert: on_conflict tuple is empty")
+            return false
+        }
+        for (sub in mkt.values) {
+            var s = sub
+            if (s is ExprRef2Value) {
+                s = (s as ExprRef2Value).subexpr
+            }
+            if (s == null || !(s is ExprField)) {
+                macro_error(prog, at, "_sql_upsert: on_conflict tuple elements must be `_.Col`; got {describe(sub)}")
+                return false
+            }
+            let ef = s as ExprField
+            var recv = ef.value
+            if (recv is ExprRef2Value) {
+                recv = (recv as ExprRef2Value).subexpr
+            }
+            if (recv == null || !(recv is ExprVar) || (recv as ExprVar).name != "_") {
+                macro_error(prog, at, "_sql_upsert: on_conflict tuple element receiver must be `_`; got {describe(sub)}")
+                return false
+            }
+            conflictCols |> push(string(ef.name))
+        }
+        return validate_conflict_cols(rootT, conflictCols, prog, at)
+    }
+    macro_error(prog, at, "_sql_upsert: on_conflict must be `_.Col` (single) or `tuple(_.C1, _.C2, ...)` (composite); got {describe(node)}")
+    return false
+}
+
+[macro_function]
+def private validate_conflict_cols(rootT : TypeDeclPtr; conflictCols : array<string>; prog : ProgramPtr; at : LineInfo) : bool {
+    //! Cross-check every conflict-target column name against the struct's
+    //! fields. (We don't try to verify a UNIQUE constraint exists at macro
+    //! time — composite uniqueness via [sql_index(unique=true, fields=(...))]
+    //! is hard to inspect from here. SQLite rejects at runtime if no
+    //! constraint matches, with a clear "ON CONFLICT clause does not match"
+    //! error.)
+    if (rootT == null || rootT.structType == null) {
+        macro_error(prog, at, "_sql_upsert: row type has no struct (got {describe(rootT)})")
+        return false
+    }
+    var st = rootT.structType
+    for (col in conflictCols) {
+        var found = false
+        for (f in st.fields) {
+            if (f.name == col) {
+                found = true
+            }
+        }
+        if (!found) {
+            macro_error(prog, at, "_sql_upsert: on_conflict column \"{col}\" is not a field of {st.name}")
+            return false
+        }
+    }
+    return true
+}
+
+[macro_function]
+def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : TypeDeclPtr; tableName : string;
+                                      var setSqlClauses : array<string>&;
+                                      var setBindExprs : array<ExpressionPtr>&;
+                                      prog : ProgramPtr; at : LineInfo) : bool {
+    //! Walk the do_update named-tuple body. Identical to analyze_set_clause
+    //! except the per-value SqlQuery has ``upsertMode = true`` so
+    //! ``pred_to_sql`` recognizes ``_excluded.Col`` references.
+    if (setExpr == null) {
+        macro_error(prog, at, "_sql_upsert: do_update is null")
+        return false
+    }
+    var body = setExpr
+    if (body is ExprRef2Value) {
+        body = (body as ExprRef2Value).subexpr
+    }
+    if (!(body is ExprMakeTuple)) {
+        macro_error(prog, at, "_sql_upsert: do_update must be a named-tuple literal `(Col=expr, ...)`; got: {describe(body)}")
+        return false
+    }
+    var mkTup = body as ExprMakeTuple
+    if (length(mkTup.values) == 0) {
+        macro_error(prog, at, "_sql_upsert: do_update is empty — pass at least one (Col=expr) pair")
+        return false
+    }
+    var tupT = mkTup._type
+    var recordNames : array<string>
+    if (tupT != null && tupT.baseType == Type.tTuple
+            && length(tupT.argNames) == length(mkTup.values)) {
+        recordNames <- [for (n in tupT.argNames); string(n)]
+    } elif (length(mkTup.recordNames) == length(mkTup.values)) {
+        recordNames <- [for (n in mkTup.recordNames); string(n)]
+    } else {
+        macro_error(prog, at, "_sql_upsert: do_update must be a NAMED-tuple literal `(Col=expr, ...)`; could not extract per-element column names")
+        return false
+    }
+    for (i in range(length(recordNames))) {
+        if (empty(recordNames[i])) {
+            macro_error(prog, at, "_sql_upsert: do_update positional element at index {i} has no field name; use `(Col=expr, ...)` form")
+            return false
+        }
+    }
+    if (rootT != null && rootT.structType != null) {
+        var st = rootT.structType
+        var seenCols : table<string; bool>
+        for (i in range(length(recordNames))) {
+            let colName = recordNames[i]
+            if (key_exists(seenCols, colName)) {
+                macro_error(prog, at, "_sql_upsert: duplicate do_update column \"{colName}\"")
+                return false
+            }
+            seenCols[colName] = true
+            var found = false
+            var is_computed = false
+            for (f in st.fields) {
+                if (f.name == colName) {
+                    found = true
+                    if (is_field_computed(f)) {
+                        is_computed = true
+                    }
+                    break
+                }
+            }
+            if (!found) {
+                macro_error(prog, at, "_sql_upsert: do_update column \"{colName}\" is not a field of {st.name}")
+                return false
+            }
+            if (is_computed) {
+                macro_error(prog, at, "_sql_upsert: do_update column \"{colName}\" is @sql_computed; SQLite rejects writes to generated columns. Update the source columns and the computed value follows.")
+                return false
+            }
+        }
+    }
+    var setQ = SqlQuery(
+        rootType = rootT,
+        tableName = tableName,
+        argNames <- ["_"],
+        argSourceIdx <- [0],
+        upsertMode = true
+    )
+    for (i in range(length(mkTup.values))) {
+        let colName = recordNames[i]
+        var val = mkTup.values[i]
+        let valSql = pred_to_sql(val, setQ, prog, at)
+        if (empty(valSql)) {
+            return false
+        }
+        setSqlClauses |> push("\"{colName}\" = {valSql}")
+    }
+    for (b in setQ.bindExprs) {
+        setBindExprs |> push(b)
+    }
+    return true
+}
+
+[macro_function]
+def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
+                             var rootT : TypeDeclPtr;
+                             isTry : bool; isReturning : bool) : ExpressionPtr {
+    //! Shared body for the four `_sql_upsert*` macros.
+    if (rootT == null || rootT.structType == null) {
+        macro_error(prog, call.at, "_sql_upsert: row type must be a [sql_table] struct (got {describe(rootT)})")
+        return null
+    }
+    var st = rootT.structType
+    var dbE = call.arguments[0]
+    var rowE = call.arguments[1]
+    var conflictE = call.arguments[2]
+    var doUpdateE = call.arguments[3]
+    let tableName = sql_table_name_from_type(rootT)
+
+    // 1) on_conflict columns
+    var conflictCols : array<string>
+    if (!analyze_upsert_conflict_inner(conflictE, rootT, conflictCols, prog, call.at)) {
+        return null
+    }
+
+    // 2) do_update SET clauses (with upsertMode=true so `_excluded.Col` resolves)
+    var setSqlClauses : array<string>
+    var setBindExprs : array<ExpressionPtr>
+    if (!analyze_upsert_set_clause(doUpdateE, rootT, tableName, setSqlClauses, setBindExprs, prog, call.at)) {
+        return null
+    }
+
+    // 3) Build INSERT column list (non-computed only — matches `_sql_bind_row`).
+    var nonComputedCols : array<string>
+    var nRowBinds = 0
+    for (f in st.fields) {
+        if (is_field_computed(f)) {
+            continue
+        }
+        nonComputedCols |> push(string(f.name))
+        nRowBinds++
+    }
+
+    // 4) Assemble SQL.
+    var sql = build_string() $(var w) {
+        w |> write("INSERT INTO \"{tableName}\" (")
+        for (i in range(length(nonComputedCols))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write("\"{nonComputedCols[i]}\"")
+        }
+        w |> write(") VALUES (")
+        for (i in range(length(nonComputedCols))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write("?")
+        }
+        w |> write(") ON CONFLICT(")
+        for (i in range(length(conflictCols))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write("\"{conflictCols[i]}\"")
+        }
+        w |> write(") DO UPDATE SET ")
+        for (i in range(length(setSqlClauses))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write(setSqlClauses[i])
+        }
+    }
+    if (isReturning) {
+        sql += build_returning_clause(rootT)
+    }
+
+    // 5) Build bindStmts. Row binds come first (via per-struct `_sql_bind_row`
+    //    which uses indices 1..N_row), then SET binds at N_row+1, N_row+2, ...
+    var rowClone = clone_expression(rowE)
+    var bindStmts : array<ExpressionPtr>
+    bindStmts |> push <| qmacro_expr(${
+        _::_sql_bind_row(_sql_stmt, $e(rowClone), true);
+    })
+    for (i in range(length(setBindExprs))) {
+        let bindIdx = nRowBinds + i + 1
+        var be = setBindExprs[i]
+        bindStmts |> push <| qmacro_expr(${
+            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+        })
+    }
+
+    return emit_dml_call(dbE, sql, bindStmts, isTry, isReturning, rootT, call.at)
+}
+
+[call_macro(name="_sql_upsert")]
+class private SqlUpsertMacro : AstCallMacro {
+    //! `_sql_upsert(db, row, on_conflict, do_update)` — INSERT...ON CONFLICT
+    //! DO UPDATE. Returns ``int`` rows-affected. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex < 2
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_upsert_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_upsert_body(prog, call, rootT, false, false)
+    }
+}
+
+[call_macro(name="_sql_try_upsert")]
+class private SqlTryUpsertMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_upsert`. Returns ``Result<int, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex < 2
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_upsert_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_upsert_body(prog, call, rootT, true, false)
+    }
+}
+
+[call_macro(name="_sql_upsert_returning")]
+class private SqlUpsertReturningMacro : AstCallMacro {
+    //! `_sql_upsert(...)` with a trailing ``RETURNING *`` clause. Returns
+    //! ``array<T>`` of post-merge rows. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex < 2
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_upsert_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_upsert_body(prog, call, rootT, false, true)
+    }
+}
+
+[call_macro(name="_sql_try_upsert_returning")]
+class private SqlTryUpsertReturningMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_upsert_returning`. Returns
+    //! ``Result<array<T>, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex < 2
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_upsert_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_upsert_body(prog, call, rootT, true, true)
     }
 }

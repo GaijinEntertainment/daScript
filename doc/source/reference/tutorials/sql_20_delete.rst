@@ -113,4 +113,4 @@ Non-panic ``try_`` variants
 
     Previous tutorial: :ref:`tutorial_sql_update`
 
-    Next tutorial: :ref:`tutorial_sql_transactions`
+    Next tutorial: :ref:`tutorial_sql_upsert`
