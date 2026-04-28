@@ -453,7 +453,7 @@ def handle_tools_list(id_json : string) : string {
         "judge_duplicates",
         "AI judge for detect-dupe clusters. Takes a detect-dupe JSON report and asks Claude (Haiku 4.5 by default) to partition each cluster into real-duplicate groups vs false positives, with a one-line reason per cluster. Returns an envelope with the embedded verdict JSON. Shells out to `daslang utils/find-dupe/main.das` — requires `daspkg install --root utils/find-dupe` first (fetches the `anthropic/anthropic` package) and the `ANTHROPIC_API_KEY` env var. WARNING: sends source code to Anthropic's API — only run on code your data-handling policy permits sharing.",
         {
-            "input" => PropertySchema(_type = "string", description = "Path to a detect-dupe JSON report (produced by `detect_duplicates` MCP tool or `detect-dupe --json <path>`)."),
+            "input" => PropertySchema(_type = "string", description = "Path to a detect-dupe JSON report. Produce one with `detect-dupe --json <path>` from the CLI, or use the `find_dupe` MCP tool which writes a `dupes.json` and judges it in one call. (The `detect_duplicates` MCP tool embeds the report inline and deletes its temp file, so its output isn't a reusable path.)"),
             "out" => PropertySchema(_type = "string", description = "Output directory for find_dupe_verdicts.json + .md. Defaults to a fresh temp dir under the project root."),
             "model" => PropertySchema(_type = "string", description = "`haiku` (default — Claude Haiku 4.5) or `sonnet` (Claude Sonnet 4.6)."),
             "max_clusters" => PropertySchema(_type = "string", description = "Hard cap on clusters analyzed after the worth-it gate (default 0 = no cap). Useful for cost control on large reports."),

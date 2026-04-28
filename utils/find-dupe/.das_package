@@ -5,7 +5,7 @@ require daslib/daspkg
 [export]
 def package() {
     package_name("find-dupe")
-    package_description("AI judge for find_dupes clusters — partitions duplicate suspects into real / partial / false-positive via the Claude Messages API")
+    package_description("AI judge for detect-dupe clusters — partitions duplicate suspects into real / partial / false-positive via the Claude Messages API")
 }
 
 [export]
