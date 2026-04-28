@@ -1,14 +1,14 @@
-# find_dupe — AI judge for find_dupes clusters
+# find_dupe — AI judge for detect-dupe clusters
 
-`find_dupes` produces clusters of suspected duplicate functions; on a real codebase those clusters mix real duplicates with false positives (boilerplate, generic accessors, shared-shape glue). `find-dupe` (directory: `utils/find-dupe/`) consumes the find_dupes JSON and asks Claude to **partition** each cluster into real-duplicate groups + false positives, with a one-line reason.
+`detect-dupe` produces clusters of suspected duplicate functions; on a real codebase those clusters mix real duplicates with false positives (boilerplate, generic accessors, shared-shape glue). `find-dupe` (directory: `utils/find-dupe/`) consumes the detect-dupe JSON and asks Claude to **partition** each cluster into real-duplicate groups + false positives, with a one-line reason.
 
-This skill covers when and how to invoke that judge — via MCP for AI-driven workflows, or via the CLI when iterating directly. Read [skills/find_dupes.md](find_dupes.md) first if you haven't already; that's the upstream cluster-producing pipeline.
+This skill covers when and how to invoke that judge — via MCP for AI-driven workflows, or via the CLI when iterating directly. Read [skills/detect_dupe.md](detect_dupe.md) first if you haven't already; that's the upstream cluster-producing pipeline.
 
 ## When to use this
 
-- A `find_dupes` run produced too many clusters to walk by hand and you want a triaged list.
-- You're authoring or reviewing a PR and want to know which `find_duplicates` matches are *real* duplicates worth refactoring vs structural noise.
-- You're standing up a CI gate and want a "real positives" subset of the find_dupes output rather than the firehose.
+- A `detect-dupe` run produced too many clusters to walk by hand and you want a triaged list.
+- You're authoring or reviewing a PR and want to know which `detect_duplicates` matches are *real* duplicates worth refactoring vs structural noise.
+- You're standing up a CI gate and want a "real positives" subset of the detect-dupe output rather than the firehose.
 
 ## ⚠️ Privacy
 
@@ -44,8 +44,8 @@ Two tools available:
 
 | Tool | Use when |
 |---|---|
-| `judge_duplicates` | You already have a `find_dupes` JSON report (e.g. from the `find_duplicates` MCP tool, the `find_dupes --json` CLI, or a baseline). Pass `input=<path>`. |
-| `find_dupe` | You want a one-shot run on a directory / file list / PR. Pass `paths=...`; the tool runs `find_dupes` first and judges the result in the same call. |
+| `judge_duplicates` | You already have a `detect-dupe` JSON report (e.g. from the `detect_duplicates` MCP tool, the `detect-dupe --json` CLI, or a baseline). Pass `input=<path>`. |
+| `find_dupe` | You want a one-shot run on a directory / file list / PR. Pass `paths=...`; the tool runs `detect-dupe` first and judges the result in the same call. |
 
 Both accept `dry_run=true` (token estimate, no API calls) — the safe first step on a new corpus. Other params: `model` (`haiku`/`sonnet`), `max_clusters` (cost gate), `out` (override the temp output dir). `judge_duplicates` adds `positives_only=true` to filter the verdict report to actionable rows.
 
@@ -56,8 +56,8 @@ The response envelope embeds the verdict JSON via `@embed`, so you get the struc
 Three steps when iterating outside MCP:
 
 ```bash
-# 1. Run find_dupes
-bin/daslang utils/find_dupes/main.das -- -p <paths> --json ./dupes.json
+# 1. Run detect-dupe
+bin/daslang utils/detect-dupe/main.das -- -p <paths> --json ./dupes.json
 
 # 2. Dry-run the judge (cost preview)
 bin/daslang utils/find-dupe/main.das -- --input ./dupes.json --dry-run -v
@@ -67,7 +67,7 @@ bin/daslang utils/find-dupe/main.das -- --input ./dupes.json -v
 # writes ./find-dupe-out/find_dupe_verdicts.{json,md}
 ```
 
-Run from the project root — `find_dupes` records source paths relative to its cwd, and the judge extracts function bodies from disk using those paths.
+Run from the project root — `detect-dupe` records source paths relative to its cwd, and the judge extracts function bodies from disk using those paths.
 
 ## Reading the verdict envelope
 

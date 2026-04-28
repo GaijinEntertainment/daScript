@@ -1486,19 +1486,19 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/b
 # Install lint (unified linter)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/lint/main.das DESTINATION utils/lint)
 
-# Install find_dupes (cross-file duplicate-function detector)
-file(GLOB DAS_FIND_DUPES_FILES ${PROJECT_SOURCE_DIR}/utils/find_dupes/*.das)
-install(FILES ${DAS_FIND_DUPES_FILES} DESTINATION utils/find_dupes)
+# Install detect-dupe (cross-file duplicate-function detector)
+file(GLOB DAS_DETECT_DUPE_FILES ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
+install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
 install(FILES
-    ${PROJECT_SOURCE_DIR}/utils/find_dupes/README.md
-    DESTINATION utils/find_dupes
+    ${PROJECT_SOURCE_DIR}/utils/detect-dupe/README.md
+    DESTINATION utils/detect-dupe
 )
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find_dupes/fixture/
-    DESTINATION utils/find_dupes/fixture
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/detect-dupe/fixture/
+    DESTINATION utils/detect-dupe/fixture
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install find-dupe (AI judge for find_dupes clusters via das-claude).
+# Install find-dupe (AI judge for detect-dupe clusters via das-claude).
 # Not built into all_utils_exe — it depends on the das-claude daspkg
 # package fetched at runtime, which isn't available at build time.
 file(GLOB DAS_FIND_DUPE_FILES ${PROJECT_SOURCE_DIR}/utils/find-dupe/*.das)

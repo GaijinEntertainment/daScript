@@ -172,7 +172,7 @@ def test_extract_source_known_range(t : T?) {
     // synth.das has loop_sum at lines 24-30 — we only assert it
     // contains `def loop_sum` and is non-empty so we don't pin a
     // specific column count.
-    let src = extract_source(cache, "utils/find_dupes/fixture/synth.das", 24, 30, error)
+    let src = extract_source(cache, "utils/detect-dupe/fixture/synth.das", 24, 30, error)
     t |> success(empty(error), "no error: {error}")
     t |> success(!empty(src), "non-empty source")
     t |> success(find(src, "def loop_sum") >= 0, "extracted source contains def loop_sum")
@@ -183,8 +183,8 @@ def test_extract_source_known_range(t : T?) {
 def test_extract_source_caches(t : T?) {
     var cache = FileCache()
     var error : string
-    let _ = extract_source(cache, "utils/find_dupes/fixture/synth.das", 1, 5, error)
-    t |> success(key_exists(cache.files, "utils/find_dupes/fixture/synth.das"), "file in cache after first read")
+    let _ = extract_source(cache, "utils/detect-dupe/fixture/synth.das", 1, 5, error)
+    t |> success(key_exists(cache.files, "utils/detect-dupe/fixture/synth.das"), "file in cache after first read")
 }
 
 
@@ -192,7 +192,7 @@ def test_extract_source_caches(t : T?) {
 def test_extract_source_missing_file(t : T?) {
     var cache = FileCache()
     var error : string
-    let src = extract_source(cache, "utils/find_dupes/fixture/__does_not_exist.das", 1, 5, error)
+    let src = extract_source(cache, "utils/detect-dupe/fixture/__does_not_exist.das", 1, 5, error)
     t |> success(!empty(error), "missing file should set error")
     t |> success(empty(src), "empty source on error")
 }
@@ -203,7 +203,7 @@ def test_extract_source_v1_fallback(t : T?) {
     var cache = FileCache()
     var error : string
     // end_line == 0 → single-line peek (legacy v1 input)
-    let src = extract_source(cache, "utils/find_dupes/fixture/synth.das", 24, 0, error)
+    let src = extract_source(cache, "utils/detect-dupe/fixture/synth.das", 24, 0, error)
     t |> success(empty(error), "no error: {error}")
     t |> success(!empty(src), "non-empty source even with end_line=0")
 }
@@ -211,11 +211,11 @@ def test_extract_source_v1_fallback(t : T?) {
 
 [test]
 def test_extract_source_end_line_past_eof(t : T?) {
-    // Stale find_dupes report against an edited file: end_line points
+    // Stale detect-dupe report against an edited file: end_line points
     // past EOF. Should error rather than silently clamp + extract.
     var cache = FileCache()
     var error : string
-    let src = extract_source(cache, "utils/find_dupes/fixture/synth.das", 24, 99999, error)
+    let src = extract_source(cache, "utils/detect-dupe/fixture/synth.das", 24, 99999, error)
     t |> success(!empty(error), "end_line past EOF should set error")
     t |> success(empty(src), "empty source on error")
 }
@@ -227,7 +227,7 @@ def test_extract_source_inverted_range(t : T?) {
     // silently coerce to a single-line peek.
     var cache = FileCache()
     var error : string
-    let src = extract_source(cache, "utils/find_dupes/fixture/synth.das", 30, 20, error)
+    let src = extract_source(cache, "utils/detect-dupe/fixture/synth.das", 30, 20, error)
     t |> success(!empty(error), "inverted range should set error")
     t |> success(empty(src), "empty source on error")
 }
@@ -281,7 +281,7 @@ def test_read_input_report_missing_file(t : T?) {
     // Generate a unique temp path then immediately delete it — the
     // path is now guaranteed nonexistent and unique to this run, and
     // works on Windows where `/tmp` doesn't exist. Same pattern as
-    // utils/mcp/test_tools.das `test_find_duplicates_corpus_not_found`.
+    // utils/mcp/test_tools.das `test_detect_duplicates_corpus_not_found`.
     let bogus = make_temp_input_file(t, "")
     if (empty(bogus)) {
         return

@@ -1,6 +1,6 @@
-# find-dupe — AI judge for find_dupes clusters
+# find-dupe — AI judge for detect-dupe clusters
 
-`utils/find_dupes` produces clusters of suspected duplicate functions (exact + fuzzy). On a real codebase those clusters mix **real duplicates** with **false positives** — pattern-matching boilerplate, generic accessors, shared-shape glue code that happens to canonicalize alike. Manually triaging clusters is the bottleneck for actually deleting duplicates.
+`utils/detect-dupe` produces clusters of suspected duplicate functions (exact + fuzzy). On a real codebase those clusters mix **real duplicates** with **false positives** — pattern-matching boilerplate, generic accessors, shared-shape glue code that happens to canonicalize alike. Manually triaging clusters is the bottleneck for actually deleting duplicates.
 
 `find-dupe` feeds each cluster's actual source to Claude (via the `das-claude` daspkg, module `anthropic/anthropic`) and asks it to **partition** the cluster into real-duplicate groups vs false positives, with a one-line reason. Output is JSON (machine, for CI gates / future tooling) + Markdown (human, for review).
 
@@ -44,9 +44,9 @@ Smoke test PASSED.
 
 ## Workflow
 
-1. **Run find_dupes** to produce a JSON report:
+1. **Run detect-dupe** to produce a JSON report:
    ```bash
-   bin/daslang utils/find_dupes/main.das -- -p <paths> --json ./dupes.json
+   bin/daslang utils/detect-dupe/main.das -- -p <paths> --json ./dupes.json
    ```
 
 2. **Dry-run** find-dupe for a cost preview (no API calls):
@@ -61,7 +61,7 @@ Smoke test PASSED.
    ```
    Writes `find_dupe_verdicts.json` (machine) and `find_dupe_verdicts.md` (human) to `./find-dupe-out/` (override with `--out`).
 
-> **Run from the project root.** `find_dupes` records source paths relative to its cwd. `find-dupe` extracts each function's body from disk using those paths, so its cwd must match.
+> **Run from the project root.** `detect-dupe` records source paths relative to its cwd. `find-dupe` extracts each function's body from disk using those paths, so its cwd must match.
 
 > **Cross-platform paths.** Examples use cwd-relative paths (`./dupes.json`) so they work on Linux, macOS, and Windows alike. If you'd rather drop intermediates in the OS tempdir, substitute your shell's convention — `$TMPDIR/dupes.json` (zsh/bash on macOS), `/tmp/dupes.json` (Linux), or `%TEMP%\dupes.json` (PowerShell/cmd) — none of those are required by the tool.
 
@@ -69,7 +69,7 @@ Smoke test PASSED.
 
 | Flag | Default | Description |
 |---|---|---|
-| `-i`, `--input` | (required) | find_dupes JSON report file |
+| `-i`, `--input` | (required) | detect-dupe JSON report file |
 | `-o`, `--out` | `./find-dupe-out` | output directory |
 | `--model` | `haiku` | `haiku` (Haiku 4.5) or `sonnet` (Sonnet 4.6) |
 | `--min-lines` | `6` | skip clusters where every member is shorter than this |
@@ -103,8 +103,8 @@ Each `VerdictRow` carries `cluster_id`, `kind` (`exact`/`fuzzy`), `similarity` (
 
 Two MCP tools shell out to this CLI so AI assistants can run the full pipeline without leaving the chat:
 
-- `judge_duplicates` — takes a find_dupes JSON report path; returns the verdict envelope.
-- `find_dupe` — convenience: runs find_dupes against `paths`, then judges the resulting clusters.
+- `judge_duplicates` — takes a detect-dupe JSON report path; returns the verdict envelope.
+- `find_dupe` — convenience: runs detect-dupe against `paths`, then judges the resulting clusters.
 
 Both surface a structured "anthropic daspkg not installed" error with the install command when the subprocess fails for that reason. See `doc/source/reference/utils/find_dupe.rst` and `utils/mcp/README.md` for parameter details.
 
@@ -129,5 +129,5 @@ A typical cluster (3-4 functions, 50 lines total) consumes ~1 KTok in + 0.3 KTok
 
 ## See also
 
-- `utils/find_dupes/README.md` — the cluster-producing pipeline whose JSON we consume.
+- `utils/detect-dupe/README.md` — the cluster-producing pipeline whose JSON we consume.
 - `examples/claude/` — the daslang helper bot, the source pattern this tool was built from (also uses das-claude).

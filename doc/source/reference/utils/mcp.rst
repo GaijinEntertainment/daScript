@@ -201,9 +201,9 @@ Parse-aware search (tree-sitter)
 Duplicate detection
 -------------------
 
-These tools wrap :ref:`utils_find_dupes` end-to-end (no shelling out).
+These tools wrap :ref:`utils_detect_dupe` end-to-end (no shelling out).
 ``export_corpus`` builds the corpus once over a body of code;
-``find_duplicates`` queries it.  ``judge_duplicates`` and ``find_dupe``
+``detect_duplicates`` queries it.  ``judge_duplicates`` and ``find_dupe``
 shell out to the :ref:`utils_find_dupe` AI judge.
 
 .. list-table::
@@ -215,20 +215,20 @@ shell out to the :ref:`utils_find_dupe` AI judge.
    * - ``export_corpus``
      - Scan one or more ``.das`` files / directories / globs, compile
        each in-process, and write a corpus JSON to ``out``.  Same shape
-       as ``find_dupes --export-functions``.
-   * - ``find_duplicates``
+       as ``detect-dupe --export-functions``.
+   * - ``detect_duplicates``
      - Compare candidate file(s) against a pre-built corpus.  Returns
        a per-candidate JSON envelope with corpus stats, pattern-skip
        counts, and the top-N exact and fuzzy matches per candidate.
        Supports ``keep`` to override the default pattern filter.
    * - ``judge_duplicates``
-     - Take a ``find_dupes`` JSON report and ask Claude to partition
+     - Take a ``detect-dupe`` JSON report and ask Claude to partition
        each cluster into real / partial / false_positive verdicts.
        Shells out to ``daslang utils/find-dupe/main.das`` --- requires
        ``daspkg install --root utils/find-dupe`` first (the
        ``anthropic/anthropic`` package).
    * - ``find_dupe``
-     - Convenience wrapper: run ``find_dupes`` against ``paths`` and
+     - Convenience wrapper: run ``detect-dupe`` against ``paths`` and
        judge the resulting clusters in one call.  Same daspkg
        requirement as ``judge_duplicates``.
 

@@ -6,11 +6,11 @@
    single: Utils; Cluster triage
 
 ==========================================================
- find_dupe --- AI judge for find_dupes clusters
+ find_dupe --- AI judge for detect-dupe clusters
 ==========================================================
 
 ``find_dupe`` (directory: ``utils/find-dupe/``) consumes a
-:ref:`find_dupes <utils_find_dupes>` JSON report and asks Claude (via
+:ref:`detect-dupe <utils_detect_dupe>` JSON report and asks Claude (via
 the ``das-claude`` daspkg, module ``anthropic/anthropic``) to
 **partition** each cluster into real-duplicate groups vs false
 positives, with a one-line reason.  Output is JSON (machine, for CI
@@ -83,9 +83,9 @@ Expected output::
 Workflow
 ========
 
-1. Run :ref:`find_dupes <utils_find_dupes>` to produce a JSON report::
+1. Run :ref:`detect-dupe <utils_detect_dupe>` to produce a JSON report::
 
-      bin/daslang utils/find_dupes/main.das -- -p <paths> --json ./dupes.json
+      bin/daslang utils/detect-dupe/main.das -- -p <paths> --json ./dupes.json
 
 2. Dry-run ``find_dupe`` for a cost preview (no API calls)::
 
@@ -102,7 +102,7 @@ Workflow
    ``find_dupe_verdicts.md`` (human) to ``./find-dupe-out/`` (override
    with ``--out``).
 
-Run from the project root.  ``find_dupes`` records source paths
+Run from the project root.  ``detect-dupe`` records source paths
 relative to its cwd; ``find_dupe`` extracts each function's body from
 disk using those paths, so its cwd must match.
 
@@ -119,7 +119,7 @@ Flags
      - Meaning
    * - ``-i``, ``--input``
      - required
-     - find_dupes JSON report file
+     - detect-dupe JSON report file
    * - ``-o``, ``--out``
      - ``./find-dupe-out``
      - output directory
@@ -214,12 +214,12 @@ daspkg not installed" error with the exact install command.
    * - Tool
      - Purpose
    * - ``judge_duplicates``
-     - Take a find_dupes JSON report and return the verdict envelope.
+     - Take a detect-dupe JSON report and return the verdict envelope.
        Parameters: ``input`` (required), ``out``, ``model``,
        ``parallel``, ``max_clusters``, ``min_lines``, ``positives_only``,
        ``dry_run``.
    * - ``find_dupe``
-     - Convenience: run find_dupes against ``paths`` and judge the
+     - Convenience: run detect-dupe against ``paths`` and judge the
        resulting clusters in a single call.  Parameters: ``paths``
        (required), ``out``, ``model``, ``threshold``, ``parallel``,
        ``max_clusters``, ``min_lines``, ``dry_run``.
@@ -266,7 +266,7 @@ Implementation
      - CLI (``daslib/clargs``), pipeline orchestration, parallel
        fan-out via ``daslib/jobque_boost``
    * - ``cluster_input.das``
-     - find_dupes JSON shadow structs +
+     - detect-dupe JSON shadow structs +
        ``read_input_report``
    * - ``source_extract.das``
      - ``FileCache`` + ``extract_source(path, start_line, end_line)``
@@ -286,7 +286,7 @@ Implementation
 See also
 ========
 
-* :ref:`utils_find_dupes` --- the cluster-producing pipeline whose
+* :ref:`utils_detect_dupe` --- the cluster-producing pipeline whose
   JSON ``find_dupe`` consumes.
 * :ref:`utils_mcp` --- the MCP server that wraps both tools.
 * :ref:`utils_daspkg` --- the package manager that fetches

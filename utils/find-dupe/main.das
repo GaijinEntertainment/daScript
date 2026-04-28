@@ -23,7 +23,7 @@ let DEFAULT_SONNET = "claude-sonnet-4-6"
 [CommandLineArgs]
 struct Config {
     @clarg_short = "i"
-    @clarg_doc = "find_dupes JSON report file (input)"
+    @clarg_doc = "detect-dupe JSON report file (input)"
     input : string
 
     @clarg_short = "o"
@@ -294,7 +294,7 @@ def update_summary(var s : OutputSummary; row : VerdictRow) {
 
 def run_pipeline(cfg : Config) : int {
     if (empty(cfg.input)) {
-        to_log(LOG_ERROR, "error: --input is required (path to find_dupes JSON report)\n\n")
+        to_log(LOG_ERROR, "error: --input is required (path to detect-dupe JSON report)\n\n")
         print_help(get_command_info(type<Config>), "find-dupe")
         return 2
     }
@@ -524,7 +524,7 @@ def main() {
         return
     }
     // `[export] def main()` returns void in daslang — surface a non-zero
-    // exit via `panic` (same convention as utils/find_dupes/main.das).
+    // exit via `panic` (same convention as utils/detect-dupe/main.das).
     // The detailed reason already went through `to_log(LOG_ERROR, ...)`
     // inside run_pipeline, so the panic message is just a short tag.
     let rc = run_pipeline(cfg)

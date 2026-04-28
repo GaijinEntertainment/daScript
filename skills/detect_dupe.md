@@ -1,11 +1,11 @@
-# find_dupes — duplicate-function detection
+# detect-dupe — duplicate-function detection
 
 Read this skill before doing duplicate-detection work in this repo, or before editing the tool itself. Two audiences are covered:
 
 - **Using the tool** — building a corpus, asking "does this function already exist?", wiring a CI gate. Lead sections.
 - **Extending the tool** — adding patterns, modifying the canonicalizer, wiring new MCP parameters, refactoring helpers. See [Maintainer notes](#maintainer-notes) at the bottom.
 
-The full user-facing reference lives at `doc/source/reference/utils/find_dupes.rst`; this skill is the operational guide.
+The full user-facing reference lives at `doc/source/reference/utils/detect-dupe.rst`; this skill is the operational guide.
 
 ## When to use this
 
@@ -24,7 +24,7 @@ The MCP server exposes the entire pipeline — no shelling out:
 | MCP tool | Purpose |
 |---|---|
 | `export_corpus` | Scan paths/dirs/globs, compile each `.das` file, write a `corpus.json` |
-| `find_duplicates` | Compare candidate file(s) against a `corpus.json`, return per-candidate matches |
+| `detect_duplicates` | Compare candidate file(s) against a `corpus.json`, return per-candidate matches |
 
 ### Step 1 — build a corpus
 
@@ -45,7 +45,7 @@ Envelope:
 ### Step 2 — query against a candidate
 
 ```
-mcp__daslang__find_duplicates(
+mcp__daslang__detect_duplicates(
   paths="path/to/new_helper.das",
   corpus="corpus.json"
 )
@@ -103,7 +103,7 @@ The filter applies to **both** corpus records and freshly-compiled candidates �
 
 ## CLI workflow (advanced)
 
-The CLI at `utils/find_dupes/main.das` supports modes the MCP tools don't expose. Use it for:
+The CLI at `utils/detect-dupe/main.das` supports modes the MCP tools don't expose. Use it for:
 
 - **B1 baseline / CI gate** — `--baseline <corpus.json> --check`. Records absent from the baseline are tagged candidates; non-zero exit when any cluster/pair survives.
 - **`--baseline-strict`** — drops clusters whose canonical was already in the baseline; only fully-new canonicals survive.
@@ -116,18 +116,18 @@ Quick recipes:
 
 ```sh
 # one-off corpus build (commit this)
-bin/Release/daslang.exe utils/find_dupes/main.das -- -p tests --export-functions tests_baseline.json
+bin/Release/daslang.exe utils/detect-dupe/main.das -- -p tests --export-functions tests_baseline.json
 
 # CI gate: flag any new structural duplicates introduced by a PR
-bin/Release/daslang.exe utils/find_dupes/main.das -- -p tests --baseline tests_baseline.json --check
+bin/Release/daslang.exe utils/detect-dupe/main.das -- -p tests --baseline tests_baseline.json --check
 
 # git pipeline against the baseline
 git diff --name-only master | grep '\.das$' | \
-    bin/Release/daslang.exe utils/find_dupes/main.das -- \
+    bin/Release/daslang.exe utils/detect-dupe/main.das -- \
         --import-functions tests_baseline.json --against-from-stdin
 ```
 
-Full flag reference: `bin/Release/daslang.exe utils/find_dupes/main.das -- -?` or `doc/source/reference/utils/find_dupes.rst`.
+Full flag reference: `bin/Release/daslang.exe utils/detect-dupe/main.das -- -?` or `doc/source/reference/utils/detect-dupe.rst`.
 
 ## Limitations
 
@@ -148,11 +148,11 @@ Work top-down: most-similar matches first.
 
 ## Maintainer notes
 
-The remainder of this skill is **only relevant when editing the find_dupes tool itself** — adding patterns, modifying the canonicalizer, wiring new MCP parameters, refactoring helpers. SDK users don't need any of it; the install version of this skill (`install/skills/find_dupes.md`) deliberately omits these sections.
+The remainder of this skill is **only relevant when editing the detect-dupe tool itself** — adding patterns, modifying the canonicalizer, wiring new MCP parameters, refactoring helpers. SDK users don't need any of it; the install version of this skill (`install/skills/detect_dupe.md`) deliberately omits these sections.
 
 ### Architecture at a glance
 
-`utils/find_dupes/` is an in-process compile-and-canonicalize pipeline:
+`utils/detect-dupe/` is an in-process compile-and-canonicalize pipeline:
 
 1. **Scan** — `scan_das_files` (in `pipeline.das`) walks paths/dirs/globs; skips `builtin.das`, `daslib/debugger.das`, `daslib/profiler.das`, `_*` dirs.
 2. **Compile** — `compile_and_collect` compiles one file at a time. Compile policy mirrors `utils/lint`: `ignore_shared_modules`, `export_all`. Optimisations stay ON so dastest macros (e.g. `unroll`) compile.
@@ -166,11 +166,11 @@ The pipeline is **shared** between the CLI (`main.das`) and the MCP tools — th
 
 ### Adding a new pattern
 
-Three-step change in `patterns.das` + `test_find_dupes.das`:
+Three-step change in `patterns.das` + `test_detect_dupe.das`:
 
 1. **Predicate.** Add a `try_<name>(...)` in `patterns.das`. Return `true` and populate `hit.name` (the user-visible identifier) and `hit.note` (a short human-readable summary, shown in `--verbose`) when the pattern matches. Body-shape matchers take `(canonical : string; var hit : PatternHit)`; name-shape matchers take `(name : string; var hit : PatternHit)` (see `try_visitor`).
 2. **Wire it.** Add the call to `classify(name, canonical)` in priority order — *more specific shapes first*. Name-based checks usually win over body-shape checks (a visitor method whose body fits `emit` should still be classified `visitor`).
-3. **Tests.** Add at least one positive test and one negative test in `test_find_dupes.das` under the `── patterns / classify ──` section. The negative test should be a real-looking canonical that should NOT match (mixed statements, nested blocks, single statement) — guard against the predicate over-firing.
+3. **Tests.** Add at least one positive test and one negative test in `test_detect_dupe.das` under the `── patterns / classify ──` section. The negative test should be a real-looking canonical that should NOT match (mixed statements, nested blocks, single statement) — guard against the predicate over-firing.
 
 Pattern names are the user-visible contract: they appear in `--keep`, the `--verbose` skip log, the summary line, and the MCP envelope's `patterns_skipped` map. Pick a short, stable identifier.
 
@@ -178,7 +178,7 @@ When matching against tokenized canonicals, prefer `tokenize_canonical` + `split
 
 ### When to extract a helper into `pipeline.das`
 
-If more than one entry point uses it (the CLI in `main.das`, the MCP `find_duplicates` tool, the MCP `export_corpus` tool, and the test suite all count), it lives in `pipeline.das` as `def public`. Examples that already follow this rule: `compile_and_collect`, `apply_pattern_filter`, `scan_das_files`, `is_skip_file`, `has_expect_directive`.
+If more than one entry point uses it (the CLI in `main.das`, the MCP `detect_duplicates` tool, the MCP `export_corpus` tool, and the test suite all count), it lives in `pipeline.das` as `def public`. Examples that already follow this rule: `compile_and_collect`, `apply_pattern_filter`, `scan_das_files`, `is_skip_file`, `has_expect_directive`.
 
 If you're tempted to copy-paste a helper from `main.das` into a new MCP tool: stop, move it into `pipeline.das` first, then call it from both.
 
@@ -187,7 +187,7 @@ If you're tempted to copy-paste a helper from `main.das` into a new MCP tool: st
 Two MCP tools, both in `utils/mcp/tools/`:
 
 - `export_corpus.das` — scans paths, compiles, writes the corpus JSON.
-- `find_duplicates.das` — wraps B2 mode. Loads a corpus, compiles candidates, applies pattern filter, returns a per-candidate JSON envelope.
+- `detect_duplicates.das` — wraps B2 mode. Loads a corpus, compiles candidates, applies pattern filter, returns a per-candidate JSON envelope.
 
 Adding parameters to either tool is a four-site change in `utils/mcp/protocol.das`:
 
@@ -200,7 +200,7 @@ Adding parameters to either tool is a four-site change in `utils/mcp/protocol.da
 
 ### Empty-result handling
 
-The MCP `find_duplicates` tool distinguishes three cases when `cand_refs` is empty after filtering:
+The MCP `detect_duplicates` tool distinguishes three cases when `cand_refs` is empty after filtering:
 
 1. **Compile failed** (`n_failed > 0`) — error envelope, includes the first failed file path.
 2. **No functions in file** (`candidates_pre_filter == 0`) — error envelope, "no candidate functions extracted from {paths}".
@@ -212,20 +212,20 @@ When adding new failure modes, preserve this distinction. "Empty result" is not 
 
 Two test suites:
 
-- `utils/find_dupes/test_find_dupes.das` — unit tests for the pipeline (tokenizer, canonicalizer, clusterer, pattern matcher, exchange, B1/B2 modes). Run via `bin/Release/daslang.exe dastest/dastest.das -- --test utils/find_dupes/test_find_dupes.das` or the MCP `run_test` tool.
-- `utils/mcp/test_tools.das` — integration tests for the MCP tools, including `do_find_duplicates` and `do_export_corpus`.
+- `utils/detect-dupe/test_detect_dupe.das` — unit tests for the pipeline (tokenizer, canonicalizer, clusterer, pattern matcher, exchange, B1/B2 modes). Run via `bin/Release/daslang.exe dastest/dastest.das -- --test utils/detect-dupe/test_detect_dupe.das` or the MCP `run_test` tool.
+- `utils/mcp/test_tools.das` — integration tests for the MCP tools, including `do_detect_duplicates` and `do_export_corpus`.
 
-When you add a pattern, add tests in *both* places: the `classify()` unit test in `test_find_dupes.das`, and at least one envelope-shape test in `test_tools.das` if the pattern materially changes MCP output (e.g. a new envelope field).
+When you add a pattern, add tests in *both* places: the `classify()` unit test in `test_detect_dupe.das`, and at least one envelope-shape test in `test_tools.das` if the pattern materially changes MCP output (e.g. a new envelope field).
 
-`utils/find_dupes/fixture/synth.das` and `fixture/canonical_cases.das` are hand-crafted fixtures for smoke-testing the visitor end-to-end. If you add a new canonicalization concern (a new AST node visited differently), add a one-function case to `canonical_cases.das`.
+`utils/detect-dupe/fixture/synth.das` and `fixture/canonical_cases.das` are hand-crafted fixtures for smoke-testing the visitor end-to-end. If you add a new canonicalization concern (a new AST node visited differently), add a one-function case to `canonical_cases.das`.
 
 ### AOT registration
 
-If you add a new test file under `utils/find_dupes/`, register it in `tests/aot/CMakeLists.txt` — see `skills/aot_testing.md`. CI runs ALL tests with AOT enabled.
+If you add a new test file under `utils/detect-dupe/`, register it in `tests/aot/CMakeLists.txt` — see `skills/aot_testing.md`. CI runs ALL tests with AOT enabled.
 
 ### Linting / formatting
 
-Standard daslang rules (see `skills/das_formatting.md`). `find_dupes`-specific:
+Standard daslang rules (see `skills/das_formatting.md`). `detect-dupe`-specific:
 
 - Records (`FuncRecord`) are non-copyable due to the `sig : array<...>` field. Use `<-`, `push_clone`, or `emplace` when threading them through arrays.
 - Avoid `print` outside `main.das` and the test files. Library helpers in `pipeline.das` / `patterns.das` should be quiet (the MCP tools rely on stdout staying free for JSON-RPC); when you need diagnostics, use `to_log(LOG_INFO)` or take a `verbose : bool` parameter and gate the `print`.
@@ -234,8 +234,8 @@ Standard daslang rules (see `skills/das_formatting.md`). `find_dupes`-specific:
 
 Every user-facing change touches three files in lockstep:
 
-- `utils/find_dupes/README.md` — the in-tree quick reference.
-- `doc/source/reference/utils/find_dupes.rst` — the published reference doc.
-- `install/skills/find_dupes.md` — the install-side skill that ships in the SDK.
+- `utils/detect-dupe/README.md` — the in-tree quick reference.
+- `doc/source/reference/utils/detect-dupe.rst` — the published reference doc.
+- `install/skills/detect_dupe.md` — the install-side skill that ships in the SDK.
 
-If a change is repo-dev-only (e.g. a new internal helper, a refactor that doesn't surface), update only this skill (`skills/find_dupes.md`) and skip the install side.
+If a change is repo-dev-only (e.g. a new internal helper, a refactor that doesn't surface), update only this skill (`skills/detect_dupe.md`) and skip the install side.

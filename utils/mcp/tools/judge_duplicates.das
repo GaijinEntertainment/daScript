@@ -76,7 +76,7 @@ def public run_find_dupe_judge(input_path : string;
         return make_tool_result("Cannot determine daslang executable path", true)
     }
     if (empty(input_path)) {
-        return make_tool_result("judge_duplicates: missing required 'input' parameter (path to find_dupes JSON report)", true)
+        return make_tool_result("judge_duplicates: missing required 'input' parameter (path to detect-dupe JSON report)", true)
     }
     let resolved_input = resolve_path(input_path)
     let input_st = stat(resolved_input)

@@ -40,7 +40,7 @@ def private load_file(var cache : FileCache; path : string) : bool {
 // inclusive on both ends), or an empty string with `error` set on
 // failure. `end_line <= 0` falls back to a single-line peek (just the
 // start line, no inline marker) — happens only when consuming a v1
-// find_dupes report; `read_input_report` already logs a one-shot
+// detect-dupe report; `read_input_report` already logs a one-shot
 // file-level warning in that case.
 def public extract_source(var cache : FileCache; path : string;
                           start_line, end_line : int;
@@ -64,7 +64,7 @@ def public extract_source(var cache : FileCache; path : string;
         hi = lo
     } else {
         // For v2 inputs we treat out-of-range or inverted `end_line` as
-        // an error rather than silently clamping. Stale find_dupes
+        // an error rather than silently clamping. Stale detect-dupe
         // reports against an edited file are the realistic failure mode
         // here — silently extracting the wrong slice would feed the
         // judge model misleading source and waste an API call. Caller

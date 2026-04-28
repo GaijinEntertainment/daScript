@@ -1,7 +1,7 @@
 options gen2
 
 
-// Non-generic baseline — must be visible to find_dupes.
+// Non-generic baseline — must be visible to detect-dupe.
 def case_mono_baseline(a, b : int) : int {
     return a + b
 }

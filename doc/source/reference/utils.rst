@@ -19,7 +19,7 @@ built-in leak-detection mechanism.
    utils/dascov.rst
    utils/daspkg.rst
    utils/mcp.rst
-   utils/find_dupes.rst
+   utils/detect_dupe.rst
    utils/find_dupe.rst
    utils/profiler.rst
    utils/memory_leak_detection.rst

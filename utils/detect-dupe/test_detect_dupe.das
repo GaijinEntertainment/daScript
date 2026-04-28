@@ -428,7 +428,7 @@ def test_fuzzy_min_tokens_filter(t : T?) {
 // at the end cleans up.
 
 def make_temp_export_path(t : T?) : string {
-    let r = create_temp_file_result("find_dupes_test", ".json")
+    let r = create_temp_file_result("detect_dupe_test", ".json")
     if (!(r is value)) {
         t |> failure("create_temp_file_result failed: {unsafe(r.error)}")
         return ""
@@ -636,7 +636,7 @@ def test_derive_sig_and_count_below_floor(t : T?) {
 // without unsafe-by-move capture. The fixture is small (~13 functions),
 // so per-test overhead is acceptable.
 
-let CANONICAL_FIXTURE = "utils/find_dupes/fixture/canonical_cases.das"
+let CANONICAL_FIXTURE = "utils/detect-dupe/fixture/canonical_cases.das"
 
 
 [test]
@@ -733,7 +733,7 @@ def test_canonical_let_var_token(t : T?) {
 
 // ── end-to-end pipeline against fixture/synth.das ────────────────────
 
-let SYNTH_FIXTURE = "utils/find_dupes/fixture/synth.das"
+let SYNTH_FIXTURE = "utils/detect-dupe/fixture/synth.das"
 
 
 [test]
@@ -1316,7 +1316,7 @@ def test_apply_pattern_filter_preserves_candidate_flag(t : T?) {
 // uncalled generics were invisible and called generics surfaced under
 // the mangled symbol. The tests below pin both directions.
 
-let GENERICS_FIXTURE = "utils/find_dupes/fixture/generics_cases.das"
+let GENERICS_FIXTURE = "utils/detect-dupe/fixture/generics_cases.das"
 
 
 [test]

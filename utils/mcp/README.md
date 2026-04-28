@@ -34,10 +34,10 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that e
 
 | Tool | Description |
 |---|---|
-| `export_corpus` | Scan one or more `.das` files / directories / globs, compile each in-process, and write a corpus JSON to `out`. Same shape as `find_dupes --export-functions` |
-| `find_duplicates` | Compare candidate file(s) against a pre-built corpus. Returns a per-candidate JSON envelope with corpus stats, pattern-skip counts, and the top-N exact and fuzzy matches per candidate. Supports `keep` to override the default pattern filter |
-| `judge_duplicates` | AI judge: take a `find_dupes` JSON report and ask Claude to partition each cluster into real / partial / false_positive verdicts. Shells out to `daslang utils/find-dupe/main.das` — requires `daspkg install --root utils/find-dupe` first (the `anthropic/anthropic` package) and `ANTHROPIC_API_KEY`. WARNING: sends source to Anthropic's API |
-| `find_dupe` | Convenience: run `find_dupes` against `paths` and judge the resulting clusters in one call. Same daspkg + API-key requirement as `judge_duplicates` |
+| `export_corpus` | Scan one or more `.das` files / directories / globs and write a corpus JSON to `out`. Same shape as `detect-dupe --export-functions` (subprocess wrapper around `utils/detect-dupe/main.das`) |
+| `detect_duplicates` | Compare candidate file(s) against a pre-built corpus. Returns an envelope with the per-candidate JSON report (top-N exact and fuzzy matches per candidate). Supports `keep` to override the default pattern filter |
+| `judge_duplicates` | AI judge: take a `detect-dupe` JSON report and ask Claude to partition each cluster into real / partial / false_positive verdicts. Shells out to `daslang utils/find-dupe/main.das` — requires `daspkg install --root utils/find-dupe` first (the `anthropic/anthropic` package) and `ANTHROPIC_API_KEY`. WARNING: sends source to Anthropic's API |
+| `find_dupe` | Convenience: run `detect-dupe` against `paths` and judge the resulting clusters in one call. Same daspkg + API-key requirement as `judge_duplicates` |
 
 ### Live-Reload Control
 

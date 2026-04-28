@@ -35,15 +35,15 @@ Fix significant issues (unused variables that indicate bugs, performance warning
 
 ## 1.5. Check for duplicates against the corpus
 
-Run `find_dupes` against the **changed `.das` files only**, with a pre-built corpus of the rest of the tree. This is the "did I just write something that already exists?" check — catches structural copy-paste before review.
+Run `detect-dupe` against the **changed `.das` files only**, with a pre-built corpus of the rest of the tree. This is the "did I just write something that already exists?" check — catches structural copy-paste before review.
 
 ```bash
 # One-off: build the corpus over the rest of the tree (re-build occasionally as the codebase drifts)
-bin/Release/daslang.exe utils/find_dupes/main.das -- -p daslib -p tests -p utils --export-functions /tmp/corpus.json
+bin/Release/daslang.exe utils/detect-dupe/main.das -- -p daslib -p tests -p utils --export-functions /tmp/corpus.json
 
 # Per-PR: compare the diff against the corpus
 git diff --name-only origin/master..HEAD -- '*.das' | \
-  bin/Release/daslang.exe utils/find_dupes/main.das -- \
+  bin/Release/daslang.exe utils/detect-dupe/main.das -- \
     --import-functions /tmp/corpus.json --against-from-stdin
 ```
 
@@ -51,7 +51,7 @@ Or via MCP (preferred when available):
 
 ```
 mcp__daslang__export_corpus(paths="daslib,tests,utils", out="/tmp/corpus.json")
-mcp__daslang__find_duplicates(paths="<git-diff list>", corpus="/tmp/corpus.json")
+mcp__daslang__detect_duplicates(paths="<git-diff list>", corpus="/tmp/corpus.json")
 ```
 
 **Triage policy:**
@@ -62,7 +62,7 @@ mcp__daslang__find_duplicates(paths="<git-diff list>", corpus="/tmp/corpus.json"
 
 Skip this step for PRs that only touch tests, fixtures, or generated files.
 
-See `skills/find_dupes.md` for the full workflow including B1 baseline / CI gate modes.
+See `skills/detect_dupe.md` for the full workflow including B1 baseline / CI gate modes.
 
 ## 2. Run all tests
 

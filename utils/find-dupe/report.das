@@ -8,9 +8,9 @@ require cluster_input
 require judge
 
 
-// Output JSON shape — distinct from the find_dupes input shape.
+// Output JSON shape — distinct from the detect-dupe input shape.
 // `schema_version` lets future bumps reject older readers loudly,
-// same convention as utils/find_dupes/exchange.das.
+// same convention as utils/detect-dupe/exchange.das.
 let public FIND_DUPE_SCHEMA_VERSION = 1
 
 

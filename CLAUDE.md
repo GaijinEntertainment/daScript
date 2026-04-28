@@ -116,8 +116,8 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
 | `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
 | `skills/filesystem.md` | Any `.das` code that builds, splits, or normalizes a file path, or touches the filesystem (existence, listing, copy/rename/remove, temp files). **Rule:** path & filename operations MUST use `fio` helpers (`base_name`/`dir_name`/`extension`/`stem`/`path_join`/`normalize`/`is_absolute`/`relative`) — never hand-rolled `rfind`/`slice`/string-interp. Filesystem ops use `fio` / `daslib/fio` (`stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
-| `skills/find_dupes.md` | Detecting duplicate / near-duplicate functions in repo code — building a corpus, asking "did I just write something that already exists?" during PR authoring/review, or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `find_duplicates`) and the underlying CLI (`utils/find_dupes/main.das`). Also read before editing/extending the find_dupes tool itself (adding a pattern matcher, extending the canonicalizer, wiring new MCP parameters) |
-| `skills/find_dupe.md` | AI-judging a find_dupes report — turning a noisy clusters JSON into actionable real/partial/false-positive verdicts via Claude (`utils/find-dupe/`). Read before invoking the `judge_duplicates` or `find_dupe` MCP tools, before running the CLI on a fresh repo, or when wiring the daspkg `anthropic/anthropic` install. Also covers cost guardrails (`--dry-run`, `--max-clusters`, `--positives-only`) |
+| `skills/detect_dupe.md` | Detecting duplicate / near-duplicate functions in repo code — building a corpus, asking "did I just write something that already exists?" during PR authoring/review, or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `detect_duplicates`) and the underlying CLI (`utils/detect-dupe/main.das`). Also read before editing/extending the detect-dupe tool itself (adding a pattern matcher, extending the canonicalizer, wiring new MCP parameters) |
+| `skills/find_dupe.md` | AI-judging a detect-dupe report — turning a noisy clusters JSON into actionable real/partial/false-positive verdicts via Claude (`utils/find-dupe/`). Read before invoking the `judge_duplicates` or `find_dupe` MCP tools, before running the CLI on a fresh repo, or when wiring the daspkg `anthropic/anthropic` install. Also covers cost guardrails (`--dry-run`, `--max-clusters`, `--positives-only`) |
 | `skills/linq.md` | Any `.das` code that filters, maps, sorts, groups, aggregates, or otherwise transforms a sequence into another sequence, array, or table. **Preference order:** comprehension (`[for (x in src); expr; where cond]`) when one expression covers the whole transformation → LINQ (`daslib/linq_boost` shorthand `_select` / `_where` / `_to_array`, or pipe-form `arr \|> where_(...) \|> ...`) for chains, lazy iterators, set ops, joins, aggregations → plain `for` loop for side-effecting iteration. **Do not use `daslib/functional`** (`map` / `filter` / `each` / `to_array`) for new code — older surface, less integrated. |
 
 Multiple skill files may apply to a single task. For example, creating a new daslib module requires reading `skills/das_formatting.md`, `skills/daslib_modules.md`, and possibly `skills/documentation_rst.md`.
@@ -297,7 +297,7 @@ This is the post-migration state. If you find yourself reading older guidance ab
 other level) should be used instead. CI pipes `to_log` through the same stdout the user
 sees, so there is no behavior loss — the win is consistent log levels (`LOG_INFO`,
 `LOG_WARNING`, `LOG_ERROR`) and the ability to filter / route output later. See
-`utils/find_dupes/main.das` for the canonical pattern (zero `print()` calls; everything
+`utils/detect-dupe/main.das` for the canonical pattern (zero `print()` calls; everything
 flows through `to_log`).
 
 
@@ -337,8 +337,8 @@ flows through `to_log`).
 - `modules/dasLiveHost/` — C++ module for live-reload host lifecycle (dynamic module)
 - `utils/daslang-live/` — Live-reloading application host (`daslang-live.exe`)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
-- `utils/find_dupes/` — Cross-file duplicate-function detector — canonicalizer, MinHash, clusterer, pattern filter (also exposed via the `export_corpus` and `find_duplicates` MCP tools)
-- `utils/find-dupe/` — AI judge for find_dupes clusters — partitions duplicate suspects into real / partial / false-positive via Claude. Requires `daspkg install --root utils/find-dupe` (anthropic/anthropic) and `ANTHROPIC_API_KEY`. Also exposed via the `judge_duplicates` and `find_dupe` MCP tools
+- `utils/detect-dupe/` — Cross-file duplicate-function detector — canonicalizer, MinHash, clusterer, pattern filter (also exposed via the `export_corpus` and `detect_duplicates` MCP tools)
+- `utils/find-dupe/` — AI judge for detect-dupe clusters — partitions duplicate suspects into real / partial / false-positive via Claude. Requires `daspkg install --root utils/find-dupe` (anthropic/anthropic) and `ANTHROPIC_API_KEY`. Also exposed via the `judge_duplicates` and `find_dupe` MCP tools
 - `utils/daspkg/` — Package manager (install, update, build, search packages)
 - `examples/daslive/` — Live-reload examples (hello, triangle, tank_game, etc.)
 - `examples/games/` — Full game examples (arcanoid, sequence) — run under daslang-live or daslang
@@ -377,10 +377,10 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
 | `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
-| `export_corpus` | Running `find_dupes --export-functions` from a shell to build a duplicate-detection corpus |
-| `find_duplicates` | Running `find_dupes --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
-| `judge_duplicates` | Manually invoking `find-dupe` over a `find_dupes` JSON report. Returns Claude-judged verdicts (real / partial / false_positive) for each cluster. Requires daspkg-installed `anthropic/anthropic` and `ANTHROPIC_API_KEY` |
-| `find_dupe` | One-shot duplicate-finder + judge. Use when starting fresh on a directory or PR; `find_duplicates` + `judge_duplicates` separately when you already have a curated corpus |
+| `export_corpus` | Running `detect-dupe --export-functions` from a shell to build a duplicate-detection corpus |
+| `detect_duplicates` | Running `detect-dupe --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
+| `judge_duplicates` | Manually invoking `find-dupe` over a `detect-dupe` JSON report. Returns Claude-judged verdicts (real / partial / false_positive) for each cluster. Requires daspkg-installed `anthropic/anthropic` and `ANTHROPIC_API_KEY` |
+| `find_dupe` | One-shot duplicate-finder + judge. Use when starting fresh on a directory or PR; `detect_duplicates` + `judge_duplicates` separately when you already have a curated corpus |
 | `live_launch` | Manually starting `daslang-live.exe` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

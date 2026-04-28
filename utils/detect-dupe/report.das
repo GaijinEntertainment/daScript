@@ -53,7 +53,7 @@ def member_label(m : MemberRef) : string {
 
 // Per-candidate JSON shape: "for each function in the focus set, here
 // are the existing functions it resembles." Used by --against mode and
-// the find_duplicates MCP tool — both want the result keyed on the
+// the detect_duplicates MCP tool — both want the result keyed on the
 // user's mental model ("what should I look at for *this* function I
 // just wrote") rather than the flat clusters/pairs view.
 
@@ -184,7 +184,7 @@ def public print_per_candidate_summary(report : Report;
                                        candidate_refs : array<MemberRef>;
                                        top_per_candidate : int) {
     let pcr = build_per_candidate_report(report, candidate_refs, top_per_candidate)
-    to_log(LOG_INFO, "\n=== find_dupes per-candidate report ===\n")
+    to_log(LOG_INFO, "\n=== detect-dupe per-candidate report ===\n")
     to_log(LOG_INFO, "candidates scanned: {length(pcr.candidates)}\n")
     var n_with_hits = 0
     for (r in pcr.candidates) {
@@ -218,7 +218,7 @@ def public print_per_candidate_summary(report : Report;
 
 
 def public print_summary(report : Report; top : int) {
-    to_log(LOG_INFO, "\n=== find_dupes summary ===\n")
+    to_log(LOG_INFO, "\n=== detect-dupe summary ===\n")
     to_log(LOG_INFO, "files scanned     : {report.summary.files_scanned}\n")
     to_log(LOG_INFO, "functions analyzed: {report.summary.functions_analyzed}\n")
     to_log(LOG_INFO, "exact clusters    : {length(report.exact_clusters)}\n")
