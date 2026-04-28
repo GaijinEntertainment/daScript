@@ -4,6 +4,7 @@ require strings
 require daslib/clargs
 require daslib/fio
 require daslib/algorithm
+require daslib/jobque_boost
 require anthropic/anthropic
 require cluster_input
 require source_extract
@@ -37,6 +38,12 @@ struct Config {
 
     @clarg_doc = "sort: default | size | fuzzy_first (default = composite)"
     sort_by : string = "default"
+
+    @clarg_doc = "concurrent judge calls (default 8). 1 = sequential."
+    parallel : int = 8
+
+    @clarg_doc = "filter reports to actionable rows only: real + partial. Summary still reflects all clusters."
+    positives_only : bool
 
     @clarg_doc = "estimate tokens & cost without making API calls"
     dry_run : bool
@@ -298,6 +305,10 @@ def run_pipeline(cfg : Config) : int {
         to_log(LOG_ERROR, "error: --sort-by must be 'default', 'size', or 'fuzzy_first', got '{cfg.sort_by}'\n")
         return 2
     }
+    if (cfg.parallel < 1) {
+        to_log(LOG_ERROR, "error: --parallel must be >= 1, got {cfg.parallel}\n")
+        return 2
+    }
     var input_report : InputReport
     var read_err : string
     if (!read_input_report(cfg.input, input_report, read_err)) {
@@ -361,38 +372,123 @@ def run_pipeline(cfg : Config) : int {
     }
     var output = OutputReport()
     output.model := model_id
-    var live_count = 0
+    // Split into skipped (no API call) and live (judge call needed).
+    // Skipped rows are built synchronously up front; live rows are
+    // judged in parallel and re-merged in original `jobs` order so the
+    // priority sort survives.
+    var live_results : table<int; VerdictRow>
+    var live_indices : array<int>
+    for (idx in iter_range(jobs)) {
+        if (jobs[idx].skipped) {
+            continue
+        }
+        live_indices |> push(idx)
+    }
+    let n_live = length(live_indices)
+    if (n_live > 0) {
+        let workers = cfg.parallel < n_live ? cfg.parallel : n_live
+        if (cfg.verbose) {
+            to_log(LOG_INFO, "Judging {n_live} live cluster(s) with {workers} worker(s)...\n")
+        }
+        if (workers <= 1) {
+            // Sequential — avoid jobque overhead, keep ordered progress
+            // numbering for the single-threaded case.
+            var live_count = 0
+            for (idx in live_indices) {
+                let j & = unsafe(jobs[idx])
+                live_count++
+                if (cfg.verbose) {
+                    to_log(LOG_INFO, "[{live_count}/{n_live}] cluster #{j.cluster_id} ({j.kind}, {length(j.members)} members) → {model_id}...\n")
+                }
+                let srcs & = unsafe(sources_by_id[j.cluster_id])
+                var verdict <- live_judge(j.members, srcs, model_id)
+                var row <- make_verdict_row(j, verdict)
+                if (cfg.verbose) {
+                    to_log(LOG_INFO, "    verdict={row.verdict} reason=\"{row.reason}\" tokens={row.input_tokens}+{row.output_tokens}\n")
+                }
+                live_results[j.cluster_id] <- row
+            }
+        } else {
+            // Hand-rolled fan-out: parallel_map's macro auto-wraps the
+            // body in `@{}` with default capture, which can't carry our
+            // non-copyable `jobs` / `sources_by_id`. With direct
+            // `new_job(@ capture(ref(...)) {...})` we get the exact
+            // capture modes we need. Lifetime is safe — `with_wait_group`
+            // blocks the outer scope until every worker has notified, so
+            // the referenced arrays/tables outlive every job.
+            let verbose = cfg.verbose
+            with_job_que() {
+                with_channel(n_live) $(ch) {
+                    with_wait_group(n_live) $(wg) {
+                        for (idx in live_indices) {
+                            let captured_idx = idx
+                            unsafe {
+                                new_job <| @ capture(ref(jobs), ref(sources_by_id)) () {
+                                    let j & = unsafe(jobs[captured_idx])
+                                    let srcs & = unsafe(sources_by_id[j.cluster_id])
+                                    var verdict <- live_judge(j.members, srcs, model_id)
+                                    var row <- make_verdict_row(j, verdict)
+                                    if (verbose) {
+                                        to_log(LOG_INFO, "[done] cluster #{j.cluster_id} verdict={row.verdict} reason=\"{row.reason}\" tokens={row.input_tokens}+{row.output_tokens}\n")
+                                    }
+                                    ch |> push_clone(row)
+                                    ch |> notify_and_release
+                                    wg |> notify_and_release
+                                }
+                            }
+                        }
+                    }
+                    ch |> for_each_clone() $(row : VerdictRow#) {
+                        live_results[row.cluster_id] <- clone_to_move(row)
+                    }
+                }
+            }
+            if (cfg.verbose) {
+                to_log(LOG_INFO, "Parallel judge complete: {length(live_results)}/{n_live}\n")
+            }
+        }
+    }
+    // Reassemble in original priority order.
     for (j in jobs) {
         if (j.skipped) {
             var row <- make_verdict_row(j, Verdict())
-            update_summary(output.summary, row)
             if (cfg.verbose) {
                 to_log(LOG_INFO, "[skip] cluster #{j.cluster_id} ({j.kind}, {length(j.members)} members): {j.skip_reason}\n")
             }
+            update_summary(output.summary, row)
             output.verdicts |> emplace(row)
             continue
         }
-        live_count++
-        if (cfg.verbose) {
-            to_log(LOG_INFO, "[{live_count}] cluster #{j.cluster_id} ({j.kind}, {length(j.members)} members) → calling {model_id}...\n")
+        if (key_exists(live_results, j.cluster_id)) {
+            var row <- live_results[j.cluster_id]
+            update_summary(output.summary, row)
+            output.verdicts |> emplace(row)
         }
-        let srcs & = unsafe(sources_by_id[j.cluster_id])
-        var verdict <- live_judge(j.members, srcs, model_id)
-        var row <- make_verdict_row(j, verdict)
-        update_summary(output.summary, row)
-        if (cfg.verbose) {
-            to_log(LOG_INFO, "    verdict={row.verdict} reason=\"{row.reason}\" tokens={row.input_tokens}+{row.output_tokens}\n")
-        }
-        output.verdicts |> emplace(row)
     }
     mkdir(cfg.out)
     let json_path = path_join(cfg.out, "look_at_dupes_verdicts.json")
     let md_path = path_join(cfg.out, "look_at_dupes_verdicts.md")
-    if (!write_json_report(output, json_path)) {
+    // Build the report payload to write — filtered down to actionable
+    // rows when --positives-only is set. Always a fresh struct so we
+    // don't disturb `output.summary` (printed below).
+    var report_to_write = OutputReport()
+    report_to_write.schema_version = output.schema_version
+    report_to_write.model := output.model
+    report_to_write.summary = output.summary
+    for (row in output.verdicts) {
+        if (cfg.positives_only && row.verdict != "real" && row.verdict != "partial") {
+            continue
+        }
+        report_to_write.verdicts |> push_clone(row)
+    }
+    if (cfg.positives_only && cfg.verbose) {
+        to_log(LOG_INFO, "--positives-only: keeping {length(report_to_write.verdicts)} of {length(output.verdicts)} rows\n")
+    }
+    if (!write_json_report(report_to_write, json_path)) {
         to_log(LOG_ERROR, "error: could not write JSON report to {json_path}\n")
         return 3
     }
-    if (!write_markdown_report(output, sources_by_id, md_path)) {
+    if (!write_markdown_report(report_to_write, sources_by_id, md_path)) {
         to_log(LOG_ERROR, "error: could not write Markdown report to {md_path}\n")
         return 3
     }

@@ -156,6 +156,9 @@ def public write_markdown_report(report : OutputReport;
         fw |> fprint("**Model:** `{report.model}`  \n")
         let s & = unsafe(report.summary)
         fw |> fprint("**Summary:** {s.judged} judged / {s.total} total  \n")
+        if (length(report.verdicts) < s.total) {
+            fw |> fprint("_Filtered:_ showing {length(report.verdicts)} of {s.total} rows (positives only).  \n")
+        }
         fw |> fprint("- real: {s.real}\n")
         fw |> fprint("- partial: {s.partial}\n")
         fw |> fprint("- false_positive: {s.false_positive}\n")
