@@ -362,7 +362,7 @@ def run_pipeline(cfg : Config) : int {
             let prompt = format_cluster_prompt(j.members, srcs)
             est_in += estimate_tokens(length(prompt))
         }
-        let est_out = live_jobs * 60         // ~60 output tokens per verdict (groups+reason)
+        let est_out = live_jobs * 360        // ~360 output tokens per verdict (groups+reason)
         let cost = cost_estimate(cfg.model, est_in, est_out)
         to_log(LOG_INFO, "DRY-RUN ({cfg.model} → {model_id}):\n")
         to_log(LOG_INFO, "  total jobs:    {length(jobs)}\n")
