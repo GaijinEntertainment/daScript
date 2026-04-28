@@ -531,6 +531,130 @@ dasSQLITE suite: **309 tests passing** (271 pre-chunk-7 + 38 new).
   upsert` (`Sql{Upsert,…}Macro` would change anyway) is one
   reasonable bundle.
 
+## Shipped — chunk 8: custom-types adapter rail + BLOB + backlog drain (branch `dassqlite-chunk8-custom-types`)
+
+Chunk 8 ships **tutorial 26 (custom type adapters)** and **tutorial 27
+(BLOB round-trip)**, plus two small deferred features and the dupe
+cleanup carried over from chunk 7. Tut 28 (JSON) was cut from this
+chunk — its `_sql` JSON-path walker rule deserves its own attention.
+
+### Custom-types adapter rail (`sqlite_boost.das`)
+
+- **Two-function name-based pair** — `_::sql_bind(value : T) : P` and
+  `_::sql_extract(stored : P; type<T>) : T`, where `P` is one of four
+  primitive storage types (`int64`, `double`, `string`, `array<uint8>`)
+  selected at macro-expansion from `_::sql_bind`'s return type.
+- **Module-scope overloads** for the four primitives (passthrough),
+  stdlib widenings (`int`/`int8`/`int16`/`uint`/`uint8`/`uint16`/
+  `uint64`/`float`/`bool` → primitives), and a single enum generic
+  guarded by `static_if (typeinfo is_enum(default<TT>))`. Users add
+  their own overloads at any module scope to register `DateTime`,
+  `Guid`, etc.
+- **Macro emission migrated** — the `[sql_table]` codegen routes
+  through the new `sql_bind_to_stmt(stmt, idx, v)` and
+  `read_via_adapter(stmt, col, type<T>)` helpers, plus a
+  `sql_storage_type_for(type<T>)` DDL emitter that derives the
+  column type from `_::sql_bind`'s return type via `typedecl`. Runtime
+  paths (`query_one` / `query_scalar` / raw `_sql` positional binds)
+  also route through these so user-defined adapters work uniformly.
+- **`Option<T>` over a custom adapter** — the bind/read sites unwrap
+  `Option<T>` to `T` and recurse, so `Option<DateTime>` Just Works as
+  long as `_::sql_bind`/`_::sql_extract` are defined for `DateTime`.
+- **Legacy rail removed** — `sqlite_bind` / `sqlite_read` /
+  `sqlite_sql_type` overload tables are gone.
+
+### Tut 27 — BLOB round-trip
+
+`array<uint8>` is one of the four adapter primitives, so a struct
+field of that type round-trips through a BLOB column with no extra
+annotation. No new core macro work was needed.
+
+### Backlog drain — small features
+
+- **`exec` / `try_exec` parameter binding** — 0/1/2/3-arg overloads
+  mirror the `query_one` shape (chunk 6 deferred). Routes through a
+  new private `try_exec_with_binds` helper.
+- **`_.Col == none()` → fixit `macro_error`** — `pred_to_sql`'s
+  equality handler detects `none()` on either side (both pre-typer
+  qmatch and post-typer `operator==(...)` shapes) and emits a
+  `macro_error` pointing the user at `is_none()` (chunk 4 D4 deferred).
+
+### Side bug fixes
+
+- **`sqlite3_bind_blob` wrapper had a hardcoded `index = 1`** —
+  pre-existing; never noticed because nothing tested BLOB from
+  `[sql_table]` before. Now uses the caller's `index` parameter.
+- **Empty `array<uint8>` bind** — guarded with
+  `length == 0 → sqlite3_bind_zeroblob(stmt, index, 0)` to avoid
+  `addr(data[0])` panic on zero-length arrays.
+- **`is_const_or_captured_var` missed enum / bitfield literals** —
+  `_where(_.Status == OrderStatus.Paid)` was emitting incomplete SQL
+  (`WHERE "Status" = ` with no bind). Added `ExprConstEnumeration`,
+  `ExprConstBitfield`, and the missing int8/16 / uint8/16 forms to
+  the recognizer.
+
+### Pre-existing dupe cleanup (5 items, all from chunk-7 deferred list)
+
+1. **`validate_outer_args(prog, call, rootT, expected_arity, sig_text)`**
+   — collapses `validate_outer_update_args` /
+   `validate_outer_delete_args`. All 8 callers updated.
+2. **`make_insert_sql_fn(st, name, fields, include_pk : bool)`** —
+   collapses `make_insert_with_pk_sql_fn` / `make_insert_no_pk_sql_fn`.
+   Emitted helper names stay stable
+   (`_sql_insert_with_pk_sql` / `_sql_insert_no_pk_sql`).
+3. **`find_annotation(args, argn, default_value : auto(TT)) : TT`** —
+   collapses `find_bool_annotation` / `find_string_annotation` via
+   `static_if (typeinfo is_string(default_value))` dispatch on
+   `tString` / `tBool`. ~20 call sites updated.
+4. **`try_run_dml_returning` ≡ `try_run_select`** — flagged by the
+   dupe agent but already factored: both are 1-line wrappers around
+   `try_collect_rows` with different `err_prefix`. The existing
+   factoring IS the dedupe; no code change needed.
+5. **`OuterArgZeroMacro` / `OuterArgTwoMacro` parents** —
+   `class private OuterArgZeroMacro : AstCallMacro` (overrides
+   `canVisitArgument` → `argIndex == 0`) and
+   `class private OuterArgTwoMacro : AstCallMacro`
+   (`argIndex < 2`). The 8 update/delete macros and 4 upsert macros
+   re-parent to these and drop their local `canVisitArgument`
+   overrides; each subclass keeps its own `[call_macro(name=...)]`
+   annotation since annotations don't inherit. Net: 12 × 3-line
+   override deletions, 2 × 4-line parent-class additions.
+
+### Tutorials
+
+- [tutorials/sql/26-custom_types.das](../../tutorials/sql/26-custom_types.das)
+  — `DateTime` via INTEGER, `Guid` via BLOB, enum auto-roundtrip,
+  `query_scalar` through adapters, `Option<DateTime>`, enum-in-where
+  predicate, DDL storage-type derivation.
+- [tutorials/sql/27-blob.das](../../tutorials/sql/27-blob.das) —
+  `array<uint8>` round-trip; derived from inherited
+  `tutorial/07-insert_image.das` + `08-read_image.das`.
+
+### Tests
+
+3 new test files: `test_61_custom_types.das` (7 tests),
+`test_62_blob.das` (6 tests), `test_63_exec_params.das` (6 tests).
+Plus 2 new entries in `failed_sql_macro.das` (`bad20` / `bad21` —
+the `_.Col == none()` fixit). Total dasSQLITE suite: **328 tests
+passing** (309 pre-chunk-8 + 19 new).
+
+### Deferred to chunk 9+
+
+- **Tut 28 — JSON columns** (`@sql_json` / `@sql_blob` annotations
+  + `_sql` JSON-path walker rule) — was cut from this chunk; ships
+  as its own headline.
+- **Per-field `@sql_as(type<P>)` override** — pick a non-default
+  storage primitive for a custom-type column when multiple
+  `_::sql_bind` overloads exist. Locked shape; awaiting user demand.
+- **Struct-type `_select(type<T2>)` projection** — needs a
+  `[sql_table]`-emitted compile-time field-list metadata helper.
+- **Bulk `array<T>` upsert** — carried from chunk 7 deferred.
+- **Composite foreign keys**, **partial / expression indexes**,
+  **function-reference `@sql_computed`**, **DEFAULT-firing from the
+  macro INSERT path** — all carried from chunk 7 deferred.
+- **Optimistic concurrency token, multi-table DELETE, named-tuple
+  bind for `query_one` / `exec`** — carried from earlier chunks.
+
 ## Shipped — chunk 4: read-side depth — distinct/take/skip/order_by/aggregates/group_by/NULL (branch `dassqlite-chunk4-read-depth`)
 
 Chunk 4 broadens the chunk-3 framework with the rest of the read-side

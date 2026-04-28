@@ -27,7 +27,7 @@ def private fixture(db : SqlRunner) {
 //   - ProjectionShape.Aggregate sets the SELECT-list to "COUNT(*)"
 //   - Materializer.One reads back a single int (matches daslang's
 //     `length(arr)`/`count(arr)` return type; SQLite COUNT(*) is int64
-//     internally but `sqlite_read(stmt, 0, type<int>)` narrows it)
+//     internally but `read_via_adapter(stmt, 0, type<int>)` narrows it)
 //
 // `_count` is reserved as a 2-arg call_macro in linq_boost (predicate form,
 // chunk 4 territory). For the bare aggregate we use linq.das's `count(src)`

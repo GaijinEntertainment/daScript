@@ -138,3 +138,5 @@ Generated columns require SQLite 3.31+ (2019-10-10).
     Full source: :download:`tutorials/sql/25-defaults_computed.das <../../../../tutorials/sql/25-defaults_computed.das>`
 
     Previous tutorial: :ref:`tutorial_sql_indexes`
+
+    Next tutorial: :ref:`tutorial_sql_custom_types`

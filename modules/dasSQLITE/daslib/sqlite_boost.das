@@ -30,9 +30,19 @@ def sqlite3_free(std : string) {
 
 [expect_any_array(data)]
 def sqlite3_bind_blob(stmt : sqlite3_stmt?; index : int; data) {
-    //! Binds a blob value to a prepared statement.
+    //! Binds a blob value to a prepared statement at ``index``. SQLite
+    //! makes its own copy via ``SQLITE_TRANSIENT`` (the default in this
+    //! wrapper), so the caller's array can release after the call.
+    //! Empty blobs route through ``sqlite3_bind_zeroblob`` with ``n=0``
+    //! to avoid taking ``addr(data[0])`` on a zero-length array.
+    if (data |> length == 0) {
+        return sqlite3_bind_zeroblob(stmt, index, 0)
+    }
     unsafe {
-        return sqlite3_bind_blob(stmt, 1, unsafe(addr(data[0])), data |> length)
+        // Byte count = element_count * sizeof(element). The wrapper
+        // accepts any array via [expect_any_array]; ``length`` alone is
+        // only correct for ``array<uint8>``.
+        return sqlite3_bind_blob(stmt, index, unsafe(addr(data[0])), (data |> length) * typeinfo sizeof(data[0]))
     }
 }
 
@@ -135,6 +145,78 @@ def try_exec(db : SqlRunner; sql : string) : SqlError {
     return none(type<string>)
 }
 
+def private try_exec_with_binds(db : SqlRunner; sql : string;
+                                bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : SqlError {
+    //! Single-statement ``exec`` with positional binds. Used by the 1/2/3-arg
+    //! ``try_exec`` / ``exec`` overloads below.  Routes through prepare /
+    //! bind / step / finalize because ``sqlite3_exec`` doesn't accept bind
+    //! parameters directly.
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "exec failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return some(msg)
+    }
+    invoke(bind_blk, stmt)
+    let src = sqlite3_step(stmt)
+    if (src != SQLITE_DONE && src != SQLITE_ROW) {
+        let msg = "exec failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return some(msg)
+    }
+    sqlite3_finalize(stmt)
+    return none(type<string>)
+}
+
+def try_exec(db : SqlRunner; sql : string; arg0 : auto(A0)) : SqlError {
+    //! 1-arg positional bind. ``sql`` must contain exactly one ``?``.
+    return db |> try_exec_with_binds(sql, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+    })
+}
+
+def try_exec(db : SqlRunner; sql : string; arg0 : auto(A0); arg1 : auto(A1)) : SqlError {
+    //! 2-arg positional bind.
+    return db |> try_exec_with_binds(sql, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+    })
+}
+
+def try_exec(db : SqlRunner; sql : string; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : SqlError {
+    //! 3-arg positional bind.
+    return db |> try_exec_with_binds(sql, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
+    })
+}
+
+def exec(db : SqlRunner; sql : string; arg0 : auto(A0)) : void {
+    //! Strict variant of 1-arg ``try_exec``.
+    let err = db |> try_exec(sql, arg0)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
+def exec(db : SqlRunner; sql : string; arg0 : auto(A0); arg1 : auto(A1)) : void {
+    //! Strict variant of 2-arg ``try_exec``.
+    let err = db |> try_exec(sql, arg0, arg1)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
+def exec(db : SqlRunner; sql : string; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : void {
+    //! Strict variant of 3-arg ``try_exec``.
+    let err = db |> try_exec(sql, arg0, arg1, arg2)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
 def exec(db : SqlRunner; sql : string) : void {
     //! Strict variant of ``try_exec``. Panics with the libsqlite3 errmsg on failure.
     let err = db |> try_exec(sql)
@@ -157,170 +239,372 @@ def changes(db : SqlRunner) : int {
 }
 
 // ============================================================================
-// Convention dispatch: sqlite_sql_type / sqlite_bind
+// SQL adapter rail: sql_bind / sql_extract  (tut 26)
 //
-// `[sql_table]`-generated DDL and INSERT helpers emit calls to these two
-// functions for every column. Built-in primitive types are handled by the
-// overloads below. User-defined types extend the same surface with their own
-// overloads — no registration step:
+// Convention-by-name dispatch. Every SQL-addressable type T has a pair:
 //
-//     def sqlite_sql_type(witness : MyType) : string { return "TEXT" }
-//     def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : MyType) : void { ... }
+//     def sql_bind    (v : T) : P                 // T → primitive
+//     def sql_extract (v : P; t : type<T>) : T    // primitive → T
 //
-// The generic catch-alls fire `concept_assert(false, ...)` for any type
-// that doesn't have a specific overload. `concept_assert` reports the error
-// at the *caller's* line (the user's `[sql_table]` struct), not deep inside
-// this module.
+// where P is one of {int64, double, string, array<uint8>} — the four
+// SQLite storage classes. dasSQLITE ships pairs for all standard types
+// plus a generic enum overload; user code adds pairs for domain types in
+// their own modules. The [sql_table] macro emits ``_::sql_bind`` /
+// ``_::sql_extract`` calls (tut 26 lock 4) so the caller's-module
+// overloads are always visible.
+//
+// The return type of ``sql_bind`` IS the storage type — the macro reads
+// it via ``typedecl`` and emits the matching ``sqlite3_bind_*`` /
+// ``sqlite3_column_*`` call. Single source of truth, no separate
+// ``sql_column_type(type<T>)`` registration function.
 // ============================================================================
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : int) : string {
-    return "INTEGER"
+// --- four primitive identity overloads ---
+
+def sql_bind(v : int64) : int64 {
+    return v
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : int64) : string {
-    return "INTEGER"
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<int64>) : int64 {
+    return v
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : float) : string {
-    return "REAL"
+def sql_bind(v : double) : double {
+    return v
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : double) : string {
-    return "REAL"
+[unused_argument(t)]
+def sql_extract(v : double; t : type<double>) : double {
+    return v
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : string) : string {
-    return "TEXT"
+def sql_bind(s : string) : string {
+    return s
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : bool) : string {
-    return "INTEGER"
+[unused_argument(t)]
+def sql_extract(s : string; t : type<string>) : string {
+    return s
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : $Option < auto(TT) >) : string {
-    //! Option<T> nullability is type-driven — the column's SQL type comes from the inner ``T``.
-    //! Whether a NOT NULL constraint is emitted is decided at macro-expansion time by the
-    //! [sql_table] DDL emitter, not here.
-    return sqlite_sql_type(default<TT>)
+def sql_bind(b : array<uint8>) : array<uint8> {
+    //! Identity passthrough for BLOB columns. ``array<uint8>`` is non-
+    //! copyable, so the const-reference parameter forces a clone on
+    //! return. SQLite's ``sqlite3_bind_blob`` with ``SQLITE_TRANSIENT``
+    //! adds a second copy. For very large BLOBs (multi-MB asset
+    //! payloads), prefer the streaming ``sqlite3_blob_open`` API to
+    //! avoid extra copying.
+    return <- clone_to_move(b)
 }
 
-[unused_argument(witness)]
-def sqlite_sql_type(witness : auto(TT)) : string {
-    concept_assert(false, "sqlite_sql_type: unsupported field type. Define `def sqlite_sql_type(witness : YourType) : string` to extend.")
-    return ""
+[unused_argument(t)]
+def sql_extract(b : array<uint8>; t : type<array<uint8>>) : array<uint8> {
+    return <- clone_to_move(b)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : int) : void {
-    sqlite3_bind_int64(stmt, idx, int64(value))
+// --- stdlib widenings (all integer kinds widen to int64; float widens to double) ---
+
+def sql_bind(v : int) : int64 {
+    return int64(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : int64) : void {
-    sqlite3_bind_int64(stmt, idx, value)
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<int>) : int {
+    return int(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : float) : void {
-    sqlite3_bind_double(stmt, idx, double(value))
+def sql_bind(v : int8) : int64 {
+    return int64(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : double) : void {
-    sqlite3_bind_double(stmt, idx, value)
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<int8>) : int8 {
+    return int8(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : string) : void {
-    sqlite3_bind_text(stmt, idx, value)
+def sql_bind(v : int16) : int64 {
+    return int64(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : bool) : void {
-    sqlite3_bind_int64(stmt, idx, value ? 1l : 0l)
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<int16>) : int16 {
+    return int16(v)
 }
 
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : $Option < auto(TT) >) : void {
-    //! Option<T>: bind the underlying value when ``some``, SQL NULL when ``none``.
-    if (value._has_value) {
-        sqlite_bind(stmt, idx, value._value)
+def sql_bind(v : uint) : int64 {
+    return int64(v)
+}
+
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<uint>) : uint {
+    return uint(v)
+}
+
+def sql_bind(v : uint8) : int64 {
+    return int64(v)
+}
+
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<uint8>) : uint8 {
+    return uint8(v)
+}
+
+def sql_bind(v : uint16) : int64 {
+    return int64(v)
+}
+
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<uint16>) : uint16 {
+    return uint16(v)
+}
+
+def sql_bind(v : uint64) : int64 {
+    //! Reinterpret cast — values above ``int64.max`` round-trip through
+    //! the sign bit (SQLite has no UNSIGNED type). For workloads that
+    //! actually exceed that range, store as ``string`` via a custom adapter.
+    return int64(v)
+}
+
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<uint64>) : uint64 {
+    return uint64(v)
+}
+
+def sql_bind(v : float) : double {
+    return double(v)
+}
+
+[unused_argument(t)]
+def sql_extract(v : double; t : type<float>) : float {
+    return float(v)
+}
+
+def sql_bind(v : bool) : int64 {
+    return v ? 1l : 0l
+}
+
+[unused_argument(t)]
+def sql_extract(v : int64; t : type<bool>) : bool {
+    return v != 0l
+}
+
+// --- enum generic (lock 6) ---
+//
+// Any enum T round-trips through INTEGER via ``int64(value)`` /
+// ``T(int64)``. The catch-all generic uses ``static_if (typeinfo
+// is_enum)`` to gate; non-enum non-primitive types trip the
+// ``concept_assert`` and surface a clean error at the [sql_table]
+// expansion site (or any other _::sql_bind caller).
+//
+// Tradeoff: enum-value reordering silently corrupts data (value 2 means
+// something different in the new schema version). Text-backed enums
+// (``@sql_enum_as_string``) are deferred until a user opts in.
+
+def sql_bind(value : auto(TT)) : int64 {
+    static_if (typeinfo is_enum(value)) {
+        return int64(value)
+    } else {
+        concept_assert(false, "sql_bind: unsupported field type. Define `def sql_bind(v : YourType) : int64 | double | string | array<uint8>` (and a matching sql_extract) in YourType's module.")
+        return 0l
+    }
+}
+
+[unused_argument(t)]
+def sql_extract(value : int64; t : type<auto(TT)>) : TT {
+    static_if (typeinfo is_enum(default<TT>)) {
+        // int64 → enum via reinterpret. Mirrors typemacro_boost's
+        // ``int64_to_enum``; inlined here to avoid pulling that module
+        // into every dasSQLITE consumer.
+        static_if (typeinfo sizeof(type<TT>) == 1) {
+            return unsafe(reinterpret<TT>(int8(value)))
+        } static_elif (typeinfo sizeof(type<TT>) == 2) {
+            return unsafe(reinterpret<TT>(int16(value)))
+        } else {
+            return unsafe(reinterpret<TT>(int(value)))
+        }
+    } else {
+        concept_assert(false, "sql_extract: unsupported field type. Define `def sql_extract(v : int64 | double | string | array<uint8>; t : type<YourType>) : YourType` (and a matching sql_bind) in YourType's module.")
+        return default<TT>
+    }
+}
+
+// ============================================================================
+// Internal bridge: sql_bind/sql_extract ↔ libsqlite3 C API
+//
+// The [sql_table] macro emits ``_::sql_bind(row.field)`` (resolves the user's
+// adapter at the caller's module) and routes the resulting primitive into
+// libsqlite3 via the four ``sql_bind_to_stmt`` overloads below. For reads,
+// ``read_via_adapter`` uses ``typedecl`` to resolve the storage primitive at
+// compile time, calls the matching ``sqlite3_column_*``, and feeds the
+// primitive into ``_::sql_extract`` to materialize the user type.
+//
+// ``sql_storage_type_for`` does the same compile-time resolution for the DDL
+// emitter — column type strings are picked from the four-primitive table.
+// ============================================================================
+
+def sqlite3_column_blob_(stmt : sqlite3_stmt?; col : int) : array<uint8> {
+    //! Reads a BLOB column as a fresh ``array<uint8>``. Allocates on
+    //! daslang's heap and copies — SQLite's blob pointer is only valid
+    //! until the next ``step`` / ``reset`` / ``finalize``, so the copy
+    //! is mandatory for safe out-of-statement use.
+    let n = sqlite3_column_bytes(stmt, col)
+    var r : array<uint8>
+    r |> resize(n)
+    if (n > 0) {
+        unsafe {
+            // sqlite3_column_blob returns ``const void *``; AOT codegen's
+            // das_memcpy wants a non-const source, so strip the const here.
+            memcpy(addr(r[0]), reinterpret<void?>(sqlite3_column_blob(stmt, col)), n)
+        }
+    }
+    return <- r
+}
+
+// --- bind direction ---
+//
+// Dispatch table: four primitive overloads route directly to libsqlite3;
+// the Option<T> overload handles NULL semantics; the catch-all generic
+// routes any other type through the user's ``_::sql_bind`` adapter and
+// recurses on the resulting primitive (or the inner value of an Option).
+
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : int64) : void {
+    sqlite3_bind_int64(stmt, idx, v)
+}
+
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : double) : void {
+    sqlite3_bind_double(stmt, idx, v)
+}
+
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : string) : void {
+    sqlite3_bind_text(stmt, idx, v)
+}
+
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : array<uint8>) : void {
+    sqlite3_bind_blob(stmt, idx, v)
+}
+
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : $Option < auto(TT) >) : void {
+    //! ``some(x)`` recurses on ``x`` (which routes through the user's
+    //! ``_::sql_bind`` adapter for non-primitive ``T``); ``none`` binds NULL.
+    if (v._has_value) {
+        sql_bind_to_stmt(stmt, idx, v._value)
     } else {
         sqlite3_bind_null(stmt, idx)
     }
 }
 
-[unused_argument(stmt, idx, value)]
-def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : auto(TT)) : void {
-    concept_assert(false, "sqlite_bind: unsupported field type. Define `def sqlite_bind(var stmt : sqlite3_stmt?; idx : int; value : YourType) : void` to extend.")
+def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : auto(TT)) : void {
+    //! Catch-all: route through the user's ``_::sql_bind`` adapter, then
+    //! recurse on the primitive return value. ``_::``-dispatched so the
+    //! caller's-module overloads (the user's adapter pair) are visible.
+    sql_bind_to_stmt(stmt, idx, _::sql_bind(v))
 }
 
-// ============================================================================
-// Read-side dispatch: sqlite_read
+// --- read direction ---
 //
-// Mirrors `sqlite_bind` for the read direction. `[sql_table]`-generated
-// `_sql_read_row` and the `_sql` macro's row materializer emit calls to
-// `sqlite_read(stmt, col, type<T>) : T` for every column. Built-in primitive
-// types are handled by the overloads below; user-defined types extend the
-// surface with their own overload — no registration step:
-//
-//     def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<MyType>) : MyType { ... }
-//
-// The generic catch-all fires `concept_assert(false, ...)` for any type that
-// doesn't have a specific overload. Reports at the caller's line.
-// ============================================================================
+// Dispatch table: four primitive ``sql_read_witness`` overloads read the
+// matching ``sqlite3_column_*``; ``read_via_adapter`` resolves the storage
+// primitive at compile time via ``typedecl(_::sql_bind(default<T>))`` and
+// then dispatches to the matching witness overload, feeding the primitive
+// into ``_::sql_extract``. The ``Option<T>`` overload of
+// ``read_via_adapter`` handles NULL detection.
 
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<int>) : int {
-    return sqlite3_column_int(stmt, col)
-}
-
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<int64>) : int64 {
+[unused_argument(witness)]
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : int64) : int64 {
     return sqlite3_column_int64(stmt, col)
 }
 
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<float>) : float {
-    return float(sqlite3_column_double(stmt, col))
-}
-
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<double>) : double {
+[unused_argument(witness)]
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : double) : double {
     return sqlite3_column_double(stmt, col)
 }
 
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<string>) : string {
+[unused_argument(witness)]
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : string) : string {
     return sqlite3_column_text_(stmt, col)
 }
 
-[unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<bool>) : bool {
-    return sqlite3_column_int(stmt, col) != 0
+[unused_argument(witness)]
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : array<uint8>) : array<uint8> {
+    return <- sqlite3_column_blob_(stmt, col)
+}
+
+[unused_argument(stmt, col, witness)]
+def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : auto(SS)) : SS {
+    concept_assert(false, "sql_bind must return one of int64 / double / string / array<uint8>")
+    return default<SS>
 }
 
 [unused_argument(t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<$Option<auto(TT)>>) : Option<TT -const -#> {
-    //! Option<T>: SQLITE_NULL → ``none``; otherwise read the inner ``T`` and wrap in ``some``.
+def read_via_adapter(stmt : sqlite3_stmt?; col : int; t : type<$Option<auto(TT)>>) : Option<TT -const -#> {
+    //! ``Option<T>`` overload: SQLITE_NULL → ``none``, otherwise read the
+    //! inner ``T`` via the generic ``read_via_adapter`` and wrap in ``some``.
     if (sqlite3_column_type(stmt, col) == SQLITE_NULL) {
         return none(type<TT -const -#>)
     }
-    return some(sqlite_read(stmt, col, type<TT -const -#>))
+    return some(read_via_adapter(stmt, col, type<TT -const -#>))
 }
 
-[unused_argument(stmt, col, t)]
-def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
-    concept_assert(false, "sqlite_read: unsupported field type. Define `def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<YourType>) : YourType` to extend.")
-    return default<TT>
+[unused_argument(t)]
+def read_via_adapter(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
+    //! Reads a single column as the storage primitive
+    //! ``_::sql_bind(default<TT>)`` returns, then materializes ``TT`` via
+    //! ``_::sql_extract``. The primitive type is resolved at compile time
+    //! via ``typedecl`` — no runtime call to the user's adapter.
+    return _::sql_extract(
+        sql_read_witness(stmt, col, default<typedecl(_::sql_bind(default<TT>))>),
+        type<TT>
+    )
+}
+
+// --- DDL: column-type string from sql_bind's return type ---
+
+[unused_argument(witness)]
+def sql_storage_type_witness(witness : int64) : string {
+    return "INTEGER"
+}
+
+[unused_argument(witness)]
+def sql_storage_type_witness(witness : double) : string {
+    return "REAL"
+}
+
+[unused_argument(witness)]
+def sql_storage_type_witness(witness : string) : string {
+    return "TEXT"
+}
+
+[unused_argument(witness)]
+def sql_storage_type_witness(witness : array<uint8>) : string {
+    return "BLOB"
+}
+
+[unused_argument(witness)]
+def sql_storage_type_witness(witness : auto(SS)) : string {
+    concept_assert(false, "sql_bind must return one of int64 / double / string / array<uint8>")
+    return ""
+}
+
+[unused_argument(t)]
+def sql_storage_type_for(t : type<auto(TT)>) : string {
+    return sql_storage_type_witness(default<typedecl(_::sql_bind(default<TT>))>)
+}
+
+[unused_argument(t)]
+def sql_storage_type_for(t : type<$Option<auto(TT)>>) : string {
+    //! Option<T> nullability is decided by the [sql_table] DDL emitter; the
+    //! column type comes from the inner ``T``'s storage primitive.
+    return sql_storage_type_for(type<TT>)
 }
 
 // ============================================================================
 // query_scalar — read column 0 of the first row as ``TT``
 //
-// Generic over any type with a ``sqlite_read(stmt, col, type<TT>) : TT``
-// overload. Built-ins: string, int, int64, float, double, bool. User types
-// extend by adding their own ``sqlite_read`` overload — no registration step.
+// Routes through the tut-26 ``_::sql_bind`` / ``_::sql_extract`` adapter
+// rail via ``read_via_adapter``. Built-ins: every ``int*`` / ``uint*``,
+// ``float`` / ``double``, ``bool``, ``string``, ``array<uint8>``, every
+// enum, and any user type that ships an adapter pair.
 //
 // `try_*` returns ``Result<TT, string>`` (prepare/step error or zero rows).
 // `query_scalar` is the strict variant — panics on err.
@@ -331,7 +615,11 @@ def try_query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<
     //! Prepares ``sql``, steps once, returns column 0 as ``TT``.
     //! Returns ``Err(errmsg)`` on prepare/step error or zero rows.
     return <- try_one_row(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
-        return sqlite_read(stmt, 0, type<TT -const -#>)
+        static_if (typeinfo can_copy(default<TT -const -#>)) {
+            return read_via_adapter(stmt, 0, type<TT -const -#>)
+        } else {
+            return <- clone_to_move(read_via_adapter(stmt, 0, type<TT -const -#>))
+        }
     }, "query_scalar")
 }
 
@@ -357,7 +645,11 @@ def query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -
 [unused_argument(t)]
 def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
     var r <- try_one_row_opt(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
-        return sqlite_read(stmt, 0, type<TT -const -#>)
+        static_if (typeinfo can_copy(default<TT -const -#>)) {
+            return read_via_adapter(stmt, 0, type<TT -const -#>)
+        } else {
+            return <- clone_to_move(read_via_adapter(stmt, 0, type<TT -const -#>))
+        }
     }, "query_scalar_opt")
     if (r |> is_err) {
         panic(r |> unwrap_err)
@@ -431,9 +723,18 @@ def private try_one_row(db : SqlRunner; sql : string;
         sqlite3_finalize(stmt)
         return err(msg, type<TT -const -#>)
     }
-    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_ok(row, type<string>)
+    // Capture the function-call result. Copyable rows initialize via ``=``;
+    // non-copyable (e.g. user types containing ``array<uint8>``) route
+    // through ``clone_to_move`` so the rvalue is movable.
+    static_if (typeinfo can_copy(default<TT -const -#>)) {
+        var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+        sqlite3_finalize(stmt)
+        return move_ok(row, type<string>)
+    } else {
+        var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
+        sqlite3_finalize(stmt)
+        return move_ok(row, type<string>)
+    }
 }
 
 def private try_one_row_opt(db : SqlRunner; sql : string;
@@ -461,9 +762,15 @@ def private try_one_row_opt(db : SqlRunner; sql : string;
         sqlite3_finalize(stmt)
         return err(msg, type<Option<TT -const -#>>)
     }
-    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_ok(move_some(row), type<string>)
+    static_if (typeinfo can_copy(default<TT -const -#>)) {
+        var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+        sqlite3_finalize(stmt)
+        return move_ok(move_some(row), type<string>)
+    } else {
+        var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
+        sqlite3_finalize(stmt)
+        return move_ok(move_some(row), type<string>)
+    }
 }
 
 def private try_step_dml(db : SqlRunner; sql : string;
@@ -503,7 +810,14 @@ def private try_collect_rows(db : SqlRunner; sql : string;
     var inscope result : array<TT -const -#>
     var rc = sqlite3_step(stmt)
     while (rc == SQLITE_ROW) {
-        result |> push(invoke(row_blk, stmt))
+        // Copyable rows ``push`` directly; non-copyable rows (e.g.
+        // structs containing ``array<uint8>``) ``emplace`` from the
+        // invoke rvalue so we don't deep-clone on every row.
+        static_if (typeinfo can_copy(default<TT -const -#>)) {
+            result |> push(invoke(row_blk, stmt))
+        } else {
+            result |> emplace(invoke(row_blk, stmt))
+        }
         rc = sqlite3_step(stmt)
     }
     if (rc != SQLITE_DONE) {
@@ -520,7 +834,11 @@ def private try_query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
                                bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<TT -const -#, string> {
     return <- try_one_row(db, sql, bind_blk,
                           $(stmt : sqlite3_stmt?) {
-                              return _::_sql_read_row(stmt, type<TT -const -#>)
+                              static_if (typeinfo can_copy(default<TT -const -#>)) {
+                                  return _::_sql_read_row(stmt, type<TT -const -#>)
+                              } else {
+                                  return <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
+                              }
                           },
                           "query_one")
 }
@@ -552,9 +870,15 @@ def private query_one_opt_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
         sqlite3_finalize(stmt)
         panic("query_one_opt step failed: {sqlite3_errmsg(db.sqlite_handle)}")
     }
-    var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_some(row)
+    static_if (typeinfo can_copy(default<TT -const -#>)) {
+        var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
+        sqlite3_finalize(stmt)
+        return move_some(row)
+    } else {
+        var row : TT -const -# <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
+        sqlite3_finalize(stmt)
+        return move_some(row)
+    }
 }
 
 // ---- try_query_one — Result<TT, string>; 0..3 positional args ----
@@ -567,24 +891,24 @@ def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT 
 def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Result<TT -const -#, string> {
     //! 1-arg positional bind.
     return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 1, arg0)
     })
 }
 
 def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : Result<TT -const -#, string> {
     //! 2-arg positional bind.
     return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
     })
 }
 
 def try_query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : Result<TT -const -#, string> {
     //! 3-arg positional bind.
     return <- try_query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
-        sqlite_bind(stmt, 3, arg2)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
     })
 }
 
@@ -598,24 +922,24 @@ def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -# {
 [unused_argument(t)]
 def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : TT -const -# {
     return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 1, arg0)
     })
 }
 
 [unused_argument(t)]
 def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : TT -const -# {
     return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
     })
 }
 
 [unused_argument(t)]
 def query_one(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : TT -const -# {
     return <- query_one_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
-        sqlite_bind(stmt, 3, arg2)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
     })
 }
 
@@ -627,22 +951,22 @@ def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT 
 
 def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Option<TT -const -#> {
     return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 1, arg0)
     })
 }
 
 def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : Option<TT -const -#> {
     return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
     })
 }
 
 def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : Option<TT -const -#> {
     return <- query_one_opt_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, arg0)
-        sqlite_bind(stmt, 2, arg1)
-        sqlite_bind(stmt, 3, arg2)
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
     })
 }
 
@@ -1043,7 +1367,7 @@ def try_delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : Result<
     //! constructing a dummy struct just to identify the row. Returns
     //! ``Ok(rows_affected)`` (1 or 0), ``Err(errmsg)`` on SQL failure.
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(default<TT>), $(var stmt : sqlite3_stmt?) {
-        sqlite_bind(stmt, 1, id)
+        sql_bind_to_stmt(stmt, 1, id)
     }, "delete_by_id")
 }
 
@@ -1188,7 +1512,7 @@ def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>
 // Generic DML runners — used by the `_sql_update` / `_sql_delete` macros.
 //
 // These take a SQL string + bind block (the macro fills in the
-// `sqlite_bind(stmt, idx, expr)` calls) and execute it. Return rows-affected
+// `sql_bind_to_stmt(stmt, idx, expr)` calls) and execute it. Return rows-affected
 // for non-RETURNING; array<T> for RETURNING.
 // ============================================================================
 
@@ -1243,7 +1567,11 @@ def try_select_from(db : SqlRunner; t : type<auto(TT)>) : Result<array<TT -const
     return <- db |> try_collect_rows(_::_sql_select_all_sql(type<TT -const -#>),
         $(var stmt : sqlite3_stmt?) {},
         $(stmt : sqlite3_stmt?) {
-            return _::_sql_read_row(stmt, type<TT -const -#>)
+            static_if (typeinfo can_copy(default<TT -const -#>)) {
+                return _::_sql_read_row(stmt, type<TT -const -#>)
+            } else {
+                return <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
+            }
         }, "select_from")
 }
 
@@ -1332,13 +1660,13 @@ def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt 
 // to the user's struct type, a fixed family of helper functions consumed by
 // `create_table` / `drop_table_if_exists` / `insert` below.
 //
-// All generated function bodies emit `sqlite_sql_type(type<T>)` and
-// `sqlite_bind(stmt, idx, row.field)` calls — so primitive and user-defined
-// field types travel the same code path. The witness on `sqlite_sql_type` is
-// a type tag for overload dispatch only; bodies must not read it. Type
-// resolution defers to each generated function's own typecheck pass; the
-// macro itself does not depend on field types being fully resolved at
-// apply() time.
+// All generated function bodies emit `sql_storage_type_for(type<T>)` and
+// `sql_bind_to_stmt(stmt, idx, row.field)` calls — so primitive and user-
+// defined field types travel the same code path. ``sql_bind_to_stmt``'s
+// catch-all routes the value through the user's ``_::sql_bind`` adapter
+// (resolved at the caller's-module overload set). Type resolution defers
+// to each generated function's own typecheck pass; the macro itself does
+// not depend on field types being fully resolved at apply() time.
 //
 // TODO: 5 of the 7 emitted helpers (_sql_table_name, _sql_drop_table_if_exists_sql,
 // _sql_create_table_sql, _sql_insert_with_pk_sql, _sql_insert_no_pk_sql) take
@@ -1350,18 +1678,19 @@ def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt 
 // chunk-1 review.
 // ============================================================================
 
-def private find_bool_annotation(args : AnnotationArgumentList; argn : string; default_value : bool) : bool {
+def private find_annotation(args : AnnotationArgumentList; argn : string; default_value : auto(TT)) : TT {
+    //! Generic annotation reader. ``TT`` must be ``bool`` or ``string``;
+    //! daslang's ``static_if (typeinfo is_string …)`` picks the matching
+    //! ``tString`` / ``tBool`` accessor on the AnnotationArgument variant.
     let v = find_arg(args, argn)
-    if (v is tBool) {
-        return v as tBool
-    }
-    return default_value
-}
-
-def private find_string_annotation(args : AnnotationArgumentList; argn : string; default_value : string) : string {
-    let v = find_arg(args, argn)
-    if (v is tString) {
-        return v as tString
+    static_if (typeinfo is_string(default_value)) {
+        if (v is tString) {
+            return v as tString
+        }
+    } else {
+        if (v is tBool) {
+            return v as tBool
+        }
     }
     return default_value
 }
@@ -1480,8 +1809,8 @@ def private build_create_indexes_sql(st : StructurePtr; table_name : string; fie
             if (string(ann.annotation.name) != "sql_index") {
                 continue
             }
-            let idx_name_arg = find_string_annotation(ann.arguments, "name", "")
-            let is_unique = find_bool_annotation(ann.arguments, "unique", false)
+            let idx_name_arg = find_annotation(ann.arguments, "name", "")
+            let is_unique = find_annotation(ann.arguments, "unique", false)
             let cols = find_string_array_annotation(ann.arguments, "fields")
             if (length(cols) == 0) {
                 errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
@@ -1585,8 +1914,8 @@ class SqlIndexMacro : AstStructureAnnotation {
             errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
             return false
         }
-        let is_unique = find_bool_annotation(args, "unique", false)
-        let idx_name_arg = find_string_annotation(args, "name", "")
+        let is_unique = find_annotation(args, "unique", false)
+        let idx_name_arg = find_annotation(args, "name", "")
 
         // Cross-check every named column against the struct's fields.
         for (col in cols) {
@@ -1680,11 +2009,11 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
     var tab = string(found_st.name)
     for (ann in found_st.annotations) {
         if (ann.annotation.name == "sql_table") {
-            tab = find_string_annotation(ann.arguments, "name", tab)
+            tab = find_annotation(ann.arguments, "name", tab)
         }
     }
     for (pf in found_st.fields) {
-        if (find_bool_annotation(pf.annotation, "sql_primary_key", false)) {
+        if (find_annotation(pf.annotation, "sql_primary_key", false)) {
             return (tab, string(pf.name), true)
         }
     }
@@ -1694,29 +2023,29 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 [structure_macro(name=sql_table)]
 class SqlTableMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        let table_name = find_string_annotation(args, "name", string(st.name))
+        let table_name = find_annotation(args, "name", string(st.name))
 
         var fields : array<FieldInfo>
         for (field in st.fields) {
             let fname = string(field.name)
-            let is_pk = find_bool_annotation(field.annotation, "sql_primary_key", false)
-            let is_unique = find_bool_annotation(field.annotation, "sql_unique", false)
+            let is_pk = find_annotation(field.annotation, "sql_primary_key", false)
+            let is_unique = find_annotation(field.annotation, "sql_unique", false)
             let is_optional = is_option_field_type(field._type)
 
             // @sql_computed expression
-            let computed_sql = find_string_annotation(field.annotation, "sql_computed", "")
+            let computed_sql = find_annotation(field.annotation, "sql_computed", "")
             let is_computed = !empty(computed_sql)
-            let is_stored = find_bool_annotation(field.annotation, "sql_stored", false)
+            let is_stored = find_annotation(field.annotation, "sql_stored", false)
 
             // Defaults — native daslang field init OR @sql_default_fn (mutually exclusive)
-            let sql_default_fn = find_string_annotation(field.annotation, "sql_default_fn", "")
+            let sql_default_fn = find_annotation(field.annotation, "sql_default_fn", "")
 
             // Foreign key — @sql_references + optional @sql_on_delete / @sql_on_update
-            let references = find_string_annotation(field.annotation, "sql_references", "")
-            let on_delete = find_string_annotation(field.annotation, "sql_on_delete", "no_action")
-            let on_update = find_string_annotation(field.annotation, "sql_on_update", "no_action")
-            let has_on_delete_attr = !empty(find_string_annotation(field.annotation, "sql_on_delete", ""))
-            let has_on_update_attr = !empty(find_string_annotation(field.annotation, "sql_on_update", ""))
+            let references = find_annotation(field.annotation, "sql_references", "")
+            let on_delete = find_annotation(field.annotation, "sql_on_delete", "no_action")
+            let on_update = find_annotation(field.annotation, "sql_on_update", "no_action")
+            let has_on_delete_attr = !empty(find_annotation(field.annotation, "sql_on_delete", ""))
+            let has_on_update_attr = !empty(find_annotation(field.annotation, "sql_on_update", ""))
 
             // ---- validation ----
             if (is_pk && is_optional) {
@@ -1835,9 +2164,9 @@ class SqlTableMacro : AstStructureAnnotation {
         // User-facing source order requirement: [sql_table, sql_index, ...].
         var fn_indexes = make_create_indexes_sql_fn(st, "")
         compiling_module() |> add_function(fn_indexes)
-        var fn_ins_pk = make_insert_with_pk_sql_fn(st, table_name, fields)
+        var fn_ins_pk = make_insert_sql_fn(st, table_name, fields, true)
         compiling_module() |> add_function(fn_ins_pk)
-        var fn_ins_nopk = make_insert_no_pk_sql_fn(st, table_name, fields)
+        var fn_ins_nopk = make_insert_sql_fn(st, table_name, fields, false)
         compiling_module() |> add_function(fn_ins_nopk)
         var fn_pk_unset = make_pk_is_unset_fn(st, fields)
         compiling_module() |> add_function(fn_pk_unset)
@@ -1927,7 +2256,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 suffix += info.references_clause
             }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(prefix)); }))
-            write_exprs |> push(qmacro_expr(${ writer |> write(sqlite_sql_type(type<$t(st.fields[i]._type)>)); }))
+            write_exprs |> push(qmacro_expr(${ writer |> write(sql_storage_type_for(type<$t(st.fields[i]._type)>)); }))
             write_exprs |> push(qmacro_expr(${ writer |> write($v(suffix)); }))
         }
         write_exprs |> push(qmacro_expr(${ writer |> write(")"); }))
@@ -1942,15 +2271,18 @@ class SqlTableMacro : AstStructureAnnotation {
         return <- fn
     }
 
-    def make_insert_with_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+    def make_insert_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>; include_pk : bool) : FunctionPtr {
         // Always emit explicit column list so computed (GENERATED) columns can be
-        // skipped — SQLite rejects writes to generated columns. Without computed
-        // columns this is functionally equivalent to the previous positional
-        // `INSERT INTO T VALUES (?,?,...)` form.
+        // skipped — SQLite rejects writes to generated columns. ``include_pk``
+        // toggles whether the primary key column participates: with-PK is the
+        // user-specified-keys path, without-PK is the AUTOINCREMENT path.
+        // Both fall back to `DEFAULT VALUES` when no bindable columns remain
+        // (PK-only struct without PK, or all-computed struct).
+        let helper_name = include_pk ? "_sql_insert_with_pk_sql" : "_sql_insert_no_pk_sql"
         let cols = build_string() $(var w) {
             var first = true
             for (info in fields) {
-                if (info.is_computed) {
+                if (info.is_computed || (!include_pk && info.is_pk)) {
                     continue
                 }
                 if (!first) {
@@ -1965,7 +2297,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let placeholders = build_string() $(var w) {
             var first = true
             for (info in fields) {
-                if (info.is_computed) {
+                if (info.is_computed || (!include_pk && info.is_pk)) {
                     continue
                 }
                 if (!first) {
@@ -1978,49 +2310,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let sql = (empty(cols)
             ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
             : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
-        var fn = qmacro_function("_sql_insert_with_pk_sql") $(typ : $t(st)) : string {
-            return $v(sql)
-        }
-        fn.flags |= FunctionFlags.generated
-        fn.body |> force_at(st.at)
-        return <- fn
-    }
-
-    def make_insert_no_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
-        let cols = build_string() $(var w) {
-            var first = true
-            for (info in fields) {
-                if (info.is_pk || info.is_computed) {
-                    continue
-                }
-                if (!first) {
-                    w |> write(", ")
-                }
-                w |> write("\"")
-                w |> write(info.col_name)
-                w |> write("\"")
-                first = false
-            }
-        }
-        let placeholders = build_string() $(var w) {
-            var first = true
-            for (info in fields) {
-                if (info.is_pk || info.is_computed) {
-                    continue
-                }
-                if (!first) {
-                    w |> write(", ")
-                }
-                w |> write("?")
-                first = false
-            }
-        }
-        // PK-only / all-computed structs have no non-PK bindable columns. SQLite
-        // rejects `INSERT INTO T () VALUES ()`, so fall back to `DEFAULT VALUES`.
-        let sql = (empty(cols)
-            ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
-            : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
-        var fn = qmacro_function("_sql_insert_no_pk_sql") $(typ : $t(st)) : string {
+        var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
             return $v(sql)
         }
         fn.flags |= FunctionFlags.generated
@@ -2073,7 +2363,7 @@ class SqlTableMacro : AstStructureAnnotation {
             let wi = with_pk_idx
             let field_name = info.name
             with_pk_exprs |> push(qmacro_expr(${
-                sqlite_bind(stmt, $v(wi), row.$f(field_name));
+                sql_bind_to_stmt(stmt, $v(wi), row.$f(field_name));
             }))
         }
 
@@ -2085,7 +2375,7 @@ class SqlTableMacro : AstStructureAnnotation {
             no_pk_idx++
             let field_name = info.name
             no_pk_exprs |> push(qmacro_expr(${
-                sqlite_bind(stmt, $v(no_pk_idx), row.$f(field_name));
+                sql_bind_to_stmt(stmt, $v(no_pk_idx), row.$f(field_name));
             }))
         }
 
@@ -2130,7 +2420,12 @@ class SqlTableMacro : AstStructureAnnotation {
             let col_idx = i
             let field_name = info.name
             assign_exprs |> push(qmacro_expr(${
-                row.$f(field_name) = sqlite_read(stmt, $v(col_idx), type<$t(st.fields[i]._type)>);
+                static_if (typeinfo can_copy(default<$t(st.fields[i]._type)>)) {
+                    row.$f(field_name) = read_via_adapter(stmt, $v(col_idx), type<$t(st.fields[i]._type)>);
+                } else {
+                    var field_tmp <- clone_to_move(read_via_adapter(stmt, $v(col_idx), type<$t(st.fields[i]._type)>));
+                    row.$f(field_name) <- field_tmp;
+                }
             }))
         }
 
@@ -2264,7 +2559,7 @@ class SqlTableMacro : AstStructureAnnotation {
             let bi = bind_idx
             let field_name = fields[i].name
             bind_exprs |> push(qmacro_expr(${
-                sqlite_bind(stmt, $v(bi), row.$f(field_name));
+                sql_bind_to_stmt(stmt, $v(bi), row.$f(field_name));
             }))
         }
         // PK column last (WHERE clause).
@@ -2272,7 +2567,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let pk_bind_idx = bind_idx
         let pk_field_name = fields[pk_idx].name
         bind_exprs |> push(qmacro_expr(${
-            sqlite_bind(stmt, $v(pk_bind_idx), row.$f(pk_field_name));
+            sql_bind_to_stmt(stmt, $v(pk_bind_idx), row.$f(pk_field_name));
         }))
 
         var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
@@ -2298,7 +2593,7 @@ class SqlTableMacro : AstStructureAnnotation {
         }
         let pk_field_name = fields[pk_idx].name
         var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
-            sqlite_bind(stmt, 1, row.$f(pk_field_name))
+            sql_bind_to_stmt(stmt, 1, row.$f(pk_field_name))
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
