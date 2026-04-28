@@ -330,6 +330,24 @@ namespace das {
         return res;
     }
 
+    // Read until EOF using a growing buffer. Works for streams without a
+    // known size (pipes, sockets, stdin) where `builtin_fread` returns ""
+    // because `fstat().st_size` is 0. 64 KB chunk matches the default Linux
+    // and macOS pipe capacity, so one syscall typically drains a kernel
+    // pipe buffer; for larger payloads `string::append` doubles capacity
+    // amortizing growth across O(log N) reallocations.
+    char * builtin_fread_to_eof ( const FILE * f, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(at, "can't fread NULL");
+        string buf;
+        constexpr size_t CHUNK = 64 * 1024;
+        vector<char> chunk(CHUNK);
+        size_t n;
+        while ( (n = fread(chunk.data(), 1, CHUNK, (FILE *)f)) > 0 ) {
+            buf.append(chunk.data(), n);
+        }
+        return context->allocateString(buf, at);
+    }
+
     char * builtin_fgets(const FILE* f, Context* context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fgets NULL");
         vector<char> buffer(16384);
@@ -716,6 +734,205 @@ namespace das {
         processDone = true;
         fclose(f);
         watchdog.join();
+        if ( timedOut ) return DAS_POPEN_TIMEOUT;
+        return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
+#endif
+    }
+
+#ifdef _MSC_VER
+    // Quote a single argv element for Windows CommandLineToArgvW parsing.
+    // Wraps in double quotes if needed, doubles backslashes that precede a
+    // quote (or end-of-string inside a quoted token), and escapes embedded
+    // quotes with backslash. Matches the documented MSVCRT / CommandLineToArgvW
+    // algorithm (https://learn.microsoft.com/en-us/cpp/cpp/main-function-command-line-args).
+    static string winArgvEscape ( const char * arg ) {
+        if ( !arg ) return "\"\"";
+        string a = arg;
+        if ( !a.empty() && a.find_first_of(" \t\n\v\"") == string::npos ) {
+            return a;
+        }
+        string out = "\"";
+        for ( size_t i = 0; i < a.size(); ) {
+            size_t backslashes = 0;
+            while ( i < a.size() && a[i] == '\\' ) { ++backslashes; ++i; }
+            if ( i == a.size() ) {
+                out.append(backslashes * 2, '\\');
+            } else if ( a[i] == '"' ) {
+                out.append(backslashes * 2 + 1, '\\');
+                out += '"';
+                ++i;
+            } else {
+                out.append(backslashes, '\\');
+                out += a[i];
+                ++i;
+            }
+        }
+        out += '"';
+        return out;
+    }
+
+    static string winBuildCommandLine ( char ** argv, uint32_t argc ) {
+        string s;
+        for ( uint32_t i = 0; i < argc; ++i ) {
+            if ( i ) s += ' ';
+            s += winArgvEscape(argv[i]);
+        }
+        return s;
+    }
+#endif
+
+    // popen_argv: argv-based subprocess. Bypasses the shell entirely — on
+    // Windows, CreateProcess invokes the .exe directly (no cmd.exe, no
+    // first-quote-stripping); on Unix, fork+execvp (no /bin/sh, no $() /
+    // backtick expansion). timeout_sec <= 0 means no timeout.
+    int builtin_popen_argv ( const Array & args_arr, float timeout_sec,
+                             const TBlock<void,const FILE *> & blk,
+                             Context * context, LineInfoArg * at ) {
+        if ( args_arr.size == 0 ) {
+            context->throw_error_at(at, "popen_argv with empty args");
+            return -1;
+        }
+        char ** argv = (char **) args_arr.data;
+        if ( !argv[0] ) {
+            context->throw_error_at(at, "popen_argv with null exe");
+            return -1;
+        }
+#ifdef _MSC_VER
+        SECURITY_ATTRIBUTES sa;
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+        sa.lpSecurityDescriptor = NULL;
+        HANDLE hReadPipe = NULL, hWritePipe = NULL;
+        if ( !CreatePipe(&hReadPipe, &hWritePipe, &sa, 0) ) {
+            vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+        HANDLE hJob = NULL;
+        if ( timeout_sec > 0.0f ) {
+            hJob = CreateJobObjectA(NULL, NULL);
+            if ( hJob ) {
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli;
+                memset(&jeli, 0, sizeof(jeli));
+                jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+            }
+        }
+        STARTUPINFOA si;
+        memset(&si, 0, sizeof(si));
+        si.cb = sizeof(si);
+        si.hStdOutput = hWritePipe;
+        si.hStdError = hWritePipe;
+        si.dwFlags = STARTF_USESTDHANDLES;
+        PROCESS_INFORMATION pi;
+        memset(&pi, 0, sizeof(pi));
+        // CreateProcess wants a writable buffer for lpCommandLine.
+        string cmdLine = winBuildCommandLine(argv, args_arr.size);
+        DWORD createFlags = CREATE_NO_WINDOW;
+        if ( timeout_sec > 0.0f ) createFlags |= CREATE_SUSPENDED;
+        BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
+            createFlags, NULL, NULL, &si, &pi);
+        CloseHandle(hWritePipe);
+        if ( !created ) {
+            CloseHandle(hReadPipe);
+            if ( hJob ) CloseHandle(hJob);
+            vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        if ( timeout_sec > 0.0f ) {
+            if ( hJob ) AssignProcessToJobObject(hJob, pi.hProcess);
+            ResumeThread(pi.hThread);
+        }
+        CloseHandle(pi.hThread);
+        int fd = _open_osfhandle((intptr_t)hReadPipe, _O_RDONLY | _O_TEXT);
+        FILE * f = _fdopen(fd, "rt");
+        HANDLE hProcess = pi.hProcess;
+        atomic<bool> timedOut{false};
+        thread watchdog;
+        if ( timeout_sec > 0.0f ) {
+            DWORD timeout_ms = (DWORD)(timeout_sec * 1000.0f);
+            watchdog = thread([hProcess, hJob, timeout_ms, &timedOut]() {
+                if ( WaitForSingleObject(hProcess, timeout_ms) == WAIT_TIMEOUT ) {
+                    timedOut = true;
+                    if ( hJob ) {
+                        TerminateJobObject(hJob, 1);
+                    } else {
+                        TerminateProcess(hProcess, 1);
+                    }
+                }
+            });
+        }
+        vec4f cargs[1];
+        cargs[0] = cast<FILE *>::from(f);
+        context->invoke(blk, cargs, nullptr, at);
+        WaitForSingleObject(hProcess, INFINITE);
+        DWORD exitCode = 0;
+        GetExitCodeProcess(hProcess, &exitCode);
+        fclose(f);
+        if ( watchdog.joinable() ) watchdog.join();
+        CloseHandle(hProcess);
+        if ( hJob ) CloseHandle(hJob);
+        return timedOut ? DAS_POPEN_TIMEOUT : (int)exitCode;
+#else
+        int pipefd[2];
+        if ( pipe(pipefd) == -1 ) {
+            vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        // Build a NULL-terminated argv copy for execvp. We can't pass
+        // args_arr.data directly because daslang doesn't guarantee a
+        // trailing NULL element.
+        vector<char *> cargv;
+        cargv.reserve(args_arr.size + 1);
+        for ( uint32_t i = 0; i < args_arr.size; ++i ) {
+            cargv.push_back(argv[i] ? argv[i] : (char *)"");
+        }
+        cargv.push_back(nullptr);
+        pid_t pid = fork();
+        if ( pid == -1 ) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+            vec4f cargs[1]; cargs[0] = cast<FILE *>::from(nullptr);
+            context->invoke(blk, cargs, nullptr, at);
+            return -1;
+        }
+        if ( pid == 0 ) {
+            close(pipefd[0]);
+            dup2(pipefd[1], STDOUT_FILENO);
+            dup2(pipefd[1], STDERR_FILENO);
+            close(pipefd[1]);
+            execvp(cargv[0], cargv.data());
+            _exit(127);
+        }
+        close(pipefd[1]);
+        FILE * f = fdopen(pipefd[0], "r");
+        atomic<bool> timedOut{false};
+        atomic<bool> processDone{false};
+        thread watchdog;
+        if ( timeout_sec > 0.0f ) {
+            watchdog = thread([pid, timeout_sec, &timedOut, &processDone]() {
+                auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds((int)(timeout_sec * 1000.0f));
+                while ( std::chrono::steady_clock::now() < deadline ) {
+                    if ( processDone.load() ) return;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+                if ( !processDone.load() ) {
+                    timedOut = true;
+                    kill(pid, SIGKILL);
+                }
+            });
+        }
+        vec4f cargs[1];
+        cargs[0] = cast<FILE *>::from(f);
+        context->invoke(blk, cargs, nullptr, at);
+        int status = 0;
+        waitpid(pid, &status, 0);
+        processDone = true;
+        fclose(f);
+        if ( watchdog.joinable() ) watchdog.join();
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
         return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
 #endif
@@ -1350,6 +1567,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen_timeout)>(*this, lib, "popen_timeout",
                 SideEffects::modifyExternal, "builtin_popen_timeout")
                     ->args({"command","timeout","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen_argv)>(*this, lib, "popen_argv",
+                SideEffects::modifyExternal, "builtin_popen_argv")
+                    ->args({"args","timeout","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_fread_to_eof)>(*this, lib, "fread_to_eof",
+                SideEffects::modifyExternal, "builtin_fread_to_eof")
+                    ->args({"f","context","at"})->unsafeOperation = true;
             addConstant<int32_t>(*this, "popen_timed_out", DAS_POPEN_TIMEOUT);
             addExtern<DAS_BIND_FUN(builtin_system)>(*this, lib, "system",
                 SideEffects::modifyExternal, "builtin_system")

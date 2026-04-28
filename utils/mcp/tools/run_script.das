@@ -32,8 +32,13 @@ def do_run_script(file, code : string; timeout_str : string = ""; track_allocati
     }
     let timeout_sec = empty(timeout_str) ? 30.0 : float(to_int(timeout_str))
     var output : string
-    let extra_flags = track_allocations ? " -track-allocations -heap-report" : ""
-    let exit_code = run_and_capture("{exe}{extra_flags} {script_path}", output, timeout_sec)
+    var argv <- [exe]
+    if (track_allocations) {
+        argv |> push("-track-allocations")
+        argv |> push("-heap-report")
+    }
+    argv |> push(string(script_path))
+    let exit_code = run_and_capture(argv, output, timeout_sec)
     if (is_temp) {
         remove(script_path)
     }

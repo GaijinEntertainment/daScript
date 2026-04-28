@@ -54,30 +54,35 @@ def public do_find_dupe(paths : string;
             return make_tool_result("find_dupe: 'max_clusters' must be >= 0 (got {max_clusters})", true)
         }
     }
-    var threshold_arg = ""
+    var threshold : float = -1.0
     if (!empty(threshold_str)) {
         let parsed = try_to_float(threshold_str)
         if (is_err(parsed)) {
             return make_tool_result("find_dupe: 'threshold' must be a number in [0, 1] (got '{threshold_str}')", true)
         }
-        let t = unwrap(parsed)
-        if (t < 0.0 || t > 1.0) {
-            return make_tool_result("find_dupe: 'threshold' must be in [0, 1] (got {t})", true)
+        threshold = unwrap(parsed)
+        if (threshold < 0.0 || threshold > 1.0) {
+            return make_tool_result("find_dupe: 'threshold' must be in [0, 1] (got {threshold})", true)
         }
-        threshold_arg = " -t {t}"
     }
-    var resolved_out = resolve_path(empty(out_dir) ? "{get_das_root()}/_mcp_find_dupe_{ref_time_ticks()}" : out_dir)
+    let resolved_out = resolve_path(empty(out_dir) ? "{get_das_root()}/_mcp_find_dupe_{ref_time_ticks()}" : out_dir)
     mkdir(resolved_out)
     let dupes_json = path_join(resolved_out, "dupes.json")
     // Stage 1: run detect-dupe to produce the cluster JSON.
-    var stage1_cmd = "\"{exe}\" \"{detect_dupe_main}\" --"
+    var stage1_argv <- [exe, detect_dupe_main, "--"]
+    stage1_argv |> reserve(length(stage1_argv) + 2 * length(files) + 4)
     for (f in files) {
-        stage1_cmd += " -p \"{resolve_path(f)}\""
+        stage1_argv |> push("-p")
+        stage1_argv |> push(resolve_path(f))
     }
-    stage1_cmd += " --json \"{dupes_json}\""
-    stage1_cmd += threshold_arg
+    stage1_argv |> push("--json")
+    stage1_argv |> push(string(dupes_json))
+    if (threshold >= 0.0) {
+        stage1_argv |> push("-t")
+        stage1_argv |> push("{threshold}")
+    }
     var stage1_out : string
-    let stage1_rc = run_and_capture(stage1_cmd, stage1_out, 0.0)
+    let stage1_rc = run_and_capture(stage1_argv, stage1_out, 0.0)
     if (stage1_rc != 0) {
         return make_tool_result("find_dupe: detect-dupe failed (exit code {stage1_rc}):\n{stage1_out}", true)
     }

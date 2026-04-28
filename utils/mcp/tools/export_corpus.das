@@ -45,9 +45,11 @@ def public do_export_corpus(paths : string; out : string;
         return make_tool_result("export_corpus: no paths matched: {paths}", true)
     }
     let resolved_out = resolve_path(out)
-    var cmd = "\"{exe}\" \"{detect_dupe_main}\" -- --export-functions \"{resolved_out}\""
+    var argv <- [exe, detect_dupe_main, "--", "--export-functions", resolved_out]
+    argv |> reserve(length(argv) + 2 * length(seeds))
     for (s in seeds) {
-        cmd += " -p \"{resolve_path(s)}\""
+        argv |> push("-p")
+        argv |> push(resolve_path(s))
     }
     if (!empty(min_tokens_str)) {
         let parsed = try_to_int(min_tokens_str)
@@ -58,10 +60,11 @@ def public do_export_corpus(paths : string; out : string;
         if (n < 0) {
             return make_tool_result("export_corpus: 'min_tokens' must be >= 0 (got {n})", true)
         }
-        cmd += " --min-tokens {n}"
+        argv |> push("--min-tokens")
+        argv |> push("{n}")
     }
     var output : string
-    let exit_code = run_and_capture(cmd, output, 0.0)
+    let exit_code = run_and_capture(argv, output, 0.0)
     if (exit_code != 0) {
         return make_tool_result("export_corpus: detect-dupe failed (exit code {exit_code}):\n{output}", true)
     }

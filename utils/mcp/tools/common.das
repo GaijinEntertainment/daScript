@@ -276,47 +276,26 @@ def get_daslang_exe() : string {
     return get_das_exe()
 }
 
-// Run an external command, capture stdout+stderr to a temp file, return exit_code.
+// Run an external command, capture stdout+stderr, return exit_code.
+// `args[0]` is the executable; remaining elements are positional arguments.
 // timeout_sec > 0 kills the process tree after that many seconds (returns popen_timed_out).
 // timeout_sec <= 0 means no timeout.
 //
-// Windows note: `_popen` invokes `cmd.exe /c <cmd>`, and cmd.exe applies the
-// "first quote / last quote" stripping rule when the command starts with `"`.
-// Several callers below quote the exe path (e.g. `"C:\path\daslang.exe" ...`)
-// so the rendered command DOES start with a quote — without `/S` cmd.exe
-// strips that outer quote and mis-parses the rest as paths, emitting the
-// classic "The filename, directory name, or volume label syntax is incorrect"
-// error. `cmd /S /C "<cmd>"` tells cmd.exe to take the literal string after
-// /C and skip the quote-stripping pass.
-def run_and_capture(cmd_line : string; var output : string&; timeout_sec : float = 0.0) : int {
-    let root = get_das_root()
-    let tmp_out = "{root}/_mcp_cmd_output_{ref_time_ticks()}.txt"
-    var full_cmd = "{cmd_line} > {tmp_out} 2>&1"
-    if (get_platform_name() == "windows") {
-        full_cmd = "cmd /S /C \"{full_cmd}\""
-    }
+// Argv-based: `popen_argv` (Windows: CreateProcess; Unix: fork+execvp) bypasses
+// the shell entirely. No cmd.exe quote-stripping, no /bin/sh `$()`/backtick
+// expansion — every argv element reaches the child verbatim. Callers don't
+// (and shouldn't) quote arguments themselves.
+def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    var captured : string
     var exit_code = -1
     unsafe {
-        if (timeout_sec > 0.0) {
-            exit_code = popen_timeout(full_cmd, timeout_sec) $(f) {
-                if (f != null) {
-                    fread(f)
-                }
-            }
-        } else {
-            exit_code = popen(full_cmd) $(f) {
-                if (f != null) {
-                    fread(f)
-                }
+        exit_code = popen_argv(args, timeout_sec) $(f) {
+            if (f != null) {
+                captured := fread_to_eof(f)
             }
         }
     }
-    fopen(tmp_out, "rb") $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }
-    remove(tmp_out)
+    output := captured
     return exit_code
 }
 

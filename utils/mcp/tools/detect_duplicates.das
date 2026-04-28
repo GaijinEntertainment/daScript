@@ -53,9 +53,13 @@ def public do_detect_duplicates(paths : string; corpus : string;
         return make_tool_result("detect_duplicates: corpus file not found: {resolved_corpus}", true)
     }
     let json_out = "{get_das_root()}/_mcp_detect_duplicates_{ref_time_ticks()}.json"
-    var cmd = "\"{exe}\" \"{detect_dupe_main}\" -- --import-functions \"{resolved_corpus}\" --json \"{json_out}\""
+    var argv <- [exe, detect_dupe_main, "--",
+                 "--import-functions", resolved_corpus,
+                 "--json", json_out]
+    argv |> reserve(length(argv) + 2 * length(files))
     for (f in files) {
-        cmd += " --against \"{resolve_path(f)}\""
+        argv |> push("--against")
+        argv |> push(resolve_path(f))
     }
     if (!empty(threshold_str)) {
         let parsed = try_to_float(threshold_str)
@@ -66,7 +70,8 @@ def public do_detect_duplicates(paths : string; corpus : string;
         if (t < 0.0 || t > 1.0) {
             return make_tool_result("detect_duplicates: 'threshold' must be in [0, 1] (got {t})", true)
         }
-        cmd += " -t {t}"
+        argv |> push("-t")
+        argv |> push("{t}")
     }
     if (!empty(min_tokens_str)) {
         let parsed = try_to_int(min_tokens_str)
@@ -77,7 +82,8 @@ def public do_detect_duplicates(paths : string; corpus : string;
         if (n < 0) {
             return make_tool_result("detect_duplicates: 'min_tokens' must be >= 0 (got {n})", true)
         }
-        cmd += " --min-tokens {n}"
+        argv |> push("--min-tokens")
+        argv |> push("{n}")
     }
     if (!empty(top_str)) {
         let parsed = try_to_int(top_str)
@@ -88,7 +94,8 @@ def public do_detect_duplicates(paths : string; corpus : string;
         if (n < 1) {
             return make_tool_result("detect_duplicates: 'top' must be >= 1 (got {n})", true)
         }
-        cmd += " -n {n}"
+        argv |> push("-n")
+        argv |> push("{n}")
     }
     if (!empty(keep_str)) {
         for (k in split_by_chars(keep_str, ", \t\n")) {
@@ -98,11 +105,12 @@ def public do_detect_duplicates(paths : string; corpus : string;
             if (!(k == "all" || k == "visitor" || k == "dispatch" || k == "emit")) {
                 return make_tool_result("detect_duplicates: 'keep' token must be one of all/visitor/dispatch/emit (got '{k}')", true)
             }
-            cmd += " -k {k}"
+            argv |> push("-k")
+            argv |> push(k)
         }
     }
     var output : string
-    let exit_code = run_and_capture(cmd, output, 0.0)
+    let exit_code = run_and_capture(argv, output, 0.0)
     if (exit_code != 0) {
         remove(json_out)
         return make_tool_result("detect-dupe failed (exit code {exit_code}):\n{output}", true)

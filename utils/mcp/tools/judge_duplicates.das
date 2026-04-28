@@ -89,36 +89,42 @@ def public run_find_dupe_judge(input_path : string;
     if (!input_st.is_valid || !input_st.is_reg) {
         return make_tool_result("judge_duplicates: input file not found: {resolved_input}", true)
     }
-    var resolved_out = resolve_path(empty(out_dir) ? "{get_das_root()}/_mcp_find_dupe_{ref_time_ticks()}" : out_dir)
+    let resolved_out = resolve_path(empty(out_dir) ? "{get_das_root()}/_mcp_find_dupe_{ref_time_ticks()}" : out_dir)
     let main_das = "{get_das_root()}/utils/find-dupe/main.das"
     let main_st = stat(main_das)
     if (!main_st.is_valid || !main_st.is_reg) {
         return make_tool_result("judge_duplicates: utils/find-dupe/main.das not found at {main_das}", true)
     }
-    var cmd = "\"{exe}\" \"{main_das}\" -- --input \"{resolved_input}\" --out \"{resolved_out}\""
+    var argv <- [exe, main_das, "--",
+                 "--input", resolved_input,
+                 "--out", resolved_out]
     if (!empty(model)) {
-        cmd += " --model {model}"
+        argv |> push("--model")
+        argv |> push(string(model))
     }
     if (parallel > 0) {
-        cmd += " --parallel {parallel}"
+        argv |> push("--parallel")
+        argv |> push("{parallel}")
     }
     if (max_clusters > 0) {
-        cmd += " --max-clusters {max_clusters}"
+        argv |> push("--max-clusters")
+        argv |> push("{max_clusters}")
     }
     if (min_lines > 0) {
-        cmd += " --min-lines {min_lines}"
+        argv |> push("--min-lines")
+        argv |> push("{min_lines}")
     }
     if (positives_only) {
-        cmd += " --positives-only"
+        argv |> push("--positives-only")
     }
     if (dry_run) {
-        cmd += " --dry-run"
+        argv |> push("--dry-run")
     }
     if (verbose) {
-        cmd += " -v"
+        argv |> push("-v")
     }
     var output : string
-    let exit_code = run_and_capture(cmd, output, 0.0)
+    let exit_code = run_and_capture(argv, output, 0.0)
     if (exit_code != 0) {
         if (looks_like_anthropic_missing(output)) {
             return make_tool_result("{daspkg_install_hint()}\n\n--- subprocess output ---\n{output}", true)
