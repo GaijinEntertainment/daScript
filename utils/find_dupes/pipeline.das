@@ -174,6 +174,13 @@ def private collect_one_function(var func : FunctionPtr;
     rec.ref.file = fn_file
     rec.ref.name = string(func.name)
     rec.ref.line = int(func.at.line)
+    // `func.at` spans only the `def name(args)` declaration line — not
+    // the body. The body's closing `}` lives in `func.body.at.last_line`.
+    if (func.body != null) {
+        rec.ref.end_line = int(func.body.at.last_line)
+    } else {
+        rec.ref.end_line = int(func.at.last_line)
+    }
     rec.ref.is_lambda = func.flags._lambda
     rec.canonical := canon
     derive_sig_and_count(rec, want_sigs, min_tokens)

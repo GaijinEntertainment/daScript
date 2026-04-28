@@ -33,6 +33,17 @@ def public classify(name : string; canonical : string) : PatternHit {
     if (try_dispatch(canonical, hit)) {
         return hit
     }
+    // Single-statement dastest test wrappers:
+    //   def test_xxx(t : T?) { t |> run("desc") @(t : T?) { ... } }
+    // The canonicalizer collapses the lambda body to ADDR, so every
+    // such test canonicalizes identically. `dispatch` only fires at
+    // N >= 2 statements, so a one-run-per-def test slips through —
+    // hence this name-tagged single-statement variant. Check before
+    // `emit` because `emit` is the more general "small N trivial calls"
+    // shape; `test_wrapper` is the more specific name+shape match.
+    if (try_test_wrapper(name, canonical, hit)) {
+        return hit
+    }
     if (try_emit(canonical, hit)) {
         return hit
     }
@@ -88,6 +99,46 @@ def try_dispatch(canonical : string; var hit : PatternHit) : bool {
     }
     hit.name := "dispatch"
     hit.note := "{length(stmts)}x repeated"
+    return true
+}
+
+
+// Single-statement dastest test wrapper: a function whose name starts
+// with `test_` and whose body is exactly one top-level `t |> run(...)`
+// call carrying a lambda body (one or more `ADDR` tokens — captures +
+// the lambda function pointer). The canonicalizer collapses the lambda
+// body to `ADDR`, so every dastest with a single named subtest produces
+// the same canonical regardless of what the lambda actually does. This
+// pattern catches them; users opt back in via `--keep test_wrapper`.
+def try_test_wrapper(name : string; canonical : string; var hit : PatternHit) : bool {
+    if (!(name |> starts_with("test_"))) {
+        return false
+    }
+    let stmts <- split_top_level_stmts(canonical)
+    if (length(stmts) != 1) {
+        return false
+    }
+    let toks <- tokenize_canonical(stmts[0])
+    if (length(toks) < 2) {
+        return false
+    }
+    if (toks[0] != "STMT" && toks[0] != "FIN_STMT") {
+        return false
+    }
+    if (toks[1] != "CALL:run") {
+        return false
+    }
+    var addr_count = 0
+    for (i in range(2, length(toks))) {
+        if (toks[i] == "ADDR") {
+            addr_count++
+        }
+    }
+    if (addr_count == 0) {
+        return false
+    }
+    hit.name := "test_wrapper"
+    hit.note := "single t |> run(...) body"
     return true
 }
 

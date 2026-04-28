@@ -24,6 +24,10 @@ def make_record(name : string; canonical : string; line : int; want_sigs : bool)
     rec.ref.name := name
     rec.ref.file := "test.das"
     rec.ref.line = line
+    // Default to a 5-line synthetic body. Tests that care about the
+    // exact span override .ref.end_line directly. Required to satisfy
+    // is_well_formed's `end_line >= line` check on the import path.
+    rec.ref.end_line = line + 5
     rec.ref.is_lambda = false
     rec.canonical := canonical
     derive_sig_and_count(rec, want_sigs, 0)
@@ -547,6 +551,49 @@ def test_import_bad_schema_version(t : T?) {
     let ok = read_import(path, loaded, false, 0, err)
     t |> success(!ok, "read_import rejects unknown schema_version")
     t |> success(find(err, "schema_version") >= 0, "error mentions schema_version: {err}")
+    remove(path)
+}
+
+
+// is_well_formed must reject v2 records that are missing or have a
+// degenerate `end_line` — otherwise downstream consumers (e.g.
+// look-at-dupes' source extractor) silently fall back to
+// single-line peeks. Build a v2 envelope by hand so the writer's
+// out-of-the-box defaults don't paper over the missing field.
+[test]
+def test_import_rejects_zero_end_line(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    let body = "\{\"schema_version\":{EXCHANGE_SCHEMA_VERSION},\"functions\":[\{\"name\":\"foo\",\"file\":\"a.das\",\"line\":10,\"end_line\":0,\"is_lambda\":false,\"canonical\":\"FN A B ENDFN\"\}]\}"
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    var loaded : array<FuncRecord>
+    var err : string
+    let ok = read_import(path, loaded, false, 0, err, /*quiet=*/ true)
+    t |> success(ok, "read_import succeeds (envelope is valid; record is dropped as malformed)")
+    t |> equal(length(loaded), 0)
+    remove(path)
+}
+
+
+[test]
+def test_import_rejects_zero_line(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    let body = "\{\"schema_version\":{EXCHANGE_SCHEMA_VERSION},\"functions\":[\{\"name\":\"foo\",\"file\":\"a.das\",\"line\":0,\"end_line\":5,\"is_lambda\":false,\"canonical\":\"FN A B ENDFN\"\}]\}"
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    var loaded : array<FuncRecord>
+    var err : string
+    let ok = read_import(path, loaded, false, 0, err, /*quiet=*/ true)
+    t |> success(ok, "envelope is valid; line=0 record is dropped as malformed")
+    t |> equal(length(loaded), 0)
     remove(path)
 }
 
@@ -1139,6 +1186,44 @@ def test_pattern_emit_when_no_visitor_name(t : T?) {
     let canon = "FN ARG <var_0> TYP ARG <var_1> TYP BODY BLK STMT CALL:write P2R <var_0> .FLD LIT STMT RET <var_1> ENDBLK ENDFN"
     let hit = classify("emit_close_paren", canon)
     t |> equal(hit.name, "emit")
+}
+
+
+[test]
+def test_pattern_test_wrapper_single_run(t : T?) {
+    // Real-world canonical of `def test_xxx(t : T?) { t |> run("X") @(t) { ... } }`.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ASC MK_STR ADDR ADDR ENDBLK ENDFN"
+    let hit = classify("test_something", canon)
+    t |> equal(hit.name, "test_wrapper")
+}
+
+
+[test]
+def test_pattern_test_wrapper_requires_test_prefix(t : T?) {
+    // Same canonical, but the function isn't a dastest — keep it.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ASC MK_STR ADDR ADDR ENDBLK ENDFN"
+    let hit = classify("dispatch_runner", canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_test_wrapper_requires_addr(t : T?) {
+    // Test function that calls `run` with no lambda body — exotic but
+    // shouldn't fire test_wrapper (the body has no ADDR).
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ASC MK_STR ENDBLK ENDFN"
+    let hit = classify("test_no_lambda", canon)
+    t |> equal(hit.name, "")
+}
+
+
+[test]
+def test_pattern_test_wrapper_yields_to_dispatch(t : T?) {
+    // Two `t |> run(...)` calls: dispatch fires first (≥ 2 identical
+    // statements). test_wrapper requires exactly one — so dispatch wins.
+    let canon = "FN ARG <var_0> TYP BODY BLK STMT CALL:run <var_0> LIT ADDR STMT CALL:run <var_0> LIT ADDR ENDBLK ENDFN"
+    let hit = classify("test_two_subtests", canon)
+    t |> equal(hit.name, "dispatch")
 }
 
 

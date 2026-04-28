@@ -65,6 +65,7 @@ modules/.daspkg_backup/
 modules/.daspkg_cache/
 modules/.daspkg.log
 examples/**/modules/
+utils/**/modules/
 
 # Claude Code (local settings + runtime state)
 .claude/
