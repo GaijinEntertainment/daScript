@@ -7,7 +7,7 @@ options gen2
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field) and `some_unknown_func(_)`
 // hits the unresolved function. Those cascades are expected.
-expect 40104:21, 30304:2, 30503:3
+expect 40104:23, 30304:2, 30503:3
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -126,6 +126,16 @@ def main() {
     //     valid in unparenthesized compound query.
     let bad19 <- _sql((db |> select_from(type<Car>) |> _select(_.Price))
                        |> union(db |> select_from(type<Car>) |> _select(_.Price) |> take(5)))
+
+    // 20. `_.Col == none()` — fixit error redirects to is_none(). The
+    //     locked decision (chunk-4 D4) is "explicit-over-magic": the
+    //     compiler refuses to translate the equality and points at the
+    //     correct spelling. See pred_to_sql `==` handler.
+    var nullable_owner = Owner(Id = 0, CarId = 0, Name = "")
+    let bad20 <- _sql(db |> select_from(type<Owner>) |> _where(_.CarId == none(type<int>)))
+
+    // 21. `_.Col != none()` — same fixit; the inverse is `is_some()`.
+    let bad21 <- _sql(db |> select_from(type<Owner>) |> _where(_.CarId != none(type<int>)))
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees

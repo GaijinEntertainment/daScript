@@ -81,7 +81,7 @@ enum private Materializer {
 
 enum private ProjectionShape {
     FullRow             //!< no `_select`: SELECT cols-of(rootT); reads via _::_sql_read_row
-    SingleColumn        //!< `_select(_.Field)`: SELECT one col; reads via sqlite_read
+    SingleColumn        //!< `_select(_.Field)`: SELECT one col; reads via read_via_adapter
     NamedTuple          //!< `_select((Name=_.Name, Price=_.Price))`: SELECT cols; reads via tuple builder
     Aggregate           //!< `_count()` etc.: raw SQL expression in SELECT; scalar reader
     GroupedNamedTuple   //!< `_select` after `_group_by`: tuple of group keys + group-scope aggregates
@@ -667,7 +667,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             q.aggregateExpr = "COUNT(*)"
             // SQLite's COUNT(*) is int64 internally, but daslang's
             // `length(arr)` / `count(arr)` return `int`, so narrow via
-            // `sqlite_read(stmt, 0, type<int>)`. Matches the grouped
+            // `read_via_adapter(stmt, 0, type<int>)`. Matches the grouped
             // form (`_._1 |> length`) which also lands as `int`. Any
             // plausible row count fits.
             q.aggregateType = new TypeDecl(at = at, baseType = Type.tInt)
@@ -1460,7 +1460,7 @@ def private try_translate_group_aggregate(var node : ExpressionPtr; q : SqlQuery
 
     // length(_._1) / count(_._1) → COUNT(*)
     // Result type is `int` to match daslang's `length`/`count` return on
-    // arrays. SQLite COUNT(*) returns int64 internally but sqlite_read
+    // arrays. SQLite COUNT(*) returns int64 internally but read_via_adapter
     // narrows to int via sqlite3_column_int — fine for any plausible row
     // count and matches the user's projection-tuple inferred type.
     if ((fname == "length" || fname == "count") && argc == 1
@@ -1882,12 +1882,25 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) == $e(rhs)).matched) {
+            // ``_.Col == none()`` is a common footgun: the user probably
+            // meant ``_.Col |> is_none()``. ``none()`` returns
+            // ``Option<T>``, comparing it to a column value would auto-bind
+            // a 0-byte placeholder and produce wrong results, so emit a
+            // fixit-style ``macro_error`` pointing at the right spelling.
+            if (is_none_call(lhs) || is_none_call(rhs)) {
+                macro_error(prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
+                return ""
+            }
             return "{pred_to_sql(lhs, q, prog, at)} = {pred_to_sql(rhs, q, prog, at)}"
         }
     }
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) != $e(rhs)).matched) {
+            if (is_none_call(lhs) || is_none_call(rhs)) {
+                macro_error(prog, at, "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
+                return ""
+            }
             return "{pred_to_sql(lhs, q, prog, at)} <> {pred_to_sql(rhs, q, prog, at)}"
         }
     }
@@ -2121,7 +2134,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     }
 
     // Literal / captured var → bind param. Clone the *peeled* expression so
-    // when we re-emit it as a `sqlite_bind` argument the runtime reads the
+    // when we re-emit it as a `sql_bind_to_stmt` argument the runtime reads the
     // captured value cleanly (without re-wrapping into ExprRef2Value).
     // Inside `_having`, route to havingBindExprs so the placeholder index
     // matches the SQL emission order (WHERE → HAVING → LIMIT).
@@ -2132,6 +2145,27 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             q.bindExprs |> push <| clone_expression(node)
         }
         return "?"
+    }
+
+    // Common footgun: equality / inequality against ``none()``. After the
+    // typer rewrites ``a == b`` into ``operator==(a, b)`` we lose the
+    // qmatch-friendly binary shape, so detect the call form here and emit
+    // a fixit pointing at ``is_none()`` / ``is_some()``.
+    if (node is ExprCall) {
+        let c = node as ExprCall
+        let cname = string(c.name)
+        if (cname |> find("eq") >= 0 && length(c.arguments) >= 2) {
+            for (a in c.arguments) {
+                if (is_none_call(a)) {
+                    let positive = cname |> find("not") < 0
+                    macro_error(prog, at,
+                        positive
+                            ? "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder."
+                            : "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
+                    return ""
+                }
+            }
+        }
     }
 
     macro_error(prog, at, "_sql: _where: unsupported expression. Got: {describe(node)}")
@@ -2491,6 +2525,35 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
 }
 
 [macro_function]
+def private is_none_call(node : ExpressionPtr) : bool {
+    //! Detect ``none()`` (or ``none(type<T>)``) so the equality walker can
+    //! emit a fixit error pointing at ``is_none()``. ``none`` lives in
+    //! daslib/option; once the typer reifies the template the call's name
+    //! becomes a mangled form like ``_::`template`0x…`option`none`…``, so
+    //! we substring-match instead of exact-equality.
+    if (node == null) {
+        return false
+    }
+    var peeled = node
+    if (peeled is ExprRef2Value) {
+        peeled = (peeled as ExprRef2Value).subexpr
+        if (peeled == null) {
+            return false
+        }
+    }
+    if (peeled is ExprCall) {
+        let c = peeled as ExprCall
+        let cname = string(c.name)
+        if (cname == "none") {
+            return true
+        }
+        // Reified template form: contains both "option" and "none".
+        return cname |> find("option") >= 0 && cname |> find("none") >= 0
+    }
+    return false
+}
+
+[macro_function]
 def private is_const_or_captured_var(var node : ExpressionPtr) : bool {
     //! Recognize a literal or a captured-var read so the predicate walker can
     //! emit a `?` placeholder + bind. After Mode-2 inner expansion captured
@@ -2505,8 +2568,10 @@ def private is_const_or_captured_var(var node : ExpressionPtr) : bool {
             return false
         }
     }
-    if (node is ExprConstInt || node is ExprConstInt64 || node is ExprConstUInt || node is ExprConstUInt64
-        || node is ExprConstFloat || node is ExprConstDouble || node is ExprConstBool || node is ExprConstString) {
+    if (node is ExprConstInt || node is ExprConstInt8 || node is ExprConstInt16 || node is ExprConstInt64
+        || node is ExprConstUInt || node is ExprConstUInt8 || node is ExprConstUInt16 || node is ExprConstUInt64
+        || node is ExprConstFloat || node is ExprConstDouble || node is ExprConstBool || node is ExprConstString
+        || node is ExprConstEnumeration || node is ExprConstBitfield) {
         return true
     }
     if (node is ExprVar) {
@@ -2756,9 +2821,9 @@ class private SqlTextMacro : AstCallMacro {
 //
 // The row-builder block is determined by q.proj:
 //   - FullRow      → _::_sql_read_row(stmt, type<T>)
-//   - SingleColumn → sqlite_read(stmt, 0, type<FieldType>)
+//   - SingleColumn → read_via_adapter(stmt, 0, type<FieldType>)
 //   - NamedTuple   → tuple row builder for the projected fields
-//   - Aggregate    → sqlite_read(stmt, 0, type<aggregateType>)
+//   - Aggregate    → read_via_adapter(stmt, 0, type<aggregateType>)
 // ============================================================================
 
 [macro_function]
@@ -2782,7 +2847,7 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     if (q.proj == ProjectionShape.Aggregate) {
         let colIdx = 0
         var aggT = clone_type(q.aggregateType)
-        return qmacro(sqlite_read(_sql_stmt, $v(colIdx), type<$t(aggT)>))
+        return qmacro(read_via_adapter(_sql_stmt, $v(colIdx), type<$t(aggT)>))
     }
     if (q.proj == ProjectionShape.SingleColumn) {
         let colIdx = 0
@@ -2798,10 +2863,10 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
             macro_error(prog, at, "_sql: cannot resolve type of projected column '{q.selectCols[0]}'")
             return null
         }
-        return qmacro(sqlite_read(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
+        return qmacro(read_via_adapter(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
     }
     if (q.proj == ProjectionShape.NamedTuple) {
-        // Build  (Name = sqlite_read(stmt, 0, type<...>), Price = sqlite_read(stmt, 1, type<...>))
+        // Build  (Name = read_via_adapter(stmt, 0, type<...>), Price = read_via_adapter(stmt, 1, type<...>))
         // recordNames live on the tuple TypeDecl's argNames — set those via
         // recordType so the typer reads them back into the ExprMakeTuple.
         let n = length(q.selectCols)
@@ -2824,7 +2889,7 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
                 macro_error(prog, at, "_sql: cannot resolve type of projected column '{q.selectCols[i]}'")
                 return null
             }
-            var readExpr = qmacro(sqlite_read(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
+            var readExpr = qmacro(read_via_adapter(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
             emplace(mkTup.values, readExpr)
             tupT.argTypes |> emplace_new(clone_type(fieldType))
             tupT.argNames[i] := q.projRecordNames[i]
@@ -2843,7 +2908,7 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
         for (i in range(n)) {
             let colIdx = i
             var fieldType = clone_type(q.groupedSelectTypes[i])
-            var readExpr = qmacro(sqlite_read(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
+            var readExpr = qmacro(read_via_adapter(_sql_stmt, $v(colIdx), type<$t(fieldType)>))
             emplace(mkTup.values, readExpr)
             tupT.argTypes |> emplace_new(clone_type(fieldType))
             tupT.argNames[i] := q.projRecordNames[i]
@@ -2945,14 +3010,14 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     }
     let sql = build_sql_string(q)
 
-    // Build bind statements: sqlite_bind(stmt, i+1, $e(boundExpr))
+    // Build bind statements: sql_bind_to_stmt(stmt, i+1, $e(boundExpr))
     var bind_stmts : array<ExpressionPtr>
     bind_stmts |> reserve(length(q.bindExprs))
     for (i in range(length(q.bindExprs))) {
         let bindIdx = i + 1
         var be = q.bindExprs[i]
         bind_stmts |> push <| qmacro_expr(${
-            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+            sql_bind_to_stmt(_sql_stmt, $v(bindIdx), $e(be));
         })
     }
 
@@ -3056,8 +3121,8 @@ class private TrySqlMacro : AstCallMacro {
 //   * Captured locals and literals classify as binds — pred_to_sql emits a
 //     `?` placeholder and the original ExprVar / ExprConst is pushed to the
 //     bind list. At the macro's output, the bind expression is passed verbatim
-//     to ``sqlite_bind(stmt, idx, expr)``; daslang's typer resolves the
-//     captured-var's type and overload-dispatches `sqlite_bind`.
+//     to ``sql_bind_to_stmt(stmt, idx, expr)``; daslang's typer resolves the
+//     captured-var's type and overload-dispatches `sql_bind_to_stmt`.
 //
 // Bind ordering for SET-then-WHERE SQL: SET binds come first, then WHERE
 // binds (matches placeholder order in `UPDATE ... SET col1=?, ... WHERE ...`).
@@ -3297,7 +3362,7 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
         let bindIdx = i + 1
         var be = allBinds[i]
         bindStmts |> push <| qmacro_expr(${
-            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+            sql_bind_to_stmt(_sql_stmt, $v(bindIdx), $e(be));
         })
     }
     return emit_dml_call(dbE, sql, bindStmts, isTry, isReturning, rootT, call.at)
@@ -3335,7 +3400,7 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
         let bindIdx = i + 1
         var be = q.bindExprs[i]
         bindStmts |> push <| qmacro_expr(${
-            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+            sql_bind_to_stmt(_sql_stmt, $v(bindIdx), $e(be));
         })
     }
     return emit_dml_call(dbE, sql, bindStmts, isTry, isReturning, rootT, call.at)
@@ -3345,14 +3410,19 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
 // Outer macros — `canVisitArgument = false` for everything except db so the
 // WHERE / SET arguments stay raw (with `_` unbound). pred_to_sql operates on
 // the AST shape directly; bind expressions (captured locals, literals) are
-// passed through to ``sqlite_bind`` verbatim and resolve at the macro's
+// passed through to ``sql_bind_to_stmt`` verbatim and resolve at the macro's
 // output type-inference pass.
 // ----------------------------------------------------------------------------
 
 [macro_function]
-def private validate_outer_update_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
-    if (length(call.arguments) != 4) {
-        macro_error(prog, call.at, "{call.name}: expected (db, type<T>, where_expr, set_expr) — got {length(call.arguments)} args")
+def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&;
+                                expected_arity : int; sig_text : string) : bool {
+    //! Shared validator for outer call_macros (``_sql_update`` / ``_sql_delete``
+    //! and their ``_sql_try_*_returning`` variants). Each caller supplies the
+    //! expected arg count (3 for delete, 4 for update) and a human-readable
+    //! signature like ``"(db, type<T>, where_expr)"``.
+    if (length(call.arguments) != expected_arity) {
+        macro_error(prog, call.at, "{call.name}: expected {sig_text} — got {length(call.arguments)} args")
         return false
     }
     var typeE = call.arguments[1]
@@ -3363,33 +3433,38 @@ def private validate_outer_update_args(prog : ProgramPtr; var call : ExprCallMac
     return true
 }
 
-[macro_function]
-def private validate_outer_delete_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
-    if (length(call.arguments) != 3) {
-        macro_error(prog, call.at, "{call.name}: expected (db, type<T>, where_expr) — got {length(call.arguments)} args")
-        return false
+class private OuterArgZeroMacro : AstCallMacro {
+    //! Shared parent for the 8 `_sql_update*` / `_sql_delete*` outer macros.
+    //! Only argument 0 (``db``) is visited by the typer; the remaining args
+    //! (``type<T>``, ``where_expr``, optional ``set_expr``) stay raw so
+    //! ``pred_to_sql`` and the named-tuple walker can read the unresolved AST
+    //! shape with ``_`` unbound. ``[call_macro(name=...)]`` does not inherit,
+    //! so each concrete subclass keeps its own annotation.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
     }
-    var typeE = call.arguments[1]
-    if (!qmatch(typeE, type<$t(rootT)>).matched) {
-        macro_error(prog, call.at, "{call.name}: second argument must be a `type<T>` literal")
-        return false
+}
+
+class private OuterArgTwoMacro : AstCallMacro {
+    //! Shared parent for the 4 `_sql_upsert*` outer macros. Args 0 (``db``)
+    //! and 1 (``row``) are visited by the typer (the row needs to be a
+    //! resolved struct value); args 2 (``on_conflict``) and 3 (``do_update``)
+    //! stay raw for the analyzer to walk.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex < 2
     }
-    return true
 }
 
 [call_macro(name="_sql_update")]
-class private SqlUpdateMacro : AstCallMacro {
+class private SqlUpdateMacro : OuterArgZeroMacro {
     //! `_sql_update(db, type<T>, where_expr, set_expr)` — predicate-based UPDATE.
     //! ``where_expr`` is an expression in the row variable `_` (e.g.
     //! ``_.LastSeen < cutoff``). ``set_expr`` is a named-tuple literal
     //! ``(Col1=expr1, Col2=expr2, ...)`` whose RHS may reference ``_.Col``
     //! and captured locals. Returns ``int`` rows-affected. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_update_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
             return null
         }
         return emit_update_body(prog, call, rootT, false, false)
@@ -3397,14 +3472,11 @@ class private SqlUpdateMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_update")]
-class private SqlTryUpdateMacro : AstCallMacro {
+class private SqlTryUpdateMacro : OuterArgZeroMacro {
     //! Non-panic sibling of `_sql_update`. Returns ``Result<int, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_update_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
             return null
         }
         return emit_update_body(prog, call, rootT, true, false)
@@ -3412,15 +3484,12 @@ class private SqlTryUpdateMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_update_returning")]
-class private SqlUpdateReturningMacro : AstCallMacro {
+class private SqlUpdateReturningMacro : OuterArgZeroMacro {
     //! `_sql_update(...)` with a trailing ``RETURNING *`` clause. Returns
     //! ``array<T>`` of post-update rows. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_update_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
             return null
         }
         return emit_update_body(prog, call, rootT, false, true)
@@ -3428,15 +3497,12 @@ class private SqlUpdateReturningMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_update_returning")]
-class private SqlTryUpdateReturningMacro : AstCallMacro {
+class private SqlTryUpdateReturningMacro : OuterArgZeroMacro {
     //! Non-panic sibling of `_sql_update_returning`. Returns
     //! ``Result<array<T>, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_update_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 4, "(db, type<T>, where_expr, set_expr)")) {
             return null
         }
         return emit_update_body(prog, call, rootT, true, true)
@@ -3444,15 +3510,12 @@ class private SqlTryUpdateReturningMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_delete")]
-class private SqlDeleteMacro : AstCallMacro {
+class private SqlDeleteMacro : OuterArgZeroMacro {
     //! `_sql_delete(db, type<T>, where_expr)` — predicate-based DELETE.
     //! Returns ``int`` rows-affected. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_delete_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
             return null
         }
         return emit_delete_body(prog, call, rootT, false, false)
@@ -3460,14 +3523,11 @@ class private SqlDeleteMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_delete")]
-class private SqlTryDeleteMacro : AstCallMacro {
+class private SqlTryDeleteMacro : OuterArgZeroMacro {
     //! Non-panic sibling of `_sql_delete`. Returns ``Result<int, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_delete_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
             return null
         }
         return emit_delete_body(prog, call, rootT, true, false)
@@ -3475,15 +3535,12 @@ class private SqlTryDeleteMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_delete_returning")]
-class private SqlDeleteReturningMacro : AstCallMacro {
+class private SqlDeleteReturningMacro : OuterArgZeroMacro {
     //! `_sql_delete(...)` with a trailing ``RETURNING *`` clause. Returns
     //! ``array<T>`` of just-deleted rows. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_delete_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
             return null
         }
         return emit_delete_body(prog, call, rootT, false, true)
@@ -3491,15 +3548,12 @@ class private SqlDeleteReturningMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_delete_returning")]
-class private SqlTryDeleteReturningMacro : AstCallMacro {
+class private SqlTryDeleteReturningMacro : OuterArgZeroMacro {
     //! Non-panic sibling of `_sql_delete_returning`. Returns
     //! ``Result<array<T>, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex == 0
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
-        if (!validate_outer_delete_args(prog, call, rootT)) {
+        if (!validate_outer_args(prog, call, rootT, 3, "(db, type<T>, where_expr)")) {
             return null
         }
         return emit_delete_body(prog, call, rootT, true, true)
@@ -3516,10 +3570,11 @@ class private SqlTryDeleteReturningMacro : AstCallMacro {
 //   - do_update : named-tuple literal `(Col=expr, ...)` referencing `_` (existing row)
 //                 and/or `_excluded` (proposed row — SQLite's built-in sentinel)
 //
-// Like `_sql_update`, args 1..3 stay raw (canVisitArgument=true only for arg 0,
-// the db). The do_update walker runs `pred_to_sql` with `q.upsertMode = true` so
-// `_excluded.Col` resolves to SQLite's `excluded.col`; `_.Col` resolves to the
-// unqualified column reference (existing-row in DO UPDATE SET context).
+// Args 2 and 3 stay raw (canVisitArgument visits only args 0 and 1 — the db
+// and the row, since the row needs to be a typed struct value). The do_update
+// walker runs `pred_to_sql` with `q.upsertMode = true` so `_excluded.Col`
+// resolves to SQLite's `excluded.col`; `_.Col` resolves to the unqualified
+// column reference (existing-row in DO UPDATE SET context).
 // ============================================================================
 
 [macro_function]
@@ -3831,7 +3886,7 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
         let bindIdx = nRowBinds + i + 1
         var be = setBindExprs[i]
         bindStmts |> push <| qmacro_expr(${
-            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+            sql_bind_to_stmt(_sql_stmt, $v(bindIdx), $e(be));
         })
     }
 
@@ -3839,12 +3894,9 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
 }
 
 [call_macro(name="_sql_upsert")]
-class private SqlUpsertMacro : AstCallMacro {
+class private SqlUpsertMacro : OuterArgTwoMacro {
     //! `_sql_upsert(db, row, on_conflict, do_update)` — INSERT...ON CONFLICT
     //! DO UPDATE. Returns ``int`` rows-affected. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex < 2
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
         if (!validate_outer_upsert_args(prog, call, rootT)) {
@@ -3855,11 +3907,8 @@ class private SqlUpsertMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_upsert")]
-class private SqlTryUpsertMacro : AstCallMacro {
+class private SqlTryUpsertMacro : OuterArgTwoMacro {
     //! Non-panic sibling of `_sql_upsert`. Returns ``Result<int, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex < 2
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
         if (!validate_outer_upsert_args(prog, call, rootT)) {
@@ -3870,12 +3919,9 @@ class private SqlTryUpsertMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_upsert_returning")]
-class private SqlUpsertReturningMacro : AstCallMacro {
+class private SqlUpsertReturningMacro : OuterArgTwoMacro {
     //! `_sql_upsert(...)` with a trailing ``RETURNING *`` clause. Returns
     //! ``array<T>`` of post-merge rows. Panics on SQL error.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex < 2
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
         if (!validate_outer_upsert_args(prog, call, rootT)) {
@@ -3886,12 +3932,9 @@ class private SqlUpsertReturningMacro : AstCallMacro {
 }
 
 [call_macro(name="_sql_try_upsert_returning")]
-class private SqlTryUpsertReturningMacro : AstCallMacro {
+class private SqlTryUpsertReturningMacro : OuterArgTwoMacro {
     //! Non-panic sibling of `_sql_upsert_returning`. Returns
     //! ``Result<array<T>, string>``.
-    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
-        return argIndex < 2
-    }
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         var rootT : TypeDeclPtr
         if (!validate_outer_upsert_args(prog, call, rootT)) {

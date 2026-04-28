@@ -30,7 +30,7 @@ def private fixture(db : SqlRunner) {
 // `select_from(db, type<T>) : array<T>` is a regular runtime function. It
 // prepares `SELECT col1, col2, ... FROM Table`, steps the cursor, and
 // materializes every row via the chunk-1 `[sql_table]`-emitted
-// `_sql_read_row` helper + `sqlite_read` dispatch rail. Anything chained on
+// `_sql_read_row` helper + `read_via_adapter` dispatch rail. Anything chained on
 // top in compat mode is plain daslib/linq running client-side over the
 // already-materialized array — no SQL push-down. `_sql` is the optimization
 // path; `select_from` standalone is the always-works baseline.

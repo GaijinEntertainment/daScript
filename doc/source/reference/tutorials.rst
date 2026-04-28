@@ -314,6 +314,8 @@ Run any tutorial from the project root::
    tutorials/sql_23_foreign_keys.rst
    tutorials/sql_24_indexes.rst
    tutorials/sql_25_defaults_computed.rst
+   tutorials/sql_26_custom_types.rst
+   tutorials/sql_27_blob.rst
 
 .. _tutorials_dasaudio:
 
