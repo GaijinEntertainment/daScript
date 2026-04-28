@@ -193,7 +193,7 @@ def document_module_fio(root : string) {
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name|extension|stem|replace_extension|path_join|normalize|is_absolute|relative|relative_result|parent)$%%),
         group_by_regex("Directory manipulation", mod, %regex~(dir|dir_rec|mkdir|mkdir_rec|mkdir_result|rmdir|rmdir_rec|rmdir_rec_result|rmdir_result|chdir|getcwd)$%%),
         group_by_regex("Filesystem queries", mod, %regex~(temp_directory|temp_directory_result|create_temp_file|create_temp_file_result|create_temp_directory|create_temp_directory_result|disk_space)$%%),
-        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_timed_out|get_env_variable|sanitize_command_line|has_env_variable)$%%),
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|system|popen|popen_binary|popen_timeout|popen_argv|popen_timed_out|get_env_variable|sanitize_command_line|has_env_variable)$%%),
         group_by_regex("Dynamic modules", mod, %regex~(register_dynamic_module|register_native_path)$%%)
     )
     documents("File input output library", mod, "fio.rst", groups)
