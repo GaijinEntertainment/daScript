@@ -15,6 +15,9 @@ require daslib/sql public
 require daslib/ast_boost
 require daslib/templates
 require daslib/templates_boost
+require daslib/json public          // [sql_table] @sql_json adapter codegen calls JV / read_json / write_json
+require daslib/json_boost public    // [sql_table] @sql_json adapter codegen calls from_JV
+require daslib/archive public       // [sql_table] @sql_blob adapter codegen calls mem_archive_save / mem_archive_load
 
 def sqlite3_column_text_(stmt : sqlite3_stmt?; col : int) : string {
     //! Returns the text value of a column in the current row of a result set of a SELECT statement.
@@ -598,6 +601,71 @@ def sql_storage_type_for(t : type<$Option<auto(TT)>>) : string {
     return sql_storage_type_for(type<TT>)
 }
 
+// --- column_info: same compile-time walk, abstract-typed view ---
+//
+// Mirror of the DDL string-witness machinery, returning the abstract
+// `SqlType` enum from `daslib/sql` instead of the SQLite spelling. The
+// per-table `_sql_column_info` helper synthesized by `[sql_table]` calls
+// `sql_storage_enum_for(type<F>)` per non-`@sql_json`/`@sql_blob` field;
+// `@sql_json` and `@sql_blob` fields short-circuit to `Text` and `Blob`
+// respectively (mirrors the DDL bypass at `make_create_table_sql_fn`).
+
+[unused_argument(witness)]
+def sql_storage_enum_witness(witness : int64) : SqlType {
+    return SqlType.Integer
+}
+
+[unused_argument(witness)]
+def sql_storage_enum_witness(witness : double) : SqlType {
+    return SqlType.Real
+}
+
+[unused_argument(witness)]
+def sql_storage_enum_witness(witness : string) : SqlType {
+    return SqlType.Text
+}
+
+[unused_argument(witness)]
+def sql_storage_enum_witness(witness : array<uint8>) : SqlType {
+    return SqlType.Blob
+}
+
+[unused_argument(witness)]
+def sql_storage_enum_witness(witness : auto(SS)) : SqlType {
+    concept_assert(false, "sql_bind must return one of int64 / double / string / array<uint8>")
+    return SqlType.Null
+}
+
+[unused_argument(t)]
+def sql_storage_enum_for(t : type<auto(TT)>) : SqlType {
+    return sql_storage_enum_witness(default<typedecl(_::sql_bind(default<TT>))>)
+}
+
+[unused_argument(t)]
+def sql_storage_enum_for(t : type<$Option<auto(TT)>>) : SqlType {
+    return sql_storage_enum_for(type<TT>)
+}
+
+def sqlite_sql_type(t : SqlType) : string {
+    //! Render an abstract ``SqlType`` to its SQLite-dialect spelling.
+    //! Other providers ship their own helper (`postgres_sql_type`,
+    //! `mysql_sql_type`, …) so the same `ColumnInfo` round-trips across
+    //! backends without ambiguity.
+    if (t == SqlType.Integer) {
+        return "INTEGER"
+    }
+    if (t == SqlType.Real) {
+        return "REAL"
+    }
+    if (t == SqlType.Text) {
+        return "TEXT"
+    }
+    if (t == SqlType.Blob) {
+        return "BLOB"
+    }
+    return "NULL"
+}
+
 // ============================================================================
 // query_scalar — read column 0 of the first row as ``TT``
 //
@@ -695,46 +763,55 @@ def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<
 // Each one parameterizes only on (a) the row/bind blocks and (b) the
 // user-visible error prefix. Adding new wrappers should reuse one of
 // these instead of inlining a fifth prepare/bind loop.
+//
+// All four executors share an identical 6-line prologue (prepare +
+// error-on-failure + bind) and a finalize-on-every-exit epilogue.
+// `try_with_stmt` owns that boilerplate; each executor only has to
+// describe its step-result strategy in `body_blk`.
+//
+// Error format is normalized to `{err_prefix}: <what>` across all
+// failure paths. No consumers parse these strings.
 
-def private try_one_row(db : SqlRunner; sql : string;
-                        bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
-                        row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
-                        err_prefix : string) : Result<TT -const -#, string> {
-    // Error format is normalized to `{err_prefix}: <what>` across all
-    // three failure paths. The pre-refactor inlined messages were
-    // inconsistent (`query_one: step failed` had a colon,
-    // `_sql step failed` did not — likewise for `prepare failed`); the
-    // unified shape replaces both. No consumers parse these strings.
+def private try_with_stmt(db : SqlRunner; sql : string; err_prefix : string;
+                          bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                          body_blk : block<(stmt : sqlite3_stmt?) : $Result<auto(R); string> >) : Result<R, string> {
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
+        return err(msg, type<R>)
     }
     invoke(bind_blk, stmt)
-    let src = sqlite3_step(stmt)
-    if (src == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return err("{err_prefix}: expected one row, got 0 rows", type<TT -const -#>)
-    }
-    if (src != SQLITE_ROW) {
-        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
-    }
-    // Capture the function-call result. Copyable rows initialize via ``=``;
-    // non-copyable (e.g. user types containing ``array<uint8>``) route
-    // through ``clone_to_move`` so the rvalue is movable.
-    static_if (typeinfo can_copy(default<TT -const -#>)) {
-        var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-        sqlite3_finalize(stmt)
-        return move_ok(row, type<string>)
-    } else {
-        var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
-        sqlite3_finalize(stmt)
-        return move_ok(row, type<string>)
-    }
+    var r <- invoke(body_blk, stmt)
+    sqlite3_finalize(stmt)
+    return <- r
+}
+
+def private try_one_row(db : SqlRunner; sql : string;
+                        bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                        row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
+                        err_prefix : string) : Result<TT -const -#, string> {
+    return <- try_with_stmt(db, sql, err_prefix, bind_blk,
+        $(stmt : sqlite3_stmt?) : Result<TT -const -#, string> {
+            let src = sqlite3_step(stmt)
+            if (src == SQLITE_DONE) {
+                return err("{err_prefix}: expected one row, got 0 rows", type<TT -const -#>)
+            }
+            if (src != SQLITE_ROW) {
+                return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<TT -const -#>)
+            }
+            // Copyable rows initialize via ``=``; non-copyable (e.g. user types
+            // containing ``array<uint8>``) route through ``clone_to_move`` so
+            // the rvalue is movable.
+            static_if (typeinfo can_copy(default<TT -const -#>)) {
+                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+                return move_ok(row, type<string>)
+            } else {
+                var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
+                return move_ok(row, type<string>)
+            }
+        })
 }
 
 def private try_one_row_opt(db : SqlRunner; sql : string;
@@ -744,89 +821,62 @@ def private try_one_row_opt(db : SqlRunner; sql : string;
     //! Like `try_one_row`, but returns `Ok(none)` on zero rows instead of
     //! `Err`. Use when "no row matched" is a normal outcome and only
     //! prepare/step failures are real errors.
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<Option<TT -const -#>>)
-    }
-    invoke(bind_blk, stmt)
-    let src = sqlite3_step(stmt)
-    if (src == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return ok(none(type<TT -const -#>), type<string>)
-    }
-    if (src != SQLITE_ROW) {
-        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<Option<TT -const -#>>)
-    }
-    static_if (typeinfo can_copy(default<TT -const -#>)) {
-        var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-        sqlite3_finalize(stmt)
-        return move_ok(move_some(row), type<string>)
-    } else {
-        var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
-        sqlite3_finalize(stmt)
-        return move_ok(move_some(row), type<string>)
-    }
+    return <- try_with_stmt(db, sql, err_prefix, bind_blk,
+        $(stmt : sqlite3_stmt?) : Result<Option<TT -const -#>, string> {
+            let src = sqlite3_step(stmt)
+            if (src == SQLITE_DONE) {
+                return ok(none(type<TT -const -#>), type<string>)
+            }
+            if (src != SQLITE_ROW) {
+                return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<Option<TT -const -#>>)
+            }
+            static_if (typeinfo can_copy(default<TT -const -#>)) {
+                var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+                return move_ok(move_some(row), type<string>)
+            } else {
+                var row : TT -const -# <- clone_to_move(invoke(row_blk, stmt))
+                return move_ok(move_some(row), type<string>)
+            }
+        })
 }
 
 def private try_step_dml(db : SqlRunner; sql : string;
                          bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                          err_prefix : string) : Result<int, string> {
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<int>)
-    }
-    invoke(bind_blk, stmt)
-    let src = sqlite3_step(stmt)
-    if (src != SQLITE_DONE) {
-        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<int>)
-    }
-    let n = sqlite3_changes(db.sqlite_handle)
-    sqlite3_finalize(stmt)
-    return ok(n, type<string>)
+    return <- try_with_stmt(db, sql, err_prefix, bind_blk,
+        $(stmt : sqlite3_stmt?) : Result<int, string> {
+            let src = sqlite3_step(stmt)
+            if (src != SQLITE_DONE) {
+                return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<int>)
+            }
+            return ok(sqlite3_changes(db.sqlite_handle), type<string>)
+        })
 }
 
 def private try_collect_rows(db : SqlRunner; sql : string;
                              bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                              row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
                              err_prefix : string) : Result<array<TT -const -#>, string> {
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    invoke(bind_blk, stmt)
-    var inscope result : array<TT -const -#>
-    var rc = sqlite3_step(stmt)
-    while (rc == SQLITE_ROW) {
-        // Copyable rows ``push`` directly; non-copyable rows (e.g.
-        // structs containing ``array<uint8>``) ``emplace`` from the
-        // invoke rvalue so we don't deep-clone on every row.
-        static_if (typeinfo can_copy(default<TT -const -#>)) {
-            result |> push(invoke(row_blk, stmt))
-        } else {
-            result |> emplace(invoke(row_blk, stmt))
-        }
-        rc = sqlite3_step(stmt)
-    }
-    if (rc != SQLITE_DONE) {
-        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    sqlite3_finalize(stmt)
-    return move_ok(result, type<string>)
+    return <- try_with_stmt(db, sql, err_prefix, bind_blk,
+        $(stmt : sqlite3_stmt?) : Result<array<TT -const -#>, string> {
+            var inscope result : array<TT -const -#>
+            var rc = sqlite3_step(stmt)
+            while (rc == SQLITE_ROW) {
+                // Copyable rows ``push`` directly; non-copyable rows (e.g.
+                // structs containing ``array<uint8>``) ``emplace`` from the
+                // invoke rvalue so we don't deep-clone on every row.
+                static_if (typeinfo can_copy(default<TT -const -#>)) {
+                    result |> push(invoke(row_blk, stmt))
+                } else {
+                    result |> emplace(invoke(row_blk, stmt))
+                }
+                rc = sqlite3_step(stmt)
+            }
+            if (rc != SQLITE_DONE) {
+                return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<array<TT -const -#>>)
+            }
+            return move_ok(result, type<string>)
+        })
 }
 
 [unused_argument(t)]
@@ -854,31 +904,18 @@ def private query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
 
 def private query_one_opt_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
                                bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Option<TT -const -#> {
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        sqlite3_finalize(stmt)
-        panic("query_one_opt prepare failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    var r <- try_one_row_opt(db, sql, bind_blk,
+        $(stmt : sqlite3_stmt?) {
+            static_if (typeinfo can_copy(default<TT -const -#>)) {
+                return _::_sql_read_row(stmt, type<TT -const -#>)
+            } else {
+                return <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
+            }
+        }, "query_one_opt")
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
     }
-    invoke(bind_blk, stmt)
-    let src = sqlite3_step(stmt)
-    if (src == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return none(type<TT -const -#>)
-    }
-    if (src != SQLITE_ROW) {
-        sqlite3_finalize(stmt)
-        panic("query_one_opt step failed: {sqlite3_errmsg(db.sqlite_handle)}")
-    }
-    static_if (typeinfo can_copy(default<TT -const -#>)) {
-        var row : TT -const -# = _::_sql_read_row(stmt, type<TT -const -#>) // nolint:LINT003
-        sqlite3_finalize(stmt)
-        return move_some(row)
-    } else {
-        var row : TT -const -# <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
-        sqlite3_finalize(stmt)
-        return move_some(row)
-    }
+    return <- r._value
 }
 
 // ---- try_query_one — Result<TT, string>; 0..3 positional args ----
@@ -971,6 +1008,112 @@ def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(
 }
 
 // ============================================================================
+// query / try_query — typed multi-row raw-SQL read.
+//
+// The fourth member of the `query_*` family. Unlike `select_from(type<T>)`
+// (which builds a `SELECT cols-of(T) FROM <table>` and runs it), `query` takes
+// the user's own SQL — useful for catalog reads (`PRAGMA table_info`,
+// `sqlite_master`), `SELECT … JOIN` shapes outside the `_sql` macro, and any
+// raw-SQL projection the LINQ chain can't (or shouldn't) translate.
+//
+// Row-shape constraint: T must be a `[sql_table]` struct so the macro-emitted
+// `_sql_read_row(stmt, type<T>) : T` is in scope. The struct does not have to
+// correspond to a real table — `[sql_table]` on a read-only row shape is the
+// idiomatic way to opt in to the typed materializer without committing to a
+// CREATE TABLE.
+//
+// Column order is positional: SELECT projection order must match the struct's
+// field declaration order. For name-driven mapping, drop to `try_run_select` /
+// `run_select` with an explicit row block.
+// ============================================================================
+
+[unused_argument(t)]
+def private try_query_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                           bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<array<TT -const -#>, string> {
+    return <- try_collect_rows(db, sql, bind_blk,
+                               $(stmt : sqlite3_stmt?) {
+                                   static_if (typeinfo can_copy(default<TT -const -#>)) {
+                                       return _::_sql_read_row(stmt, type<TT -const -#>)
+                                   } else {
+                                       return <- clone_to_move(_::_sql_read_row(stmt, type<TT -const -#>))
+                                   }
+                               },
+                               "query")
+}
+
+def private query_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
+                       bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : array<TT -const -#> {
+    var r <- try_query_impl(db, sql, type<TT -const -#>, bind_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
+// ---- try_query — Result<array<TT>, string>; 0..3 positional args ----
+
+def try_query(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<array<TT -const -#>, string> {
+    //! Zero-arg form. Errors only on prepare/step failure; an empty result set
+    //! is `Ok([])`.
+    return <- try_query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
+}
+
+def try_query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : Result<array<TT -const -#>, string> {
+    //! 1-arg positional bind.
+    return <- try_query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+    })
+}
+
+def try_query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : Result<array<TT -const -#>, string> {
+    //! 2-arg positional bind.
+    return <- try_query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+    })
+}
+
+def try_query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : Result<array<TT -const -#>, string> {
+    //! 3-arg positional bind.
+    return <- try_query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
+    })
+}
+
+// ---- query (strict) — array<TT>; 0..3 positional args; panics on err ----
+
+[unused_argument(t)]
+def query(db : SqlRunner; sql : string; t : type<auto(TT)>) : array<TT -const -#> {
+    return <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {})
+}
+
+[unused_argument(t)]
+def query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0)) : array<TT -const -#> {
+    return <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+    })
+}
+
+[unused_argument(t)]
+def query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1)) : array<TT -const -#> {
+    return <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+    })
+}
+
+[unused_argument(t)]
+def query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg1 : auto(A1); arg2 : auto(A2)) : array<TT -const -#> {
+    return <- query_impl(db, sql, type<TT -const -#>, $(var stmt : sqlite3_stmt?) {
+        sql_bind_to_stmt(stmt, 1, arg0)
+        sql_bind_to_stmt(stmt, 2, arg1)
+        sql_bind_to_stmt(stmt, 3, arg2)
+    })
+}
+
+// ============================================================================
 // User-facing CRUD over [sql_table] structs
 //
 // Each generic forwards to the per-struct helpers emitted by the macro.
@@ -1020,6 +1163,16 @@ def drop_table_if_exists(db : SqlRunner; t : auto(TT)) : void {
     if (err |> is_some) {
         panic(err |> unwrap)
     }
+}
+
+[unused_argument(t), template(t)]
+def column_info(t : type<auto(TT)>) : array<ColumnInfo> {
+    //! Returns the column metadata for a `[sql_table]`-tagged struct ``T``.
+    //! Driven by the per-struct ``_sql_column_info`` helper that the macro
+    //! emits alongside DDL — same compile-time field walk, viewed through
+    //! the abstract `ColumnInfo` lens. Render the dialect-specific column
+    //! type via `sqlite_sql_type(c.data_type)`.
+    return <- _::_sql_column_info(default<TT>)
 }
 
 def try_insert(db : SqlRunner; row : auto(TT)) : Result<int64, string> {
@@ -1770,6 +1923,8 @@ struct private FieldInfo {
     is_unique : bool
     is_computed : bool
     is_stored : bool                //!< false → VIRTUAL (SQLite default), true → STORED
+    is_json : bool                  //!< @sql_json — TEXT-backed via daslib/json round-trip; `_sql` walker descends as JSON path
+    is_blob : bool                  //!< @sql_blob — BLOB-backed via daslib/archive; opaque to `_sql`
     computed_sql : string           //!< body of `GENERATED ALWAYS AS (...)`; non-empty iff is_computed
     default_clause : string         //!< pre-built ` DEFAULT <expr>` or `""` when no default applies
     references_clause : string      //!< pre-built ` REFERENCES "T"("Pk") ON DELETE X ON UPDATE Y` or `""`
@@ -1917,18 +2072,30 @@ class SqlIndexMacro : AstStructureAnnotation {
         let is_unique = find_annotation(args, "unique", false)
         let idx_name_arg = find_annotation(args, "name", "")
 
-        // Cross-check every named column against the struct's fields.
+        // Cross-check every named column against the struct's fields, and
+        // build the daslang→SQL column-name mapping in the same pass. The
+        // user writes `fields="col_type"` (the DASLANG field name); the
+        // emitted DDL uses the @sql_column-renamed SQL identifier. Annotations
+        // stay in daslang-space; renames are transparent at emission time.
+        var sql_cols : array<string>
+        sql_cols |> reserve(length(cols))
         for (col in cols) {
             var has_field = false
+            var resolved = col
             for (field in st.fields) {
                 if (field.name == col) {
                     has_field = true
+                    let ca = find_arg(field.annotation, "sql_column")
+                    if (ca is tString) {
+                        resolved = string(ca as tString)
+                    }
                 }
             }
             if (!has_field) {
                 errors := "[sql_index]: field '{col}' is not a column of struct '{st.name}'."
                 return false
             }
+            sql_cols |> push(resolved)
         }
 
         // Locate the per-struct `_sql_create_indexes_sql` placeholder emitted
@@ -1950,11 +2117,13 @@ class SqlIndexMacro : AstStructureAnnotation {
             return false
         }
 
-        // Build the CREATE INDEX statement for THIS annotation.
+        // Build the CREATE INDEX statement for THIS annotation. Auto-name uses
+        // SQL column names so two structs with the same daslang field name
+        // mapped to different SQL columns get distinct index names.
         let auto_name = build_string() $(var w) {
             w |> write("idx_")
             w |> write(table_name)
-            for (col in cols) {
+            for (col in sql_cols) {
                 w |> write("_")
                 w |> write(col)
             }
@@ -1963,12 +2132,12 @@ class SqlIndexMacro : AstStructureAnnotation {
         let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
         let this_stmt = build_string() $(var w) {
             w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
-            for (j in range(length(cols))) {
+            for (j in range(length(sql_cols))) {
                 if (j > 0) {
                     w |> write(", ")
                 }
                 w |> write("\"")
-                w |> write(cols[j])
+                w |> write(sql_cols[j])
                 w |> write("\"")
             }
             w |> write(")")
@@ -2014,7 +2183,15 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
     }
     for (pf in found_st.fields) {
         if (find_annotation(pf.annotation, "sql_primary_key", false)) {
-            return (tab, string(pf.name), true)
+            // The PK column may have been renamed via @sql_column on the
+            // parent struct's PK field — read that here so the FK references
+            // the SQL identifier, not the daslang field name.
+            var pk_col = string(pf.name)
+            let pk_anno = find_arg(pf.annotation, "sql_column")
+            if (pk_anno is tString) {
+                pk_col = string(pk_anno as tString)
+            }
+            return (tab, pk_col, true)
         }
     }
     return (tab, "", false)
@@ -2026,6 +2203,7 @@ class SqlTableMacro : AstStructureAnnotation {
         let table_name = find_annotation(args, "name", string(st.name))
 
         var fields : array<FieldInfo>
+        fields |> reserve(length(st.fields))
         for (field in st.fields) {
             let fname = string(field.name)
             let is_pk = find_annotation(field.annotation, "sql_primary_key", false)
@@ -2037,6 +2215,13 @@ class SqlTableMacro : AstStructureAnnotation {
             let is_computed = !empty(computed_sql)
             let is_stored = find_annotation(field.annotation, "sql_stored", false)
 
+            // @sql_json / @sql_blob — opt in to non-scalar column storage. `[sql_table]`
+            // generates a `sql_bind` / `sql_extract` adapter pair for the field's
+            // declared type; `_sql` walker descends into @sql_json columns as JSON
+            // paths and rejects descent into @sql_blob columns.
+            let is_json = find_annotation(field.annotation, "sql_json", false)
+            let is_blob = find_annotation(field.annotation, "sql_blob", false)
+
             // Defaults — native daslang field init OR @sql_default_fn (mutually exclusive)
             let sql_default_fn = find_annotation(field.annotation, "sql_default_fn", "")
 
@@ -2046,6 +2231,28 @@ class SqlTableMacro : AstStructureAnnotation {
             let on_update = find_annotation(field.annotation, "sql_on_update", "no_action")
             let has_on_delete_attr = !empty(find_annotation(field.annotation, "sql_on_delete", ""))
             let has_on_update_attr = !empty(find_annotation(field.annotation, "sql_on_update", ""))
+
+            // @sql_column = "<sql_name>" — rename the field's SQL column so a
+            // daslang struct field can shadow a SQL keyword (`type`, `for`, …)
+            // or use a different on-disk column name. We DON'T use
+            // find_annotation here because that helper can't distinguish
+            // "absent" from `= ""`; both return the default. find_arg + is tString
+            // surfaces the missing-vs-empty case so we can reject the empty
+            // form with a clear error.
+            var col_name = fname
+            let col_anno = find_arg(field.annotation, "sql_column")
+            if (col_anno is tString) {
+                let cv = string(col_anno as tString)
+                if (empty(cv)) {
+                    errors := "[sql_table]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
+                    return false
+                }
+                if (find(cv, "\"") >= 0 || find(cv, "\\") >= 0) {
+                    errors := "[sql_table]: field '{fname}' @sql_column=\"{cv}\" — embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
+                    return false
+                }
+                col_name = cv
+            }
 
             // ---- validation ----
             if (is_pk && is_optional) {
@@ -2062,6 +2269,19 @@ class SqlTableMacro : AstStructureAnnotation {
             }
             if (is_computed && !empty(sql_default_fn)) {
                 errors := "[sql_table]: field '{fname}' is @sql_computed; @sql_default_fn does not apply (computed columns derive their value from the expression)."
+                return false
+            }
+            if (is_json && is_blob) {
+                errors := "[sql_table]: field '{fname}' has both @sql_json and @sql_blob — pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque, faster binary storage."
+                return false
+            }
+            let json_or_blob_kind = is_json ? "json" : "blob"
+            if ((is_json || is_blob) && is_pk) {
+                errors := "[sql_table]: field '{fname}' is @sql_{json_or_blob_kind} — non-scalar columns cannot be a PRIMARY KEY."
+                return false
+            }
+            if ((is_json || is_blob) && is_computed) {
+                errors := "[sql_table]: field '{fname}' is @sql_computed; @sql_{json_or_blob_kind} does not apply (computed columns derive their value from the SQL expression, not from a daslang adapter)."
                 return false
             }
             if (field.init != null && !empty(sql_default_fn)) {
@@ -2137,17 +2357,99 @@ class SqlTableMacro : AstStructureAnnotation {
 
             fields |> push(FieldInfo(
                 name = fname,
-                col_name = fname,
+                col_name = col_name,
                 is_pk = is_pk,
                 is_int_pk = is_pk && (field._type.baseType == Type.tInt || field._type.baseType == Type.tInt64),
                 is_optional = is_optional,
                 is_unique = is_unique,
                 is_computed = is_computed,
                 is_stored = is_stored,
+                is_json = is_json,
+                is_blob = is_blob,
                 computed_sql = computed_sql,
                 default_clause = default_clause,
                 references_clause = references_clause
             ))
+        }
+
+        // ---- @sql_column collision detection ----
+        // After all per-field annotation reads complete, sweep `fields` once
+        // for duplicate `col_name` values. A collision can come from two
+        // fields renaming to the same SQL column, OR from one renamed field
+        // shadowing another field's daslang name (e.g. `@sql_column = "B"` on
+        // field `A` when there's already a sibling field literally named `B`).
+        // Either case would emit malformed DDL (CREATE TABLE with two
+        // `"X"` columns) — fail loud at macro time with a precise pointer.
+        {
+            var seen_cols : table<string; string>  // sql_col -> first daslang field it came from
+            for (info in fields) {
+                if (key_exists(seen_cols, info.col_name)) {
+                    let first_owner = seen_cols[info.col_name]
+                    errors := "[sql_table]: SQL column name '{info.col_name}' is claimed by both field '{first_owner}' and field '{info.name}'. @sql_column renames must produce a unique column name across the struct."
+                    return false
+                }
+                seen_cols |> insert(info.col_name, info.name)
+            }
+        }
+
+        // ---- @sql_json / @sql_blob adapter codegen ----
+        // Emit FIRST (before the per-table helpers below) so the adapter
+        // overloads are visible to overload resolution when the helpers
+        // (`_sql_read_row` / `_sql_bind_row`) get type-checked, both of which
+        // call into the chunk-8 `_::sql_bind` / `_::sql_extract` rail.
+        //
+        // Dedup is **per-(T, kind)**: an existing `sql_bind(T) : string`
+        // satisfies a fresh @sql_json field, `sql_bind(T) : array<uint8>`
+        // satisfies @sql_blob — but using the same T with a different kind
+        // (across structs in this module, or across fields of one struct)
+        // would silently miscompile, so it's rejected as a compile error.
+        // Within-struct: `seen_kinds` maps describe(T) -> expected return
+        // (`"string"` for JSON, `"array<uint8>"` for BLOB). Cross-struct:
+        // `find_user_adapter_return_type` looks up any existing `sql_bind(T)`
+        // overload in the module and reports its return primitive.
+        var seen_kinds : table<string; SqlAdapterKind>
+        for (i in range(length(fields))) {
+            let info = fields[i]
+            if (!info.is_json && !info.is_blob) {
+                continue
+            }
+            let ft = st.fields[i]._type
+            if (ft == null) {
+                continue
+            }
+            let key = describe(ft)
+            let expected_kind = info.is_json ? SqlAdapterKind.Json : SqlAdapterKind.Blob
+            let kind_label = info.is_json ? "@sql_json" : "@sql_blob"
+            let prev_kind = seen_kinds?[key] ?? SqlAdapterKind.None
+            if (prev_kind != SqlAdapterKind.None) {
+                if (prev_kind != expected_kind) {
+                    let prev_label = prev_kind == SqlAdapterKind.Json ? "@sql_json" : "@sql_blob"
+                    errors := "[sql_table]: field '{info.name}' is {kind_label}, but an earlier field of struct '{st.name}' already used type '{key}' with {prev_label}. Adapter dedup is per-(T, kind); the same T must be used with one storage kind across this struct. Pick one kind, or wrap '{key}' in a typedef so the two storage views are distinct types."
+                    return false
+                }
+                continue
+            }
+            seen_kinds |> insert(key, expected_kind)
+            let existing_kind = find_sql_bind_kind_for_type(compiling_module(), ft)
+            if (existing_kind != SqlAdapterKind.None) {
+                if (existing_kind != expected_kind) {
+                    let existing_label = existing_kind == SqlAdapterKind.Json ? "@sql_json (sql_bind returns string)" : (existing_kind == SqlAdapterKind.Blob ? "@sql_blob (sql_bind returns array<uint8>)" : "an unrelated `sql_bind` overload")
+                    errors := "[sql_table]: field '{info.name}' is {kind_label}, but type '{key}' is already bound by {existing_label} (from a sibling annotation or a hand-written adapter). Adapter dedup is per-(T, kind); the same T must be used with one storage kind. Pick one kind, or wrap '{key}' in a typedef so the two storage views are distinct types."
+                    return false
+                }
+                continue
+            }
+            if (info.is_json) {
+                var fn_b = make_json_sql_bind_fn(ft, st.at)
+                compiling_module() |> add_function(fn_b)
+                var fn_e = make_json_sql_extract_fn(ft, st.at)
+                compiling_module() |> add_function(fn_e)
+            } else {
+                var fn_b = make_blob_sql_bind_fn(ft, st.at)
+                compiling_module() |> add_function(fn_b)
+                var fn_e = make_blob_sql_extract_fn(ft, st.at)
+                compiling_module() |> add_function(fn_e)
+            }
         }
 
         // [sql_index] sibling-annotation processing happens in finish() —
@@ -2184,6 +2486,8 @@ class SqlTableMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_bind_upd)
         var fn_bind_pk = make_bind_row_pk_only_fn(st, fields)
         compiling_module() |> add_function(fn_bind_pk)
+        var fn_col_info = make_column_info_fn(st, fields)
+        compiling_module() |> add_function(fn_col_info)
 
         return true
     }
@@ -2256,7 +2560,18 @@ class SqlTableMacro : AstStructureAnnotation {
                 suffix += info.references_clause
             }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(prefix)); }))
-            write_exprs |> push(qmacro_expr(${ writer |> write(sql_storage_type_for(type<$t(st.fields[i]._type)>)); }))
+            // @sql_json / @sql_blob short-circuit `sql_storage_type_for` (which would
+            // fail for struct/tuple T anyway). The annotation pins storage class:
+            // TEXT for json, BLOB for blob — adapter codegen below produces the
+            // matching `sql_bind` / `sql_extract` overloads that bind the column
+            // through that storage class.
+            if (info.is_json) {
+                write_exprs |> push(qmacro_expr(${ writer |> write("TEXT"); }))
+            } elif (info.is_blob) {
+                write_exprs |> push(qmacro_expr(${ writer |> write("BLOB"); }))
+            } else {
+                write_exprs |> push(qmacro_expr(${ writer |> write(sql_storage_type_for(type<$t(st.fields[i]._type)>)); }))
+            }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(suffix)); }))
         }
         write_exprs |> push(qmacro_expr(${ writer |> write(")"); }))
@@ -2265,6 +2580,63 @@ class SqlTableMacro : AstStructureAnnotation {
             return build_string() $(var writer) {
                 $b(write_exprs)
             }
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_column_info_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        //! Per-struct helper backing the user-facing ``column_info(type<T>)``
+        //! generic. Walks the same `FieldInfo` array DDL emission uses; emits
+        //! one `ColumnInfo` push per field in declaration order, including
+        //! ``@sql_computed`` fields (they appear in the schema and in
+        //! ``PRAGMA table_info``, so the daslang-side view surfaces them
+        //! too). ``is_nullable`` follows the daslang-side meaning — it is
+        //! ``info.is_optional`` (Option<T>-derived), not a NOT-NULL constraint
+        //! check. See API_REWORK § 09.
+        var push_exprs : array<ExpressionPtr>
+        push_exprs |> reserve(length(fields))
+        for (i in range(length(fields))) {
+            let info = fields[i]
+            let name = info.col_name
+            let is_pk = info.is_pk
+            let is_nullable = info.is_optional
+            // Strip the leading " DEFAULT " prefix that `default_clause` carries
+            // for direct DDL concatenation. ``default_expr`` is the raw SQL
+            // expression (`"1"` / `"'x'"` / `"CURRENT_TIMESTAMP"`) — readable
+            // and aligned with PRAGMA table_info's ``dflt_value`` column.
+            var default_expr = ""
+            if (length(info.default_clause) > length(" DEFAULT ")) {
+                default_expr = info.default_clause |> slice(length(" DEFAULT "))
+            }
+            if (info.is_json) {
+                push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
+                    name = $v(name),
+                    data_type = SqlType.Text,
+                    is_pk = $v(is_pk),
+                    is_nullable = $v(is_nullable),
+                    default_expr = $v(default_expr))); }))
+            } elif (info.is_blob) {
+                push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
+                    name = $v(name),
+                    data_type = SqlType.Blob,
+                    is_pk = $v(is_pk),
+                    is_nullable = $v(is_nullable),
+                    default_expr = $v(default_expr))); }))
+            } else {
+                push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
+                    name = $v(name),
+                    data_type = sql_storage_enum_for(type<$t(st.fields[i]._type)>),
+                    is_pk = $v(is_pk),
+                    is_nullable = $v(is_nullable),
+                    default_expr = $v(default_expr))); }))
+            }
+        }
+        var fn = qmacro_function("_sql_column_info") $(typ : $t(st)) : array<ColumnInfo> {
+            var result : array<ColumnInfo>
+            $b(push_exprs)
+            return <- result
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -2599,4 +2971,167 @@ class SqlTableMacro : AstStructureAnnotation {
         fn.body |> force_at(st.at)
         return <- fn
     }
+
+    // ---- @sql_json adapter codegen ----
+    //
+    //   def sql_bind    (v : T) : string          { return write_json(JV(v)) }
+    //   def sql_extract (v : string; t : type<T>) : T {
+    //       var err = ""
+    //       let jv = read_json(v, err)
+    //       if (err != "") {
+    //           panic("sql_extract: malformed JSON in column data: {err}")
+    //       }
+    //       return from_JV(jv, default<T>)
+    //   }
+    //
+    // The pair plugs into the chunk-8 `_::sql_bind` / `_::sql_extract` rail.
+    // Storage class is TEXT (driven by the `string` return of `sql_bind`).
+    // Round-trip fidelity matches `daslib/json_boost`'s `JV` / `from_JV`
+    // surface (struct, tuple, array, table, variant, enum, primitives).
+    //
+    // Note on `clone_type`: a field's `_type` arrives with the field-context
+    // modifier flags (ref/const/etc.) that come from being read inside a struct.
+    // Substituting the raw decl into a function parameter yields a slightly
+    // different type than a hand-written `(v : T)` — overload resolution then
+    // fails to pick the emitted adapter and falls through to the chunk-8
+    // catch-all. Clone the decl and use the fresh copy so the substituted type
+    // matches a hand-written reference exactly.
+    def make_json_sql_bind_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
+        // The hand-written form `def sql_bind(v : tuple<...>) : string` is
+        // parsed with `TypeDeclFlags.constant = true` on the parameter
+        // (struct/tuple params are pass-by-ref and the parser implicitly
+        // marks them as ``const`` to keep the body immutable). When
+        // `[sql_table]` calls `_::sql_bind(v)` through the chunk-8 catch-
+        // all, the argument arrives with `const explicit` flags from the
+        // generic instantiation — and a non-const parameter rejects a
+        // const argument, dropping our overload from the candidate set.
+        // Match the parsed form: clone the field type and turn on
+        // ``constant`` so resolution accepts the const argument.
+        var t1 <- clone_type(field_type)
+        t1.flags |= TypeDeclFlags.constant
+        var fn = qmacro_function("sql_bind") $(v : $t(t1)) : string {
+            return _::write_json(_::JV(v))
+        }
+        fn.body |> force_at(at)
+        return <- fn
+    }
+
+    def make_json_sql_extract_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
+        var t1 <- clone_type(field_type)
+        t1.flags |= TypeDeclFlags.constant
+        var t2 <- clone_type(field_type)
+        var t3 <- clone_type(field_type)
+        // Panic on malformed JSON (matching the @sql_blob symmetry where
+        // `mem_archive_load` panics on corrupt bytes). Without the check,
+        // `read_json` returning null silently feeds into `from_JV` which
+        // returns `default<T>` — schema drift / disk corruption then
+        // surfaces as zero-initialized rows, masking real data loss.
+        var fn = qmacro_function("sql_extract") $(v : string; t : type<$t(t1)>) : $t(t2) {
+            var err = ""
+            let jv = _::read_json(v, err)
+            if (err != "") {
+                panic("sql_extract: malformed JSON in column data: {err}")
+            }
+            return _::from_JV(jv, default<$t(t3)>)
+        }
+        fn.body |> force_at(at)
+        return <- fn
+    }
+
+    // ---- @sql_blob adapter codegen ----
+    //
+    //   def sql_bind    (v : T) : array<uint8>            { var v_local : T; v_local := v; return <- mem_archive_save(v_local) }
+    //   def sql_extract (v : array<uint8>; t : type<T>) : T {
+    //       var r = default<T>
+    //       _::mem_archive_load(v, r)   // panics on failure (canfail=false)
+    //       return r
+    //   }
+    //
+    // Storage class is BLOB. The opaqueness is enforced by `_sql`'s walker:
+    // any `_.<blob_col>.<path>` chain in a predicate produces a compile error
+    // pointing at the field, since `daslib/archive` data is positional binary
+    // and SQL has no way to introspect it.
+    //
+    // `mem_archive_save(var t : auto&)` requires a mutable reference, but our
+    // adapter is reached through the chunk-8 generic `sql_bind_to_stmt(... v :
+    // auto(TT))` which holds `v` as a non-var binding. Clone into a local var
+    // to bridge the const/var gap without taking `var v` ourselves (which would
+    // force the catch-all to also take var, rippling up to the row binder).
+    def make_blob_sql_bind_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
+        var t1 <- clone_type(field_type)
+        t1.flags |= TypeDeclFlags.constant
+        var fn = qmacro_function("sql_bind") $(v : $t(t1)) : array<uint8> {
+            var v_local <- clone_to_move(v)
+            return <- _::mem_archive_save(v_local)
+        }
+        fn.body |> force_at(at)
+        return <- fn
+    }
+
+    def make_blob_sql_extract_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
+        var t1 <- clone_type(field_type)
+        t1.flags |= TypeDeclFlags.constant
+        var t2 <- clone_type(field_type)
+        var t3 <- clone_type(field_type)
+        var fn = qmacro_function("sql_extract") $(v : array<uint8>; t : type<$t(t1)>) : $t(t2) {
+            var r = default<$t(t3)>
+            var v_local <- clone_to_move(v)
+            _::mem_archive_load(v_local, r)
+            return <- r
+        }
+        fn.body |> force_at(at)
+        return <- fn
+    }
+}
+
+// SqlAdapterKind — discriminates an existing `sql_bind(T)` overload by its
+// return-type shape, used for [sql_table] @sql_json / @sql_blob dedup.
+//   None — no overload of `sql_bind(T)` exists for T in the module.
+//   Json — overload returns `string` (matches @sql_json codegen).
+//   Blob — overload returns `array<uint8>` (matches @sql_blob codegen).
+//   Other — overload exists but returns something else (user-supplied or
+//           a stale generated form); always treated as a kind conflict.
+enum private SqlAdapterKind {
+    None
+    Json
+    Blob
+    Other
+}
+
+def private classify_sql_bind_return(td : TypeDeclPtr) : SqlAdapterKind {
+    //! Map a `sql_bind(T)` return type to its adapter kind. JSON returns are
+    //! `string`; BLOB returns are `array<uint8>`. Anything else is "Other"
+    //! and treated as a conflict.
+    if (td == null) {
+        return SqlAdapterKind.None
+    }
+    if (td.baseType == Type.tString) {
+        return SqlAdapterKind.Json
+    }
+    if (td.baseType == Type.tArray && td.firstType != null && td.firstType.baseType == Type.tUInt8) {
+        return SqlAdapterKind.Blob
+    }
+    return SqlAdapterKind.Other
+}
+
+def private find_sql_bind_kind_for_type(mod : Module?; td : TypeDeclPtr) : SqlAdapterKind {
+    //! Walk every overload of ``sql_bind`` in ``mod`` and report the kind of
+    //! the one whose first parameter is type-equivalent to ``td`` (ignoring
+    //! const/ref/temp). Returns ``None`` when no matching overload exists.
+    //! Used by [sql_table] @sql_json / @sql_blob adapter codegen for
+    //! kind-aware dedup: a JSON kind matches @sql_json reuse, Blob kind
+    //! matches @sql_blob reuse; ``Other`` (or kind mismatch) is a compile
+    //! error.
+    if (td == null) {
+        return SqlAdapterKind.None
+    }
+    var kind = SqlAdapterKind.None
+    for_each_function(mod, "sql_bind") $(var fn) {
+        if (length(fn.arguments) > 0
+                && fn.arguments[0]._type != null
+                && is_same_type(td, fn.arguments[0]._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
+            kind = classify_sql_bind_return(fn.result)
+        }
+    }
+    return kind
 }

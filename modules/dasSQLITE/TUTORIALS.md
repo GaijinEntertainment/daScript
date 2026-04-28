@@ -271,21 +271,27 @@ here because by now the reader understands custom-type adapters.
     [27-blob.das](../../tutorials/sql/27-blob.das). The
     `@sql_blob` annotation for opaque struct serialization is a
     different concept and lands with tut 28 (JSON / serialization).
-28. **JSON columns** — `@sql_json` field annotation, `_sql` JSON-path
-    walker rule, round-tripping daslang types through SQLite JSON1.
-    Mockup: [37-json.das](tutorial-mockup/37-json.das.mockup).
+28. **JSON columns** — `@sql_json` and `@sql_blob` field annotations,
+    `_sql` walker descent into JSON paths (pred-side and projection-
+    side, arbitrary depth), opaque archive round-trip for `@sql_blob`.
+    **Shipped:** [tutorials/sql/28-json.das](../../tutorials/sql/28-json.das).
+    Original mockup: [37-json.das](tutorial-mockup/37-json.das.mockup).
 
 ## Part 7 — Introspection
 
 Schema inspection is late on purpose: most app code doesn't need it, and it
 makes more sense once you know what a `[sql_table]` is.
 
-29. **Column names** — `db |> schema("Cars")` returns a typed schema
-    description. Mockup: **none yet — write new** (derived from
-    `tutorial/09-column_names.das`).
-30. **Listing tables** — `db |> tables()` returns the set of user tables.
-    Mockup: **none yet — write new** (derived from
-    `tutorial/10-list_tables.das`).
+29. **Column metadata** — Band 1 `column_info(type<T>)` returns
+    `array<ColumnInfo>` baked at `[sql_table]` expansion time;
+    `sqlite_sql_type` renders the abstract `SqlType` enum to the
+    SQLite dialect. Band 3 covers raw `PRAGMA table_info` via the
+    typed `query` family for genuinely-dynamic introspection.
+    **Shipped:** [tutorials/sql/29-column_names.das](../../tutorials/sql/29-column_names.das).
+30. **Listing tables** — raw `query("SELECT … FROM sqlite_master …",
+    type<MasterRow>)` for catalog inspection. No new abstract API
+    (catalog spelling is genuinely provider-specific). **Shipped:**
+    [tutorials/sql/30-list_tables.das](../../tutorials/sql/30-list_tables.das).
 
 ## Part 8 — Operations
 
@@ -410,9 +416,9 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 25 | Defaults + computed | `25-defaults_computed.das` | **Shipped** (chunk 7); native field init for literal defaults (`Active : bool = true`), `@sql_default_fn` for SQL built-ins (CURRENT_TIMESTAMP / CURRENT_DATE / CURRENT_TIME), `@sql_computed = "expr"` (+ optional `@sql_stored = true`) |
 | 26 | Custom type adapters | `26-custom_types.das` | **Shipped** (chunk 8); `_::sql_bind` / `_::sql_extract` adapter pair, four primitive storage types (INTEGER / REAL / TEXT / BLOB), enum auto-roundtrip, return-type-driven DDL, `Option<T>` over a custom adapter; per-field `@sql_as(type<P>)` override deferred |
 | 27 | BLOB round-trip | `27-blob.das` | **Shipped** (chunk 8); `array<uint8>` is one of the four adapter primitives — falls out of tut 26 |
-| 28 | JSON columns | `37-json.das` | Has mockup |
-| 29 | Column names | — | **Needs mockup** (from inherited 09) |
-| 30 | Listing tables | — | **Needs mockup** (from inherited 10) |
+| 28 | JSON + BLOB columns | `28-json.das` | **Shipped** (chunk 9); `@sql_json` (TEXT via daslib/json + json_boost) + `@sql_blob` (BLOB via daslib/archive); `_sql` walker JSON-path descent (pred + projection, arbitrary depth) emits `json_extract`; `@sql_blob` opaque to walker (compile error on descent); adapter dedup across tables; mockup was 37-json |
+| 29 | Column metadata | `29-column_names.das` | **Shipped** (chunk 9); Band 1 `column_info(type<T>) : array<ColumnInfo>` (compile-time walk) + abstract `SqlType` enum + `sqlite_sql_type` dialect renderer; Band 3 raw `PRAGMA table_info` via the typed `query` family |
+| 30 | Listing tables | `30-list_tables.das` | **Shipped** (chunk 9); raw `query` against `sqlite_master`; no abstract `list_tables` helper (catalog spelling diverges per backend) |
 | 31 | Views | `31-views.das` | Has mockup |
 | 32 | Migrations | `30-migrations.das` | Has mockup |
 | 33 | PRAGMA tuning | `33-pragma.das` | Has mockup |

@@ -316,6 +316,9 @@ Run any tutorial from the project root::
    tutorials/sql_25_defaults_computed.rst
    tutorials/sql_26_custom_types.rst
    tutorials/sql_27_blob.rst
+   tutorials/sql_28_json.rst
+   tutorials/sql_29_column_names.rst
+   tutorials/sql_30_list_tables.rst
 
 .. _tutorials_dasaudio:
 

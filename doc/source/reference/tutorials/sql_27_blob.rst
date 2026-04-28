@@ -125,3 +125,5 @@ streaming path on the deferred list until a real workload demands it.
     Full source: :download:`tutorials/sql/27-blob.das <../../../../tutorials/sql/27-blob.das>`
 
     Previous tutorial: :ref:`tutorial_sql_custom_types`
+
+    Next tutorial: :ref:`tutorial_sql_json`
