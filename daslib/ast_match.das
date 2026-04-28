@@ -5,10 +5,6 @@ options no_unused_function_arguments = false
 options strict_smart_pointers = true
 options stack = 1_048_576
 
-// this module is not AOT compiled. there are major issues with current ExpressionPtr and TypeDeclPtr
-// return-call patterns, which we are not going to address - until we get rid of smart_ptr altogether on das side
-options no_aot
-
 module ast_match shared public
 
 //! AST pattern matching — reverse reification.
@@ -18,25 +14,19 @@ module ast_match shared public
 //! system as ``qmacro`` but in reverse: ``$e`` clones a matched expression,
 //! ``$v`` extracts a constant value, ``$i`` extracts an identifier name.
 //!
-//! TODO — ExprRef2Value transparency. Post-inference, a read of a ``var``
-//! local can appear wrapped in ``ExprRef2Value(inner)`` (the ref-to-value
-//! adapter that fires when daslang dereferences a reference to consume its
-//! value). The current matcher is RTTI-strict, so a pattern like
-//! ``$e(lhs) == $e(rhs)`` matches the literal LHS/RHS shape but ``$e(rhs)``
-//! captures the wrapper, not the underlying ``ExprVar``/``ExprConst`` —
-//! callers that then check ``rhs is ExprVar`` will miss it. Two fixes:
-//!   1. **Auto-peel in $e capture** — ``generate_match`` could strip
-//!      ``ExprRef2Value`` wrappers when binding to ``$e(name)`` so the
-//!      captured expression is the underlying value.
-//!   2. **Auto-peel in fixed sub-patterns** — when matching a literal-shaped
-//!      sub-pattern (``a + b``), peel ``ExprRef2Value`` from the actual
-//!      before the RTTI guard fires.
-//! Either fix would let downstream callers (e.g. ``modules/dasSQLITE/daslib/
-//! sqlite_linq.das`` ``is_const_or_captured_var``) drop their own peel logic.
-//! Not urgent — current chunk-2 tests all pass because the captured-var
-//! inputs reach the macro before the wrapper is inserted — but the next
-//! complex case (struct-field reads, array indexing, anything that goes
-//! through more inference passes) will hit it.
+//! ``ExprRef2Value`` transparency. Post-inference, a read of a ``var`` local
+//! can appear wrapped in ``ExprRef2Value(inner)`` — the ref-to-value adapter
+//! the typer inserts when a reference is dereferenced for its value. The
+//! wrapper is invisible (no surface syntax, no user-visible semantics), so
+//! ``generate_match`` peels it on both sides:
+//!   - **Pattern side** (compile time): ``ExprRef2Value`` in the pattern is
+//!     stripped at the top of ``generate_match`` before dispatch.
+//!   - **Source side** (runtime): every dispatch emits a
+//!     ``qm_peel_ref2value(actual_var)`` call that strips the wrapper from
+//!     the runtime expression before the RTTI guard fires.
+//! ``ExprPtr2Ref`` (the ``*foo`` operator) is intentionally NOT peeled —
+//! it is user-visible, semantically meaningful, and ``*foo`` should NOT
+//! match ``foo``.
 
 require daslib/ast public
 require daslib/rtti
@@ -72,6 +62,17 @@ def qm_run(var expr : Expression?; blk : block<(var arg : Expression?) : QMatchR
     //! Invoke a matching block on the expression.
     //! Used internally by the ``qmatch`` macro.
     return invoke(blk, expr)
+}
+
+def qm_peel_ref2value(var e : Expression?&) : void {
+    //! Strip ``ExprRef2Value`` wrappers from ``e`` in place. The typer inserts
+    //! these post-inference around any read of a reference; they are invisible
+    //! to user-written code and the matcher peels them so a clean pattern
+    //! (``_.X``) matches a wrapped source (``ExprRef2Value(_.X)``) and vice
+    //! versa. Emitted at the top of every ``generate_match`` dispatch.
+    while (e != null && e is ExprRef2Value) {
+        e = (e as ExprRef2Value).subexpr
+    }
 }
 
 def qm_run_function(var func : FunctionPtr&; blk : block<(var body : Expression?; var func_ptr : Function?) : QMatchResult>) : QMatchResult {
@@ -1067,6 +1068,18 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     if (pattern == null) {
         return
     }
+
+    // Pattern-side peel: ExprRef2Value is a typer artifact, not user-visible.
+    // Descend into the wrapped expression and discard the wrapper. Recursive
+    // call handles nested wrappers naturally.
+    if (pattern is ExprRef2Value) {
+        generate_match((pattern as ExprRef2Value).subexpr, actual_var, body, index, at)
+        return
+    }
+
+    // Source-side peel: emit a runtime call that strips ExprRef2Value from
+    // the actual expression before any RTTI/field guards fire.
+    body |> push <| qmacro_expr(${ qm_peel_ref2value($i(actual_var)); })
 
     let rtti = string(pattern.__rtti)
 

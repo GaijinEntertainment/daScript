@@ -24,6 +24,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/memory_leak_detection.md` | `skills/memory_leak_detection.md` | Heap / gc_node / smart_ptr / handle leak detection — runtime CLI flags |
 | `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
 | `install/skills/detect_dupe.md` | `skills/detect_dupe.md` | Duplicate-function detection — corpus build, MCP tools (`export_corpus`, `detect_duplicates`), CLI modes |
+| `install/skills/mcp_tools.md` | `skills/mcp_tools.md` | Full MCP tool table + live-API reference (CLAUDE.md only carries a 2-line pointer) |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
 | `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector (canonicalizer, clusterer, MinHash, pattern filter) |
 
@@ -88,30 +89,31 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/install/skills DESTINATION ${DAS_INSTALL
 
 ## Verification
 
-After modifying install instructions:
+After modifying install instructions, install to a scratch prefix and verify the layout. Replace `<prefix>` with whatever directory you prefer (e.g. `~/daslang-test`, `/tmp/daslang`, `D:/daslang`).
 
 1. Rebuild: `cmake --build build --config Release --target daslang`
-2. Install: `cmake --install build --config Release --prefix D:/daslang`
-3. Verify files exist:
-   - `D:/daslang/CLAUDE.md`
-   - `D:/daslang/skills/das_formatting.md`
-   - `D:/daslang/skills/cpp_integration.md`
-   - `D:/daslang/skills/daslib_modules.md`
-   - `D:/daslang/skills/das_macros.md`
-   - `D:/daslang/skills/daspkg.md`
-   - `D:/daslang/skills/dynamic_modules.md`
-   - `D:/daslang/skills/daslang_live.md`
-   - `D:/daslang/skills/clargs_usage.md`
-   - `D:/daslang/skills/json.md`
-   - `D:/daslang/skills/xml.md`
-   - `D:/daslang/skills/filesystem.md`
-   - `D:/daslang/skills/writing_tests.md`
-   - `D:/daslang/skills/memory_leak_detection.md`
-   - `D:/daslang/skills/jobque_debugging.md`
-   - `D:/daslang/skills/detect_dupe.md`
-   - `D:/daslang/utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
-   - `D:/daslang/utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
-   - `D:/daslang/utils/detect-dupe/main.das`
-   - `D:/daslang/utils/detect-dupe/patterns.das`
-   - `D:/daslang/utils/detect-dupe/fixture/synth.das`
+2. Install: `cmake --install build --config Release --prefix <prefix>`
+3. Verify files exist under `<prefix>/`:
+   - `CLAUDE.md`
+   - `skills/das_formatting.md`
+   - `skills/cpp_integration.md`
+   - `skills/daslib_modules.md`
+   - `skills/das_macros.md`
+   - `skills/daspkg.md`
+   - `skills/dynamic_modules.md`
+   - `skills/daslang_live.md`
+   - `skills/clargs_usage.md`
+   - `skills/json.md`
+   - `skills/xml.md`
+   - `skills/filesystem.md`
+   - `skills/writing_tests.md`
+   - `skills/memory_leak_detection.md`
+   - `skills/jobque_debugging.md`
+   - `skills/detect_dupe.md`
+   - `skills/mcp_tools.md`
+   - `utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
+   - `utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
+   - `utils/detect-dupe/main.das`
+   - `utils/detect-dupe/patterns.das`
+   - `utils/detect-dupe/fixture/synth.das`
 4. Spot-check that no repo-internal paths leaked into install files

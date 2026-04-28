@@ -1,11 +1,11 @@
 # Skill: Migrate hand-rolled argv to `daslib/clargs`
 
 **Read this skill before** editing any in-tree tool that still calls
-`get_command_line_arguments()` directly. The standing rule (Boris,
-2026-04-24): whenever you touch such a tool for any reason, migrate its
-argv parsing to `daslib/clargs` in the same PR. Do **not** open a
-dedicated "migrate every tool" PR — keep migrations opportunistic so
-they ride along with whatever you were already doing.
+`get_command_line_arguments()` directly. Standing rule: whenever you
+touch such a tool for any reason, migrate its argv parsing to
+`daslib/clargs` in the same PR. Do **not** open a dedicated
+"migrate every tool" PR — keep migrations opportunistic so they ride
+along with whatever you were already doing.
 
 ## Why
 
