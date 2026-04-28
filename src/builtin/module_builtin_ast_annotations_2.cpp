@@ -204,6 +204,7 @@ namespace das {
         AstExprMakeTupleAnnotation(ModuleLibrary & ml)
             :  AstExprMakeArrayAnnotation<ExprMakeTuple> ("ExprMakeTuple", ml) {
             addField<DAS_BIND_MANAGED_FIELD(isKeyValue)>("isKeyValue");
+            addField<DAS_BIND_MANAGED_FIELD(recordNames)>("recordNames");
         }
     };
 

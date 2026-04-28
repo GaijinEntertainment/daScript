@@ -220,6 +220,144 @@ matrix.
 - AOT path stays green (CMake glob auto-picks new tests; reconfigure
   required after adding the first new test of a chunk).
 
+## Shipped — chunk 6: write side — UPDATE / DELETE / Transactions (branch `dassqlite-chunk6-update-delete-tx`)
+
+Chunk 6 ships **tutorials 19 (UPDATE), 20 (DELETE), 22 (Transactions)** —
+the write-side counterpart to chunks 2–5's read-side `_sql(...)` flagship.
+Tut 21 (UPSERT) is deferred to chunk 7 because it carries its own
+substantial new surface (the `_excluded` AST sentinel, multi-column
+conflict targets, `@sql_unique` annotation, four "INSERT OR X" variants,
+bulk overload).
+
+### Naming decision (override of the original mockups)
+
+Macro forms use the `_sql_` prefix:
+`_sql_update`, `_sql_try_update`, `_sql_update_returning`,
+`_sql_try_update_returning`, and the parallel `_sql_delete` set.
+The mockups (15-update.das.mockup / 16-delete.das.mockup) had the bare
+`_update` / `_delete` names — overridden during plan walkthrough so that
+SQL provenance stays visible at the call site and there's no name
+collision with hypothetical future non-SQL macros named `_update` /
+`_delete`. Function siblings stay unprefixed (`update`, `delete_`,
+`delete_by_id`, plus the `try_*` variants). RETURNING is macro-only
+in this chunk — `_sql_update_returning` / `_sql_delete_returning`
+(and the `_sql_try_*_returning` non-panic variants) — backed by the
+generic `run_dml_returning` / `try_run_dml_returning` runtime
+helpers; there are no plain `update_returning` / `delete_returning`
+function wrappers.
+
+### New `[sql_table]` generated helpers
+
+- `_sql_update_by_pk_sql(typ : T) : string` —
+  `UPDATE "T" SET "c1"=?, "c2"=?, ... WHERE "pk"=?`. PK-only or PK-less
+  structs emit a stub that panics at call time with a clear message
+  (concept_assert fires unconditionally during structure-macro apply,
+  so a runtime panic is the workable shape).
+- `_sql_delete_by_pk_sql(typ : T) : string` —
+  `DELETE FROM "T" WHERE "pk"=?`.
+- `_sql_bind_row_for_update(stmt, row)` — binds non-PK columns first
+  (positional 1..N), then the PK column at index N+1 — matches the SET-
+  then-WHERE order in the generated SQL.
+- `_sql_bind_row_pk_only(stmt, row)` — binds just the PK column at
+  index 1, used by `delete_(row)` to execute the by-PK DELETE.
+
+### Runtime additions in `sqlite_boost.das`
+
+- **`changes(db) : int`** — wraps `sqlite3_changes`. Used by raw `exec`
+  callers and by tests for "what did the last DML touch".
+- **By-PK mutators:** `update(row)` / `try_update(row)`,
+  `delete_(row)` / `try_delete_(row)`,
+  `delete_by_id(type<T>, id)` / `try_delete_by_id(...)`.
+  All return `int` rows-affected (1 or 0); `try_*` returns
+  `Result<int, string>`.
+- **Generic DML runners:** `try_run_dml` / `run_dml` (returns int),
+  `try_run_dml_returning` / `run_dml_returning` (returns `array<T>`).
+  Used by the `_sql_update` / `_sql_delete` macros — they take a SQL
+  string + bind block + (for RETURNING) a row-builder block.
+- **Transaction suite:**
+  - `enum SqliteTxnMode { Deferred, Immediate, Exclusive }`.
+  - `with_transaction(db, blk)` and
+    `with_transaction(db, mode, blk)` — two distinct overloads (per
+    tut 22 plan; trailing-block convention forbids an optional middle
+    parameter).
+  - `try_transaction(db, blk)` and `try_transaction(db, mode, blk)` —
+    return `SqlError` (`Option<string>`) rather than `Result<void, E>`
+    because daslang's `Result<T, E>` does not yet support `void`
+    payloads. `none = success`; `some(errmsg) = SQL failure at BEGIN
+    or COMMIT`. Block panics still ROLLBACK and re-propagate.
+  - `in_transaction(db) : bool` — wraps the inverse of
+    `sqlite3_get_autocommit`.
+  - **Savepoint nesting:** when entered while already in a
+    transaction, emits `SAVEPOINT das_sp` / `RELEASE das_sp` /
+    `ROLLBACK TO das_sp; RELEASE das_sp` instead of BEGIN/COMMIT/
+    ROLLBACK. SQLite resolves RELEASE / ROLLBACK TO against the
+    most-recent matching savepoint name, so proper LIFO nesting
+    composes correctly without the runner tracking depth itself.
+- **Bulk insert composability fix:** `try_insert(rows : array<T>)`
+  now branches on `in_transaction()` — uses `BEGIN IMMEDIATE` /
+  `COMMIT` when standalone, `SAVEPOINT das_ins_sp` / `RELEASE` when
+  nested inside an outer `with_transaction`. Without this fix SQLite
+  errored "cannot start a transaction within a transaction" when
+  bulk-insert was nested.
+
+### New macros in `sqlite_linq.das`
+
+Eight new `[call_macro]`s — four for UPDATE and four for DELETE.
+Each pair is `_sql_{verb}` / `_sql_try_{verb}` (with optional
+`_returning` suffix for the four RETURNING variants). All eight set
+`canVisitArgument = false` for everything except `db`, so the WHERE /
+SET expressions arrive as raw AST. Analysis runs on the AST shape
+directly: `_.Col` references → SQL column refs, captured locals /
+literals → `?` placeholders + bind expressions. Bind ordering is SET
+binds first, then WHERE binds (matches placeholder order in
+`UPDATE ... SET ... WHERE ...`).
+
+The named-tuple SET clause `(Col1=val1, Col2=val2)` carries its
+column names in `ExprMakeTuple.recordNames`, populated by the parser
+(no type inference required). Chunk 6 also exposes `recordNames` to
+daslang reflection via a one-line C++ change in
+`module_builtin_ast_annotations_2.cpp` so the macro can read it
+directly without forcing premature type inference on the SET arg.
+
+### Tutorials
+
+- [tutorials/sql/19-update.das](../../tutorials/sql/19-update.das) — by-PK,
+  bulk macro, RETURNING, raw escape hatch, try_ variants.
+- [tutorials/sql/20-delete.das](../../tutorials/sql/20-delete.das) — by-PK
+  via `delete_(row)` / `delete_by_id`, bulk macro, RETURNING, raw escape
+  hatch, try_ variants.
+- [tutorials/sql/22-transactions.das](../../tutorials/sql/22-transactions.das)
+  — 2-arg / 3-arg `with_transaction`, savepoint nesting,
+  `in_transaction()`, `try_transaction`.
+
+### Tests
+
+9 new test files: `test_43_update_by_pk.das`, `test_44_update_bulk.das`,
+`test_45_update_returning.das`, `test_46_delete_by_pk.das`,
+`test_47_delete_bulk.das`, `test_48_delete_returning.das`,
+`test_49_changes.das`, `test_50_with_transaction.das`,
+`test_51_try_transaction.das`. Plus `failed_sql_update_delete.das` for
+malformed-call diagnostics. Total dasSQLITE suite: **271 tests passing**
+(238 pre-chunk-6 + 33 new).
+
+### Deferred to chunk 7+
+
+- **UPSERT** (tut 21) — `_excluded` AST sentinel, multi-column conflict
+  targets, `@sql_unique` field annotation, INSERT OR IGNORE / INSERT OR
+  REPLACE shortcuts, bulk overload.
+- **`exec` parameter binding** — `db |> exec(sql, args...)` doesn't
+  exist; users must inline values into the SQL string for raw escape
+  hatch with dynamic data, or stick to the macro forms. Adding
+  parameterized `exec` is a small follow-up that mirrors `query_one`'s
+  variadic shape.
+- **Optimistic concurrency** (`@sql_concurrency_token`) — open question
+  in API_MISSING § 15; defer until a real ask.
+- **Multi-table DELETE** (PG `DELETE … USING` / MySQL JOIN-DELETE) —
+  dialect-divergent, deliberately skipped per API_MISSING § 16.
+- **Projection-side `_select` after `_sql_update_returning`** — for
+  RETURNING column projection, post-process the result with a chain
+  `|> _select(...)` instead of inventing a `update_returning_select`.
+
 ## Shipped — chunk 4: read-side depth — distinct/take/skip/order_by/aggregates/group_by/NULL (branch `dassqlite-chunk4-read-depth`)
 
 Chunk 4 broadens the chunk-3 framework with the rest of the read-side

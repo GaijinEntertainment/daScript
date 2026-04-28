@@ -485,8 +485,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     //    side). Column qualification is driven by `!empty(q.rootAlias)`
     //    in `pred_to_sql` — the alias-emission signal is independent of
     //    "this query contains a join".
-    var subQ = SqlQuery()
-    subQ.rootAlias = "t1"
+    var subQ = SqlQuery(rootAlias = "t1")
     if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) {
         return false
     }
@@ -2999,5 +2998,468 @@ class private TrySqlMacro : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "_try_sql expects one argument: a chain expression")
         return emit_sql_macro_body(prog, call, true)
+    }
+}
+
+// ============================================================================
+// `_sql_update` / `_sql_delete` — predicate-based mutations
+//
+// These macros run with `canVisitArgument = false` for everything except `db`
+// so the WHERE / SET arguments arrive as raw AST (the user writes `_.Col < x`
+// with `_` unbound). Analysis proceeds on the raw shape:
+//
+//   * `_.Col` references are recognized via the AST shape (ExprField over
+//     ExprVar named "_") and translated to SQL column refs (`"Col"`). They
+//     never become bind parameters.
+//   * Captured locals and literals classify as binds — pred_to_sql emits a
+//     `?` placeholder and the original ExprVar / ExprConst is pushed to the
+//     bind list. At the macro's output, the bind expression is passed verbatim
+//     to ``sqlite_bind(stmt, idx, expr)``; daslang's typer resolves the
+//     captured-var's type and overload-dispatches `sqlite_bind`.
+//
+// Bind ordering for SET-then-WHERE SQL: SET binds come first, then WHERE
+// binds (matches placeholder order in `UPDATE ... SET col1=?, ... WHERE ...`).
+// For RETURNING, the RETURNING clause is appended without adding binds and
+// the row materializer reuses the `[sql_table]`-generated `_sql_read_row`.
+// ============================================================================
+
+[macro_function]
+def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
+                               var setSqlClauses : array<string>&;
+                               var setBindExprs : array<ExpressionPtr>&;
+                               prog : ProgramPtr; at : LineInfo) : bool {
+    //! Walk a raw `(Col1 = expr1, Col2 = expr2, ...)` named-tuple literal and
+    //! emit a list of `"Col" = <sql>` fragments + the bind expressions they
+    //! introduce. The SET clause SQL fragments are pushed into
+    //! ``setSqlClauses``; bind expressions accumulate into ``setBindExprs``.
+    //! WHERE binds (from ``q.bindExprs``) stay separate and are appended
+    //! after SET binds at SQL emission time.
+    if (setExpr == null) {
+        macro_error(prog, at, "_sql_update: set clause is null")
+        return false
+    }
+    var body = setExpr
+    if (body is ExprRef2Value) {
+        body = (body as ExprRef2Value).subexpr
+    }
+    if (!(body is ExprMakeTuple)) {
+        macro_error(prog, at, "_sql_update: set clause must be a named-tuple literal `(Col1=expr1, Col2=expr2, ...)`; got: {describe(body)}")
+        return false
+    }
+    var mkTup = body as ExprMakeTuple
+    if (length(mkTup.values) == 0) {
+        macro_error(prog, at, "_sql_update: set clause is empty — UPDATE with no columns is invalid SQL. Pass at least one (Col=expr) pair.")
+        return false
+    }
+    // The named-tuple literal's record names live on the inferred tuple type
+    // (`tupT.argNames`). When the macro runs with ``canVisitArgument=false``
+    // the SET arg arrives raw and `mkTup._type` is null — fall back to the
+    // recordNames carried directly on the MakeTuple node by the parser.
+    var tupT = mkTup._type
+    var recordNames : array<string>
+    if (tupT != null && tupT.baseType == Type.tTuple
+            && length(tupT.argNames) == length(mkTup.values)) {
+        recordNames |> reserve(length(tupT.argNames))
+        for (i in range(length(tupT.argNames))) {
+            recordNames |> push(string(tupT.argNames[i]))
+        }
+    } elif (length(mkTup.recordNames) == length(mkTup.values)) {
+        recordNames |> reserve(length(mkTup.recordNames))
+        for (i in range(length(mkTup.recordNames))) {
+            recordNames |> push(string(mkTup.recordNames[i]))
+        }
+    } else {
+        macro_error(prog, at, "_sql_update: set clause must be a NAMED-tuple literal `(Col=expr, ...)`; could not extract per-element column names")
+        return false
+    }
+    for (i in range(length(recordNames))) {
+        if (empty(recordNames[i])) {
+            macro_error(prog, at, "_sql_update: set clause: positional element at index {i} has no field name; use `(Col=expr, ...)` form")
+            return false
+        }
+    }
+    // Validate each SET column: must be a real field on T, no duplicates.
+    // The WHERE side validates `_.Field` via pred_to_sql; mirror that
+    // discipline on the SET side so typos / collisions surface as a
+    // macro_error at compile time instead of a SQLite runtime error.
+    if (q.rootType != null && q.rootType.structType != null) {
+        var st = q.rootType.structType
+        var seenCols : table<string; bool>
+        for (i in range(length(recordNames))) {
+            let colName = recordNames[i]
+            if (key_exists(seenCols, colName)) {
+                macro_error(prog, at, "_sql_update: duplicate SET column \"{colName}\"")
+                return false
+            }
+            seenCols[colName] = true
+            var found = false
+            for (f in st.fields) {
+                if (f.name == colName) {
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                macro_error(prog, at, "_sql_update: SET column \"{colName}\" is not a field of {st.name}")
+                return false
+            }
+        }
+    }
+    // Each value is translated via the same pred_to_sql machinery as a WHERE
+    // predicate. Captured vars and `_.Col` references both work; binds are
+    // pushed into a SET-local list so we can interleave them with WHERE
+    // binds in correct placeholder order at SQL emission time.
+    var setQ = SqlQuery(
+        rootType = q.rootType,
+        tableName = q.tableName,
+        argNames <- ["_"],
+        argSourceIdx <- [0]
+    )
+    setSqlClauses |> reserve(length(setSqlClauses) + length(mkTup.values))
+    for (i in range(length(mkTup.values))) {
+        let colName = recordNames[i]
+        var val = mkTup.values[i]
+        let valSql = pred_to_sql(val, setQ, prog, at)
+        if (empty(valSql)) {
+            return false  // pred_to_sql already issued macro_error
+        }
+        setSqlClauses |> push("\"{colName}\" = {valSql}")
+    }
+    setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
+    for (b in setQ.bindExprs) {
+        setBindExprs |> push(b)
+    }
+    return true
+}
+
+[macro_function]
+def private build_returning_clause(rootT : TypeDeclPtr) : string {
+    //! Append `RETURNING "c1", "c2", ...` listing every field of T in
+    //! struct-declaration order. Mirrors `_sql_select_all_sql`'s output so
+    //! the row materializer (`_sql_read_row`) reads columns in struct order.
+    if (rootT == null || rootT.structType == null) {
+        return ""
+    }
+    var st = rootT.structType
+    return build_string() $(var w) {
+        w |> write(" RETURNING ")
+        var first = true
+        for (field in st.fields) {
+            if (!first) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(field.name)
+            w |> write("\"")
+            first = false
+        }
+    }
+}
+
+[macro_function]
+def private emit_dml_call(var dbE : ExpressionPtr; sql : string;
+                          var bindStmts : array<ExpressionPtr>;
+                          isTry : bool; isReturning : bool;
+                          rootT : TypeDeclPtr; at : LineInfo) : ExpressionPtr {
+    //! Build the runtime call for `_sql_update*` / `_sql_delete*`. Picks one of
+    //! the four `_::run_dml*` variants from `(isTry, isReturning)` — the call
+    //! name is the only intrinsic fork (qmacro can't parameterize `_::name`);
+    //! the bind lambda and (for returning variants) the row reader are built
+    //! once and spliced into each branch.
+    var bindLambda = qmacro($(var _sql_stmt : sqlite3_stmt?) {
+        $b(bindStmts)
+    })
+    var res : ExpressionPtr
+    if (isReturning) {
+        var rootClone = clone_type(rootT)
+        var readerLambda = qmacro($(_sql_stmt : sqlite3_stmt?) => _::_sql_read_row(_sql_stmt, type<$t(rootClone)>))
+        if (isTry) {
+            res = qmacro(_::try_run_dml_returning($e(dbE), $v(sql), $e(bindLambda), $e(readerLambda)))
+        } else {
+            res = qmacro(_::run_dml_returning($e(dbE), $v(sql), $e(bindLambda), $e(readerLambda)))
+        }
+    } else {
+        if (isTry) {
+            res = qmacro(_::try_run_dml($e(dbE), $v(sql), $e(bindLambda)))
+        } else {
+            res = qmacro(_::run_dml($e(dbE), $v(sql), $e(bindLambda)))
+        }
+    }
+    res |> force_at(at)
+    return res
+}
+
+[macro_function]
+def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
+                             var rootT : TypeDeclPtr;
+                             isTry : bool; isReturning : bool) : ExpressionPtr {
+    //! Shared body for the four `_sql_update*` macros. Operates on the raw
+    //! WHERE / SET argument expressions (canVisitArgument=false skipped
+    //! type inference for them); pred_to_sql analyzes the AST shape and
+    //! pushes captured vars / literals as binds. Caller supplies the already-
+    //! extracted ``rootT`` (the struct TypeDecl from `type<T>`).
+    if (rootT == null || rootT.structType == null) {
+        macro_error(prog, call.at, "_sql_update: T must be a struct (got {describe(rootT)})")
+        return null
+    }
+    var dbE = call.arguments[0]
+    var whereE = call.arguments[2]
+    var setE = call.arguments[3]
+    let tableName = sql_table_name_from_type(rootT)
+    var q = SqlQuery(
+        rootType = rootT,
+        tableName = tableName,
+        argNames <- ["_"],
+        argSourceIdx <- [0]
+    )
+    // Translate WHERE — raw AST.
+    let whereSql = pred_to_sql(whereE, q, prog, call.at)
+    if (empty(whereSql)) {
+        return null
+    }
+    // Translate SET — raw named-tuple literal.
+    var setSqlClauses : array<string>
+    var setBindExprs : array<ExpressionPtr>
+    if (!analyze_set_clause(setE, q, setSqlClauses, setBindExprs, prog, call.at)) {
+        return null
+    }
+    // Build SQL.
+    var sql = build_string() $(var w) {
+        w |> write("UPDATE \"")
+        w |> write(tableName)
+        w |> write("\" SET ")
+        for (i in range(length(setSqlClauses))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            w |> write(setSqlClauses[i])
+        }
+        w |> write(" WHERE ")
+        w |> write(whereSql)
+    }
+    if (isReturning) {
+        sql += build_returning_clause(rootT)
+    }
+    // Combine binds: SET first, then WHERE.
+    var allBinds : array<ExpressionPtr>
+    allBinds |> reserve(length(setBindExprs) + length(q.bindExprs))
+    for (b in setBindExprs) {
+        allBinds |> push(b)
+    }
+    for (b in q.bindExprs) {
+        allBinds |> push(b)
+    }
+    var bindStmts : array<ExpressionPtr>
+    bindStmts |> reserve(length(allBinds))
+    for (i in range(length(allBinds))) {
+        let bindIdx = i + 1
+        var be = allBinds[i]
+        bindStmts |> push <| qmacro_expr(${
+            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+        })
+    }
+    return emit_dml_call(dbE, sql, bindStmts, isTry, isReturning, rootT, call.at)
+}
+
+[macro_function]
+def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
+                             var rootT : TypeDeclPtr;
+                             isTry : bool; isReturning : bool) : ExpressionPtr {
+    //! Shared body for the four `_sql_delete*` macros.
+    if (rootT == null || rootT.structType == null) {
+        macro_error(prog, call.at, "_sql_delete: T must be a struct (got {describe(rootT)})")
+        return null
+    }
+    var dbE = call.arguments[0]
+    var whereE = call.arguments[2]
+    let tableName = sql_table_name_from_type(rootT)
+    var q = SqlQuery(
+        rootType = rootT,
+        tableName = tableName,
+        argNames <- ["_"],
+        argSourceIdx <- [0]
+    )
+    let whereSql = pred_to_sql(whereE, q, prog, call.at)
+    if (empty(whereSql)) {
+        return null
+    }
+    var sql = "DELETE FROM \"{tableName}\" WHERE {whereSql}"
+    if (isReturning) {
+        sql += build_returning_clause(rootT)
+    }
+    var bindStmts : array<ExpressionPtr>
+    bindStmts |> reserve(length(q.bindExprs))
+    for (i in range(length(q.bindExprs))) {
+        let bindIdx = i + 1
+        var be = q.bindExprs[i]
+        bindStmts |> push <| qmacro_expr(${
+            sqlite_bind(_sql_stmt, $v(bindIdx), $e(be));
+        })
+    }
+    return emit_dml_call(dbE, sql, bindStmts, isTry, isReturning, rootT, call.at)
+}
+
+// ----------------------------------------------------------------------------
+// Outer macros — `canVisitArgument = false` for everything except db so the
+// WHERE / SET arguments stay raw (with `_` unbound). pred_to_sql operates on
+// the AST shape directly; bind expressions (captured locals, literals) are
+// passed through to ``sqlite_bind`` verbatim and resolve at the macro's
+// output type-inference pass.
+// ----------------------------------------------------------------------------
+
+[macro_function]
+def private validate_outer_update_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
+    if (length(call.arguments) != 4) {
+        macro_error(prog, call.at, "{call.name}: expected (db, type<T>, where_expr, set_expr) — got {length(call.arguments)} args")
+        return false
+    }
+    var typeE = call.arguments[1]
+    if (!qmatch(typeE, type<$t(rootT)>).matched) {
+        macro_error(prog, call.at, "{call.name}: second argument must be a `type<T>` literal")
+        return false
+    }
+    return true
+}
+
+[macro_function]
+def private validate_outer_delete_args(prog : ProgramPtr; var call : ExprCallMacro?; var rootT : TypeDeclPtr&) : bool {
+    if (length(call.arguments) != 3) {
+        macro_error(prog, call.at, "{call.name}: expected (db, type<T>, where_expr) — got {length(call.arguments)} args")
+        return false
+    }
+    var typeE = call.arguments[1]
+    if (!qmatch(typeE, type<$t(rootT)>).matched) {
+        macro_error(prog, call.at, "{call.name}: second argument must be a `type<T>` literal")
+        return false
+    }
+    return true
+}
+
+[call_macro(name="_sql_update")]
+class private SqlUpdateMacro : AstCallMacro {
+    //! `_sql_update(db, type<T>, where_expr, set_expr)` — predicate-based UPDATE.
+    //! ``where_expr`` is an expression in the row variable `_` (e.g.
+    //! ``_.LastSeen < cutoff``). ``set_expr`` is a named-tuple literal
+    //! ``(Col1=expr1, Col2=expr2, ...)`` whose RHS may reference ``_.Col``
+    //! and captured locals. Returns ``int`` rows-affected. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_update_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_update_body(prog, call, rootT, false, false)
+    }
+}
+
+[call_macro(name="_sql_try_update")]
+class private SqlTryUpdateMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_update`. Returns ``Result<int, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_update_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_update_body(prog, call, rootT, true, false)
+    }
+}
+
+[call_macro(name="_sql_update_returning")]
+class private SqlUpdateReturningMacro : AstCallMacro {
+    //! `_sql_update(...)` with a trailing ``RETURNING *`` clause. Returns
+    //! ``array<T>`` of post-update rows. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_update_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_update_body(prog, call, rootT, false, true)
+    }
+}
+
+[call_macro(name="_sql_try_update_returning")]
+class private SqlTryUpdateReturningMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_update_returning`. Returns
+    //! ``Result<array<T>, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_update_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_update_body(prog, call, rootT, true, true)
+    }
+}
+
+[call_macro(name="_sql_delete")]
+class private SqlDeleteMacro : AstCallMacro {
+    //! `_sql_delete(db, type<T>, where_expr)` — predicate-based DELETE.
+    //! Returns ``int`` rows-affected. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_delete_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_delete_body(prog, call, rootT, false, false)
+    }
+}
+
+[call_macro(name="_sql_try_delete")]
+class private SqlTryDeleteMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_delete`. Returns ``Result<int, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_delete_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_delete_body(prog, call, rootT, true, false)
+    }
+}
+
+[call_macro(name="_sql_delete_returning")]
+class private SqlDeleteReturningMacro : AstCallMacro {
+    //! `_sql_delete(...)` with a trailing ``RETURNING *`` clause. Returns
+    //! ``array<T>`` of just-deleted rows. Panics on SQL error.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_delete_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_delete_body(prog, call, rootT, false, true)
+    }
+}
+
+[call_macro(name="_sql_try_delete_returning")]
+class private SqlTryDeleteReturningMacro : AstCallMacro {
+    //! Non-panic sibling of `_sql_delete_returning`. Returns
+    //! ``Result<array<T>, string>``.
+    def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool {
+        return argIndex == 0
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        var rootT : TypeDeclPtr
+        if (!validate_outer_delete_args(prog, call, rootT)) {
+            return null
+        }
+        return emit_delete_body(prog, call, rootT, true, true)
     }
 }

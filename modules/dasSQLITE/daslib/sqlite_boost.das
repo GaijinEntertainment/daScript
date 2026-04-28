@@ -142,6 +142,14 @@ def last_insert_rowid(db : SqlRunner) : int64 {
     return sqlite3_last_insert_rowid(db.sqlite_handle)
 }
 
+def changes(db : SqlRunner) : int {
+    //! Returns the number of rows affected by the most recent INSERT, UPDATE, or DELETE
+    //! on this connection. Wraps ``sqlite3_changes``; see https://sqlite.org/c3ref/changes.html
+    //! for the exact contract (DML statements only — DDL, schema changes, and triggers
+    //! count separately).
+    return sqlite3_changes(db.sqlite_handle)
+}
+
 // ============================================================================
 // Convention dispatch: sqlite_sql_type / sqlite_bind
 //
@@ -316,26 +324,9 @@ def sqlite_read(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
 def try_query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT -const -#, string> {
     //! Prepares ``sql``, steps once, returns column 0 as ``TT``.
     //! Returns ``Err(errmsg)`` on prepare/step error or zero rows.
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "query_scalar prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
-    }
-    let src = sqlite3_step(stmt)
-    if (src == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return err("query_scalar: expected one row, got 0 rows", type<TT -const -#>)
-    }
-    if (src != SQLITE_ROW) {
-        let msg = "query_scalar: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<TT -const -#>)
-    }
-    var result = sqlite_read(stmt, 0, type<TT -const -#>) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_ok(result, type<string>)
+    return <- try_one_row(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
+        return sqlite_read(stmt, 0, type<TT -const -#>)
+    }, "query_scalar")
 }
 
 [unused_argument(t)]
@@ -359,24 +350,13 @@ def query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -
 
 [unused_argument(t)]
 def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        sqlite3_finalize(stmt)
-        panic("query_scalar_opt prepare failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    var r <- try_one_row_opt(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
+        return sqlite_read(stmt, 0, type<TT -const -#>)
+    }, "query_scalar_opt")
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
     }
-    let src = sqlite3_step(stmt)
-    if (src == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return none(type<TT -const -#>)
-    }
-    if (src != SQLITE_ROW) {
-        sqlite3_finalize(stmt)
-        panic("query_scalar_opt step failed: {sqlite3_errmsg(db.sqlite_handle)}")
-    }
-    var result = sqlite_read(stmt, 0, type<TT -const -#>) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_some(result)
+    return <- r._value
 }
 
 // ============================================================================
@@ -400,12 +380,24 @@ def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<
 // invoked once after prepare. Each public wrapper supplies the right
 // bind block for its arity.
 
-// Shared prepare/bind/step/finalize body for single-row Result-returning
-// reads. Both `try_query_one_impl` (struct-typed reads via
-// `_sql_read_row`) and `try_run_select_one` (caller-supplied row block
-// via the `_sql` macro) used to inline this whole loop verbatim. Pulled
-// up here so they share one implementation; the differences collapse to
-// (a) the row materializer block and (b) the user-visible error prefix.
+// Shared prepare/bind/step/finalize bodies for the runtime layer. Four
+// helpers cover every shape the public API needs:
+//   - `try_one_row`     — single row, ``Err`` on zero rows; consumed by
+//                         `try_query_one_impl`, `try_run_select_one`, and
+//                         `try_query_scalar`.
+//   - `try_one_row_opt` — single row, ``Ok(none)`` on zero rows; consumed
+//                         by `query_scalar_opt` and `try_run_select_one_opt`.
+//   - `try_step_dml`    — single step, returns rows-affected; consumed by
+//                         every non-RETURNING DML (`try_run_dml`,
+//                         `try_insert`, `try_update`, `try_delete_`,
+//                         `try_delete_by_id`).
+//   - `try_collect_rows` — multi-row materializer; consumed by
+//                          `try_run_select`, `try_run_dml_returning`, and
+//                          `try_select_from`.
+// Each one parameterizes only on (a) the row/bind blocks and (b) the
+// user-visible error prefix. Adding new wrappers should reuse one of
+// these instead of inlining a fifth prepare/bind loop.
+
 def private try_one_row(db : SqlRunner; sql : string;
                         bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                         row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
@@ -436,6 +428,85 @@ def private try_one_row(db : SqlRunner; sql : string;
     var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
     sqlite3_finalize(stmt)
     return move_ok(row, type<string>)
+}
+
+def private try_one_row_opt(db : SqlRunner; sql : string;
+                            bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                            row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
+                            err_prefix : string) : Result<Option<TT -const -#>, string> {
+    //! Like `try_one_row`, but returns `Ok(none)` on zero rows instead of
+    //! `Err`. Use when "no row matched" is a normal outcome and only
+    //! prepare/step failures are real errors.
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<Option<TT -const -#>>)
+    }
+    invoke(bind_blk, stmt)
+    let src = sqlite3_step(stmt)
+    if (src == SQLITE_DONE) {
+        sqlite3_finalize(stmt)
+        return ok(none(type<TT -const -#>), type<string>)
+    }
+    if (src != SQLITE_ROW) {
+        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<Option<TT -const -#>>)
+    }
+    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
+    sqlite3_finalize(stmt)
+    return move_ok(move_some(row), type<string>)
+}
+
+def private try_step_dml(db : SqlRunner; sql : string;
+                         bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                         err_prefix : string) : Result<int, string> {
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<int>)
+    }
+    invoke(bind_blk, stmt)
+    let src = sqlite3_step(stmt)
+    if (src != SQLITE_DONE) {
+        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<int>)
+    }
+    let n = sqlite3_changes(db.sqlite_handle)
+    sqlite3_finalize(stmt)
+    return ok(n, type<string>)
+}
+
+def private try_collect_rows(db : SqlRunner; sql : string;
+                             bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                             row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
+                             err_prefix : string) : Result<array<TT -const -#>, string> {
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    invoke(bind_blk, stmt)
+    var inscope result : array<TT -const -#>
+    var rc = sqlite3_step(stmt)
+    while (rc == SQLITE_ROW) {
+        result |> push(invoke(row_blk, stmt))
+        rc = sqlite3_step(stmt)
+    }
+    if (rc != SQLITE_DONE) {
+        let msg = "{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<TT -const -#>>)
+    }
+    sqlite3_finalize(stmt)
+    return move_ok(result, type<string>)
 }
 
 [unused_argument(t)]
@@ -616,21 +687,12 @@ def try_insert(db : SqlRunner; row : auto(TT)) : Result<int64, string> {
     //! When the row's integer primary key is zero, the macro-emitted no-PK INSERT runs and SQLite assigns the id.
     let pk_unset = _::_sql_pk_is_unset(row)
     let sql = pk_unset ? _::_sql_insert_no_pk_sql(row) : _::_sql_insert_with_pk_sql(row)
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "insert prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<int64>)
+    let r = db |> try_step_dml(sql, $(var stmt : sqlite3_stmt?) {
+        _::_sql_bind_row(stmt, row, !pk_unset)
+    }, "insert")
+    if (r |> is_err) {
+        return err(r |> unwrap_err, type<int64>)
     }
-    _::_sql_bind_row(stmt, row, !pk_unset)
-    let src = sqlite3_step(stmt)
-    if (src != SQLITE_DONE) {
-        let msg = "insert step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<int64>)
-    }
-    sqlite3_finalize(stmt)
     return ok(sqlite3_last_insert_rowid(db.sqlite_handle), type<string>)
 }
 
@@ -659,7 +721,13 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
             return err("insert: rows mix PK-set and PK-unset (row 0 vs row {i}); partition the array before calling insert", type<int64>)
         }
     }
-    let begin_err = db |> try_exec("BEGIN IMMEDIATE")
+    // Choose BEGIN/COMMIT vs SAVEPOINT/RELEASE based on ambient state so
+    // bulk-insert composes inside an outer ``with_transaction`` block.
+    // Without this branch SQLite rejects ``BEGIN IMMEDIATE`` with "cannot
+    // start a transaction within a transaction" when nested.
+    let was_in_txn = db |> in_transaction()
+    let begin_sql = was_in_txn ? "SAVEPOINT das_ins_sp" : "BEGIN IMMEDIATE"
+    let begin_err = db |> try_exec(begin_sql)
     if (begin_err |> is_some) {
         return err(begin_err |> unwrap, type<int64>)
     }
@@ -669,7 +737,12 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     if (prc != SQLITE_OK) {
         let msg = "insert prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
-        db |> try_exec("ROLLBACK") |> ignore_sql_error
+        if (was_in_txn) {
+            db |> try_exec("ROLLBACK TO das_ins_sp") |> ignore_sql_error
+            db |> try_exec("RELEASE das_ins_sp") |> ignore_sql_error
+        } else {
+            db |> try_exec("ROLLBACK") |> ignore_sql_error
+        }
         return err(msg, type<int64>)
     }
     for (row in rows) {
@@ -680,13 +753,28 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
         if (src != SQLITE_DONE) {
             let msg = "insert step failed: {sqlite3_errmsg(db.sqlite_handle)}"
             sqlite3_finalize(stmt)
-            db |> try_exec("ROLLBACK") |> ignore_sql_error
+            if (was_in_txn) {
+                db |> try_exec("ROLLBACK TO das_ins_sp") |> ignore_sql_error
+                db |> try_exec("RELEASE das_ins_sp") |> ignore_sql_error
+            } else {
+                db |> try_exec("ROLLBACK") |> ignore_sql_error
+            }
             return err(msg, type<int64>)
         }
     }
     sqlite3_finalize(stmt)
-    let commit_err = db |> try_exec("COMMIT")
+    let commit_sql = was_in_txn ? "RELEASE das_ins_sp" : "COMMIT"
+    let commit_err = db |> try_exec(commit_sql)
     if (commit_err |> is_some) {
+        // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). Roll back so the
+        // connection isn't left mid-transaction. Bulk-insert uses its own
+        // savepoint name (das_ins_sp) so the rollback path is local.
+        if (was_in_txn) {
+            db |> try_exec("ROLLBACK TO das_ins_sp") |> ignore_sql_error
+            db |> try_exec("RELEASE das_ins_sp") |> ignore_sql_error
+        } else {
+            db |> try_exec("ROLLBACK") |> ignore_sql_error
+        }
         return err(commit_err |> unwrap, type<int64>)
     }
     return ok(sqlite3_last_insert_rowid(db.sqlite_handle), type<string>)
@@ -706,6 +794,256 @@ def private ignore_sql_error(e : SqlError) : void {
     //! Discards a SqlError. Used by try_insert(array) to swallow ROLLBACK failures while preserving the original error.
 }
 
+// ============================================================================
+// by-PK UPDATE / DELETE
+//
+// Single-row mutators driven by [sql_table]'s generated `_sql_update_by_pk_sql`,
+// `_sql_delete_by_pk_sql`, and `_sql_bind_row_for_update` helpers. The struct
+// must declare exactly one @sql_primary_key field; otherwise the generated
+// helper panics with a clear message at call time (see make_update_by_pk_sql_fn
+// at the bottom of this file).
+//
+// All four functions return ``int`` (rows-affected — 1 or 0). 0 is NOT an
+// error: the row simply wasn't there. Reserve ``Err`` for genuine SQL
+// failures (constraint violation, IO, BUSY).
+// ============================================================================
+
+def try_update(db : SqlRunner; row : auto(TT)) : Result<int, string> {
+    //! Updates a single row identified by its @sql_primary_key field. Returns
+    //! ``Ok(rows_affected)`` (1 if the row matched, 0 if not), ``Err(errmsg)``
+    //! on SQL failure.
+    return <- db |> try_step_dml(_::_sql_update_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
+        _::_sql_bind_row_for_update(stmt, row)
+    }, "update")
+}
+
+def update(db : SqlRunner; row : auto(TT)) : int {
+    //! Strict variant of ``try_update(row)``. Panics with the libsqlite3 errmsg on failure.
+    let r = db |> try_update(row)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_delete_(db : SqlRunner; row : auto(TT)) : Result<int, string> {
+    //! Deletes the row identified by ``row``'s @sql_primary_key field. Non-PK
+    //! fields are ignored. Returns ``Ok(rows_affected)`` (1 if matched, 0 if not),
+    //! ``Err(errmsg)`` on SQL failure.
+    //! Trailing underscore in the name is intentional: ``delete`` is a daslang
+    //! keyword, mirroring the convention used by ``daslib/linq``'s ``where_``.
+    // The PK is bound at index 1 (the only placeholder in `DELETE FROM T WHERE pk=?`).
+    // We can't reuse `_sql_bind_row_for_update` here because it binds non-PK
+    // columns first; instead, look up the PK field directly via the generated
+    // _sql_pk_value helper that matches each [sql_table] struct.
+    return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
+        _::_sql_bind_row_pk_only(stmt, row)
+    }, "delete")
+}
+
+def delete_(db : SqlRunner; row : auto(TT)) : int {
+    //! Strict variant of ``try_delete_(row)``. Panics with the libsqlite3 errmsg on failure.
+    let r = db |> try_delete_(row)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+[unused_argument(t)]
+def try_delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : Result<int, string> {
+    //! Deletes the row of type ``T`` whose primary key equals ``id``. Avoids
+    //! constructing a dummy struct just to identify the row. Returns
+    //! ``Ok(rows_affected)`` (1 or 0), ``Err(errmsg)`` on SQL failure.
+    return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(default<TT>), $(var stmt : sqlite3_stmt?) {
+        sqlite_bind(stmt, 1, id)
+    }, "delete_by_id")
+}
+
+[unused_argument(t)]
+def delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : int {
+    //! Strict variant of ``try_delete_by_id``. Panics with the libsqlite3 errmsg on failure.
+    let r = db |> try_delete_by_id(type<TT>, id)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+// ============================================================================
+// Transactions
+//
+// `with_transaction` blocks emit BEGIN/COMMIT/ROLLBACK or
+// SAVEPOINT/RELEASE/ROLLBACK TO depending on whether the connection is
+// already inside a transaction (detected via sqlite3_get_autocommit). All
+// nested calls use the same SAVEPOINT name `das_sp` — SQLite resolves
+// RELEASE/ROLLBACK TO against the most-recent matching savepoint, so proper
+// LIFO nesting composes correctly without the runner tracking depth itself.
+//
+// Two overloads, not one optional-parameter function: piping puts the block
+// last, so an optional middle `mode` parameter wouldn't resolve from a
+// no-mode call site. See API_REWORK.md § "12 + 13 + 14" for the full
+// rationale.
+// ============================================================================
+
+enum SqliteTxnMode {
+    //! BEGIN modifiers for SQLite. Maps to ``BEGIN [DEFERRED|IMMEDIATE|EXCLUSIVE]``.
+    Deferred    //!< Default; lock acquisition deferred to the first read/write.
+    Immediate   //!< RESERVED lock at BEGIN; concurrent writers block immediately.
+    Exclusive   //!< EXCLUSIVE lock; blocks readers and writers (legacy mode; not WAL-safe).
+}
+
+def in_transaction(db : SqlRunner) : bool {
+    //! Returns true if the connection is currently inside a BEGIN/COMMIT pair
+    //! (or a SAVEPOINT). Wraps the inverse of ``sqlite3_get_autocommit``.
+    return !sqlite3_get_autocommit_(db.sqlite_handle)
+}
+
+def private txn_begin_sql(was_in_txn : bool; mode : SqliteTxnMode) : string {
+    if (was_in_txn) {
+        return "SAVEPOINT das_sp"
+    }
+    if (mode == SqliteTxnMode.Immediate) {
+        return "BEGIN IMMEDIATE"
+    }
+    if (mode == SqliteTxnMode.Exclusive) {
+        return "BEGIN EXCLUSIVE"
+    }
+    return "BEGIN"
+}
+
+def private txn_commit_sql(was_in_txn : bool) : string {
+    return was_in_txn ? "RELEASE das_sp" : "COMMIT"
+}
+
+def private txn_best_effort_rollback(db : SqlRunner; was_in_txn : bool) : void {
+    // Best-effort: swallow rollback errors so the original failure (panic
+    // message or BEGIN/blk SQL error) reaches the caller intact.
+    if (was_in_txn) {
+        db |> try_exec("ROLLBACK TO das_sp") |> ignore_sql_error
+        db |> try_exec("RELEASE das_sp") |> ignore_sql_error
+    } else {
+        db |> try_exec("ROLLBACK") |> ignore_sql_error
+    }
+}
+
+def with_transaction(db : SqlRunner; blk : block<() : void>) : void {
+    //! 2-arg overload — abstract layer entry point. Defaults to
+    //! ``SqliteTxnMode.Deferred`` (matches SQLite's default ``BEGIN``).
+    db |> with_transaction(SqliteTxnMode.Deferred, blk)
+}
+
+def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>) : void {
+    //! Wraps ``blk`` in a SQL transaction. Emits BEGIN [mode] / COMMIT, or
+    //! SAVEPOINT das_sp / RELEASE das_sp when nested inside an existing
+    //! transaction. ROLLBACK fires on panic / early return via daslang's
+    //! ``finally`` (best effort — original failure propagates).
+    let was_in_txn = db |> in_transaction()
+    db |> exec(txn_begin_sql(was_in_txn, mode))
+    var success = false
+    {
+        invoke(blk)
+        success = true
+    } finally {
+        if (success) {
+            // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). If it does, roll
+            // back so the connection isn't left mid-transaction, then panic
+            // with the commit message.
+            let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
+            if (commit_err |> is_some) {
+                txn_best_effort_rollback(db, was_in_txn)
+                panic(commit_err |> unwrap)
+            }
+        } else {
+            txn_best_effort_rollback(db, was_in_txn)
+        }
+    }
+}
+
+def try_transaction(db : SqlRunner; blk : block<() : void>) : SqlError {
+    //! Non-panic 2-arg overload. Returns ``none`` on commit success, or
+    //! ``some(errmsg)`` if BEGIN or COMMIT fails. Block panics still ROLLBACK
+    //! and re-propagate — wrap the block in your own try/recover if you want
+    //! to convert a block panic into a SqlError.
+    //!
+    //! Returns ``SqlError = Option<string>`` rather than ``Result<void, string>``
+    //! because daslang's ``Result<T, E>`` does not yet support a ``void`` payload.
+    return db |> try_transaction(SqliteTxnMode.Deferred, blk)
+}
+
+def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>) : SqlError {
+    //! Non-panic 3-arg overload. Same semantics as ``try_transaction(db, blk)``
+    //! with a SQLite-specific BEGIN modifier.
+    let was_in_txn = db |> in_transaction()
+    let begin_err = db |> try_exec(txn_begin_sql(was_in_txn, mode))
+    if (begin_err |> is_some) {
+        return begin_err
+    }
+    var success = false
+    {
+        invoke(blk)
+        success = true
+    } finally {
+        if (!success) {
+            txn_best_effort_rollback(db, was_in_txn)
+        }
+    }
+    // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). If it does, roll back
+    // so the connection isn't left mid-transaction before returning the error.
+    let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
+    if (commit_err |> is_some) {
+        txn_best_effort_rollback(db, was_in_txn)
+    }
+    return commit_err
+}
+
+// ============================================================================
+// Generic DML runners — used by the `_sql_update` / `_sql_delete` macros.
+//
+// These take a SQL string + bind block (the macro fills in the
+// `sqlite_bind(stmt, idx, expr)` calls) and execute it. Return rows-affected
+// for non-RETURNING; array<T> for RETURNING.
+// ============================================================================
+
+def try_run_dml(db : SqlRunner; sql : string;
+                bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<int, string> {
+    //! Prepares ``sql``, invokes ``bind_blk`` to bind parameters, steps once,
+    //! and returns rows-affected. Used by the `_sql_update` / `_sql_delete`
+    //! macros for predicate-based mutations.
+    return <- db |> try_step_dml(sql, bind_blk, "DML")
+}
+
+def run_dml(db : SqlRunner; sql : string;
+            bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : int {
+    //! Strict variant of ``try_run_dml``. Panics with the libsqlite3 errmsg on failure.
+    let r = db |> try_run_dml(sql, bind_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_run_dml_returning(db : SqlRunner; sql : string;
+                          bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                          row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<array<TT -const -#>, string> {
+    //! Prepares ``sql`` (which must include a ``RETURNING ...`` clause),
+    //! invokes ``bind_blk``, then steps repeatedly through ``SQLITE_ROW``
+    //! rows, calling ``row_blk`` to materialize each result row.
+    //! Used by ``_sql_update_returning`` / ``_sql_delete_returning`` macros.
+    return <- db |> try_collect_rows(sql, bind_blk, row_blk, "DML RETURNING")
+}
+
+def run_dml_returning(db : SqlRunner; sql : string;
+                      bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
+                      row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : array<TT -const -#> {
+    //! Strict variant of ``try_run_dml_returning``. Panics on failure.
+    var r = db |> try_run_dml_returning(sql, bind_blk, row_blk)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return <- r._value
+}
+
 [unused_argument(t)]
 def try_select_from(db : SqlRunner; t : type<auto(TT)>) : Result<array<TT -const -#>, string> {
     //! Reads every row of the table backing ``T`` and materializes them as ``array<TT>``.
@@ -715,27 +1053,11 @@ def try_select_from(db : SqlRunner; t : type<auto(TT)>) : Result<array<TT -const
     //!
     //! NOTE: uses a regular generic (`type<auto(TT)>`) rather than `[template]` so
     //! the `type<T>` argument survives in the AST for `_sql` chain-pattern matching.
-    let sql = _::_sql_select_all_sql(type<TT -const -#>)
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "select_from prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    var inscope result : array<TT -const -#>
-    var rc = sqlite3_step(stmt)
-    while (rc == SQLITE_ROW) {
-        result |> emplace(_::_sql_read_row(stmt, type<TT -const -#>))
-        rc = sqlite3_step(stmt)
-    }
-    if (rc != SQLITE_DONE) {
-        let msg = "select_from step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    sqlite3_finalize(stmt)
-    return move_ok(result, type<string>)
+    return <- db |> try_collect_rows(_::_sql_select_all_sql(type<TT -const -#>),
+        $(var stmt : sqlite3_stmt?) {},
+        $(stmt : sqlite3_stmt?) {
+            return _::_sql_read_row(stmt, type<TT -const -#>)
+        }, "select_from")
 }
 
 [unused_argument(t)]
@@ -762,27 +1084,7 @@ def try_run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sq
     //! Prepares ``sql``, runs ``bind_blk`` once, then steps the cursor and
     //! materializes each row via ``row_blk``. Returns ``Err(errmsg)`` on
     //! prepare or step failure.
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    invoke(bind_blk, stmt)
-    var inscope result : array<TT -const -#>
-    var rc = sqlite3_step(stmt)
-    while (rc == SQLITE_ROW) {
-        result |> push(invoke(row_blk, stmt))
-        rc = sqlite3_step(stmt)
-    }
-    if (rc != SQLITE_DONE) {
-        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<array<TT -const -#>>)
-    }
-    sqlite3_finalize(stmt)
-    return move_ok(result, type<string>)
+    return <- db |> try_collect_rows(sql, bind_blk, row_blk, "_sql")
 }
 
 def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : array<TT -const -#> {
@@ -822,27 +1124,7 @@ def try_run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var s
     //! Prepares ``sql``, runs ``bind_blk`` once, steps once. Returns
     //! ``Ok(some(row))`` if a row is found, ``Ok(none)`` if zero rows, or
     //! ``Err(errmsg)`` on prepare/step failure.
-    var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
-    if (prc != SQLITE_OK) {
-        let msg = "_sql prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<Option<TT -const -#>>)
-    }
-    invoke(bind_blk, stmt)
-    let rc = sqlite3_step(stmt)
-    if (rc == SQLITE_DONE) {
-        sqlite3_finalize(stmt)
-        return ok(none(type<TT -const -#>), type<string>)
-    }
-    if (rc != SQLITE_ROW) {
-        let msg = "_sql step failed: {sqlite3_errmsg(db.sqlite_handle)}"
-        sqlite3_finalize(stmt)
-        return err(msg, type<Option<TT -const -#>>)
-    }
-    var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
-    sqlite3_finalize(stmt)
-    return move_ok(move_some(row), type<string>)
+    return <- try_one_row_opt(db, sql, bind_blk, row_blk, "_sql")
 }
 
 def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Option<TT -const -#> {
@@ -966,6 +1248,14 @@ class SqlTableMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_select_all)
         var fn_read = make_read_row_fn(st, fields)
         compiling_module() |> add_function(fn_read)
+        var fn_upd_pk = make_update_by_pk_sql_fn(st, table_name, fields)
+        compiling_module() |> add_function(fn_upd_pk)
+        var fn_del_pk = make_delete_by_pk_sql_fn(st, table_name, fields)
+        compiling_module() |> add_function(fn_del_pk)
+        var fn_bind_upd = make_bind_row_for_update_fn(st, fields)
+        compiling_module() |> add_function(fn_bind_upd)
+        var fn_bind_pk = make_bind_row_pk_only_fn(st, fields)
+        compiling_module() |> add_function(fn_bind_pk)
 
         return true
     }
@@ -1187,6 +1477,162 @@ class SqlTableMacro : AstStructureAnnotation {
             var row = default<$t(st)>
             $b(assign_exprs)
             return <- row
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def find_pk_field(fields : array<FieldInfo>) : int {
+        for (i in range(length(fields))) {
+            if (fields[i].is_pk) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    def make_update_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // PK-less / SET-less structs get a stub that panics at runtime — using
+        // ``concept_assert`` here would fire at compile-time on every
+        // ``[sql_table]`` declaration (the function body is type-checked
+        // unconditionally). The stub stays unreachable in practice because
+        // ``update(row)`` panics from the same function before binding runs.
+        let pk_idx = find_pk_field(fields)
+        if (pk_idx < 0) {
+            let st_name = string(st.name)
+            let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable — no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
+            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+                panic($v(msg))
+                return ""
+            }
+            fn.flags |= FunctionFlags.generated
+            fn.body |> force_at(st.at)
+            return <- fn
+        }
+        let pk_col = fields[pk_idx].col_name
+        let set_clause = build_string() $(var w) {
+            var first = true
+            for (info in fields) {
+                if (info.is_pk) {
+                    continue
+                }
+                if (!first) {
+                    w |> write(", ")
+                }
+                w |> write("\"")
+                w |> write(info.col_name)
+                w |> write("\" = ?")
+                first = false
+            }
+        }
+        // PK-only struct (no SET columns): `UPDATE T SET WHERE pk=?` is invalid
+        // SQL. Stub panics at call time with a clear message.
+        if (empty(set_clause)) {
+            let st_name = string(st.name)
+            let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK field is missing. Add at least one non-PK column, or use raw `exec`."
+            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+                panic($v(msg))
+                return ""
+            }
+            fn.flags |= FunctionFlags.generated
+            fn.body |> force_at(st.at)
+            return <- fn
+        }
+        let sql = "UPDATE \"{table_name}\" SET {set_clause} WHERE \"{pk_col}\" = ?"
+        var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+            return $v(sql)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_delete_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        let pk_idx = find_pk_field(fields)
+        if (pk_idx < 0) {
+            let st_name = string(st.name)
+            let msg = "[sql_table] {st_name}: delete_(row) / delete_by_id require a @sql_primary_key field. Use `_sql_delete(type<{st_name}>, where)` instead."
+            var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st)) : string {
+                panic($v(msg))
+                return ""
+            }
+            fn.flags |= FunctionFlags.generated
+            fn.body |> force_at(st.at)
+            return <- fn
+        }
+        let pk_col = fields[pk_idx].col_name
+        let sql = "DELETE FROM \"{table_name}\" WHERE \"{pk_col}\" = ?"
+        var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st)) : string {
+            return $v(sql)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_bind_row_for_update_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // Emits SET-then-WHERE binds: every non-PK column at indices 1..N,
+        // PK column at index N+1. Mirrors the SQL emitted by
+        // `_sql_update_by_pk_sql`. For PK-less / SET-less structs the stub
+        // never runs (the SQL helper panics first), but we still emit a
+        // valid no-op body so the surface compiles.
+        let pk_idx = find_pk_field(fields)
+        if (pk_idx < 0) {
+            var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
+                pass
+            }
+            fn.flags |= FunctionFlags.generated
+            fn.body |> force_at(st.at)
+            return <- fn
+        }
+
+        var bind_exprs : array<ExpressionPtr>
+        var bind_idx = 0
+        // Non-PK columns first.
+        for (i in range(length(fields))) {
+            if (fields[i].is_pk) {
+                continue
+            }
+            bind_idx++
+            let bi = bind_idx
+            let field_name = fields[i].name
+            bind_exprs |> push(qmacro_expr(${
+                sqlite_bind(stmt, $v(bi), row.$f(field_name));
+            }))
+        }
+        // PK column last (WHERE clause).
+        bind_idx++
+        let pk_bind_idx = bind_idx
+        let pk_field_name = fields[pk_idx].name
+        bind_exprs |> push(qmacro_expr(${
+            sqlite_bind(stmt, $v(pk_bind_idx), row.$f(pk_field_name));
+        }))
+
+        var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
+            $b(bind_exprs)
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_bind_row_pk_only_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // Binds just the PK column at index 1. Used by `try_delete_(row)` to
+        // execute `DELETE FROM T WHERE pk=?` without needing every field set.
+        // PK-less structs get a no-op stub (the SQL helper panics first).
+        let pk_idx = find_pk_field(fields)
+        if (pk_idx < 0) {
+            var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
+                pass
+            }
+            fn.flags |= FunctionFlags.generated
+            fn.body |> force_at(st.at)
+            return <- fn
+        }
+        let pk_field_name = fields[pk_idx].name
+        var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
+            sqlite_bind(stmt, 1, row.$f(pk_field_name))
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
