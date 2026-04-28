@@ -275,8 +275,9 @@ namespace das {
         for ( auto mod : modules ) {
             for ( auto & [key, ann] : mod->handleTypes ) {
                 if ( ann ) {
+                    const auto &ann_name = ann->name;
                     ann->visitTypeDecls([&]( TypeDecl * td ) {
-                        vis.trackAnnotationTypeDecl(td, ann->name);
+                        vis.trackAnnotationTypeDecl(td, ann_name);
                     });
                 }
             }
