@@ -1,23 +1,23 @@
-.. _utils_find_dupes:
+.. _utils_detect_dupe:
 
 .. index::
-   single: Utils; find_dupes
+   single: Utils; detect-dupe
    single: Utils; Duplicate detection
    single: Utils; Code similarity
 
 =====================================================
- find_dupes --- Cross-file similar-function detector
+ detect-dupe --- Cross-file similar-function detector
 =====================================================
 
-``find_dupes`` walks one or more directories of ``.das`` files,
+``detect-dupe`` walks one or more directories of ``.das`` files,
 normalises every user function into an alpha-renamed token stream
 (identifiers, types, and literals all collapsed), and reports
 near-identical functions across the corpus.  It is useful for
 surfacing test-suite boilerplate that could be factored, near-clones
 that drifted apart, or copy-pasted helpers that escaped review.
 
-Two interfaces ship together: a CLI (``utils/find_dupes/main.das``)
-and two MCP tools (``export_corpus`` and ``find_duplicates``) that
+Two interfaces ship together: a CLI (``utils/detect-dupe/main.das``)
+and two MCP tools (``export_corpus`` and ``detect_duplicates``) that
 expose the same engine to AI coding assistants.
 
 .. contents::
@@ -50,13 +50,13 @@ Quick start
 
 CLI::
 
-   bin/daslang utils/find_dupes/main.das -- -p tests --json /tmp/dupes.json
-   bin/daslang utils/find_dupes/main.das -- -p tests/strings -t 0.85 -n 20
-   bin/daslang utils/find_dupes/main.das -- -p daslib --no-fuzzy --min-tokens 32
-   bin/daslang utils/find_dupes/main.das -- -p tests --keep all
-   bin/daslang utils/find_dupes/main.das -- -?
+   bin/daslang utils/detect-dupe/main.das -- -p tests --json /tmp/dupes.json
+   bin/daslang utils/detect-dupe/main.das -- -p tests/strings -t 0.85 -n 20
+   bin/daslang utils/detect-dupe/main.das -- -p daslib --no-fuzzy --min-tokens 32
+   bin/daslang utils/detect-dupe/main.das -- -p tests --keep all
+   bin/daslang utils/detect-dupe/main.das -- -?
 
-JIT works too --- ``bin/daslang -jit utils/find_dupes/main.das -- ...``
+JIT works too --- ``bin/daslang -jit utils/detect-dupe/main.das -- ...``
 (net runtime improvement is modest because per-file cost is
 dominated by interpreter compilation of the scanned files).
 
@@ -134,7 +134,7 @@ Flags
      - off
      - Pattern name to KEEP despite default skip (repeatable).
        Special value ``all`` disables pattern filtering entirely.
-       See :ref:`utils_find_dupes_patterns`
+       See :ref:`utils_detect_dupe_patterns`
    * - ``-v / --verbose``
      - off
      - Per-file progress
@@ -148,7 +148,7 @@ debug agents at compile time, which would abort the scanner on the
 second use.
 
 
-.. _utils_find_dupes_patterns:
+.. _utils_detect_dupe_patterns:
 
 Pattern filter
 ==============
@@ -247,6 +247,11 @@ modes are layered on top via a single ``is_candidate`` flag inside
 ``FuncRecord``.  A cluster or fuzzy pair is **kept** iff at least
 one of its members is a candidate.
 
+An AI judge (:ref:`utils_find_dupe`) can consume the resulting JSON
+report and triage clusters into real duplicates, partial matches, and
+false positives --- useful when a flat report is too noisy to walk
+manually.
+
 
 B1 --- baseline diff (CI gate)
 ------------------------------
@@ -255,10 +260,10 @@ Snapshot the corpus once, commit the JSON, and on every PR re-scan
 and diff::
 
    # one-off: build the baseline (commit this)
-   bin/daslang utils/find_dupes/main.das -- -p tests --export-functions tests_baseline.json
+   bin/daslang utils/detect-dupe/main.das -- -p tests --export-functions tests_baseline.json
 
    # CI: scan again, surface only what isn't in the baseline
-   bin/daslang utils/find_dupes/main.das -- -p tests --baseline tests_baseline.json --check
+   bin/daslang utils/detect-dupe/main.das -- -p tests --baseline tests_baseline.json --check
 
 Records are tagged candidate when their **member identity**
 (``file:line:name``) is absent from the baseline.  A cluster
@@ -287,12 +292,12 @@ B2 --- PR-files / interactive
 "Did I just write something that already exists?"  Compare a file
 list against a pre-built corpus::
 
-   bin/daslang utils/find_dupes/main.das -- \
+   bin/daslang utils/detect-dupe/main.das -- \
        --import-functions tests_baseline.json --against tests/strings/new_helper.das
 
    # git pipeline:
    git diff --name-only master | grep '\.das$' | \
-       bin/daslang utils/find_dupes/main.das -- \
+       bin/daslang utils/detect-dupe/main.das -- \
            --import-functions tests_baseline.json --against-from-stdin
 
 When ``--against`` and ``--import-functions`` are both set, corpus
@@ -316,8 +321,8 @@ tool (visualizer, custom clusterer), or to shard compilation
 across machines and merge later, dump the post-canonicalization
 records and reload them::
 
-   bin/daslang utils/find_dupes/main.das -- -p tests --export-functions /tmp/funcs.json
-   bin/daslang utils/find_dupes/main.das -- --import-functions /tmp/funcs.json --json /tmp/dupes.json
+   bin/daslang utils/detect-dupe/main.das -- -p tests --export-functions /tmp/funcs.json
+   bin/daslang utils/detect-dupe/main.das -- --import-functions /tmp/funcs.json --json /tmp/dupes.json
 
 ``--import-functions`` is mutually exclusive with both ``--path``
 and ``--export-functions``.  ``--export-functions`` always exits
@@ -360,9 +365,9 @@ end-to-end --- no shelling out:
    * - ``export_corpus``
      - Scan ``paths`` (files / directories / globs), compile each
        ``.das`` file in-process, and write a corpus JSON to ``out``
-       in the same shape ``find_duplicates`` expects.
+       in the same shape ``detect_duplicates`` expects.
        Replacement for the CLI ``--export-functions``.
-   * - ``find_duplicates``
+   * - ``detect_duplicates``
      - Wraps B2 mode.  Pass ``paths`` (newline- or
        comma-delimited, or a glob) and ``corpus`` (a JSON from
        ``export_corpus`` / ``--export-functions``); receive a
@@ -418,9 +423,9 @@ Implementation
      - Narrowly-targeted fixture (one function per
        canonicalization concern) for unit-testing
        ``CanonicalVisitor``
-   * - ``test_find_dupes.das``
+   * - ``test_detect_dupe.das``
      - dastest suite --- run with
-       ``bin/daslang dastest/dastest.das -- --test utils/find_dupes/test_find_dupes.das``
+       ``bin/daslang dastest/dastest.das -- --test utils/detect-dupe/test_detect_dupe.das``
 
 
 Notes
@@ -444,7 +449,7 @@ Notes
   modules (e.g. ``dastest/testing.das``) flood the report.
 * Per-source-line dedup: a generic reified for N types becomes N
   ``FunctionPtr`` instances all pointing at the same
-  ``(file, line)``.  ``find_dupes`` keeps the first to avoid the
+  ``(file, line)``.  ``detect-dupe`` keeps the first to avoid the
   same source location being counted N times.
 
 

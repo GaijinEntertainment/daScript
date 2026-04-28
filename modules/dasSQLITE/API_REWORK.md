@@ -497,7 +497,7 @@ dasSQLITE suite: **309 tests passing** (271 pre-chunk-7 + 38 new).
   only fires from raw `exec`. Detecting "user wants the default" from
   a struct field value is fragile (zero-detection) or verbose (explicit
   field list). Raw SQL is the escape hatch.
-- **Pre-existing duplicate cleanup pass** — `find_duplicates` over
+- **Pre-existing duplicate cleanup pass** — `detect_duplicates` over
   `sqlite_boost.das` + `sqlite_linq.das` flagged five real merge
   candidates carried over from chunks 3 / 6, none of which are chunk-7
   surface but all of which would land cleanly together:

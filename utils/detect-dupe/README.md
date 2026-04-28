@@ -1,4 +1,4 @@
-# find_dupes — cross-file similar-function detector
+# detect-dupe — cross-file similar-function detector
 
 Walks a directory tree of `.das` files, normalises each user function into
 an alpha-renamed token stream (identifiers, types, and literals all
@@ -22,15 +22,15 @@ review.
 ## Usage
 
 ```sh
-./bin/daslang utils/find_dupes/main.das -- -p tests --json /tmp/dupes.json
-./bin/daslang utils/find_dupes/main.das -- -p tests/strings -t 0.85 -n 20
-./bin/daslang utils/find_dupes/main.das -- -p daslib --no-fuzzy --min-tokens 32
-./bin/daslang utils/find_dupes/main.das -- -p tests -L --min-tokens 16    # cluster dastest run() bodies
-./bin/daslang utils/find_dupes/main.das -- -p tests --keep all            # disable pattern filter (legacy view)
-./bin/daslang utils/find_dupes/main.das -- -?
+./bin/daslang utils/detect-dupe/main.das -- -p tests --json /tmp/dupes.json
+./bin/daslang utils/detect-dupe/main.das -- -p tests/strings -t 0.85 -n 20
+./bin/daslang utils/detect-dupe/main.das -- -p daslib --no-fuzzy --min-tokens 32
+./bin/daslang utils/detect-dupe/main.das -- -p tests -L --min-tokens 16    # cluster dastest run() bodies
+./bin/daslang utils/detect-dupe/main.das -- -p tests --keep all            # disable pattern filter (legacy view)
+./bin/daslang utils/detect-dupe/main.das -- -?
 ```
 
-`./bin/daslang -jit utils/find_dupes/main.das -- …` works too — find_dupes itself JITs cleanly. Net runtime improvement is modest because per-file cost is dominated by interpreter compilation of the scanned files.
+`./bin/daslang -jit utils/detect-dupe/main.das -- …` works too — detect-dupe itself JITs cleanly. Net runtime improvement is modest because per-file cost is dominated by interpreter compilation of the scanned files.
 
 Flags:
 
@@ -49,7 +49,7 @@ Flags:
 | `--baseline` | (off) | B1: load corpus JSON; tag records whose member identity (`file:line:name`) isn't in the baseline as candidates and filter to those |
 | `--baseline-strict` | off | B1 modifier: also drop clusters whose canonical exists in the baseline (only fully-new clusters survive) |
 | `--against` | (off) | B2 candidate path (file or directory). Repeatable. Compiled in-process; their functions are tagged candidates and the report is filtered |
-| `--against-from-stdin` | off | B2: read newline-delimited candidate paths from stdin (use with `git diff --name-only … \| find_dupes --against-from-stdin …`) |
+| `--against-from-stdin` | off | B2: read newline-delimited candidate paths from stdin (use with `git diff --name-only … \| detect-dupe --against-from-stdin …`) |
 | `--check` | off | Exit non-zero when the post-filter report contains any clusters/pairs (CI gate) |
 | `--flat` | off | In `--against` mode, force the flat clusters+pairs writer (default is the per-candidate rollup) |
 | `-k / --keep` | (off) | Pattern name to KEEP despite default skip (repeatable). Special value `all` disables pattern filtering entirely. See "Patterns" below |
@@ -75,7 +75,7 @@ Pattern detection lives in `patterns.das`. Adding a new pattern is a three-step 
 
 1. Add a `try_<name>(name?, canonical, var hit) : bool` predicate that returns `true` and populates `hit.name` / `hit.note` when matched. Body-shape matchers take only the canonical; name-shape matchers take both. Match order in `classify()` is name-first, then body-shape (more specific → more general).
 2. Wire it into `classify(name, canonical)` in priority order (more specific shapes first; name-based matchers usually win over body-shape matchers).
-3. Add at least one positive test and one negative test in `test_find_dupes.das` (under `── patterns / classify ──`).
+3. Add at least one positive test and one negative test in `test_detect_dupe.das` (under `── patterns / classify ──`).
 
 Pattern names are the user-visible contract — they appear in `--keep`, in the per-record `--verbose` skip log, and in the summary line. Pick a short, stable identifier.
 
@@ -117,7 +117,7 @@ is real signal).
 | `exchange.das` | On-disk JSON schema + writer/reader for `--export-functions` / `--import-functions` |
 | `fixture/synth.das` | Hand-crafted fixture for smoke-testing the visitor end-to-end |
 | `fixture/canonical_cases.das` | Narrowly-targeted fixture (one function per canonicalization concern) for unit-testing `CanonicalVisitor` |
-| `test_find_dupes.das` | dastest suite — run with `bin/daslang dastest/dastest.das -- --test utils/find_dupes/test_find_dupes.das` |
+| `test_detect_dupe.das` | dastest suite — run with `bin/daslang dastest/dastest.das -- --test utils/detect-dupe/test_detect_dupe.das` |
 
 Notes:
 
@@ -146,10 +146,10 @@ Compilation is the expensive step; the canonical-form computation is determinist
 
 ```sh
 # compile + extract, write JSON, exit before clustering
-./bin/daslang utils/find_dupes/main.das -- -p tests --export-functions /tmp/funcs.json
+./bin/daslang utils/detect-dupe/main.das -- -p tests --export-functions /tmp/funcs.json
 
 # skip compilation; cluster + report from JSON (--json still works as before)
-./bin/daslang utils/find_dupes/main.das -- --import-functions /tmp/funcs.json --json /tmp/dupes.json
+./bin/daslang utils/detect-dupe/main.das -- --import-functions /tmp/funcs.json --json /tmp/dupes.json
 ```
 
 `--import-functions` is mutually exclusive with both `--path` and `--export-functions`. `--export-functions` always exits before the clustering pass.
@@ -181,10 +181,10 @@ Snapshot the corpus once, commit the JSON, and on every PR re-scan + diff.
 
 ```sh
 # one-off: build the baseline (commit this)
-./bin/daslang utils/find_dupes/main.das -- -p tests --export-functions tests_baseline.json
+./bin/daslang utils/detect-dupe/main.das -- -p tests --export-functions tests_baseline.json
 
 # CI: scan again, surface only what isn't in the baseline
-./bin/daslang utils/find_dupes/main.das -- -p tests --baseline tests_baseline.json --check
+./bin/daslang utils/detect-dupe/main.das -- -p tests --baseline tests_baseline.json --check
 ```
 
 Records are tagged candidate when their **member identity** (`file:line:name`) is absent from the baseline. A cluster appears in the report if any of its members is a candidate, which catches both (a) brand-new canonicals and (b) growth — a new copy of an already-tracked canonical added in a new location. Use `--baseline-strict` to drop case (b) — strict additionally filters out clusters whose canonical was already in the baseline, so only fully-new canonicals survive. Pairs aren't strict-filtered (the baseline doesn't carry MinHash signatures), so strict is cluster-only.
@@ -198,12 +198,12 @@ Note: `file:line:name` keying means an unrelated edit that shifts line numbers w
 "Did I just write something that already exists?" Compare a file list against a pre-built corpus:
 
 ```sh
-./bin/daslang utils/find_dupes/main.das -- \
+./bin/daslang utils/detect-dupe/main.das -- \
     --import-functions tests_baseline.json --against tests/strings/new_helper.das
 
 # git pipeline:
 git diff --name-only master | grep '\.das$' | \
-    ./bin/daslang utils/find_dupes/main.das -- \
+    ./bin/daslang utils/detect-dupe/main.das -- \
         --import-functions tests_baseline.json --against-from-stdin
 ```
 
@@ -213,7 +213,7 @@ The default writer in `--against` mode is a per-candidate rollup ("for each func
 
 ### MCP integration
 
-The `find_duplicates` tool in the [daslang MCP server](../mcp/) wraps B2 mode for AI assistants. Pass `paths` (newline- or comma-delimited, or a glob) and `corpus` (the JSON from `--export-functions`); receive a per-candidate JSON envelope. Used by Claude Code et al. during PR review.
+The `detect_duplicates` tool in the [daslang MCP server](../mcp/) wraps B2 mode for AI assistants. Pass `paths` (newline- or comma-delimited, or a glob) and `corpus` (the JSON from `--export-functions`); receive a per-candidate JSON envelope. Used by Claude Code et al. during PR review.
 
 ## Out of scope
 

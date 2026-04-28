@@ -85,7 +85,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/writing_tests.md` | Writing tests for your daslang code with the bundled `dastest` framework (`bin/daslang dastest/dastest.das -- --test ...`) |
 | `skills/memory_leak_detection.md` | Diagnosing leaks — `--das-profiler-leaks`, `-track-allocations -heap-report`, `GC APP LEAK` reports, `--track-smart-ptr`, `HandleRegistry` dump |
 | `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Stream/Feature leaks using `DumpJobQueLeaks` and `--track-job-status <id>` refcount tracing |
-| `skills/find_dupes.md` | Detecting duplicate / near-duplicate functions across a daslang codebase — building a corpus, asking "did I just write something that already exists?", or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `find_duplicates`) and the underlying CLI (`utils/find_dupes/main.das`) |
+| `skills/detect_dupe.md` | Detecting duplicate / near-duplicate functions across a daslang codebase — building a corpus, asking "did I just write something that already exists?", or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `detect_duplicates`) and the underlying CLI (`utils/detect-dupe/main.das`) |
 | `skills/linq.md` | Any `.das` code that filters, maps, sorts, groups, aggregates, or otherwise transforms a sequence into another sequence, array, or table. Preference order: comprehension `[for (x in src); expr; where cond]` when one expression covers it → LINQ (`daslib/linq_boost` shorthand `_select` / `_where` / `_to_array`, or pipe-form `arr \|> where_(...) \|> ...`) for chains, lazy iterators, set ops, joins, aggregations → plain `for` loop for side-effecting iteration. Avoid `daslib/functional` (`map` / `filter` / `each` / `to_array`) for new code |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
@@ -124,7 +124,7 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - `strict_smart_pointers` is ON — but the only types that are still `smart_ptr` are `Program` (`ProgramPtr`), `Context` (`ContextPtr`), `FileAccess` (`FileAccessPtr`), and a few internals (`DebugAgentPtr`, `VisitorAdapterPtr` from `make_visitor`). Only those need `var inscope`. **All AST types** (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, every `Annotation` subclass) are now plain raw pointers (gc_node) — see "AST nodes (gc_node)" below
 - No implicit type promotion: `int + float` is a compile error — both sides must match
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
-- `int("123")` does NOT work — use `to_int` from `require strings`
+- `int("123")` does NOT work — use `to_int` from `require strings`. **`to_int` silently returns `0` on garbage** (`to_int("foo")` → `0`, `to_int("12abc")` → `12`). When you need to validate user/external input — including any string that flows into a shell command, file path, or system call — use `try_to_int` / `try_to_float` from `daslib/strings_convert` instead. Those return `Result<T; ConversionError>` distinguishing `invalid_argument` / `out_of_range` / `trailing_garbage`, so `";rm -rf;"` rejects cleanly instead of becoming `0`. Same for `to_float` → `try_to_float`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
 - **`default<T>`** — the default (zero) value of type `T`: `default<int>` is `0`, `default<string>` is `""`, `default<float>` is `0.0f`. The body of the called function CAN use the value freely.
 - **`type<T>`** vs **`default<T>`** as a witness argument — they are **not** interchangeable:
@@ -245,7 +245,7 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 - **Field/variable annotations use `@name` only:** `@safe_when_uninitialized at : LineInfo`, `@sql_primary_key id : int64`. The `[name]` form is reserved for struct/function/global-level annotations and does NOT parse on a struct field
 - `require` uses forward slash: `require daslib/linq` — NOT backslash
 - `require foo public` — re-exports `foo` transitively
-- `[export] def main()` returns `void` — do NOT return values from main
+- `[export] def main()` defaults to returning `void`, but you can declare it as `def main() : int { ... return rc }` when you need to surface a non-zero process exit code (e.g. CLI tools whose callers branch on exit). Don't reach for `panic` just to force a non-zero exit; declare `: int` and `return rc` instead.
 - `push` copies (fails for non-copyable types), `emplace` moves (zeros source), `push_clone` clones (preserves source)
 - Non-copyable types (`array<T>`, `table<K;V>`, lambdas): use `:=`, `push_clone`, or `<-`
 - Blocks cannot be stored/returned/captured — use lambdas or function pointers
@@ -286,7 +286,7 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
-- `utils/find_dupes/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `find_duplicates` MCP tools)
+- `utils/detect-dupe/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `detect_duplicates` MCP tools)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
 - `tree-sitter-daslang/` — Tree-sitter grammar, shared library, and highlighting queries
@@ -335,8 +335,8 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 | `outline` | Manually scanning files for function/struct/enum declarations |
 | `aot` | Manually running AOT generation and extracting function C++ |
 | `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
-| `export_corpus` | Running `utils/find_dupes/main.das --export-functions` from a shell to build a duplicate-detection corpus |
-| `find_duplicates` | Running `utils/find_dupes/main.das --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
+| `export_corpus` | Running `utils/detect-dupe/main.das --export-functions` from a shell to build a duplicate-detection corpus |
+| `detect_duplicates` | Running `utils/detect-dupe/main.das --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
 | `live_launch` | Manually starting `daslang-live` from shell |
 | `live_status` | `curl http://localhost:9090/status` |
 | `live_error` | `curl http://localhost:9090/error` |

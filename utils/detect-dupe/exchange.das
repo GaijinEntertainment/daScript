@@ -36,7 +36,7 @@ struct public ExportEnvelope {
 
 // v2 (2026-04-27): added `end_line` to ExportedFunction so consumers
 // can extract the full function body from disk by line range. Required
-// by `utils/look-at-dupes/`. v1 readers reject v2 files (and vice
+// by `utils/find-dupe/`. v1 readers reject v2 files (and vice
 // versa) via the explicit version check in `read_import` /
 // `load_baseline_canonicals`.
 let public EXCHANGE_SCHEMA_VERSION = 2
@@ -100,7 +100,7 @@ def public write_export(records : array<FuncRecord>; path : string) : bool {
 // `end_line` here doesn't break legacy data — a malformed v2 record
 // missing `end_line` defaults to 0 and gets rejected by this check
 // instead of silently degrading downstream consumers (e.g.
-// `look-at-dupes` would fall back to single-line source extraction).
+// `find-dupe` would fall back to single-line source extraction).
 def is_well_formed(ef : ExportedFunction) : bool {
     return (!empty(ef.canonical) && !empty(ef.name) && !empty(ef.file)
         && ef.line >= 1 && ef.end_line >= ef.line)

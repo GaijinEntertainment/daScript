@@ -276,35 +276,23 @@ def get_daslang_exe() : string {
     return get_das_exe()
 }
 
-// Run an external command, capture stdout+stderr to a temp file, return exit_code.
+// Run an external command, capture stdout+stderr, return exit_code.
+// `args[0]` is the executable; remaining elements are positional arguments.
 // timeout_sec > 0 kills the process tree after that many seconds (returns popen_timed_out).
 // timeout_sec <= 0 means no timeout.
-def run_and_capture(cmd_line : string; var output : string&; timeout_sec : float = 0.0) : int {
-    let root = get_das_root()
-    let tmp_out = "{root}/_mcp_cmd_output_{ref_time_ticks()}.txt"
-    let full_cmd = "{cmd_line} > {tmp_out} 2>&1"
-    var exit_code = -1
-    unsafe {
-        if (timeout_sec > 0.0) {
-            exit_code = popen_timeout(full_cmd, timeout_sec) $(f) {
-                if (f != null) {
-                    fread(f)
-                }
-            }
-        } else {
-            exit_code = popen(full_cmd) $(f) {
-                if (f != null) {
-                    fread(f)
-                }
-            }
-        }
-    }
-    fopen(tmp_out, "rb") $(f) {
+//
+// Argv-based: `popen_argv` (Windows: CreateProcess; Unix: fork+execvp) bypasses
+// the shell entirely. No cmd.exe quote-stripping, no /bin/sh `$()`/backtick
+// expansion — every argv element reaches the child verbatim. Callers don't
+// (and shouldn't) quote arguments themselves.
+def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    var captured : string
+    let exit_code = unsafe(popen_argv(args, timeout_sec, $(f) {
         if (f != null) {
-            output = fread(f)
+            captured := unsafe(fread_to_eof(f))
         }
-    }
-    remove(tmp_out)
+    }))
+    output := captured
     return exit_code
 }
 

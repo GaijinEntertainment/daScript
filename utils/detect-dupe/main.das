@@ -85,7 +85,7 @@ struct Config {
 
 // Read newline-delimited paths from stdin. Used by --against-from-stdin
 // to plug into shell pipelines: `git diff --name-only master |
-// daslang utils/find_dupes/main.das -- --against-from-stdin
+// daslang utils/detect-dupe/main.das -- --against-from-stdin
 // --import-functions corpus.json`. Skips blank lines.
 def read_stdin_paths(var paths : array<string>) {
     let f = fstdin()
@@ -186,12 +186,12 @@ def main() {
     var cfg = Config()
     let err = parse_args(cfg)
     if (cfg.help) {
-        print_help(get_command_info(type<Config>), "find_dupes")
+        print_help(get_command_info(type<Config>), "detect-dupe")
         return
     }
     if (err != "") {
         to_log(LOG_ERROR, "error: {err}\n\n")
-        print_help(get_command_info(type<Config>), "find_dupes")
+        print_help(get_command_info(type<Config>), "detect-dupe")
         return
     }
     let importing = !empty(cfg.import_functions)
@@ -216,7 +216,7 @@ def main() {
     }
     if (!importing && !has_against && length(cfg.path) == 0) {
         to_log(LOG_ERROR, "error: at least one --path is required (or pass --import-functions, or --against)\n\n")
-        print_help(get_command_info(type<Config>), "find_dupes")
+        print_help(get_command_info(type<Config>), "detect-dupe")
         return
     }
     if (cfg.threshold < 0.0f || cfg.threshold > 1.0f) {
@@ -311,7 +311,7 @@ def main() {
             // ship an incomplete corpus.
             if (n_failed > 0) {
                 to_log(LOG_ERROR, "error: {n_failed} compile failure(s); refusing to write partial export\n")
-                panic("find_dupes export failed: {n_failed} compile failure(s)")
+                panic("detect-dupe export failed: {n_failed} compile failure(s)")
             }
             if (write_export(records, cfg.export_functions)) {
                 to_log(LOG_INFO, "wrote {length(records)} function(s) to {cfg.export_functions}\n")
@@ -322,7 +322,7 @@ def main() {
             // partial-failure runs. The `error:` prefix matches the
             // format used elsewhere for usage errors in this CLI.
             to_log(LOG_ERROR, "error: could not write export to {cfg.export_functions}\n")
-            panic("find_dupes export failed")
+            panic("detect-dupe export failed")
         }
     }
 
@@ -492,6 +492,6 @@ def main() {
         // --check turns the post-filter report into a CI gate. Use
         // `panic` to surface a non-zero exit code (same pattern as the
         // export-failure path above).
-        panic("find_dupes --check failed: {length(rep.exact_clusters)} cluster(s), {length(rep.fuzzy_pairs)} pair(s)")
+        panic("detect-dupe --check failed: {length(rep.exact_clusters)} cluster(s), {length(rep.fuzzy_pairs)} pair(s)")
     }
 }

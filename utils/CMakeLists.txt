@@ -12,7 +12,7 @@ set(DAS_UTILS
     aot
     dascov
     daspkg
-    find_dupes
+    detect-dupe
 )
 
 if(NOT DAS_SQLITE_DISABLED)
@@ -72,8 +72,8 @@ SET(DAS_UTILS_TO_TEST
     dascov
     mcp
     lint
-    find_dupes
-    look-at-dupes/tests
+    detect-dupe
+    find-dupe/tests
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

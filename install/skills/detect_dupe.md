@@ -1,6 +1,6 @@
-# find_dupes — duplicate-function detection for daslang code
+# detect-dupe — duplicate-function detection for daslang code
 
-Read this skill before doing duplicate-detection work on a daslang codebase: building a corpus of canonical signatures, asking "did I just write something that already exists?", or wiring a CI gate that flags new structural duplicates. The tool ships as `utils/find_dupes/` plus two MCP tools (`export_corpus`, `find_duplicates`) on the daslang MCP server.
+Read this skill before doing duplicate-detection work on a daslang codebase: building a corpus of canonical signatures, asking "did I just write something that already exists?", or wiring a CI gate that flags new structural duplicates. The tool ships as `utils/detect-dupe/` plus two MCP tools (`export_corpus`, `detect_duplicates`) on the daslang MCP server.
 
 ## When to use this
 
@@ -19,7 +19,7 @@ The MCP server exposes the entire pipeline — no shelling out:
 | MCP tool | Purpose |
 |---|---|
 | `export_corpus` | Scan paths/dirs/globs, compile each `.das` file, write a `corpus.json` |
-| `find_duplicates` | Compare candidate file(s) against a `corpus.json`, return per-candidate matches |
+| `detect_duplicates` | Compare candidate file(s) against a `corpus.json`, return per-candidate matches |
 
 ### Step 1 — build a corpus
 
@@ -40,7 +40,7 @@ Output is an envelope:
 ### Step 2 — query against a candidate
 
 ```
-mcp__daslang__find_duplicates(
+mcp__daslang__detect_duplicates(
   paths="my_project/new_helper.das",
   corpus="corpus.json"
 )
@@ -98,7 +98,7 @@ The filter applies to **both** corpus records and freshly-compiled candidates. I
 
 ## CLI workflow (advanced)
 
-The CLI ships at `utils/find_dupes/main.das` and supports a few modes the MCP tools don't expose. Use it when you need:
+The CLI ships at `utils/detect-dupe/main.das` and supports a few modes the MCP tools don't expose. Use it when you need:
 
 - **B1 baseline / CI gate** — `--baseline <corpus.json> --check`. Records absent from the baseline are tagged candidates; non-zero exit when any cluster/pair survives.
 - **`--baseline-strict`** — drops clusters whose canonical was already in the baseline, so only fully-new canonicals survive.
@@ -111,18 +111,18 @@ Quick recipes:
 
 ```sh
 # one-off corpus build (commit this)
-bin/daslang utils/find_dupes/main.das -- -p src --export-functions baseline.json
+bin/daslang utils/detect-dupe/main.das -- -p src --export-functions baseline.json
 
 # CI gate: flag any new structural duplicates introduced by a PR
-bin/daslang utils/find_dupes/main.das -- -p src --baseline baseline.json --check
+bin/daslang utils/detect-dupe/main.das -- -p src --baseline baseline.json --check
 
 # git pipeline against the baseline
 git diff --name-only master | grep '\.das$' | \
-    bin/daslang utils/find_dupes/main.das -- \
+    bin/daslang utils/detect-dupe/main.das -- \
         --import-functions baseline.json --against-from-stdin
 ```
 
-Full flag reference: `bin/daslang utils/find_dupes/main.das -- -?` or the published docs.
+Full flag reference: `bin/daslang utils/detect-dupe/main.das -- -?` or the published docs.
 
 ## Limitations
 

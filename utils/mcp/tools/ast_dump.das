@@ -24,7 +24,8 @@ def do_ast_dump_expression(expression : string) : string {
         return make_tool_result("Cannot write temp file", true)
     }
     var output : string
-    let exit_code = run_and_capture("{exe} {script_path}", output)
+    let argv <- [exe, script_path]
+    let exit_code = run_and_capture(argv, output)
     remove(script_path)
     if (exit_code != 0) {
         return make_tool_result("AST dump failed (exit code {exit_code}):\n{output}", true)

@@ -1,0 +1,1 @@
+Drains an open file/pipe/socket to EOF using a 64 KB growing buffer and returns the captured bytes as a string. Use this for streams without a known size (pipes, subprocess output, sockets, stdin) where `fread` returns an empty string because `fstat().st_size` reports 0.
