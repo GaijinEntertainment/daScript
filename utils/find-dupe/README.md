@@ -59,7 +59,7 @@ Smoke test PASSED.
    ```bash
    bin/daslang utils/find-dupe/main.das -- --input ./dupes.json -v
    ```
-   Writes `find_dupe_verdicts.json` (machine) and `find_dupe_verdicts.md` (human) to `./find-dupe-out/` (override with `--out`).
+   Writes `find_dupe_verdicts.json` (machine) and `find_dupe_verdicts.md` (human) to `./find-dupe-out/` (override the directory with `--out`, the basename with `--out-basename`).
 
 > **Run from the project root.** `detect-dupe` records source paths relative to its cwd. `find-dupe` extracts each function's body from disk using those paths, so its cwd must match.
 

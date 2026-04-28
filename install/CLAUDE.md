@@ -245,7 +245,7 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 - **Field/variable annotations use `@name` only:** `@safe_when_uninitialized at : LineInfo`, `@sql_primary_key id : int64`. The `[name]` form is reserved for struct/function/global-level annotations and does NOT parse on a struct field
 - `require` uses forward slash: `require daslib/linq` — NOT backslash
 - `require foo public` — re-exports `foo` transitively
-- `[export] def main()` returns `void` — do NOT return values from main
+- `[export] def main()` defaults to returning `void`, but you can declare it as `def main() : int { ... return rc }` when you need to surface a non-zero process exit code (e.g. CLI tools whose callers branch on exit). Don't reach for `panic` just to force a non-zero exit; declare `: int` and `return rc` instead.
 - `push` copies (fails for non-copyable types), `emplace` moves (zeros source), `push_clone` clones (preserves source)
 - Non-copyable types (`array<T>`, `table<K;V>`, lambdas): use `:=`, `push_clone`, or `<-`
 - Blocks cannot be stored/returned/captured — use lambdas or function pointers

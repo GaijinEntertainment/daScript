@@ -30,6 +30,9 @@ struct Config {
     @clarg_doc = "output directory (default ./find-dupe-out)"
     out : string = "./find-dupe-out"
 
+    @clarg_doc = "basename for verdict files (default find_dupe_verdicts → <basename>.json + <basename>.md)"
+    out_basename : string = "find_dupe_verdicts"
+
     @clarg_doc = "model: haiku | sonnet (default haiku)"
     model : string = "haiku"
 
@@ -469,8 +472,8 @@ def run_pipeline(cfg : Config) : int {
         }
     }
     mkdir(cfg.out)
-    let json_path = path_join(cfg.out, "find_dupe_verdicts.json")
-    let md_path = path_join(cfg.out, "find_dupe_verdicts.md")
+    let json_path = path_join(cfg.out, "{cfg.out_basename}.json")
+    let md_path = path_join(cfg.out, "{cfg.out_basename}.md")
     // Build the report payload to write — filtered down to actionable
     // rows when --positives-only is set. Always a fresh struct so we
     // don't disturb `output.summary` (printed below).
@@ -507,28 +510,21 @@ def run_pipeline(cfg : Config) : int {
 
 
 [export]
-def main() {
+def main() : int {
     var cfg = Config()
     let err = parse_args(cfg)
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "find-dupe")
-        return
+        return 0
     }
     if (err != "") {
         to_log(LOG_ERROR, "error: {err}\n\n")
         print_help(get_command_info(type<Config>), "find-dupe")
-        return
+        return 1
     }
     if (cfg.smoke_test) {
         smoke_test()
-        return
+        return 0
     }
-    // `[export] def main()` returns void in daslang — surface a non-zero
-    // exit via `panic` (same convention as utils/detect-dupe/main.das).
-    // The detailed reason already went through `to_log(LOG_ERROR, ...)`
-    // inside run_pipeline, so the panic message is just a short tag.
-    let rc = run_pipeline(cfg)
-    if (rc != 0) {
-        panic("find-dupe failed (exit code {rc})")
-    }
+    return run_pipeline(cfg)
 }

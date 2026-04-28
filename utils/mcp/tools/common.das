@@ -287,14 +287,11 @@ def get_daslang_exe() : string {
 // (and shouldn't) quote arguments themselves.
 def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
     var captured : string
-    var exit_code = -1
-    unsafe {
-        exit_code = popen_argv(args, timeout_sec) $(f) {
-            if (f != null) {
-                captured := fread_to_eof(f)
-            }
+    let exit_code = unsafe(popen_argv(args, timeout_sec, $(f) {
+        if (f != null) {
+            captured := unsafe(fread_to_eof(f))
         }
-    }
+    }))
     output := captured
     return exit_code
 }

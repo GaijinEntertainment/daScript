@@ -100,7 +100,7 @@ Workflow
 
    Writes ``find_dupe_verdicts.json`` (machine) and
    ``find_dupe_verdicts.md`` (human) to ``./find-dupe-out/`` (override
-   with ``--out``).
+   the directory with ``--out``, the basename with ``--out-basename``).
 
 Run from the project root.  ``detect-dupe`` records source paths
 relative to its cwd; ``find_dupe`` extracts each function's body from

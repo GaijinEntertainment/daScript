@@ -16,15 +16,11 @@ def das_exe() : string {
 }
 
 def run_argv(args : array<string>; var output : string&) : int {
-    var rc = -1
-    unsafe {
-        rc = popen_argv(args, 0.0) $(f) {
-            if (f != null) {
-                output = fread_to_eof(f)
-            }
+    return unsafe(popen_argv(args, 0.0, $(f) {
+        if (f != null) {
+            output = unsafe(fread_to_eof(f))
         }
-    }
-    return rc
+    }))
 }
 
 // Tests -----------------------------------------------------------------
