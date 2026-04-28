@@ -1340,6 +1340,17 @@ namespace das {
                 return false;
             }
         }
+        virtual bool isAppliedToGeneric () const override {
+            if ( auto fnIsAppliedToGeneric = get_isAppliedToGeneric(classPtr) ) {
+                bool result = false;
+                runMacroFunction(context, "isAppliedToGeneric", [&]() {
+                    result = invoke_isAppliedToGeneric(context,fnIsAppliedToGeneric,classPtr);
+                });
+                return result;
+            } else {
+                return false;
+            }
+        }
         virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
             const AnnotationDeclaration & decl, string & err  ) const override {
             if ( auto fnIsCompatible = get_isCompatible(classPtr) ) {

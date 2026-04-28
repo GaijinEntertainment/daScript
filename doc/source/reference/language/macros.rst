@@ -115,6 +115,7 @@ There is additionally the ``[function_macro]`` annotation which accomplishes the
         def abstract transform ( var call : ExprCallFunc?; var errors : das_string ) : ExpressionPtr
         def abstract verifyCall ( var call : ExprCallFunc?; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
+        def abstract generic_apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract finish ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         def abstract patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
         def abstract fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
@@ -123,6 +124,7 @@ There is additionally the ``[function_macro]`` annotation which accomplishes the
         def abstract isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
         def abstract isSpecialized : bool
         def abstract appendToMangledName ( func:FunctionPtr; decl:AnnotationDeclaration; var mangledName:das_string ) : void
+        def abstract isAppliedToGeneric : bool
     }
 
 ``transform`` lets you change calls to the function and is applied at the infer pass.
@@ -132,6 +134,12 @@ Transform is the best way to replace or modify function calls with other semanti
 
 ``apply`` is applied to the function itself before the infer pass.
 Apply is typically where global function body modifications or instancing occurs.
+
+``generic_apply`` is applied to each instance of a generic function as it is specialized,
+after the type substitution. Use it for transformations that need the resolved types of the
+instance. For purely structural rewrites that do not need types resolved, override
+``apply`` and return true from ``isAppliedToGeneric`` so the rewrite happens once on the
+generic template instead.
 
 ``finish`` is applied to the function itself after the infer pass.
 It's only called on non-generic functions or instances of the generic functions.
@@ -154,6 +162,13 @@ If a function is not compatible, the errors field must be specified.
 
 ``appendToMangledName`` is called to append a mangled name to the function.
 That way multiple functions with the same type signature can exist and be differentiated between.
+
+``isAppliedToGeneric`` returns true if the annotation's ``apply`` should also run on
+generic function templates at parse time. By default it is false, meaning ``apply`` only
+runs on non-generic functions; generic instances receive ``generic_apply`` instead.
+Annotations that perform purely structural rewrites (no type information needed) — for
+example, ``[class_method]`` injecting a ``self`` argument — return true so that the
+rewrite happens once on the template and every instantiation inherits it.
 
 Lets review the following example from ``ast_boost`` of how the ``macro`` annotation is implemented:
 

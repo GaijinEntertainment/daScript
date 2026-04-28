@@ -109,6 +109,12 @@ class AstFunctionAnnotation {
     def abstract isCompatible(var func : FunctionPtr; var types : VectorTypeDeclPtr; decl : AnnotationDeclaration; var errors : das_string) : bool
     def abstract isSpecialized : bool
     def abstract appendToMangledName(func : FunctionPtr; decl : AnnotationDeclaration; var mangledName : das_string) : void
+    //! Returns true if this annotation's ``apply`` should also run on generic
+    //! function templates at parse time. Default is false. Annotations that
+    //! perform purely structural rewrites (no type information needed) override
+    //! this to ``true`` so the rewrite happens once on the template and every
+    //! instantiation inherits it. See ``[class_method]`` for an example.
+    def abstract isAppliedToGeneric : bool
 }
 
 [macro_interface]

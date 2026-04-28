@@ -163,13 +163,17 @@ namespace das {
         }
     }
 
-    void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at ) {
+    void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at, bool genericMode ) {
         if ( annL ) {
             for ( auto itA = annL->begin(); itA!=annL->end();  ) {
                 auto pA = *itA;
                 if ( pA->annotation ) {
                     if ( pA->annotation->rtti_isFunctionAnnotation() ) {
                         auto ann = static_cast<FunctionAnnotation*>(pA->annotation);
+                        if ( genericMode && !ann->isAppliedToGeneric() ) {
+                            itA ++;
+                            continue;
+                        }
                         string err;
                         if ( !ann->apply(func, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
@@ -799,9 +803,10 @@ namespace das {
             }
             assignDefaultArguments(func);
             if ( isGeneric ) {
+                runFunctionAnnotations(scanner, yyextra, func, annL, annLAt, /*genericMode=*/true);
                 implAddGenericFunction(scanner, func);
             } else {
-                runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
+                runFunctionAnnotations(scanner, yyextra, func, annL, annLAt);
                 if ( !yyextra->g_Program->addFunction(func) ) {
                     das_yyerror(scanner,"function is already defined " + func->getMangledName(),
                         func->at, CompilationError::function_already_declared);

@@ -463,6 +463,7 @@ namespace das
         virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
         virtual bool isSpecialized() const { return false; }
         virtual void appendToMangledName( const FunctionPtr &, const AnnotationDeclaration &, string & /* mangledName */ ) const { }
+        virtual bool isAppliedToGeneric() const { return false; }
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
