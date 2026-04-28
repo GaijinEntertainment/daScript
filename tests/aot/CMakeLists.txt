@@ -28,7 +28,11 @@ FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "daslib/*.das")
 #                                 annotation_arguments, ExprBlock) lacking AOT header decls
 #   network                    — daslang class `Server` shadows C++ `das::Server`,
 #                                codegen resolves NetworkServer? to the daslang class
-list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network)\\.das$")
+#   style_lint                 — [lint_macro] consumed only at compile time;
+#                                iterates `*ExprMakeStruct.structs[i]` (a `MakeStruct`
+#                                that subclasses `vector<MakeFieldDeclPtr>` in C++) which
+#                                has no `das_iterator<MakeStruct>` AOT specialization
+list(FILTER AOT_DASLIB_MODULE_FILES EXCLUDE REGEX "daslib/(aot_macro|debugger|profiler|profiler_boost|ast_debug|decs_state|aot_cpp|aot_standalone|network|style_lint)\\.das$")
 
 add_custom_target(test_aot_daslib_modules)
 SET(DASLIB_MODULES_AOT_GENERATED_SRC)
