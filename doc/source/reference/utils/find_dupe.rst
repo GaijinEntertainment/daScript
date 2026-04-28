@@ -216,13 +216,16 @@ daspkg not installed" error with the exact install command.
    * - ``judge_duplicates``
      - Take a detect-dupe JSON report and return the verdict envelope.
        Parameters: ``input`` (required), ``out``, ``model``,
-       ``parallel``, ``max_clusters``, ``min_lines``, ``positives_only``,
-       ``dry_run``.
+       ``max_clusters``, ``positives_only``, ``dry_run``.
    * - ``find_dupe``
      - Convenience: run detect-dupe against ``paths`` and judge the
        resulting clusters in a single call.  Parameters: ``paths``
-       (required), ``out``, ``model``, ``threshold``, ``parallel``,
-       ``max_clusters``, ``min_lines``, ``dry_run``.
+       (required), ``out``, ``model``, ``threshold``, ``max_clusters``,
+       ``dry_run``.
+
+The MCP layer hardcodes ``parallel=8`` and ``min_lines=6`` (sensible
+defaults for an interactive tool); use the CLI directly if you need
+to tune those.
 
 Both tools accept ``dry_run=true`` to estimate cluster count and token
 cost without making any API calls --- the safe default for "is this

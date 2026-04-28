@@ -428,7 +428,7 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_tool(
         "export_corpus",
-        "Build a corpus.json from one or more .das files/dirs/globs. Output is the same shape `detect_duplicates` expects: a JSON dump of every user function's canonical token stream and source location. Run this once over a body of code (e.g. 'daslib', 'tests', or your project) to produce a corpus, then point `detect_duplicates` at it. This is the MCP-side replacement for `detect-dupe --export-functions`; the whole workflow stays inside the MCP server with no shelling out.",
+        "Build a corpus.json from one or more .das files/dirs/globs. Output is the same shape `detect_duplicates` expects: a JSON dump of every user function's canonical token stream and source location. Run this once over a body of code (e.g. 'daslib', 'tests', or your project) to produce a corpus, then point `detect_duplicates` at it. Shells out to `daslang utils/detect-dupe/main.das` (daslang's `require` grammar can't use hyphenated path components, so the wrapper invokes the CLI as a subprocess).",
         {
             "paths" => PropertySchema(_type = "string", description = "Files, directories, or globs to scan. Comma- or newline-delimited. Directories are walked recursively. Skips `_*` directories, hidden directories, `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das`."),
             "out" => PropertySchema(_type = "string", description = "Output corpus.json path. Overwrites if it exists. Refuses to write a partial corpus when any input file fails to compile (matches the CLI's --export-functions behavior)."),

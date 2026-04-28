@@ -15,7 +15,6 @@ require daslib/fio
 
 struct DetectDuplicatesEnvelope {
     exit_code : int
-    json_path : string
     @embed report : string           //!< raw per-candidate JSON from --json
     stdout : string                  //!< captured subprocess output (diagnostics)
 }
@@ -85,7 +84,6 @@ def public do_detect_duplicates(paths : string; corpus : string;
     }
     var envelope : DetectDuplicatesEnvelope
     envelope.exit_code = exit_code
-    envelope.json_path := json_out
     envelope.report := fread(json_out)
     envelope.stdout := output
     remove(json_out)

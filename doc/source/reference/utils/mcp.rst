@@ -201,10 +201,13 @@ Parse-aware search (tree-sitter)
 Duplicate detection
 -------------------
 
-These tools wrap :ref:`utils_detect_dupe` end-to-end (no shelling out).
-``export_corpus`` builds the corpus once over a body of code;
-``detect_duplicates`` queries it.  ``judge_duplicates`` and ``find_dupe``
-shell out to the :ref:`utils_find_dupe` AI judge.
+All four tools shell out to the underlying CLIs --- daslang's
+``require`` grammar can't take hyphenated path components, so the MCP
+wrappers invoke ``daslang utils/detect-dupe/main.das`` and
+``daslang utils/find-dupe/main.das`` as subprocesses.  ``export_corpus``
+builds the corpus once over a body of code; ``detect_duplicates``
+queries it; ``judge_duplicates`` and ``find_dupe`` invoke the
+:ref:`utils_find_dupe` AI judge.
 
 .. list-table::
    :header-rows: 1
@@ -213,9 +216,9 @@ shell out to the :ref:`utils_find_dupe` AI judge.
    * - Tool
      - Description
    * - ``export_corpus``
-     - Scan one or more ``.das`` files / directories / globs, compile
-       each in-process, and write a corpus JSON to ``out``.  Same shape
-       as ``detect-dupe --export-functions``.
+     - Scan one or more ``.das`` files / directories / globs and write
+       a corpus JSON to ``out``.  Subprocesses
+       ``detect-dupe --export-functions``.
    * - ``detect_duplicates``
      - Compare candidate file(s) against a pre-built corpus.  Returns
        a per-candidate JSON envelope with corpus stats, pattern-skip
