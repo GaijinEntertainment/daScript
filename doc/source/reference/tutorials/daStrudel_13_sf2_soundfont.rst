@@ -107,9 +107,9 @@ layers at different expression levels to thicken the pad:
         note("<[g3,b3,d4] [a3,c4,e4]>") |> sf2("string_ensemble") |> sf2_expression(1.0) |> gain(0.5)
     ])
 
-SF2 playback in daStrudel is a daslang-only extension — there is no
-equivalent in strudel.cc.  See :ref:`strudel_vs_strudel_cc` for the full
-list of daslang-only features.
+SF2 playback in daStrudel is a daslang-only extension beyond the
+standard mini-notation.  See :ref:`mini-notation compatibility
+<strudel_vs_strudel_cc>` for the full list of daslang-only features.
 
 .. seealso::
 

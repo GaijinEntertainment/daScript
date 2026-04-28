@@ -8,7 +8,7 @@ Pattern-based live-coding music library: cycle-space time, mini-notation DSL,
 pattern algebra and combinators, synthesis, samples, SF2 soundfonts, MIDI
 playback, per-voice effect chains, and a threaded playback harness.
 
-See also :ref:`tutorials_dastrudel` and :ref:`strudel_vs_strudel_cc`.
+See also :ref:`tutorials_dastrudel` and :ref:`mini-notation compatibility <strudel_vs_strudel_cc>`.
 
 .. toctree::
 

@@ -156,6 +156,8 @@ Workflow Tips
 
    Previous tutorial: :ref:`tutorial_dastrudel_midi_files`
 
-   Comparison with strudel.cc: :ref:`strudel_vs_strudel_cc`
+   Next tutorial: :ref:`tutorial_dastrudel_hrtf_position`
+
+   Mini-notation compatibility: :ref:`mini-notation compatibility <strudel_vs_strudel_cc>`
 
    Full daStrudel reference: :ref:`stdlib_strudel_section`

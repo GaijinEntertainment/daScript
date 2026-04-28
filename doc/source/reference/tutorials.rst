@@ -377,6 +377,7 @@ For the strudel-to-strudel.cc feature comparison, see
    tutorials/daStrudel_13_sf2_soundfont.rst
    tutorials/daStrudel_14_midi_files.rst
    tutorials/daStrudel_15_live_reloading.rst
+   tutorials/daStrudel_16_hrtf_position.rst
 
 .. _tutorials_daspeg:
 

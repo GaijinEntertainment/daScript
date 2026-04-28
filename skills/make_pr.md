@@ -35,13 +35,32 @@ Fix significant issues (unused variables that indicate bugs, performance warning
 
 ## 1.5. Check for duplicates against the corpus
 
-Run `detect-dupe` against the **changed `.das` files only**, with a pre-built corpus of the rest of the tree. This is the "did I just write something that already exists?" check — catches structural copy-paste before review.
+Run `detect-dupe` against the **changed `.das` files only**, with a per-PR corpus scoped to the **directories the PR actually touches** (plus their sibling test/example/tutorial dirs). This is the "did I just write something that already exists?" check — catches structural copy-paste before review.
+
+**Don't run a full-tree corpus.** Exporting all of `daslib`, `tests`, `utils`, `modules` is slow and the noise floor swamps real signal — the dupes that matter are the ones near the code you changed (sibling functions in the same module, parallel tests, copy-pasted tutorial scaffolds). Build a narrow corpus.
+
+**How to scope:**
 
 ```bash
-# One-off: build the corpus over the rest of the tree (re-build occasionally as the codebase drifts)
-bin/Release/daslang.exe utils/detect-dupe/main.das -- -p daslib -p tests -p utils --export-functions /tmp/corpus.json
+# 1. List the unique top-level dirs touched by the PR
+git diff --name-only origin/master..HEAD -- '*.das' | awk -F/ 'NF>=2 {print $1"/"$2}' | sort -u
 
-# Per-PR: compare the diff against the corpus
+# Example output for a strudel-only PR:
+#   examples/daStrudel
+#   modules/dasAudio
+#   tests/strudel
+#   tutorials/daStrudel
+```
+
+Use those dirs (or trim further to a single module subfolder, e.g. `modules/dasAudio/strudel`) as the corpus scope.
+
+```bash
+# Per-PR: corpus over the touched scope only
+bin/Release/daslang.exe utils/detect-dupe/main.das -- \
+  -p modules/dasAudio/strudel -p tests/strudel -p tutorials/daStrudel -p examples/daStrudel \
+  --export-functions /tmp/corpus.json
+
+# Compare the diff against it
 git diff --name-only origin/master..HEAD -- '*.das' | \
   bin/Release/daslang.exe utils/detect-dupe/main.das -- \
     --import-functions /tmp/corpus.json --against-from-stdin
@@ -50,9 +69,13 @@ git diff --name-only origin/master..HEAD -- '*.das' | \
 Or via MCP (preferred when available):
 
 ```
-mcp__daslang__export_corpus(paths="daslib,tests,utils", out="/tmp/corpus.json")
+mcp__daslang__export_corpus(paths="modules/dasAudio/strudel,tests/strudel,tutorials/daStrudel,examples/daStrudel", out="/tmp/corpus.json")
 mcp__daslang__detect_duplicates(paths="<git-diff list>", corpus="/tmp/corpus.json")
 ```
+
+The candidate files are auto-stripped from the corpus before comparison, so it's fine for the corpus scope to overlap the changed-files list.
+
+**When to widen the scope** — if the PR introduces a generic helper (`pattern_*`, `time_*`, etc.), add the obvious adjacent directory (`daslib`) to catch dupes against the standard library. But still avoid a tree-wide sweep.
 
 **Triage policy:**
 - **Exact match (similarity 1.0)** with an existing function — almost always a real concern. Either (a) reuse the existing one, (b) document why a sibling is needed, or (c) extract a shared helper.

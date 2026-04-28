@@ -1434,7 +1434,7 @@ def document_module_strudel_synth(root : string) {
 def document_module_strudel_scheduler(root : string) {
     var mod = find_module("strudel_scheduler")
     var groups <- array<DocGroup>(
-        group_by_regex("Orbit effects", mod, %regex~(init_reverb|init_chorus|init_delay|get_orbit_reverb|get_orbit_delay)$%%),
+        group_by_regex("Orbit effects", mod, %regex~(init_reverb|init_delay|get_orbit_reverb|get_orbit_delay|get_orbit_chorus)$%%),
         group_by_regex("Scheduler lifecycle", mod, %regex~(tick|shutdown_scheduler)$%%)
     )
     document("Voice allocation, effect bus routing, and per-tick mixing", mod, "strudel_scheduler.rst", groups)
@@ -1510,6 +1510,7 @@ def document_module_strudel_pattern(root : string) {
         group_by_regex("Combinators", mod, %regex~(rev|jux|off|layer|superimpose|euclid|palindrome|ply|iter|iterBack|when_cycle|linger|hurry|compress|chunk|striate|struct_|mask|choose|wchoose|randcat|chooseCycles|shuffle|scramble|echo|stut|transpose|add|innerJoin|combineWith|combineWithStr|degrade|degradeBy|every|bjorklund|sometimes|often|sometimesby)$%%),
         group_by_regex("Setter primitives", mod, %regex~set_.*$%%),
         group_by_regex("Fluent control: dynamics and routing", mod, %regex~(gain|velocity|vel|pan|speed|note|sound|cut|orbit|begin|end_pos)$%%),
+        group_by_regex("Fluent control: 3D positioning (HRTF)", mod, %regex~(hrtf|hrtf_azimuth|hrtf_elevation)$%%),
         group_by_regex("Fluent control: effects sends", mod, %regex~(room|roomsize|size|delay|delaytime|dt|delayfeedback|dfb|delaysync|chorus)$%%),
         group_by_regex("Fluent control: filters", mod, %regex~(lpf|lp|hpf|hp|lpq|resonance|hpq|bpf|bpq|djf)$%%),
         group_by_regex("Fluent control: envelope", mod, %regex~(attack|att|decay|dec|sustain|sus|release|rel)$%%),
