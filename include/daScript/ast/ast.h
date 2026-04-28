@@ -1595,7 +1595,6 @@ namespace das
     // dll loading
         vector<string> dll_search_paths;          // additional search paths for dll loading
     // one-liners
-        /*option*/ bool temp_one_liner_warning = false;
         /*option*/ bool temp_table_lint_warning = false;
     };
 
