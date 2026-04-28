@@ -478,6 +478,8 @@ Every `.das` file in this directory tree is listed below, grouped by subdirector
 | failed_function_argument_already_declared.das | Duplicate function argument name | **expect** `30202` |
 | failed_function_not_found_ambiguous.das | Ambiguous function call — same name in two modules | **expect** `30304` |
 | generators.das | Generator mechanics — yield, ranges, nested, early return | |
+| generic_class_method.das | `[class_method]` on generic static methods — verifies `isAppliedToGeneric` flag | |
+| failed_class_method_non_static.das | `[class_method]` rejected on non-static class method | **expect** `30111` |
 | failed_global_init_type_mismatch.das | Global variable type mismatch on init | **expect** `30113` |
 | global_order.das | Global variable initialization ordering with clone | |
 | global_ptr_init.das | Global pointer struct initialization | |

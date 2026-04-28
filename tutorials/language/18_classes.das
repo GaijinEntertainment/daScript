@@ -187,6 +187,9 @@ def main {
     // Note: structs can also have methods via [class_method] annotation
     // from daslib/class_boost. It adds an implicit 'self' parameter to
     // 'def static' functions, enabling obj.method() syntax on structs.
+    // Generic static methods (with `auto` parameters) are also supported —
+    // the macro rewrites the template once and every instantiation inherits
+    // the injected `self`. See tests/language/generic_class_method.das.
 }
 
 // output:

@@ -24,7 +24,11 @@ class ClassMethodMacro : AstFunctionAnnotation {
     explicitConstClassMethod : bool = false
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.classParent == null) {
-            errors := "class_method can be applied only to class methods";
+            errors := "class_method can be applied only to class methods"
+            return false
+        }
+        if (!func.moreFlags.isStaticClassMethod) {
+            errors := "class_method can be applied only to static class methods"
             return false
         }
         var tt = new TypeDecl(baseType = Type.tStructure, structType = func.classParent)
@@ -41,6 +45,9 @@ class ClassMethodMacro : AstFunctionAnnotation {
                 $e(func.body)
             }
         }
+        return true
+    }
+    def override isAppliedToGeneric : bool {
         return true
     }
 }

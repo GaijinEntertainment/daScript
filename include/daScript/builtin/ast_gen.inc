@@ -13,9 +13,10 @@ protected:
     __fn_isCompatible = 9,
     __fn_isSpecialized = 10,
     __fn_appendToMangledName = 11,
+    __fn_isAppliedToGeneric = 12,
   };
 protected:
-  int _das_class_method_offset[12];
+  int _das_class_method_offset[13];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_transform] = info->fields[2]->offset;
@@ -30,6 +31,7 @@ public:
       _das_class_method_offset[__fn_isCompatible] = info->fields[11]->offset;
       _das_class_method_offset[__fn_isSpecialized] = info->fields[12]->offset;
       _das_class_method_offset[__fn_appendToMangledName] = info->fields[13]->offset;
+      _das_class_method_offset[__fn_isAppliedToGeneric] = info->fields[14]->offset;
   }
   __forceinline Func get_transform ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_transform]);
@@ -138,6 +140,15 @@ public:
       <void *,Function * const ,AnnotationDeclaration const  &,das::string &>
         (__context__,nullptr,__funcCall__,
           self,func,decl,mangledName);
+  }
+  __forceinline Func get_isAppliedToGeneric ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_isAppliedToGeneric]);
+  }
+  __forceinline bool invoke_isAppliedToGeneric ( Context * __context__, Func __funcCall__, void * self ) const {
+    return das_invoke_function<bool>::invoke
+      <void *>
+        (__context__,nullptr,__funcCall__,
+          self);
   }
 };
 
