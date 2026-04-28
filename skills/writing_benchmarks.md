@@ -25,18 +25,30 @@ bin/Release/daslang.exe -jit dastest/dastest.das -- --bench --test benchmarks/co
 
 The Copilot terminal tool truncates output at ~16KB and mixes it with prior scrollback. **Always pipe benchmark output to a file**, then read the file:
 
+From the repo root, on Windows / PowerShell:
+
 ```powershell
 # Run a single benchmark file
-Push-Location D:\Work\daScript
-D:\Work\daScript\bin\Release\daslang.exe D:\Work\daScript\dastest\dastest.das -- --bench --test D:\Work\daScript\benchmarks\core\hash\test02.das 2>&1 | Out-File D:\Work\daScript\_bench_out.txt -Encoding ascii
-Pop-Location
+bin\Release\daslang.exe dastest\dastest.das -- --bench --test benchmarks\core\hash\test02.das 2>&1 | Out-File _bench_out.txt -Encoding ascii
 
 # Run a whole directory — run files one at a time to avoid multi-hour waits
 $tests = 2..12
 foreach ($t in $tests) {
-    $f = "D:\Work\daScript\benchmarks\core\hash\test{0:D2}.das" -f $t
-    D:\Work\daScript\bin\Release\daslang.exe D:\Work\daScript\dastest\dastest.das -- --bench --test $f 2>&1 | Out-File D:\Work\daScript\_bench_out.txt -Append -Encoding ascii
+    $f = "benchmarks\core\hash\test{0:D2}.das" -f $t
+    bin\Release\daslang.exe dastest\dastest.das -- --bench --test $f 2>&1 | Out-File _bench_out.txt -Append -Encoding ascii
 }
+```
+
+On Linux / macOS:
+
+```bash
+# Single file
+build/daslang dastest/dastest.das -- --bench --test benchmarks/core/hash/test02.das > _bench_out.txt 2>&1
+
+# Whole directory, one at a time
+for t in $(seq -f "%02g" 2 12); do
+    build/daslang dastest/dastest.das -- --bench --test "benchmarks/core/hash/test${t}.das" >> _bench_out.txt 2>&1
+done
 ```
 
 Then read results with `read_file` on `_bench_out.txt` — **not** from terminal output.

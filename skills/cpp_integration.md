@@ -364,7 +364,7 @@ TextPrinter tp;
 tp << "leaked " << count << " handles\n";
 ```
 
-`fprintf(stderr, ...)` has three concrete problems Boris flagged:
+`fprintf(stderr, ...)` has three concrete problems:
 
 - **No sink override** — `TextPrinter` can be subclassed/redirected;
   `fprintf` writes wherever the OS `stderr` happens to point.

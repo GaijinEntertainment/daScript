@@ -113,8 +113,8 @@ When a macro walks an AST and pattern-matches specific call shapes to
 route them differently (e.g. `_sql` detects nested
 `select_from(...)._any(...)` and emits SQL `EXISTS`, vs. `_none(...)`
 emitting `NOT EXISTS`), **do not rely on detecting `!expr` to flip the
-emitted output**. Boris's standing rule (2026-04-24): "we don't have
-leading `!` support" for AST walkers. The `!` often sits across
+emitted output**. Standing rule: AST walkers do not have leading-`!`
+support. The `!` often sits across
 intermediate AST nodes — parentheses, `if` expressions, local `let`
 bindings, constant-folded wrappers — that break a naive pattern match.
 Pattern-matching `!any(...)` is correct for some cases, silently wrong

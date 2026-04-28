@@ -300,7 +300,7 @@ namespace das
     template <>
     struct cast <long double> {
         static __forceinline long double to(vec4f x)            { union { vec4f v; long double t; } A; A.v = x; return A.t; }
-        static __forceinline vec4f from ( long double x )       { union { vec4f v; long double t; } A; A.t = x; return A.v; }
+        static __forceinline vec4f from ( long double x )       { union { vec4f v; long double t; } A; A.v = v_zero(); A.t = x; return A.v; }
     };
 
     template <>
@@ -370,7 +370,7 @@ namespace das
     template <>
     struct cast <double> {
         static __forceinline double to(vec4f x)                { union { vec4f v; double t; } A; A.v = x; return A.t; }
-        static __forceinline vec4f from ( double x )           { union { vec4f v; double t; } A; A.t = x; return A.v; }
+        static __forceinline vec4f from ( double x )           { union { vec4f v; double t; } A; A.v = v_zero(); A.t = x; return A.v; }
     };
 
     template <>

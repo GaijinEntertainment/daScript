@@ -25,7 +25,7 @@ daslang was created at Gaijin Entertainment to solve a concrete problem: **inter
 - **Run a script:** `bin/daslang path/to/script.das`
 - **Compile-only check:** `bin/daslang -compile-only path/to/script.das` — compiles without simulation or execution. Use `-dry-run` to also simulate (but not execute).
 - **AOT generation:** `bin/daslang -aot input.das output.cpp` — emit C++ stubs ahead-of-time. Add `-aot-macros` to include macros in the output.
-- **JIT execution:** `bin/daslang -jit path/to/script.das` — compile to native via LLVM JIT before running. Available only in builds compiled with the JIT module. `bin/daslang -exe path/to/script.das -output out.exe` JITs to a standalone executable (implies `-dry-run`).
+- **JIT execution:** `bin/daslang -jit path/to/script.das` — compile to native via LLVM JIT before running. Available only in builds compiled with the JIT module. `bin/daslang -exe path/to/script.das -output out` JITs to a standalone executable (implies `-dry-run`); the platform's executable extension is appended automatically (e.g. `.exe` on Windows).
 - **AOT-linked execution:** `bin/daslang -use-aot path/to/script.das` — run with AOT stubs that have been linked into the binary (host-side flag).
 - **Pass arguments to the script:** everything after `--` is forwarded to the script. `bin/daslang script.das -- arg1 arg2`. Use `daslib/clargs` to parse them — see `skills/clargs_usage.md`.
 - **Example:** `bin/daslang examples/hello_world.das`
@@ -57,9 +57,8 @@ The compiler sets `DAS_PAK_ROOT` to the project directory before evaluating call
 
 ### Debugging
 
-- **Always check the exit code** after running `daslang` — a crash may produce no output at all, looking like a silent success
-- On Windows, check `$LASTEXITCODE` in PowerShell after every run. Exit code `0` = success, non-zero = error
-- Exit code `-1073741819` (`0xC0000005`) = **Access Violation** — indicates a native crash (segfault)
+- **Always check the exit code** after running `daslang` — a crash may produce no output at all, looking like a silent success. PowerShell: `$LASTEXITCODE`. Bash/zsh: `$?`. Exit code `0` = success.
+- Exit code `-1073741819` / `0xC0000005` (Windows) or `139` / `134` (Linux/macOS) = native crash — Access Violation / SIGSEGV / SIGABRT
 - If the program crashes with no error message, the bug is in native code (C++ bindings or smart pointer misuse) — check exit code first
 - **Don't truncate output** with `head`/`tail` — daslang stack traces are easily clipped. Capture full output, then `grep` if needed
 - **`options log`** — append at the end of a `.das` file to dump the final post-compilation program text. Useful for confirming what the compiler actually produces (constant folding, generic reification, macro expansion).
@@ -71,22 +70,23 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 
 | Skill file | Read BEFORE... |
 |---|---|
+| `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
-| `skills/cpp_integration.md` | Embedding daslang in C++ host applications, binding types/functions/enums |
-| `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, functional, match, etc.), channels |
-| `skills/das_macros.md` | Writing compile-time macros, AST manipulation, qmacro/quote code generation, gc_node AST-pointer patterns |
-| `skills/daspkg.md` | Creating `.das_package` manifests, package structure, daspkg commands |
-| `skills/clargs_usage.md` | Writing your own daslang command-line tools — declarative argv parsing via `daslib/clargs` |
-| `skills/dynamic_modules.md` | Understanding `.das_module` descriptors, module resolution, `register_native_path`, `register_dynamic_module` |
-| `skills/daslang_live.md` | Working with `daslang-live`, live-reload lifecycle, REST API, `[live_command]`, persistent state |
-| `skills/json.md` | Reading or writing JSON in `.das` code — choosing between `sprint_json`/`sscan_json`, `JV`/`from_JV` from `daslib/json_boost`, custom converters, or manual `JsonValue?` |
-| `skills/xml.md` | Reading, building, querying, or serializing XML via `dasPUGIXML` (`PUGIXML_boost`) — RAII parsing, iteration, `tag`/`attr` builder, XPath, struct↔XML round-trip |
-| `skills/filesystem.md` | Any `.das` code that builds, splits, or normalizes a file path, or touches the filesystem (existence, listing, copy/rename/remove, temp files). **Rule:** path & filename operations MUST use `fio` helpers (`base_name`/`dir_name`/`extension`/`stem`/`path_join`/`normalize`/`is_absolute`/`relative`) — never hand-rolled `rfind`/`slice`/string-interp. Filesystem ops use `fio` / `daslib/fio` (`stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
-| `skills/writing_tests.md` | Writing tests for your daslang code with the bundled `dastest` framework (`bin/daslang dastest/dastest.das -- --test ...`) |
-| `skills/memory_leak_detection.md` | Diagnosing leaks — `--das-profiler-leaks`, `-track-allocations -heap-report`, `GC APP LEAK` reports, `--track-smart-ptr`, `HandleRegistry` dump |
-| `skills/jobque_debugging.md` | Debugging Channel/LockBox/JobStatus/Stream/Feature leaks using `DumpJobQueLeaks` and `--track-job-status <id>` refcount tracing |
-| `skills/detect_dupe.md` | Detecting duplicate / near-duplicate functions across a daslang codebase — building a corpus, asking "did I just write something that already exists?", or wiring a CI gate. Covers both the MCP tools (`export_corpus`, `detect_duplicates`) and the underlying CLI (`utils/detect-dupe/main.das`) |
-| `skills/linq.md` | Any `.das` code that filters, maps, sorts, groups, aggregates, or otherwise transforms a sequence into another sequence, array, or table. Preference order: comprehension `[for (x in src); expr; where cond]` when one expression covers it → LINQ (`daslib/linq_boost` shorthand `_select` / `_where` / `_to_array`, or pipe-form `arr \|> where_(...) \|> ...`) for chains, lazy iterators, set ops, joins, aggregations → plain `for` loop for side-effecting iteration. Avoid `daslib/functional` (`map` / `filter` / `each` / `to_array`) for new code |
+| `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
+| `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, etc.) |
+| `skills/das_macros.md` | Compile-time macros, AST manipulation, qmacro/quote, gc_node patterns |
+| `skills/daspkg.md` | Creating `.das_package` manifests, daspkg commands |
+| `skills/clargs_usage.md` | Writing daslang CLI tools — declarative argv parsing via `daslib/clargs` |
+| `skills/dynamic_modules.md` | `.das_module` descriptors, module resolution, `register_native_path` |
+| `skills/daslang_live.md` | `daslang-live` lifecycle, REST API, `[live_command]`, persistent state |
+| `skills/json.md` | Reading/writing JSON (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
+| `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII, builder, XPath, struct round-trip) |
+| `skills/filesystem.md` | Any `.das` path/filename/filesystem op — must use `fio` helpers, never `rfind`/`slice` |
+| `skills/writing_tests.md` | Writing tests with the bundled `dastest` framework |
+| `skills/memory_leak_detection.md` | Diagnosing leaks (`--das-profiler-leaks`, `--track-smart-ptr`, `GC APP LEAK`, `HandleRegistry`) |
+| `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leaks |
+| `skills/detect_dupe.md` | Duplicate-function detection (corpus, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |
+| `skills/linq.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
@@ -121,59 +121,34 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 
 ### Important defaults
 
-- `strict_smart_pointers` is ON — but the only types that are still `smart_ptr` are `Program` (`ProgramPtr`), `Context` (`ContextPtr`), `FileAccess` (`FileAccessPtr`), and a few internals (`DebugAgentPtr`, `VisitorAdapterPtr` from `make_visitor`). Only those need `var inscope`. **All AST types** (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, every `Annotation` subclass) are now plain raw pointers (gc_node) — see "AST nodes (gc_node)" below
 - No implicit type promotion: `int + float` is a compile error — both sides must match
 - No `bool(int)` cast — use `x != 0`; no `string(bool)` — use `"{flag}"`
 - `int("123")` does NOT work — use `to_int` from `require strings`. **`to_int` silently returns `0` on garbage** (`to_int("foo")` → `0`, `to_int("12abc")` → `12`). When you need to validate user/external input — including any string that flows into a shell command, file path, or system call — use `try_to_int` / `try_to_float` from `daslib/strings_convert` instead. Those return `Result<T; ConversionError>` distinguishing `invalid_argument` / `out_of_range` / `trailing_garbage`, so `";rm -rf;"` rejects cleanly instead of becoming `0`. Same for `to_float` → `try_to_float`
 - Hex literals are `uint` by default — use `int(0x3F)` for int
-- **`default<T>`** — the default (zero) value of type `T`: `default<int>` is `0`, `default<string>` is `""`, `default<float>` is `0.0f`. The body of the called function CAN use the value freely.
-- **`type<T>`** vs **`default<T>`** as a witness argument — they are **not** interchangeable:
-  - `type<T>` is a no-stack, no-construction compile-time type tag. The function body must NOT use the parameter (compile error if it does). Annotate with `[unused_argument(t)]`.
-  - `default<T>` is a real zero-value of `T`. The body can read/pass it. Use `default<T>` when the called function's body might touch the witness; use `type<T>` only when the parameter exists purely for overload discrimination.
-  - Smell: if you find yourself wanting to read a `type<T>` parameter inside the body, switch the call site to `default<T>` — don't rewrite the function.
-- **`typedecl(expr)`** — compile-time type-of expression, usable inside `default<>`: `default<typedecl(field)>` gives the zero value of `field`'s type. Useful in generic code with `static_if` to compare against defaults.
-- **Bitfield sizes**: `bitfield Name : uint8 { ... }`, `: uint16`, `: uint64`; default is `uint` (32-bit). Always unsigned.
-- **Bitfield from expression**: `bitfield64(1ul << 13ul)` — use the constructor to create a bitfield value from an integer expression. Similarly `bitfield8()`, `bitfield16()`.
+- **`default<T>`** — the zero value of `T`. Body of the called function CAN use it.
+- **`type<T>`** vs **`default<T>`** as a witness argument: `type<T>` is a no-stack tag (compile error if body reads it; annotate `[unused_argument(t)]`); `default<T>` is a real zero value (body can read/pass it). Pick by whether the body needs to touch the param. If you want to read a `type<T>` param, switch the caller to `default<T>` — don't rewrite the function.
+- **`typedecl(expr)`** — compile-time type-of, usable inside `default<>`: `default<typedecl(field)>`.
+- **Bitfields**: `bitfield Name : uint8 { ... }` (also `uint16`/`uint64`; default `uint`, always unsigned). From an int: `bitfield64(1ul << 13ul)` (also `bitfield8`/`bitfield16`).
 
 ### Pass-by-value vs pass-by-reference
 
-- Most types (structs, arrays, tables) always pass by reference — `&` is unnecessary on them
-- Only **workhorse types** (`int`, `float`, `bool`, `string`, etc. — `isWorkhorseType` on the C++ side) pass by value
-- **AST pointers (gc_node) pass by value** — `ExpressionPtr`, `TypeDeclPtr`, `FunctionPtr`, `StructurePtr`, `EnumerationPtr`, `VariablePtr`, `MakeFieldDeclPtr`, `MakeStructPtr`, `AnnotationPtr` and friends are all plain raw pointers. Passing them by value just copies the pointer — no refcount bump, no allocation. The underlying gc_node is owned by its `gc_root` (typically the Module), not by the caller.
-  - `def foo(p : ExpressionPtr)` — caller passes a pointer; both sides reference the same node
-  - `def foo(var p : ExpressionPtr)` — `var` lets you reassign `p` locally
-  - `def foo(var p : ExpressionPtr&)` — pass by reference, so `p = newExpr` propagates back
-- **The few remaining `smart_ptr<T>` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) **still use refcount semantics**. Variables holding them require `var inscope` for cleanup. This is the narrow remaining surface where the smart_ptr rules in older docs still apply
-- **`var s : string`** — writable local copy, changes do NOT propagate back to the caller
-- **`var s : string&`** — pass by reference, changes propagate back. Use `&` for string out-parameters
-- **`clone_string(s)`** — clones a string into the current context's heap. Required for cross-context calls where the source context may be destroyed
-- **`:=`** on strings performs a clone (allocates in current context). Plain `=` copies the pointer
+- Structs/arrays/tables always pass by reference — no `&` needed.
+- Only **workhorse types** (`int`, `float`, `bool`, `string`, …, `isWorkhorseType` on the C++ side) pass by value.
+- **AST pointers (gc_node) pass by value** — copying the pointer, no refcount, no allocation. `def foo(p : ExpressionPtr)` shares the node; `var p` lets you reassign locally; `var p : ExpressionPtr&` propagates reassignment back. For mutable field access, take the param as `var`.
+- **Strings:** `var s : string` is a writable local copy (no propagation). `var s : string&` propagates. `:=` clones into current context's heap (required across contexts); plain `=` copies the pointer.
+- **Residual `smart_ptr` types** (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`) still use refcount semantics — variables holding them need `var inscope`. AST types do NOT — see below.
 
-### AST nodes (gc_node) — unique ownership, clone to duplicate
+### AST nodes (gc_node) and memory
 
-Every AST node lives at exactly one location. Multiple `ExpressionPtr` or `TypeDeclPtr` values pointing at the same node are **shared references to one object**, not independent copies. The garbage collector tracks the node by its address; sticking the same pointer in two places does not create a second node.
+AST types (TypeDecl, Expression, Function, Structure, Enumeration, Variable, MakeFieldDecl, MakeStruct, every `Annotation` subclass) are plain raw pointers tracked by gc_node. The only types still using `smart_ptr` are `Program`, `Context`, `FileAccess`, plus a couple of internal helpers (`DebugAgentPtr`, `VisitorAdapterPtr`).
 
-- **Don't insert the same pointer into two parent expressions** — that creates aliasing. Both parents think they own the child, gc_collect walks it twice, mutations on one parent show up in the other.
-- **Use the matching `clone_*` to duplicate:**
-  - `clone_type(t)` for `TypeDeclPtr`
-  - `clone_expression(e)` for `ExpressionPtr` (recursive deep clone)
-  - `clone_function(f)` for `FunctionPtr` — note: still returns via move (`var x <- clone_function(f)`)
-  - `clone_variable(v)` for `VariablePtr`
-  - `clone_structure(s)` for `StructurePtr`
-- **Don't use `var inscope`** for AST pointer types — the gc_node owns its own lifetime via `gc_root`. `var inscope` is for the residual smart_ptr types only (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`).
-- **Don't use `<-`** when assigning AST pointers — plain `=` is correct (`fn.body = newBlock`, `td.firstType = elemType`). Keep `<-` only where the API still demands it (`clone_function`, `qmacro_function` returns).
-- **Tools/utilities that build AST at runtime** (outside the normal compile pipeline) must wrap the scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
-- **Don't use `clone_to_move`** on AST pointers as a substitute for `clone_*` — `clone_to_move` is the generic copy-then-move helper for non-copyable values like `array<T>`. For AST nodes the right call is the type-specific `clone_type` / `clone_expression` / etc.
+Quick rules:
+- AST nodes have **unique ownership** — don't insert the same pointer into two parents; use `clone_type` / `clone_expression` / `clone_function` / `clone_variable` / `clone_structure` to duplicate.
+- AST pointers use plain `=` and pass-by-value. **No `var inscope`, no `<-`** for them. `var inscope` is only for the residual smart_ptr types.
+- Tools that build AST at runtime (outside the compile pipeline) must wrap their scope in `ast_gc_guard() { ... }` from `daslib/ast`, or the leak detector reports `GC APP LEAK` at exit.
+- daslang has garbage collection, but plain `var arr : array<T>` does NOT finalize on scope exit. Either declare with `var inscope` (smart_ptr only), call `delete` explicitly, or move out via `<-`. Per-frame leaks in hot paths usually trace to a local `var arr` never deleted.
 
-If you find yourself reading older guidance about `var inscope`, `<-`, or `clone_to_move` for AST types, the source is pre-migration — see `skills/das_macros.md` for the current rules.
-
-### Memory and move semantics
-
-- daslang has garbage collection — `delete` is not required in most code
-- **No C++/Rust-style scope RAII for plain `var`** — a local `var arr : array<T>` declared in any scope (function body, if-block, loop body) does NOT finalize on scope exit; the heap allocation stays alive until the context tears down. To get cleanup you must either (a) declare with `var inscope` (smart_ptrs only — Program/Context/FileAccess), (b) call `delete arr` explicitly before scope exit, or (c) move ownership out via `<-`. Per-frame leaks in hot paths usually trace back to a local `var arr : array<...>` that was never deleted
-- `var inscope` declares automatic cleanup; struct fields need defaults or `@safe_when_uninitialized`
-- `var inscope` is legal inside `for` / `while` loop bodies — the loop's `finally` runs per iteration (on fall-through, `continue`, `break`, `return`), so each iteration finalizes its own scoped variables
-- `<-` is memcpy+memset(0), NOT smart_ptr-aware. For the residual smart_ptrs (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`) it bypasses refcount handling. For AST raw pointers it just shuffles a pointer slot, harmless but stylistically wrong (use `=`)
+For migrating older code that uses `var inscope`/`<-` on AST types, see `skills/das_macros.md`.
 
 ### Context heaps and threading
 
@@ -259,21 +234,14 @@ If you find yourself reading older guidance about `var inscope`, `<-`, or `clone
 | Don't write | Write instead | Why |
 |---|---|---|
 | `string(x.__rtti) == "ExprFoo"` | `x is ExprFoo` | `is` works directly on AST pointers |
-| `get_ptr(x) == null` | `x == null` | AST pointers compare to `null` directly (also still works for residual smart_ptrs) |
-| `get_ptr(x).field` | `x.field` | AST pointers auto-dereference for field access; `get_ptr` is leftover from the smart_ptr era |
-| `string(das_str) == "lit"` | `das_str == "lit"` | `das_string` compares directly with `string` |
-| `!empty(string(das_str))` | `!empty(das_str)` | `empty()` works on `das_string` |
-| `let v = string(x.name); $i(v)` | `$i(x.name)` | qmacro `$i`/`$f` accept `das_string` directly |
-| `var copy = val; $v(copy)` | `$v(val)` | qmacro `$v` works with `let` vars and loop vars |
+| `get_ptr(x) == null` / `get_ptr(x).field` | `x == null` / `x.field` | AST pointers auto-dereference; `get_ptr` is smart_ptr-era residue |
+| `string(das_str) == "lit"`, `!empty(string(das_str))` | drop the `string(...)` cast | `das_string` compares with `string` directly; `empty()` works on it |
+| `let v = string(x.name); $i(v)` / `var copy = val; $v(copy)` | `$i(x.name)` / `$v(val)` | qmacro tags accept `das_string`, `let` vars, loop vars directly |
 | `if (true) { ... }` | `{ ... }` | bare blocks create lexical scope in gen2 |
 | `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
-| `unsafe { (reinterpret<ExprBlock?> blk).list }` | `blk.list` | AST pointers auto-dereference |
-| `unsafe(reinterpret<T?> x)` | make param `var` + plain `x` | `var` param gives non-const access, no reinterpret needed |
-| `let i = max(rfind(p, "/"), rfind(p, "\\")); slice(p, i+1)` | `base_name(p)` | `fio.base_name` is cross-platform; manual `rfind` misses Windows separators or trailing slashes |
-| `slice(p, 0, max(rfind(p, "/"), rfind(p, "\\")))` | `dir_name(p)` | same — use `fio.dir_name`/`parent`, never hand-roll directory splitting |
-| `"{a}/{b}"` for file paths | `path_join(a, b)` | handles separator collisions and platform separators |
+| `unsafe { (reinterpret<ExprBlock?> blk).list }` / `unsafe(reinterpret<T?> x)` | make param `var` + plain `x.list` | `var` param gives non-const field access without reinterpret |
 
-**Minimize `unsafe`:** Most `unsafe(reinterpret<T?>)` in macro code exists to strip `const` from raw-pointer field access. Fix the root cause: make the function parameter `var` so field access returns non-const pointers. Reserve `unsafe` for genuinely unsafe operations (pointer arithmetic, `reinterpret` across unrelated types).
+For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 
 ## SDK Directory Layout
 
@@ -307,55 +275,6 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 
 ## MCP Server (AI Tool Integration)
 
-`utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants. Uses stdio transport — no extra build dependencies.
+`utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants. Stdio transport — no extra build dependencies. **Prefer MCP tools** over manual compilation and grep — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl.
 
-**When MCP tools are available**, prefer them over manual compilation and grep-based exploration:
-
-| Tool | Use instead of... |
-|---|---|
-| `compile_check` | Running `daslang` manually and parsing errors |
-| `list_functions` | Grepping for `def ` in `.das` files |
-| `list_types` | Grepping for `struct`/`class`/`enum` definitions |
-| `find_symbol` | Searching across modules for function/type names |
-| `list_module_api` | Reading daslib source to find available functions |
-| `list_modules` | Guessing module names or scanning `daslib/` directory |
-| `ast_dump` | Manually inspecting AST or post-macro output (supports `lineinfo` for source locations) |
-| `program_log` | Running with `options log` to see full post-compilation program text |
-| `run_script` | Running scripts via shell and capturing output |
-| `run_test` | Running dastest via shell and parsing results |
-| `format_file` | Running the formatter script manually |
-| `convert_to_gen2` | Running `das-fmt` manually to convert gen1→gen2 syntax |
-| `goto_definition` | Manually tracing symbol definitions across files |
-| `type_of` | Manually inspecting expression types |
-| `list_requires` | Grepping for `require` statements and guessing transitive deps |
-| `find_references` | Manually searching for all usages of a symbol across files |
-| `eval_expression` | Evaluating expressions by writing throwaway scripts |
-| `describe_type` | Reading source to understand type fields, methods, and values |
-| `grep_usage` | Grepping for symbol names across files (parse-aware via ast-grep + tree-sitter) |
-| `outline` | Manually scanning files for function/struct/enum declarations |
-| `aot` | Manually running AOT generation and extracting function C++ |
-| `lint` | Running lint/perf_lint/style_lint manually or requiring the modules for code quality, performance, and style checks |
-| `export_corpus` | Running `utils/detect-dupe/main.das --export-functions` from a shell to build a duplicate-detection corpus |
-| `detect_duplicates` | Running `utils/detect-dupe/main.das --against` from a shell to ask "did I just write something that already exists?". Wraps B2 mode end-to-end |
-| `live_launch` | Manually starting `daslang-live` from shell |
-| `live_status` | `curl http://localhost:9090/status` |
-| `live_error` | `curl http://localhost:9090/error` |
-| `live_reload` | `curl -X POST http://localhost:9090/reload` |
-| `live_pause` | `curl -X POST http://localhost:9090/pause` or `/unpause` |
-| `live_command` | `curl -X POST http://localhost:9090/command -d '{"name":"..."}` |
-| `live_shutdown` | `curl -X POST http://localhost:9090/shutdown` |
-| `shutdown` | Manually restarting the MCP server process |
-
-Cursor-based tools (`goto_definition`, `type_of`, `find_references`) support a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
-
-**Live tools:** The `live_*` tools interact with a running `daslang-live` instance via its REST API. `live_launch` starts one if not already running. All live tools accept optional `port` (default 9090). When a compilation error is active, `live_command` and `live_pause` return 503 with the error. Hitting any unknown endpoint returns JSON help.
-
-**Configuration:** Configure `.mcp.json` with `"command": "bin/daslang", "args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and permissions.
-
-## Keywords Reference
-
-`aka` — variable name alias (`var a aka alpha = 42`)
-`inscope` — declares variable owns a smart_ptr lifetime; only relevant for the residual smart_ptr types (`ProgramPtr`, `ContextPtr`, `FileAccessPtr`, `DebugAgentPtr`, `VisitorAdapterPtr`). AST pointers (gc_node) do NOT use `inscope`
-`is type<T>` — compile-time type check
-`expect` — suppress specific compilation errors
-`template` — generic type constraint in function signatures
+Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
