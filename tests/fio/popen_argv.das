@@ -3,15 +3,16 @@ require dastest/testing_boost public
 
 require strings
 require daslib/fio
-require daslib/command_line
 
 // Helpers ---------------------------------------------------------------
 
-// `get_das_exe` already returns the platform-appropriate interpreter path
-// (`daslang.exe` with backslashes on Windows, `daslang` with forward slashes
-// elsewhere) so callers don't need to normalize.
+// argv[0] is the running interpreter; on these tests dastest is invoked
+// as `daslang(.exe) dastest/dastest.das ...`, so argv[0] points at the
+// daslang binary we want to spawn. Avoids `daslib/command_line` so this
+// test's AOT footprint stays self-contained.
 def das_exe() : string {
-    return get_das_exe()
+    let args <- get_command_line_arguments()
+    return empty(args) ? "" : args[0]
 }
 
 def run_argv(args : array<string>; var output : string&) : int {
