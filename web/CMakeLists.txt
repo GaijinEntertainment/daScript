@@ -439,6 +439,7 @@ SET(MISC_SRC
 ../src/misc/job_que.cpp
 ../src/misc/free_list.cpp
 ../src/misc/gc_node.cpp
+../src/misc/globals.cpp
 ../src/misc/daScriptC.cpp
 ../src/misc/handle_registry.cpp
 ../src/misc/uric.cpp
