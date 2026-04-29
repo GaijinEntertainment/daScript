@@ -66,15 +66,31 @@ jobs:
             archive_ext: tar.gz
             sanitizers: none
 
-          # single asan build — disabled: consistently times out in CI
+          # ASAN — disabled, see issue #2530. The small-test variant (skip the
+          # dastest step, run only ctest -L small) was tried in #2526 but
+          # daslang itself is not yet ASAN-clean — one OOB fixed there, more may
+          # lurk past startup. Re-enable after a dedicated cleanup pass.
           # - target: linux
           #   architecture: 64
           #   runner: ubuntu-latest-fat
           #   cmake_preset: Debug
           #   sanitizers: asan
-          #   build_name: linux_asan
+          #   build_name: linux_asan_small
           #   build_system: cmake
           #   cmake_generator: Ninja
+          #   small_only: 'true'
+
+          # TSAN — small C++ tests only (forward-looking; useful when small-test
+          # coverage adds threading scenarios; full dastest under TSAN is impractical)
+          - target: linux
+            architecture: 64
+            runner: ubuntu-latest-fat
+            cmake_preset: Debug
+            sanitizers: tsan
+            build_name: linux_tsan_small
+            build_system: cmake
+            cmake_generator: Ninja
+            small_only: 'true'
 
           # single ubsan build
           - target: linux
@@ -272,6 +288,7 @@ jobs:
             ;;
         esac
     - name: "Test"
+      if: matrix.small_only != 'true'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -299,8 +316,24 @@ jobs:
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
         esac
+    - name: "Small C++ Tests"
+      run: |
+        set -eux
+        # Suppress LSan false-positives from format_error and JIT-mode exit() paths;
+        # see "Test" step above for the same suppressions.
+        echo -e "leak:format_error\n" > build/suppressions.txt
+        export LSAN_OPTIONS="suppressions='$(pwd)/build/suppressions.txt'"
+        cd build
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           windows*)
+            ctest --build-config "${{ matrix.cmake_preset }}" -L small --output-on-failure
+            ;;
+           *)
+            ctest -L small --output-on-failure
+            ;;
+        esac
     - name: "Slow Release Tests"
-      if: matrix.cmake_preset == 'Release'
+      if: matrix.cmake_preset == 'Release' && matrix.small_only != 'true'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in

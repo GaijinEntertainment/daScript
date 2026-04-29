@@ -488,7 +488,14 @@ namespace das
 
         DAS_EVAL_ABI vec4f ___noinline evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         DAS_EVAL_ABI vec4f ___noinline evalWithCatch ( SimNode * node );
+        // Run `subexpr`; catches dasException. Returns false on panic with the message in
+        // exception/exceptionAt for getException(). Does NOT clear state -- caller must
+        // clearException() (or use runWithCatchAndClear) before next eval, else it rethrows.
         bool ___noinline runWithCatch ( const callable<void()> & subexpr );
+        // runWithCatch + clearException on failure. For callers that don't need the message.
+        bool ___noinline runWithCatchAndClear ( const callable<void()> & subexpr );
+        // Hard-zeros exception, last_exception, stopFlags. Safe on a locked context.
+        void clearException();
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(2,3);
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);

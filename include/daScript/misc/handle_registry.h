@@ -22,6 +22,7 @@ namespace das {
     };
 
     using HandleLeakDumpFn = void (*)();
+    using HandleLeakCountFn = uint64_t (*)();
 
     // Definitions in src/misc/handle_registry.cpp — single instance across
     // daslang.exe + all dasModule*.shared_module DLLs so registrations from any
@@ -30,6 +31,8 @@ namespace das {
     DAS_API mutex & handleRegistry_dumpMutex_impl ();
     DAS_API void handleRegistry_registerDump_impl ( HandleLeakDumpFn fn );
     DAS_API void handleRegistry_dumpAll_impl ();
+    DAS_API void handleRegistry_registerCount_impl ( HandleLeakCountFn fn );
+    DAS_API uint64_t handleRegistry_countAll_impl ();
 
     inline vector<HandleLeakDumpFn> & handleRegistry_dumpHooks () {
         return handleRegistry_dumpHooks_impl();
@@ -42,6 +45,12 @@ namespace das {
     }
     inline void handleRegistry_dumpAll () {
         handleRegistry_dumpAll_impl();
+    }
+    inline void handleRegistry_registerCount ( HandleLeakCountFn fn ) {
+        handleRegistry_registerCount_impl(fn);
+    }
+    inline uint64_t handleRegistry_countAll () {
+        return handleRegistry_countAll_impl();
     }
 
     template <typename T>

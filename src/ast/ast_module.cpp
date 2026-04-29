@@ -211,6 +211,10 @@ namespace das {
         }
     }
 
+    uint64_t Module::CountHandleLeaks() {
+        return handleRegistry_countAll();
+    }
+
     void Module::Shutdown( bool dumpHandleLeaks ) {
         DAS_ASSERT(daScriptEnvironment::getOwned()!=nullptr);
         DAS_ASSERT(daScriptEnvironment::getBound()!=nullptr);

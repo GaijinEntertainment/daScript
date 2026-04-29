@@ -43,6 +43,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/writing_tests.md` | Writing or editing test files under `tests/` |
+| `skills/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` (doctest, leak guards, ctest wiring) |
 | `skills/documentation_rst.md` | Editing RST in `doc/source/`, `//!` doc-comments in `daslib/*.das`, tutorial RST pages |
 | `skills/tutorials.md` | Anything that looks like a tutorial — they live under `/tutorials/<area>/`, NEVER `modules/<X>/tutorial/` |
 | `skills/cpp_integration.md` | Writing/editing C++ in `src/`, `modules/`, `tutorials/integration/cpp/` |

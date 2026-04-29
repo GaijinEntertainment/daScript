@@ -31,6 +31,7 @@ namespace das {
             } else {
                 context->to_err(&context->exceptionAt, ("macro caused exception during " + message + "\n" + context->getException()).c_str());
             }
+            context->clearException();
         }
         if (bound->g_Program) {
             bound->macroTimeTicks += ref_time_ticks() - timeM;
