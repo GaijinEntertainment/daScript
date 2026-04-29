@@ -1290,7 +1290,8 @@ namespace das
                 });
             }
             if ( failed ) {
-                to_err(&exceptionAt, last_exception);
+                to_err(&exceptionAt, getException());
+                clearException();
             }
         }
         restart();

@@ -3911,6 +3911,7 @@ namespace das
             if (!initScriptSuccess) {
                 error("exception during init script", context.getException(), "",
                     context.exceptionAt, CompilationError::cant_initialize);
+                context.clearException();
             }
             if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
                 auto dt = get_time_usec(time1) / 1000000.;

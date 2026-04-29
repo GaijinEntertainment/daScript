@@ -938,11 +938,17 @@ namespace das
     }
 
     template <typename T>
+    uint64_t countHandleLeaks () {
+        return uint64_t(HandleRegistry<T>::instance().live_count());
+    }
+
+    template <typename T>
     void addHandleAnnotation ( Module * mod, ModuleLibrary & lib,
                                const string & name,
                                const string & destroyFnName = string(),
                                const string & cppTypeName = string() ) {
         handleRegistry_registerDump(&dumpHandleLeaks<T>);
+        handleRegistry_registerCount(&countHandleLeaks<T>);
         mod->addAnnotation(new ManagedHandleAnnotation<T>(lib, name, cppTypeName));
         addExtern<decltype(&das_handle_equ<T>),  das_handle_equ<T>>
             (*mod, lib, "==", SideEffects::none, "das_handle_equ");

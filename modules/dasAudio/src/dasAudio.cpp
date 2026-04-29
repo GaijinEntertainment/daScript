@@ -265,12 +265,11 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
     lock_guard<recursive_mutex> guard(*g_mixer_context->contextMutex);
     auto saved = daScriptEnvironment::exchangeBound(g_mixer_env);
     g_mixer_context->restart();
-    g_mixer_context.get()->runWithCatch([&](){
+    if ( !g_mixer_context.get()->runWithCatch([&](){
         das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context.get(),nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
-    });
-    // TODO: i don't know what to do with exceptions here. im ignoring for now. better than crashing
-    if ( const char* exp = g_mixer_context->getException() ) {
-        g_mixer_context->to_err(&g_mixer_context->exceptionAt, exp);
+    }) ) {
+        g_mixer_context->to_err(&g_mixer_context->exceptionAt, g_mixer_context->getException());
+        g_mixer_context->clearException();
     }
     daScriptEnvironment::setBound(saved);
 }

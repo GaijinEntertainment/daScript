@@ -1,5 +1,9 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS VERSION 0.6.1)
+# enable_testing() must live at the top-level scope of the top-level
+# CMakeLists.txt for `ninja test` / ctest to work from the build root.
+# The actual add_test() calls live under tests-cpp/.
+enable_testing()
 include(GNUInstallDirs)
 
 # for now we gonna run with exceptions enabled
@@ -1216,18 +1220,9 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
     #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
     #ENDIF()
 
-    # Thread-safety test (issue #2027) — static link
-    add_executable(test_concurrent_init ${PROJECT_SOURCE_DIR}/tests/threading/test_concurrent_init.cpp)
-    TARGET_LINK_LIBRARIES(test_concurrent_init libDaScript ${SRC_LIBRARIES} ${DAS_MODULES_LIBS})
-    target_include_directories(test_concurrent_init PRIVATE ${NEED_MODULES_PATH})
-    SETUP_CPP11(test_concurrent_init)
-
-    # Thread-safety test (issue #2027) — dynamic link (DLL)
-    add_executable(test_concurrent_init_dyn ${PROJECT_SOURCE_DIR}/tests/threading/test_concurrent_init.cpp)
-    TARGET_LINK_LIBRARIES(test_concurrent_init_dyn libDaScriptDyn ${SRC_LIBRARIES})
-    ADD_DEPENDENCIES(test_concurrent_init_dyn libDaScriptDyn ${DAS_DYN_MODULES_LIBS})
-    target_include_directories(test_concurrent_init_dyn PRIVATE ${NEED_MODULES_PATH})
-    SETUP_CPP11(test_concurrent_init_dyn)
+    # C++ test infrastructure (doctest under tests-cpp/, plus big-test executables).
+    # Owns ALL C++-test-related CMake. enable_testing() lives at the top of this file.
+    add_subdirectory(tests-cpp)
 
     # Build daslang utilities as standalone executables (-exe mode)
     add_subdirectory(utils)

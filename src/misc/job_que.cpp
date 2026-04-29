@@ -378,6 +378,19 @@ namespace das {
         }
     }
 
+    uint64_t JobStatus::CountJobQueLeaks() {
+        uint64_t total = 0;
+        {
+            lock_guard<mutex> guard(sTrackMutex);
+            for ( auto p = sTrackHead; p; p = p->mTrackNext ) total++;
+        }
+        {
+            lock_guard<mutex> guard(Feature::sTrackMutex);
+            for ( auto f = Feature::sTrackHead; f; f = f->fTrackNext ) total++;
+        }
+        return total;
+    }
+
     // Feature tracking
 
     void Feature::trackInsert() {

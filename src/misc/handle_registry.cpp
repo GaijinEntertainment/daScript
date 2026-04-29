@@ -37,4 +37,27 @@ namespace das {
         for ( auto fn : hooks ) fn();
     }
 
+    static vector<HandleLeakCountFn> & handleRegistry_countHooks_impl () {
+        static vector<HandleLeakCountFn> hooks;
+        return hooks;
+    }
+
+    DAS_API void handleRegistry_registerCount_impl ( HandleLeakCountFn fn ) {
+        lock_guard<mutex> g(handleRegistry_dumpMutex_impl());
+        auto & hooks = handleRegistry_countHooks_impl();
+        for ( auto e : hooks ) if ( e == fn ) return;
+        hooks.push_back(fn);
+    }
+
+    DAS_API uint64_t handleRegistry_countAll_impl () {
+        vector<HandleLeakCountFn> hooks;
+        {
+            lock_guard<mutex> g(handleRegistry_dumpMutex_impl());
+            hooks = handleRegistry_countHooks_impl();
+        }
+        uint64_t total = 0;
+        for ( auto fn : hooks ) total += fn();
+        return total;
+    }
+
 }

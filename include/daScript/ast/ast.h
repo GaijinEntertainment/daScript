@@ -1158,6 +1158,7 @@ namespace das
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );
+        static uint64_t CountHandleLeaks();
         static void Reset(bool debAg);
         static void ClearSharedModules();
         static void CollectSharedModules();

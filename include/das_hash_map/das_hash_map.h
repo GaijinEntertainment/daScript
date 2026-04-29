@@ -70,8 +70,24 @@ namespace daslang_hash_map_detail {
     // platform.h macros not yet set up at our inclusion point). Gated on DAS_SAFE_HASH
     // the same way anyhash.h is: safe path breaks on block[0]==0 before touching
     // block[1]; fast path does a 2-byte read and tolerates the 1-byte overread.
+    //
+    // Under ASAN, default DAS_SAFE_HASH to 1 — the fast path's overread crosses the
+    // std::string allocation boundary (heap allocs are sized to chars+null exactly),
+    // which ASAN flags. Cannot use NO_ASAN_INLINE here because this header is pulled
+    // in before platform.h sets it up.
+    //
+    // __has_feature is Clang-only; on GCC the preprocessor still has to PARSE the
+    // RHS of `&&` even though `defined(__has_feature)` is false (short-circuit is
+    // semantic, not lexical), so guard it with the standard portability shim.
+    #ifndef __has_feature
+        #define __has_feature(x) 0
+    #endif
     #ifndef DAS_SAFE_HASH
-    #define DAS_SAFE_HASH 0
+        #if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
+            #define DAS_SAFE_HASH 1
+        #else
+            #define DAS_SAFE_HASH 0
+        #endif
     #endif
     static inline uint64_t hash_blockz64 ( const uint8_t * block ) noexcept {
         const uint64_t FNV_offset_basis = 14695981039346656037ull;
