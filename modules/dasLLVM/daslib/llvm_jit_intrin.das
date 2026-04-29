@@ -18,10 +18,15 @@ struct JitCtx {
     builder : LLVMOpaqueBuilder -const? -const
 }
 
+// Set by llvm_macro before codegen when prog.policies.jit_exe_mode is true.
+// Read by intrinsic_is_standalone_exe to fold $::is_standalone_exe() into a constant.
+var public g_jit_exe_mode = false
+
 let g_intrin_lookup <- {
 // $, aka builtin
     // misc
         "$::length" => @@intrinsic_builtin_length,
+        "$::is_standalone_exe" => @@intrinsic_is_standalone_exe,
     // pointer math
         "$::i_das_ptr_set_add" => @@intrinsic_das_ptr_set_add,
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add,
@@ -171,6 +176,10 @@ def intrinsic_builtin_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
     } else {
         return null
     }
+}
+
+def intrinsic_is_standalone_exe(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    return LLVMConstInt(ctx.types.t_int1, g_jit_exe_mode ? 1ul : 0ul, 0)
 }
 
 def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {

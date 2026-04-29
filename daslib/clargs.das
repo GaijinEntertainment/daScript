@@ -63,6 +63,20 @@ def public get_program_args() : array<string> {
     return <- get_program_args(get_command_line_arguments())
 }
 
+// Mode-aware argv source.  Returns argv[1..] when running as a standalone exe
+// (built via `daslang -exe`), and the post-`--` slice when running under the
+// interpreter or in-process JIT.  This is what the macro-generated default
+// `parse_args()` uses, so utilities work the same whether interpreted or
+// shipped as a binary.
+def public get_user_args() : array<string> {
+    let argv <- get_command_line_arguments()
+    if (is_standalone_exe()) {
+        return <- get_program_args(argv)
+    } else {
+        return <- get_cli_arguments(argv)
+    }
+}
+
 def clargs_flag_name(field_name : string) : string {
     return "--" + replace_multiple(field_name, [("_", "-")])
 }
@@ -308,8 +322,11 @@ def public parse_argument(args : array<string>; arg_info : CommandArgumentInfo; 
 // `format_help` builds the help text as a string (testable, redirectable).
 // `print_help` is a thin wrapper that prints it to stdout.
 //
-// Layout:
+// Layout (standalone exe — `is_standalone_exe() == true`):
 //   Usage: <prog_name> [flags]
+//
+// Layout (interpreted script):
+//   Usage: daslang <prog_name> -- [flags]
 //
 //   Flags:
 //     -X, --long=PLACEHOLDER    doc_string (required) (repeated)
@@ -395,7 +412,11 @@ def public format_help(info : CommandInfo; prog_name : string) : string {
     }
     let gutter = 4
     return build_string() $(var w) {
-        write(w, "Usage: {prog_name} [flags]\n\nFlags:\n")
+        if (is_standalone_exe()) {
+            write(w, "Usage: {prog_name} [flags]\n\nFlags:\n")
+        } else {
+            write(w, "Usage: daslang {prog_name} -- [flags]\n\nFlags:\n")
+        }
         for (i, arg in range(length(info.args)), info.args) {
             let s = specs[i]
             let pad = max_spec_len - length(s) + gutter
@@ -525,7 +546,7 @@ class ArgsMacro : AstStructureAnnotation {
 
     def make_parse_default_fn(var st : StructurePtr) : FunctionPtr {
         var fn = qmacro_function("parse_args") $(var dst : $t(st)) : string {
-            return parse_args(dst, get_cli_arguments())
+            return parse_args(dst, get_user_args())
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)

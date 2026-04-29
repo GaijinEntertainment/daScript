@@ -168,7 +168,7 @@ get_value|insert_clone|emplace_new|insert_default|emplace_default|get_with_defau
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%),
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments|with_argv)$%%),
         group_by_regex("Time and date", mod, %regex~(get_time_usec|ref_time_ticks|get_clock|get_time_nsec|mktime)$%%),
-        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|get_platform_name|get_architecture_name)$%%),
+        group_by_regex("Platform queries", mod, %regex~(get_context_share_counter|das_is_dll_build|is_standalone_exe|get_platform_name|get_architecture_name)$%%),
         group_by_regex("String formatting", mod, %regex~(fmt)$%%),
         group_by_regex("Argument consumption", mod, %regex~(consume_argument)$%%),
         group_by_regex("Lock checking", mod, %regex~(lock_count)$%%),

@@ -424,7 +424,8 @@ def test_get_program_args_only_argv0(t : T?) {
 def test_format_help_smoke(t : T?) {
     let info <- get_command_info(type<ShortFlagsConfig>)
     let help = format_help(info, "demo")
-    t |> success(starts_with(help, "Usage: demo [flags]\n"), "starts with usage line")
+    // Test runs under the interpreter, so format_help emits the daslang-script invocation form.
+    t |> success(starts_with(help, "Usage: daslang demo -- [flags]\n"), "starts with usage line")
     t |> success(find(help, "-n, --name=STRING") != -1, "renders short+long flag spec")
     t |> success(find(help, "-v, --verbose") != -1, "bool flag has no =placeholder")
     t |> success(find(help, "-p, --color=ENUM") != -1, "enum flag uses ENUM placeholder")

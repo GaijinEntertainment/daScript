@@ -1,0 +1,1 @@
+Returns `true` when the current binary was produced by `daslang -exe` (a standalone executable). Returns `false` under the interpreter, in-process LLVM JIT, and AOT C++ builds. The LLVM JIT replaces this call with a constant at codegen time, so the value is folded with no runtime cost.
