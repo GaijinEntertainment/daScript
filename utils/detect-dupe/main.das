@@ -5,6 +5,7 @@ require daslib/clargs
 require daslib/ast
 require daslib/ast_boost
 require daslib/fio
+require daslib/jobque_boost
 require daslib/strings_boost
 require math
 require strings
@@ -21,6 +22,16 @@ struct Config {
     @clarg_short = "p"
     @clarg_doc = "Path(s) to scan (file or directory). Repeatable."
     path : array<string>
+
+    @clarg_doc = "Read newline-delimited paths from a file (#-comments and blank lines skipped). Composes with -p; can be combined with --paths-stdin. Each entry can be a file or directory; directories recurse via the same scanner as -p."
+    paths_from : string
+
+    @clarg_doc = "Read newline-delimited paths from stdin (#-comments and blank lines skipped). Composes with -p / --paths-from. Mutually exclusive with --against-from-stdin (one stdin reader at a time)."
+    paths_stdin : bool
+
+    @clarg_short = "j"
+    @clarg_doc = "Worker count for parallel --export-functions runs. 0 = auto (= hardware threads). 1 = sequential. Files are sorted, split into N contiguous chunks, each compiled by a child detect-dupe process; shards merged in chunk-index order so output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless. Ignored without --export-functions."
+    workers : int
 
     @clarg_short = "t"
     @clarg_doc = "Fuzzy similarity threshold 0..1 (default 0.7)"
@@ -83,24 +94,6 @@ struct Config {
 }
 
 
-// Read newline-delimited paths from stdin. Used by --against-from-stdin
-// to plug into shell pipelines: `git diff --name-only master |
-// daslang utils/detect-dupe/main.das -- --against-from-stdin
-// --import-functions corpus.json`. Skips blank lines.
-def read_stdin_paths(var paths : array<string>) {
-    let f = fstdin()
-    if (f == null) {
-        return
-    }
-    while (!feof(f)) {
-        let line = fgets(f) |> strip
-        if (!empty(line)) {
-            paths |> push(line)
-        }
-    }
-}
-
-
 // Expand each `--against` argument (file or directory) into a normalized
 // set of `.das` file paths. Reuses scan_das_files so the same skip
 // rules (`builtin.das`, debugger/profiler) apply.
@@ -112,7 +105,7 @@ def resolve_against_files(against : array<string>; from_stdin : bool;
         raw |> push(p)
     }
     if (from_stdin) {
-        read_stdin_paths(raw)
+        read_path_lines(fstdin(), raw)
     }
     var cache : table<string; void?>
     var files : array<string>
@@ -181,6 +174,223 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
 }
 
 
+// Below this many input files, parallel export is a loss — each child
+// pays a daslang startup cost (a few hundred ms), so 16 files split 8
+// ways is slower than running sequentially in one process. Tune by
+// re-timing daslib (~80 files) and tests/language (~600 files) if the
+// startup cost shifts materially.
+let PARALLEL_THRESHOLD = 16
+
+
+def should_parallelize(n_files : int; workers_setting : int) : bool {
+    if (workers_setting == 1) {
+        return false
+    }
+    return n_files >= PARALLEL_THRESHOLD
+}
+
+
+def compute_worker_count(n_files : int; workers_setting : int) : int {
+    var w = workers_setting
+    if (w == 0) {
+        w = get_total_hw_threads()
+        if (w < 1) {
+            w = 1
+        }
+    }
+    if (w > n_files) {
+        w = n_files
+    }
+    if (w < 1) {
+        w = 1
+    }
+    return w
+}
+
+
+// One pre-built work item per chunk. argv is the full popen_argv
+// vector (including the daslang exe + main.das path) so workers don't
+// have to know anything about the parent's invocation.
+struct ShardInput {
+    index : int
+    chunk_path : string
+    shard_path : string
+    argv : array<string>
+}
+
+
+struct ShardResult {
+    index : int
+    exit_code : int
+    stdout : string
+}
+
+
+// Lay out chunk + shard temp paths next to the user's --export-functions
+// output. Avoids relying on $TMPDIR / %TEMP%, and the path the caller
+// supplied is by definition writable.
+def shard_path_for(out_path : string; tag : string; kind : string; index : int) : string {
+    return "{out_path}.{tag}.{kind}-{index}"
+}
+
+
+def run_parallel_export(files : array<string>; cfg : Config) {
+    let workers = compute_worker_count(length(files), cfg.workers)
+    let total = length(files)
+    let raw_args <- get_command_line_arguments()
+    if (length(raw_args) < 2) {
+        to_log(LOG_ERROR, "error: --workers requires `daslang main.das` invocation (raw_args has {length(raw_args)} entries)\n")
+        panic("detect-dupe parallel export failed: cannot self-spawn")
+    }
+    let exe = raw_args[0]
+    let script = raw_args[1]
+    let tag = "{ref_time_ticks()}"
+
+    let chunks <- chunk_files(files, workers)
+    let n_chunks = length(chunks)
+
+    var inputs : array<ShardInput>
+    inputs |> reserve(n_chunks)
+    var chunk_paths : array<string>
+    chunk_paths |> reserve(n_chunks)
+    var shard_paths : array<string>
+    shard_paths |> reserve(n_chunks)
+    for (k in range(n_chunks)) {
+        let cp = shard_path_for(cfg.export_functions, tag, "chunk", k) + ".txt"
+        let sp = shard_path_for(cfg.export_functions, tag, "shard", k) + ".json"
+        var write_ok = false
+        fopen(cp, "wb") $(fw) {
+            if (fw == null) {
+                return
+            }
+            write_ok = true
+            for (entry in chunks[k]) {
+                fw |> fprint("{entry}\n")
+            }
+        }
+        if (!write_ok) {
+            for (p in chunk_paths) {
+                remove(p)
+            }
+            to_log(LOG_ERROR, "error: could not write chunk file {cp}\n")
+            panic("detect-dupe parallel export failed: chunk write")
+        }
+        chunk_paths |> push(cp)
+        shard_paths |> push(sp)
+        var argv : array<string>
+        argv |> reserve(12)
+        argv |> push(exe)
+        argv |> push(script)
+        argv |> push("--")
+        argv |> push("--paths-from")
+        argv |> push(cp)
+        argv |> push("--export-functions")
+        argv |> push(sp)
+        argv |> push("--workers")
+        argv |> push("1")
+        argv |> push("--min-tokens")
+        argv |> push("{cfg.min_tokens}")
+        if (cfg.lambdas_only) {
+            argv |> push("--lambdas-only")
+        }
+        if (cfg.no_fuzzy) {
+            argv |> push("--no-fuzzy")
+        }
+        inputs |> emplace(ShardInput(
+            index = k,
+            chunk_path = cp,
+            shard_path = sp,
+            argv <- argv))
+    }
+
+    to_log(LOG_INFO, "parallel export: {n_chunks} worker(s) over {total} file(s)\n")
+
+    var results : array<ShardResult>
+    results |> resize(n_chunks)
+    for (i in range(n_chunks)) {
+        results[i].index = i
+        results[i].exit_code = -1
+    }
+
+    with_channel(n_chunks) $(inCh) {
+        with_channel(n_chunks) $(outCh) {
+            with_job_status(n_chunks) $(done) {
+                for (_t in range(n_chunks)) {
+                    new_thread <| @ {
+                        for_each_clone(inCh) $(input : ShardInput#) {
+                            var output : string
+                            let exit_code = unsafe(popen_argv(input.argv, 0.0, $(f) {
+                                if (f != null) {
+                                    output := unsafe(fread_to_eof(f))
+                                }
+                            }))
+                            outCh |> push_clone(ShardResult(
+                                index = input.index,
+                                exit_code = exit_code,
+                                stdout = output))
+                            outCh |> notify()
+                        }
+                        inCh |> release()
+                        outCh |> release()
+                        done |> notify_and_release()
+                    }
+                }
+                for (inp in inputs) {
+                    inCh |> push_clone(inp)
+                    inCh |> notify()
+                }
+                for (r in each_clone(outCh, type<ShardResult>)) {
+                    if (r.index >= 0 && r.index < length(results)) {
+                        results[r.index].index = r.index
+                        results[r.index].exit_code = r.exit_code
+                        results[r.index].stdout := r.stdout
+                    }
+                }
+                done |> join()
+            }
+        }
+    }
+
+    var any_failed = false
+    for (k in range(n_chunks)) {
+        let r = results[k]
+        if (!empty(r.stdout)) {
+            for (line in split(r.stdout, "\n")) {
+                if (!empty(line)) {
+                    to_log(LOG_INFO, "[worker {k}] {line}\n")
+                }
+            }
+        }
+        if (r.exit_code != 0) {
+            to_log(LOG_ERROR, "worker {k} failed (exit code {r.exit_code})\n")
+            any_failed = true
+        }
+    }
+
+    for (p in chunk_paths) {
+        remove(p)
+    }
+
+    if (any_failed) {
+        for (p in shard_paths) {
+            remove(p)
+        }
+        panic("detect-dupe parallel export failed: at least one worker exited non-zero")
+    }
+
+    var merr : string
+    let merged = merge_envelope_files(shard_paths, cfg.export_functions, merr)
+    for (p in shard_paths) {
+        remove(p)
+    }
+    if (!merged) {
+        to_log(LOG_ERROR, "error: {merr}\n")
+        panic("detect-dupe parallel export failed: shard merge")
+    }
+    to_log(LOG_INFO, "merged {n_chunks} shard(s) into {cfg.export_functions}\n")
+}
+
+
 [export]
 def main() {
     var cfg = Config()
@@ -198,8 +408,11 @@ def main() {
     let exporting = !empty(cfg.export_functions)
     let has_against = length(cfg.against) > 0 || cfg.against_from_stdin
     let has_baseline = !empty(cfg.baseline)
-    if (importing && length(cfg.path) > 0) {
-        to_log(LOG_ERROR, "error: --import-functions and --path are mutually exclusive\n")
+    let has_paths_input = (length(cfg.path) > 0
+        || !empty(cfg.paths_from)
+        || cfg.paths_stdin)
+    if (importing && has_paths_input) {
+        to_log(LOG_ERROR, "error: --import-functions is mutually exclusive with --path / --paths-from / --paths-stdin\n")
         return
     }
     if (importing && exporting) {
@@ -210,13 +423,21 @@ def main() {
         to_log(LOG_ERROR, "error: --export-functions is incompatible with --against / --baseline (export captures the raw corpus, not a filtered view)\n")
         return
     }
+    if (cfg.paths_stdin && cfg.against_from_stdin) {
+        to_log(LOG_ERROR, "error: --paths-stdin and --against-from-stdin both consume stdin; only one is allowed per run\n")
+        return
+    }
     if (cfg.baseline_strict && !has_baseline) {
         to_log(LOG_ERROR, "error: --baseline-strict requires --baseline\n")
         return
     }
-    if (!importing && !has_against && length(cfg.path) == 0) {
-        to_log(LOG_ERROR, "error: at least one --path is required (or pass --import-functions, or --against)\n\n")
+    if (!importing && !has_against && !has_paths_input) {
+        to_log(LOG_ERROR, "error: at least one of --path / --paths-from / --paths-stdin is required (or pass --import-functions, or --against)\n\n")
         print_help(get_command_info(type<Config>), "detect-dupe")
+        return
+    }
+    if (cfg.workers < 0) {
+        to_log(LOG_ERROR, "error: --workers must be >= 0, got {cfg.workers}\n")
         return
     }
     if (cfg.threshold < 0.0f || cfg.threshold > 1.0f) {
@@ -272,35 +493,88 @@ def main() {
             }
         }
     } else {
+        var seeds : array<string>
+        seeds |> reserve(length(cfg.path))
+        for (p in cfg.path) {
+            seeds |> push(p)
+        }
+        if (!empty(cfg.paths_from)) {
+            var perr : string
+            if (!read_path_lines_from_file(cfg.paths_from, seeds, perr)) {
+                to_log(LOG_ERROR, "error: {perr}\n")
+                return
+            }
+        }
+        if (cfg.paths_stdin) {
+            read_path_lines(fstdin(), seeds)
+        }
+
         var files : array<string>
         var cache : table<string; void?>
-        for (p in cfg.path) {
+        for (p in seeds) {
             scan_das_files(p, files, cache)
         }
         if (length(files) == 0 && !has_against) {
             to_log(LOG_ERROR, "error: no .das files found under given paths\n")
             return
         }
-        if (length(files) > 0) {
-            to_log(LOG_INFO, "scanning {length(files)} file(s)...\n")
+        // Sort the file list before any compile happens. Two reasons:
+        //   * parallel mode chunks contiguously, so deterministic input
+        //     order is required for byte-identical output across worker
+        //     counts.
+        //   * sequential mode used to follow filesystem-iteration order,
+        //     which is platform-dependent. Sorting once unifies both.
+        sort(files)
+
+        // Drop expect-directive fixtures once, before deciding sequential
+        // vs parallel. The parallel-mode threshold check has to run
+        // against the *compilable* count — otherwise an input list
+        // dominated by fixtures (e.g. tests/ has dozens of expect-broken
+        // files) might trip a 16-file gate while the real work is
+        // sub-threshold, paying child-process startup for nothing.
+        // Sequential mode also benefits: no per-iteration I/O for the
+        // expect-check, just compile the filtered list.
+        var compile_files : array<string>
+        compile_files |> reserve(length(files))
+        var n_skipped = 0
+        for (f in files) {
+            if (has_expect_directive(f)) {
+                n_skipped++
+                continue
+            }
+            compile_files |> push(f)
+        }
+        if (n_skipped > 0) {
+            to_log(LOG_INFO, "{n_skipped} file(s) skipped (expect-directive)\n")
+        }
+        files_scanned = length(files)
+
+        // Parallel export fast-path: skip the in-process compile loop
+        // entirely. Workers see the pre-filtered list, so they don't
+        // waste startup cost on fixtures.
+        if (exporting && should_parallelize(length(compile_files), cfg.workers)) {
+            if (length(compile_files) == 0) {
+                to_log(LOG_ERROR, "error: every input file contains an `expect` directive; nothing to export\n")
+                panic("detect-dupe export failed: no compilable files")
+            }
+            run_parallel_export(compile_files, cfg)
+            return
+        }
+
+        if (length(compile_files) > 0) {
+            to_log(LOG_INFO, "scanning {length(compile_files)} file(s)...\n")
         }
 
         var n_failed = 0
-        var n_skipped = 0
-        for (i in range(length(files))) {
-            let file = files[i]
+        for (i in range(length(compile_files))) {
+            let file = compile_files[i]
             if (cfg.verbose) {
-                to_log(LOG_INFO, "[{i + 1}/{length(files)}] {file}\n")
-            }
-            if (has_expect_directive(file)) {
-                n_skipped++
-                continue
+                to_log(LOG_INFO, "[{i + 1}/{length(compile_files)}] {file}\n")
             }
             if (!compile_and_collect(file, records, seen_loc, cfg.verbose, cfg.lambdas_only, want_sigs, min_tokens)) {
                 n_failed++
             }
         }
-        files_scanned = length(files)
         to_log(LOG_INFO, "collected {length(records)} function record(s); {n_failed} compile failure(s), {n_skipped} skipped (expect-directive)\n")
 
         if (exporting) {
@@ -414,11 +688,13 @@ def main() {
     let skip_counts <- apply_pattern_filter(records, kept_set, keep_all, cfg.verbose)
     if (length(skip_counts) > 0) {
         var skip_pairs : array<tuple<string; int>>
+        skip_pairs |> reserve(length(skip_counts))
         for (k, v in keys(skip_counts), values(skip_counts)) {
             skip_pairs |> push((k, v))
         }
         sort(skip_pairs) <| $(a, b) => a._0 < b._0
         var parts : array<string>
+        parts |> reserve(length(skip_pairs))
         for (kv in skip_pairs) {
             parts |> push("{kv._1} {kv._0}")
         }

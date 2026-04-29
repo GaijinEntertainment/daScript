@@ -148,10 +148,7 @@ def test_tokenize_trailing_space(t : T?) {
 
 [test]
 def test_minhash_signature_length(t : T?) {
-    var toks : array<string>
-    toks |> push("alpha")
-    toks |> push("beta")
-    toks |> push("gamma")
+    let toks <- ["alpha", "beta", "gamma"]
     let sig <- minhash_signature(toks)
     t |> equal(length(sig), 64)
 }
@@ -161,8 +158,7 @@ def test_minhash_signature_length(t : T?) {
 def test_minhash_padding_for_short_input(t : T?) {
     // 1 token is below N_GRAM (=5) — padding kicks in so we still get
     // a stable 64-slot signature.
-    var toks : array<string>
-    toks |> push("only_one")
+    let toks <- ["only_one"]
     let sig <- minhash_signature(toks)
     t |> equal(length(sig), 64)
 }
@@ -172,6 +168,8 @@ def test_minhash_padding_for_short_input(t : T?) {
 def test_minhash_deterministic(t : T?) {
     var toks_a : array<string>
     var toks_b : array<string>
+    toks_a |> reserve(20)
+    toks_b |> reserve(20)
     for (i in range(20)) {
         toks_a |> push("token_{i}")
         toks_b |> push("token_{i}")
@@ -191,6 +189,7 @@ def test_minhash_deterministic(t : T?) {
 [test]
 def test_jaccard_identical(t : T?) {
     var toks : array<string>
+    toks |> reserve(15)
     for (i in range(15)) {
         toks |> push("t{i}")
     }
@@ -210,12 +209,9 @@ def test_jaccard_empty(t : T?) {
 
 [test]
 def test_jaccard_length_mismatch(t : T?) {
-    var toks : array<string>
-    toks |> push("x")
-    toks |> push("y")
+    let toks <- ["x", "y"]
     let sig <- minhash_signature(toks)
-    var short_sig : array<uint64>
-    short_sig |> push(0ul)
+    let short_sig <- [0ul]
     t |> equal(jaccard_estimate(sig, short_sig), 0.0f)
 }
 
@@ -227,6 +223,8 @@ def test_jaccard_unrelated_low(t : T?) {
     // estimate is far below "duplicate" territory.
     var toks_a : array<string>
     var toks_b : array<string>
+    toks_a |> reserve(30)
+    toks_b |> reserve(30)
     for (i in range(30)) {
         toks_a |> push("aaa_{i}")
         toks_b |> push("zzz_{i + 1000}")
@@ -242,12 +240,12 @@ def test_jaccard_unrelated_low(t : T?) {
 
 [test]
 def test_exact_groups_duplicates(t : T?) {
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN ARG <var_0> RET <var_0> ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN ARG <var_0> RET <var_0> ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN ARG <var_0> RET LIT ENDFN", 3, false)
-    records |> emplace <| make_record("d", "FN ARG <var_0> RET <var_0> ENDFN", 4, false)
-    var clusters <- exact_buckets(records, 0)
+    var records <- array<FuncRecord>(
+        <- make_record("a", "FN ARG <var_0> RET <var_0> ENDFN", 1, false),
+        <- make_record("b", "FN ARG <var_0> RET <var_0> ENDFN", 2, false),
+        <- make_record("c", "FN ARG <var_0> RET LIT ENDFN", 3, false),
+        <- make_record("d", "FN ARG <var_0> RET <var_0> ENDFN", 4, false))
+    let clusters <- exact_buckets(records, 0)
     // 3 records share canonical → 1 cluster of size 3; record "c" is
     // alone → not reported.
     t |> equal(length(clusters), 1)
@@ -261,12 +259,12 @@ def test_exact_groups_duplicates(t : T?) {
 
 [test]
 def test_exact_min_tokens_filter(t : T?) {
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN ENDFN", 1, false)            // 2 tokens
-    records |> emplace <| make_record("b", "FN ENDFN", 2, false)            // 2 tokens
-    records |> emplace <| make_record("c", "FN BODY BLK STMT ENDBLK ENDFN", 3, false)
-    records |> emplace <| make_record("d", "FN BODY BLK STMT ENDBLK ENDFN", 4, false)
-    var clusters <- exact_buckets(records, 5)
+    var records <- array<FuncRecord>(
+        <- make_record("a", "FN ENDFN", 1, false),                          // 2 tokens
+        <- make_record("b", "FN ENDFN", 2, false),                          // 2 tokens
+        <- make_record("c", "FN BODY BLK STMT ENDBLK ENDFN", 3, false),
+        <- make_record("d", "FN BODY BLK STMT ENDBLK ENDFN", 4, false))
+    let clusters <- exact_buckets(records, 5)
     // a/b at 2 tokens are below min_tokens=5; only c/d remain.
     t |> equal(length(clusters), 1)
     t |> equal(length(clusters[0].members), 2)
@@ -277,11 +275,11 @@ def test_exact_min_tokens_filter(t : T?) {
 
 [test]
 def test_exact_assigns_cluster_id(t : T?) {
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN X Y Z ENDFN", 1, false)
-    records |> emplace <| make_record("b", "FN X Y Z ENDFN", 2, false)
-    records |> emplace <| make_record("c", "FN P Q R ENDFN", 3, false)
-    var clusters <- exact_buckets(records, 0)
+    var records <- array<FuncRecord>(
+        <- make_record("a", "FN X Y Z ENDFN", 1, false),
+        <- make_record("b", "FN X Y Z ENDFN", 2, false),
+        <- make_record("c", "FN P Q R ENDFN", 3, false))
+    let clusters <- exact_buckets(records, 0)
     let i_a = find_record_by_name(records, "a")
     let i_b = find_record_by_name(records, "b")
     let i_c = find_record_by_name(records, "c")
@@ -296,7 +294,7 @@ def test_exact_assigns_cluster_id(t : T?) {
 def test_exact_singleton_not_reported(t : T?) {
     var records : array<FuncRecord>
     records |> emplace <| make_record("solo", "FN UNIQUE STREAM ENDFN", 1, false)
-    var clusters <- exact_buckets(records, 0)
+    let clusters <- exact_buckets(records, 0)
     t |> equal(length(clusters), 0)
 }
 
@@ -305,13 +303,13 @@ def test_exact_singleton_not_reported(t : T?) {
 
 [test]
 def test_sort_clusters_by_size(t : T?) {
-    var records : array<FuncRecord>
-    // Two clusters: AAA size 2, BBB size 3. After sort, BBB comes first.
-    records |> emplace <| make_record("a1", "FN AAA ENDFN", 1, false)
-    records |> emplace <| make_record("a2", "FN AAA ENDFN", 2, false)
-    records |> emplace <| make_record("b1", "FN BBB ENDFN", 3, false)
-    records |> emplace <| make_record("b2", "FN BBB ENDFN", 4, false)
-    records |> emplace <| make_record("b3", "FN BBB ENDFN", 5, false)
+    var records <- array<FuncRecord>(
+        // Two clusters: AAA size 2, BBB size 3. After sort, BBB comes first.
+        <- make_record("a1", "FN AAA ENDFN", 1, false),
+        <- make_record("a2", "FN AAA ENDFN", 2, false),
+        <- make_record("b1", "FN BBB ENDFN", 3, false),
+        <- make_record("b2", "FN BBB ENDFN", 4, false),
+        <- make_record("b3", "FN BBB ENDFN", 5, false))
     var clusters <- exact_buckets(records, 0)
     sort_clusters(clusters)
     t |> equal(length(clusters), 2)
@@ -358,7 +356,7 @@ def test_fuzzy_near_duplicates_pair(t : T?) {
     let canon_b = "FN ARG <var_0> TYP BODY BLK STMT LET LET_VAR <var_1> LIT STMT FOR FOR_VAR <var_2> <var_0> FOR_BODY BLK STMT OP2:*= <var_1> <var_2> ENDBLK STMT RET <var_1> ENDBLK ENDFN"
     records |> emplace <| make_record("a", canon_a, 1, true)
     records |> emplace <| make_record("b", canon_b, 2, true)
-    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    let pairs <- fuzzy_pairs(records, 0.7f, 0)
     t |> equal(length(pairs), 1)
     t |> success(pairs[0].similarity >= 0.7f, "similarity above threshold, got {pairs[0].similarity}")
 }
@@ -372,7 +370,7 @@ def test_fuzzy_skips_identical(t : T?) {
     let canon = "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN"
     records |> emplace <| make_record("a", canon, 1, true)
     records |> emplace <| make_record("b", canon, 2, true)
-    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    let pairs <- fuzzy_pairs(records, 0.7f, 0)
     t |> equal(length(pairs), 0)
 }
 
@@ -385,9 +383,9 @@ def test_fuzzy_skips_same_cluster(t : T?) {
     let canon = "FN ARG <var_0> TYP BODY BLK STMT RET OP2:+ <var_0> LIT ENDBLK ENDFN"
     records |> emplace <| make_record("a", canon, 1, true)
     records |> emplace <| make_record("b", canon, 2, true)
-    var clusters <- exact_buckets(records, 0)
+    let clusters <- exact_buckets(records, 0)
     t |> equal(length(clusters), 1)
-    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    let pairs <- fuzzy_pairs(records, 0.7f, 0)
     t |> equal(length(pairs), 0)
 }
 
@@ -396,26 +394,26 @@ def test_fuzzy_skips_same_cluster(t : T?) {
 def test_fuzzy_length_ratio_gate(t : T?) {
     // Very different lengths → length_ratio gate drops the pair regardless
     // of MinHash similarity.
-    var records : array<FuncRecord>
-    records |> emplace <| make_record(
-        "short",
-        "FN ARG <var_0> TYP BODY BLK STMT RET <var_0> ENDBLK ENDFN",
-        1, true)
-    records |> emplace <| make_record(
-        "long",
-        "FN ARG <var_0> TYP ARG <var_1> TYP ARG <var_2> TYP TYP BODY BLK STMT LET LET_VAR <var_3> LIT STMT FOR FOR_VAR <var_4> <var_0> FOR_BODY BLK STMT OP2:+= <var_3> <var_4> ENDBLK STMT FOR FOR_VAR <var_5> <var_1> FOR_BODY BLK STMT OP2:*= <var_3> <var_5> ENDBLK STMT RET <var_3> ENDBLK ENDFN",
-        2, true)
-    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    let records <- array<FuncRecord>(
+        <- make_record(
+            "short",
+            "FN ARG <var_0> TYP BODY BLK STMT RET <var_0> ENDBLK ENDFN",
+            1, true),
+        <- make_record(
+            "long",
+            "FN ARG <var_0> TYP ARG <var_1> TYP ARG <var_2> TYP TYP BODY BLK STMT LET LET_VAR <var_3> LIT STMT FOR FOR_VAR <var_4> <var_0> FOR_BODY BLK STMT OP2:+= <var_3> <var_4> ENDBLK STMT FOR FOR_VAR <var_5> <var_1> FOR_BODY BLK STMT OP2:*= <var_3> <var_5> ENDBLK STMT RET <var_3> ENDBLK ENDFN",
+            2, true))
+    let pairs <- fuzzy_pairs(records, 0.7f, 0)
     t |> equal(length(pairs), 0)
 }
 
 
 [test]
 def test_fuzzy_min_tokens_filter(t : T?) {
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("a", "FN A B C ENDFN", 1, true)
-    records |> emplace <| make_record("b", "FN A B C ENDFN", 2, true)
-    var pairs <- fuzzy_pairs(records, 0.7f, 100)
+    let records <- array<FuncRecord>(
+        <- make_record("a", "FN A B C ENDFN", 1, true),
+        <- make_record("b", "FN A B C ENDFN", 2, true))
+    let pairs <- fuzzy_pairs(records, 0.7f, 100)
     t |> equal(length(pairs), 0)
 }
 
@@ -441,9 +439,9 @@ def make_temp_export_path(t : T?) : string {
 def test_export_import_basic(t : T?) {
     let path = make_temp_export_path(t)
     if (empty(path)) return
-    var records : array<FuncRecord>
-    records |> emplace <| make_record("alpha", "FN A B C ENDFN", 10, false)
-    records |> emplace <| make_record("beta", "FN X Y Z ENDFN", 20, false)
+    var records <- array<FuncRecord>(
+        <- make_record("alpha", "FN A B C ENDFN", 10, false),
+        <- make_record("beta", "FN X Y Z ENDFN", 20, false))
     records[1].ref.is_lambda = true
 
     let wrote = write_export(records, path)
@@ -595,6 +593,251 @@ def test_import_rejects_zero_line(t : T?) {
     t |> success(ok, "envelope is valid; line=0 record is dropped as malformed")
     t |> equal(length(loaded), 0)
     remove(path)
+}
+
+
+// ── path-list helpers (read_path_lines) ──────────────────────────────
+
+[test]
+def test_read_path_lines_basic(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint("# comment line\n")
+            fw |> fprint("\n")
+            fw |> fprint("daslib/foo.das\n")
+            fw |> fprint("    \n")
+            fw |> fprint("  daslib/bar.das  \n")
+            fw |> fprint("# trailing comment\n")
+        }
+    }
+    var paths : array<string>
+    var err : string
+    let ok = read_path_lines_from_file(path, paths, err)
+    t |> success(ok, "read_path_lines_from_file returned true; err={err}")
+    t |> equal(length(paths), 2)
+    t |> equal(paths[0], "daslib/foo.das")
+    t |> equal(paths[1], "daslib/bar.das")
+    remove(path)
+}
+
+
+[test]
+def test_read_path_lines_missing_file(t : T?) {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return
+    remove(path)
+    var paths : array<string>
+    var err : string
+    let ok = read_path_lines_from_file(path, paths, err)
+    t |> success(!ok, "read_path_lines_from_file returns false for missing file")
+    t |> success(!empty(err), "error message set: {err}")
+    t |> equal(length(paths), 0)
+}
+
+
+// ── input-file dedup (scan_das_files cache) ──────────────────────────
+//
+// `scan_das_files` shares a cache table across multiple seed paths so
+// overlapping `-p` + `--paths-from` entries don't double-count. This
+// is the load-bearing invariant for the union semantics in main.das.
+
+let SCAN_FIXTURE_DIR = "utils/detect-dupe/fixture"
+
+
+[test]
+def test_scan_das_files_dedup(t : T?) {
+    var files1 : array<string>
+    var cache1 : table<string; void?>
+    scan_das_files(SCAN_FIXTURE_DIR, files1, cache1)
+    let n1 = length(files1)
+    t |> success(n1 > 0, "fixture dir scan picked up at least one file")
+    if (n1 == 0) {
+        return
+    }
+    // Re-scan the same dir using the same cache — must yield zero new entries.
+    let before = length(files1)
+    scan_das_files(SCAN_FIXTURE_DIR, files1, cache1)
+    t |> equal(length(files1), before, "second scan with same cache adds nothing")
+    // Re-scan via a different seed (same dir) using the same cache.
+    var files2 : array<string>
+    scan_das_files(SCAN_FIXTURE_DIR, files2, cache1)
+    t |> equal(length(files2), 0, "second scan with different out-array but same cache yields zero")
+}
+
+
+// ── chunk_files ──────────────────────────────────────────────────────
+
+def synth_paths(n : int) : array<string> {
+    var out : array<string>
+    out |> reserve(n)
+    for (i in range(n)) {
+        out |> push("file_{i}.das")
+    }
+    return <- out
+}
+
+
+[test]
+def test_chunk_files_contiguous_and_complete(t : T?) {
+    let files <- synth_paths(11)
+    let chunks <- chunk_files(files, 4)
+    t |> equal(length(chunks), 4, "11 files / 4 workers => 4 chunks")
+    // Round-up per-chunk = ceil(11/4) = 3, last chunk shorter.
+    t |> equal(length(chunks[0]), 3)
+    t |> equal(length(chunks[1]), 3)
+    t |> equal(length(chunks[2]), 3)
+    t |> equal(length(chunks[3]), 2)
+    // Concat must equal original.
+    var rebuilt : array<string>
+    rebuilt |> reserve(11)
+    for (c in chunks) {
+        for (s in c) {
+            rebuilt |> push(s)
+        }
+    }
+    t |> equal(length(rebuilt), 11)
+    for (i in range(11)) {
+        t |> equal(rebuilt[i], "file_{i}.das")
+    }
+}
+
+
+[test]
+def test_chunk_files_workers_one(t : T?) {
+    let files <- synth_paths(7)
+    let chunks <- chunk_files(files, 1)
+    t |> equal(length(chunks), 1, "workers=1 => single chunk")
+    t |> equal(length(chunks[0]), 7)
+}
+
+
+[test]
+def test_chunk_files_workers_more_than_files(t : T?) {
+    let files <- synth_paths(3)
+    let chunks <- chunk_files(files, 8)
+    t |> equal(length(chunks), 3, "workers > files => one chunk per file, no empty trailers")
+    for (c in chunks) {
+        t |> equal(length(c), 1)
+    }
+}
+
+
+[test]
+def test_chunk_files_empty_input(t : T?) {
+    let files : array<string>
+    let chunks <- chunk_files(files, 4)
+    t |> equal(length(chunks), 0, "empty input => empty chunk list")
+}
+
+
+// ── merge_envelope_files ─────────────────────────────────────────────
+
+def write_shard(t : T?; functions : array<ExportedFunction>; schema : int) : string {
+    let path = make_temp_export_path(t)
+    if (empty(path)) return ""
+    var env = ExportEnvelope(schema_version = schema)
+    env.functions |> reserve(length(functions))
+    for (ef in functions) {
+        env.functions |> emplace(ExportedFunction(
+            name = ef.name,
+            file = ef.file,
+            line = ef.line,
+            end_line = ef.end_line,
+            is_lambda = ef.is_lambda,
+            canonical = ef.canonical))
+    }
+    let body = sprint_json(env, false)
+    fopen(path, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+        }
+    }
+    return path
+}
+
+
+def make_export_func(name : string; line : int) : ExportedFunction {
+    return ExportedFunction(
+        name = name,
+        file = "test.das",
+        line = line,
+        end_line = line + 5,
+        is_lambda = false,
+        canonical = "FN {name}")
+}
+
+
+[test]
+def test_merge_envelope_files_concat_in_order(t : T?) {
+    let s0 <- [make_export_func("alpha", 10), make_export_func("beta", 20)]
+    let s1 <- [make_export_func("gamma", 30)]
+    let s2 <- [make_export_func("delta", 40), make_export_func("epsilon", 50)]
+
+    let p0 = write_shard(t, s0, EXCHANGE_SCHEMA_VERSION)
+    let p1 = write_shard(t, s1, EXCHANGE_SCHEMA_VERSION)
+    let p2 = write_shard(t, s2, EXCHANGE_SCHEMA_VERSION)
+    if (empty(p0) || empty(p1) || empty(p2)) return
+
+    let out = make_temp_export_path(t)
+    if (empty(out)) return
+    let shards <- [p0, p1, p2]
+    var err : string
+    let ok = merge_envelope_files(shards, out, err)
+    t |> success(ok, "merge_envelope_files returned true; err={err}")
+
+    var loaded : array<FuncRecord>
+    var rerr : string
+    let read_ok = read_import(out, loaded, false, 0, rerr)
+    t |> success(read_ok, "read_import on merged file; err={rerr}")
+    t |> equal(length(loaded), 5)
+    t |> equal(loaded[0].ref.name, "alpha")
+    t |> equal(loaded[1].ref.name, "beta")
+    t |> equal(loaded[2].ref.name, "gamma")
+    t |> equal(loaded[3].ref.name, "delta")
+    t |> equal(loaded[4].ref.name, "epsilon")
+    remove(p0)
+    remove(p1)
+    remove(p2)
+    remove(out)
+}
+
+
+[test]
+def test_merge_envelope_files_rejects_bad_schema(t : T?) {
+    let good <- [make_export_func("ok", 10)]
+    let bad <- [make_export_func("nope", 20)]
+    let p_good = write_shard(t, good, EXCHANGE_SCHEMA_VERSION)
+    let p_bad = write_shard(t, bad, /*schema=*/ 99)
+    if (empty(p_good) || empty(p_bad)) return
+
+    let out = make_temp_export_path(t)
+    if (empty(out)) return
+    let shards <- [p_good, p_bad]
+    var err : string
+    let ok = merge_envelope_files(shards, out, err)
+    t |> success(!ok, "merge rejects bad schema_version")
+    t |> success(find(err, "schema_version") >= 0, "error mentions schema_version: {err}")
+    remove(p_good)
+    remove(p_bad)
+    remove(out)
+}
+
+
+[test]
+def test_merge_envelope_files_missing_shard(t : T?) {
+    let missing = make_temp_export_path(t)
+    if (empty(missing)) return
+    remove(missing)
+    let out = make_temp_export_path(t)
+    if (empty(out)) return
+    let shards <- [missing]
+    var err : string
+    let ok = merge_envelope_files(shards, out, err)
+    t |> success(!ok, "merge rejects missing shard")
+    t |> success(!empty(err), "error message set: {err}")
+    remove(out)
 }
 
 
@@ -772,8 +1015,8 @@ def test_pipeline_synth_exact_clusters(t : T?) {
 def test_pipeline_synth_fuzzy_pair(t : T?) {
     var records : array<FuncRecord>
     compile_fixture(SYNTH_FIXTURE, records, false, true)
-    var clusters <- exact_buckets(records, 0)
-    var pairs <- fuzzy_pairs(records, 0.7f, 0)
+    let clusters <- exact_buckets(records, 0)
+    let pairs <- fuzzy_pairs(records, 0.7f, 0)
     t |> equal(length(pairs), 1)
     let names_match = (
         (pairs[0].a.name == "loop_sum" && pairs[0].b.name == "loop_product") ||
@@ -1028,9 +1271,7 @@ def test_per_candidate_rollup_shape(t : T?) {
     var pairs <- fuzzy_pairs(records, 0.6f, 0, true)
     sort_pairs(pairs)
 
-    var rep : Report
-    rep.exact_clusters <- clusters
-    rep.fuzzy_pairs <- pairs
+    let rep = Report(exact_clusters <- clusters, fuzzy_pairs <- pairs)
 
     let cand_refs <- collect_candidate_refs(records)
     let pcr = build_per_candidate_report(rep, cand_refs, 5)

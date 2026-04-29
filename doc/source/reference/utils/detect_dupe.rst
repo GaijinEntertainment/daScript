@@ -72,8 +72,31 @@ Flags
      - Default
      - Meaning
    * - ``-p / --path``
-     - required
-     - File or directory to scan; repeatable
+     - required\*
+     - File or directory to scan; repeatable.  ``*`` one of ``-p``,
+       ``--paths-from``, ``--paths-stdin`` is required (or
+       ``--import-functions`` / ``--against``)
+   * - ``--paths-from``
+     - off
+     - Read newline-delimited paths from a file (``#``-comments and
+       blank lines skipped).  Composes with ``-p``.  Each entry can
+       be a file or directory; directories recurse via the same
+       scanner as ``-p``
+   * - ``--paths-stdin``
+     - off
+     - Read newline-delimited paths from stdin (``#``-comments and
+       blank lines skipped).  Composes with ``-p``.  Mutually
+       exclusive with ``--against-from-stdin`` (one stdin reader per
+       run)
+   * - ``-j / --workers``
+     - 0 (auto)
+     - Worker count for parallel ``--export-functions`` runs.  0 =
+       hardware threads.  1 = sequential.  Files are sorted, split
+       into N contiguous chunks, each compiled by a child detect-dupe
+       process; shards are merged in chunk-index order so output is
+       byte-identical across worker counts.  Below 16 input files the
+       export stays sequential regardless.  Ignored without
+       ``--export-functions``
    * - ``-t / --threshold``
      - 0.7
      - Fuzzy similarity floor (0..1).  Score is
@@ -327,6 +350,55 @@ records and reload them::
 ``--import-functions`` is mutually exclusive with both ``--path``
 and ``--export-functions``.  ``--export-functions`` always exits
 before the clustering pass.
+
+Parallel export (``-j / --workers``)
+------------------------------------
+
+For large corpora the dominant cost is per-file compilation.
+``--workers N`` fans the export across N child detect-dupe
+processes:
+
+* The full file list is sorted, split into N contiguous chunks,
+  and written to per-worker temp files.
+* Each child runs ``--paths-from <chunk> --export-functions
+  <shard> --workers 1`` and produces its own envelope.
+* The parent reads shards back **in chunk-index order** and
+  concatenates their ``functions`` arrays.  Output is therefore
+  byte-identical to a sequential ``--workers 1`` run on the same
+  inputs.
+* Below 16 input files the export stays sequential regardless ---
+  child-process startup dominates the savings on small lists.
+
+Default (``-j 0``) is auto, equal to the host's hardware thread
+count.  Compile is CPU-bound, so oversubscription does not help.
+``-j 1`` forces sequential.  Compile failures in any child fail
+the whole export (no partial corpus shipped) --- same gate as the
+sequential path.
+
+Explicit file-list inputs
+-------------------------
+
+``--paths-from <file>`` and ``--paths-stdin`` accept newline-
+delimited file lists (``#``-comments and blank lines skipped).
+They compose with ``-p`` (union, deduplicated) and are typically
+used to scope an export to the files in a PR diff:
+
+.. code-block:: sh
+
+   # via file (avoids ARG_MAX on big PRs)
+   git diff --name-only master | grep '\.das$' > /tmp/pr.txt
+   bin/daslang utils/detect-dupe/main.das -- \
+       --paths-from /tmp/pr.txt --export-functions pr.json
+
+   # via stdin (same idea, no temp file)
+   git diff --name-only master | grep '\.das$' | \
+       bin/daslang utils/detect-dupe/main.das -- \
+           --paths-stdin --export-functions pr.json
+
+Each entry can be a file or a directory; directories recurse via
+the same scanner ``-p`` uses.  ``--paths-stdin`` is mutually
+exclusive with ``--against-from-stdin`` (one stdin reader per
+run).
 
 The on-disk schema is a small envelope:
 
