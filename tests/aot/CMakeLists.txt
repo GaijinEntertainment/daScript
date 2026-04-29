@@ -12,7 +12,7 @@ DAS_AOT_LIB("${AOT_TESTING_FILES}" TESTING_AOT_GENERATED_SRC test_aot_testing da
 
 # AOT all daslib .das files — catches codegen regressions for any module,
 # not just those used in tests/. Files marked `options no_aot` are silently skipped.
-FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "daslib/*.das")
+FILE(GLOB AOT_DASLIB_MODULE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "daslib/*.das")
 # Exclude modules that misbehave under batched AOT:
 #   aot_macro                  — [simulate_macro] fires, expects policies.aot_result
 #   debugger                   — required by others; error surfaces here
@@ -39,52 +39,52 @@ SET(DASLIB_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_DASLIB_MODULE_FILES}" DASLIB_MODULES_AOT_GENERATED_SRC test_aot_daslib_modules daslang)
 
 # AOT for individual test files
-FILE(GLOB AOT_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/aot/*.das")
+FILE(GLOB AOT_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/aot/*.das")
 
 # AOT for algorithm test files
-FILE(GLOB AOT_ALGORITHM_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/algorithm/*.das")
+FILE(GLOB AOT_ALGORITHM_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/algorithm/*.das")
 
 # AOT for apply test files
-FILE(GLOB AOT_APPLY_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/apply/*.das")
+FILE(GLOB AOT_APPLY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/apply/*.das")
 
 # AOT for archive test files
-FILE(GLOB AOT_ARCHIVE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/archive/*.das")
+FILE(GLOB AOT_ARCHIVE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/archive/*.das")
 
 # AOT for ast_match test files
-FILE(GLOB AOT_AST_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/ast_match/*.das")
+FILE(GLOB AOT_AST_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/ast_match/*.das")
 
 # AOT for assert_once test files
-FILE(GLOB AOT_ASSERT_ONCE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/assert_once/*.das")
+FILE(GLOB AOT_ASSERT_ONCE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/assert_once/*.das")
 
 # AOT for async test files
-FILE(GLOB AOT_ASYNC_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/async/*.das")
+FILE(GLOB AOT_ASYNC_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/async/*.das")
 
 # AOT for bare_block test files
-FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/bare_block/*.das")
+FILE(GLOB AOT_BARE_BLOCK_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bare_block/*.das")
 
 # AOT for base64 test files
-FILE(GLOB AOT_BASE64_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/base64/*.das")
+FILE(GLOB AOT_BASE64_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/base64/*.das")
 
 # AOT for bitfields test files
-FILE(GLOB AOT_BITFIELDS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/bitfields/*.das")
+FILE(GLOB AOT_BITFIELDS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bitfields/*.das")
 
 # AOT for bool_array test files
-FILE(GLOB AOT_BOOL_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/bool_array/*.das")
+FILE(GLOB AOT_BOOL_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bool_array/*.das")
 
 # AOT for data_walker test files
-FILE(GLOB AOT_DATA_WALKER_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/data_walker/*.das")
+FILE(GLOB AOT_DATA_WALKER_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/data_walker/*.das")
 
 # AOT for debug test files
-FILE(GLOB AOT_DEBUG_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/debug/*.das")
+FILE(GLOB AOT_DEBUG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/debug/*.das")
 
 # AOT for debug_agent test files
-FILE(GLOB AOT_DEBUG_AGENT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/debug_agent/*.das")
+FILE(GLOB AOT_DEBUG_AGENT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/debug_agent/*.das")
 
 # AOT for dasPEG test files
-FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasPEG/*.das")
+FILE(GLOB AOT_DASPEG_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasPEG/*.das")
 
 # AOT for decs test files
-FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/decs/*.das")
+FILE(GLOB AOT_DECS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/decs/*.das")
 # Exclude expect-error tests (they intentionally fail to compile)
 # Exclude test_stages_extra (it is a module, compiled via DAS_AOT_LIB below)
 list(FILTER AOT_DECS_FILES EXCLUDE REGEX "failed_|test_stages_extra")
@@ -95,7 +95,7 @@ SET(AOT_DECS_MODULE_FILES
 )
 
 # AOT for live_host test files
-FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/live_host/*.das")
+FILE(GLOB AOT_LIVE_HOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/live_host/*.das")
 
 # Live host module files (libraries required by live_host tests)
 SET(AOT_LIVE_HOST_MODULE_FILES
@@ -115,7 +115,7 @@ ENDIF()
 # AOT for dasSQLITE test files
 SET(AOT_DASSQLITE_FILES)
 IF(NOT DAS_SQLITE_DISABLED)
-    FILE(GLOB AOT_DASSQLITE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasSQLITE/*.das")
+    FILE(GLOB AOT_DASSQLITE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasSQLITE/*.das")
     # Exclude expect-error tests (they intentionally fail to compile)
     list(FILTER AOT_DASSQLITE_FILES EXCLUDE REGEX "failed_")
 ENDIF()
@@ -189,7 +189,7 @@ ENDIF()
 # AOT for dasPUGIXML test files
 SET(AOT_PUGIXML_FILES)
 IF(NOT DAS_PUGIXML_DISABLED)
-    FILE(GLOB AOT_PUGIXML_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasPUGIXML/*.das")
+    FILE(GLOB AOT_PUGIXML_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasPUGIXML/*.das")
 ENDIF()
 
 # AOT for dasHV module library files
@@ -204,45 +204,45 @@ ENDIF()
 # AOT for dasHV test files
 SET(AOT_DASHV_FILES)
 IF(NOT DAS_HV_DISABLED)
-    FILE(GLOB AOT_DASHV_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dasHV/*.das")
+    FILE(GLOB AOT_DASHV_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dasHV/*.das")
     # Exclude module files (compiled via DAS_AOT_LIB)
     list(FILTER AOT_DASHV_FILES EXCLUDE REGEX "/_")
 ENDIF()
 
 # AOT for dynamic_cast_rtti test files
-FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/dynamic_cast_rtti/*.das")
+FILE(GLOB AOT_DYNAMIC_CAST_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/dynamic_cast_rtti/*.das")
 
 # AOT for fio test files
-FILE(GLOB AOT_FIO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/fio/*.das")
+FILE(GLOB AOT_FIO_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fio/*.das")
 
 # AOT for fs test files
-FILE(GLOB AOT_FS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/fs/*.das")
+FILE(GLOB AOT_FS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/fs/*.das")
 
 # AOT for functional test files
-FILE(GLOB AOT_FUNCTIONAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/functional/*.das")
+FILE(GLOB AOT_FUNCTIONAL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/functional/*.das")
 
 # AOT for gc test files
-FILE(GLOB AOT_GC_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/gc/*.das")
+FILE(GLOB AOT_GC_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/gc/*.das")
 
 # AOT for handle_types test files
-FILE(GLOB AOT_HANDLE_TYPES_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/handle_types/*.das")
+FILE(GLOB AOT_HANDLE_TYPES_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/handle_types/*.das")
 
 # AOT for hash_map test files
-FILE(GLOB AOT_HASH_MAP_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/hash_map/*.das")
+FILE(GLOB AOT_HASH_MAP_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/hash_map/*.das")
 
 # AOT for interfaces test files
-FILE(GLOB AOT_INTERFACES_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/interfaces/*.das")
+FILE(GLOB AOT_INTERFACES_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/interfaces/*.das")
 # Exclude expect-error tests and AOT codegen failures
 list(FILTER AOT_INTERFACES_FILES EXCLUDE REGEX "failed_|test_missing_")
 
 # AOT for jobque test files
-FILE(GLOB AOT_JOBQUE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/jobque/*.das")
+FILE(GLOB AOT_JOBQUE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/jobque/*.das")
 
 # AOT for json test files
-FILE(GLOB AOT_JSON_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/json/*.das")
+FILE(GLOB AOT_JSON_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/json/*.das")
 
 # AOT for linq test files
-FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/linq/*.das")
+FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/linq/*.das")
 # Exclude module files (they are compiled via DAS_AOT_LIB below) and
 # expect-error tests (use `expect` to assert intentional macro_failed
 # diagnostics; AOT cannot compile them)
@@ -254,10 +254,10 @@ SET(AOT_LINQ_MODULE_FILES
 )
 
 # AOT for match test files
-FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/match/*.das")
+FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/match/*.das")
 
 # AOT for math test files
-FILE(GLOB AOT_MATH_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/math/*.das")
+FILE(GLOB AOT_MATH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/math/*.das")
 # Exclude module file (macro module, not a test)
 list(FILTER AOT_MATH_FILES EXCLUDE REGEX "fake_numeric")
 
@@ -267,45 +267,45 @@ SET(AOT_MATH_MODULE_FILES
 )
 
 # AOT for module_tests test files
-FILE(GLOB AOT_MODULE_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/module_tests/*.das")
+FILE(GLOB AOT_MODULE_TESTS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/module_tests/*.das")
 
 # AOT for option test files (also houses Result<T, E> tests)
-FILE(GLOB AOT_OPTION_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/option/*.das")
+FILE(GLOB AOT_OPTION_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/option/*.das")
 
 # AOT for regex test files
-FILE(GLOB AOT_REGEX_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/regex/*.das")
+FILE(GLOB AOT_REGEX_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/regex/*.das")
 
 # AOT for safe_addr test files
-FILE(GLOB AOT_SAFE_ADDR_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/safe_addr/*.das")
+FILE(GLOB AOT_SAFE_ADDR_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/safe_addr/*.das")
 
 # AOT for delegate test files
-FILE(GLOB AOT_DELEGATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/delegate/*.das")
+FILE(GLOB AOT_DELEGATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/delegate/*.das")
 
 # AOT for soa test files
-FILE(GLOB AOT_SOA_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/soa/*.das")
+FILE(GLOB AOT_SOA_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/soa/*.das")
 
 # AOT for spoof test files
-FILE(GLOB AOT_SPOOF_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/spoof/*.das")
+FILE(GLOB AOT_SPOOF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/spoof/*.das")
 
 # AOT for strings test files
-FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/strings/*.das")
+FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/strings/*.das")
 # Exclude expect-error tests
 list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "_failed")
 
 # AOT for template test files
-FILE(GLOB AOT_TEMPLATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/template/*.das")
+FILE(GLOB AOT_TEMPLATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/template/*.das")
 
 # AOT for type_traits test files
-FILE(GLOB AOT_TYPE_TRAITS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/type_traits/*.das")
+FILE(GLOB AOT_TYPE_TRAITS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/type_traits/*.das")
 
 # AOT for uri test files
-FILE(GLOB AOT_URI_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/uri/*.das")
+FILE(GLOB AOT_URI_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/uri/*.das")
 
 # AOT for lpipe test files
-FILE(GLOB AOT_LPIPE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/lpipe/*.das")
+FILE(GLOB AOT_LPIPE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lpipe/*.das")
 
 # AOT for stbimage test files
-FILE(GLOB AOT_STBIMAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/stbimage/*.das")
+FILE(GLOB AOT_STBIMAGE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/stbimage/*.das")
 # Exclude gen_test_images (utility script, not a test)
 list(FILTER AOT_STBIMAGE_FILES EXCLUDE REGEX "gen_test_images")
 
@@ -316,10 +316,10 @@ SET(AOT_STBIMAGE_MODULE_FILES
 )
 
 # AOT for jit test files
-FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/jit/*.das")
+FILE(GLOB AOT_JIT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/jit/*.das")
 
 # AOT for loops test files
-FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/loops/*.das")
+FILE(GLOB AOT_LOOPS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/loops/*.das")
 
 # AOT for daslib test files
 SET(AOT_DASLIB_TEST_FILES
@@ -327,7 +327,7 @@ SET(AOT_DASLIB_TEST_FILES
 )
 
 # AOT for language test files
-FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/language/*.das")
+FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
 list(FILTER AOT_LANGUAGE_TEST_FILES EXCLUDE REGEX "failed_|cant_|invalid_")
 # Exclude module files (they are compiled via DAS_AOT_LIB below)
