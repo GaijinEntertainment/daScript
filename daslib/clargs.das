@@ -539,7 +539,7 @@ class ArgsMacro : AstStructureAnnotation {
                 if (r |> is_err) {
                     return "{$v(arg.flag_name)}: {r |> unwrap_err}"
                 }
-                var opt <- r |> move_unwrap
+                var opt <- r |> move_unwrap   // nolint:LINT003 — non-copyable static_if branch below consumes `opt` via `move_unwrap`, so it must stay `var`
                 if (opt |> is_some) {
                     static_if (typeinfo can_copy(type<$t(st.fields[field_index]._type)>)) {
                         dst.$f(arg.field_name) = opt |> unwrap

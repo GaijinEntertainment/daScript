@@ -62,18 +62,16 @@ def public derive_sig_and_count(var rec : FuncRecord; want_sigs : bool; min_toke
 
 
 def public write_export(records : array<FuncRecord>; path : string) : bool {
-    var env = ExportEnvelope()
-    env.schema_version = EXCHANGE_SCHEMA_VERSION
+    var env = ExportEnvelope(schema_version = EXCHANGE_SCHEMA_VERSION)
     env.functions |> reserve(length(records))
     for (rec in records) {
-        var ef : ExportedFunction
-        ef.name := rec.ref.name
-        ef.file := rec.ref.file
-        ef.line = rec.ref.line
-        ef.end_line = rec.ref.end_line
-        ef.is_lambda = rec.ref.is_lambda
-        ef.canonical := rec.canonical
-        env.functions |> emplace(ef)
+        env.functions |> emplace(ExportedFunction(
+            name = rec.ref.name,
+            file = rec.ref.file,
+            line = rec.ref.line,
+            end_line = rec.ref.end_line,
+            is_lambda = rec.ref.is_lambda,
+            canonical = rec.canonical))
     }
     let body = sprint_json(env, true)
     var ok = false
@@ -83,6 +81,54 @@ def public write_export(records : array<FuncRecord>; path : string) : bool {
         }
         ok = true
         fw |> fprint(body)
+    }
+    return ok
+}
+
+
+// Merge N shard ExportEnvelope JSON files (each produced by `write_export`)
+// into a single envelope written to `out_path`. Functions are concatenated
+// in the order shards are listed — caller controls determinism by listing
+// shards in stable chunk-index order. Used by the parallel `--workers`
+// path: each child writes its own shard, the parent merges in order.
+//
+// Strict: any unreadable shard, parse failure, or schema_version mismatch
+// fails the whole merge (no partial output). Same gate `read_import` uses.
+def public merge_envelope_files(shard_paths : array<string>; out_path : string;
+                                var error : string&) : bool {
+    var merged = ExportEnvelope()
+    merged.schema_version = EXCHANGE_SCHEMA_VERSION
+    for (p in shard_paths) {
+        let text = fread(p)
+        if (empty(text)) {
+            error := "could not read shard (empty or missing): {p}"
+            return false
+        }
+        var env = ExportEnvelope()
+        if (!sscan_json(text, env)) {
+            error := "could not parse shard JSON: {p}"
+            return false
+        }
+        if (env.schema_version != EXCHANGE_SCHEMA_VERSION) {
+            error := "shard schema_version {env.schema_version} (expected {EXCHANGE_SCHEMA_VERSION}): {p}"
+            return false
+        }
+        merged.functions |> reserve(length(merged.functions) + length(env.functions))
+        for (ef in env.functions) {
+            merged.functions |> emplace(ef)
+        }
+    }
+    let body = sprint_json(merged, true)
+    var ok = false
+    fopen(out_path, "wb") $(fw) {
+        if (fw == null) {
+            return
+        }
+        ok = true
+        fw |> fprint(body)
+    }
+    if (!ok) {
+        error := "could not write merged envelope to {out_path}"
     }
     return ok
 }

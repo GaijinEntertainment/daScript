@@ -4,6 +4,7 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/fio
 require daslib/strings_boost
+require math
 require strings
 require canonical
 require cluster
@@ -22,6 +23,87 @@ require patterns
 // paths to compile. Lives here (rather than in `main.das`) so MCP tools
 // — which can't shell out to the CLI — can build a corpus end-to-end
 // from inside the same process.
+
+// Read newline-delimited paths from `f` (either `fstdin()` for the
+// `--paths-stdin`/`--against-from-stdin` flows, or a freshly-opened file
+// for `--paths-from`). Skips blank lines and `#`-prefixed comments so
+// callers can hand-roll a path list with annotations. Lives here (rather
+// than main.das) so the unit tests can exercise it directly without
+// shelling out to a subprocess.
+def public read_path_lines(f : FILE const?; var paths : array<string>) {
+    if (f == null) {
+        return
+    }
+    while (!feof(f)) {
+        let line = fgets(f) |> strip
+        if (empty(line)) {
+            continue
+        }
+        if (line |> starts_with("#")) {
+            continue
+        }
+        paths |> push(line)
+    }
+}
+
+
+// Read newline-delimited paths from a file. Wraps `read_path_lines` and
+// returns false (with `error` populated) if the file can't be opened, so
+// the caller can emit a usage error rather than silently producing an
+// empty seed list.
+def public read_path_lines_from_file(path : string; var paths : array<string>;
+                                     var error : string&) : bool {
+    var ok = false
+    fopen(path, "rb") $(f) {
+        if (f == null) {
+            return
+        }
+        ok = true
+        read_path_lines(f, paths)
+    }
+    if (!ok) {
+        error := "could not open paths-from file: {path}"
+    }
+    return ok
+}
+
+
+// Split a flat file list into N contiguous chunks for parallel export.
+// Contiguous (not round-robin) so each worker's shard preserves
+// file:line ordering, and so the merged envelope is byte-identical to
+// the sequential one. `n_chunks` is clamped to `[1, length(files)]`.
+// Empty trailing chunks are NOT emitted: when `length(files) <
+// n_chunks` the result has exactly `length(files)` chunks.
+def public chunk_files(files : array<string>; n_chunks : int) : array<array<string>> {
+    var out : array<array<string>>
+    let total = length(files)
+    if (total == 0) {
+        return <- out
+    }
+    var n = n_chunks
+    if (n < 1) {
+        n = 1
+    }
+    if (n > total) {
+        n = total
+    }
+    let per_chunk = (total + n - 1) / n
+    for (k in range(n)) {
+        let start_idx = k * per_chunk
+        if (start_idx >= total) {
+            break
+        }
+        let end_excl = min((k + 1) * per_chunk, total)
+        var chunk : array<string>
+        chunk |> reserve(end_excl - start_idx)
+        for (j in range(start_idx, end_excl)) {
+            chunk |> push(files[j])
+        }
+        out |> emplace(chunk)
+    }
+    return <- out
+}
+
 
 // `daslib/debugger.das` and `daslib/profiler.das` install thread-local
 // agents at compile time; the second install in the same process throws

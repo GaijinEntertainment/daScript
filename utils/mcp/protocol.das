@@ -428,13 +428,15 @@ def handle_tools_list(id_json : string) : string {
     ))
     result.tools |> emplace(make_tool(
         "export_corpus",
-        "Build a corpus.json from one or more .das files/dirs/globs. Output is the same shape `detect_duplicates` expects: a JSON dump of every user function's canonical token stream and source location. Run this once over a body of code (e.g. 'daslib', 'tests', or your project) to produce a corpus, then point `detect_duplicates` at it. Shells out to `daslang utils/detect-dupe/main.das` (daslang's `require` grammar can't use hyphenated path components, so the wrapper invokes the CLI as a subprocess).",
+        "Build a corpus.json from one or more .das files/dirs/globs. Output is the same shape `detect_duplicates` expects: a JSON dump of every user function's canonical token stream and source location. Run this once over a body of code (e.g. 'daslib', 'tests', or your project) to produce a corpus, then point `detect_duplicates` at it. Shells out to `daslang utils/detect-dupe/main.das` (daslang's `require` grammar can't use hyphenated path components, so the wrapper invokes the CLI as a subprocess). Pass `paths_file` to scope the export to an explicit precomputed list (e.g. files in a PR diff); pass `workers` to parallelize across child processes.",
         {
-            "paths" => PropertySchema(_type = "string", description = "Files, directories, or globs to scan. Comma- or newline-delimited. Directories are walked recursively. Skips `_*` directories, hidden directories, `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das`."),
+            "paths" => PropertySchema(_type = "string", description = "Files, directories, or globs to scan. Comma- or newline-delimited. Directories are walked recursively. Skips `_*` directories, hidden directories, `builtin.das`, `daslib/debugger.das`, and `daslib/profiler.das`. Optional when `paths_file` is given; otherwise required."),
+            "paths_file" => PropertySchema(_type = "string", description = "Path to a newline-delimited file of paths. Skips blank lines and lines starting with `#`. Composes with `paths` (union; deduped). Use this for PR-scoped runs where you'd otherwise hit ARG_MAX (e.g. piping `git diff --name-only` to a file)."),
             "out" => PropertySchema(_type = "string", description = "Output corpus.json path. Overwrites if it exists. Refuses to write a partial corpus when any input file fails to compile (matches the CLI's --export-functions behavior)."),
-            "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per record (default 0 — keep every user function). Records below the threshold are dropped at export time. Most callers should leave this at 0 and let `detect_duplicates --min-tokens` filter at query time.")
+            "min_tokens" => PropertySchema(_type = "string", description = "Minimum canonical-token count per record (default 0 — keep every user function). Records below the threshold are dropped at export time. Most callers should leave this at 0 and let `detect_duplicates --min-tokens` filter at query time."),
+            "workers" => PropertySchema(_type = "string", description = "Worker count for parallel compilation. 0 = auto (= hardware threads). 1 = sequential. Files are split into N contiguous chunks; each chunk is compiled by a child detect-dupe process; shards are merged in chunk-index order so the output is byte-identical across worker counts. Below 16 input files the export stays sequential regardless.")
         },
-        ["paths", "out"]
+        ["out"]
     ))
     result.tools |> emplace(make_tool(
         "detect_duplicates",
@@ -611,7 +613,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "detect_duplicates") {
         return do_detect_duplicates(arg1, arg2, arg3, arg4, arg5, arg6)
     } elif (tool_name == "export_corpus") {
-        return do_export_corpus(arg1, arg2, arg3)
+        return do_export_corpus(arg1, arg2, arg3, arg4, arg5)
     } elif (tool_name == "judge_duplicates") {
         return do_judge_duplicates(arg1, arg2, arg3, arg4, arg5, arg6)
     } elif (tool_name == "find_dupe") {
@@ -806,14 +808,16 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg6 = get_string_arg(args, "keep")
     } elif (name == "export_corpus") {
         arg1 = get_string_arg(args, "paths")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
+        arg2 = get_string_arg(args, "paths_file")
+        if (empty(arg1) && empty(arg2)) {
+            return json_rpc_error(id_json, -32602, "missing input — provide 'paths' and/or 'paths_file'")
         }
-        arg2 = get_string_arg(args, "out")
-        if (empty(arg2)) {
+        arg3 = get_string_arg(args, "out")
+        if (empty(arg3)) {
             return json_rpc_error(id_json, -32602, "missing 'out' argument")
         }
-        arg3 = get_string_arg(args, "min_tokens")
+        arg4 = get_string_arg(args, "min_tokens")
+        arg5 = get_string_arg(args, "workers")
     } elif (name == "judge_duplicates") {
         arg1 = get_string_arg(args, "input")
         if (empty(arg1)) {

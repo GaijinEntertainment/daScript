@@ -29,6 +29,17 @@ mcp__daslang__export_corpus(paths="daslib,utils,my_project", out="corpus.json")
 
 You build the corpus once over the body of code you want to compare against. Re-run it when the code drifts enough that stale matches become a problem.
 
+`workers="0"` (or omitted) parallelizes across hardware threads. `workers="1"` keeps the run sequential. Output is byte-identical across worker counts.
+
+`paths_file="<path>"` scopes the export to a precomputed file list — handy for PR-scoped runs:
+
+```
+git diff --name-only master | grep '\.das$' > /tmp/pr.txt
+mcp__daslang__export_corpus(paths_file="/tmp/pr.txt", out="pr.json")
+```
+
+`paths_file` composes with `paths` (union, deduped). The file format is one path per line; blank lines and `#`-comment lines are skipped.
+
 Output is an envelope:
 
 ```json
@@ -103,6 +114,8 @@ The CLI ships at `utils/detect-dupe/main.das` and supports a few modes the MCP t
 - **B1 baseline / CI gate** — `--baseline <corpus.json> --check`. Records absent from the baseline are tagged candidates; non-zero exit when any cluster/pair survives.
 - **`--baseline-strict`** — drops clusters whose canonical was already in the baseline, so only fully-new canonicals survive.
 - **`--against-from-stdin`** — read newline-delimited candidate paths from stdin, e.g. piped from `git diff --name-only`.
+- **`--paths-from <file>` / `--paths-stdin`** — read the *primary* file list from a file or stdin (skips blank lines and `#`-comments). Composes with `-p`. Use the file form when an inline list would hit ARG_MAX, the stdin form to plug into `git diff --name-only` pipelines for PR-scoped corpus builds.
+- **`-j / --workers N`** — parallel `--export-functions` across N child detect-dupe processes. 0 (default) = hardware threads. 1 = sequential. Output is byte-identical to a sequential run (sorted-then-chunked, shards merged in order). Below 16 files the export stays sequential.
 - **`-L / --lambdas-only`** — cluster lambda bodies instead of top-level functions; useful for finding duplicated dastest `run` lambdas.
 - **`--min-tokens N`** — drop trivial wrappers (default 8).
 - **`--no-fuzzy`** — exact clusters only, faster on large corpora.
@@ -110,11 +123,18 @@ The CLI ships at `utils/detect-dupe/main.das` and supports a few modes the MCP t
 Quick recipes:
 
 ```sh
-# one-off corpus build (commit this)
+# one-off corpus build (commit this) — parallel by default for large runs
 bin/daslang utils/detect-dupe/main.das -- -p src --export-functions baseline.json
+
+# explicit worker count (1 = sequential)
+bin/daslang utils/detect-dupe/main.das -- -p src -j 8 --export-functions baseline.json
 
 # CI gate: flag any new structural duplicates introduced by a PR
 bin/daslang utils/detect-dupe/main.das -- -p src --baseline baseline.json --check
+
+# PR-scoped corpus build via file list (avoids ARG_MAX on big diffs)
+git diff --name-only master | grep '\.das$' > /tmp/pr.txt
+bin/daslang utils/detect-dupe/main.das -- --paths-from /tmp/pr.txt --export-functions pr.json
 
 # git pipeline against the baseline
 git diff --name-only master | grep '\.das$' | \
