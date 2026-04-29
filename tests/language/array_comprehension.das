@@ -45,7 +45,9 @@ def test_array_comprehension(t : T?) {
         }
         for (z in range(10)) {
             if ((z & 1) == 0) {
-                t |> equal(even_squares[z], z * z)
+                t |> equal(even_squares?[z] ?? -1, z * z)
+            } else {
+                t |> equal(even_squares?[z] ?? -1, -1)
             }
         }
     }

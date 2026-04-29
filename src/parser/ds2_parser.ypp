@@ -3913,9 +3913,9 @@ expr_map_tuple_list
 
 /* Shared prefix used by make_table_decl and array_comprehension.
    Increments das_nested_parentheses so the lexer suppresses newline-emitted
-   semicolons inside { ... }. Factored into a named nonterminal so both rules
-   reduce the same anonymous mid-rule action; otherwise LALR sees a reduce/reduce
-   conflict between distinct anonymous actions sitting at the same prefix. */
+   semicolons inside { ... }. Factored into a named empty production so both
+   rules reduce the same symbol; otherwise LALR sees a reduce/reduce conflict
+   between two distinct anonymous mid-rule actions sitting at the same prefix. */
 push_table_nesting
     :   /* empty */ {
         yyextra->das_nested_parentheses ++;
