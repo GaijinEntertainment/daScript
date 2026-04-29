@@ -89,6 +89,14 @@ void Module_dasSQLITE::initMain() {
     addExtern<DAS_BIND_FUN(sqlite3_prepare_v2_no_tail)>(*this,lib,"sqlite3_prepare_v2_no_tail",
         SideEffects::worstDefault, "sqlite3_prepare_v2_no_tail")
             ->args({"db","sql","stmt"});
+    addExtern<DAS_BIND_FUN(sqlite3_register_function)>(*this,lib,"sqlite3_register_function",
+        SideEffects::worstDefault, "sqlite3_register_function")
+            ->args({"db","name","fn","nArgs",
+                    "tag0","tag1","tag2","tag3",
+                    "retTag","deterministic","directonly","context","at"});
+    addExtern<DAS_BIND_FUN(sqlite3_backup_run)>(*this,lib,"sqlite3_backup_run",
+        SideEffects::worstDefault, "sqlite3_backup_run")
+            ->args({"src","dst"});
 
     for ( auto & pfn : this->functions.each() ) {
         // ok, lets fix up everything returning uint8? into returning string# and make it unsafe operation

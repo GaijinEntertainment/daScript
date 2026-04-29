@@ -655,6 +655,208 @@ passing** (309 pre-chunk-8 + 19 new).
 - **Optimistic concurrency token, multi-table DELETE, named-tuple
   bind for `query_one` / `exec`** — carried from earlier chunks.
 
+## Shipped — chunk 10: operational SQLite (branch `dassqlite-chunk10-operational-sqlite`)
+
+Chunk 10 ships **tut 31 (views)**, **tut 33 (PRAGMA tuning)**, **tut 34
+(backup + VACUUM)**, **tut 35 (streaming `_each_sql`)**, and **tut 39
+(user-defined SQL scalar functions)** — five tutorials covering the
+"operational" surface of SQLite that wasn't yet in the daslang rail.
+Migrations (originally listed as tut 30) deferred to chunk 11. No new
+language prerequisites; chunk 10 sits entirely on the chunk-2..9
+foundation.
+
+### Tut 31 — `[sql_view]` + `_create_view`
+
+- **`[sql_view(name="...")]` structure annotation.** Read-only sibling
+  of `[sql_table]`. Generates the same `_sql_table_name` /
+  `_sql_select_all_sql` / `_sql_read_row` / `_sql_column_info` /
+  `_sql_drop_view_if_exists_sql` helpers under the same names so
+  `select_from(type<V>)` and the `_sql(...)` rail dispatch on view
+  types without case-splitting.
+- **Field annotations:** `@sql_column` (rename), `@sql_json`,
+  `@sql_blob` accepted; six DDL-flavored annotations rejected
+  (`@sql_primary_key`, `@sql_unique`, `@sql_computed`/`@sql_stored`,
+  `@sql_default_fn`, `@sql_references`/`@sql_on_delete`/`@sql_on_update`).
+  Sibling `[sql_index]` rejected too.
+- **JSON/BLOB adapter codegen factored** out of `[sql_table]`'s body
+  into a shared `emit_json_blob_adapters_for_struct(st, fields, tag,
+  errors)` helper — `[sql_view]` reuses the exact same adapter
+  machinery for transparent JSON/BLOB-typed view columns.
+- **Mutation-path rejection:** predicate-form (`_sql_update` /
+  `_sql_delete` / `_sql_upsert` and try / returning siblings) caught at
+  compile time inside `validate_outer_args`'s view check; row-form
+  (`insert(viewRow)` / `update(viewRow)` / `delete_(viewRow)` /
+  `upsert(viewRow)`) caught at compile time via macro-emitted
+  `concept_assert(false, ...)` stubs that fire on first reference.
+- **`_create_view(db, type<V>, chain)` call macro.** Validates: `type<V>`
+  carries `[sql_view]`; chain projection's column count matches V's
+  field count; per-position type matches V's field type (compared via
+  `describe()`); chain has no bound-parameter expressions (SQLite
+  rejects `?` placeholders inside CREATE VIEW). Emits `db |> exec(...)`
+  with the view's column list using V's field names (and `@sql_column`
+  renames) authoritative.
+- **Literal-inlining** for `_create_view`: chain bind-exprs that are
+  `ExprConst*` (Int/Bool/Float/Double/String with `'` doubling) are
+  formatted into the SQL text; captured locals rejected with a clear
+  pointer at the literal-only requirement. Acknowledged as a hack for
+  this chunk; replacement design is the SQL-fragment refactor
+  (deferred — see "Carried" below).
+- **`drop_view_if_exists(type<V>)` / `try_drop_view_if_exists`** template
+  wrappers.
+- Tutorial: [tutorials/sql/31-views.das](../../tutorials/sql/31-views.das).
+  Tests: `test_72_view_basic.das` (5 positive),
+  `failed_sql_view_schema.das` (9 errors),
+  `failed_sql_view_mutations.das` (8 errors),
+  `failed_create_view.das` (6 errors).
+
+### Tut 33 — Pragma tuning
+
+- **`set_pragma` / `try_set_pragma`** with three typed overloads
+  (string / int64 / bool with ON/OFF). Inlined into `PRAGMA "..." = ...`
+  since SQLite parses pragma values at prepare time (no `?` binds).
+- **`apply_recommended_pragmas` / `try_apply_recommended_pragmas`**:
+  WAL + busy_timeout=5000 + foreign_keys=ON + synchronous=NORMAL.
+  Errors short-circuit through `Result`-style early return so the
+  caller learns which pragma failed.
+- Tutorial: [tutorials/sql/33-pragma.das](../../tutorials/sql/33-pragma.das).
+  Tests: `test_80_pragma_basic.das` (6 cases incl. PRAGMA-in-tx
+  rejection).
+
+### Tut 34 — Vacuum / optimize / integrity / backup
+
+- **`vacuum` / `try_vacuum`** — rejects active transactions before
+  reaching SQLite (the strict form would surface SQLite's error
+  message; the wrapper-side preflight is friendlier).
+- **`vacuum_into(path)` / `try_vacuum_into`** — `''`-doubling
+  single-quote escape on `path` (SQLite rejects `?` binds for VACUUM).
+- **`optimize` / `try_optimize`** — thin `PRAGMA optimize` wrapper.
+- **`integrity_check` / `quick_check` / `try_*`** — `array<string>`
+  return; healthy DB returns `["ok"]`, corruption returns one row per
+  detected issue. Backed by a private `try_check_impl` using
+  `try_run_select` with `read_via_adapter` (NOT `try_query`, which
+  expects a struct + `_sql_read_row`).
+- **`backup_to(dest)` / `backup_to(path)` + `try_*` siblings** — online
+  Backup API (`sqlite3_backup_init` / `_step` / `_finish`). C++ shim
+  `sqlite3_backup_run` lives in `dasSQLITE.backup.cpp`; loops with
+  100-page steps and falls back to a 50 ms `sqlite3_sleep` on
+  transient SQLITE_BUSY/LOCKED responses. Path overload opens the
+  destination internally and finalizes via `var inscope`. The C++ shim
+  returns `SQLITE_OK` on a fully-completed backup and any other rc on
+  failure; the daslang side maps that to `SqlError`.
+- Tutorial: [tutorials/sql/34-backup_vacuum.das](../../tutorials/sql/34-backup_vacuum.das).
+  Tests: `test_85_vacuum.das` (5 cases) +
+  `test_83_backup_to.das` (3 cases — memory-runner snapshot, on-disk
+  round-trip, destination overwrite).
+
+### Tut 35 — Streaming (`_each_sql`)
+
+- **`_each_sql(chain)` call macro** returning `iterator<T>` via
+  `run_each_select` runtime helper. Same chain shape as `_sql`;
+  rejects materializing terminals (`_to_array`, `_first`, `_first_opt`,
+  aggregates) at compile time, pointing at `_sql` for the
+  materializing form.
+- **Generator pattern that worked** (after debugging "can't yield from
+  inside the block" + "implicit capture by move"): explicit
+  `capture(<- name1, <- name2)` with `<-` on every captured name;
+  `var row_lam : lambda<...>` in the runtime helper signature;
+  `for (_ in range(0x7FFFFFFF))` with `break` on `SQLITE_DONE`
+  (daslang generators reject `while`); yield as the LAST statement in
+  the for body.
+- **Cleanup via `finally`:** the generator's `finally { sqlite3_finalize(stmt) }`
+  runs on normal exhaustion, early `break`, outer return, and panic —
+  no leaked stmt blocks subsequent writes on the same connection.
+  Captured-local binds work (CREATE-VIEW-style inlining is NOT needed
+  since `?` placeholders are honored at run time).
+- **API_REWORK §35 revision:** §35 originally said streaming was a
+  "behavior of existing iterator-based `for (row in _sql(...))`" — but
+  that iterator form was never shipped. Streaming is therefore real
+  new API: a new `_each_sql` macro returning `iterator<T>`.
+- Tutorial: [tutorials/sql/35-streaming.das](../../tutorials/sql/35-streaming.das).
+  Tests: `test_90_each_sql_basic.das` (5 positive incl. break +
+  stmt-cleanup proof), `failed_each_sql_terminals.das` (4 errors).
+
+### Tut 39 — `register_function`
+
+- **`register_function(db, name, @@fn[, deterministic[, directonly]])`
+  call macro.** Inspects the function pointer's static type at compile
+  time (`_type.argTypes` + `_type.firstType`), derives an `SqlFnTag`
+  per arg + return, and emits a call to a C++ trampoline-registration
+  shim with per-position tags. Up to 4 arguments supported in v1.
+- **Supported scalar set** (compile error otherwise, with per-position
+  diagnostic naming the offender): `int`, `int64`, `float`, `double`,
+  `bool`, `string`. Pointer types, structs, arrays, lambdas, classes
+  rejected.
+- **C++ trampoline** in `dasSQLITE.userfn.cpp`. `RegisteredScalarFn`
+  user-data struct stores `(Context*, Func, retTag, nArgs, argTags[4])`;
+  freed by SQLite-managed `xDestroy` callback (registered via
+  `sqlite3_create_function_v2`'s last param) on connection close /
+  function replacement / explicit drop.
+- **NULL handling (v1):** any SQLITE_NULL argument short-circuits to
+  `sqlite3_result_null` without invoking the daslang function — the
+  idiomatic SQL behavior of built-in scalars (`abs(NULL)` → NULL).
+  Explicit `Option<T>` arg types for in-function NULL handling are
+  deferred to a follow-up.
+- **Panic recovery:** `Context::runWithCatch` wraps the daslang
+  invocation. On panic, the message is read via `getException()`, the
+  context's `exception` / `stopFlags` are cleared (matching the
+  recovery shape from `simulate_exceptions.cpp:217`), and the panic is
+  surfaced via `sqlite3_result_error`. The connection itself is
+  unaffected — subsequent statements on the same connection run
+  normally.
+- **`deterministic=true`** maps to `SQLITE_DETERMINISTIC` (allows the
+  fn in `CREATE INDEX … ON tbl(myfn(col))` and lets the planner
+  factor it out of inner loops). **`directonly=true`** maps to
+  `SQLITE_DIRECTONLY` (blocks invocation from triggers / views /
+  CHECK constraints).
+- **Tag transport:** four scalar `uint8_t` slots (`tag0..tag3`) on the
+  C++ binding instead of a `TArray<uint8_t>`, sidestepping the
+  array-construction overhead in the macro emit. Unused slots
+  ignored according to nArgs.
+- Tutorial: [tutorials/sql/32-sql_functions.das](../../tutorials/sql/32-sql_functions.das).
+  Tests: `test_74_register_function_basic.das` (10 — every supported
+  type and arity), `test_75_register_function_null_panic.das`
+  (3 — NULL short-circuit, panic recovery, post-panic connection
+  health), `test_76_register_function_use_in_chains.das`
+  (3 — UDF in WHERE / ORDER BY / projection),
+  `test_77_register_function_lifetime.das` (3 — replacement,
+  per-connection scope, no-survive-reopen),
+  `failed_register_function.das` (5 errors — struct arg, struct
+  return, pointer arg, lambda instead of `@@fn`, > 4 args).
+
+### Cumulative state after chunk 10
+
+381 (chunk 9) + 21 (chunk 10) = ~402 dasSQLITE tests passing.
+
+### Carried / deferred to chunk 11+
+
+- **SQL-fragment refactor** — replace `_create_view`'s literal-inlining
+  hack with a polymorphic emitter. Design: `variant SqlFragment {
+  Text : string; Bind : ExpressionPtr }`; two render modes —
+  `render_placeholders` for `_sql` / `_each_sql` (today's behavior,
+  returns `(sql, binds)`), `render_inlined` for `_create_view`
+  (formats const literals into text or fails on captured locals). Same
+  machinery applies to future DDL contexts where `?` is illegal:
+  `CREATE INDEX … ON t(<expr>)`, `CHECK(<expr>)`, `GENERATED ALWAYS AS
+  (<expr>)`. ~200-300 lines touched in sqlite_linq.das (8-10 sites).
+- **Migrations (chunk 11)** — `daslib/sql_migrate` module,
+  `[sql_migration]` annotation collected across translation units,
+  `migrate_to_latest` runner, `__schema_version` table, multi-row
+  audit semantics.
+- **Aggregate / window UDFs** — `xStep` / `xFinal` / `xValue` /
+  `xInverse`. v1's `register_function` is scalar-only.
+- **`[sql_function]` annotation macro** — auto-registration on
+  connect, custom-type adapter composition.
+- **Updatable views via INSTEAD OF triggers.**
+- **ATTACH DATABASE** (tut 36 — independent SQLite extension).
+- **`_try_each_sql`** — Result-yielding iterator variant.
+- **Backup progress callback** — `sqlite3_backup_step(bp, N)` +
+  `remaining` / `pagecount` surfaced to a daslang block.
+- **Compile-time enum surface for pragmas** — `set_journal_mode(JournalMode.WAL)`
+  rather than the stringly-typed name.
+- **Open-time named-tuple pragma bundle** — `with_sqlite(path,
+  pragmas=(...))`.
+- **Option<T> args / blob args / blob return** for `register_function`.
+
 ## Shipped — chunk 9: JSON / BLOB columns + column metadata + raw `query` family (branch `dassqlite-chunk9-json-introspection`)
 
 Chunk 9 ships the headline JSON / opaque-blob feature plus the

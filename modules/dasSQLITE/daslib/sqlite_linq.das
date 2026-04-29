@@ -2818,6 +2818,152 @@ def private is_none_call(node : ExpressionPtr) : bool {
 }
 
 [macro_function]
+def private is_const_literal(var node : ExpressionPtr) : bool {
+    //! True iff `node` is a literal constant expression that can be inlined
+    //! directly into SQL text (used by `_create_view` since CREATE VIEW does
+    //! not accept `?` placeholders). Peels through ExprRef2Value the same
+    //! way `is_const_or_captured_var` does. Captured-variable reads
+    //! (`ExprVar`) are deliberately rejected here — they would need to bind
+    //! at runtime, which CREATE VIEW cannot do. Enum and bitfield constants
+    //! are accepted: their underlying integer value is emitted into the SQL,
+    //! matching the wire shape SQLite stores for the column.
+    if (node == null) {
+        return false
+    }
+    if (node is ExprRef2Value) {
+        node = (node as ExprRef2Value).subexpr
+        if (node == null) {
+            return false
+        }
+    }
+    return (node is ExprConstInt || node is ExprConstInt8 || node is ExprConstInt16 || node is ExprConstInt64 ||
+            node is ExprConstUInt || node is ExprConstUInt8 || node is ExprConstUInt16 || node is ExprConstUInt64 ||
+            node is ExprConstFloat || node is ExprConstDouble || node is ExprConstBool || node is ExprConstString ||
+            node is ExprConstEnumeration || node is ExprConstBitfield)
+}
+
+[macro_function]
+def private format_const_as_sql_literal(var node : ExpressionPtr) : string {
+    //! Render a literal AST node as a SQLite SQL literal token. Caller has
+    //! already validated via `is_const_literal`. String values escape `'`
+    //! by doubling, matching SQLite's quoted-string syntax.
+    if (node is ExprRef2Value) {
+        node = (node as ExprRef2Value).subexpr
+    }
+    if (node is ExprConstInt) {
+        return "{(node as ExprConstInt).getValue}"
+    }
+    if (node is ExprConstInt8) {
+        return "{(node as ExprConstInt8).getValue}"
+    }
+    if (node is ExprConstInt16) {
+        return "{(node as ExprConstInt16).getValue}"
+    }
+    if (node is ExprConstInt64) {
+        return "{(node as ExprConstInt64).getValue}"
+    }
+    if (node is ExprConstUInt) {
+        return "{(node as ExprConstUInt).getValue}"
+    }
+    if (node is ExprConstUInt8) {
+        return "{(node as ExprConstUInt8).getValue}"
+    }
+    if (node is ExprConstUInt16) {
+        return "{(node as ExprConstUInt16).getValue}"
+    }
+    if (node is ExprConstUInt64) {
+        return "{(node as ExprConstUInt64).getValue}"
+    }
+    if (node is ExprConstFloat) {
+        return "{(node as ExprConstFloat).getValue}"
+    }
+    if (node is ExprConstDouble) {
+        return "{(node as ExprConstDouble).getValue}"
+    }
+    if (node is ExprConstBool) {
+        return (node as ExprConstBool).getValue ? "1" : "0"
+    }
+    if (node is ExprConstString) {
+        let raw = string((node as ExprConstString).value)
+        // SQLite-quoted: wrap in single quotes, double any embedded `'`.
+        let doubled = raw |> replace("'", "''")
+        return "'{doubled}'"
+    }
+    if (node is ExprConstEnumeration) {
+        // Emit the underlying integer value so the comparison matches the
+        // INTEGER cell SQLite stores for the column. The enum's name string
+        // (`MyEnum.Value`) means nothing to SQLite.
+        let c = node as ExprConstEnumeration
+        let value = find_enum_value(unsafe(reinterpret<EnumerationPtr> c._type.enumType), string(c.value))
+        return "{value}"
+    }
+    if (node is ExprConstBitfield) {
+        return "{(node as ExprConstBitfield).getValue}"
+    }
+    return ""
+}
+
+[macro_function]
+def private next_bind_placeholder(sql : string) : int {
+    //! Find the next `?` placeholder in `sql`, skipping any `?` that lives
+    //! inside a single-quoted SQL string literal (e.g. JSON-path arguments
+    //! `'$.foo.bar'`). Doubled single quotes (`''`) are treated as escapes
+    //! and stay inside the quoted region. Returns -1 if no placeholder is
+    //! found.
+    var found = -1
+    peek_data(sql) $(bytes) {
+        let n = length(bytes)
+        var i = 0
+        var in_quote = false
+        while (i < n) {
+            let ch = bytes[i]
+            if (ch == uint8('\'')) {
+                if (in_quote && i + 1 < n && bytes[i + 1] == uint8('\'')) {
+                    i += 2
+                    continue
+                }
+                in_quote = !in_quote
+                i += 1
+                continue
+            }
+            if (!in_quote && ch == uint8('?')) {
+                found = i
+                return
+            }
+            i += 1
+        }
+    }
+    return found
+}
+
+[macro_function]
+def private inline_binds_into_sql(sql : string; var ordered_binds : array<ExpressionPtr>) : string {
+    //! Walk `sql` left-to-right replacing each `?` placeholder with the
+    //! formatted SQL literal of the corresponding bind expression. Caller
+    //! must have validated all binds with `is_const_literal` first.
+    //!
+    //! `build_sql_string` can emit single-quoted SQL string literals — for
+    //! example JSON-path arguments like `'$.foo.bar'` from `@sql_json`
+    //! columns — so the substitution skips any `?` that appears inside a
+    //! quoted string (and treats `''` as an in-quote escape).
+    var rest = sql
+    return build_string() $(var w) {
+        for (i in range(length(ordered_binds))) {
+            let pos = next_bind_placeholder(rest)
+            if (pos < 0) {
+                w |> write(rest)
+                rest = ""
+                break
+            }
+            w |> write(rest |> slice(0, pos))
+            w |> write(format_const_as_sql_literal(ordered_binds[i]))
+            rest = rest |> slice(pos + 1)
+        }
+        w |> write(rest)
+    }
+}
+
+[macro_function]
 def private is_const_or_captured_var(var node : ExpressionPtr) : bool {
     //! Recognize a literal or a captured-var read so the predicate walker can
     //! emit a `?` placeholder + bind. After Mode-2 inner expansion captured
@@ -2862,20 +3008,19 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
     // At macro-expansion time we cannot directly call the user's
     // _::_sql_table_name helper because it lives in the user's module, not in
-    // sqlite_linq's macro context. Instead, derive the table name here from
-    // the struct metadata: use [sql_table(name="...")] when present, else
-    // fall back to the struct name.
+    // sqlite_linq's macro context. Instead, derive the table-or-view name
+    // here from the struct metadata: read `[sql_table(name="...")]` or
+    // `[sql_view(name="...")]` (whichever is present), else fall back to
+    // the struct name.
     if (rootT == null || rootT.structType == null) {
         return ""
     }
     var st = rootT.structType
-    // Try to read the [sql_table(name="...")] override from the structure
-    // annotation list. `[sql_table]` cannot appear twice on the same struct
-    // (daslang rejects duplicate annotations), so once we find it and finish
-    // scanning its arguments, break out — no other `sql_table` annotation
-    // can exist in the list.
+    // [sql_table] / [sql_view] cannot appear twice on the same struct
+    // (daslang rejects duplicate annotations), and a struct shouldn't carry
+    // both — but if it did, the first one wins.
     for (annDecl in st.annotations) {
-        if (annDecl.annotation.name == "sql_table") {
+        if (annDecl.annotation.name == "sql_table" || annDecl.annotation.name == "sql_view") {
             for (arg in annDecl.arguments) {
                 if (arg.name == "name" && arg.basicType == Type.tString) {
                     return string(arg.sValue)
@@ -2885,6 +3030,24 @@ def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
         }
     }
     return string(st.name)
+}
+
+[macro_function]
+def private is_view_type(rootT : TypeDeclPtr) : bool {
+    //! True iff `rootT` is a struct value carrying a `[sql_view]`
+    //! annotation. Used by mutation macros (`_sql_update` / `_sql_delete`
+    //! / `_sql_upsert` and their try/returning variants) to reject the
+    //! user before they hit a runtime panic from the per-struct stubs.
+    if (rootT == null || rootT.structType == null) {
+        return false
+    }
+    var st = rootT.structType
+    for (annDecl in st.annotations) {
+        if (annDecl.annotation.name == "sql_view") {
+            return true
+        }
+    }
+    return false
 }
 
 // ============================================================================
@@ -3098,6 +3261,186 @@ class private SqlTextMacro : AstCallMacro {
         }
         let sql = build_sql_string(q)
         var res = qmacro($v(sql))
+        res.force_at(call.at)
+        return res
+    }
+}
+
+// ============================================================================
+// _create_view — emit a CREATE VIEW statement from a `[sql_view]` struct +
+// a SELECT chain. The chain is the same shape `_sql` accepts (single-source
+// or joined; FullRow / NamedTuple / GroupedNamedTuple / SingleColumn / Aggregate).
+//
+// Validation rules:
+//   - Arg 1 must be `type<V>` where V carries `[sql_view]`.
+//   - Projection column count must match V's field count.
+//   - Per-column type must match V's field type (compared via `describe()`).
+//   - The chain must NOT use bound parameters (literal values only — SQLite
+//     rejects `?` placeholders inside CREATE VIEW … AS SELECT).
+//   - `_to_array()` is rejected as redundant (views are by definition arrays
+//     of rows).
+//
+// SQL emission uses the `CREATE VIEW name(col1, col2, …) AS SELECT …` form so
+// V's field names define the view's column names regardless of whether the
+// user used record-name aliasing in `_select` (`(Foo=_.Bar)`) — the user is
+// trusted to set field names per their public-facing schema.
+// ============================================================================
+
+[call_macro(name="_create_view")]
+class private SqlCreateViewMacro : AstCallMacro {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 3, prog, call.at,
+            "_create_view expects (db, type<V>, chain) — got {length(call.arguments)} args")
+
+        var viewT : TypeDeclPtr
+        var typeE = call.arguments[1]
+        if (!qmatch(typeE, type<$t(viewT)>).matched) {
+            macro_error(prog, call.at, "_create_view: second argument must be a `type<V>` literal")
+            return null
+        }
+        if (viewT == null || viewT.structType == null) {
+            macro_error(prog, call.at, "_create_view: type<V> must be a struct (got {describe(viewT)})")
+            return null
+        }
+        if (!is_view_type(viewT)) {
+            macro_error(prog, call.at,
+                "_create_view: type<V> must carry [sql_view] — got '{viewT.structType.name}' without [sql_view]. Add `[sql_view(name=\"…\")]` to the struct.")
+            return null
+        }
+
+        // View name from `[sql_view(name="…")]`, fallback to struct name.
+        var view_name = string(viewT.structType.name)
+        for (annDecl in viewT.structType.annotations) {
+            if (annDecl.annotation.name == "sql_view") {
+                for (arg in annDecl.arguments) {
+                    if (arg.name == "name" && arg.basicType == Type.tString) {
+                        view_name = string(arg.sValue)
+                    }
+                }
+                break
+            }
+        }
+
+        // Analyze the SELECT chain.
+        var argChainT = call.arguments[2]._type
+        macro_verify(argChainT != null, prog, call.at, "_create_view: chain argument is not inferred yet")
+        macro_verify(!argChainT.isAutoOrAlias, prog, call.at, "_create_view: chain type is auto/alias after inference")
+        var q = SqlQuery()
+        if (!analyze_chain(call.arguments[2], q, prog, call.at)) {
+            return null
+        }
+
+        if (q.seenToArray) {
+            macro_error(prog, call.at, "_create_view: chain ends in `_to_array()` — views are by definition arrays of rows; drop the `_to_array()` terminal.")
+            return null
+        }
+
+        // Collect every bind expression in the same order build_sql_string lays
+        // out `?` placeholders: per-join ON binds (in join order) → outer WHERE
+        // → HAVING → LIMIT → OFFSET. CREATE VIEW … AS SELECT does not accept
+        // `?` placeholders, so each bind must be a literal constant we can
+        // inline; captured-variable references are rejected with a clear error.
+        var n_join_binds = 0
+        for (j in q.joins) {
+            n_join_binds += length(j.rightOnBindExprs)
+        }
+        let total_binds = (n_join_binds + length(q.bindExprs) + length(q.havingBindExprs) +
+                           (q.limitBindExpr != null ? 1 : 0) + (q.offsetBindExpr != null ? 1 : 0))
+        var ordered_binds : array<ExpressionPtr>
+        ordered_binds |> reserve(total_binds)
+        for (j in q.joins) {
+            for (b in j.rightOnBindExprs) {
+                ordered_binds |> push(b)
+            }
+        }
+        for (b in q.bindExprs) {
+            ordered_binds |> push(b)
+        }
+        for (b in q.havingBindExprs) {
+            ordered_binds |> push(b)
+        }
+        if (q.limitBindExpr != null) {
+            ordered_binds |> push(q.limitBindExpr)
+        }
+        if (q.offsetBindExpr != null) {
+            ordered_binds |> push(q.offsetBindExpr)
+        }
+        for (be in ordered_binds) {
+            if (!is_const_literal(be)) {
+                macro_error(prog, call.at, "_create_view: view bodies cannot reference local variables — only literal values are allowed (got `{describe(be._type)}`). Captured locals would need `?` placeholders, which SQLite rejects inside CREATE VIEW.")
+                return null
+            }
+        }
+
+        // Validate projection column count vs V's fields.
+        let nFields = length(viewT.structType.fields)
+        var nProj = 0
+        if (q.proj == ProjectionShape.Aggregate) {
+            nProj = 1
+        } elif (q.proj == ProjectionShape.GroupedNamedTuple) {
+            nProj = length(q.groupedSelectExprs)
+        } else {
+            nProj = length(q.selectCols)
+        }
+        if (nProj != nFields) {
+            macro_error(prog, call.at, "_create_view: column count mismatch — projection has {nProj} columns, [sql_view] '{viewT.structType.name}' has {nFields} fields")
+            return null
+        }
+
+        // Per-position type check via describe().
+        for (i in range(nFields)) {
+            var projType : TypeDeclPtr
+            if (q.proj == ProjectionShape.Aggregate) {
+                projType = q.aggregateType
+            } elif (q.proj == ProjectionShape.GroupedNamedTuple) {
+                projType = q.groupedSelectTypes[i]
+            } elif (i < length(q.selectColTypes) && q.selectColTypes[i] != null) {
+                projType = q.selectColTypes[i]
+            } else {
+                projType = lookup_struct_field_type(q.rootType, q.selectCols[i])
+            }
+            if (projType == null) {
+                macro_error(prog, call.at, "_create_view: cannot resolve type of projected column #{i+1}")
+                return null
+            }
+            let fieldT = viewT.structType.fields[i]._type
+            if (fieldT == null) {
+                continue
+            }
+            let projDesc = describe(projType)
+            let fieldDesc = describe(fieldT)
+            if (projDesc != fieldDesc) {
+                macro_error(prog, call.at, "_create_view: column #{i+1} type mismatch — projection emits '{projDesc}', [sql_view] '{viewT.structType.name}.{viewT.structType.fields[i].name}' is '{fieldDesc}'")
+                return null
+            }
+        }
+
+        // Build the column-name list using V's @sql_column-renamed names.
+        let col_list = build_string() $(var w) {
+            for (i in range(nFields)) {
+                if (i > 0) {
+                    w |> write(", ")
+                }
+                var col_name = string(viewT.structType.fields[i].name)
+                let col_anno = find_arg(viewT.structType.fields[i].annotation, "sql_column")
+                if (col_anno is tString) {
+                    col_name = string(col_anno as tString)
+                }
+                w |> write("\"")
+                w |> write(col_name)
+                w |> write("\"")
+            }
+        }
+
+        let select_sql_with_placeholders = build_sql_string(q)
+        let select_sql = inline_binds_into_sql(select_sql_with_placeholders, ordered_binds)
+        let create_sql = "CREATE VIEW \"{view_name}\"({col_list}) AS {select_sql}"
+
+        // Use the user's outer db argument (call.arguments[0]) — pipe-rewrite
+        // turns `db |> _create_view(...)` into `_create_view(db, ...)`, so
+        // arg 0 is exactly what the user wrote.
+        var dbExpr = clone_expression(call.arguments[0])
+        var res = qmacro(_::exec($e(dbExpr), $v(create_sql)))
         res.force_at(call.at)
         return res
     }
@@ -3507,6 +3850,134 @@ class private TrySqlMacro : AstCallMacro {
 }
 
 // ============================================================================
+// _each_sql — streaming iterator over a SELECT chain.
+//
+// Same chain shape as `_sql(...)`, but instead of materializing the result
+// set into an array up front, the macro emits a `_::run_each_select(...)`
+// call returning a `generator<TT>`. The generator yields one row at a time
+// and finalizes the prepared statement on:
+//   - normal exhaustion
+//   - early `break` from the surrounding for-loop
+//   - panic from inside the for-loop body
+//
+// Restrictions vs `_sql`:
+//   - terminals are rejected: `_first()` / `_first_opt()` / `_to_array()`
+//     are not iterators (they materialize one row or the whole array)
+//   - aggregates are rejected: `_count()` / `_sum()` / etc. produce a
+//     scalar; iteration is degenerate
+// For these shapes use `_sql(...)` directly.
+// ============================================================================
+
+[macro_function]
+def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?) : ExpressionPtr {
+    var argT = call.arguments[0]._type
+    macro_verify(argT != null, prog, call.at, "_each_sql: chain argument is not inferred yet")
+    macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
+    var q = SqlQuery()
+    if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
+        return null
+    }
+
+    // Reject terminals — _each_sql produces an iterator, not a scalar /
+    // single row / explicit array. Each error points the user at `_sql`
+    // for the materializing form.
+    //
+    // Order matters: aggregates (which set both q.proj=Aggregate AND
+    // q.matr=One internally) get the aggregate-specific message; plain
+    // _first / _first_opt fall through to the single-row message.
+    if (q.seenToArray) {
+        macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` — _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
+        return null
+    }
+    if (q.proj == ProjectionShape.Aggregate) {
+        macro_error(prog, call.at, "_each_sql: chain ends in an aggregate (_count/_sum/_avg/_min/_max) — aggregates collapse to one scalar; iteration is degenerate. Use `_sql(...)` for the scalar value, or drop the aggregate to iterate over rows.")
+        return null
+    }
+    if (q.matr == Materializer.One || q.matr == Materializer.OneOpt) {
+        macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` — those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
+        return null
+    }
+
+    // Bind ordering — same as emit_sql_macro_body: per-join ON binds → outer
+    // WHERE → HAVING → LIMIT → OFFSET. Limit/offset binds are still allowed
+    // (e.g. `_each_sql(... |> take(100))` streams up to 100 rows).
+    var joinOnCount = 0
+    for (j in q.joins) {
+        joinOnCount += length(j.rightOnBindExprs)
+    }
+    var joinOnBinds : array<ExpressionPtr>
+    joinOnBinds |> reserve(joinOnCount)
+    for (j in q.joins) {
+        for (b in j.rightOnBindExprs) {
+            joinOnBinds |> push(b)
+        }
+    }
+    if (length(joinOnBinds) > 0) {
+        var ordered : array<ExpressionPtr>
+        ordered |> reserve(length(joinOnBinds) + length(q.bindExprs))
+        for (b in joinOnBinds) {
+            ordered |> push(b)
+        }
+        for (b in q.bindExprs) {
+            ordered |> push(b)
+        }
+        q.bindExprs <- ordered
+    }
+    q.bindExprs |> reserve(length(q.bindExprs) + length(q.havingBindExprs) + 2)
+    for (be in q.havingBindExprs) {
+        q.bindExprs |> push(be)
+    }
+    if (q.limitBindExpr != null) {
+        q.bindExprs |> push(q.limitBindExpr)
+    }
+    if (q.offsetBindExpr != null) {
+        q.bindExprs |> push(q.offsetBindExpr)
+    }
+
+    let sql = build_sql_string(q)
+
+    var bind_stmts : array<ExpressionPtr>
+    bind_stmts |> reserve(length(q.bindExprs))
+    for (i in range(length(q.bindExprs))) {
+        let bindIdx = i + 1
+        var be = q.bindExprs[i]
+        bind_stmts |> push <| qmacro_expr(${
+            sql_bind_to_stmt(_sql_stmt, $v(bindIdx), $e(be));
+        })
+    }
+
+    var rowBuilder = build_row_builder(q, prog, call.at)
+    if (rowBuilder == null) {
+        return null
+    }
+
+    var dbExpr = q.dbExpr
+    // bind_blk is a `block` (one-shot, runs before the generator). row_blk
+    // is a capturing `lambda` so it can outlive the run_each_select call
+    // inside the generator body.
+    var res = qmacro(_::run_each_select($e(dbExpr), $v(sql),
+        $(var _sql_stmt : sqlite3_stmt?) {
+            $b(bind_stmts)
+        },
+        @(_sql_stmt : sqlite3_stmt?) => $e(rowBuilder)))
+    res.force_at(call.at)
+    return res
+}
+
+[call_macro(name="_each_sql")]
+class private EachSqlMacro : AstCallMacro {
+    //! _each_sql(chain) -> iterator<T>. Same chain shape as `_sql(...)`,
+    //! but yields rows lazily rather than materializing the whole array.
+    //! Iterate via `for (row in _each_sql(db |> select_from(type<T>)))`.
+    //! The underlying prepared statement is finalized on loop exit (normal
+    //! exhaustion / break / panic) by the generator's `finally`.
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 1, prog, call.at, "_each_sql expects one argument: a chain expression")
+        return emit_each_sql_macro_body(prog, call)
+    }
+}
+
+// ============================================================================
 // `_sql_update` / `_sql_delete` — predicate-based mutations
 //
 // These macros run with `canVisitArgument = false` for everything except `db`
@@ -3841,6 +4312,10 @@ def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; va
         macro_error(prog, call.at, "{call.name}: second argument must be a `type<T>` literal")
         return false
     }
+    if (is_view_type(rootT)) {
+        macro_error(prog, call.at, "{call.name}: cannot mutate [sql_view] '{rootT.structType.name}' — views are read-only. Mutate the underlying table(s) and re-query the view.")
+        return false
+    }
     return true
 }
 
@@ -4010,6 +4485,10 @@ def private validate_outer_upsert_args(prog : ProgramPtr; var call : ExprCallMac
     }
     if (rowE._type.isGoodArrayType) {
         macro_error(prog, call.at, "{call.name}: bulk array<T> upsert is deferred to a follow-up — pass a single row for now and call inside a transaction loop if you need batching")
+        return false
+    }
+    if (is_view_type(rowE._type)) {
+        macro_error(prog, call.at, "{call.name}: cannot upsert into [sql_view] '{rowE._type.structType.name}' — views are read-only. Mutate the underlying table(s) and re-query the view.")
         return false
     }
     rootT = clone_type(rowE._type)

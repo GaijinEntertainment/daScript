@@ -736,7 +736,8 @@ def document_module_ast_match(root : string) {
         group_by_regex("Argument filtering", mod, %regex~.*(qm_count_real_args|qm_real_arg_index|qm_extract_remaining_args|qm_is_fake_arg|qm_count_real_call_args|qm_real_call_arg_index)$%%),
         group_by_regex("Block scanning", mod, %regex~.*(qm_scan|qm_extract_stmts)$%%),
         group_by_regex("Constant construction", mod, %regex~.*(qm_make_zero_const)$%%),
-        group_by_regex("AST reconstruction", mod, %regex~.*(qm_convert_local_function|qm_resolve_local_function|qm_convert_comprehension|qm_resolve_comprehension)$%%)
+        group_by_regex("AST reconstruction", mod, %regex~.*(qm_convert_local_function|qm_resolve_local_function|qm_convert_comprehension|qm_resolve_comprehension)$%%),
+        group_by_regex("AST normalization", mod, %regex~.*(qm_peel_ref2value)$%%)
     )
     document("AST pattern matching", mod, "ast_match.rst", groups)
 }
