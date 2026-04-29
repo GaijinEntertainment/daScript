@@ -4,7 +4,7 @@ options persistent_heap
 
 // Sawtooth chord with chorus effect — warm detuned pad with gentle stereo widening.
 // Hear: rich sawtooth chords shimmer and spread as chorus adds subtle detuning.
-// Note: chorus here is a per-voice effect send (not pattern audio chopping).
+// Note: chorus is a per-orbit effect send (independent per orbit, like reverb / delay).
 
 require feature_common
 

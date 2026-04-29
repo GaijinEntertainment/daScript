@@ -336,6 +336,40 @@ def set_pan(var pat : Pattern; p : float) : Pattern {
     return <- fmap(pat, fn)
 }
 
+// pat |> set_hrtf_azimuth(-45.0) — set 3D HRTF azimuth (degrees, -180..180); pan still controls source width.
+def set_hrtf_azimuth(var pat : Pattern; deg : float) : Pattern {
+    //! Sets the HRTF azimuth (degrees, -180..180) on every event in `pat` and engages HRTF positioning.
+    //! 0 = directly ahead, +90 = right, -90 = left. Under the binaural-stereo HRTF render `pan` still
+    //! controls source width / L/R balance feeding the spatialiser; HRTF controls 3D position.
+    let fn <- @capture(= deg) (e : Event) : Event {
+        var r = e; r.hrtf_azimuth = deg; r.hrtf_active = true; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_hrtf_elevation(15.0) — set 3D HRTF elevation (degrees, -90..90); pan still controls source width.
+def set_hrtf_elevation(var pat : Pattern; deg : float) : Pattern {
+    //! Sets the HRTF elevation (degrees, -90..90) on every event in `pat` and engages HRTF positioning.
+    //! 0 = horizontal plane, positive = up. Under the binaural-stereo HRTF render `pan` still controls
+    //! source width / L/R balance feeding the spatialiser; HRTF controls 3D position.
+    let fn <- @capture(= deg) (e : Event) : Event {
+        var r = e; r.hrtf_elevation = deg; r.hrtf_active = true; return r
+    }
+    return <- fmap(pat, fn)
+}
+
+// pat |> set_hrtf(-45.0, 0.0) — set both HRTF azimuth and elevation in one call; pan still controls source width.
+def set_hrtf(var pat : Pattern; az, el : float) : Pattern {
+    //! Sets HRTF azimuth and elevation in one call and engages HRTF positioning.
+    //! Azimuth (-180..180): 0 = ahead, +90 = right, -90 = left. Elevation (-90..90): 0 = horizontal.
+    //! Under the binaural-stereo HRTF render `pan` still controls source width / L/R balance feeding
+    //! the spatialiser; HRTF controls 3D position.
+    let fn <- @capture(= az, = el) (e : Event) : Event {
+        var r = e; r.hrtf_azimuth = az; r.hrtf_elevation = el; r.hrtf_active = true; return r
+    }
+    return <- fmap(pat, fn)
+}
+
 // pat |> set_speed(2.0) — set sample playback speed
 def private set_speed(var pat : Pattern; spd : float) : Pattern {
     let fn <- @capture(= spd) (e : Event) : Event {
@@ -869,7 +903,7 @@ def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
     var transformed <- invoke(transform, pat) // nolint:LINT003
     var left <- pat |> set_pan(0.0)
     var right <- transformed |> set_pan(1.0)
-    var layers : array<Pattern>
+    var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| left
     layers |> emplace <| right
     return <- stack(layers)
@@ -880,7 +914,7 @@ def jux(var pat : Pattern; transform : PatternTransform) : Pattern {
 def off(var pat : Pattern; time : double; transform : PatternTransform) : Pattern {
     //! Overlays `pat` with a time-shifted copy transformed by `transform`. Example: `s("bd sd") |> off(0.125, @@(x) => transpose(x, 7.0))` — canon at the fifth.
     var shifted <- invoke(transform, pat) |> late(time)
-    var layers : array<Pattern>
+    var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
     layers |> emplace <| shifted
     return <- stack(layers)
@@ -930,7 +964,7 @@ def sometimesby(var pat : Pattern; prob : float; transform : PatternTransform) :
     var degraded <- degrade_keep(pat, prob)
     var undegraded <- degrade_drop(pat, prob) // nolint:LINT003
     var transformed <- invoke(transform, undegraded) // nolint:LINT003
-    var layers : array<Pattern>
+    var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| degraded
     layers |> emplace <| transformed
     return <- stack(layers)
@@ -1220,6 +1254,22 @@ def set_pan(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     //! Pattern-valued `set_pan` — samples `mod_pat` at each event onset to set `pan`.
     return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
         var r = e; r.pan = val; return r
+    })
+}
+
+def set_hrtf_azimuth(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-valued `set_hrtf_azimuth` — samples `mod_pat` at each event onset to set the HRTF azimuth (degrees, -180..180).
+    //! Engages HRTF positioning on every event; `pan` still controls source width / L/R balance feeding the spatialiser.
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.hrtf_azimuth = val; r.hrtf_active = true; return r
+    })
+}
+
+def set_hrtf_elevation(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-valued `set_hrtf_elevation` — samples `mod_pat` at each event onset to set the HRTF elevation (degrees, -90..90).
+    //! Engages HRTF positioning on every event; `pan` still controls source width / L/R balance feeding the spatialiser.
+    return combineWith(pat, mod_pat, @(e : Event; val : float) : Event {
+        var r = e; r.hrtf_elevation = val; r.hrtf_active = true; return r
     })
 }
 
@@ -1634,7 +1684,7 @@ def palindrome(var pat : Pattern) : Pattern {
 def superimpose(var pat : Pattern; transform : PatternTransform) : Pattern {
     //! Stacks `pat` with `transform(pat)`, both playing simultaneously. Example: `pat |> superimpose(@@(x) => fast(x, 2.0lf))`.
     var transformed <- invoke(transform, pat)
-    var layers : array<Pattern>
+    var layers : array<Pattern> // nolint:STYLE012
     layers |> emplace <| pat
     layers |> emplace <| transformed
     return <- stack(layers)
@@ -2359,6 +2409,19 @@ def pan(var pat : Pattern; p : float) : Pattern {
     //! Fluent shorthand for `set_pan`. Sets stereo position (0=L, 0.5=C, 1=R).
     return <- set_pan(pat, p)
 }
+def hrtf_azimuth(var pat : Pattern; deg : float) : Pattern {
+    //! Fluent shorthand for `set_hrtf_azimuth`. Engages HRTF positioning; `pan` still controls source width.
+    return <- set_hrtf_azimuth(pat, deg)
+}
+def hrtf_elevation(var pat : Pattern; deg : float) : Pattern {
+    //! Fluent shorthand for `set_hrtf_elevation`. Engages HRTF positioning; `pan` still controls source width.
+    return <- set_hrtf_elevation(pat, deg)
+}
+def hrtf(var pat : Pattern; az, el : float) : Pattern {
+    //! Fluent shorthand for `set_hrtf` — sets HRTF azimuth + elevation and engages 3D positioning;
+    //! `pan` still controls source width.
+    return <- set_hrtf(pat, az, el)
+}
 def speed(var pat : Pattern; spd : float) : Pattern {
     //! Fluent shorthand for `set_speed`. Sets sample playback speed.
     return <- set_speed(pat, spd)
@@ -2657,6 +2720,14 @@ def vel(var pat : Pattern; var mod_pat : Pattern) : Pattern {
 def pan(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     //! Pattern-modulated `pan` — sampled from `mod_pat` per event.
     return <- set_pan(pat, mod_pat)
+}
+def hrtf_azimuth(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-modulated HRTF azimuth — sampled from `mod_pat` per event. Engages HRTF positioning.
+    return <- set_hrtf_azimuth(pat, mod_pat)
+}
+def hrtf_elevation(var pat : Pattern; var mod_pat : Pattern) : Pattern {
+    //! Pattern-modulated HRTF elevation — sampled from `mod_pat` per event. Engages HRTF positioning.
+    return <- set_hrtf_elevation(pat, mod_pat)
 }
 def speed(var pat : Pattern; var mod_pat : Pattern) : Pattern {
     //! Pattern-modulated `speed` — sampled from `mod_pat` per event.

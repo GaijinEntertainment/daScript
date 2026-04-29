@@ -295,7 +295,6 @@ def public strudel_add_track(var pat : Pattern; gain : float = 1.0) : int {
     track.sched.cps = g_cps
     track.sched.lastQueryEnd = g_wall_time * g_cps
     track.sched.sf2 = g_sf2 != null ? unsafe(reinterpret<SF2File const?>(g_sf2)) : null
-    init_chorus(track.sched)
     if (g_sf2 != null) {
         init_reverb(track.sched)
     }

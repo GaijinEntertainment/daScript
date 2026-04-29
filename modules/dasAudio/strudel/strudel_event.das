@@ -108,6 +108,15 @@ struct Event {
         //! Compressor attack time in seconds.
     compressor_release : float = 0.05   // release time seconds
         //! Compressor release time in seconds.
+    // HRTF positional override — when active, the equal-power stereo pan render is replaced by a
+    // binaural-stereo HRTF (two ma_hrtf instances per voice; pan still controls source width).
+    // Shares the ma_hrtf engine used by audio_boost; CIPIC dataset is baked in at compile time.
+    hrtf_active    : bool = false   // explicit "is HRTF position set?" flag (azimuth=0 alone is ambiguous — means "in front")
+        //! True when HRTF positioning is active for this event; setters flip this on.
+    hrtf_azimuth   : float = 0.0    // azimuth in degrees: -180..180 (0 = directly ahead, +90 = right, -90 = left)
+        //! HRTF azimuth in degrees (-180..180; 0 = ahead, +90 = right, -90 = left). Ignored unless `hrtf_active`.
+    hrtf_elevation : float = 0.0    // elevation in degrees: -90..90 (0 = horizontal plane)
+        //! HRTF elevation in degrees (-90..90; 0 = horizontal). Ignored unless `hrtf_active`.
     // SF2 SoundFont
     sf2_program    : int = -1   // SF2 GM program number (-1 = not SF2, use sample/oscillator)
         //! SF2 GM program number (-1 = not SF2; use sample/oscillator instead).
@@ -121,7 +130,7 @@ struct Event {
         //! SF2 pitch bend 0.0–1.0 (0.5 = center, -1 = use default).
 }
 
-// Resolve ADSR fields from their "user set / unset" form (−1 = unset) into concrete
+// Resolve ADSR fields from their "user set / unset" form (-1 = unset) into concrete
 // envelope parameters. The rules are designed so that intuitive shorthand sounds right:
 //
 //   • Nothing set           → a=0.001, d=0.001, s=1.0, r=0.01 (a held tone with tiny envelope edges)

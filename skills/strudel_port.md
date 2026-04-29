@@ -202,6 +202,37 @@ effort:
 
    See :ref:`tutorial_dastrudel_sf2_soundfont`.
 
+## Orbit semantics (per-orbit FX)
+
+In daslang, ``orbit`` selects a per-orbit effect bus with **independent
+reverb / delay / chorus** instances. ``room`` sends to the orbit's
+reverb, ``delay`` to its delay, ``chorus`` to its chorus. Voices on
+different orbits don't share FX state — splitting orbits is how you
+get separate reverb tails or chorus rates for the kick vs the lead.
+``orbit(0)`` is the default. See ``examples/daStrudel/features/orbit_*.das``
+for canonical patterns.
+
+## HRTF position (daslang extension)
+
+Per-event 3D positioning on top of stereo ``pan``:
+
+```das
+pat |> hrtf_azimuth(deg)       // numeric or pattern-valued
+pat |> hrtf_elevation(deg)     // numeric or pattern-valued
+pat |> hrtf(az, el)            // combined numeric setter
+```
+
+Setters flip an ``hrtf_active`` flag on the event; the scheduler
+routes the dry signal and the orbit-FX sends through **two**
+per-voice ``ma_hrtf`` instances (``hrtf_l`` + ``hrtf_r``) for
+binaural-stereo HRTF: each input channel becomes a virtual source
+at azimuth -/+ 30°, summed at the output. Pan and HRTF are
+orthogonal — pan controls source width, HRTF controls position.
+Best on headphones; cheaper to skip and use ``pan`` alone when
+externalisation isn't needed. See
+:ref:`tutorial_dastrudel_hrtf_position` and
+``examples/daStrudel/hrtf/`` for the bumblebee demo.
+
 ## Common friction points when pasting
 
 ### Mini-notation ``bd(3,8)`` Euclidean form

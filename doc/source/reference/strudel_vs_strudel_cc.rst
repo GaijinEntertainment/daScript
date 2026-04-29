@@ -220,13 +220,14 @@ Orbit bus model
 ---------------
 
 **Divergence:** daslang has an explicit ``OrbitBus`` per orbit
-number.  ``room`` sends to that orbit's reverb; ``delay`` to that
-orbit's delay; ``chorus`` is per-voice, **not** per-orbit.
-strudel.cc routes reverb/delay through SuperDirt differently.
+number.  ``room`` sends to that orbit's reverb, ``delay`` to that
+orbit's delay, and ``chorus`` to that orbit's chorus — each FX
+instance is allocated lazily on first send.  strudel.cc routes
+reverb/delay through SuperDirt differently.
 
 **How to apply:** if your strudel.cc pattern mixes two orbits to
 share a reverb, in daslang they need the same ``orbit`` number.
-If you want independent reverbs per voice, split orbits.
+If you want independent reverbs/choruses per voice, split orbits.
 
 Mini-notation parsing
 ---------------------
@@ -267,6 +268,59 @@ strudel.cc allocates voices dynamically per hap.
 **How to apply:** very dense polyphony may drop notes in daslang.
 Raise the pool size at ``Scheduler`` construction or thin the
 pattern.
+
+
+.. _strudel_cc_extensions:
+
+Extensions over strudel.cc
+==========================
+
+daslang adds a few primitives strudel.cc does not have.  These ride
+on top of the underlying ``audio_boost`` engine, so the existing
+strudel.cc syntax keeps working — the extensions only activate when
+you reach for them.
+
+HRTF positional override
+------------------------
+
+**Extension:** per-event ``hrtf_azimuth`` / ``hrtf_elevation`` (and
+the combined ``hrtf(az, el)``) replace the equal-power stereo
+``pan`` *render path* with a binaural-stereo HRTF: each input
+channel becomes a virtual source at azimuth -/+ 30° (the standard
+ITU listening triangle), each through its own ``ma_hrtf``
+instance, summed at the output.  Pan and HRTF become orthogonal —
+``pan`` shapes the inherent stereo width / image of the source,
+``hrtf`` positions the source in 3D.  Same CIPIC-based dataset
+``audio_boost`` uses; baked into the binary at compile time, no
+extra setup needed.
+
+**API:**
+
+.. code-block:: das
+
+   pat |> hrtf_azimuth(deg)        // numeric, -180..180
+   pat |> hrtf_elevation(deg)      // numeric, -90..90
+   pat |> hrtf(az, el)             // combined numeric
+
+   // pattern-valued (animated):
+   pat |> hrtf_azimuth(sine() |> range(-90.0, 90.0) |> slow(4.0lf))
+
+Setting any of the three flips the event's ``hrtf_active`` flag.
+The two HRTF outputs are summed and re-used for the
+reverb / delay / chorus sends, so the entire wet path follows the
+spatialised source (full physical accuracy) before being scaled
+into the orbit effect buses.
+
+**Cost:** each HRTF voice carries *two* ``ma_hrtf`` instances
+(one per input channel, both allocated lazily on first render).
+Practical for a handful of simultaneous voices; reach for plain
+``pan`` when you don't need externalisation, depth, or front/back
+disambiguation.
+
+**See also:**
+- Tutorial: :ref:`tutorial_dastrudel_hrtf_position`
+- Demo: ``examples/daStrudel/hrtf/``
+- Engine reference: :ref:`ma_hrtf <handle-audio-ma_hrtf>`
 
 
 .. _strudel_cc_naming:

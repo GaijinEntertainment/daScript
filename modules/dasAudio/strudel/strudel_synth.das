@@ -939,6 +939,18 @@ struct OscVoice {
     // per-voice audio effects (crush/coarse/shape/djf/bpf/bpq)
     @safe_when_uninitialized fx : VoiceFX
         //! Per-voice FX chain (bitcrush/waveshaper/DJ filter/bandpass/phaser/tremolo/compressor).
+    // HRTF positional override (when active, places this voice in 3D via virtual-stereo HRTF;
+    // L/R channels become virtual sources at azimuth -/+ 30°, each through its own HRTF instance).
+    hrtf_active    : bool  = false
+        //! True when this voice uses HRTF positioning. Pan still controls stereo width / image.
+    hrtf_azimuth   : float = 0.0
+        //! HRTF azimuth in degrees (-180..180; 0 = ahead).
+    hrtf_elevation : float = 0.0
+        //! HRTF elevation in degrees (-90..90; 0 = horizontal).
+    hrtf_l         : ma_hrtf?
+        //! HRTF state for the left input channel (virtual source at azimuth - 30°); allocated lazily.
+    hrtf_r         : ma_hrtf?
+        //! HRTF state for the right input channel (virtual source at azimuth + 30°); allocated lazily.
 }
 
 def osc_voice_init_supersaw(var voice : OscVoice) {
