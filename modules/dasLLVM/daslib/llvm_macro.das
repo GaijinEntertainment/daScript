@@ -8,9 +8,11 @@ require llvm/daslib/llvm_dll_utils
 require llvm/daslib/llvm_exe
 require llvm/daslib/llvm_jit
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_jit_intrin
 
 require daslib/ast_boost
 require daslib/strings_boost
+require daslib/defer
 
 require daslib/fio
 require jit
@@ -139,6 +141,10 @@ class JIT_LLVM : AstSimulateMacro {
                 "daslang build is static, disabling dll mode.\n")
         }
         let gen_exe = prog.policies.jit_exe_mode
+        // Drives the $::is_standalone_exe JIT intrinsic in llvm_jit_intrin so daslang
+        // code can constant-fold to true when this codegen run produces a standalone exe.
+        llvm_jit_intrin::g_jit_exe_mode = gen_exe
+        defer() { llvm_jit_intrin::g_jit_exe_mode = false; }
         let exe_main = "main" // prog.policies.jit_entry_point |> empty() ? "main" : prog.policies.jit_entry_point
         let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe
         let opt_level = prog.policies.jit_opt_level

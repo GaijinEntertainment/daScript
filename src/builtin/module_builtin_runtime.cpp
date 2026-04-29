@@ -1335,6 +1335,10 @@ namespace das
 
     }
 
+    bool is_standalone_exe ( ) {
+        return false;
+    }
+
     DAS_API uint64_t get_context_share_counter ( Context * context ) {
         return (uint64_t) context->code.use_count();
     }
@@ -1849,6 +1853,8 @@ namespace das
         addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")
                 ->arg("arguments");
+        addExtern<DAS_BIND_FUN(is_standalone_exe)>(*this, lib, "is_standalone_exe",
+            SideEffects::accessExternal, "is_standalone_exe");
         addExtern<DAS_BIND_FUN(withCommandLineArguments)>(*this, lib,  "with_argv",
             SideEffects::invoke, "withArgv")
                 ->args({"new_arguments", "block","context","line"});
