@@ -13,6 +13,7 @@ set(DAS_UTILS
     dascov
     daspkg
     detect-dupe
+    hygiene
 )
 
 if(NOT DAS_SQLITE_DISABLED)
@@ -74,6 +75,7 @@ SET(DAS_UTILS_TO_TEST
     lint
     detect-dupe
     find-dupe/tests
+    hygiene
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})

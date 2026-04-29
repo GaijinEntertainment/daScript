@@ -661,8 +661,8 @@ Chunk 10 ships **tut 31 (views)**, **tut 33 (PRAGMA tuning)**, **tut 34
 (backup + VACUUM)**, **tut 35 (streaming `_each_sql`)**, and **tut 39
 (user-defined SQL scalar functions)** — five tutorials covering the
 "operational" surface of SQLite that wasn't yet in the daslang rail.
-Migrations (originally listed as tut 30) deferred to chunk 11. No new
-language prerequisites; chunk 10 sits entirely on the chunk-2..9
+Migrations (originally listed as tut 30) deferred to the last chunk. No
+new language prerequisites; chunk 10 sits entirely on the chunk-2..9
 foundation.
 
 ### Tut 31 — `[sql_view]` + `_create_view`
@@ -829,16 +829,27 @@ foundation.
 
 ### Carried / deferred to chunk 11+
 
-- **SQL-fragment refactor** — replace `_create_view`'s literal-inlining
-  hack with a polymorphic emitter. Design: `variant SqlFragment {
-  Text : string; Bind : ExpressionPtr }`; two render modes —
-  `render_placeholders` for `_sql` / `_each_sql` (today's behavior,
-  returns `(sql, binds)`), `render_inlined` for `_create_view`
-  (formats const literals into text or fails on captured locals). Same
-  machinery applies to future DDL contexts where `?` is illegal:
-  `CREATE INDEX … ON t(<expr>)`, `CHECK(<expr>)`, `GENERATED ALWAYS AS
-  (<expr>)`. ~200-300 lines touched in sqlite_linq.das (8-10 sites).
-- **Migrations (chunk 11)** — `daslib/sql_migrate` module,
+- **SQL-fragment refactor** — SHIPPED in chunk 11 (`SqlFrag` variant +
+  `fold_to_string` / `fold_to_builder` consumers in sqlite_linq.das).
+  All 13 macro emissions route through `fold_to_builder`; const-folding
+  collapses all-text/all-bind chains to a single `ExprConstString` so
+  AOT codegen is byte-identical to the previous `$v(sql)` baking path.
+  PR-B follow-on adds `_sql_pragma(db, name, value)` and
+  `_sql_vacuum_into(db, path)` macros that exercise the
+  `inline_id` / `inline_lit` SqlFrag kinds — both fold to literal SQL
+  when args are compile-time constants, falling back to a builder
+  with `sql_quote_id` / `sql_quote_lit` calls otherwise. PR-C extends
+  `_order_by` / `_order_by_descending` to accept a `string`-typed
+  expression (single col or tuple element) — the SQL build emits a
+  `\x01` placeholder consumed by `sql_to_frags_ex`, which routes the
+  expression through `fold_to_builder` as an `inline_id` frag. Const
+  strings still fold to compile-time-quoted SQL; runtime variables emit
+  `sql_quote_id(<expr>)` so embedded `"` is doubled safely. Mixed
+  tuples (e.g. `(_.Price, runtimeName)`) work — each entry independently
+  picks the compile-time `_.Field` or runtime-string path. `_create_view`
+  rejects runtime ORDER BY (DDL is run-once; runtime column would bake at
+  view-creation time).
+- **Migrations (last chunk)** — `daslib/sql_migrate` module,
   `[sql_migration]` annotation collected across translation units,
   `migrate_to_latest` runner, `__schema_version` table, multi-row
   audit semantics.

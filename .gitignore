@@ -82,7 +82,7 @@ modules/dasStbImage/dasModuleStbImage.pdb
 modules/dasStdDlg/dasModuleStdDlg.pdb
 modules/dasUnitTest/dasModuleUnitTest.pdb
 tree-sitter-daslang/daslang.pdb
-libhv.20260408.log
+libhv.*.log
 modules/dasAudio/dasModuleAudio_debug.pdb
 modules/dasHV/dasModuleHV_debug.pdb
 modules/dasLiveHost/dasModuleLiveHost_debug.pdb
