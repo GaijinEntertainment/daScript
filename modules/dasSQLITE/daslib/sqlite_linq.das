@@ -182,6 +182,7 @@ struct private SqlQuery {
     argSourceIdx : array<int>             //!< parallel to argNames
     dbExpr      : ExpressionPtr
     upsertMode  : bool                    //!< _upsert do_update body context — recognize `_excluded.Col` as the SQLite ``excluded.col`` proposed-row reference. Only set inside `emit_upsert_body`.
+    hadError    : bool                    //!< pred_to_sql / projection / subquery analyzer raised a `macro_error` somewhere in the recursion. Top-level callers (analyze_predicate, etc.) must check this *after* the recursive walk — relying on `empty(s)` is unsafe because operator handlers wrap empty children in non-empty SQL fragments (e.g. `lhs = rhs` becomes `" = ?"` when only the lhs failed).
 }
 
 // ============================================================================
@@ -228,13 +229,61 @@ def private source_rootType_for_idx(var q : SqlQuery&; idx : int) : TypeDeclPtr 
 }
 
 [macro_function]
-def private column_sql_for_alias(alias : string; field : string) : string {
-    //! Format a column SQL fragment. Empty alias → unqualified `"Col"` (single-
-    //! source mode). Non-empty alias → `"talias"."Col"`.
-    if (empty(alias)) {
-        return "\"{field}\""
+def private source_rootType_for_alias(var q : SqlQuery&; alias : string) : TypeDeclPtr {
+    //! Reverse lookup of `source_rootType_for_idx` — find the source whose
+    //! alias matches and return its rootType. Used at SQL emission time when
+    //! we have the alias on hand (from `q.selectColAliases[i]`) but not the
+    //! source index. Falls back to `q.rootType` if no match (defensive: should
+    //! never happen because every alias in `selectColAliases` was placed by an
+    //! analyzer that knew the source idx).
+    if (alias == q.rootAlias) {
+        return q.rootType
     }
-    return "\"{alias}\".\"{field}\""
+    for (j in q.joins) {
+        if (j.alias == alias) {
+            return j.rootType
+        }
+    }
+    return q.rootType
+}
+
+[macro_function]
+def private column_sql_for_alias(alias : string; rootT : TypeDeclPtr; field : string) : string {
+    //! Format a column SQL fragment. Empty alias → unqualified `"Col"` (single-
+    //! source mode). Non-empty alias → `"talias"."Col"`. ``field`` is the
+    //! daslang field name; this helper translates it to the SQL column via
+    //! `@sql_column` (using ``rootT``'s field annotations) so renames are
+    //! transparent at every emission site. ``rootT`` may be null when the
+    //! caller doesn't have a struct type in hand (e.g. a literal projection);
+    //! in that case the daslang name passes through unchanged.
+    let sqlCol = field_to_column_name(rootT, field)
+    if (empty(alias)) {
+        return "\"{sqlCol}\""
+    }
+    return "\"{alias}\".\"{sqlCol}\""
+}
+
+[macro_function]
+def private render_json_extract(rootT : TypeDeclPtr; alias : string; col : string; path : array<string>) : string {
+    //! SQLite ``json_extract(<column-ref>, '$.p1.p2…')``. ``alias`` empty in
+    //! single-source mode (unqualified column ref); non-empty multi-source
+    //! mode emits ``"alias"."col"``. ``rootT`` is the struct type that owns
+    //! ``col`` — used to resolve `@sql_column` on the JSON column itself.
+    //! ``path`` lists JSON-path elements outer-to-inner (struct field names
+    //! or tuple ``_N`` accessors — both pass through unchanged because tuples
+    //! serialize via ``JV`` as objects keyed by their record-name, mirroring
+    //! the daslang-side accessor; @sql_column does NOT apply to JSON-path
+    //! segments since the path navigates the JSON value, not the SQL schema).
+    let p = build_string() $(var w) {
+        w |> write("'$")
+        for (s in path) {
+            w |> write(".")
+            w |> write(s)
+        }
+        w |> write("'")
+    }
+    let target = column_sql_for_alias(alias, rootT, col)
+    return "json_extract({target}, {p})"
 }
 
 [macro_function]
@@ -372,7 +421,8 @@ def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
         return true
     }
     let col = q.selectCols[0]
-    q.aggregateExpr = "{sqlOp}(\"{col}\")"
+    let sqlCol = field_to_column_name(q.rootType, col)
+    q.aggregateExpr = "{sqlOp}(\"{sqlCol}\")"
     if (promote_to_double) {
         q.aggregateType = new TypeDecl(at = at, baseType = Type.tDouble)
     } else {
@@ -527,21 +577,19 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     }
 
     // 4. Construct JoinSpec.
-    var spec <- default<JoinSpec>
-    spec.kind = kind
-    spec.rootType = subQ.rootType
-    spec.tableName = subQ.tableName
-    spec.alias = "t1"
-    spec.leftAlias = "t0"
-    spec.leftCol = extract_key_selector_field(jCall.arguments[2], "__la__", prog, at)
-    if (empty(spec.leftCol)) {
-        return false
-    }
-    spec.rightCol = extract_key_selector_field(jCall.arguments[3], "__lb__", prog, at)
-    if (empty(spec.rightCol)) {
-        return false
-    }
-    spec.rightWhereSql = subQ.whereSql
+    let leftCol = extract_key_selector_field(jCall.arguments[2], "__la__", prog, at)
+    return false if (empty(leftCol))
+    let rightCol = extract_key_selector_field(jCall.arguments[3], "__lb__", prog, at)
+    return false if (empty(rightCol))
+    var spec <- JoinSpec(
+        kind = kind,
+        rootType = subQ.rootType,
+        tableName = subQ.tableName,
+        alias = "t1",
+        leftCol = leftCol,
+        leftAlias = "t0",
+        rightCol = rightCol,
+        rightWhereSql = subQ.whereSql)
     // Hold right-side WHERE binds on the JoinSpec (NOT the outer q.bindExprs)
     // — the runtime bind builder concatenates per-join ON binds first, then
     // outer WHERE / HAVING / LIMIT / OFFSET, so the placeholder index lines
@@ -595,20 +643,16 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     // into the inner chain. Only one terminal allowed per chain.
 
     // Peel _to_array(prev) — plain function in this module, no expansion.
+    // _to_array() is a materializer-mode flag (sets `q.matr = Array`); it
+    // doesn't change emitted SQL, so its position in the chain is
+    // irrelevant — `select_from |> _select(...) |> _to_array()` and
+    // `select_from |> _to_array() |> _select(...)` produce identical SQL.
+    // Only the duplicate-terminal guard remains.
     {
         var inner : ExpressionPtr
         if (qmatch(node, _to_array($e(inner))).matched) {
             if (q.seenToArray || q.seenTerminal) {
                 macro_error(prog, at, "_sql: only one terminal allowed per chain")
-                return false
-            }
-            // _to_array() must be the outermost chain element. analyze_chain
-            // walks outermost-first, so any operator already peeled (any of
-            // these flags / fields populated) means _to_array is buried under
-            // a wrapper like _where(...) that would mean "filter after
-            // materialize" — not translatable to SQL.
-            if (q.seenSelect || q.whereSql != "") {
-                macro_error(prog, at, "_sql: _to_array() must be the outermost chain element")
                 return false
             }
             q.seenToArray = true
@@ -917,8 +961,11 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             q.inHaving = true
             let s = pred_to_sql(body, q, prog, at)
             q.inHaving = false
+            if (q.hadError) {
+                return false   // pred_to_sql (or deeper) issued a macro_error
+            }
             if (empty(s)) {
-                return false   // pred_to_sql already issued a macro_error
+                return false   // top-level pred_to_sql returned "" without setting hadError
             }
             q.havingSql = s
             q.seenHaving = true
@@ -958,6 +1005,11 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     }
 
     // Peel where_(prev, lambda) — post-expansion of `_where(prev, predicate)`.
+    // Recurse into the inner chain FIRST so `q.rootType` is set before the
+    // predicate analyzer runs — pred_to_sql's `@sql_json` / `@sql_blob` field-
+    // descent recognizer reads field annotations off `q.rootType`. Multiple
+    // chained `_where`s still compose with AND (innermost recurse-first
+    // populates `q.whereSql`, each outer wrap adds `(prev) AND (cur)`).
     {
         var wCall = match_linq_call(node, "where_")
         if (wCall != null) {
@@ -966,10 +1018,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 macro_error(prog, at, "_sql: _where predicate lambda has unexpected shape")
                 return false
             }
-            if (!analyze_predicate(body, q, prog, at)) {
+            if (!analyze_chain(wCall.arguments[0], q, prog, at)) {
                 return false
             }
-            return analyze_chain(wCall.arguments[0], q, prog, at)
+            return analyze_predicate(body, q, prog, at)
         }
     }
 
@@ -1205,11 +1257,89 @@ def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
         if (spec.kind != JoinKind.Left) {
             return ""
         }
+        let sqlRightCol = field_to_column_name(spec.rootType, spec.rightCol)
         if (positive) {
-            return "\"{spec.alias}\".\"{spec.rightCol}\" IS NOT NULL"
+            return "\"{spec.alias}\".\"{sqlRightCol}\" IS NOT NULL"
         }
-        return "\"{spec.alias}\".\"{spec.rightCol}\" IS NULL"
+        return "\"{spec.alias}\".\"{sqlRightCol}\" IS NULL"
     }
+}
+
+[macro_function]
+def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
+                                         var outFrag : string&; var outLeafType : TypeDeclPtr&;
+                                         prog : ProgramPtr; at : LineInfo) : int {
+    //! Multi-level field-chain recognizer for the projection side. Returns
+    //! 1 = matched (outFrag carries the `json_extract(...)` SQL, outLeafType
+    //! the resolved daslang scalar type at the leaf), 0 = didn't match
+    //! (caller falls through to single-level / is_some recognizers), or -1 =
+    //! matched as `@sql_blob` descent OR JSON-path-resolution error
+    //! (macro_error already emitted; caller propagates failure). Mirror of
+    //! the inline recognizer in `pred_to_sql` — keeps the logic in one place
+    //! so single-column and named-tuple projections share it.
+    if (val == null || !(val is ExprField)) {
+        return 0
+    }
+    var ef0 = val as ExprField
+    var recv0 = ef0.value
+    if (recv0 is ExprRef2Value) {
+        recv0 = (recv0 as ExprRef2Value).subexpr
+    }
+    if (recv0 == null || !(recv0 is ExprField)) {
+        return 0
+    }
+    var chain : array<string>
+    chain |> push(string(ef0.name))
+    var cur : ExpressionPtr = recv0
+    while (cur != null && cur is ExprField) {
+        var efc = cur as ExprField
+        chain |> push(string(efc.name))
+        cur = efc.value
+        if (cur is ExprRef2Value) {
+            cur = (cur as ExprRef2Value).subexpr
+        }
+    }
+    if (cur == null || !(cur is ExprVar)) {
+        return 0
+    }
+    let argName = string((cur as ExprVar).name)
+    // Silent resolution (mirror of pred_to_sql): unrecognized arg names
+    // fall through so unrelated chains keep their existing diagnostics.
+    var srcIdx = -1
+    if (q.seenJoin) {
+        srcIdx = lookup_arg_source(q, argName)
+        if (srcIdx < 0 && argName == "_") {
+            srcIdx = 0
+        }
+    } elif (argName == "_") {
+        srcIdx = 0
+    }
+    if (srcIdx < 0) {
+        return 0
+    }
+    let nChain = length(chain)
+    let colName = chain[nChain - 1]
+    let srcType = source_rootType_for_idx(q, srcIdx)
+    if (has_field_annotation(srcType, colName, "sql_blob")) {
+        macro_error(prog, at, "_sql: cannot project @sql_blob column path '{colName}.…'; round-trip the row and access the field in daslang, or use raw SQL")
+        return -1
+    }
+    if (!has_field_annotation(srcType, colName, "sql_json")) {
+        return 0
+    }
+    var jsonPath : array<string>
+    jsonPath |> reserve(nChain - 1)
+    for (i in range(nChain - 1)) {
+        jsonPath |> push(chain[nChain - 2 - i])
+    }
+    var leaf = resolve_nested_field_type(srcType, colName, jsonPath)
+    if (leaf == null) {
+        macro_error(prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
+        return -1
+    }
+    outFrag = render_json_extract(srcType, source_alias_for_idx(q, srcIdx), colName, jsonPath)
+    outLeafType = leaf
+    return 1
 }
 
 [macro_function]
@@ -1250,6 +1380,33 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
         }
     }
 
+    // Multi-level field chain — `<arg>.Col.path1.path2…`. When `Col` carries
+    // `@sql_json`, descend via `json_extract`; `@sql_blob` is a compile error
+    // per API_REWORK §37 lock 6. `try_recognize_json_path_proj` returns
+    // 1 = matched (frag + leafType set), -1 = matched-as-error (macro_error
+    // emitted), 0 = didn't match (fall through to single-level qmatch). Mirror
+    // of the pred_to_sql recognizer above the single-level qmatch.
+    {
+        var frag : string
+        var leafType : TypeDeclPtr
+        let m = try_recognize_json_path_proj(body, q, frag, leafType, prog, at)
+        if (m < 0) {
+            return false
+        }
+        if (m > 0) {
+            q.selectCols |> clear
+            q.selectColAliases |> clear
+            q.selectColTypes |> clear
+            q.selectColSqlFragments |> clear
+            q.selectCols |> push("")              //!< discriminator-only — fragment carries the SQL
+            q.selectColAliases |> push("")
+            q.selectColSqlFragments |> push(frag)
+            q.selectColTypes |> push(leafType)
+            q.proj = ProjectionShape.SingleColumn
+            return true
+        }
+    }
+
     // Single-column form: <argname>.FieldName  (`_` in single-source, `u`/`o` etc. after a join).
     // Receiver must be ExprVar — `$e(recv).$f(field)` would otherwise accept
     // nested chains (`_.opt.X`, `a.b.c`) and silently extract the inner
@@ -1269,12 +1426,14 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
             q.selectColTypes |> clear
             q.selectColSqlFragments |> clear
             q.selectCols |> push(fieldName)
-            if (q.seenJoin) {
-                q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
-                q.selectColSqlFragments |> push("")
-                let srcType = source_rootType_for_idx(q, srcIdx)
-                q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
-            }
+            // Always push to the parallel arrays — single-source emits empty
+            // alias / fragment (build_sql_string + build_row_builder discriminate
+            // on emptiness, not on `q.seenJoin`, so the same machinery handles
+            // both modes uniformly).
+            q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
+            q.selectColSqlFragments |> push("")
+            let srcType = source_rootType_for_idx(q, srcIdx)
+            q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
             q.proj = ProjectionShape.SingleColumn
             return true
         }
@@ -1304,6 +1463,25 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                 if (val is ExprRef2Value) {
                     val = (val as ExprRef2Value).subexpr
                 }
+                // Multi-level JSON-path descent (`<arg>.Col.path…`) — runs
+                // before the single-level qmatch which only matches ExprVar
+                // receivers and would otherwise reject these.
+                {
+                    var jfrag : string
+                    var jleaf : TypeDeclPtr
+                    let m = try_recognize_json_path_proj(val, q, jfrag, jleaf, prog, at)
+                    if (m < 0) {
+                        return false
+                    }
+                    if (m > 0) {
+                        q.selectCols |> push("")
+                        q.selectColAliases |> push("")
+                        q.selectColSqlFragments |> push(jfrag)
+                        q.selectColTypes |> push(jleaf)
+                        q.projRecordNames |> push(string(tupT.argNames[i]))
+                        continue
+                    }
+                }
                 var receiver : ExpressionPtr
                 var fieldName : string
                 if (qmatch(val, $e(receiver).$f(fieldName)).matched
@@ -1315,12 +1493,12 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                     }
                     q.selectCols |> push(fieldName)
                     q.projRecordNames |> push(string(tupT.argNames[i]))
-                    if (q.seenJoin) {
-                        q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
-                        q.selectColSqlFragments |> push("")
-                        let srcType = source_rootType_for_idx(q, srcIdx)
-                        q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
-                    }
+                    // Always push parallel-array entries — see SingleColumn
+                    // branch above for rationale.
+                    q.selectColAliases |> push(source_alias_for_idx(q, srcIdx))
+                    q.selectColSqlFragments |> push("")
+                    let srcType = source_rootType_for_idx(q, srcIdx)
+                    q.selectColTypes |> push(lookup_struct_field_type(srcType, fieldName))
                     continue
                 }
                 // Multi-source computed projection: is_some(arg) / is_none(arg).
@@ -1543,7 +1721,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
                 macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
                 return false
             }
-            q.groupedSelectExprs |> push("\"{col}\"")
+            q.groupedSelectExprs |> push("\"{field_to_column_name(q.rootType, col)}\"")
             q.groupedSelectTypes |> push(fieldType)
             q.projRecordNames |> push(string(tupT.argNames[i]))
             continue
@@ -1562,7 +1740,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
                             macro_error(prog, at, "_sql: cannot resolve type of group key column '{col}'")
                             return false
                         }
-                        q.groupedSelectExprs |> push("\"{col}\"")
+                        q.groupedSelectExprs |> push("\"{field_to_column_name(q.rootType, col)}\"")
                         q.groupedSelectTypes |> push(fieldType)
                         q.projRecordNames |> push(string(tupT.argNames[i]))
                         continue
@@ -1639,10 +1817,14 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         let outerName = string(ef.name)
         let nKeys = length(q.groupByCols)
         // Single-key: `_._0` → first group-by column.
+        // groupByCols stores daslang names; translate to SQL identifier here
+        // since orderByCols entries are emitted directly into ORDER BY.
         if (nKeys == 1 && recv != null && recv is ExprVar
                 && (recv as ExprVar).name == "_"
                 && outerName == "_0") {
-            q.orderByCols |> push("{q.groupByCols[0]} {direction}")
+            let dasName = group_key_column_name(q, 0)
+            let sqlCol = field_to_column_name(q.rootType, dasName)
+            q.orderByCols |> push("\"{sqlCol}\" {direction}")
             return true
         }
         // Multi-key: `_._0._N`.
@@ -1659,7 +1841,9 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
                 let suffix = slice(outerName, 1, length(outerName))
                 let keyIdx = try_to_int(suffix) ?? -1
                 if (keyIdx >= 0 && keyIdx < nKeys) {
-                    q.orderByCols |> push("{q.groupByCols[keyIdx]} {direction}")
+                    let dasName = group_key_column_name(q, keyIdx)
+                    let sqlCol = field_to_column_name(q.rootType, dasName)
+                    q.orderByCols |> push("\"{sqlCol}\" {direction}")
                     return true
                 }
             }
@@ -1669,7 +1853,8 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
     {
         var fieldName : string
         if (qmatch(body, _.$f(fieldName)).matched) {
-            q.orderByCols |> push("\"{fieldName}\" {direction}")
+            let sqlCol = field_to_column_name(q.rootType, fieldName)
+            q.orderByCols |> push("\"{sqlCol}\" {direction}")
             return true
         }
     }
@@ -1688,7 +1873,8 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
             // the diagnostic — no explicit peel needed here.
             var fieldName : string
             if (qmatch(val, _.$f(fieldName)).matched) {
-                q.orderByCols |> push("\"{fieldName}\" {direction}")
+                let sqlCol = field_to_column_name(q.rootType, fieldName)
+                q.orderByCols |> push("\"{sqlCol}\" {direction}")
             } else {
                 macro_error(prog, at, "_sql: _order_by: tuple-key entries must be `_.Field`; got: {describe(val)}")
                 return false
@@ -1719,6 +1905,11 @@ def private collect_group_keys(var body : ExpressionPtr; var q : SqlQuery&; prog
         }
     }
     // Single-column form: _.FieldName
+    //
+    // groupByCols stores DASLANG names (quoted) — `group_key_column_name`
+    // strips the quotes and feeds the daslang name to `lookup_struct_field_type`
+    // in the projection analyzer. Translation to the SQL identifier (via
+    // `field_to_column_name`) happens at build_sql_string emission, not here.
     {
         var fieldName : string
         if (qmatch(body, _.$f(fieldName)).matched) {
@@ -1761,8 +1952,14 @@ def private analyze_predicate(var body : ExpressionPtr; var q : SqlQuery&; prog 
         return false
     }
     let s = pred_to_sql(body, q, prog, at)
+    if (q.hadError) {
+        return false   // pred_to_sql (or a deeper walker) issued a macro_error;
+                       // operator handlers wrap empty children in non-empty SQL
+                       // (e.g. `lhs = rhs` becomes `" = ?"` when lhs failed),
+                       // so the empty(s) check below is not sufficient on its own.
+    }
     if (empty(s)) {
-        return false   // pred_to_sql already issued a macro_error
+        return false   // top-level pred_to_sql returned "" without setting hadError
     }
     if (empty(q.whereSql)) {
         q.whereSql = s
@@ -1773,18 +1970,31 @@ def private analyze_predicate(var body : ExpressionPtr; var q : SqlQuery&; prog 
 }
 
 [macro_function]
+def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg : string) : string {
+    //! Single failure path for `pred_to_sql` and the analyze_* helpers that
+    //! recurse through it. Sets `q.hadError` so analyze_predicate /
+    //! analyze_set_clause / analyze_upsert_set_clause / emit_update_body /
+    //! emit_delete_body can detect a macro_error from anywhere in the
+    //! recursion. Operator handlers (`==` / `+` / `&&` / etc.) wrap empty
+    //! children in non-empty SQL fragments — `lhs = rhs` becomes `" = ?"`
+    //! when only the lhs failed — so `empty(s)` at the top level isn't a
+    //! reliable failure signal on its own. Always returns "".
+    q.hadError = true
+    macro_error(prog, at, msg)
+    return ""
+}
+
+[macro_function]
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {
     if (node == null) {
-        macro_error(prog, at, "_sql: _where: null sub-expression")
-        return ""
+        return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     }
     // Peel ExprRef2Value (value-from-ref adapter that the typer inserts
     // around field reads after Mode-2 inner expansion).
     if (node is ExprRef2Value) {
         node = (node as ExprRef2Value).subexpr
         if (node == null) {
-            macro_error(prog, at, "_sql: _where: ExprRef2Value with null subexpr")
-            return ""
+            return pred_fail(q, prog, at, "_sql: _where: ExprRef2Value with null subexpr")
         }
     }
 
@@ -1813,6 +2023,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                         var binds : array<ExpressionPtr>
                         let subSql = analyze_subquery(icall.arguments[0], binds, prog, at, true)
                         if (empty(subSql)) {
+                            q.hadError = true   // analyze_subquery emitted macro_error
                             return ""
                         }
                         for (b in binds) {
@@ -1855,8 +2066,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             // a 0-byte placeholder and produce wrong results, so emit a
             // fixit-style ``macro_error`` pointing at the right spelling.
             if (is_none_call(lhs) || is_none_call(rhs)) {
-                macro_error(prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
-                return ""
+                return pred_fail(q, prog, at, "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder.")
             }
             return "{pred_to_sql(lhs, q, prog, at)} = {pred_to_sql(rhs, q, prog, at)}"
         }
@@ -1865,8 +2075,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) != $e(rhs)).matched) {
             if (is_none_call(lhs) || is_none_call(rhs)) {
-                macro_error(prog, at, "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
-                return ""
+                return pred_fail(q, prog, at, "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
             }
             return "{pred_to_sql(lhs, q, prog, at)} <> {pred_to_sql(rhs, q, prog, at)}"
         }
@@ -1930,6 +2139,85 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         }
     }
 
+    // Multi-level field chain — `<arg>.Col.path1.path2…`. Runs BEFORE the
+    // single-level qmatch below (which deliberately rejects `a.b.c` to avoid
+    // arg-name collisions in multi-source mode). When `Col` carries
+    // `@sql_json`, descend into the JSON storage via SQLite's `json_extract`.
+    // `@sql_blob` columns are opaque — descent is a compile error per
+    // API_REWORK §37 lock 6. Unannotated nested chains fall through (the
+    // single-level qmatch fails to match a multi-level shape, and downstream
+    // diagnostics report the unsupported access).
+    if (node is ExprField) {
+        var ef0 = node as ExprField
+        var recv0 = ef0.value
+        if (recv0 is ExprRef2Value) {
+            recv0 = (recv0 as ExprRef2Value).subexpr
+        }
+        // Need at least two ExprField levels to be a multi-level chain.
+        if (recv0 != null && recv0 is ExprField) {
+            // Walk down receiver chain, collecting names outer-to-inner.
+            // Innermost ExprField name is the SQL column on the source struct;
+            // earlier names are the JSON path through nested struct/tuple fields.
+            var chain : array<string>
+            chain |> push(string(ef0.name))
+            var cur : ExpressionPtr = recv0
+            while (cur != null && cur is ExprField) {
+                var efc = cur as ExprField
+                chain |> push(string(efc.name))
+                cur = efc.value
+                if (cur is ExprRef2Value) {
+                    cur = (cur as ExprRef2Value).subexpr
+                }
+            }
+            // Receiver must end at an ExprVar (lambda arg) for this to be a
+            // column-rooted path. Anything else falls through.
+            if (cur != null && cur is ExprVar) {
+                let argName = string((cur as ExprVar).name)
+                var srcIdx = -1
+                if (!empty(q.rootAlias)) {
+                    srcIdx = lookup_arg_source(q, argName)
+                    if (srcIdx < 0 && argName == "_") {
+                        srcIdx = 0
+                    }
+                } elif (argName == "_") {
+                    srcIdx = 0
+                }
+                if (srcIdx >= 0) {
+                    let nChain = length(chain)
+                    let colName = chain[nChain - 1]
+                    let srcType = source_rootType_for_idx(q, srcIdx)
+                    if (has_field_annotation(srcType, colName, "sql_blob")) {
+                        return pred_fail(q, prog, at, "_sql: cannot descend into @sql_blob column '{colName}'; filter in daslang after round-trip, or use raw SQL")
+                    }
+                    if (has_field_annotation(srcType, colName, "sql_json")) {
+                        // Reverse the outer-to-inner chain into a path that
+                        // walks from the column outward (drop the column name).
+                        var jsonPath : array<string>
+                        jsonPath |> reserve(nChain - 1)
+                        for (i in range(nChain - 1)) {
+                            jsonPath |> push(chain[nChain - 2 - i])
+                        }
+                        // Mirror the SELECT-side guard (try_recognize_json_path_proj):
+                        // walk the daslang-side type to confirm every path segment
+                        // resolves on a struct/tuple field. Without this, typos in a
+                        // WHERE-clause JSON path silently produce SQL (e.g.
+                        // `json_extract("Prefs", '$.cuty')`) that always returns NULL
+                        // and matches nothing — daslang's typer cannot catch these
+                        // because `_where(it, expr)` returns the same array<T> as the
+                        // input, so the lambda body's type is never required to
+                        // resolve the chain (`_sql` consumes the AST before typer
+                        // would otherwise report `can't get tuple field`).
+                        let leaf = resolve_nested_field_type(srcType, colName, jsonPath)
+                        if (leaf == null) {
+                            return pred_fail(q, prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
+                        }
+                        return render_json_extract(srcType, source_alias_for_idx(q, srcIdx), colName, jsonPath)
+                    }
+                }
+            }
+        }
+    }
+
     // Column reference: <argname>.ColName  (ExprField rooted at any lambda param).
     // Single-source: emit unqualified `"Col"` (only `_` is bound).
     // Multi-source: look up arg → source idx → emit `"talias"."Col"`. Unrecognized
@@ -1961,7 +2249,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     srcIdx = 0
                 }
                 if (srcIdx >= 0) {
-                    return column_sql_for_alias(source_alias_for_idx(q, srcIdx), fieldName)
+                    let rootT = source_rootType_for_idx(q, srcIdx)
+                    return column_sql_for_alias(source_alias_for_idx(q, srcIdx), rootT, fieldName)
                 }
                 // Not bound to any source — fall through to other patterns
                 // (e.g. `_._0` group-key references which keep their own
@@ -1969,14 +2258,17 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             } else {
                 // Single-source: only `_` is bound. Match the legacy emission.
                 if (argName == "_") {
-                    return "\"{fieldName}\""
+                    return column_sql_for_alias("", q.rootType, fieldName)
                 }
                 // Upsert-only sentinel: `_excluded.Col` → SQLite's
                 // ``excluded.col`` reference to the proposed row inside
                 // ON CONFLICT DO UPDATE SET. Gated on q.upsertMode so
-                // unrelated chains don't accidentally accept it.
+                // unrelated chains don't accidentally accept it. The SQL
+                // identifier is the rename-aware column name (so
+                // @sql_column = "type" emits `excluded."type"`).
                 if (q.upsertMode && argName == "_excluded") {
-                    return "excluded.\"{fieldName}\""
+                    let sqlCol = field_to_column_name(q.rootType, fieldName)
+                    return "excluded.\"{sqlCol}\""
                 }
             }
         }
@@ -1994,7 +2286,11 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var aggType : TypeDeclPtr
         if (try_translate_group_aggregate(node, q, prog, at, aggSql, aggType)) {
             if (empty(aggSql)) {
-                return ""   // helper emitted macro_error
+                // helper emitted macro_error; mark q.hadError so the
+                // analyzer-side checks fire even if an outer operator
+                // handler wraps this empty fragment.
+                q.hadError = true
+                return ""
             }
             return aggSql
         }
@@ -2017,6 +2313,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             var binds : array<ExpressionPtr>
             let subSql = analyze_subquery(mcall.arguments[1], binds, prog, at, true)
             if (empty(subSql)) {
+                q.hadError = true   // analyze_subquery emitted macro_error
                 return ""
             }
             for (b in binds) {
@@ -2051,20 +2348,20 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 // analyze_predicate directly on the bare pred expression.
                 var subQ = SqlQuery()
                 if (!analyze_chain(mcall.arguments[0], subQ, prog, at)) {
+                    q.hadError = true   // analyze_chain emitted macro_error on subQ
                     return ""
                 }
                 if (subQ.seenJoin || length(subQ.joins) > 0) {
-                    macro_error(prog, at, "_sql: subqueries cannot themselves contain joins (chunk 5)")
-                    return ""
+                    return pred_fail(q, prog, at, "_sql: subqueries cannot themselves contain joins (chunk 5)")
                 }
                 if (subQ.seenGroupBy || !empty(subQ.havingSql) || subQ.seenOrderBy
                         || subQ.distinctFlag || subQ.limitBindExpr != null
                         || subQ.offsetBindExpr != null || subQ.seenTerminal
                         || subQ.seenToArray) {
-                    macro_error(prog, at, "_sql: _any/_none subquery must be a `select_from(...)` (chain stages and terminals are not yet allowed)")
-                    return ""
+                    return pred_fail(q, prog, at, "_sql: _any/_none subquery must be a `select_from(...)` (chain stages and terminals are not yet allowed)")
                 }
                 if (!analyze_predicate(mcall.arguments[1], subQ, prog, at)) {
+                    q.hadError = true   // analyze_predicate emitted macro_error on subQ
                     return ""
                 }
                 subSql = build_sql_string(subQ)
@@ -2074,6 +2371,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 }
             }
             if (empty(subSql)) {
+                q.hadError = true   // sub-helper emitted macro_error
                 return ""
             }
             for (b in binds) {
@@ -2125,18 +2423,16 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             for (a in c.arguments) {
                 if (is_none_call(a)) {
                     let positive = cname |> find("not") < 0
-                    macro_error(prog, at,
+                    return pred_fail(q, prog, at,
                         positive
                             ? "_sql: `_.Col == none()` is not translated. Use `_.Col |> is_none()` (or `is_some()` for the negation) — `none()` returns Option<T>, equality against it would silently bind an empty placeholder."
                             : "_sql: `_.Col != none()` is not translated. Use `_.Col |> is_some()` (the inverse of is_none).")
-                    return ""
                 }
             }
         }
     }
 
-    macro_error(prog, at, "_sql: _where: unsupported expression. Got: {describe(node)}")
-    return ""
+    return pred_fail(q, prog, at, "_sql: _where: unsupported expression. Got: {describe(node)}")
 }
 
 // ============================================================================
@@ -2407,6 +2703,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         var binds : array<ExpressionPtr>
         let subSql = analyze_subquery(call.arguments[0], binds, prog, at, true)
         if (empty(subSql)) {
+            q.hadError = true   // analyze_subquery emitted macro_error
             return ""
         }
         for (b in binds) {
@@ -2595,7 +2892,7 @@ def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
 // ============================================================================
 
 [macro_function]
-def private build_sql_string(q : SqlQuery) : string {
+def private build_sql_string(var q : SqlQuery&) : string {
     let inner = build_sql_select(q)
     if (q.setOpKind == SetOpKind.None) {
         return inner
@@ -2612,7 +2909,7 @@ def private build_sql_string(q : SqlQuery) : string {
 }
 
 [macro_function]
-def private build_sql_select(q : SqlQuery) : string {
+def private build_sql_select(var q : SqlQuery&) : string {
     return build_string() $(var w) {
         w |> write("SELECT ")
         if (q.distinctFlag) {
@@ -2634,21 +2931,37 @@ def private build_sql_select(q : SqlQuery) : string {
                 if (i > 0) {
                     w |> write(", ")
                 }
-                // Multi-source: precomputed SQL fragments (e.g. `IS NOT
-                // NULL` probes) live in selectColSqlFragments; alias-
-                // qualified column refs use selectColAliases + selectCols.
-                // Single-source: emit unqualified `"Col"`.
-                if (q.seenJoin && i < length(q.selectColSqlFragments) && !empty(q.selectColSqlFragments[i])) {
+                // Discriminator-on-emptiness (NOT on `q.seenJoin`): a
+                // non-empty SQL fragment wins (precomputed `IS NOT NULL`
+                // probes from is_some / is_none, or `json_extract(...)` from
+                // single-source JSON-path projections); else a non-empty
+                // alias produces `"alias"."Col"`; else fall through to the
+                // unqualified single-source `"Col"`. Same machinery for
+                // single-source and multi-source — both populate the parallel
+                // arrays uniformly.
+                //
+                // `q.selectCols[i]` holds the DASLANG field name (used by
+                // downstream type lookups via lookup_struct_field_type which
+                // matches on `field.name`). At SQL emission, translate to the
+                // SQL column name via `@sql_column` (multi-source case routes
+                // through the per-column owning source's rootType — held in
+                // `q.selectColTypes[i]`'s containing struct, but we only have
+                // the leaf type here, so for multi-source we look up via
+                // q.rootType / each join's rootType from the alias).
+                if (i < length(q.selectColSqlFragments) && !empty(q.selectColSqlFragments[i])) {
                     w |> write(q.selectColSqlFragments[i])
-                } elif (q.seenJoin && i < length(q.selectColAliases) && !empty(q.selectColAliases[i])) {
+                } elif (i < length(q.selectColAliases) && !empty(q.selectColAliases[i])) {
+                    let owningT = source_rootType_for_alias(q, q.selectColAliases[i])
+                    let sqlCol = field_to_column_name(owningT, q.selectCols[i])
                     w |> write("\"")
                     w |> write(q.selectColAliases[i])
                     w |> write("\".\"")
-                    w |> write(q.selectCols[i])
+                    w |> write(sqlCol)
                     w |> write("\"")
                 } else {
+                    let sqlCol = field_to_column_name(q.rootType, q.selectCols[i])
                     w |> write("\"")
-                    w |> write(q.selectCols[i])
+                    w |> write(sqlCol)
                     w |> write("\"")
                 }
             }
@@ -2674,11 +2987,16 @@ def private build_sql_select(q : SqlQuery) : string {
                 w |> write("\" ON \"")
                 w |> write(j.leftAlias)
                 w |> write("\".\"")
-                w |> write(j.leftCol)
+                // leftCol/rightCol are daslang field names; translate via
+                // @sql_column on each side's owning struct. Left side's owner
+                // is the source whose alias is `j.leftAlias` (root or an
+                // earlier join); right side's owner is `j.rootType`.
+                let leftOwnerT = source_rootType_for_alias(q, j.leftAlias)
+                w |> write(field_to_column_name(leftOwnerT, j.leftCol))
                 w |> write("\" = \"")
                 w |> write(j.alias)
                 w |> write("\".\"")
-                w |> write(j.rightCol)
+                w |> write(field_to_column_name(j.rootType, j.rightCol))
                 w |> write("\"")
                 // Right-side `_where` lives in the JOIN's ON clause (NOT the
                 // outer WHERE). Required for LEFT JOIN — a row-level filter
@@ -2705,15 +3023,22 @@ def private build_sql_select(q : SqlQuery) : string {
             w |> write(q.whereSql)
         }
         // GROUP BY / HAVING come between WHERE and ORDER BY in SQL clause
-        // order. groupByCols entries are pre-quoted; havingSql is the
-        // pre-formatted clause body (no leading "HAVING ").
+        // order. groupByCols entries hold daslang field names (`"col_type"`)
+        // — `group_key_column_name` strips the quotes for projection-side
+        // type lookups via `lookup_struct_field_type` which matches on
+        // `field.name`. Translate to the SQL identifier (post-`@sql_column`)
+        // here at emission so the daslang-name invariant holds upstream.
         if (length(q.groupByCols) > 0) {
             w |> write(" GROUP BY ")
             for (i in range(length(q.groupByCols))) {
                 if (i > 0) {
                     w |> write(", ")
                 }
-                w |> write(q.groupByCols[i])
+                let dasName = group_key_column_name(q, i)
+                let sqlCol = field_to_column_name(q.rootType, dasName)
+                w |> write("\"")
+                w |> write(sqlCol)
+                w |> write("\"")
             }
         }
         if (!empty(q.havingSql)) {
@@ -2808,6 +3133,109 @@ def private lookup_struct_field_type(rootT : TypeDeclPtr; fieldName : string) : 
 }
 
 [macro_function]
+def private has_field_annotation(rootT : TypeDeclPtr; fieldName : string; annoName : string) : bool {
+    //! True iff the named field on `rootT`'s struct carries `@<annoName>` set
+    //! to true. Used by the JSON-path descent recognizer to gate `_.Col.path…`
+    //! chains on `@sql_json` (descend) vs `@sql_blob` (compile error per
+    //! API_REWORK §37 lock 6).
+    if (rootT == null || rootT.structType == null) {
+        return false
+    }
+    var st = rootT.structType
+    for (field in st.fields) {
+        if (field.name == fieldName) {
+            let v = find_arg(field.annotation, annoName)
+            return v is tBool && (v as tBool)
+        }
+    }
+    return false
+}
+
+[macro_function]
+def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string;
+                                         annoName : string; defaultV : string) : string {
+    //! Sibling of `has_field_annotation` for string-valued field annotations
+    //! like `@sql_column = "type"`. Returns the annotation's string value or
+    //! `defaultV` when absent / non-string. The validation layer in
+    //! `[sql_table]` rejects empty strings before this helper is reached at
+    //! `_sql` analysis time, so a present-but-empty value never surfaces here.
+    if (rootT == null || rootT.structType == null) {
+        return defaultV
+    }
+    var st = rootT.structType
+    for (field in st.fields) {
+        if (field.name == fieldName) {
+            let v = find_arg(field.annotation, annoName)
+            if (v is tString) {
+                return string(v as tString)
+            }
+            return defaultV
+        }
+    }
+    return defaultV
+}
+
+[macro_function]
+def private field_to_column_name(rootT : TypeDeclPtr; fieldName : string) : string {
+    //! Translate a daslang-side field name to its SQL column name. Reads the
+    //! `@sql_column = "<sql_name>"` field annotation; falls back to
+    //! `fieldName` when the field has no rename. Every site in `_sql`'s
+    //! walker that emits a SQL identifier from a daslang field reference
+    //! routes through this helper so renames are transparent end-to-end —
+    //! `[sql_index(fields=…)]` / `@sql_references` / projection / predicate /
+    //! _order_by / _group_by / upsert all stay in daslang-name terms in user
+    //! code and translate at SQL emission.
+    return find_field_annotation_string(rootT, fieldName, "sql_column", fieldName)
+}
+
+[macro_function]
+def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jsonPath : array<string>) : TypeDeclPtr {
+    //! Walk `jsonPath` (outer-to-inner) starting from the daslang type of the
+    //! `@sql_json` column `colName` on `rootT`. At each step, descend into a
+    //! struct field (matched by name) or a tuple slot (matched against
+    //! `argNames` for named tuples). Returns the leaf scalar type used by
+    //! `read_via_adapter<T>` to materialize the projected value, or null when
+    //! any step can't be resolved (caller emits a macro_error).
+    var cur = lookup_struct_field_type(rootT, colName)
+    if (cur == null) {
+        return null
+    }
+    for (seg in jsonPath) {
+        if (cur == null) {
+            return null
+        }
+        if (cur.baseType == Type.tStructure && cur.structType != null) {
+            var found : TypeDeclPtr
+            for (field in cur.structType.fields) {
+                if (field.name == seg) {
+                    found = clone_type(field._type)
+                    break
+                }
+            }
+            if (found == null) {
+                return null
+            }
+            cur = found
+        } elif (cur.baseType == Type.tTuple && length(cur.argNames) > 0) {
+            var idx = -1
+            for (i in range(length(cur.argNames))) {
+                if (cur.argNames[i] == seg) {
+                    idx = i
+                    break
+                }
+            }
+            if (idx < 0) {
+                return null
+            }
+            cur = clone_type(cur.argTypes[idx])
+        } else {
+            return null
+        }
+    }
+    return cur
+}
+
+[macro_function]
 def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : ExpressionPtr {
     //! Build the per-row materialization expression based on q.proj.
     //! Returns null on error (macro_error already emitted).
@@ -2818,10 +3246,13 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
     }
     if (q.proj == ProjectionShape.SingleColumn) {
         let colIdx = 0
-        // Multi-source: column type is already resolved into `selectColTypes`
-        // at projection-analysis time. Single-source: look up via rootType.
+        // Type is resolved at projection-analysis time and pushed into
+        // `selectColTypes` for both single-source and multi-source modes
+        // (covers `<arg>.Col` field-lookup AND `json_extract` paths). Fall
+        // back to `lookup_struct_field_type(rootType, selectCols[0])` only
+        // when the array is empty (legacy callers / future-proofing).
         var fieldType : TypeDeclPtr
-        if (q.seenJoin && length(q.selectColTypes) > 0) {
+        if (length(q.selectColTypes) > 0) {
             fieldType = q.selectColTypes[0]
         } else {
             fieldType = lookup_struct_field_type(q.rootType, q.selectCols[0])
@@ -2842,12 +3273,12 @@ def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInf
         var mkTup = new ExprMakeTuple(at = at)
         for (i in range(n)) {
             let colIdx = i
-            // Multi-source: type already resolved at projection-analysis time
-            // (covers both `<arg>.Col` field-lookup AND computed-column
-            // results like `is_some(o)` → bool). Single-source: lookup via
-            // q.rootType + selectCols[i].
+            // selectColTypes is populated per-element for both single-source
+            // and multi-source projections (covers `<arg>.Col` lookups,
+            // `is_some(o)` → bool probes, and `json_extract` JSON paths).
+            // Fall through to rootType lookup only when the array is empty.
             var fieldType : TypeDeclPtr
-            if (q.seenJoin && i < length(q.selectColTypes)) {
+            if (i < length(q.selectColTypes)) {
                 fieldType = q.selectColTypes[i]
             } else {
                 fieldType = lookup_struct_field_type(q.rootType, q.selectCols[i])
@@ -3192,12 +3623,16 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;
     setSqlClauses |> reserve(length(setSqlClauses) + length(mkTup.values))
     for (i in range(length(mkTup.values))) {
         let colName = recordNames[i]
+        let sqlCol = field_to_column_name(q.rootType, colName)
         var val = mkTup.values[i]
         let valSql = pred_to_sql(val, setQ, prog, at)
-        if (empty(valSql)) {
-            return false  // pred_to_sql already issued macro_error
+        if (setQ.hadError) {
+            return false   // pred_to_sql (or deeper) emitted a macro_error
         }
-        setSqlClauses |> push("\"{colName}\" = {valSql}")
+        if (empty(valSql)) {
+            return false   // top-level pred_to_sql returned "" without setting hadError
+        }
+        setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
     setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
     for (b in setQ.bindExprs) {
@@ -3211,6 +3646,9 @@ def private build_returning_clause(rootT : TypeDeclPtr) : string {
     //! Append `RETURNING "c1", "c2", ...` listing every field of T in
     //! struct-declaration order. Mirrors `_sql_select_all_sql`'s output so
     //! the row materializer (`_sql_read_row`) reads columns in struct order.
+    //! `field_to_column_name` translates `@sql_column` renames to the on-disk
+    //! SQL identifier (positional column index is what `_sql_read_row` uses,
+    //! so the daslang-side row-builder is unaffected by the rename).
     if (rootT == null || rootT.structType == null) {
         return ""
     }
@@ -3223,7 +3661,7 @@ def private build_returning_clause(rootT : TypeDeclPtr) : string {
                 w |> write(", ")
             }
             w |> write("\"")
-            w |> write(field.name)
+            w |> write(field_to_column_name(rootT, string(field.name)))
             w |> write("\"")
             first = false
         }
@@ -3288,6 +3726,9 @@ def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
     )
     // Translate WHERE — raw AST.
     let whereSql = pred_to_sql(whereE, q, prog, call.at)
+    if (q.hadError) {
+        return null   // pred_to_sql (or deeper) emitted a macro_error
+    }
     if (empty(whereSql)) {
         return null
     }
@@ -3354,6 +3795,9 @@ def private emit_delete_body(prog : ProgramPtr; var call : ExprCallMacro?;
         argSourceIdx <- [0]
     )
     let whereSql = pred_to_sql(whereE, q, prog, call.at)
+    if (q.hadError) {
+        return null   // pred_to_sql (or deeper) emitted a macro_error
+    }
     if (empty(whereSql)) {
         return null
     }
@@ -3745,12 +4189,16 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
     setSqlClauses |> reserve(length(setSqlClauses) + length(mkTup.values))
     for (i in range(length(mkTup.values))) {
         let colName = recordNames[i]
+        let sqlCol = field_to_column_name(rootT, colName)
         var val = mkTup.values[i]
         let valSql = pred_to_sql(val, setQ, prog, at)
+        if (setQ.hadError) {
+            return false   // pred_to_sql (or deeper) emitted a macro_error
+        }
         if (empty(valSql)) {
             return false
         }
-        setSqlClauses |> push("\"{colName}\" = {valSql}")
+        setSqlClauses |> push("\"{sqlCol}\" = {valSql}")
     }
     setBindExprs |> reserve(length(setBindExprs) + length(setQ.bindExprs))
     for (b in setQ.bindExprs) {
@@ -3789,17 +4237,21 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
     }
 
     // 3) Build INSERT column list (non-computed only — matches `_sql_bind_row`).
+    //    `nonComputedCols` holds the SQL-side names (post-`@sql_column`); bind
+    //    indices are positional, so the daslang-side bind helper is unaffected.
     var nonComputedCols : array<string>
     var nRowBinds = 0
     for (f in st.fields) {
         if (is_field_computed(f)) {
             continue
         }
-        nonComputedCols |> push(string(f.name))
+        nonComputedCols |> push(field_to_column_name(rootT, string(f.name)))
         nRowBinds++
     }
 
-    // 4) Assemble SQL.
+    // 4) Assemble SQL. `conflictCols` arrived here as daslang field names
+    //    (via `analyze_upsert_conflict_inner` validating against `f.name`);
+    //    translate to SQL identifiers at emission so renames are transparent.
     var sql = build_string() $(var w) {
         w |> write("INSERT INTO \"{tableName}\" (")
         for (i in range(length(nonComputedCols))) {
@@ -3820,7 +4272,8 @@ def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
             if (i > 0) {
                 w |> write(", ")
             }
-            w |> write("\"{conflictCols[i]}\"")
+            let sqlCfCol = field_to_column_name(rootT, conflictCols[i])
+            w |> write("\"{sqlCfCol}\"")
         }
         w |> write(") DO UPDATE SET ")
         for (i in range(length(setSqlClauses))) {

@@ -7,7 +7,7 @@ options gen2
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field) and `some_unknown_func(_)`
 // hits the unresolved function. Those cascades are expected.
-expect 40104:23, 30304:2, 30503:3
+expect 40104:21, 30304:2, 30503:2
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -52,11 +52,9 @@ def main() {
     // 7. _sql_text with non-chain
     let bad7 = _sql_text(42)
 
-    // 8. _to_array() buried under _where — must be outermost terminal
-    let bad8 <- _sql(db |> select_from(type<Car>) |> _to_array() |> _where(_.Id == 1))
-
-    // 9. _to_array() after _select — must be outermost terminal
-    let bad9 <- _sql(db |> select_from(type<Car>) |> _select(_.Name) |> _to_array() |> _where(_.Id == 1))
+    // _to_array() ordering is unchecked — it's a materializer-mode flag that
+    // doesn't change emitted SQL, so any chain position is valid (see
+    // sqlite_linq.das comment by the _to_array peel).
 
     // 10. _having without _group_by — HAVING is meaningless without aggregation
     let bad10 <- _sql(db |> select_from(type<Car>) |> _having(_._1 |> length > 1))
