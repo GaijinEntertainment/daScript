@@ -3911,10 +3911,19 @@ expr_map_tuple_list
     }
     ;
 
-make_table_decl
-    :   '{' [loc] {
+/* Shared prefix used by make_table_decl and array_comprehension.
+   Increments das_nested_parentheses so the lexer suppresses newline-emitted
+   semicolons inside { ... }. Factored into a named nonterminal so both rules
+   reduce the same anonymous mid-rule action; otherwise LALR sees a reduce/reduce
+   conflict between distinct anonymous actions sitting at the same prefix. */
+push_table_nesting
+    :   /* empty */ {
         yyextra->das_nested_parentheses ++;
-    } optional_emit_semis optional_expr_map_tuple_list[arguments] '}' {
+    }
+    ;
+
+make_table_decl
+    :   '{' [loc] push_table_nesting optional_emit_semis optional_expr_map_tuple_list[arguments] '}' {
         yyextra->das_nested_parentheses --;
         if ( $arguments ) {
             auto mka = new ExprMakeArray(tokAt(scanner,@loc));
@@ -4009,9 +4018,13 @@ table_comprehension
     }
     ;
 
-/* array_comprehension uses { } â€” only available in full expr (not expr_no_bracket) */
+/* array_comprehension uses { } — only available in full expr (not expr_no_bracket).
+   Shares the push_table_nesting prefix with make_table_decl so newlines after '{'
+   (and between body tokens) are not turned into emit-semicolons by the lexer.
+   See issue #2459. */
 array_comprehension
-    :   '{' DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] '}' [forend] {
+    :   '{' push_table_nesting optional_emit_semis DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' ';' expr[subexpr] array_comprehension_where[where] '}' [forend] {
+        yyextra->das_nested_parentheses --;
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,true);
     }
     ;
