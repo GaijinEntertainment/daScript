@@ -420,7 +420,7 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 29 | Column metadata | `29-column_names.das` | **Shipped** (chunk 9); Band 1 `column_info(type<T>) : array<ColumnInfo>` (compile-time walk) + abstract `SqlType` enum + `sqlite_sql_type` dialect renderer; Band 3 raw `PRAGMA table_info` via the typed `query` family |
 | 30 | Listing tables | `30-list_tables.das` | **Shipped** (chunk 9); raw `query` against `sqlite_master`; no abstract `list_tables` helper (catalog spelling diverges per backend) |
 | 31 | Views | `31-views.das` | **Shipped** (chunk 10); `[sql_view(name=...)]` annotation + `_create_view` macro + `drop_view_if_exists`; mutation-path rejection at compile time (predicate form) and runtime (row form) |
-| 32 | Migrations | `30-migrations.das` | Has mockup — deferred to chunk 11 |
+| 32 | Migrations | `30-migrations.das` | Has mockup — deferred to last chunk |
 | 33 | PRAGMA tuning | `33-pragma.das` | **Shipped** (chunk 10); `set_pragma` / `try_set_pragma` (string/int64/bool overloads) + `apply_recommended_pragmas` (WAL + busy_timeout + foreign_keys + synchronous=NORMAL) |
 | 34 | Backup + VACUUM | `34-backup_vacuum.das` | **Shipped** (chunk 10); `vacuum` / `vacuum_into` / `optimize` / `integrity_check` / `quick_check` + `backup_to(dest)` / `backup_to(path)` (online Backup API with SQLITE_BUSY/LOCKED retry) |
 | 35 | Streaming results | `35-streaming.das` | **Shipped** (chunk 10); `_each_sql(chain)` returning `iterator<T>`, generator-based; rejects materializing terminals (`_to_array`, `_first`, aggregates); `sqlite3_finalize` runs in `finally` so stmt is released on break/exhaustion/panic |

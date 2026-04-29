@@ -25,6 +25,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 | `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
 | `install/skills/detect_dupe.md` | `skills/detect_dupe.md` | Duplicate-function detection — corpus build, MCP tools (`export_corpus`, `detect_duplicates`), CLI modes |
 | `install/skills/mcp_tools.md` | `skills/mcp_tools.md` | Full MCP tool table + live-API reference (CLAUDE.md only carries a 2-line pointer) |
+| `install/skills/regex.md` | `skills/regex.md` | Regular expressions — `daslib/regex` API + `%regex~...%%` reader macro |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
 | `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector (canonicalizer, clusterer, MinHash, pattern filter) |
 
@@ -111,6 +112,7 @@ After modifying install instructions, install to a scratch prefix and verify the
    - `skills/jobque_debugging.md`
    - `skills/detect_dupe.md`
    - `skills/mcp_tools.md`
+   - `skills/regex.md`
    - `utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
    - `utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
    - `utils/detect-dupe/main.das`

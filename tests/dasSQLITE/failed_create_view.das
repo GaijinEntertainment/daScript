@@ -2,7 +2,7 @@ options gen2
 
 // _create_view shape errors. Each block triggers exactly one macro_error
 // (40104) from `SqlCreateViewMacro`.
-expect 40104:6
+expect 40104:7
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -72,5 +72,9 @@ def main {
         // 6. _to_array() terminal — redundant for a view
         db |> _create_view(type<CarName3>,
             db |> select_from(type<Car>) |> _to_array())
+        // 7. runtime _order_by(string) — column name would be baked at view-creation
+        let runtime_col = "Price"
+        db |> _create_view(type<CarName3>,
+            db |> select_from(type<Car>) |> _order_by(runtime_col))
     }
 }

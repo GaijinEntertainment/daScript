@@ -68,17 +68,7 @@ def sqlite3_prepare_v2(db : sqlite3?; sql : string; var stmt : sqlite3_stmt?&) {
     return sqlite3_prepare_v2_no_tail(db, sql, unsafe(addr(stmt)))
 }
 
-// ============================================================================
-// High-level API — runner, RAII, scalar query, exec, last_insert_rowid
-//
-// Error-handling shape: each fallible operation has a `try_*` form that does
-// the work and returns the failure-or-result via daslib/option +
-// daslib/result. The strict form (no `try_`) is a thin wrapper that unwraps
-// and panics on failure — so the panic message is always the libsqlite3
-// errmsg, never a generic "unwrap called on err". For void-returning
-// operations the try_ form returns `SqlError = Option<string>` where
-// `none = success` and `some(errmsg) = failure`.
-// ============================================================================
+// ===== High-level API: runner, RAII, exec, last_insert_rowid =====
 
 struct SqlRunner {
     //! Owns a libsqlite3 connection. Closed by `finalize` on `var inscope` scope exit.
@@ -151,10 +141,6 @@ def try_exec(db : SqlRunner; sql : string) : SqlError {
 
 def private try_exec_with_binds(db : SqlRunner; sql : string;
                                 bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : SqlError {
-    //! Single-statement ``exec`` with positional binds. Used by the 1/2/3-arg
-    //! ``try_exec`` / ``exec`` overloads below.  Routes through prepare /
-    //! bind / step / finalize because ``sqlite3_exec`` doesn't accept bind
-    //! parameters directly.
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
@@ -242,26 +228,7 @@ def changes(db : SqlRunner) : int {
     return sqlite3_changes(db.sqlite_handle)
 }
 
-// ============================================================================
-// SQL adapter rail: sql_bind / sql_extract  (tut 26)
-//
-// Convention-by-name dispatch. Every SQL-addressable type T has a pair:
-//
-//     def sql_bind    (v : T) : P                 // T → primitive
-//     def sql_extract (v : P; t : type<T>) : T    // primitive → T
-//
-// where P is one of {int64, double, string, array<uint8>} — the four
-// SQLite storage classes. dasSQLITE ships pairs for all standard types
-// plus a generic enum overload; user code adds pairs for domain types in
-// their own modules. The [sql_table] macro emits ``_::sql_bind`` /
-// ``_::sql_extract`` calls (tut 26 lock 4) so the caller's-module
-// overloads are always visible.
-//
-// The return type of ``sql_bind`` IS the storage type — the macro reads
-// it via ``typedecl`` and emits the matching ``sqlite3_bind_*`` /
-// ``sqlite3_column_*`` call. Single source of truth, no separate
-// ``sql_column_type(type<T>)`` registration function.
-// ============================================================================
+// ===== SQL adapter rail: sql_bind / sql_extract  (tut 26) =====
 
 // --- four primitive identity overloads ---
 
@@ -393,17 +360,7 @@ def sql_extract(v : int64; t : type<bool>) : bool {
     return v != 0l
 }
 
-// --- enum generic (lock 6) ---
-//
-// Any enum T round-trips through INTEGER via ``int64(value)`` /
-// ``T(int64)``. The catch-all generic uses ``static_if (typeinfo
-// is_enum)`` to gate; non-enum non-primitive types trip the
-// ``concept_assert`` and surface a clean error at the [sql_table]
-// expansion site (or any other _::sql_bind caller).
-//
-// Tradeoff: enum-value reordering silently corrupts data (value 2 means
-// something different in the new schema version). Text-backed enums
-// (``@sql_enum_as_string``) are deferred until a user opts in.
+// --- enum generic ---
 
 def sql_bind(value : auto(TT)) : int64 {
     static_if (typeinfo is_enum(value)) {
@@ -433,19 +390,7 @@ def sql_extract(value : int64; t : type<auto(TT)>) : TT {
     }
 }
 
-// ============================================================================
-// Internal bridge: sql_bind/sql_extract ↔ libsqlite3 C API
-//
-// The [sql_table] macro emits ``_::sql_bind(row.field)`` (resolves the user's
-// adapter at the caller's module) and routes the resulting primitive into
-// libsqlite3 via the four ``sql_bind_to_stmt`` overloads below. For reads,
-// ``read_via_adapter`` uses ``typedecl`` to resolve the storage primitive at
-// compile time, calls the matching ``sqlite3_column_*``, and feeds the
-// primitive into ``_::sql_extract`` to materialize the user type.
-//
-// ``sql_storage_type_for`` does the same compile-time resolution for the DDL
-// emitter — column type strings are picked from the four-primitive table.
-// ============================================================================
+// ===== Internal bridge: sql_bind/sql_extract ↔ libsqlite3 C API =====
 
 def sqlite3_column_blob_(stmt : sqlite3_stmt?; col : int) : array<uint8> {
     //! Reads a BLOB column as a fresh ``array<uint8>``. Allocates on
@@ -466,11 +411,6 @@ def sqlite3_column_blob_(stmt : sqlite3_stmt?; col : int) : array<uint8> {
 }
 
 // --- bind direction ---
-//
-// Dispatch table: four primitive overloads route directly to libsqlite3;
-// the Option<T> overload handles NULL semantics; the catch-all generic
-// routes any other type through the user's ``_::sql_bind`` adapter and
-// recurses on the resulting primitive (or the inner value of an Option).
 
 def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : int64) : void {
     sqlite3_bind_int64(stmt, idx, v)
@@ -506,13 +446,6 @@ def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : auto(TT)) : void {
 }
 
 // --- read direction ---
-//
-// Dispatch table: four primitive ``sql_read_witness`` overloads read the
-// matching ``sqlite3_column_*``; ``read_via_adapter`` resolves the storage
-// primitive at compile time via ``typedecl(_::sql_bind(default<T>))`` and
-// then dispatches to the matching witness overload, feeding the primitive
-// into ``_::sql_extract``. The ``Option<T>`` overload of
-// ``read_via_adapter`` handles NULL detection.
 
 [unused_argument(witness)]
 def sql_read_witness(stmt : sqlite3_stmt?; col : int; witness : int64) : int64 {
@@ -603,13 +536,6 @@ def sql_storage_type_for(t : type<$Option<auto(TT)>>) : string {
 }
 
 // --- column_info: same compile-time walk, abstract-typed view ---
-//
-// Mirror of the DDL string-witness machinery, returning the abstract
-// `SqlType` enum from `daslib/sql` instead of the SQLite spelling. The
-// per-table `_sql_column_info` helper synthesized by `[sql_table]` calls
-// `sql_storage_enum_for(type<F>)` per non-`@sql_json`/`@sql_blob` field;
-// `@sql_json` and `@sql_blob` fields short-circuit to `Text` and `Blob`
-// respectively (mirrors the DDL bypass at `make_create_table_sql_fn`).
 
 [unused_argument(witness)]
 def sql_storage_enum_witness(witness : int64) : SqlType {
@@ -667,21 +593,12 @@ def sqlite_sql_type(t : SqlType) : string {
     return "NULL"
 }
 
-// ============================================================================
-// query_scalar — read column 0 of the first row as ``TT``
-//
-// Routes through the tut-26 ``_::sql_bind`` / ``_::sql_extract`` adapter
-// rail via ``read_via_adapter``. Built-ins: every ``int*`` / ``uint*``,
-// ``float`` / ``double``, ``bool``, ``string``, ``array<uint8>``, every
-// enum, and any user type that ships an adapter pair.
-//
-// `try_*` returns ``Result<TT, string>`` (prepare/step error or zero rows).
-// `query_scalar` is the strict variant — panics on err.
-// ============================================================================
-
 [unused_argument(t)]
 def try_query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT -const -#, string> {
-    //! Prepares ``sql``, steps once, returns column 0 as ``TT``.
+    //! Prepares ``sql``, steps once, returns column 0 as ``TT``. Routes
+    //! through the ``_::sql_bind`` / ``_::sql_extract`` adapter rail (tut 26)
+    //! via ``read_via_adapter``, so ``TT`` can be any primitive, enum, or
+    //! user type that ships an adapter pair.
     //! Returns ``Err(errmsg)`` on prepare/step error or zero rows.
     return <- try_one_row(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
         static_if (typeinfo can_copy(default<TT -const -#>)) {
@@ -702,17 +619,12 @@ def query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -
     return r |> unwrap
 }
 
-// ============================================================================
-// query_scalar_opt — Option<TT> variant for "0 rows is expected"
-//
-// Returns ``some(val)`` if a row is found, ``none`` if zero rows. Panics
-// only on prepare/step failure (genuine errors). Use when 0 rows is a
-// normal outcome (lookups by primary key, etc.); use ``query_scalar`` when
-// 0 rows is a programmer error.
-// ============================================================================
-
 [unused_argument(t)]
 def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
+    //! ``Option<TT>`` variant of ``query_scalar`` for when "0 rows" is a
+    //! normal outcome (e.g. lookup by primary key). Returns ``some(val)``
+    //! if a row is found, ``none`` if zero rows. Panics only on
+    //! prepare/step failure (genuine errors).
     var r <- try_one_row_opt(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
         static_if (typeinfo can_copy(default<TT -const -#>)) {
             return read_via_adapter(stmt, 0, type<TT -const -#>)
@@ -726,52 +638,7 @@ def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<
     return <- r._value
 }
 
-// ============================================================================
-// query_one — full-row read with positional bind args
-//
-// Each [sql_table] struct gets a generated ``_sql_read_row`` helper at macro
-// time; ``query_one`` family uses that to materialize the row. Bind args go
-// to positional placeholders in declaration order. Currently only 0..3
-// positional args are supported (one explicit overload per arity). 4+ args
-// and named-tuple bind (``query_one(sql, type<T>, (a=1, b=2, ...))`` for
-// ``:name`` placeholders) are deferred to chunk 4 — the named-tuple form
-// needs a ``[call_macro]`` to walk the trailing tuple's argNames.
-//
-// `try_*` returns ``Result<T, string>`` (bind/prepare/step errors AND zero
-// rows); strict panics on err; ``*_opt`` returns ``Option<T>`` (``none`` on
-// zero rows; panic only on bind/prepare/step error).
-// ============================================================================
-
-// All 12 public variants below delegate to one of three private impls
-// that take a `bind_blk : block<(var stmt : sqlite3_stmt?) : void>`,
-// invoked once after prepare. Each public wrapper supplies the right
-// bind block for its arity.
-
-// Shared prepare/bind/step/finalize bodies for the runtime layer. Four
-// helpers cover every shape the public API needs:
-//   - `try_one_row`     — single row, ``Err`` on zero rows; consumed by
-//                         `try_query_one_impl`, `try_run_select_one`, and
-//                         `try_query_scalar`.
-//   - `try_one_row_opt` — single row, ``Ok(none)`` on zero rows; consumed
-//                         by `query_scalar_opt` and `try_run_select_one_opt`.
-//   - `try_step_dml`    — single step, returns rows-affected; consumed by
-//                         every non-RETURNING DML (`try_run_dml`,
-//                         `try_insert`, `try_update`, `try_delete_`,
-//                         `try_delete_by_id`).
-//   - `try_collect_rows` — multi-row materializer; consumed by
-//                          `try_run_select`, `try_run_dml_returning`, and
-//                          `try_select_from`.
-// Each one parameterizes only on (a) the row/bind blocks and (b) the
-// user-visible error prefix. Adding new wrappers should reuse one of
-// these instead of inlining a fifth prepare/bind loop.
-//
-// All four executors share an identical 6-line prologue (prepare +
-// error-on-failure + bind) and a finalize-on-every-exit epilogue.
-// `try_with_stmt` owns that boilerplate; each executor only has to
-// describe its step-result strategy in `body_blk`.
-//
-// Error format is normalized to `{err_prefix}: <what>` across all
-// failure paths. No consumers parse these strings.
+// ===== query_one — full-row read with positional bind args =====
 
 def private try_with_stmt(db : SqlRunner; sql : string; err_prefix : string;
                           bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
@@ -819,9 +686,6 @@ def private try_one_row_opt(db : SqlRunner; sql : string;
                             bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                             row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>;
                             err_prefix : string) : Result<Option<TT -const -#>, string> {
-    //! Like `try_one_row`, but returns `Ok(none)` on zero rows instead of
-    //! `Err`. Use when "no row matched" is a normal outcome and only
-    //! prepare/step failures are real errors.
     return <- try_with_stmt(db, sql, err_prefix, bind_blk,
         $(stmt : sqlite3_stmt?) : Result<Option<TT -const -#>, string> {
             let src = sqlite3_step(stmt)
@@ -1008,25 +872,7 @@ def query_one_opt(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(
     })
 }
 
-// ============================================================================
-// query / try_query — typed multi-row raw-SQL read.
-//
-// The fourth member of the `query_*` family. Unlike `select_from(type<T>)`
-// (which builds a `SELECT cols-of(T) FROM <table>` and runs it), `query` takes
-// the user's own SQL — useful for catalog reads (`PRAGMA table_info`,
-// `sqlite_master`), `SELECT … JOIN` shapes outside the `_sql` macro, and any
-// raw-SQL projection the LINQ chain can't (or shouldn't) translate.
-//
-// Row-shape constraint: T must be a `[sql_table]` struct so the macro-emitted
-// `_sql_read_row(stmt, type<T>) : T` is in scope. The struct does not have to
-// correspond to a real table — `[sql_table]` on a read-only row shape is the
-// idiomatic way to opt in to the typed materializer without committing to a
-// CREATE TABLE.
-//
-// Column order is positional: SELECT projection order must match the struct's
-// field declaration order. For name-driven mapping, drop to `try_run_select` /
-// `run_select` with an explicit row block.
-// ============================================================================
+// ===== query / try_query — typed multi-row raw-SQL read =====
 
 [unused_argument(t)]
 def private try_query_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
@@ -1114,15 +960,7 @@ def query(db : SqlRunner; sql : string; t : type<auto(TT)>; arg0 : auto(A0); arg
     })
 }
 
-// ============================================================================
-// User-facing CRUD over [sql_table] structs
-//
-// Each generic forwards to the per-struct helpers emitted by the macro.
-// Type witness is passed through to the helper as `t` (`type<Car>`-style call
-// site) or via a row instance (`row` argument also matches the helper's
-// `(typ : Car)` parameter — daslang accepts type-witness AND value-witness in
-// the same param slot).
-// ============================================================================
+// ===== User-facing CRUD over [sql_table] structs =====
 
 [template(t)]
 def try_create_table(db : SqlRunner; t : auto(TT)) : SqlError {
@@ -1231,10 +1069,7 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
             return err("insert: rows mix PK-set and PK-unset (row 0 vs row {i}); partition the array before calling insert", type<int64>)
         }
     }
-    // Choose BEGIN/COMMIT vs SAVEPOINT/RELEASE based on ambient state so
-    // bulk-insert composes inside an outer ``with_transaction`` block.
-    // Without this branch SQLite rejects ``BEGIN IMMEDIATE`` with "cannot
-    // start a transaction within a transaction" when nested.
+    // BEGIN/COMMIT vs SAVEPOINT/RELEASE depending on ambient state, so this composes inside with_transaction.
     let was_in_txn = db |> in_transaction()
     let begin_sql = was_in_txn ? "SAVEPOINT das_ins_sp" : "BEGIN IMMEDIATE"
     let begin_err = db |> try_exec(begin_sql)
@@ -1276,9 +1111,7 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     let commit_sql = was_in_txn ? "RELEASE das_ins_sp" : "COMMIT"
     let commit_err = db |> try_exec(commit_sql)
     if (commit_err |> is_some) {
-        // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). Roll back so the
-        // connection isn't left mid-transaction. Bulk-insert uses its own
-        // savepoint name (das_ins_sp) so the rollback path is local.
+        // COMMIT/RELEASE can fail (SQLITE_BUSY/IO); roll back so the connection isn't left mid-transaction.
         if (was_in_txn) {
             db |> try_exec("ROLLBACK TO das_ins_sp") |> ignore_sql_error
             db |> try_exec("RELEASE das_ins_sp") |> ignore_sql_error
@@ -1301,30 +1134,11 @@ def insert(db : SqlRunner; rows : array<auto(TT)>) : int64 {
 
 [unused_argument(e)]
 def private ignore_sql_error(e : SqlError) : void {
-    //! Discards a SqlError. Used by try_insert(array) to swallow ROLLBACK failures while preserving the original error.
 }
 
-// ============================================================================
-// INSERT OR IGNORE / INSERT OR REPLACE
-//
-// Variants of ``insert`` that change SQLite's conflict resolution. Both reuse
-// the per-struct ``_sql_insert_with_pk_sql`` / ``_sql_insert_no_pk_sql`` SQL
-// emitters and ``_sql_bind_row`` bind code; the only difference is a textual
-// ``OR IGNORE`` / ``OR REPLACE`` modifier inserted after ``INSERT`` and a
-// rows-affected return (via ``sqlite3_changes``) rather than ``last_insert_rowid``.
-//
-// ``OR IGNORE``: silent no-op on PK / UNIQUE violation. Returns 0 for the
-//   conflicting row, 1 for the inserted row.
-// ``OR REPLACE``: deletes the conflicting row, then inserts the new one. Be
-//   careful — any column not in the new row gets its DEFAULT (rarely what you
-//   want for partial updates; tut 21's UPSERT ON CONFLICT DO UPDATE is the
-//   proper merge form).
-// ============================================================================
+// ===== INSERT OR IGNORE / INSERT OR REPLACE =====
 
 def private with_or_clause(plain_sql : string; or_clause : string) : string {
-    //! Insert `OR IGNORE` / `OR REPLACE` between `INSERT` and `INTO` /
-    //! `DEFAULT VALUES`. The plain SQL always begins with ``INSERT `` so the
-    //! substitution target is unambiguous.
     if (empty(or_clause)) {
         return plain_sql
     }
@@ -1332,8 +1146,6 @@ def private with_or_clause(plain_sql : string; or_clause : string) : string {
 }
 
 def private try_insert_or(db : SqlRunner; row : auto(TT); or_clause : string) : Result<int, string> {
-    //! Shared body for `try_insert_or_ignore` / `try_insert_or_replace` (single row).
-    //! Returns ``Ok(rows_affected)`` — 0 if the row was IGNORE-d, 1 otherwise.
     let pk_unset = _::_sql_pk_is_unset(row)
     let plain_sql = pk_unset ? _::_sql_insert_no_pk_sql(row) : _::_sql_insert_with_pk_sql(row)
     let sql = with_or_clause(plain_sql, or_clause)
@@ -1347,10 +1159,6 @@ def private try_insert_or(db : SqlRunner; row : auto(TT); or_clause : string) : 
 }
 
 def private try_insert_or(db : SqlRunner; rows : array<auto(TT)>; or_clause : string) : Result<int, string> {
-    //! Shared body for `try_insert_or_ignore` / `try_insert_or_replace` (bulk).
-    //! Wraps the per-row prepared-statement loop in a transaction (BEGIN/COMMIT
-    //! at the outer level, SAVEPOINT/RELEASE when nested). Returns the SUM of
-    //! per-statement ``sqlite3_changes`` over the batch.
     if (empty(rows)) {
         return ok(0, type<string>)
     }
@@ -1475,19 +1283,7 @@ def insert_or_replace(db : SqlRunner; rows : array<auto(TT)>) : int {
     return r |> unwrap
 }
 
-// ============================================================================
-// by-PK UPDATE / DELETE
-//
-// Single-row mutators driven by [sql_table]'s generated `_sql_update_by_pk_sql`,
-// `_sql_delete_by_pk_sql`, and `_sql_bind_row_for_update` helpers. The struct
-// must declare exactly one @sql_primary_key field; otherwise the generated
-// helper panics with a clear message at call time (see make_update_by_pk_sql_fn
-// at the bottom of this file).
-//
-// All four functions return ``int`` (rows-affected — 1 or 0). 0 is NOT an
-// error: the row simply wasn't there. Reserve ``Err`` for genuine SQL
-// failures (constraint violation, IO, BUSY).
-// ============================================================================
+// ===== by-PK UPDATE / DELETE =====
 
 def try_update(db : SqlRunner; row : auto(TT)) : Result<int, string> {
     //! Updates a single row identified by its @sql_primary_key field. Returns
@@ -1513,10 +1309,6 @@ def try_delete_(db : SqlRunner; row : auto(TT)) : Result<int, string> {
     //! ``Err(errmsg)`` on SQL failure.
     //! Trailing underscore in the name is intentional: ``delete`` is a daslang
     //! keyword, mirroring the convention used by ``daslib/linq``'s ``where_``.
-    // The PK is bound at index 1 (the only placeholder in `DELETE FROM T WHERE pk=?`).
-    // We can't reuse `_sql_bind_row_for_update` here because it binds non-PK
-    // columns first; instead, look up the PK field directly via the generated
-    // _sql_pk_value helper that matches each [sql_table] struct.
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
         _::_sql_bind_row_pk_only(stmt, row)
     }, "delete")
@@ -1551,21 +1343,7 @@ def delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : int {
     return r |> unwrap
 }
 
-// ============================================================================
-// Transactions
-//
-// `with_transaction` blocks emit BEGIN/COMMIT/ROLLBACK or
-// SAVEPOINT/RELEASE/ROLLBACK TO depending on whether the connection is
-// already inside a transaction (detected via sqlite3_get_autocommit). All
-// nested calls use the same SAVEPOINT name `das_sp` — SQLite resolves
-// RELEASE/ROLLBACK TO against the most-recent matching savepoint, so proper
-// LIFO nesting composes correctly without the runner tracking depth itself.
-//
-// Two overloads, not one optional-parameter function: piping puts the block
-// last, so an optional middle `mode` parameter wouldn't resolve from a
-// no-mode call site. See API_REWORK.md § "12 + 13 + 14" for the full
-// rationale.
-// ============================================================================
+// ===== Transactions =====
 
 enum SqliteTxnMode {
     //! BEGIN modifiers for SQLite. Maps to ``BEGIN [DEFERRED|IMMEDIATE|EXCLUSIVE]``.
@@ -1598,8 +1376,7 @@ def private txn_commit_sql(was_in_txn : bool) : string {
 }
 
 def private txn_best_effort_rollback(db : SqlRunner; was_in_txn : bool) : void {
-    // Best-effort: swallow rollback errors so the original failure (panic
-    // message or BEGIN/blk SQL error) reaches the caller intact.
+    // Swallow rollback errors so the original failure reaches the caller intact.
     if (was_in_txn) {
         db |> try_exec("ROLLBACK TO das_sp") |> ignore_sql_error
         db |> try_exec("RELEASE das_sp") |> ignore_sql_error
@@ -1627,9 +1404,7 @@ def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void
         success = true
     } finally {
         if (success) {
-            // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). If it does, roll
-            // back so the connection isn't left mid-transaction, then panic
-            // with the commit message.
+            // COMMIT/RELEASE can fail (SQLITE_BUSY/IO); roll back, then panic with the commit message.
             let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
             if (commit_err |> is_some) {
                 txn_best_effort_rollback(db, was_in_txn)
@@ -1669,8 +1444,7 @@ def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>
             txn_best_effort_rollback(db, was_in_txn)
         }
     }
-    // COMMIT/RELEASE can fail (SQLITE_BUSY, IO error). If it does, roll back
-    // so the connection isn't left mid-transaction before returning the error.
+    // COMMIT/RELEASE can still fail (SQLITE_BUSY/IO); roll back so the connection isn't left mid-transaction.
     let commit_err = db |> try_exec(txn_commit_sql(was_in_txn))
     if (commit_err |> is_some) {
         txn_best_effort_rollback(db, was_in_txn)
@@ -1678,36 +1452,46 @@ def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>
     return commit_err
 }
 
-// ============================================================================
-// PRAGMA helpers — `set_pragma` / `try_set_pragma` / `apply_recommended_pragmas`.
-//
-// PRAGMA values are parsed at prepare time (no `?` placeholder), so values are
-// formatted into the SQL inline. Pragma names + values are admin-controlled
-// (not user input) — they are not escaped or validated; a bad name surfaces as
-// SQLite's own prepare-time error. Three typed `value` overloads cover the common
-// shapes: string ('WAL' / 'NORMAL'), int64 (busy_timeout, cache_size), bool
-// (foreign_keys, recursive_triggers).
-// ============================================================================
+// ===== SQL quoting helpers =====
+
+def sql_quote_id(s : string) : string {
+    //! Wraps ``s`` in double quotes; SQLite-portable form for a quoted
+    //! identifier (table / column / view name). Embedded double quotes
+    //! are doubled. Used by ``fold_to_builder`` for ``inline_id`` fragments
+    //! and by ``_sql_pragma`` / ``_sql_vacuum_into`` for runtime-built SQL.
+    let escaped = s |> replace("\"", "\"\"")
+    return "\"{escaped}\""
+}
+
+def sql_quote_lit(s : string) : string {
+    //! Wraps ``s`` in single quotes (SQL string literal). Embedded single
+    //! quotes are doubled. Used by ``fold_to_builder`` for ``inline_lit``
+    //! fragments where the value must be inlined into the SQL text
+    //! (CREATE VIEW, PRAGMA, VACUUM INTO — none accept ``?`` placeholders).
+    let escaped = s |> replace("'", "''")
+    return "'{escaped}'"
+}
+
+// ===== PRAGMA helpers =====
 
 def try_set_pragma(db : SqlRunner; name : string; value : string) : SqlError {
     //! Sets ``PRAGMA "<name>" = '<value>'``. Returns ``none`` on success,
     //! ``some(errmsg)`` on failure. The value is single-quoted; embedded
     //! single quotes in ``value`` are doubled to keep SQLite happy.
-    let escaped = value |> replace("'", "''")
-    return db |> try_exec("PRAGMA \"{name}\" = '{escaped}'")
+    return db |> try_exec("PRAGMA {sql_quote_id(name)} = {sql_quote_lit(value)}")
 }
 
 def try_set_pragma(db : SqlRunner; name : string; value : int64) : SqlError {
     //! Sets ``PRAGMA "<name>" = <int>``. Used for numeric pragmas like
     //! ``busy_timeout`` (ms), ``cache_size`` (pages or KB), ``page_size``.
-    return db |> try_exec("PRAGMA \"{name}\" = {value}")
+    return db |> try_exec("PRAGMA {sql_quote_id(name)} = {value}")
 }
 
 def try_set_pragma(db : SqlRunner; name : string; value : bool) : SqlError {
     //! Sets ``PRAGMA "<name>" = ON|OFF``. Used for boolean pragmas like
     //! ``foreign_keys``, ``recursive_triggers``, ``trusted_schema``.
     let onoff = value ? "ON" : "OFF"
-    return db |> try_exec("PRAGMA \"{name}\" = {onoff}")
+    return db |> try_exec("PRAGMA {sql_quote_id(name)} = {onoff}")
 }
 
 def set_pragma(db : SqlRunner; name : string; value : string) : void {
@@ -1777,32 +1561,7 @@ def apply_recommended_pragmas(db : SqlRunner) : void {
     }
 }
 
-// ============================================================================
-// VACUUM / OPTIMIZE / integrity check / quick check.
-//
-// VACUUM rewrites the database file from scratch — pages defragmented, free
-// pages reclaimed, on-disk order optimized. It is most useful after large
-// DELETE/TRUNCATE workloads. Cannot run inside an active transaction; the
-// helpers reject that case at runtime.
-//
-// `optimize` analyzes the schema and updates the query planner's stats.
-// Recommended at connection close on long-lived connections.
-//
-// `integrity_check` / `quick_check` walk the database checking for
-// corruption. ``"ok"`` is returned as a single-row result on a healthy
-// database; on corruption, multiple rows describe the issues. The helpers
-// surface the rows verbatim — caller decides what to do.
-//
-// (`backup_to` lives in a separate `dasSQLITE.backup.cpp` C++ wrapper; not
-// included in the daslang-only subset shipped here.)
-// ============================================================================
-
-def private escape_sqlite_quoted(s : string) : string {
-    //! Doubles embedded single quotes for SQLite's quoted-string syntax.
-    //! Used by helpers that must inline a path/value into SQL where `?`
-    //! placeholders are not allowed (e.g. VACUUM INTO).
-    return s |> replace("'", "''")
-}
+// ===== VACUUM / OPTIMIZE / integrity check / quick check =====
 
 def try_vacuum(db : SqlRunner) : SqlError {
     //! VACUUM rewrites the database file. Cannot run inside an active
@@ -1831,8 +1590,7 @@ def try_vacuum_into(db : SqlRunner; path : string) : SqlError {
     if (db |> in_transaction()) {
         return some("VACUUM INTO cannot run inside an active transaction; commit or rollback first")
     }
-    let escaped = escape_sqlite_quoted(path)
-    return db |> try_exec("VACUUM INTO '{escaped}'")
+    return db |> try_exec("VACUUM INTO {sql_quote_lit(path)}")
 }
 
 def vacuum_into(db : SqlRunner; path : string) : void {
@@ -1859,10 +1617,6 @@ def optimize(db : SqlRunner) : void {
 }
 
 def private try_check_impl(db : SqlRunner; sql : string) : Result<array<string>, string> {
-    //! Shared body for ``try_integrity_check`` / ``try_quick_check``.
-    //! PRAGMA integrity_check / quick_check return scalar string rows, so
-    //! we route through ``try_run_select`` with an explicit per-row reader
-    //! rather than ``try_query`` (which expects a struct + ``_sql_read_row``).
     return <- db |> try_run_select(sql,
         $(var stmt : sqlite3_stmt?) {},
         $(stmt : sqlite3_stmt?) {
@@ -1905,29 +1659,14 @@ def quick_check(db : SqlRunner) : array<string> {
     return <- r._value
 }
 
-// ============================================================================
-// backup_to — copy the live database into another (open) connection or
-// directly to a file on disk.
-//
-// SQLite's online backup API copies pages incrementally and tolerates
-// concurrent writes on the source — the destination receives the full
-// state at the time the backup completes. Useful for snapshotting
-// :memory: databases, hot backups of long-running on-disk databases, or
-// cloning into a fresh file before applying destructive migrations.
-//
-// Two overloads:
-//   - ``backup_to(dest : SqlRunner)`` — caller owns ``dest``.
-//   - ``backup_to(path : string)`` — opens ``path`` here, performs the
-//     copy, and closes ``path`` on return. Useful for the common
-//     "snapshot to disk" case.
-// ============================================================================
-
 def try_backup_to(db : SqlRunner; dest : SqlRunner) : SqlError {
     //! Copies all of ``db`` into the open connection ``dest`` using
-    //! SQLite's online backup API. Tolerates concurrent writers on
-    //! ``db`` (transient SQLITE_BUSY/LOCKED responses are retried with
-    //! a 50 ms backoff). Returns ``some(errmsg)`` if the backup did not
-    //! complete; ``none`` on success.
+    //! SQLite's online backup API. Pages are copied incrementally and
+    //! concurrent writers on ``db`` are tolerated (transient
+    //! SQLITE_BUSY/LOCKED responses are retried with a 50 ms backoff).
+    //! Useful for snapshotting :memory: databases, hot backups, or
+    //! cloning before destructive migrations. Returns ``some(errmsg)``
+    //! if the backup did not complete; ``none`` on success.
     //!
     //! The C++ shim returns ``SQLITE_OK`` on a fully-completed backup
     //! (the result of ``sqlite3_backup_finish`` after a clean
@@ -1972,13 +1711,7 @@ def backup_to(db : SqlRunner; path : string) : void {
     }
 }
 
-// ============================================================================
-// Generic DML runners — used by the `_sql_update` / `_sql_delete` macros.
-//
-// These take a SQL string + bind block (the macro fills in the
-// `sql_bind_to_stmt(stmt, idx, expr)` calls) and execute it. Return rows-affected
-// for non-RETURNING; array<T> for RETURNING.
-// ============================================================================
+// ===== Generic DML runners (used by `_sql_update` / `_sql_delete` macros) =====
 
 def try_run_dml(db : SqlRunner; sql : string;
                 bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : Result<int, string> {
@@ -2049,40 +1782,27 @@ def select_from(db : SqlRunner; t : type<auto(TT)>) : array<TT -const -#> {
     return <- r._value
 }
 
-// ============================================================================
-// _each_sql macro runtime: run_each_select
-//
-// Lazy-iterating sibling of `run_select` — instead of materializing every
-// row into an array, it returns a `generator<TT>` that yields one row at
-// a time. Useful for streaming over large result sets where the array
-// materialization would dominate memory or latency.
-//
-// Lifetime: the prepared statement is owned by the generator. SQLite's
-// `sqlite3_finalize` runs in the generator's `finally` block, so the
-// statement is released on:
-//   - normal exhaustion (loop runs to completion)
-//   - early `break` from the for-loop
-//   - panic from inside the loop body
-// In every case, no statement leaks; subsequent writes to the same DB are
-// not blocked by a stale read transaction.
-//
-// **One-shot semantics**: a generator can only be iterated once. To re-run
-// the same query, re-evaluate the `_each_sql(...)` call site (each call
-// builds a fresh statement).
-// ============================================================================
-
 [unsafe_outside_of_for, nodiscard]
 def run_each_select(db : SqlRunner; sql : string;
                     bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                     var row_lam : lambda<(stmt : sqlite3_stmt?) : auto(TT)>) {
-    //! Prepares ``sql``, runs ``bind_blk`` once, then returns a generator
-    //! that lazily ``sqlite3_step``s the cursor. Each yielded value is
-    //! produced by ``row_lam(stmt)``.
+    //! `_each_sql` macro runtime: lazy-iterating sibling of ``run_select``.
+    //! Prepares ``sql``, runs ``bind_blk`` once, then returns a
+    //! ``generator<TT>`` that lazily ``sqlite3_step``s the cursor; each
+    //! yielded value is produced by ``row_lam(stmt)``. Useful for
+    //! streaming over large result sets where the array materialization
+    //! would dominate memory or latency.
     //!
     //! ``row_lam`` is a lambda (not a block) because it must be captured
     //! into the generator body and outlive the surrounding stack frame.
     //! ``bind_blk`` runs once before the generator is constructed and can
     //! stay a block.
+    //!
+    //! Lifetime: the prepared statement is owned by the generator;
+    //! ``sqlite3_finalize`` runs in the generator's ``finally`` block —
+    //! statement is released on normal exhaustion, early break, or panic.
+    //! One-shot semantics: a generator can only be iterated once; re-run
+    //! the same query by re-evaluating the ``_each_sql(...)`` call site.
     //!
     //! Panics on prepare failure (with the libsqlite3 errmsg). Step
     //! failures inside the loop also panic; the generator's ``finally``
@@ -2097,17 +1817,8 @@ def run_each_select(db : SqlRunner; sql : string;
         panic(msg)
     }
     invoke(bind_blk, stmt)
-    // Explicit-capture form (matches `daslib/functional`'s filter / map
-    // generators): captures `row_lam` (lambda — move) and `stmt` (raw
-    // pointer — value). The connection pointer is read off the stmt via
-    // `sqlite3_db_handle` for the errmsg path; no extra capture needed.
-    // The generator's `finally` finalizes the statement on exhaustion /
-    // early break / panic.
     return <- generator<TT -const -#> capture(<- row_lam, <- stmt) {
-        // Loop shape: daslang restricts `yield` to be the LAST statement
-        // inside a `for` body (or its terminal `if` arm). We sqlite3_step
-        // first, branch on the result code, and yield the materialized row
-        // as the for-body's tail. SQLITE_DONE / step errors break the loop.
+        // `yield` must be the LAST statement of the for-body; step first, then yield the row.
         for (_ in range(0x7FFFFFFF)) {
             let rc = sqlite3_step(stmt)
             if (rc != SQLITE_ROW) {
@@ -2124,20 +1835,11 @@ def run_each_select(db : SqlRunner; sql : string;
     }
 }
 
-// ============================================================================
-// _sql macro runtime: try_run_select / run_select
-//
-// The `_sql` macro emits a call to one of these. `bind_blk` runs once after
-// prepare to push bound values; `row_blk` is invoked per row to materialize
-// the typed result. Generic on the row type (`auto(TT)`) so the call site
-// determines whether the array is `array<Car>`, `array<string>`, or any
-// other projected shape.
-// ============================================================================
-
 def try_run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<array<TT -const -#>, string> {
-    //! Prepares ``sql``, runs ``bind_blk`` once, then steps the cursor and
-    //! materializes each row via ``row_blk``. Returns ``Err(errmsg)`` on
-    //! prepare or step failure.
+    //! `_sql` macro runtime. Prepares ``sql``, runs ``bind_blk`` once,
+    //! then steps the cursor and materializes each row via ``row_blk``.
+    //! Generic on row type so the call site determines the array element
+    //! shape. Returns ``Err(errmsg)`` on prepare or step failure.
     return <- db |> try_collect_rows(sql, bind_blk, row_blk, "_sql")
 }
 
@@ -2150,18 +1852,13 @@ def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite
     return <- r._value
 }
 
-// ============================================================================
-// _sql macro runtime: single-row materializers (One / OneOpt)
-//
-// Used by `_sql(...)` chains that end in `_first()`, `_first_opt()`, or
-// `_count()` (and chunk-4 aggregates). One panics-on-empty (for `_first`,
-// `_count`, future `_sum`-on-empty); OneOpt returns Option<T>.
-// ============================================================================
-
 def try_run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<TT -const -#, string> {
-    //! Prepares ``sql``, runs ``bind_blk`` once, steps once, materializes
-    //! the first row via ``row_blk``. Returns ``Err(errmsg)`` on prepare or
-    //! step failure or zero rows.
+    //! `_sql` macro runtime: single-row materializer used by `_sql(...)`
+    //! chains ending in `_first()`, `_count()`, or aggregates. Prepares
+    //! ``sql``, runs ``bind_blk`` once, steps once, materializes the first
+    //! row via ``row_blk``. Returns ``Err(errmsg)`` on prepare or step
+    //! failure or zero rows. (Sibling ``run_select_one_opt`` returns
+    //! ``Ok(none)`` for "0 rows is expected" call sites.)
     return <- try_one_row(db, sql, bind_blk, row_blk, "_sql")
 }
 
@@ -2191,36 +1888,9 @@ def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt 
     return <- r._value
 }
 
-// ============================================================================
-// [sql_table] structure macro
-//
-// Reads struct-level args (`name="..."` overrides the on-disk table name)
-// and per-field annotations (`@sql_primary_key` for now). Generates, attached
-// to the user's struct type, a fixed family of helper functions consumed by
-// `create_table` / `drop_table_if_exists` / `insert` below.
-//
-// All generated function bodies emit `sql_storage_type_for(type<T>)` and
-// `sql_bind_to_stmt(stmt, idx, row.field)` calls — so primitive and user-
-// defined field types travel the same code path. ``sql_bind_to_stmt``'s
-// catch-all routes the value through the user's ``_::sql_bind`` adapter
-// (resolved at the caller's-module overload set). Type resolution defers
-// to each generated function's own typecheck pass; the macro itself does
-// not depend on field types being fully resolved at apply() time.
-//
-// TODO: 5 of the 7 emitted helpers (_sql_table_name, _sql_drop_table_if_exists_sql,
-// _sql_create_table_sql, _sql_insert_with_pk_sql, _sql_insert_no_pk_sql) take
-// `typ : T` and never read it — and so does the no-PK fallback variant of
-// _sql_pk_is_unset. Currently silenced by the module-level
-// `options no_unused_function_arguments = false`. Switch to per-fn
-// `[unused_argument(typ)]` annotations attached at macro-expansion time so
-// stricter callers/linters get clean per-function info. Settle after
-// chunk-1 review.
-// ============================================================================
+// ===== [sql_table] structure macro =====
 
 def private find_annotation(args : AnnotationArgumentList; argn : string; default_value : auto(TT)) : TT {
-    //! Generic annotation reader. ``TT`` must be ``bool`` or ``string``;
-    //! daslang's ``static_if (typeinfo is_string …)`` picks the matching
-    //! ``tString`` / ``tBool`` accessor on the AnnotationArgument variant.
     let v = find_arg(args, argn)
     static_if (typeinfo is_string(default_value)) {
         if (v is tString) {
@@ -2235,22 +1905,15 @@ def private find_annotation(args : AnnotationArgumentList; argn : string; defaul
 }
 
 def private find_string_array_annotation(args : AnnotationArgumentList; argn : string) : array<string> {
-    //! Reads a parens-list field annotation `@argn=("A","B",...)` or the bare single
-    //! `@argn="A"` form. The parser flattens parens-lists into multiple flat entries
-    //! all sharing the parent name, so a single by-name walk handles both shapes.
     return <- [for (a in args); string(a.sValue); where a.name == argn && a.basicType == Type.tString]
 }
 
-// Whitelisted SQL-side default functions (`@sql_default_fn=...`). These are
-// deliberately enumerated rather than passed-through verbatim — typo-detection
-// at macro-expansion time gives a clearer error than a runtime SQLite parse error.
+// Whitelisted to surface typos at macro-expansion instead of as a runtime SQLite parse error.
 let private SQL_DEFAULT_FN_WHITELIST = ["CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME"]
 
 let private SQL_FK_ACTION_WHITELIST = ["cascade", "set_null", "set_default", "restrict", "no_action"]
 
 def private fk_action_to_sql(action : string) : string {
-    //! Map `@sql_on_delete` / `@sql_on_update` value to its DDL form.
-    //! Caller has already validated against `SQL_FK_ACTION_WHITELIST`.
     if (action == "cascade") {
         return "CASCADE"
     } elif (action == "set_null") {
@@ -2264,18 +1927,11 @@ def private fk_action_to_sql(action : string) : string {
 }
 
 def private sql_quote_string_literal(s : string) : string {
-    //! Wrap `s` in single quotes, doubling any embedded single quote. Used for
-    //! string-typed `field : string = "default"` initializers in the DDL emitter.
     let escaped = replace(s, "'", "''")
     return "'{escaped}'"
 }
 
 def private literal_init_to_default_clause(init : ExpressionPtr) : string {
-    //! Translate a daslang field initializer expression to `" DEFAULT <literal>"`.
-    //! Returns `""` when the expression is null or not a recognized literal — non-
-    //! literal initializers (e.g. `some(5)` for `Option<int>`) are silently
-    //! ignored so the daslang in-memory default still compiles, just without an
-    //! SQL-side counterpart.
     if (init == null) {
         return ""
     }
@@ -2308,22 +1964,15 @@ struct private FieldInfo {
     is_optional : bool
     is_unique : bool
     is_computed : bool
-    is_stored : bool                //!< false → VIRTUAL (SQLite default), true → STORED
-    is_json : bool                  //!< @sql_json — TEXT-backed via daslib/json round-trip; `_sql` walker descends as JSON path
-    is_blob : bool                  //!< @sql_blob — BLOB-backed via daslib/archive; opaque to `_sql`
-    computed_sql : string           //!< body of `GENERATED ALWAYS AS (...)`; non-empty iff is_computed
-    default_clause : string         //!< pre-built ` DEFAULT <expr>` or `""` when no default applies
-    references_clause : string      //!< pre-built ` REFERENCES "T"("Pk") ON DELETE X ON UPDATE Y` or `""`
+    is_stored : bool
+    is_json : bool
+    is_blob : bool
+    computed_sql : string
+    default_clause : string
+    references_clause : string
 }
 
 def private is_option_field_type(td : TypeDeclPtr) : bool {
-    //! Recognize ``Option<T>`` for the [sql_table] DDL emitter (drop NOT NULL,
-    //! reject @sql_primary_key on the field). Structure macros run before the
-    //! ``[template_structure]`` typemacro has been resolved, so a field
-    //! declared as ``Option<int>`` arrives as ``Type.typeMacro`` with the
-    //! macro name in ``dimExpr[0]``. We also accept the post-resolution form
-    //! (``Type.tStructure`` with structType.name == "Option", module ==
-    //! "option") so the helper works even if a later pass reaches it.
     if (td == null) {
         return false
     }
@@ -2338,11 +1987,6 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
 }
 
 def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
-    //! Walk every `[sql_index(...)]` on ``st`` and concatenate the CREATE INDEX
-    //! statements. Each `fields=` entry is cross-checked against ``field_names``.
-    //! On validation failure, sets ``ok = false``, populates ``errors``, and
-    //! returns ``""``. Returns ``""`` when no indexes are present (also with
-    //! ``ok = true``) so the caller can skip a sqlite3_exec call.
     ok = true
     var stmt_count = 0
     let sql = build_string() $(var w) {
@@ -2401,9 +2045,6 @@ def private build_create_indexes_sql(st : StructurePtr; table_name : string; fie
 }
 
 def private extract_string_return(var fn : FunctionPtr) : string {
-    //! Read back a `return "literal"` body emitted by `qmacro_function ... {
-    //! return $v(sql) }`. Returns the string value or `""` when the body
-    //! doesn't match the expected single-return-of-string-literal shape.
     if (fn == null || fn.body == null || !(fn.body is ExprBlock)) {
         return ""
     }
@@ -2424,10 +2065,6 @@ def private extract_string_return(var fn : FunctionPtr) : string {
 }
 
 def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPtr {
-    //! Locate a `[sql_table]`-generated helper function by name whose first
-    //! parameter type resolves to ``st``. Returns ``null`` when no overload
-    //! matches the struct (e.g. ``[sql_index]`` was placed before its
-    //! ``[sql_table]`` and the helper isn't generated yet).
     var found : FunctionPtr
     for_each_function(compiling_module(), name) $(var fn) {
         if (length(fn.arguments) > 0
@@ -2458,11 +2095,7 @@ class SqlIndexMacro : AstStructureAnnotation {
         let is_unique = find_annotation(args, "unique", false)
         let idx_name_arg = find_annotation(args, "name", "")
 
-        // Cross-check every named column against the struct's fields, and
-        // build the daslang→SQL column-name mapping in the same pass. The
-        // user writes `fields="col_type"` (the DASLANG field name); the
-        // emitted DDL uses the @sql_column-renamed SQL identifier. Annotations
-        // stay in daslang-space; renames are transparent at emission time.
+        // User writes daslang field names; emit @sql_column-renamed SQL identifiers in DDL.
         var sql_cols : array<string>
         sql_cols |> reserve(length(cols))
         for (col in cols) {
@@ -2484,9 +2117,7 @@ class SqlIndexMacro : AstStructureAnnotation {
             sql_cols |> push(resolved)
         }
 
-        // Locate the per-struct `_sql_create_indexes_sql` placeholder emitted
-        // by [sql_table]. Source-order rule: [sql_table] must precede
-        // [sql_index] in the annotation list.
+        // [sql_table] must precede [sql_index] in the annotation list (source-order rule).
         var idx_fn = find_struct_helper_fn("_sql_create_indexes_sql", st)
         if (idx_fn == null) {
             errors := "[sql_index] on struct '{st.name}': no [sql_table] declared earlier in the annotation list. Use `[sql_table(...), sql_index(...), ...]` order so the index helper is in scope."
@@ -2503,9 +2134,7 @@ class SqlIndexMacro : AstStructureAnnotation {
             return false
         }
 
-        // Build the CREATE INDEX statement for THIS annotation. Auto-name uses
-        // SQL column names so two structs with the same daslang field name
-        // mapped to different SQL columns get distinct index names.
+        // Auto-name uses SQL (post-rename) column names so distinct schemas don't collide.
         let auto_name = build_string() $(var w) {
             w |> write("idx_")
             w |> write(table_name)
@@ -2529,9 +2158,7 @@ class SqlIndexMacro : AstStructureAnnotation {
             w |> write(")")
         }
 
-        // Read the current accumulated SQL (empty after [sql_table], or the
-        // result of earlier [sql_index] applies on the same struct), append
-        // this statement, and replace fn.body.
+        // Append this statement to whatever earlier [sql_index] siblings already accumulated.
         let prev_sql = extract_string_return(idx_fn)
         let new_sql = empty(prev_sql) ? this_stmt : "{prev_sql}; {this_stmt}"
         idx_fn.body = qmacro_block() {
@@ -2543,11 +2170,6 @@ class SqlIndexMacro : AstStructureAnnotation {
 }
 
 def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string) : tuple<tab_name : string; pk_col : string; found : bool> {
-    //! Resolve `@sql_references="ParentName"` to the parent struct's
-    //! `[sql_table(name=...)]` table name and `@sql_primary_key` column. Walks
-    //! `compiling_module()`; self-reference (`parent_name == st.name`) short-
-    //! circuits to the current struct since `[sql_table]` is being applied to
-    //! it right now.
     var found_st : StructurePtr
     if (st.name == parent_name) {
         found_st = st
@@ -2569,9 +2191,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
     }
     for (pf in found_st.fields) {
         if (find_annotation(pf.annotation, "sql_primary_key", false)) {
-            // The PK column may have been renamed via @sql_column on the
-            // parent struct's PK field — read that here so the FK references
-            // the SQL identifier, not the daslang field name.
+            // FK references the SQL identifier (post @sql_column rename), not the daslang field name.
             var pk_col = string(pf.name)
             let pk_anno = find_arg(pf.annotation, "sql_column")
             if (pk_anno is tString) {
@@ -2601,10 +2221,7 @@ class SqlTableMacro : AstStructureAnnotation {
             let is_computed = !empty(computed_sql)
             let is_stored = find_annotation(field.annotation, "sql_stored", false)
 
-            // @sql_json / @sql_blob — opt in to non-scalar column storage. `[sql_table]`
-            // generates a `sql_bind` / `sql_extract` adapter pair for the field's
-            // declared type; `_sql` walker descends into @sql_json columns as JSON
-            // paths and rejects descent into @sql_blob columns.
+            // @sql_json / @sql_blob — non-scalar column storage with an emitted sql_bind/sql_extract pair.
             let is_json = find_annotation(field.annotation, "sql_json", false)
             let is_blob = find_annotation(field.annotation, "sql_blob", false)
 
@@ -2618,13 +2235,7 @@ class SqlTableMacro : AstStructureAnnotation {
             let has_on_delete_attr = !empty(find_annotation(field.annotation, "sql_on_delete", ""))
             let has_on_update_attr = !empty(find_annotation(field.annotation, "sql_on_update", ""))
 
-            // @sql_column = "<sql_name>" — rename the field's SQL column so a
-            // daslang struct field can shadow a SQL keyword (`type`, `for`, …)
-            // or use a different on-disk column name. We DON'T use
-            // find_annotation here because that helper can't distinguish
-            // "absent" from `= ""`; both return the default. find_arg + is tString
-            // surfaces the missing-vs-empty case so we can reject the empty
-            // form with a clear error.
+            // @sql_column rename. find_arg distinguishes absent from `= ""` (find_annotation can't).
             var col_name = fname
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
@@ -2759,13 +2370,6 @@ class SqlTableMacro : AstStructureAnnotation {
         }
 
         // ---- @sql_column collision detection ----
-        // After all per-field annotation reads complete, sweep `fields` once
-        // for duplicate `col_name` values. A collision can come from two
-        // fields renaming to the same SQL column, OR from one renamed field
-        // shadowing another field's daslang name (e.g. `@sql_column = "B"` on
-        // field `A` when there's already a sibling field literally named `B`).
-        // Either case would emit malformed DDL (CREATE TABLE with two
-        // `"X"` columns) — fail loud at macro time with a precise pointer.
         {
             var seen_cols : table<string; string>  // sql_col -> first daslang field it came from
             for (info in fields) {
@@ -2778,24 +2382,19 @@ class SqlTableMacro : AstStructureAnnotation {
             }
         }
 
-        // ---- @sql_json / @sql_blob adapter codegen ----
-        // Shared with `[sql_view]` — see `emit_json_blob_adapters_for_struct`.
+        // ---- @sql_json / @sql_blob adapter codegen (shared with [sql_view]) ----
         if (!emit_json_blob_adapters_for_struct(st, fields, "[sql_table]", errors)) {
             return false
         }
 
-        // [sql_index] sibling-annotation processing happens in finish() —
-        // st.annotations is not yet populated during apply(). The helper
-        // function `_sql_create_indexes_sql` is added to the module there.
+        // [sql_index] siblings rewrite the placeholder body in finish() (st.annotations not populated yet here).
         var fn_table_name = make_table_name_fn(st, table_name)
         compiling_module() |> add_function(fn_table_name)
         var fn_drop = make_drop_sql_fn(st, table_name)
         compiling_module() |> add_function(fn_drop)
         var fn_create = make_create_table_sql_fn(st, table_name, fields)
         compiling_module() |> add_function(fn_create)
-        // Empty `_sql_create_indexes_sql` placeholder. Sibling [sql_index]
-        // annotations rewrite this body to accumulate CREATE INDEX statements.
-        // User-facing source order requirement: [sql_table, sql_index, ...].
+        // Empty `_sql_create_indexes_sql` placeholder; [sql_index] siblings accumulate into it.
         var fn_indexes = make_create_indexes_sql_fn(st, "")
         compiling_module() |> add_function(fn_indexes)
         var fn_ins_pk = make_insert_sql_fn(st, table_name, fields, true)
@@ -2867,14 +2466,7 @@ class SqlTableMacro : AstStructureAnnotation {
         for (i in range(length(fields))) {
             let info = fields[i]
             let prefix = i == 0 ? "\"{info.col_name}\" " : ", \"{info.col_name}\" "
-            // Compose the column suffix:
-            //   - computed: ` GENERATED ALWAYS AS (...) VIRTUAL|STORED` and nothing
-            //     else; SQLite rejects NOT NULL / DEFAULT / UNIQUE / FK on a
-            //     generated column.
-            //   - PK: ` PRIMARY KEY`. UNIQUE is implied; DEFAULT may still fire if
-            //     the user gave a literal init.
-            //   - Otherwise: NOT NULL (unless Option<T>), UNIQUE, DEFAULT,
-            //     REFERENCES — in DDL order.
+            // computed columns reject NOT NULL/DEFAULT/UNIQUE/FK; non-computed get them in DDL order.
             var suffix = ""
             if (info.is_computed) {
                 let storage = info.is_stored ? "STORED" : "VIRTUAL"
@@ -2892,11 +2484,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 suffix += info.references_clause
             }
             write_exprs |> push(qmacro_expr(${ writer |> write($v(prefix)); }))
-            // @sql_json / @sql_blob short-circuit `sql_storage_type_for` (which would
-            // fail for struct/tuple T anyway). The annotation pins storage class:
-            // TEXT for json, BLOB for blob — adapter codegen below produces the
-            // matching `sql_bind` / `sql_extract` overloads that bind the column
-            // through that storage class.
+            // @sql_json/@sql_blob pin storage to TEXT/BLOB; sql_storage_type_for would fail on struct/tuple T.
             if (info.is_json) {
                 write_exprs |> push(qmacro_expr(${ writer |> write("TEXT"); }))
             } elif (info.is_blob) {
@@ -2934,10 +2522,7 @@ class SqlTableMacro : AstStructureAnnotation {
             let name = info.col_name
             let is_pk = info.is_pk
             let is_nullable = info.is_optional
-            // Strip the leading " DEFAULT " prefix that `default_clause` carries
-            // for direct DDL concatenation. ``default_expr`` is the raw SQL
-            // expression (`"1"` / `"'x'"` / `"CURRENT_TIMESTAMP"`) — readable
-            // and aligned with PRAGMA table_info's ``dflt_value`` column.
+            // Strip leading " DEFAULT " so default_expr matches PRAGMA table_info's dflt_value column.
             var default_expr = ""
             if (length(info.default_clause) > length(" DEFAULT ")) {
                 default_expr = info.default_clause |> slice(length(" DEFAULT "))
@@ -2976,12 +2561,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_insert_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>; include_pk : bool) : FunctionPtr {
-        // Always emit explicit column list so computed (GENERATED) columns can be
-        // skipped — SQLite rejects writes to generated columns. ``include_pk``
-        // toggles whether the primary key column participates: with-PK is the
-        // user-specified-keys path, without-PK is the AUTOINCREMENT path.
-        // Both fall back to `DEFAULT VALUES` when no bindable columns remain
-        // (PK-only struct without PK, or all-computed struct).
+        // Explicit column list skips GENERATED columns; falls back to `DEFAULT VALUES` when no bindable cols remain.
         let helper_name = include_pk ? "_sql_insert_with_pk_sql" : "_sql_insert_no_pk_sql"
         let cols = build_string() $(var w) {
             var first = true
@@ -3049,10 +2629,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        // Bind indices follow the column-list emitted by `_sql_insert_with_pk_sql`
-        // / `_sql_insert_no_pk_sql` — both skip computed columns. The index is
-        // a running counter over bindable (non-computed) columns; it is NOT
-        // the field's position in `fields`.
+        // Bind index counts bindable (non-computed) columns, NOT field position.
         var with_pk_exprs : array<ExpressionPtr>
         var no_pk_exprs : array<ExpressionPtr>
         with_pk_exprs |> reserve(length(fields))
@@ -3133,11 +2710,7 @@ class SqlTableMacro : AstStructureAnnotation {
             }))
         }
 
-        // `var row = default<$t(st)>` — explicit default so structs with
-        // Option<T> fields (which lack a builtin per-field default and rely
-        // on `@safe_when_uninitialized` only in the value position) still
-        // satisfy strict_smart_pointers' uninitialized-var check inside the
-        // generated `_sql_read_row` body.
+        // Explicit default<>: Option<T> fields don't satisfy strict_smart_pointers' uninit check otherwise.
         var fn = qmacro_function("_sql_read_row") $(stmt : sqlite3_stmt?; typ : $t(st)) : $t(st) {
             var row = default<$t(st)>
             $b(assign_exprs)
@@ -3158,11 +2731,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_update_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
-        // PK-less / SET-less structs get a stub that panics at runtime — using
-        // ``concept_assert`` here would fire at compile-time on every
-        // ``[sql_table]`` declaration (the function body is type-checked
-        // unconditionally). The stub stays unreachable in practice because
-        // ``update(row)`` panics from the same function before binding runs.
+        // PK-less structs get a runtime-panic stub (concept_assert would fire on every [sql_table] decl).
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             let st_name = string(st.name)
@@ -3191,8 +2760,7 @@ class SqlTableMacro : AstStructureAnnotation {
                 first = false
             }
         }
-        // PK-only / all-computed struct (no SET columns): `UPDATE T SET WHERE pk=?`
-        // is invalid SQL. Stub panics at call time with a clear message.
+        // No SET columns -> `UPDATE T SET WHERE pk=?` is invalid SQL; emit a runtime-panic stub.
         if (empty(set_clause)) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
@@ -3237,11 +2805,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_for_update_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        // Emits SET-then-WHERE binds: every non-PK column at indices 1..N,
-        // PK column at index N+1. Mirrors the SQL emitted by
-        // `_sql_update_by_pk_sql`. For PK-less / SET-less structs the stub
-        // never runs (the SQL helper panics first), but we still emit a
-        // valid no-op body so the surface compiles.
+        // SET-then-WHERE: non-PK cols at indices 1..N, PK at N+1 (mirrors _sql_update_by_pk_sql).
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             var fn = qmacro_function("_sql_bind_row_for_update") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
@@ -3283,9 +2847,7 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_bind_row_pk_only_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        // Binds just the PK column at index 1. Used by `try_delete_(row)` to
-        // execute `DELETE FROM T WHERE pk=?` without needing every field set.
-        // PK-less structs get a no-op stub (the SQL helper panics first).
+        // Binds the PK at index 1 for `DELETE FROM T WHERE pk=?`; no-op stub for PK-less.
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             var fn = qmacro_function("_sql_bind_row_pk_only") $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
@@ -3306,44 +2868,10 @@ class SqlTableMacro : AstStructureAnnotation {
 
 }
 
-// ---- @sql_json adapter codegen ----
-//
-//   def sql_bind    (v : T) : string          { return write_json(JV(v)) }
-//   def sql_extract (v : string; t : type<T>) : T {
-//       var err = ""
-//       let jv = read_json(v, err)
-//       if (err != "") {
-//           panic("sql_extract: malformed JSON in column data: {err}")
-//       }
-//       return from_JV(jv, default<T>)
-//   }
-//
-// The pair plugs into the chunk-8 `_::sql_bind` / `_::sql_extract` rail.
-// Storage class is TEXT (driven by the `string` return of `sql_bind`).
-// Round-trip fidelity matches `daslib/json_boost`'s `JV` / `from_JV`
-// surface (struct, tuple, array, table, variant, enum, primitives).
-//
-// Note on `clone_type`: a field's `_type` arrives with the field-context
-// modifier flags (ref/const/etc.) that come from being read inside a struct.
-// Substituting the raw decl into a function parameter yields a slightly
-// different type than a hand-written `(v : T)` — overload resolution then
-// fails to pick the emitted adapter and falls through to the chunk-8
-// catch-all. Clone the decl and use the fresh copy so the substituted type
-// matches a hand-written reference exactly.
-//
-// Module-scope (private) so both `[sql_table]` and `[sql_view]` can share
-// the same adapter codegen via `emit_json_blob_adapters_for_struct`.
+// ===== @sql_json adapter codegen =====
+
 def private make_json_sql_bind_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
-    // The hand-written form `def sql_bind(v : tuple<...>) : string` is
-    // parsed with `TypeDeclFlags.constant = true` on the parameter
-    // (struct/tuple params are pass-by-ref and the parser implicitly
-    // marks them as ``const`` to keep the body immutable). When
-    // `[sql_table]` calls `_::sql_bind(v)` through the chunk-8 catch-
-    // all, the argument arrives with `const explicit` flags from the
-    // generic instantiation — and a non-const parameter rejects a
-    // const argument, dropping our overload from the candidate set.
-    // Match the parsed form: clone the field type and turn on
-    // ``constant`` so resolution accepts the const argument.
+    // Parser marks struct/tuple params const; clone + set constant so generic resolution picks this overload.
     var t1 <- clone_type(field_type)
     t1.flags |= TypeDeclFlags.constant
     var fn = qmacro_function("sql_bind") $(v : $t(t1)) : string {
@@ -3358,11 +2886,7 @@ def private make_json_sql_extract_fn(field_type : TypeDeclPtr; at : LineInfo) : 
     t1.flags |= TypeDeclFlags.constant
     var t2 <- clone_type(field_type)
     var t3 <- clone_type(field_type)
-    // Panic on malformed JSON (matching the @sql_blob symmetry where
-    // `mem_archive_load` panics on corrupt bytes). Without the check,
-    // `read_json` returning null silently feeds into `from_JV` which
-    // returns `default<T>` — schema drift / disk corruption then
-    // surfaces as zero-initialized rows, masking real data loss.
+    // Panic on malformed JSON (mirrors @sql_blob); else schema drift surfaces as silent zero rows.
     var fn = qmacro_function("sql_extract") $(v : string; t : type<$t(t1)>) : $t(t2) {
         var err = ""
         let jv = _::read_json(v, err)
@@ -3375,25 +2899,8 @@ def private make_json_sql_extract_fn(field_type : TypeDeclPtr; at : LineInfo) : 
     return <- fn
 }
 
-// ---- @sql_blob adapter codegen ----
-//
-//   def sql_bind    (v : T) : array<uint8>            { var v_local : T; v_local := v; return <- mem_archive_save(v_local) }
-//   def sql_extract (v : array<uint8>; t : type<T>) : T {
-//       var r = default<T>
-//       _::mem_archive_load(v, r)   // panics on failure (canfail=false)
-//       return r
-//   }
-//
-// Storage class is BLOB. The opaqueness is enforced by `_sql`'s walker:
-// any `_.<blob_col>.<path>` chain in a predicate produces a compile error
-// pointing at the field, since `daslib/archive` data is positional binary
-// and SQL has no way to introspect it.
-//
-// `mem_archive_save(var t : auto&)` requires a mutable reference, but our
-// adapter is reached through the chunk-8 generic `sql_bind_to_stmt(... v :
-// auto(TT))` which holds `v` as a non-var binding. Clone into a local var
-// to bridge the const/var gap without taking `var v` ourselves (which would
-// force the catch-all to also take var, rippling up to the row binder).
+// ===== @sql_blob adapter codegen =====
+
 def private make_blob_sql_bind_fn(field_type : TypeDeclPtr; at : LineInfo) : FunctionPtr {
     var t1 <- clone_type(field_type)
     t1.flags |= TypeDeclFlags.constant
@@ -3420,13 +2927,7 @@ def private make_blob_sql_extract_fn(field_type : TypeDeclPtr; at : LineInfo) : 
     return <- fn
 }
 
-// SqlAdapterKind — discriminates an existing `sql_bind(T)` overload by its
-// return-type shape, used for [sql_table] @sql_json / @sql_blob dedup.
-//   None — no overload of `sql_bind(T)` exists for T in the module.
-//   Json — overload returns `string` (matches @sql_json codegen).
-//   Blob — overload returns `array<uint8>` (matches @sql_blob codegen).
-//   Other — overload exists but returns something else (user-supplied or
-//           a stale generated form); always treated as a kind conflict.
+// Classifies an existing `sql_bind(T)` overload's return-type shape for @sql_json / @sql_blob dedup.
 enum private SqlAdapterKind {
     None
     Json
@@ -3435,9 +2936,6 @@ enum private SqlAdapterKind {
 }
 
 def private classify_sql_bind_return(td : TypeDeclPtr) : SqlAdapterKind {
-    //! Map a `sql_bind(T)` return type to its adapter kind. JSON returns are
-    //! `string`; BLOB returns are `array<uint8>`. Anything else is "Other"
-    //! and treated as a conflict.
     if (td == null) {
         return SqlAdapterKind.None
     }
@@ -3451,13 +2949,6 @@ def private classify_sql_bind_return(td : TypeDeclPtr) : SqlAdapterKind {
 }
 
 def private find_sql_bind_kind_for_type(mod : Module?; td : TypeDeclPtr) : SqlAdapterKind {
-    //! Walk every overload of ``sql_bind`` in ``mod`` and report the kind of
-    //! the one whose first parameter is type-equivalent to ``td`` (ignoring
-    //! const/ref/temp). Returns ``None`` when no matching overload exists.
-    //! Used by [sql_table] @sql_json / @sql_blob adapter codegen for
-    //! kind-aware dedup: a JSON kind matches @sql_json reuse, Blob kind
-    //! matches @sql_blob reuse; ``Other`` (or kind mismatch) is a compile
-    //! error.
     if (td == null) {
         return SqlAdapterKind.None
     }
@@ -3473,24 +2964,6 @@ def private find_sql_bind_kind_for_type(mod : Module?; td : TypeDeclPtr) : SqlAd
 }
 
 def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : array<FieldInfo>; tag : string; var errors : das_string) : bool {
-    //! Shared @sql_json / @sql_blob adapter codegen for `[sql_table]` and
-    //! `[sql_view]`. ``tag`` is the user-facing annotation label used in
-    //! error messages (``"[sql_table]"`` or ``"[sql_view]"``).
-    //!
-    //! Emits FIRST (before the per-struct read/bind helpers) so the adapter
-    //! overloads are visible to overload resolution when the helpers
-    //! (`_sql_read_row` / `_sql_bind_row`) get type-checked, both of which
-    //! call into the chunk-8 `_::sql_bind` / `_::sql_extract` rail.
-    //!
-    //! Dedup is **per-(T, kind)**: an existing `sql_bind(T) : string`
-    //! satisfies a fresh @sql_json field, `sql_bind(T) : array<uint8>`
-    //! satisfies @sql_blob — but using the same T with a different kind
-    //! (across structs in this module, or across fields of one struct)
-    //! would silently miscompile, so it's rejected as a compile error.
-    //! Within-struct: `seen_kinds` maps describe(T) -> expected return
-    //! (`"string"` for JSON, `"array<uint8>"` for BLOB). Cross-struct:
-    //! `find_sql_bind_kind_for_type` looks up any existing `sql_bind(T)`
-    //! overload in the module and reports its return primitive.
     var seen_kinds : table<string; SqlAdapterKind>
     for (i in range(length(fields))) {
         let info = fields[i]
@@ -3538,53 +3011,24 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
     return true
 }
 
-// ============================================================================
-// `[sql_view]` — read-only struct view backed by a SQLite VIEW.
-//
-// Companion of `[sql_table]`: the struct describes a result-set shape (one
-// field per projected column), and `[sql_view]` emits the same read-path
-// helpers (``_sql_table_name``, ``_sql_select_all_sql``, ``_sql_read_row``,
-// ``_sql_column_info``, ``_sql_drop_view_if_exists_sql``) so existing
-// queries (``select_from(type<V>)`` and the `_sql` chain rail) work without
-// a dispatch on view-vs-table.
-//
-// Mutation paths are stubbed:
-//   - Predicate-form (`_sql_update` / `_sql_delete` / `_sql_upsert`) is
-//     gated at compile time by `validate_outer_args` / `validate_outer_upsert_args`
-//     reading the `[sql_view]` annotation off the type<T> argument.
-//   - Row-form (`insert(row)` / `update(row)` / `delete_(row)`) resolves
-//     to the per-struct `_sql_*` helpers below, all of which `panic` at
-//     runtime with a "views are read-only" message. The compile-time
-//     gate handles the more important predicate-form case.
-//
-// View DDL is emitted by the `_create_view(db, type<V>, <pipeline>)` call
-// macro in `daslib/sqlite_linq` (writes "CREATE VIEW ... AS SELECT ...").
-// ============================================================================
+// ===== [sql_view] — read-only struct view backed by a SQLite VIEW =====
 
 [structure_macro(name=sql_view)]
 class private SqlViewMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let view_name = find_annotation(args, "name", string(st.name))
-
-        // Reject sibling [sql_index] before doing any per-field work, so the
-        // user gets a structural error pointing at the macro stack rather
-        // than a follow-on per-field error from the `[sql_index]` apply.
+        // Reject sibling [sql_index] up front so the error points at the macro stack, not a per-field follow-on.
         for (annDecl in st.annotations) {
             if (annDecl.annotation.name == "sql_index") {
                 errors := "[sql_view] on struct '{st.name}': [sql_index] cannot apply to a view — views are read-only and inherit indexing from the underlying table. Move the index to the underlying table's struct."
                 return false
             }
         }
-
-        // ---- per-field validation ----
-        // Views accept ONLY: @sql_column (rename), @sql_json, @sql_blob.
-        // Everything that affects DDL emission of an underlying table — keys,
-        // uniqueness, computed columns, defaults, FKs — is rejected loud.
+        // ---- per-field validation: views accept only @sql_column / @sql_json / @sql_blob ----
         var fields : array<FieldInfo>
         fields |> reserve(length(st.fields))
         for (field in st.fields) {
             let fname = string(field.name)
-
             if (find_annotation(field.annotation, "sql_primary_key", false)) {
                 errors := "[sql_view]: field '{fname}' has @sql_primary_key — views are read-only and cannot declare keys; primary keys belong on the underlying table."
                 return false
@@ -3622,7 +3066,6 @@ class private SqlViewMacro : AstStructureAnnotation {
                 errors := "[sql_view]: field '{fname}' has @sql_on_update — FK actions belong on the underlying table, not the view."
                 return false
             }
-
             let is_optional = is_option_field_type(field._type)
             let is_json = find_annotation(field.annotation, "sql_json", false)
             let is_blob = find_annotation(field.annotation, "sql_blob", false)
@@ -3630,9 +3073,7 @@ class private SqlViewMacro : AstStructureAnnotation {
                 errors := "[sql_view]: field '{fname}' has both @sql_json and @sql_blob — pick one. Use @sql_json for queryable, schema-tolerant TEXT storage; use @sql_blob for opaque binary storage."
                 return false
             }
-
-            // @sql_column = "<sql_name>" — same rename rules as [sql_table].
-            // find_arg + is tString to distinguish "absent" from `= ""`.
+            // @sql_column rename, same rules as [sql_table].
             var col_name = fname
             let col_anno = find_arg(field.annotation, "sql_column")
             if (col_anno is tString) {
@@ -3647,7 +3088,6 @@ class private SqlViewMacro : AstStructureAnnotation {
                 }
                 col_name = cv
             }
-
             fields |> push(FieldInfo(
                 name = fname,
                 col_name = col_name,
@@ -3663,7 +3103,6 @@ class private SqlViewMacro : AstStructureAnnotation {
                 default_clause = "",
                 references_clause = ""))
         }
-
         // ---- @sql_column collision detection ----
         {
             var seen_cols : table<string; string>
@@ -3676,12 +3115,10 @@ class private SqlViewMacro : AstStructureAnnotation {
                 seen_cols |> insert(info.col_name, info.name)
             }
         }
-
         // ---- @sql_json / @sql_blob adapter codegen ----
         if (!emit_json_blob_adapters_for_struct(st, fields, "[sql_view]", errors)) {
             return false
         }
-
         // ---- read-path helpers (same names as [sql_table]) ----
         var fn_table_name = make_view_table_name_fn(st, view_name)
         compiling_module() |> add_function(fn_table_name)
@@ -3693,7 +3130,6 @@ class private SqlViewMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_read)
         var fn_col_info = make_view_column_info_fn(st, fields)
         compiling_module() |> add_function(fn_col_info)
-
         // ---- mutation stubs (panic at runtime with a clear message) ----
         let st_name = string(st.name)
         var fn_ins_pk = make_view_string_panic_stub_fn(st, "_sql_insert_with_pk_sql", st_name, "insert")
@@ -3712,7 +3148,6 @@ class private SqlViewMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_bind_upd)
         var fn_bind_pk = make_view_bind_row_panic_stub_fn(st, "_sql_bind_row_pk_only", st_name, "delete", false)
         compiling_module() |> add_function(fn_bind_pk)
-
         return true
     }
 }
@@ -3757,9 +3192,6 @@ def private make_view_select_all_sql_fn(var st : StructurePtr; view_name : strin
 }
 
 def private make_view_read_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-    //! Mirrors `[sql_table]`'s `make_read_row_fn`. Adapter dispatch
-    //! (chunk-8 `read_via_adapter`) handles @sql_json / @sql_blob fields
-    //! via the JSON/BLOB sql_extract overloads emitted above.
     var assign_exprs : array<ExpressionPtr>
     assign_exprs |> reserve(length(fields))
     for (i in range(length(fields))) {
@@ -3786,9 +3218,6 @@ def private make_view_read_row_fn(var st : StructurePtr; fields : array<FieldInf
 }
 
 def private make_view_column_info_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-    //! Per-view ColumnInfo helper. `is_pk` is always false (views don't
-    //! have primary keys). `default_expr` is always empty (defaults belong
-    //! to the underlying table).
     var push_exprs : array<ExpressionPtr>
     push_exprs |> reserve(length(fields))
     for (i in range(length(fields))) {
@@ -3830,11 +3259,6 @@ def private make_view_column_info_fn(var st : StructurePtr; fields : array<Field
 
 def private make_view_string_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                            st_name : string; verb : string) : FunctionPtr {
-    //! Emits `def _sql_X(typ : V) : string { panic(...); return "" }` —
-    //! returns "" never executes; the panic body fires on the first call
-    //! from a row-form mutation template (`insert(row)` / `update(row)` /
-    //! `delete_(row)`). Predicate-form mutations are caught at compile
-    //! time by `validate_outer_args` / `validate_outer_upsert_args`.
     let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
     var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
         panic($v(msg))
@@ -3846,10 +3270,6 @@ def private make_view_string_panic_stub_fn(var st : StructurePtr; helper_name : 
 }
 
 def private make_view_pk_is_unset_stub_fn(var st : StructurePtr) : FunctionPtr {
-    //! `_sql_pk_is_unset(row : V) : bool` — never reached at runtime
-    //! (the caller — `try_insert` / `try_insert_many` — calls
-    //! `_::_sql_insert_with_pk_sql` next, which panics). Returns false
-    //! to satisfy the boolean signature.
     var fn = qmacro_function("_sql_pk_is_unset") $(row : $t(st)) : bool {
         return false
     }
@@ -3861,8 +3281,6 @@ def private make_view_pk_is_unset_stub_fn(var st : StructurePtr) : FunctionPtr {
 def private make_view_bind_row_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                              st_name : string; verb : string;
                                              has_include_pk : bool) : FunctionPtr {
-    //! Emits the void-returning bind helpers. Argument shape matches the
-    //! `[sql_table]` versions exactly so overload resolution finds them.
     let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
     if (has_include_pk) {
         var fn = qmacro_function(helper_name) $(var stmt : sqlite3_stmt?; row : $t(st); include_pk : bool) : void {
@@ -3881,32 +3299,7 @@ def private make_view_bind_row_panic_stub_fn(var st : StructurePtr; helper_name 
     }
 }
 
-// ============================================================================
-// register_function — bind a daslang function as a SQL scalar UDF
-//
-// Surface:
-//
-//   db |> register_function("damage", @@damage_formula)
-//   db |> register_function("color", @@hex_to_color, true)              // deterministic
-//   db |> register_function("now_iso", @@now_iso, false, true)          // direct-only
-//
-// Implementation: a `[call_macro]` reads the function pointer's static
-// type, derives an SqlFnTag for each argument and the return, and emits a
-// call to the C++-side `sqlite3_register_function` trampoline. The macro
-// intentionally enforces the supported scalar set (Int / Int64 / Float /
-// Double / Bool / String) at compile time so misuse surfaces as a
-// `macro_error` rather than as a runtime mystery.
-//
-// NULL handling (v1): if any argument is SQLITE_NULL the trampoline
-// short-circuits to SQLITE_NULL without invoking the daslang function —
-// the idiomatic SQL behavior for built-in scalars (`abs(NULL)` -> `NULL`).
-// Explicit Option<T> arguments + Blob support are deferred to a later chunk.
-//
-// Panic recovery: a panic inside the daslang function is caught via
-// `Context::runWithCatch` and surfaced to SQLite as
-// `sqlite3_result_error`, so `try_query_scalar(... my_fn(...))` returns
-// `Err` containing the panic message; the connection itself is unaffected.
-// ============================================================================
+// ===== register_function — bind a daslang function as a SQL scalar UDF =====
 
 enum SqlFnTag {
     //! Type tag matching the C++-side SqlFnTag enum in dasSQLITE.userfn.cpp.
@@ -3921,8 +3314,6 @@ enum SqlFnTag {
 
 [macro_function]
 def private sql_fn_tag_for_type(td : TypeDeclPtr) : tuple<tag : uint8; ok : bool> {
-    //! Map an AST type to its SqlFnTag. Returns ok=false for unsupported
-    //! types so the macro can emit a precise diagnostic naming the offender.
     if (td == null) {
         return (uint8(0), false)
     }
@@ -3952,20 +3343,11 @@ def private sql_fn_tag_for_type(td : TypeDeclPtr) : tuple<tag : uint8; ok : bool
 
 [call_macro(name="register_function")]
 class private RegisterFunctionMacro : AstCallMacro {
-    //! Pipe form: `db |> register_function(name, fn[, deterministic[, directonly]])`.
-    //! Direct form: `register_function(db, name, fn[, deterministic[, directonly]])`.
-    //!
-    //! The function pointer's static signature drives tag derivation; reject
-    //! unsupported arg/return types here rather than let SQLite produce
-    //! mystery results.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         let nCallArgs = call.arguments |> length
         macro_verify(nCallArgs >= 3 && nCallArgs <= 5, prog, call.at,
             "register_function expects (db, name, fn[, deterministic[, directonly]]) — got {nCallArgs} args")
-
-        // Function pointer must already have an inferred type; otherwise the
-        // call macro is firing too early and the inner `@@fn` hasn't resolved
-        // yet. Bail with a clear message rather than a null-deref later.
+        // Need the inferred function-pointer type; otherwise the inner @@fn hasn't resolved yet.
         var fnExpr = call.arguments[2]
         macro_verify(fnExpr._type != null, prog, call.at,
             "register_function: function-pointer argument is not inferred yet — make sure the symbol exists at this point")
@@ -3973,14 +3355,10 @@ class private RegisterFunctionMacro : AstCallMacro {
             "register_function: function-pointer type is auto/alias after inference")
         macro_verify(fnExpr._type.baseType == Type.tFunction, prog, call.at,
             "register_function: third argument must be a function pointer (e.g. `@@my_fn`); got {describe(fnExpr._type)}")
-
         let nArgs = fnExpr._type.argTypes |> length
         macro_verify(nArgs <= 4, prog, call.at,
             "register_function: SQLite scalar functions support up to 4 arguments; got {nArgs}")
-
-        // Derive per-arg + return tags. Reject unsupported types up front
-        // with a per-position diagnostic so the user knows exactly which
-        // parameter to fix.
+        // Derive per-arg + return tags; reject unsupported types per position.
         var tags : array<uint8>
         tags |> reserve(4)
         for (i in range(nArgs)) {
@@ -3992,34 +3370,28 @@ class private RegisterFunctionMacro : AstCallMacro {
             }
             tags |> push(r.tag)
         }
-        // Pad tag slots to 4 — unused slots are ignored by the C++ side
-        // according to nArgs, but the binding takes 4 scalar uint8s.
+        // Pad tag slots to 4: C++ side reads nArgs but the binding takes 4 scalar uint8s.
         while (tags |> length < 4) {
             tags |> push(uint8(0))
         }
-
         let retR = sql_fn_tag_for_type(fnExpr._type.firstType)
         if (!retR.ok) {
             macro_error(prog, call.at,
                 "register_function: return type '{describe(fnExpr._type.firstType)}' is unsupported — supported: int, int64, float, double, bool, string")
             return null
         }
-
         var dbExpr   = clone_expression(call.arguments[0])
         var nameExpr = clone_expression(call.arguments[1])
         var fnClone  = clone_expression(fnExpr)
-
         // Optional positional flags. Default both to false.
         var detExpr : ExpressionPtr = nCallArgs >= 4 ? clone_expression(call.arguments[3]) : qmacro(false)
         var donExpr : ExpressionPtr = nCallArgs >= 5 ? clone_expression(call.arguments[4]) : qmacro(false)
-
         let nArgsLit = int(nArgs)
         let tag0 = tags[0]
         let tag1 = tags[1]
         let tag2 = tags[2]
         let tag3 = tags[3]
         let retTag = retR.tag
-
         // Emit: helper checks rc and panics on failure with the libsqlite3 errmsg.
         var res = qmacro(_::_register_function_check_rc(
             $e(dbExpr), $e(nameExpr), $e(fnClone), $v(nArgsLit),

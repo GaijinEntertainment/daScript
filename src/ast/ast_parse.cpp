@@ -76,9 +76,30 @@ namespace das {
                 while ( src < src_end && src[0]!='"' ) {
                     if ( src[0]=='\n' )
                         line ++;
-                    src ++;
+                    if ( src[0]=='\\' && src+1<src_end ) {
+                        // Skip the escaped character so that \" inside a string literal does not terminate the string (likewise \\, \n, etc.).
+                        if ( src[1]=='\n' ) line ++;
+                        src += 2;
+                    } else {
+                        src ++;
+                    }
                 }
+                if ( src < src_end ) src ++;
+                wb = true;
+                continue;
+            } else if ( src[0]=='\'' ) {
                 src ++;
+                while ( src < src_end && src[0]!='\'' ) {
+                    if ( src[0]=='\n' )
+                        line ++;
+                    if ( src[0]=='\\' && src+1<src_end ) {
+                        if ( src[1]=='\n' ) line ++;
+                        src += 2;
+                    } else {
+                        src ++;
+                    }
+                }
+                if ( src < src_end ) src ++;
                 wb = true;
                 continue;
             } else if ( src[0]=='/' && src[1]=='/' ) {

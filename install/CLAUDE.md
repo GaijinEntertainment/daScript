@@ -87,6 +87,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leaks |
 | `skills/detect_dupe.md` | Duplicate-function detection (corpus, MCP tools `export_corpus`/`detect_duplicates`, CLI under `utils/detect-dupe/`) |
 | `skills/linq.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |
+| `skills/regex.md` | Writing regular expressions in `.das` code |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 
