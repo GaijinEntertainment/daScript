@@ -107,7 +107,7 @@ ENDIF()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-FILE(GLOB DAS_AOT_DASLIB_DEPENDS "${PROJECT_SOURCE_DIR}/daslib/*.das")
+FILE(GLOB DAS_AOT_DASLIB_DEPENDS CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/daslib/*.das")
 
 MACRO(DAS_AOT_EXT input_files genList mainTarget dasAotTool dasAotToolArg)
     set(all_depends ${dasAotTool} ${PROJECT_SOURCE_DIR}/utils/aot/main.das ${DAS_AOT_DASLIB_DEPENDS})
@@ -319,7 +319,7 @@ SET(DAS_MODULES_LIBS)
 
 SET(DAS_ALL_EXAMPLES)
 SET(DAS_EXAMPLES_TO_RUN)
-FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" "modules/*")
+FILE(GLOB _modules RELATIVE "${PROJECT_SOURCE_DIR}/modules" CONFIGURE_DEPENDS "modules/*")
 
 # Every dynamic module should pass through this macro.
 MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
@@ -450,7 +450,7 @@ ENDFOREACH()
 # Clean stale .shared_module files. When a module is disabled, its .shared_module
 # from a previous build may remain and cause crashes at startup (the dynamic module
 # loader tries to load them even though the module code is no longer linked).
-FILE(GLOB_RECURSE _all_shared_modules "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
+FILE(GLOB_RECURSE _all_shared_modules CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/modules/*.shared_module")
 FOREACH(_sm ${_all_shared_modules})
     GET_FILENAME_COMPONENT(_sm_name "${_sm}" NAME_WE)
     IF(NOT TARGET ${_sm_name})
