@@ -1546,7 +1546,7 @@ namespace das
         /*option*/ bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
         /*option*/ bool strict_smart_pointers = true;              // collection of tests for smart pointers, like van inscope for any local, etc
         /*option*/ bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
-        /*option*/ bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
+        /*option*/ bool strict_unsafe_delete = true;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
         bool no_members_functions_in_struct = false;    // structures can't have member functions
         /*option*/ bool no_local_class_members = true;             // members of the class can't be classes
         /*option*/ bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)

@@ -306,7 +306,7 @@ Safety and Strictness
        See :ref:`Move, Copy, and Clone <move_copy_clone>`.
    * - ``strict_unsafe_delete``
      - bool
-     - false
+     - true
      - Makes ``delete`` of types that contain ``unsafe`` delete an unsafe operation.
    * - ``no_local_class_members``
      - bool

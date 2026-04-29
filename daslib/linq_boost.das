@@ -473,7 +473,7 @@ def private rename_var_in_expr(var src : Expression?; from_name, to_name : strin
     //! Clone ``src`` and rename every ``ExprVar`` named ``from_name``
     //! to ``to_name``. Same approach as fold_linq_cond.
     var res = clone_expression(src)
-    var inscope rules : Template
+    var rules : Template
     rules |> renameVariable(from_name, to_name)
     apply_template(rules, res.at, res)
     return res
@@ -691,7 +691,7 @@ def private fold_linq_cond(var expr : Expression?; argName : string) : Expressio
             var ret = blk.list[0] as ExprReturn
             if (ret.subexpr != null) {
                 var res = clone_expression(ret.subexpr)
-                var inscope rules : Template
+                var rules : Template
                 rules |> renameVariable(string(blk.arguments[0].name), argName)
                 apply_template(rules, res.at, res)
                 return res

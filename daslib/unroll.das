@@ -66,7 +66,7 @@ class UnrollMacro : AstFunctionAnnotation {
             {
                 var iblk = clone_expression(efor.body)
                 remove_deref(van, iblk)
-                var inscope rules : Template
+                var rules : Template
                 rules |> replaceVariable(van) <| new ExprConstInt(at = call.at, value = i)
                 rules |> apply_template(call.at, iblk, false)
                 nblk.list |> emplace(iblk)

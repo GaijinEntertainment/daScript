@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options remove_unused_symbols = false
+options strict_unsafe_delete = false
 
 // This is builtin module. It included by default
 // in every other module. Compiler can freely
@@ -1138,7 +1139,9 @@ def clone(var args; var nargs : array<auto(TT)?>) {
     for (narg in nargs) {
         _::push(args, narg)
     }
-    delete nargs
+    unsafe {
+        delete nargs
+    }
 }
 
 [unsafe_outside_of_for, nodiscard]

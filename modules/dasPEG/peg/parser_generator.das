@@ -350,7 +350,7 @@ def generate_result_types(var gen : ParserGenerator) {
 def generate(var gen : ParserGenerator; var def_ : Definition) {
     gen.current_context = def_.name
 
-    var inscope function_body <- gen |> generate(def_.rule)
+    var function_body <- gen |> generate(def_.rule)
     var return_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
 
     var fun = qmacro_function("parse_{def_.name}_inner`id_{gen.id}") $(var parser : $t(gen.parser_type)) : $t(return_type) {
@@ -549,7 +549,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
         if (Rule(text_extraction = $v(subrule))) {
             let result_handle = subrule.name
             let i = gen.rule_counter["extract"]++
-            var inscope subrule_ <- gen |> generate(subrule.rule)
+            var subrule_ <- gen |> generate(subrule.rule)
             var return_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
 
             var t <- qmacro_block() {
@@ -621,7 +621,7 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
     let result_handle = rule_.name
 
     if (rule_.name == "") {// Rule not bound by name, discard result
-        var inscope rule_code <- gen |> with_context("__repetition__") {
+        var rule_code <- gen |> with_context("__repetition__") {
             return <- gen |> generate(rule_.rule)
         }
 
@@ -648,7 +648,7 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
     set_rule_handle(rule_, "temp_name")
     var type_decl = gen |> get_rule_type(rule_.rule)
 
-    var inscope rule_code <- gen |> with_context("__repetition__") {
+    var rule_code <- gen |> with_context("__repetition__") {
         return <- gen |> generate(rule_.rule)
     }
 
@@ -680,7 +680,7 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     let mark_name = "__not_mark_{not_id}"
     let success_name = "__not_success_{not_id}"
 
-    var inscope rule_code <- gen |> with_context("__PEEK__") {
+    var rule_code <- gen |> with_context("__PEEK__") {
         return <- gen |> generate(rule_.rule)
     }
 
@@ -729,7 +729,7 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     let mark_name = "__and_mark_{and_id}"
     let success_name = "__and_success_{and_id}"
 
-    var inscope rule_code <- gen |> with_context("__PEEK__") {
+    var rule_code <- gen |> with_context("__PEEK__") {
         return <- gen |> generate(rule_.rule)
     }
 
@@ -770,7 +770,7 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
     let first_result_name = "__repeat_result_{gen.rule_counter["repeat"]++}"
 
     if (rule_.name == "") {// Rule not bound by name, discard result
-        var inscope rule_code <- gen |> with_context("__repetition__") {
+        var rule_code <- gen |> with_context("__repetition__") {
             return <- gen |> generate(rule_.rule)
         }
 
@@ -812,7 +812,7 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
     // Bind result to the provided name
 
     set_rule_handle(rule_, "temp_name")
-    var inscope rule_code <- gen |> with_context("__repetition__") {
+    var rule_code <- gen |> with_context("__repetition__") {
         return <- gen |> generate(rule_.rule)
     }
 
@@ -985,7 +985,7 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
     let result_handle = rule_.name
 
     if (rule_.name == "") {// Rule not bound by name, discard result
-        var inscope rule_code <- gen |> with_context("__option__") {
+        var rule_code <- gen |> with_context("__option__") {
             return <- gen |> generate(rule_.rule)
         }
 
@@ -1007,7 +1007,7 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
     var type_decl = gen |> get_rule_type(rule_.rule)
     var result_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
 
-    var inscope rule_code <- gen |> with_context("__option__") {
+    var rule_code <- gen |> with_context("__option__") {
         return <- gen |> generate(rule_.rule)
     }
 
@@ -1036,7 +1036,7 @@ def with_context(var gen : ParserGenerator; context : string; block_) {
     let last_context = gen.current_context
     gen.current_context = context
 
-    var inscope r <- invoke(block_)
+    var r <- invoke(block_)
 
     gen.current_context = last_context
     return <- r
@@ -1051,7 +1051,7 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
     var action <- alt.action
     var return_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
     var action_block = unsafe(action as ExprBlock) |> flatten_block
-    var inscope block_contents <- gen |> generate(alt.rule.rule)
+    var block_contents <- gen |> generate(alt.rule.rule)
 
     // Add epilogue (code that executes the associated action)
 

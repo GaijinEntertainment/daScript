@@ -211,14 +211,14 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     if (passArgument != null) {
         // try DelegateReturn
         if (is_typemacro_template_instance(passArgument, template_type_ret, extra_template_arguments)) {
-            var inscope args_ret <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
+            var args_ret <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
             if (infer_struct_aliases(passArgument.structType, args_ret)) {
                 return infer_template_types(passArgument, args_ret)
             }
         }
         // try DelegateVoid
         if (is_typemacro_template_instance(passArgument, template_type_void, extra_template_arguments)) {
-            var inscope args_void <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
+            var args_void <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
             if (infer_struct_aliases(passArgument.structType, args_void)) {
                 return infer_template_types(passArgument, args_void)
             }
@@ -227,7 +227,7 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     }
 
     // ── concrete path ──────────────────────────────────────────────────
-    var inscope template_arguments <- [
+    var template_arguments <- [
         TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(lambdaType))
     ]
     if (!verify_arguments(template_arguments)) {

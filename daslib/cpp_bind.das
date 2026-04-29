@@ -118,5 +118,4 @@ def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPt
         fwrite(cpp_file, "  \}\n")
     }
     fwrite(cpp_file, "};\n\n")
-    delete types
 }

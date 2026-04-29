@@ -435,7 +435,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
             }
         }
         body.list |> emplace_new <| qmacro_expr() {
-            var inscope template_arguments <- to_array_move($e(mk_array_expr))
+            var template_arguments <- to_array_move($e(mk_array_expr))
         }
         // we need to build extra arguments list
         var mk_extra_array_expr = new ExprMakeArray(at = func.at, makeType = new TypeDecl(baseType = Type.autoinfer))

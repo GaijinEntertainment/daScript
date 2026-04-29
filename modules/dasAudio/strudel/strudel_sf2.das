@@ -196,7 +196,9 @@ def finalize(var d : SF2InstrumentDef explicit) {
             delete z
         }
     }
-    delete d.zones
+    unsafe {
+        delete d.zones
+    }
 }
 
 def finalize(var d : SF2PresetDef explicit) {
@@ -211,7 +213,9 @@ def finalize(var d : SF2PresetDef explicit) {
             delete z
         }
     }
-    delete d.zones
+    unsafe {
+        delete d.zones
+    }
 }
 
 def finalize(var f : SF2File explicit) {
@@ -221,13 +225,17 @@ def finalize(var f : SF2File explicit) {
             delete inst
         }
     }
-    delete f.instruments
+    unsafe {
+        delete f.instruments
+    }
     for (preset in f.presets) {
         unsafe {
             delete preset
         }
     }
-    delete f.presets
+    unsafe {
+        delete f.presets
+    }
     // explicit finalizer replaces the default cascade — must delete remaining heap-owning fields
     delete f.sample_data
     delete f.samples
