@@ -136,7 +136,7 @@
                 FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 nullptr, err, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                 (LPSTR)&buf, 0, nullptr);
-            string msg = (n && buf) ? string(buf, n) : ("error code " + std::to_string(err));
+            string msg = (n && buf) ? string(buf, n) : ("error code " + to_string(err));
             if ( buf ) LocalFree(buf);
             while ( !msg.empty() && (msg.back()=='\r' || msg.back()=='\n') ) msg.pop_back();
             return msg;
