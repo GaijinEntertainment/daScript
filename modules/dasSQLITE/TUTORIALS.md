@@ -419,15 +419,15 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 28 | JSON + BLOB columns | `28-json.das` | **Shipped** (chunk 9); `@sql_json` (TEXT via daslib/json + json_boost) + `@sql_blob` (BLOB via daslib/archive); `_sql` walker JSON-path descent (pred + projection, arbitrary depth) emits `json_extract`; `@sql_blob` opaque to walker (compile error on descent); adapter dedup across tables; mockup was 37-json |
 | 29 | Column metadata | `29-column_names.das` | **Shipped** (chunk 9); Band 1 `column_info(type<T>) : array<ColumnInfo>` (compile-time walk) + abstract `SqlType` enum + `sqlite_sql_type` dialect renderer; Band 3 raw `PRAGMA table_info` via the typed `query` family |
 | 30 | Listing tables | `30-list_tables.das` | **Shipped** (chunk 9); raw `query` against `sqlite_master`; no abstract `list_tables` helper (catalog spelling diverges per backend) |
-| 31 | Views | `31-views.das` | Has mockup |
-| 32 | Migrations | `30-migrations.das` | Has mockup |
-| 33 | PRAGMA tuning | `33-pragma.das` | Has mockup |
-| 34 | Backup + VACUUM | `34-backup_vacuum.das` | Has mockup |
-| 35 | ATTACH DATABASE | `36-attach.das` | Has mockup |
-| 36 | Streaming results | — | No-API — concept tutorial |
+| 31 | Views | `31-views.das` | **Shipped** (chunk 10); `[sql_view(name=...)]` annotation + `_create_view` macro + `drop_view_if_exists`; mutation-path rejection at compile time (predicate form) and runtime (row form) |
+| 32 | Migrations | `30-migrations.das` | Has mockup — deferred to chunk 11 |
+| 33 | PRAGMA tuning | `33-pragma.das` | **Shipped** (chunk 10); `set_pragma` / `try_set_pragma` (string/int64/bool overloads) + `apply_recommended_pragmas` (WAL + busy_timeout + foreign_keys + synchronous=NORMAL) |
+| 34 | Backup + VACUUM | `34-backup_vacuum.das` | **Shipped** (chunk 10); `vacuum` / `vacuum_into` / `optimize` / `integrity_check` / `quick_check` + `backup_to(dest)` / `backup_to(path)` (online Backup API with SQLITE_BUSY/LOCKED retry) |
+| 35 | Streaming results | `35-streaming.das` | **Shipped** (chunk 10); `_each_sql(chain)` returning `iterator<T>`, generator-based; rejects materializing terminals (`_to_array`, `_first`, aggregates); `sqlite3_finalize` runs in `finally` so stmt is released on break/exhaustion/panic |
+| 36 | ATTACH DATABASE | `36-attach.das` | Has mockup |
 | 37 | Bulk operations | — | No-API — concept tutorial |
 | 38 | Concurrency | — | No-API — concept tutorial |
-| 39 | UD SQL functions | `32-sql_functions.das` | Has mockup |
+| 39 | UD SQL functions | `32-sql_functions.das` | **Shipped** (chunk 10); `register_function(db, name, @@fn[, deterministic[, directonly]])` call macro; arity 0..4; arg/return tags derived from function-pointer type; NULL short-circuit; panic recovery via `Context::runWithCatch` |
 | 40 | FTS5 | `39-fts5.das` | Has mockup |
 | 41 | Triggers | — | No-API — concept tutorial |
 

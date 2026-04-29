@@ -319,6 +319,11 @@ Run any tutorial from the project root::
    tutorials/sql_28_json.rst
    tutorials/sql_29_column_names.rst
    tutorials/sql_30_list_tables.rst
+   tutorials/sql_31_views.rst
+   tutorials/sql_32_sql_functions.rst
+   tutorials/sql_33_pragma.rst
+   tutorials/sql_34_backup_vacuum.rst
+   tutorials/sql_35_streaming.rst
 
 .. _tutorials_dasaudio:
 

@@ -123,3 +123,5 @@ Deferred
     Full source: :download:`tutorials/sql/30-list_tables.das <../../../../tutorials/sql/30-list_tables.das>`
 
     Previous tutorial: :ref:`tutorial_sql_column_names`
+
+    Next tutorial: :ref:`tutorial_sql_views`

@@ -26,6 +26,8 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
 		${DAS_SQLITE_DIR}/src/dasSQLITE.cpp
 	# user include
 		${DAS_SQLITE_DIR}/src/dasSQLITE.main.cpp
+		${DAS_SQLITE_DIR}/src/dasSQLITE.userfn.cpp
+		${DAS_SQLITE_DIR}/src/dasSQLITE.backup.cpp
 	# generated binding includes
 		${DAS_SQLITE_DIR}/src/dasSQLITE.alias.add.inc
 		${DAS_SQLITE_DIR}/src/dasSQLITE.dummy.add.inc
