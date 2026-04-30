@@ -34,18 +34,12 @@ def sqlite3_free(std : string) {
 
 [expect_any_array(data)]
 def sqlite3_bind_blob(stmt : sqlite3_stmt?; index : int; data) {
-    //! Binds a blob value to a prepared statement at ``index``. SQLite
-    //! makes its own copy via ``SQLITE_TRANSIENT`` (the default in this
-    //! wrapper), so the caller's array can release after the call.
-    //! Empty blobs route through ``sqlite3_bind_zeroblob`` with ``n=0``
-    //! to avoid taking ``addr(data[0])`` on a zero-length array.
+    //! Binds a blob to a prepared statement at ``index`` (``SQLITE_TRANSIENT`` copy).
+    //! Empty blobs route through ``sqlite3_bind_zeroblob`` to avoid ``addr(data[0])`` on zero-length.
     if (data |> length == 0) {
         return sqlite3_bind_zeroblob(stmt, index, 0)
     }
     unsafe {
-        // Byte count = element_count * sizeof(element). The wrapper
-        // accepts any array via [expect_any_array]; ``length`` alone is
-        // only correct for ``array<uint8>``.
         return sqlite3_bind_blob(stmt, index, unsafe(addr(data[0])), (data |> length) * typeinfo sizeof(data[0]))
     }
 }
@@ -61,18 +55,49 @@ def sqlite3_open(filename : string; var db : sqlite3?&) : int {
 }
 
 def sqlite3_prepare_v2(db : sqlite3?; sql : string; var stmt : sqlite3_stmt?&) {
-    //! Prepares a SQL statement for execution. Delegates to a C++ shim
-    //! (``sqlite3_prepare_v2_no_tail``) that drops the unused pzTail parameter,
-    //! sidestepping a daslang AOT codegen bug where ``string const?`` renders as
-    //! ``char * const *`` instead of ``const char **``.
+    //! Prepares a SQL statement for execution. Routes through a C++ shim that drops the
+    //! unused pzTail parameter (sidesteps an AOT codegen bug on ``string const?``).
     return sqlite3_prepare_v2_no_tail(db, sql, unsafe(addr(stmt)))
+}
+
+def private _qualify_schema(sql : string; schema_name : string) : string {
+    // String shim, not a parser: works because emitted SQL always quotes table refs and binds values.
+    if (empty(schema_name)) {
+        return sql
+    }
+    let q = sql_quote_id(schema_name) + "."
+    var out = sql |> replace("FROM \"", "FROM {q}\"")
+    out = out |> replace("INTO \"", "INTO {q}\"")
+    out = out |> replace("UPDATE \"", "UPDATE {q}\"")
+    out = out |> replace("JOIN \"", "JOIN {q}\"")
+    out = out |> replace("CREATE TABLE \"", "CREATE TABLE {q}\"")
+    out = out |> replace("CREATE TABLE IF NOT EXISTS \"", "CREATE TABLE IF NOT EXISTS {q}\"")
+    out = out |> replace("CREATE VIRTUAL TABLE IF NOT EXISTS \"", "CREATE VIRTUAL TABLE IF NOT EXISTS {q}\"")
+    out = out |> replace("CREATE VIRTUAL TABLE \"", "CREATE VIRTUAL TABLE {q}\"")
+    out = out |> replace("CREATE UNIQUE INDEX IF NOT EXISTS \"", "CREATE UNIQUE INDEX IF NOT EXISTS {q}\"")
+    out = out |> replace("CREATE INDEX IF NOT EXISTS \"", "CREATE INDEX IF NOT EXISTS {q}\"")
+    out = out |> replace("CREATE UNIQUE INDEX \"", "CREATE UNIQUE INDEX {q}\"")
+    out = out |> replace("CREATE INDEX \"", "CREATE INDEX {q}\"")
+    out = out |> replace("DROP TABLE IF EXISTS \"", "DROP TABLE IF EXISTS {q}\"")
+    out = out |> replace("DROP TABLE \"", "DROP TABLE {q}\"")
+    out = out |> replace("DROP VIEW IF EXISTS \"", "DROP VIEW IF EXISTS {q}\"")
+    out = out |> replace("DROP VIEW \"", "DROP VIEW {q}\"")
+    out = out |> replace("DROP INDEX IF EXISTS \"", "DROP INDEX IF EXISTS {q}\"")
+    return out
+}
+
+def private _db_prepare(db : SqlRunner; sql : string; var stmt : sqlite3_stmt?&) : int {
+    return sqlite3_prepare_v2(db.sqlite_handle, _qualify_schema(sql, db.schema_name), stmt)
 }
 
 // ===== High-level API: runner, RAII, exec, last_insert_rowid =====
 
 struct SqlRunner {
     //! Owns a libsqlite3 connection. Closed by `finalize` on `var inscope` scope exit.
+    //! `schema_name` (default empty) prefixes emitted `FROM`/`JOIN`/etc. references
+    //! with `"<schema>".`; set via `with_schema` to address ATTACHed databases.
     sqlite_handle : sqlite3? = null
+    schema_name : string
 }
 
 typedef SqlError = Option<string>
@@ -115,12 +140,8 @@ def open_sqlite(path : string) : SqlRunner {
 }
 
 def with_sqlite(path : string; blk : block<(db : SqlRunner) : void>) : void {
-    //! RAII helper. Opens the DB, sets ``PRAGMA foreign_keys=ON`` (SQLite ships
-    //! it OFF by default for back-compat with pre-3.6.19 databases — without
-    //! the pragma, FK clauses are parsed and stored but not enforced), invokes
-    //! the block, finalizes on exit (including on panic / early return). Users
-    //! who need FKs disabled can ``db |> exec("PRAGMA foreign_keys=OFF")`` from
-    //! inside the block.
+    //! RAII helper. Opens the DB, enables ``PRAGMA foreign_keys=ON`` (off by default in SQLite),
+    //! invokes ``blk``, and finalizes on exit (including panic / early return).
     var inscope db = open_sqlite(path)
     db |> exec("PRAGMA foreign_keys = ON")
     invoke(blk, db)
@@ -130,7 +151,7 @@ def try_exec(db : SqlRunner; sql : string) : SqlError {
     //! Executes ``sql`` (one or more statements, no result rows).
     //! Returns ``none`` on success, ``some(errmsg)`` on failure.
     var errmsg : string
-    let rc = sqlite3_exec(db.sqlite_handle, sql, unsafe(addr(errmsg)))
+    let rc = sqlite3_exec(db.sqlite_handle, _qualify_schema(sql, db.schema_name), unsafe(addr(errmsg)))
     if (rc != SQLITE_OK) {
         let msg = "exec failed: {errmsg}"
         sqlite3_free(errmsg)
@@ -142,7 +163,7 @@ def try_exec(db : SqlRunner; sql : string) : SqlError {
 def private try_exec_with_binds(db : SqlRunner; sql : string;
                                 bind_blk : block<(var stmt : sqlite3_stmt?) : void>) : SqlError {
     var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    let prc = _db_prepare(db, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "exec failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
@@ -221,11 +242,83 @@ def last_insert_rowid(db : SqlRunner) : int64 {
 }
 
 def changes(db : SqlRunner) : int {
-    //! Returns the number of rows affected by the most recent INSERT, UPDATE, or DELETE
-    //! on this connection. Wraps ``sqlite3_changes``; see https://sqlite.org/c3ref/changes.html
-    //! for the exact contract (DML statements only — DDL, schema changes, and triggers
-    //! count separately).
+    //! Returns rows affected by the most recent INSERT/UPDATE/DELETE (wraps ``sqlite3_changes``).
     return sqlite3_changes(db.sqlite_handle)
+}
+
+// ===== ATTACH DATABASE — tut 36: cross-DB queries on one connection =====
+
+def try_attach(db : SqlRunner; path, as_name : string) : SqlError {
+    //! Runs `ATTACH DATABASE ? AS <as_name>`. `as_name` becomes the schema qualifier
+    //! consumed by `with_schema`; reserved names (`main`, `temp`) → `some(errmsg)`.
+    return db |> try_exec("ATTACH DATABASE ? AS {sql_quote_id(as_name)}", path)
+}
+
+def try_detach(db : SqlRunner; as_name : string) : SqlError {
+    //! Runs `DETACH DATABASE <as_name>`.
+    return db |> try_exec("DETACH DATABASE {sql_quote_id(as_name)}")
+}
+
+def attach(db : SqlRunner; path, as_name : string) : void {
+    //! Strict variant of `try_attach` — panics on failure.
+    let err = db |> try_attach(path, as_name)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
+def detach(db : SqlRunner; as_name : string) : void {
+    //! Strict variant of `try_detach` — panics on failure.
+    let err = db |> try_detach(as_name)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
+def private _schema_runner(db : SqlRunner; schema_name : string) : SqlRunner {
+    // Aliases the same libsqlite3 handle as `db`; non-owning. Caller MUST NOT inscope.
+    return SqlRunner(sqlite_handle = unsafe(reinterpret<sqlite3?>(db.sqlite_handle)),
+                     schema_name = schema_name)
+}
+
+def with_schema(db : SqlRunner; schema_name : string;
+                body : block<(scoped : SqlRunner) : void>) : void {
+    //! Invokes `body` with a runner that emits `"<schema>"."<table>"` on every query.
+    //! Block-scoped to keep the schema-qualified runner non-inscope-able (it shares
+    //! `db`'s libsqlite3 handle; only the original owns lifetime).
+    invoke(body, _schema_runner(db, schema_name))
+}
+
+def with_attached(db : SqlRunner; path, as_name : string;
+                  body : block<(scoped : SqlRunner) : void>) : void {
+    //! Attaches `path`, invokes `body` with a schema-qualified runner,
+    //! and detaches in `finally` (covers normal + panic paths).
+    db |> attach(path, as_name)
+    {
+        invoke(body, _schema_runner(db, as_name))
+    } finally {
+        db |> detach(as_name)
+    }
+}
+
+// ===== LIKE-pattern escape helpers (tut 40 — string predicates) =====
+
+def like_escape_prefix(s : string) : string {
+    //! Returns `s` with `\`, `%`, `_` doubled via `\`, then `%` appended.
+    //! Pair with `col LIKE ? ESCAPE '\'`.
+    return (s |> replace("\\", "\\\\") |> replace("%", "\\%") |> replace("_", "\\_")) + "%"
+}
+
+def like_escape_suffix(s : string) : string {
+    //! Returns `s` with `\`, `%`, `_` doubled via `\`, prepended with `%`.
+    //! Pair with `col LIKE ? ESCAPE '\'`.
+    return "%" + (s |> replace("\\", "\\\\") |> replace("%", "\\%") |> replace("_", "\\_"))
+}
+
+def like_escape_substring(s : string) : string {
+    //! Returns `s` with `\`, `%`, `_` doubled via `\`, wrapped in `%…%`.
+    //! Pair with `col LIKE ? ESCAPE '\'`.
+    return "%" + (s |> replace("\\", "\\\\") |> replace("%", "\\%") |> replace("_", "\\_")) + "%"
 }
 
 // ===== SQL adapter rail: sql_bind / sql_extract  (tut 26) =====
@@ -260,12 +353,8 @@ def sql_extract(s : string; t : type<string>) : string {
 }
 
 def sql_bind(b : array<uint8>) : array<uint8> {
-    //! Identity passthrough for BLOB columns. ``array<uint8>`` is non-
-    //! copyable, so the const-reference parameter forces a clone on
-    //! return. SQLite's ``sqlite3_bind_blob`` with ``SQLITE_TRANSIENT``
-    //! adds a second copy. For very large BLOBs (multi-MB asset
-    //! payloads), prefer the streaming ``sqlite3_blob_open`` API to
-    //! avoid extra copying.
+    //! Identity passthrough for BLOB columns. For multi-MB payloads prefer the streaming
+    //! ``sqlite3_blob_open`` API to avoid the implicit clone + ``SQLITE_TRANSIENT`` copy.
     return <- clone_to_move(b)
 }
 
@@ -393,17 +482,13 @@ def sql_extract(value : int64; t : type<auto(TT)>) : TT {
 // ===== Internal bridge: sql_bind/sql_extract ↔ libsqlite3 C API =====
 
 def sqlite3_column_blob_(stmt : sqlite3_stmt?; col : int) : array<uint8> {
-    //! Reads a BLOB column as a fresh ``array<uint8>``. Allocates on
-    //! daslang's heap and copies — SQLite's blob pointer is only valid
-    //! until the next ``step`` / ``reset`` / ``finalize``, so the copy
-    //! is mandatory for safe out-of-statement use.
+    //! Reads a BLOB column as a fresh ``array<uint8>`` — copy is mandatory because
+    //! SQLite's blob pointer dies on the next ``step`` / ``reset`` / ``finalize``.
     let n = sqlite3_column_bytes(stmt, col)
     var r : array<uint8>
     r |> resize(n)
     if (n > 0) {
         unsafe {
-            // sqlite3_column_blob returns ``const void *``; AOT codegen's
-            // das_memcpy wants a non-const source, so strip the const here.
             memcpy(addr(r[0]), reinterpret<void?>(sqlite3_column_blob(stmt, col)), n)
         }
     }
@@ -485,10 +570,8 @@ def read_via_adapter(stmt : sqlite3_stmt?; col : int; t : type<$Option<auto(TT)>
 
 [unused_argument(t)]
 def read_via_adapter(stmt : sqlite3_stmt?; col : int; t : type<auto(TT)>) : TT {
-    //! Reads a single column as the storage primitive
-    //! ``_::sql_bind(default<TT>)`` returns, then materializes ``TT`` via
-    //! ``_::sql_extract``. The primitive type is resolved at compile time
-    //! via ``typedecl`` — no runtime call to the user's adapter.
+    //! Reads column as ``_::sql_bind(default<TT>)``'s storage primitive, then materializes ``TT``
+    //! via ``_::sql_extract``. Primitive type is resolved at compile time — no runtime adapter call.
     return _::sql_extract(
         sql_read_witness(stmt, col, default<typedecl(_::sql_bind(default<TT>))>),
         type<TT>
@@ -575,9 +658,7 @@ def sql_storage_enum_for(t : type<$Option<auto(TT)>>) : SqlType {
 
 def sqlite_sql_type(t : SqlType) : string {
     //! Render an abstract ``SqlType`` to its SQLite-dialect spelling.
-    //! Other providers ship their own helper (`postgres_sql_type`,
-    //! `mysql_sql_type`, …) so the same `ColumnInfo` round-trips across
-    //! backends without ambiguity.
+    //! Other providers ship their own helper so ``ColumnInfo`` round-trips across backends.
     if (t == SqlType.Integer) {
         return "INTEGER"
     }
@@ -595,11 +676,8 @@ def sqlite_sql_type(t : SqlType) : string {
 
 [unused_argument(t)]
 def try_query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : Result<TT -const -#, string> {
-    //! Prepares ``sql``, steps once, returns column 0 as ``TT``. Routes
-    //! through the ``_::sql_bind`` / ``_::sql_extract`` adapter rail (tut 26)
-    //! via ``read_via_adapter``, so ``TT`` can be any primitive, enum, or
-    //! user type that ships an adapter pair.
-    //! Returns ``Err(errmsg)`` on prepare/step error or zero rows.
+    //! Prepares ``sql``, steps once, returns column 0 as ``TT`` via the adapter rail (tut 26).
+    //! ``Err(errmsg)`` on prepare/step error or zero rows.
     return <- try_one_row(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
         static_if (typeinfo can_copy(default<TT -const -#>)) {
             return read_via_adapter(stmt, 0, type<TT -const -#>)
@@ -621,10 +699,8 @@ def query_scalar(db : SqlRunner; sql : string; t : type<auto(TT)>) : TT -const -
 
 [unused_argument(t)]
 def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<TT -const -#> {
-    //! ``Option<TT>`` variant of ``query_scalar`` for when "0 rows" is a
-    //! normal outcome (e.g. lookup by primary key). Returns ``some(val)``
-    //! if a row is found, ``none`` if zero rows. Panics only on
-    //! prepare/step failure (genuine errors).
+    //! ``Option`` variant of ``query_scalar`` — ``some(val)`` / ``none`` on zero rows.
+    //! Panics only on prepare/step failure.
     var r <- try_one_row_opt(db, sql, $(var stmt : sqlite3_stmt?) {}, $(stmt : sqlite3_stmt?) {
         static_if (typeinfo can_copy(default<TT -const -#>)) {
             return read_via_adapter(stmt, 0, type<TT -const -#>)
@@ -644,7 +720,7 @@ def private try_with_stmt(db : SqlRunner; sql : string; err_prefix : string;
                           bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                           body_blk : block<(stmt : sqlite3_stmt?) : $Result<auto(R); string> >) : Result<R, string> {
     var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    let prc = _db_prepare(db, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "{err_prefix}: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
@@ -669,9 +745,6 @@ def private try_one_row(db : SqlRunner; sql : string;
             if (src != SQLITE_ROW) {
                 return err("{err_prefix}: step failed: {sqlite3_errmsg(db.sqlite_handle)}", type<TT -const -#>)
             }
-            // Copyable rows initialize via ``=``; non-copyable (e.g. user types
-            // containing ``array<uint8>``) route through ``clone_to_move`` so
-            // the rvalue is movable.
             static_if (typeinfo can_copy(default<TT -const -#>)) {
                 var row : TT -const -# = invoke(row_blk, stmt) // nolint:LINT003
                 return move_ok(row, type<string>)
@@ -1023,10 +1096,7 @@ def drop_view_if_exists(db : SqlRunner; t : auto(TT)) : void {
 [unused_argument(t), template(t)]
 def column_info(t : type<auto(TT)>) : array<ColumnInfo> {
     //! Returns the column metadata for a `[sql_table]`-tagged struct ``T``.
-    //! Driven by the per-struct ``_sql_column_info`` helper that the macro
-    //! emits alongside DDL — same compile-time field walk, viewed through
-    //! the abstract `ColumnInfo` lens. Render the dialect-specific column
-    //! type via `sqlite_sql_type(c.data_type)`.
+    //! Render dialect-specific column types via `sqlite_sql_type(c.data_type)`.
     return <- _::_sql_column_info(default<TT>)
 }
 
@@ -1055,11 +1125,8 @@ def insert(db : SqlRunner; row : auto(TT)) : int64 {
 
 def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     //! Batched INSERT inside a single BEGIN IMMEDIATE / COMMIT transaction.
-    //! All rows must agree on PK presence — first row decides which INSERT statement is prepared,
-    //! and the function validates uniformity up front. A mixed-PK array returns ``Err`` without
-    //! opening a transaction; partition such inputs at the call site.
-    //! Returns ``Ok(last_rowid)`` on success, ``Err(errmsg)`` on failure (after ROLLBACK if a
-    //! transaction was opened).
+    //! All rows must agree on PK presence — mixed-PK arrays return ``Err`` without opening a txn.
+    //! ``Ok(last_rowid)`` on success, ``Err(errmsg)`` on failure (after ROLLBACK if applicable).
     if (empty(rows)) {
         return ok(int64(0), type<string>)
     }
@@ -1078,7 +1145,7 @@ def try_insert(db : SqlRunner; rows : array<auto(TT)>) : Result<int64, string> {
     }
     let sql = pk_unset ? _::_sql_insert_no_pk_sql(rows[0]) : _::_sql_insert_with_pk_sql(rows[0])
     var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    let prc = _db_prepare(db, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "insert prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
@@ -1177,7 +1244,7 @@ def private try_insert_or(db : SqlRunner; rows : array<auto(TT)>; or_clause : st
     let plain_sql = pk_unset ? _::_sql_insert_no_pk_sql(rows[0]) : _::_sql_insert_with_pk_sql(rows[0])
     let sql = with_or_clause(plain_sql, or_clause)
     var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    let prc = _db_prepare(db, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "insert_or_{or_clause} prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
@@ -1304,11 +1371,9 @@ def update(db : SqlRunner; row : auto(TT)) : int {
 }
 
 def try_delete_(db : SqlRunner; row : auto(TT)) : Result<int, string> {
-    //! Deletes the row identified by ``row``'s @sql_primary_key field. Non-PK
-    //! fields are ignored. Returns ``Ok(rows_affected)`` (1 if matched, 0 if not),
-    //! ``Err(errmsg)`` on SQL failure.
-    //! Trailing underscore in the name is intentional: ``delete`` is a daslang
-    //! keyword, mirroring the convention used by ``daslib/linq``'s ``where_``.
+    //! Deletes the row identified by ``row``'s @sql_primary_key field (non-PK fields ignored).
+    //! ``Ok(rows_affected)`` (1 if matched, 0 if not), ``Err(errmsg)`` on SQL failure.
+    //! Trailing underscore: ``delete`` is a daslang keyword (cf. ``daslib/linq``'s ``where_``).
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(row), $(var stmt : sqlite3_stmt?) {
         _::_sql_bind_row_pk_only(stmt, row)
     }, "delete")
@@ -1325,8 +1390,7 @@ def delete_(db : SqlRunner; row : auto(TT)) : int {
 
 [unused_argument(t)]
 def try_delete_by_id(db : SqlRunner; t : type<auto(TT)>; id : auto(K)) : Result<int, string> {
-    //! Deletes the row of type ``T`` whose primary key equals ``id``. Avoids
-    //! constructing a dummy struct just to identify the row. Returns
+    //! Deletes the row of type ``T`` whose primary key equals ``id`` — no dummy struct needed.
     //! ``Ok(rows_affected)`` (1 or 0), ``Err(errmsg)`` on SQL failure.
     return <- db |> try_step_dml(_::_sql_delete_by_pk_sql(default<TT>), $(var stmt : sqlite3_stmt?) {
         sql_bind_to_stmt(stmt, 1, id)
@@ -1353,8 +1417,7 @@ enum SqliteTxnMode {
 }
 
 def in_transaction(db : SqlRunner) : bool {
-    //! Returns true if the connection is currently inside a BEGIN/COMMIT pair
-    //! (or a SAVEPOINT). Wraps the inverse of ``sqlite3_get_autocommit``.
+    //! Returns true inside a BEGIN/COMMIT pair (or SAVEPOINT) — inverse of ``sqlite3_get_autocommit``.
     return !sqlite3_get_autocommit_(db.sqlite_handle)
 }
 
@@ -1392,10 +1455,8 @@ def with_transaction(db : SqlRunner; blk : block<() : void>) : void {
 }
 
 def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>) : void {
-    //! Wraps ``blk`` in a SQL transaction. Emits BEGIN [mode] / COMMIT, or
-    //! SAVEPOINT das_sp / RELEASE das_sp when nested inside an existing
-    //! transaction. ROLLBACK fires on panic / early return via daslang's
-    //! ``finally`` (best effort — original failure propagates).
+    //! Wraps ``blk`` in a SQL transaction (BEGIN [mode] / COMMIT; nests as SAVEPOINT/RELEASE).
+    //! ROLLBACK fires on panic / early return via ``finally`` — best effort.
     let was_in_txn = db |> in_transaction()
     db |> exec(txn_begin_sql(was_in_txn, mode))
     var success = false
@@ -1417,13 +1478,8 @@ def with_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void
 }
 
 def try_transaction(db : SqlRunner; blk : block<() : void>) : SqlError {
-    //! Non-panic 2-arg overload. Returns ``none`` on commit success, or
-    //! ``some(errmsg)`` if BEGIN or COMMIT fails. Block panics still ROLLBACK
-    //! and re-propagate — wrap the block in your own try/recover if you want
-    //! to convert a block panic into a SqlError.
-    //!
-    //! Returns ``SqlError = Option<string>`` rather than ``Result<void, string>``
-    //! because daslang's ``Result<T, E>`` does not yet support a ``void`` payload.
+    //! Non-panic 2-arg overload. ``none`` on commit success, ``some(errmsg)`` on BEGIN/COMMIT fail.
+    //! Block panics still ROLLBACK and re-propagate; wrap in your own try/recover to convert.
     return db |> try_transaction(SqliteTxnMode.Deferred, blk)
 }
 
@@ -1455,19 +1511,14 @@ def try_transaction(db : SqlRunner; mode : SqliteTxnMode; blk : block<() : void>
 // ===== SQL quoting helpers =====
 
 def sql_quote_id(s : string) : string {
-    //! Wraps ``s`` in double quotes; SQLite-portable form for a quoted
-    //! identifier (table / column / view name). Embedded double quotes
-    //! are doubled. Used by ``fold_to_builder`` for ``inline_id`` fragments
-    //! and by ``_sql_pragma`` / ``_sql_vacuum_into`` for runtime-built SQL.
+    //! Wraps ``s`` in double quotes (SQLite-portable identifier quoting); embedded ``"`` doubled.
     let escaped = s |> replace("\"", "\"\"")
     return "\"{escaped}\""
 }
 
 def sql_quote_lit(s : string) : string {
-    //! Wraps ``s`` in single quotes (SQL string literal). Embedded single
-    //! quotes are doubled. Used by ``fold_to_builder`` for ``inline_lit``
-    //! fragments where the value must be inlined into the SQL text
-    //! (CREATE VIEW, PRAGMA, VACUUM INTO — none accept ``?`` placeholders).
+    //! Wraps ``s`` in single quotes (SQL string literal); embedded ``'`` doubled.
+    //! Used for ``inline_lit`` fragments where the value can't go through ``?`` (CREATE VIEW, PRAGMA, …).
     let escaped = s |> replace("'", "''")
     return "'{escaped}'"
 }
@@ -1475,9 +1526,7 @@ def sql_quote_lit(s : string) : string {
 // ===== PRAGMA helpers =====
 
 def try_set_pragma(db : SqlRunner; name : string; value : string) : SqlError {
-    //! Sets ``PRAGMA "<name>" = '<value>'``. Returns ``none`` on success,
-    //! ``some(errmsg)`` on failure. The value is single-quoted; embedded
-    //! single quotes in ``value`` are doubled to keep SQLite happy.
+    //! Sets ``PRAGMA "<name>" = '<value>'`` (value single-quoted, embedded ``'`` doubled).
     return db |> try_exec("PRAGMA {sql_quote_id(name)} = {sql_quote_lit(value)}")
 }
 
@@ -1519,20 +1568,9 @@ def set_pragma(db : SqlRunner; name : string; value : bool) : void {
 }
 
 def try_apply_recommended_pragmas(db : SqlRunner) : SqlError {
-    //! Applies a curated set of pragmas that's appropriate for typical
-    //! application use (write-ahead logging, foreign keys, sane busy
-    //! behavior). Stops at the first failure and returns its error.
-    //!
-    //!   journal_mode = WAL        // concurrent reads + one writer
-    //!   busy_timeout = 5000       // wait 5 s on contention before SQLITE_BUSY
-    //!   foreign_keys = ON         // enforce FK constraints (off by default)
-    //!   synchronous = NORMAL      // good safety+speed balance under WAL
-    //!
-    //! If your workload demands different defaults (durability-first servers
-    //! → ``synchronous = FULL``, embedded ROM-like data → ``journal_mode =
-    //! OFF``) call ``set_pragma`` directly. ``journal_mode`` cannot be
-    //! changed inside an active transaction — call this at connection setup,
-    //! not mid-flow.
+    //! Applies WAL + busy_timeout=5000 + foreign_keys=ON + synchronous=NORMAL.
+    //! Stops at the first failure and returns its error. Call at connection setup, not mid-txn
+    //! (``journal_mode`` cannot change inside an active transaction).
     let e1 = db |> try_set_pragma("journal_mode", "WAL")
     if (e1 |> is_some) {
         return e1
@@ -1582,11 +1620,8 @@ def vacuum(db : SqlRunner) : void {
 }
 
 def try_vacuum_into(db : SqlRunner; path : string) : SqlError {
-    //! VACUUM INTO '<path>' — write a snapshot of the live database to
-    //! ``path`` without modifying the source. Useful for "save as" / hot
-    //! backup scenarios where you don't want VACUUM's lock contention on
-    //! the live file. The path is single-quoted with `''` doubling for
-    //! safety; SQLite's ``VACUUM INTO`` does not accept `?` placeholders.
+    //! VACUUM INTO '<path>' — snapshot the live database without modifying the source.
+    //! Path is single-quoted (``''`` doubled); ``VACUUM INTO`` doesn't accept ``?`` placeholders.
     if (db |> in_transaction()) {
         return some("VACUUM INTO cannot run inside an active transaction; commit or rollback first")
     }
@@ -1602,9 +1637,8 @@ def vacuum_into(db : SqlRunner; path : string) : void {
 }
 
 def try_optimize(db : SqlRunner) : SqlError {
-    //! ``PRAGMA optimize`` — refresh the query planner's stats. Recommended
-    //! at connection close on long-lived connections; cheap on short-lived
-    //! ones (it short-circuits when nothing has changed).
+    //! ``PRAGMA optimize`` — refresh the planner stats. Run at connection close on long-lived
+    //! connections; cheap otherwise (short-circuits when nothing changed).
     return db |> try_exec("PRAGMA optimize")
 }
 
@@ -1625,17 +1659,14 @@ def private try_check_impl(db : SqlRunner; sql : string) : Result<array<string>,
 }
 
 def try_integrity_check(db : SqlRunner) : Result<array<string>, string> {
-    //! Runs ``PRAGMA integrity_check`` and returns the result rows.
-    //! On a healthy database, returns ``["ok"]``. On corruption returns
-    //! one row per detected issue (free-page corruption, missing index
-    //! entry, etc.). Returns ``Err`` only on prepare/step failure.
+    //! Runs ``PRAGMA integrity_check``; returns ``["ok"]`` on a healthy DB or one row per
+    //! detected issue. ``Err`` only on prepare/step failure.
     return <- db |> try_check_impl("PRAGMA integrity_check")
 }
 
 def integrity_check(db : SqlRunner) : array<string> {
-    //! Strict variant of ``try_integrity_check``. Panics on
-    //! prepare/step failure (NOT on detected corruption — corruption is
-    //! reported via the returned rows).
+    //! Strict variant of ``try_integrity_check``. Panics only on prepare/step failure
+    //! (corruption surfaces via the returned rows, not a panic).
     var r <- db |> try_integrity_check()
     if (r |> is_err) {
         panic(r |> unwrap_err)
@@ -1644,9 +1675,8 @@ def integrity_check(db : SqlRunner) : array<string> {
 }
 
 def try_quick_check(db : SqlRunner) : Result<array<string>, string> {
-    //! Cheaper sibling of ``try_integrity_check`` — same return shape,
-    //! but skips the index-vs-table cross check. Useful as a fast
-    //! pre-flight before deciding whether to run the full check.
+    //! Cheaper sibling of ``try_integrity_check`` — same return shape, skips the
+    //! index-vs-table cross check. Useful as a pre-flight before the full check.
     return <- db |> try_check_impl("PRAGMA quick_check")
 }
 
@@ -1660,17 +1690,8 @@ def quick_check(db : SqlRunner) : array<string> {
 }
 
 def try_backup_to(db : SqlRunner; dest : SqlRunner) : SqlError {
-    //! Copies all of ``db`` into the open connection ``dest`` using
-    //! SQLite's online backup API. Pages are copied incrementally and
-    //! concurrent writers on ``db`` are tolerated (transient
-    //! SQLITE_BUSY/LOCKED responses are retried with a 50 ms backoff).
-    //! Useful for snapshotting :memory: databases, hot backups, or
-    //! cloning before destructive migrations. Returns ``some(errmsg)``
-    //! if the backup did not complete; ``none`` on success.
-    //!
-    //! The C++ shim returns ``SQLITE_OK`` on a fully-completed backup
-    //! (the result of ``sqlite3_backup_finish`` after a clean
-    //! ``SQLITE_DONE`` from the step loop) and any other rc on failure.
+    //! Online-backup copy of ``db`` into ``dest`` (incremental; tolerates concurrent writers
+    //! with 50 ms BUSY/LOCKED retry). Useful for ``:memory:`` snapshots and hot backups.
     let rc = sqlite3_backup_run(db.sqlite_handle, dest.sqlite_handle)
     if (rc != SQLITE_OK) {
         return some("backup_to: sqlite3_backup_run failed (rc={rc}): {sqlite3_errmsg(dest.sqlite_handle)}")
@@ -1679,8 +1700,7 @@ def try_backup_to(db : SqlRunner; dest : SqlRunner) : SqlError {
 }
 
 def backup_to(db : SqlRunner; dest : SqlRunner) : void {
-    //! Strict variant of ``try_backup_to``. Panics with the libsqlite3
-    //! errmsg on any non-completion.
+    //! Strict variant of ``try_backup_to``. Panics with the libsqlite3 errmsg on non-completion.
     let err = db |> try_backup_to(dest)
     if (err |> is_some) {
         panic(err |> unwrap)
@@ -1688,12 +1708,8 @@ def backup_to(db : SqlRunner; dest : SqlRunner) : void {
 }
 
 def try_backup_to(db : SqlRunner; path : string) : SqlError {
-    //! Opens ``path`` (creating the file if it does not exist), copies
-    //! ``db`` into it, and closes ``path`` on return. Returns ``some(err)``
-    //! on either an open failure or a backup failure; on backup failure
-    //! the destination file is finalized regardless, leaving a partially-
-    //! populated file on disk that the caller can ``fio::remove`` or
-    //! keep for diagnostics.
+    //! Opens ``path`` (creating if absent), copies ``db`` into it, closes on return.
+    //! On backup failure the partial file is left on disk for ``fio::remove`` or diagnostics.
     var dest_result <- try_open_sqlite(path)
     if (dest_result |> is_err) {
         return some(dest_result |> unwrap_err)
@@ -1734,10 +1750,8 @@ def run_dml(db : SqlRunner; sql : string;
 def try_run_dml_returning(db : SqlRunner; sql : string;
                           bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                           row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<array<TT -const -#>, string> {
-    //! Prepares ``sql`` (which must include a ``RETURNING ...`` clause),
-    //! invokes ``bind_blk``, then steps repeatedly through ``SQLITE_ROW``
-    //! rows, calling ``row_blk`` to materialize each result row.
-    //! Used by ``_sql_update_returning`` / ``_sql_delete_returning`` macros.
+    //! Prepares ``sql`` (must include a ``RETURNING ...`` clause), binds, and steps through every
+    //! ``SQLITE_ROW`` calling ``row_blk``. Backs the ``_sql_update/_delete_returning`` macros.
     return <- db |> try_collect_rows(sql, bind_blk, row_blk, "DML RETURNING")
 }
 
@@ -1754,13 +1768,8 @@ def run_dml_returning(db : SqlRunner; sql : string;
 
 [unused_argument(t)]
 def try_select_from(db : SqlRunner; t : type<auto(TT)>) : Result<array<TT -const -#>, string> {
-    //! Reads every row of the table backing ``T`` and materializes them as ``array<TT>``.
-    //! Compat-mode counterpart to the ``_sql(db |> select_from(type<T>))`` macro path:
-    //! when no chain operators or ``_sql`` wrapper is involved, this is what runs.
-    //! Returns ``Err(errmsg)`` on prepare or step failure.
-    //!
-    //! NOTE: uses a regular generic (`type<auto(TT)>`) rather than `[template]` so
-    //! the `type<T>` argument survives in the AST for `_sql` chain-pattern matching.
+    //! Reads every row of ``T``'s table as ``array<TT>``. Compat-mode counterpart to the
+    //! ``_sql(db |> select_from(type<T>))`` chain. ``Err(errmsg)`` on prepare or step failure.
     return <- db |> try_collect_rows(_::_sql_select_all_sql(type<TT -const -#>),
         $(var stmt : sqlite3_stmt?) {},
         $(stmt : sqlite3_stmt?) {
@@ -1786,31 +1795,11 @@ def select_from(db : SqlRunner; t : type<auto(TT)>) : array<TT -const -#> {
 def run_each_select(db : SqlRunner; sql : string;
                     bind_blk : block<(var stmt : sqlite3_stmt?) : void>;
                     var row_lam : lambda<(stmt : sqlite3_stmt?) : auto(TT)>) {
-    //! `_each_sql` macro runtime: lazy-iterating sibling of ``run_select``.
-    //! Prepares ``sql``, runs ``bind_blk`` once, then returns a
-    //! ``generator<TT>`` that lazily ``sqlite3_step``s the cursor; each
-    //! yielded value is produced by ``row_lam(stmt)``. Useful for
-    //! streaming over large result sets where the array materialization
-    //! would dominate memory or latency.
-    //!
-    //! ``row_lam`` is a lambda (not a block) because it must be captured
-    //! into the generator body and outlive the surrounding stack frame.
-    //! ``bind_blk`` runs once before the generator is constructed and can
-    //! stay a block.
-    //!
-    //! Lifetime: the prepared statement is owned by the generator;
-    //! ``sqlite3_finalize`` runs in the generator's ``finally`` block —
-    //! statement is released on normal exhaustion, early break, or panic.
-    //! One-shot semantics: a generator can only be iterated once; re-run
-    //! the same query by re-evaluating the ``_each_sql(...)`` call site.
-    //!
-    //! Panics on prepare failure (with the libsqlite3 errmsg). Step
-    //! failures inside the loop also panic; the generator's ``finally``
-    //! finalizes the stmt regardless. The strict semantics match
-    //! ``run_select``; for non-panic recovery catch the panic at a higher
-    //! level (try/recover).
+    //! `_each_sql` macro runtime — lazy ``generator<TT>`` sibling of ``run_select``.
+    //! Generator owns the prepared statement; ``sqlite3_finalize`` runs in its ``finally``.
+    //! One-shot; panics on prepare/step failure (catch at a higher level for recovery).
     var stmt : sqlite3_stmt?
-    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    let prc = _db_prepare(db, sql, stmt)
     if (prc != SQLITE_OK) {
         let msg = "_each_sql: prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_finalize(stmt)
@@ -1836,10 +1825,8 @@ def run_each_select(db : SqlRunner; sql : string;
 }
 
 def try_run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<array<TT -const -#>, string> {
-    //! `_sql` macro runtime. Prepares ``sql``, runs ``bind_blk`` once,
-    //! then steps the cursor and materializes each row via ``row_blk``.
-    //! Generic on row type so the call site determines the array element
-    //! shape. Returns ``Err(errmsg)`` on prepare or step failure.
+    //! `_sql` macro runtime. Prepares + binds, then steps and materializes each row via ``row_blk``.
+    //! Returns ``Err(errmsg)`` on prepare or step failure.
     return <- db |> try_collect_rows(sql, bind_blk, row_blk, "_sql")
 }
 
@@ -1853,12 +1840,8 @@ def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite
 }
 
 def try_run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<TT -const -#, string> {
-    //! `_sql` macro runtime: single-row materializer used by `_sql(...)`
-    //! chains ending in `_first()`, `_count()`, or aggregates. Prepares
-    //! ``sql``, runs ``bind_blk`` once, steps once, materializes the first
-    //! row via ``row_blk``. Returns ``Err(errmsg)`` on prepare or step
-    //! failure or zero rows. (Sibling ``run_select_one_opt`` returns
-    //! ``Ok(none)`` for "0 rows is expected" call sites.)
+    //! `_sql` runtime: single-row materializer (``_first()`` / ``_count()`` / aggregate chains).
+    //! ``Err(errmsg)`` on prepare/step failure or zero rows; ``run_select_one_opt`` for the optional case.
     return <- try_one_row(db, sql, bind_blk, row_blk, "_sql")
 }
 
@@ -1967,6 +1950,7 @@ struct private FieldInfo {
     is_stored : bool
     is_json : bool
     is_blob : bool
+    is_fts_rank : bool   // [sql_fts5] only — read-only, emits `rank`, skipped on INSERT
     computed_sql : string
     default_clause : string
     references_clause : string
@@ -2078,14 +2062,8 @@ def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPt
 
 [structure_macro(name=sql_index)]
 class SqlIndexMacro : AstStructureAnnotation {
-    //! Stackable struct-level annotation:
-    //!   ``[sql_index(fields="ColName", unique=true, name="explicit_name")]``
-    //!   ``[sql_index(fields=("A", "B"))]``
-    //! Reads the per-struct ``_sql_create_indexes_sql`` helper that
-    //! `[sql_table]` previously emitted (must appear earlier in the same
-    //! annotation list — typically ``[sql_table(...), sql_index(...), ...]``)
-    //! and rewrites its body to append one ``CREATE [UNIQUE] INDEX``
-    //! statement per annotation, joined by ``;``.
+    //! Stackable struct-level annotation: ``[sql_index(fields="A"|("A","B"), unique=?, name=?)]``.
+    //! Must appear after ``[sql_table]`` in the annotation list (it rewrites that helper's body).
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let cols = find_string_array_annotation(args, "fields")
         if (length(cols) == 0) {
@@ -2444,10 +2422,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_create_indexes_sql_fn(var st : StructurePtr; indexes_sql : string) : FunctionPtr {
-        //! Per-struct helper returning the concatenated CREATE INDEX statements
-        //! for every `[sql_index(...)]` attached to the struct, joined by ``;``.
-        //! Returns ``""`` when the struct has no indexes; ``try_create_table``
-        //! short-circuits sqlite3_exec on empty input.
+        //! Per-struct helper returning ``;``-joined CREATE INDEX statements for every
+        //! ``[sql_index(...)]`` (or ``""`` — ``try_create_table`` short-circuits on empty).
         var fn = qmacro_function("_sql_create_indexes_sql") $(typ : $t(st)) : string {
             return $v(indexes_sql)
         }
@@ -2507,14 +2483,8 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_column_info_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
-        //! Per-struct helper backing the user-facing ``column_info(type<T>)``
-        //! generic. Walks the same `FieldInfo` array DDL emission uses; emits
-        //! one `ColumnInfo` push per field in declaration order, including
-        //! ``@sql_computed`` fields (they appear in the schema and in
-        //! ``PRAGMA table_info``, so the daslang-side view surfaces them
-        //! too). ``is_nullable`` follows the daslang-side meaning — it is
-        //! ``info.is_optional`` (Option<T>-derived), not a NOT-NULL constraint
-        //! check. See API_REWORK § 09.
+        //! Per-struct helper backing the user-facing ``column_info(type<T>)`` generic.
+        //! ``is_nullable`` follows the daslang-side meaning (``Option<T>``-derived, not NOT-NULL).
         var push_exprs : array<ExpressionPtr>
         push_exprs |> reserve(length(fields))
         for (i in range(length(fields))) {
@@ -3126,7 +3096,7 @@ class private SqlViewMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_drop)
         var fn_select_all = make_view_select_all_sql_fn(st, view_name, fields)
         compiling_module() |> add_function(fn_select_all)
-        var fn_read = make_view_read_row_fn(st, fields)
+        var fn_read = make_read_row_helper_fn(st, fields)
         compiling_module() |> add_function(fn_read)
         var fn_col_info = make_view_column_info_fn(st, fields)
         compiling_module() |> add_function(fn_col_info)
@@ -3140,7 +3110,7 @@ class private SqlViewMacro : AstStructureAnnotation {
         compiling_module() |> add_function(fn_upd_pk)
         var fn_del_pk = make_view_string_panic_stub_fn(st, "_sql_delete_by_pk_sql", st_name, "delete")
         compiling_module() |> add_function(fn_del_pk)
-        var fn_pk_unset = make_view_pk_is_unset_stub_fn(st)
+        var fn_pk_unset = make_pk_is_unset_returns_false_fn(st)
         compiling_module() |> add_function(fn_pk_unset)
         var fn_bind = make_view_bind_row_panic_stub_fn(st, "_sql_bind_row", st_name, "insert", true)
         compiling_module() |> add_function(fn_bind)
@@ -3152,23 +3122,63 @@ class private SqlViewMacro : AstStructureAnnotation {
     }
 }
 
-def private make_view_table_name_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
-    var fn = qmacro_function("_sql_table_name") $(typ : $t(st)) : string {
-        return $v(view_name)
+// ===== Shared helper-function builders (used by [sql_view] and [sql_fts5]) =====
+// Factored out because [sql_view]/[sql_fts5] generate identical qmacro_function shells.
+
+def private make_const_string_helper_fn(var st : StructurePtr; helper_name, val : string) : FunctionPtr {
+    var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
+        return $v(val)
     }
     fn.flags |= FunctionFlags.generated
     fn.body |> force_at(st.at)
     return <- fn
 }
 
-def private make_view_drop_sql_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
-    let sql = "DROP VIEW IF EXISTS \"{view_name}\""
-    var fn = qmacro_function("_sql_drop_view_if_exists_sql") $(typ : $t(st)) : string {
-        return $v(sql)
+def private make_pk_is_unset_returns_false_fn(var st : StructurePtr) : FunctionPtr {
+    var fn = qmacro_function("_sql_pk_is_unset") $(row : $t(st)) : bool {
+        return false
     }
     fn.flags |= FunctionFlags.generated
     fn.body |> force_at(st.at)
     return <- fn
+}
+
+def private make_string_panic_stub_helper_fn(var st : StructurePtr; helper_name, msg : string) : FunctionPtr {
+    var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
+        panic($v(msg))
+        return ""
+    }
+    fn.flags |= FunctionFlags.generated
+    fn.body |> force_at(st.at)
+    return <- fn
+}
+
+def private make_void_panic_stub_helper_fn(var st : StructurePtr; helper_name, msg : string;
+                                           has_include_pk : bool) : FunctionPtr {
+    if (has_include_pk) {
+        var fn = qmacro_function(helper_name) $(var stmt : sqlite3_stmt?; row : $t(st); include_pk : bool) : void {
+            panic($v(msg))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    } else {
+        var fn = qmacro_function(helper_name) $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
+            panic($v(msg))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+}
+
+def private make_view_table_name_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
+    return <- make_const_string_helper_fn(st, "_sql_table_name", view_name)
+}
+
+def private make_view_drop_sql_fn(var st : StructurePtr; view_name : string) : FunctionPtr {
+    return <- make_const_string_helper_fn(st, "_sql_drop_view_if_exists_sql",
+                                          "DROP VIEW IF EXISTS \"{view_name}\"")
 }
 
 def private make_view_select_all_sql_fn(var st : StructurePtr; view_name : string; fields : array<FieldInfo>) : FunctionPtr {
@@ -3191,7 +3201,8 @@ def private make_view_select_all_sql_fn(var st : StructurePtr; view_name : strin
     return <- fn
 }
 
-def private make_view_read_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+def private make_read_row_helper_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+    // Per-struct _sql_read_row: column index = field index in declaration order.
     var assign_exprs : array<ExpressionPtr>
     assign_exprs |> reserve(length(fields))
     for (i in range(length(fields))) {
@@ -3260,44 +3271,332 @@ def private make_view_column_info_fn(var st : StructurePtr; fields : array<Field
 def private make_view_string_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                            st_name : string; verb : string) : FunctionPtr {
     let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
-    var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
-        panic($v(msg))
-        return ""
-    }
-    fn.flags |= FunctionFlags.generated
-    fn.body |> force_at(st.at)
-    return <- fn
-}
-
-def private make_view_pk_is_unset_stub_fn(var st : StructurePtr) : FunctionPtr {
-    var fn = qmacro_function("_sql_pk_is_unset") $(row : $t(st)) : bool {
-        return false
-    }
-    fn.flags |= FunctionFlags.generated
-    fn.body |> force_at(st.at)
-    return <- fn
+    return <- make_string_panic_stub_helper_fn(st, helper_name, msg)
 }
 
 def private make_view_bind_row_panic_stub_fn(var st : StructurePtr; helper_name : string;
                                              st_name : string; verb : string;
                                              has_include_pk : bool) : FunctionPtr {
     let msg = "[sql_view] {st_name}: cannot {verb} into a view — views are read-only. Mutate the underlying table(s) and re-query the view."
-    if (has_include_pk) {
-        var fn = qmacro_function(helper_name) $(var stmt : sqlite3_stmt?; row : $t(st); include_pk : bool) : void {
-            panic($v(msg))
+    return <- make_void_panic_stub_helper_fn(st, helper_name, msg, has_include_pk)
+}
+
+// ===== [sql_fts5] — FTS5 virtual-table struct (tut 40) =====
+
+struct private FtsRejectedAnnotation {
+    name    : string
+    is_bool : bool
+    why     : string
+}
+
+let private FTS5_REJECTED_ANNOTATIONS = fixed_array(
+    FtsRejectedAnnotation(name = "sql_primary_key", is_bool = true,
+        why = "FTS5 virtual tables don't take user PRIMARY KEYs (rowid is implicit)."),
+    FtsRejectedAnnotation(name = "sql_unique", is_bool = true,
+        why = "uniqueness constraints are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_computed", is_bool = false,
+        why = "generated columns are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_stored", is_bool = true,
+        why = "generated-column storage does not apply to FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_default_fn", is_bool = false,
+        why = "DEFAULT clauses are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_references", is_bool = false,
+        why = "foreign keys are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_on_delete", is_bool = false,
+        why = "FK actions are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_on_update", is_bool = false,
+        why = "FK actions are not supported on FTS5 virtual tables."),
+    FtsRejectedAnnotation(name = "sql_json", is_bool = true,
+        why = "FTS5 columns are tokenized text, not JSON. Drop the annotation or use a regular [sql_table]."),
+    FtsRejectedAnnotation(name = "sql_blob", is_bool = true,
+        why = "FTS5 columns are tokenized text, not BLOB. Drop the annotation or use a regular [sql_table]."))
+// Self-contained mode only: content fields must be string/Option<string>;
+// @sql_fts_rank is read-only and maps to FTS5's hidden `rank` on SELECT.
+
+[structure_macro(name=sql_fts5)]
+class private SqlFts5Macro : AstStructureAnnotation {
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        let table_name = find_annotation(args, "name", string(st.name))
+        // ---- per-field validation: FTS5 columns are simple text ----
+        var fields : array<FieldInfo>
+        var rank_count = 0
+        var content_count = 0
+        fields |> reserve(length(st.fields))
+        for (field in st.fields) {
+            let fname = string(field.name)
+            let is_optional = is_option_field_type(field._type)
+            let is_fts_rank = find_annotation(field.annotation, "sql_fts_rank", false)
+
+            // Reject every annotation that doesn't apply to a virtual table.
+            for (rej in FTS5_REJECTED_ANNOTATIONS) {
+                var present = false
+                if (rej.is_bool) {
+                    present = find_annotation(field.annotation, rej.name, false)
+                } else {
+                    present = !empty(find_annotation(field.annotation, rej.name, ""))
+                }
+                if (present) {
+                    errors := "[sql_fts5]: field '{fname}' has @{rej.name} — {rej.why}"
+                    return false
+                }
+            }
+            // @sql_column rename — same shape as [sql_table]; rejected on @sql_fts_rank
+            // (rank is hardcoded to FTS5's hidden `rank` column).
+            var col_name = fname
+            let col_anno = find_arg(field.annotation, "sql_column")
+            if (col_anno is tString) {
+                if (is_fts_rank) {
+                    errors := "[sql_fts5]: field '{fname}' has both @sql_fts_rank and @sql_column — rank is hardcoded to FTS5's hidden `rank` column. Drop the @sql_column rename."
+                    return false
+                }
+                let cv = string(col_anno as tString)
+                if (empty(cv)) {
+                    errors := "[sql_fts5]: field '{fname}' @sql_column = \"\" is invalid — provide a non-empty SQL column name."
+                    return false
+                }
+                if (find(cv, "\"") >= 0 || find(cv, "\\") >= 0) {
+                    errors := "[sql_fts5]: field '{fname}' @sql_column=\"{cv}\" — embedded `\"` / `\\` are rejected (SQL identifier hygiene). Use a plain identifier."
+                    return false
+                }
+                col_name = cv
+            }
+            // @sql_fts_rank: read-only float column, reads FTS5's hidden `rank`. No daslang init allowed.
+            if (is_fts_rank) {
+                col_name = "rank"   // FTS5 hidden column — not a declared content column
+                if (field.init != null) {
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — read-only column populated from FTS5's hidden `rank` on SELECT. Remove the daslang field initializer."
+                    return false
+                }
+                if (is_optional) {
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — must not be Option<T>. FTS5 always materializes a relevance score on a MATCH-using SELECT."
+                    return false
+                }
+                if (field._type.baseType != Type.tFloat && field._type.baseType != Type.tDouble) {
+                    errors := "[sql_fts5]: field '{fname}' is @sql_fts_rank — must be a float / double (FTS5 BM25 score). Got '{describe(field._type)}'."
+                    return false
+                }
+                rank_count++
+            } else {
+                // Content column: string or Option<string>.
+                let bt = field._type.baseType
+                let is_text = ((bt == Type.tString)
+                            || (is_optional && field._type.firstType != null && field._type.firstType.baseType == Type.tString))
+                if (!is_text) {
+                    errors := "[sql_fts5]: field '{fname}' has unsupported type '{describe(field._type)}' — FTS5 content columns must be `string` or `Option<string>`. Tag the field with `@sql_fts_rank` if it's the relevance score column."
+                    return false
+                }
+                content_count++
+            }
+            fields |> push(FieldInfo(
+                name = fname,
+                col_name = col_name,
+                is_pk = false,
+                is_int_pk = false,
+                is_optional = is_optional,
+                is_unique = false,
+                is_computed = false,
+                is_stored = false,
+                is_json = false,
+                is_blob = false,
+                is_fts_rank = is_fts_rank,
+                computed_sql = "",
+                default_clause = "",
+                references_clause = ""))
         }
-        fn.flags |= FunctionFlags.generated
-        fn.body |> force_at(st.at)
-        return <- fn
-    } else {
-        var fn = qmacro_function(helper_name) $(var stmt : sqlite3_stmt?; row : $t(st)) : void {
-            panic($v(msg))
+        if (content_count == 0) {
+            errors := "[sql_fts5] on struct '{st.name}': must declare at least one content column (`string` or `Option<string>`). A struct with only @sql_fts_rank fields has nothing to index."
+            return false
         }
-        fn.flags |= FunctionFlags.generated
-        fn.body |> force_at(st.at)
-        return <- fn
+        if (rank_count > 1) {
+            errors := "[sql_fts5] on struct '{st.name}': only one @sql_fts_rank field is allowed (FTS5 emits a single `rank` column per SELECT)."
+            return false
+        }
+        // ---- @sql_column collision detection (content columns only — rank uses FTS5's hidden id) ----
+        {
+            var seen_cols : table<string; string>
+            for (info in fields) {
+                if (info.is_fts_rank) {
+                    continue
+                }
+                if (key_exists(seen_cols, info.col_name)) {
+                    let first_owner = seen_cols[info.col_name]
+                    errors := "[sql_fts5]: SQL column name '{info.col_name}' is claimed by both field '{first_owner}' and field '{info.name}'. @sql_column renames must produce a unique column name across the struct."
+                    return false
+                }
+                seen_cols |> insert(info.col_name, info.name)
+            }
+        }
+        // [sql_index] siblings would be meaningless on a virtual table — reject up front.
+        for (annDecl in st.annotations) {
+            if (annDecl.annotation.name == "sql_index") {
+                errors := "[sql_fts5] on struct '{st.name}': sibling [sql_index] is not supported — FTS5 builds its own inverted index. Drop the [sql_index]."
+                return false
+            }
+        }
+        // ---- generated helper functions ----
+        let create_sql = build_fts5_create_table_sql(table_name, fields)
+        let select_all_sql = build_fts5_select_all_sql(table_name, fields)
+        let insert_sql = build_fts5_insert_sql(table_name, fields)
+        let st_name = string(st.name)
+        let panic_msg_pk = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table — UPDATE/DELETE-by-PK is not supported in v1. Drop and re-INSERT, or use raw `db |> exec(\"DELETE FROM ... WHERE rowid = ?\", id)`."
+        let panic_msg_bind = "[sql_fts5] {st_name}: cannot {0} on an FTS5 virtual table — not supported in v1. Use raw `db |> exec(...)` for DELETE/UPDATE."
+        var fn_table_name = make_const_string_helper_fn(st, "_sql_table_name", table_name)
+        compiling_module() |> add_function(fn_table_name)
+        var fn_drop = make_const_string_helper_fn(st, "_sql_drop_table_if_exists_sql",
+                                                  "DROP TABLE IF EXISTS \"{table_name}\"")
+        compiling_module() |> add_function(fn_drop)
+        var fn_create = make_const_string_helper_fn(st, "_sql_create_table_sql", create_sql)
+        compiling_module() |> add_function(fn_create)
+        var fn_indexes = make_const_string_helper_fn(st, "_sql_create_indexes_sql", "")
+        compiling_module() |> add_function(fn_indexes)
+        var fn_select_all = make_const_string_helper_fn(st, "_sql_select_all_sql", select_all_sql)
+        compiling_module() |> add_function(fn_select_all)
+        var fn_read = make_read_row_helper_fn(st, fields)
+        compiling_module() |> add_function(fn_read)
+        // FTS5 has no daslang-side PK; both insert helper variants emit the same SQL.
+        var fn_ins_pk = make_const_string_helper_fn(st, "_sql_insert_with_pk_sql", insert_sql)
+        compiling_module() |> add_function(fn_ins_pk)
+        var fn_ins_nopk = make_const_string_helper_fn(st, "_sql_insert_no_pk_sql", insert_sql)
+        compiling_module() |> add_function(fn_ins_nopk)
+        var fn_pk_unset = make_pk_is_unset_returns_false_fn(st)
+        compiling_module() |> add_function(fn_pk_unset)
+        var fn_bind = make_fts5_bind_row_fn(st, fields)
+        compiling_module() |> add_function(fn_bind)
+        var fn_col_info = make_fts5_column_info_fn(st, fields)
+        compiling_module() |> add_function(fn_col_info)
+        // UPDATE/DELETE not supported in v1 — runtime panic stubs (compile error would be nicer but the macro expander generates the calls unconditionally for `[sql_table]`-shape APIs).
+        var fn_upd_pk = make_string_panic_stub_helper_fn(st, "_sql_update_by_pk_sql",
+            panic_msg_pk |> replace("{0}", "update by primary key"))
+        compiling_module() |> add_function(fn_upd_pk)
+        var fn_del_pk = make_string_panic_stub_helper_fn(st, "_sql_delete_by_pk_sql",
+            panic_msg_pk |> replace("{0}", "delete by primary key"))
+        compiling_module() |> add_function(fn_del_pk)
+        var fn_bind_upd = make_void_panic_stub_helper_fn(st, "_sql_bind_row_for_update",
+            panic_msg_bind |> replace("{0}", "update"), false)
+        compiling_module() |> add_function(fn_bind_upd)
+        var fn_bind_pk = make_void_panic_stub_helper_fn(st, "_sql_bind_row_pk_only",
+            panic_msg_bind |> replace("{0}", "delete by primary key"), false)
+        compiling_module() |> add_function(fn_bind_pk)
+        return true
     }
 }
+
+def private build_fts5_create_table_sql(table_name : string; fields : array<FieldInfo>) : string {
+    let col_list = build_string() $(var w) {
+        var first = true
+        for (info in fields) {
+            if (info.is_fts_rank) {
+                continue   // rank is implicit in FTS5; not declared as a content column
+            }
+            if (!first) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(info.col_name)
+            w |> write("\"")
+            first = false
+        }
+    }
+    return "CREATE VIRTUAL TABLE IF NOT EXISTS \"{table_name}\" USING fts5({col_list}, tokenize='unicode61')"
+}
+
+def private build_fts5_select_all_sql(table_name : string; fields : array<FieldInfo>) : string {
+    let col_list = build_string() $(var w) {
+        for (i in range(length(fields))) {
+            if (i > 0) {
+                w |> write(", ")
+            }
+            if (fields[i].is_fts_rank) {
+                w |> write("rank")  // FTS5 hidden column; emitted unquoted
+            } else {
+                w |> write("\"")
+                w |> write(fields[i].col_name)
+                w |> write("\"")
+            }
+        }
+    }
+    return "SELECT {col_list} FROM \"{table_name}\""
+}
+
+def private build_fts5_insert_sql(table_name : string; fields : array<FieldInfo>) : string {
+    let cols = build_string() $(var w) {
+        var first = true
+        for (info in fields) {
+            if (info.is_fts_rank) {
+                continue
+            }
+            if (!first) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(info.col_name)
+            w |> write("\"")
+            first = false
+        }
+    }
+    let placeholders = build_string() $(var w) {
+        var first = true
+        for (info in fields) {
+            if (info.is_fts_rank) {
+                continue
+            }
+            if (!first) {
+                w |> write(", ")
+            }
+            w |> write("?")
+            first = false
+        }
+    }
+    return "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})"
+}
+
+def private make_fts5_bind_row_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+    var no_pk_exprs : array<ExpressionPtr>
+    no_pk_exprs |> reserve(length(fields))
+    var idx = 0
+    for (info in fields) {
+        if (info.is_fts_rank) {
+            continue
+        }
+        idx++
+        let bind_idx = idx
+        let field_name = info.name
+        no_pk_exprs |> push(qmacro_expr(${
+            sql_bind_to_stmt(stmt, $v(bind_idx), row.$f(field_name));
+        }))
+    }
+    var fn = qmacro_function("_sql_bind_row") $(var stmt : sqlite3_stmt?; row : $t(st); include_pk : bool) : void {
+        $b(no_pk_exprs)
+    }
+    fn.flags |= FunctionFlags.generated
+    fn.body |> force_at(st.at)
+    return <- fn
+}
+
+def private make_fts5_column_info_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+    var push_exprs : array<ExpressionPtr>
+    push_exprs |> reserve(length(fields))
+    for (i in range(length(fields))) {
+        let info = fields[i]
+        let name = info.col_name
+        let is_nullable = info.is_optional
+        push_exprs |> push(qmacro_expr(${ result |> push(ColumnInfo(
+            name = $v(name),
+            data_type = sql_storage_enum_for(type<$t(st.fields[i]._type)>),
+            is_pk = false,
+            is_nullable = $v(is_nullable),
+            default_expr = "")); }))
+    }
+    var fn = qmacro_function("_sql_column_info") $(typ : $t(st)) : array<ColumnInfo> {
+        var result : array<ColumnInfo>
+        $b(push_exprs)
+        return <- result
+    }
+    fn.flags |= FunctionFlags.generated
+    fn.body |> force_at(st.at)
+    return <- fn
+}
+
 
 // ===== register_function — bind a daslang function as a SQL scalar UDF =====
 

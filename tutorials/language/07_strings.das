@@ -13,7 +13,7 @@
 //   - Padding: pad_left, pad_right
 //   - Trimming: trim_prefix, trim_suffix, strip
 //   - capitalize, is_null_or_whitespace
-//   - Full-text query matching: text_match (FTS5 subset)
+//   - Full-text query matching: text_match (full SQLite FTS5 grammar)
 //   - Formatted output with fmt
 //   - Building strings with build_string
 //
@@ -23,6 +23,7 @@ options gen2
 
 require strings
 require daslib/strings_boost
+require daslib/fts5_query
 
 [export]
 def main {
@@ -166,76 +167,52 @@ def main {
     print("is_null_or_whitespace(\"  \") = {is_null_or_whitespace("  ")}\n")
     print("is_null_or_whitespace(\"hi\") = {is_null_or_whitespace("hi")}\n")
 
-    // === Full-Text Query Matching — text_match ===
-    // text_match(text, query) implements a small in-memory subset of
-    // the SQLite FTS5 query grammar. Useful for client-side filtering
-    // that should match what an FTS5 index would do server-side.
+    // === Full-Text Query Matching — text_match === nolint:STYLE014
+    // text_match(text, query) implements the SQLite FTS5 query grammar
+    // in-memory. Useful for client-side filtering that should match
+    // what an FTS5 index would do server-side.
     //
-    // Supported subset:
+    // Supported (require daslib/fts5_query):
     //   - Whitespace-separated terms (AND semantics)
     //   - "term*" prefix match
-    //   - ASCII case-folding (UTF-8 multi-byte words are kept intact)
-    //
-    // Anything outside that subset panics with a message asking the
-    // caller to use the SQL backend instead. Unsupported forms:
-    //   - "phrase" quoted phrases
-    //   - col:term column filters
-    //   - NEAR(...)
-    //   - AND / OR / NOT / NEAR as whole-word keywords
+    //   - "quoted phrases" with optional trailing * for phrase prefix
+    //   - AND / OR / NOT keywords (NOT is binary: A NOT B)
+    //   - Parenthesized sub-expressions
+    //   - NEAR(t1 t2 ... [, k]) proximity matching (default k=10)
+    //   - Unicode case-folding (ASCII / Latin-1 / Greek / Cyrillic)
 
     let doc = "The quick brown fox jumps over the lazy dog"
 
     // AND semantics — both terms must appear
     print("text_match \"quick fox\": {text_match(doc, "quick fox")}\n")
     print("text_match \"quick cat\": {text_match(doc, "quick cat")}\n")
-    // output: text_match "quick fox": true
-    // output: text_match "quick cat": false
 
     // Prefix match with *
     print("text_match \"jump*\": {text_match(doc, "jump*")}\n")
-    // output: text_match "jump*": true
 
-    // ASCII case-folding
-    print("text_match \"QUICK\": {text_match(doc, "QUICK")}\n")
-    // output: text_match "QUICK": true
+    // Quoted phrase — words must appear consecutively
+    print("text_match phrase: {text_match(doc, "\"quick brown\"")}\n")
 
-    // Non-ASCII (UTF-8) words are tokenized as one unit
-    print("text_match utf8: {text_match("café", "café")}\n")
-    // output: text_match utf8: true
+    // Boolean operators
+    print("text_match OR: {text_match(doc, "fox OR cat")}\n")
+    print("text_match NOT: {text_match(doc, "fox NOT cat")}\n")
 
-    // Bare * (no base term) is ignored — empty query matches everything
+    // NEAR proximity
+    print("text_match near: {text_match(doc, "NEAR(quick fox, 3)")}\n")
+
+    // Unicode case-folding through the full pipeline
+    print("text_match unicode: {text_match("Élève niño", "élève NIÑO")}\n")
+
+    // Empty query matches everything
     print("text_match empty: {text_match(doc, "")}\n")
-    print("text_match \"*\": {text_match(doc, "*")}\n")
-    // output: text_match empty: true
-    // output: text_match "*": true
 
-    // Unsupported syntax panics — wrap in try/recover to demonstrate.
-    var rejected = false
-    try {
-        var _ignored = text_match(doc, "\"quick brown\"")
-    } recover {
-        rejected = true
-    }
-    print("quoted phrase rejected: {rejected}\n")
-    // output: quoted phrase rejected: true
+    // Pre-compile a query and reuse against many texts
+    let q <- compile_text_match("(quick OR slow) NOT cat")
+    print("compiled vs doc: {text_match(doc, q)}\n")
 
-    rejected = false
-    try {
-        var _ignored = text_match(doc, "title:fox")
-    } recover {
-        rejected = true
-    }
-    print("column filter rejected: {rejected}\n")
-    // output: column filter rejected: true
-
-    rejected = false
-    try {
-        var _ignored = text_match(doc, "quick AND fox")
-    } recover {
-        rejected = true
-    }
-    print("AND keyword rejected: {rejected}\n")
-    // output: AND keyword rejected: true
+    // try_compile_text_match for fallible parsing of user input
+    let r <- try_compile_text_match("\"unterminated phrase")
+    print("try_compile error: {is_err(r)}\n")
 
     // === Formatted Output With fmt ===
     // fmt uses {fmt}-library style format specifiers (not printf)
@@ -256,7 +233,7 @@ def main {
     print("built: {result}\n")
 }
 
-// output:
+// output: nolint:STYLE014
 // Hello, World!
 // tab: here
 // newline:
@@ -309,13 +286,14 @@ def main {
 // text_match "quick fox": true
 // text_match "quick cat": false
 // text_match "jump*": true
-// text_match "QUICK": true
-// text_match utf8: true
+// text_match phrase: true
+// text_match OR: true
+// text_match NOT: true
+// text_match near: true
+// text_match unicode: true
 // text_match empty: true
-// text_match "*": true
-// quoted phrase rejected: true
-// column filter rejected: true
-// AND keyword rejected: true
+// compiled vs doc: true
+// try_compile error: true
 // fmt int: 42
 // fmt padded: 00007
 // fmt hex: ff

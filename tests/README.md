@@ -767,7 +767,9 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 | strings_properties.das | length, empty, starts_with, ends_with with fuzzing | |
 | strings_replace_multiple.das | replace_multiple — multiple replacements, special chars, empty | |
 | strings_search.das | find (string and char) with fuzzing | |
-| strings_text_match.das | text_match — FTS5-subset AND/prefix matcher, panic on unsupported syntax | |
+| utf8_word_boundary.das | utf32_is_word_char / utf32_to_lower / each_word — Unicode word-boundary primitives | |
+| fts5_query.das | FTS5 query parser — terms, phrases, AND/OR/NOT, NEAR, parens, error reporting | |
+| fts5_query_eval.das | FTS5 query evaluator — match semantics including Unicode case-fold and prefix phrases | |
 | strings_traits.das | is_alpha, is_new_line, is_white_space, is_number with fuzzing | |
 | temporary_intern_strings.das | temp_string with intern_strings option | |
 | temporary_strings.das | temp_string, build_temp_string — no heap allocations | |
