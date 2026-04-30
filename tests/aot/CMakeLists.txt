@@ -71,6 +71,11 @@ FILE(GLOB AOT_BITFIELDS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "
 # AOT for bool_array test files
 FILE(GLOB AOT_BOOL_ARRAY_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/bool_array/*.das")
 
+# AOT for class_boost test files
+FILE(GLOB AOT_CLASS_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/class_boost/*.das")
+# Exclude expect-error tests (they intentionally fail to compile)
+list(FILTER AOT_CLASS_BOOST_FILES EXCLUDE REGEX "failed_")
+
 # AOT for data_walker test files
 FILE(GLOB AOT_DATA_WALKER_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/data_walker/*.das")
 
@@ -381,6 +386,10 @@ add_custom_target(test_aot_bool_array)
 SET(BOOL_ARRAY_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_BOOL_ARRAY_FILES}" BOOL_ARRAY_AOT_GENERATED_SRC test_aot_bool_array daslang)
 
+add_custom_target(test_aot_class_boost)
+SET(CLASS_BOOST_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_CLASS_BOOST_FILES}" CLASS_BOOST_AOT_GENERATED_SRC test_aot_class_boost daslang)
+
 add_custom_target(test_aot_data_walker)
 SET(DATA_WALKER_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_DATA_WALKER_FILES}" DATA_WALKER_AOT_GENERATED_SRC test_aot_data_walker daslang)
@@ -613,6 +622,7 @@ SOURCE_GROUP_FILES("aot generated" BARE_BLOCK_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" BASE64_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" BITFIELDS_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" BOOL_ARRAY_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" CLASS_BOOST_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DATA_WALKER_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" DEBUG_AGENT_AOT_GENERATED_SRC)
@@ -678,6 +688,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${BASE64_AOT_GENERATED_SRC}
     ${BITFIELDS_AOT_GENERATED_SRC}
     ${BOOL_ARRAY_AOT_GENERATED_SRC}
+    ${CLASS_BOOST_AOT_GENERATED_SRC}
     ${DATA_WALKER_AOT_GENERATED_SRC}
     ${DEBUG_AOT_GENERATED_SRC}
     ${DEBUG_AGENT_AOT_GENERATED_SRC}
@@ -736,6 +747,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_algorithm test_aot_apply test_aot_archive test_aot_ast_match
     test_aot_assert_once test_aot_async test_aot_bare_block test_aot_base64
     test_aot_bitfields test_aot_bool_array
+    test_aot_class_boost
     test_aot_data_walker test_aot_debug
     test_aot_debug_agent test_aot_daspeg test_aot_decs test_aot_live_host test_aot_live_host_modules test_aot_dynamic_cast_rtti
     test_aot_fio test_aot_fs test_aot_functional

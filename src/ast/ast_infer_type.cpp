@@ -1474,26 +1474,30 @@ namespace das {
                                 reportAstChanged();
                                 return newCall;
                             }
-                            // lets try static class method
+                            // lets try static class method (and their parents)
                             if (valueType->baseType == Type::tStructure) {
-                                callName = "_::" + valueType->structType->name + "`" + methodName;
-                                newCall->name = callName;
-                                fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
-                                if ((fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName) {
-                                    reportAstChanged();
-                                    return newCall;
+                                for ( auto st = valueType->structType; st; st = st->parent ) {
+                                     callName = "_::" + st->name + "`" + methodName;
+                                     newCall->name = callName;
+                                     fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
+                                     if ((fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName) {
+                                         reportAstChanged();
+                                         return newCall;
+                                     }
                                 }
                             } else if (valueType->baseType == Type::tPointer && valueType->firstType && valueType->firstType->baseType == Type::tStructure) {
-                                callName = "_::" + valueType->firstType->structType->name + "`" + methodName;
-                                newCall->name = callName;
                                 auto derefValue = new ExprPtr2Ref(value->at, value);
                                 derefValue->type = new TypeDecl(*valueType->firstType);
                                 derefValue->type->constant |= valueType->constant;
                                 newCall->arguments[0] = derefValue;
-                                fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
-                                if ((fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName) {
-                                    reportAstChanged();
-                                    return newCall;
+                                for ( auto st = valueType->firstType->structType; st; st = st->parent ) {
+                                    callName = "_::" + st->name + "`" + methodName;
+                                    newCall->name = callName;
+                                    fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
+                                    if ((fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName) {
+                                        reportAstChanged();
+                                        return newCall;
+                                    }
                                 }
                             }
                         }
