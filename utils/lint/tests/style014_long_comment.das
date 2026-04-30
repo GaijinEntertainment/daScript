@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 //! Module-level header docstring — always allowed regardless of length.
 //! Even though this `//!` block is more than three lines, STYLE014 must

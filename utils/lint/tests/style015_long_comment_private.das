@@ -1,4 +1,5 @@
 options gen2
+options _comment_hygiene = true
 
 //! STYLE015: comment block longer than 1 line inside a `def private`.
 //! Reason: private functions don't get public docs, so multi-line prose

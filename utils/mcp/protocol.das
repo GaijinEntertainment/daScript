@@ -244,7 +244,14 @@ def handle_tools_list(id_json : string) : string {
         },
         ["file"]
     ))
-    result.tools |> emplace(make_file_tool("format_file", "Format a .das file using the daslang code formatter"))
+    result.tools |> emplace(make_tool(
+        "format_file",
+        "Format .das file(s) using the daslang code formatter. Supports single file, comma-separated list, or glob pattern (e.g. 'daslib/*.das'). Returns JSON array with file, status, and message fields; status is 'formatted', 'already_formatted', or 'error'.",
+        {
+            "file" => PropertySchema(_type = "string", description = "Path to .das file, comma-separated paths, or glob pattern (e.g. 'dir/*.das')")
+        },
+        ["file"]
+    ))
     result.tools |> emplace(make_tool(
         "run_script",
         "Run a daslang script and return its stdout output. Provide either a file path or inline code.",
@@ -680,7 +687,12 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "json")
-    } elif (name == "list_functions" || name == "list_types" || name == "format_file") {
+    } elif (name == "list_functions" || name == "list_types") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+    } elif (name == "format_file") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")

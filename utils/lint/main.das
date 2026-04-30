@@ -5,6 +5,7 @@ require daslib/perf_lint
 require daslib/style_lint
 require daslib/ast_boost
 require daslib/fio
+require daslib/clargs
 require math
 require strings
 require daslib/strings_boost
@@ -15,6 +16,32 @@ struct LintResult {
     errors : array<string>
     failed : bool
     compile_errors : string
+}
+
+[CommandLineArgs]
+struct Config {
+    @clarg_short = "q"
+    @clarg_doc = "Suppress PASS lines and progress messages"
+    quiet : bool
+
+    @clarg_doc = "Enable STYLE005 postfix-conditional check"
+    postfix_conditionals : bool
+
+    @clarg_doc = "Enable STYLE014/STYLE015 comment-length checks"
+    comment_hygiene : bool
+
+    @clarg_doc = "Only run paranoid lint (skip perf and style)"
+    paranoid_only : bool
+
+    @clarg_doc = "Only run performance lint (skip paranoid and style)"
+    perf_only : bool
+
+    @clarg_doc = "Only run style lint (skip paranoid and perf)"
+    style_only : bool
+
+    @clarg_short = "?"
+    @clarg_doc = "Show this help and exit"
+    help : bool
 }
 
 def write_deduped(var writer : StringBuilderWriter; messages : array<string>; prefix : string = "  ") {
@@ -105,7 +132,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
     }
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditionals : bool) : LintResult {
+def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditionals, comment_hygiene : bool) : LintResult {
     var result = LintResult(file = file)
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
@@ -137,7 +164,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditio
                 }
                 if (run_style) {
                     var style_issues : array<string>
-                    result.count += style_lint_collect(program, style_issues, postfix_conditionals)
+                    result.count += style_lint_collect(program, style_issues, postfix_conditionals, comment_hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
@@ -149,51 +176,37 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditio
 }
 
 [export]
-def main() {
-    let args <- get_command_line_arguments()
-    let sep = find_index(args, "--") + 1
-    if (sep <= 0 || sep >= length(args)) {
-        print("Usage: daslang utils/lint/main.das -- <files-or-dirs...> [options]\n")
-        print("\nUnified lint checker for daslang files.\n")
-        print("Runs regular (paranoid), performance, and style lint passes.\n")
-        print("Supports recursive directory scanning.\n")
-        print("\nOptions:\n")
-        print("  --quiet                  suppress PASS lines and progress\n")
-        print("  --postfix-conditionals   enable STYLE005 check\n")
-        print("  --paranoid-only          only run regular lint\n")
-        print("  --perf-only              only run perf lint\n")
-        print("  --style-only             only run style lint\n")
+def main() : int {
+    var cfg = Config()
+    let err = parse_args(cfg)
+    if (cfg.help) {
+        print("Unified lint checker for daslang files.\n")
+        print("Runs paranoid, performance, and style lint passes with recursive directory scanning.\n\n")
+        print_help(get_command_info(type<Config>), "utils/lint/main.das")
+        print("\nPositional arguments: one or more files or directories to lint.\n")
+        return 0
+    }
+    if (err != "") {
+        print("error: {err}\n\n")
+        print_help(get_command_info(type<Config>), "utils/lint/main.das")
         return 1
     }
-    var quiet = false
-    var postfix = false
-    var only_paranoid = false
-    var only_perf = false
-    var only_style = false
+    let cli_args <- get_user_args()
     var paths : array<string>
-    for (i in range(sep, length(args))) {
-        if (args[i] == "--quiet") {
-            quiet = true
-        } elif (args[i] == "--postfix-conditionals") {
-            postfix = true
-        } elif (args[i] == "--paranoid-only") {
-            only_paranoid = true
-        } elif (args[i] == "--perf-only") {
-            only_perf = true
-        } elif (args[i] == "--style-only") {
-            only_style = true
-        } else {
-            paths |> push(args[i])
+    for (arg in cli_args) {
+        if (!starts_with(arg, "-")) {
+            paths |> push(arg)
         }
     }
     if (length(paths) == 0) {
-        print("Error: no files or directories specified\n")
+        print("Error: no files or directories specified\n\n")
+        print_help(get_command_info(type<Config>), "utils/lint/main.das")
         return 1
     }
-    let any_only = only_paranoid || only_perf || only_style
-    let run_paranoid = !any_only || only_paranoid
-    let run_perf = !any_only || only_perf
-    let run_style = !any_only || only_style
+    let any_only = cfg.paranoid_only || cfg.perf_only || cfg.style_only
+    let run_paranoid = !any_only || cfg.paranoid_only
+    let run_perf = !any_only || cfg.perf_only
+    let run_style = !any_only || cfg.style_only
     // collect files
     var files : array<string>
     var cache : table<string; void?>
@@ -204,24 +217,24 @@ def main() {
         print("Error: no .das files found\n")
         return 1
     }
-    if (!quiet) {
+    if (!cfg.quiet) {
         print("Linting {length(files)} file(s)...\n\n")
     }
     var total_issues = 0
     var total_errors = 0
     var total_skipped = 0
     for (file in files) {
-        if (!quiet) {
+        if (!cfg.quiet) {
             print("checking {file}...\n")
         }
         if (has_expect_directive(file)) {
             total_skipped++
-            if (!quiet) {
+            if (!cfg.quiet) {
                 print("SKIP {file} (intentional compile errors via `expect`)\n")
             }
             continue
         }
-        let result = lint_file(file, run_paranoid, run_perf, run_style, postfix)
+        let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.postfix_conditionals, cfg.comment_hygiene)
         if (result.failed) {
             total_errors++
             print("FAIL {file}\n")
@@ -234,7 +247,7 @@ def main() {
             print(build_string() $(var w) {
                 write_deduped(w, result.errors)
             })
-        } elif (!quiet) {
+        } elif (!cfg.quiet) {
             print("PASS {file}\n")
         }
     }

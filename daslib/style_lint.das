@@ -22,8 +22,8 @@ module style_lint shared private
 //!   STYLE011 — variable declaration followed by immediate assignment
 //!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
 //!   STYLE013 — struct var with default/empty init followed by a run of field assignments
-//!   STYLE014 — comment block exceeds 3 lines at module/public scope (suppress with '//!@nolint' or '// nolint:STYLE014')
-//!   STYLE015 — comment block exceeds 1 line inside a 'def private' (suppress with '// nolint:STYLE015')
+//!   STYLE014 — comment block exceeds 3 lines at module/public scope (opt-in via ``options _comment_hygiene = true``, suppress with '//!@nolint' or '// nolint:STYLE014')
+//!   STYLE015 — comment block exceeds 1 line inside a 'def private' (opt-in via ``options _comment_hygiene = true``, suppress with '// nolint:STYLE015')
 
 require daslib/ast_boost
 require strings
@@ -35,6 +35,7 @@ require strings
 class StyleLintVisitor : AstVisitor {
     compile_time_errors : bool
     postfix_conditionals : bool = false
+    comment_hygiene : bool = false
     // counter
     warning_count : int = 0
     // collection mode
@@ -906,27 +907,33 @@ class StyleLintVisitor : AstVisitor {
 // Public API
 // ---------------------------------------------------------------------------
 
-def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_conditionals : bool = false) : int {
+def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int {
     //! Runs the style lint visitor on the compiled program.
     //! Returns the number of warnings found.
-    var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, postfix_conditionals = postfix_conditionals)
+    //! Pass ``comment_hygiene = true`` to enable STYLE014/STYLE015 checks.
+    var astVisitor = new StyleLintVisitor(compile_time_errors = compile_time_errors, postfix_conditionals = postfix_conditionals, comment_hygiene = comment_hygiene)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
-    astVisitor->scan_long_comment_blocks(prog)
+    if (comment_hygiene) {
+        astVisitor->scan_long_comment_blocks(prog)
+    }
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
 }
 
-def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; postfix_conditionals : bool = false) : int {
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int {
     //! Runs the style lint visitor and collects warnings as strings.
     //! Returns the number of warnings found.
-    var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, postfix_conditionals = postfix_conditionals)
+    //! Pass ``comment_hygiene = true`` to enable STYLE014/STYLE015 checks.
+    var astVisitor = new StyleLintVisitor(compile_time_errors = false, collect_warnings = true, postfix_conditionals = postfix_conditionals, comment_hygiene = comment_hygiene)
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
-    astVisitor->scan_long_comment_blocks(prog)
+    if (comment_hygiene) {
+        astVisitor->scan_long_comment_blocks(prog)
+    }
     let count = astVisitor.warning_count
     warnings |> reserve(length(astVisitor.warnings))
     for (w in astVisitor.warnings) {
@@ -943,7 +950,8 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; p
 [lint_macro]
 class StyleLintMacro : AstPassMacro {
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        style_lint(prog, true)
+        let hygiene = prog._options |> find_arg("_comment_hygiene") ?as tBool ?? false
+        style_lint(prog, true, [comment_hygiene = hygiene])
         return true
     }
 }

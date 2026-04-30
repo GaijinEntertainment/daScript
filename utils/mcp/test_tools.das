@@ -486,15 +486,155 @@ def test_list_module_api_annotations(t : T?) {
 
 // ── format_file ──────────────────────────────────────────────────────
 
+def private parse_json_array(text : string; var parsed : JsonValue?&) : bool {
+    var jerr : string
+    parsed = read_json(text, jerr)
+    return parsed != null && parsed.value is _array
+}
+
+def private find_format_result(arr : JsonValue?; file_substr : string; var status : string&; var message : string&) : bool {
+    if (arr == null || !(arr.value is _array)) {
+        return false
+    }
+    for (entry in arr.value as _array) {
+        if (entry == null) {
+            continue
+        }
+        let file_val = entry?["file"]
+        if (file_val == null || !(file_val.value is _string)) {
+            continue
+        }
+        let file = file_val.value as _string
+        if (find(file, file_substr) < 0) {
+            continue
+        }
+        let status_val = entry?["status"]
+        let msg_val = entry?["message"]
+        if (status_val != null && status_val.value is _string) {
+            status = status_val.value as _string
+        }
+        if (msg_val != null && msg_val.value is _string) {
+            message = msg_val.value as _string
+        }
+        return true
+    }
+    return false
+}
+
 [test]
 def test_format_file(t : T?) {
-    t |> run("formats already-formatted file") <| @(t : T?) {
+    t |> run("single file returns JSON array with required fields") <| @(t : T?) {
         var text : string
         var is_error = false
         parse_result(do_format_file(fixture_path("_fixture_valid.das")), text, is_error)
         t |> success(!is_error, "should not be error")
-        // might be "already formatted" or "Formatted" depending on state
-        t |> success(find(text, "ormatted") >= 0, "should mention formatting result")
+
+        var parsed : JsonValue?
+        let ok = parse_json_array(text, parsed)
+        t |> success(ok, "inner payload should be a JSON array")
+        if (!ok) {
+            unsafe { delete parsed; }
+            return
+        }
+
+        t |> success(length(parsed.value as _array) >= 1, "array should contain at least one result")
+        let first = (parsed.value as _array)[0]
+        t |> success(first != null, "first result should exist")
+        if (first != null) {
+            t |> success(first?["file"] != null, "result has file")
+            t |> success(first?["status"] != null, "result has status")
+            t |> success(first?["message"] != null, "result has message")
+            let st = first?["status"]
+            if (st != null && st.value is _string) {
+                let status = st.value as _string
+                t |> success(status == "formatted" || status == "already_formatted", "status is expected")
+            } else {
+                t |> failure("status should be a string")
+            }
+        }
+        unsafe { delete parsed; }
+    }
+
+    t |> run("comma-separated list returns one result per file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_format_file("{fixture_path("_fixture_valid.das")},{fixture_path("_fixture_error.das")}"), text, is_error)
+        t |> success(!is_error, "both fixture files should be processable")
+
+        var parsed : JsonValue?
+        let ok = parse_json_array(text, parsed)
+        t |> success(ok, "inner payload should be a JSON array")
+        if (!ok) {
+            unsafe { delete parsed; }
+            return
+        }
+        t |> equal(length(parsed.value as _array), 2, "comma-separated list should yield two results")
+
+        var st1 = ""
+        var msg1 = ""
+        let has_valid = find_format_result(parsed, "_fixture_valid.das", st1, msg1)
+        t |> success(has_valid, "valid fixture result present")
+        t |> success(!empty(st1), "valid fixture has non-empty status")
+        t |> success(find(msg1, "fixture_valid") >= 0, "valid fixture message references file")
+
+        var st2 = ""
+        var msg2 = ""
+        let has_error_fixture = find_format_result(parsed, "_fixture_error.das", st2, msg2)
+        t |> success(has_error_fixture, "error fixture result present")
+        t |> success(!empty(st2), "error fixture has non-empty status")
+        t |> success(find(msg2, "fixture_error") >= 0, "error fixture message references file")
+        unsafe { delete parsed; }
+    }
+
+    t |> run("glob pattern expands and returns matching file entry") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_format_file("utils/mcp/tests/_fixture_v*.das"), text, is_error)
+        t |> success(!is_error, "glob with matches should not be error")
+
+        var parsed : JsonValue?
+        let ok = parse_json_array(text, parsed)
+        t |> success(ok, "inner payload should be a JSON array")
+        if (!ok) {
+            unsafe { delete parsed; }
+            return
+        }
+        var st = ""
+        var msg = ""
+        let has_valid = find_format_result(parsed, "_fixture_valid.das", st, msg)
+        t |> success(has_valid, "glob should include _fixture_valid.das")
+        t |> success(st == "formatted" || st == "already_formatted", "glob result status is expected")
+        unsafe { delete parsed; }
+    }
+
+    t |> run("mixed valid + missing sets isError and reports per-file statuses") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_format_file("{fixture_path("_fixture_valid.das")},utils/mcp/tests/_fixture_does_not_exist_123.das"), text, is_error)
+        t |> success(is_error, "missing file in batch should set isError")
+
+        var parsed : JsonValue?
+        let ok = parse_json_array(text, parsed)
+        t |> success(ok, "inner payload should be a JSON array")
+        if (!ok) {
+            unsafe { delete parsed; }
+            return
+        }
+        t |> equal(length(parsed.value as _array), 2, "mixed batch should still return two result entries")
+
+        var st_ok = ""
+        var msg_ok = ""
+        let has_valid = find_format_result(parsed, "_fixture_valid.das", st_ok, msg_ok)
+        t |> success(has_valid, "valid file result present")
+        t |> success(st_ok == "formatted" || st_ok == "already_formatted", "valid file status is expected")
+
+        var st_missing = ""
+        var msg_missing = ""
+        let has_missing = find_format_result(parsed, "_fixture_does_not_exist_123.das", st_missing, msg_missing)
+        t |> success(has_missing, "missing file result present")
+        t |> equal(st_missing, "error")
+        t |> success(find(msg_missing, "Cannot open file") >= 0, "missing file reports open error")
+        unsafe { delete parsed; }
     }
 }
 

@@ -7,7 +7,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 ## Architecture
 
 - **Module:** `daslib/style_lint.das` — `module style_lint shared private`
-- **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true)`
+- **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true)` with `comment_hygiene` read from `options _comment_hygiene`
 - **Visitor:** `class StyleLintVisitor : AstVisitor` — walks the AST with source-line inspection
 - **Error reporting:** `macro_style_warning(compiling_program(), at, message)` — reports as error code 40218
 - **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
@@ -26,8 +26,8 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
 | STYLE012 | `var a : array<T>; a \|> push(x); a \|> emplace(<-y)` (≥ 2 contiguous `push`/`emplace`) | Use array literal `var a <- [x, <-y]`, or typed constructor `var a <- array<T>(x, y)` when an explicit element type is needed (polymorphic upcasts, interface pointers). `push_clone` excluded; single `push` stays silent — often more readable |
 | STYLE013 | `var a = Foo(); a.x = 1; a.y = 2` (or `var a : Foo` for `[safe_when_uninitialized]` structs), ≥ 2 contiguous field assignments | Use a named-argument constructor: `var a = Foo(x = 1, y = 2)`. Skipped when init is non-empty (`Foo(x=1)` then `a.y = 2` stays silent), when assignments are not contiguous, or for `inscope`/generated/generic-instantiation vars |
-| STYLE014 | `//` or `//!` comment block of more than 3 contiguous lines at module/public scope | Trim to a 1-line WHY (move design notes to a `.md` doc, not source). Module-leading docstring (block before any AST decl in the file) is always allowed. Suppress per-block with `//!@nolint` on first line of a `//!` block (also stripped from generated RST), or `// nolint:STYLE014` on first line of a `//` block |
-| STYLE015 | `//` or `//!` comment block of more than 1 contiguous line inside a `def private` | Private symbols don't surface in any doc generator, so multi-line prose there is dead weight. Trim to one line, or suppress on first line with `// nolint:STYLE015` |
+| STYLE014 | `//` or `//!` comment block of more than 3 contiguous lines at module/public scope | Trim to a 1-line WHY (move design notes to a `.md` doc, not source). Module-leading docstring (block before any AST decl in the file) is always allowed. Suppress per-block with `//!@nolint` on first line of a `//!` block (also stripped from generated RST), or `// nolint:STYLE014` on first line of a `//` block. **Opt-in via `options _comment_hygiene = true`** (disabled by default). |
+| STYLE015 | `//` or `//!` comment block of more than 1 contiguous line inside a `def private` | Private symbols don't surface in any doc generator, so multi-line prose there is dead weight. Trim to one line, or suppress on first line with `// nolint:STYLE015`. **Opt-in via `options _comment_hygiene = true`** (disabled by default). |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -91,10 +91,10 @@ Individual warnings can be suppressed with `// nolint:STYLExxx` on the same line
 
 ```das
 // Compile-time mode: reports warnings during compilation
-def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_conditionals : bool = false) : int
+def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int
 
 // Collection mode: appends warnings to array
-def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; postfix_conditionals : bool = false) : int
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int
 ```
 
 ## MCP Integration
