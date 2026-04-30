@@ -19,9 +19,17 @@
 // You can safely use that function for data on stack, but loading of last element of float[3] array
 // may be unsafe when it's allocated on heap. Sometimes access to memory after array may cause app crash.
 // Don't use that function to fix warnings like "heap use after free".
+#if __SANITIZE_THREAD__ || __SANITIZE_ADDRESS__ || __SANITIZE_UNDEFINED__ || \
+    (defined(__has_feature) && __has_feature(address_sanitizer)) || \
+    (defined(__has_feature) && __has_feature(thread_sanitizer)) || \
+    defined(DAS_VEC_SAFE_LOADS)
+#define V_LDU_P3_USE_SAFE 1
+#else
+#define V_LDU_P3_USE_SAFE 0
+#endif
 NO_ASAN_INLINE vec3f v_ldu_p3(const float *m)
 {
-#if __SANITIZE_THREAD__
+#if V_LDU_P3_USE_SAFE
   return v_ldu_p3_safe(m);
 #else
   return v_ldu(m);
@@ -29,7 +37,7 @@ NO_ASAN_INLINE vec3f v_ldu_p3(const float *m)
 }
 NO_ASAN_INLINE vec4i v_ldui_p3(const int *m)
 {
-#if __SANITIZE_THREAD__
+#if V_LDU_P3_USE_SAFE
   return v_ldui_p3_safe(m);
 #else
   return v_ldui(m);

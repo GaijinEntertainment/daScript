@@ -9,7 +9,10 @@
 #include <cstdint>
 #include <mutex>
 #include <new>
+#include <string>
 #include <chrono>
+
+#include "daScript/misc/lexer_alloc_track.h"
 
 #if defined(_MSC_VER)
     #include <windows.h>
@@ -21,17 +24,12 @@
     #include <dlfcn.h>
 #endif
 
-// init_seg(lib) puts this TU's file-scope dynamic initializers in the "library"
-// group, which runs before any init_seg(user) — i.e., before all user-level C++
-// static constructors. Our registration struct (below) calls std::atexit() from
-// its constructor, so its handler lands at the bottom of the atexit LIFO stack.
-// Subsequent user static destructors register via __cxa_atexit and stack on top.
-// Result: our dump fires AFTER every user-level static destructor has run, so
-// process-lifetime statics (Meyers singletons, static vectors, etc.) no longer
-// appear as leaks.
+// init_seg(lib) registers our atexit handler before any user-level static
+// ctor — handler ends up at the bottom of the LIFO stack, fires after all
+// user static dtors so their allocations don't show as leaks.
 #if defined(_MSC_VER)
     #pragma warning(push)
-    #pragma warning(disable: 4073)  // initializers put in library initialization area
+    #pragma warning(disable: 4073)
     #pragma init_seg(lib)
     #pragma warning(pop)
 #endif
@@ -47,19 +45,19 @@ struct AllocInfo {
 };
 
 struct Entry {
-    void *      key;        // nullptr = empty, kTombstone = deleted
+    void *      key;
     AllocInfo   info;
 };
 
 static void * const kTombstone = reinterpret_cast<void*>(uintptr_t(-1));
 
-// Hand-rolled open-addressing hash map keyed by void*. Uses std::malloc/std::free
-// directly so its own storage never re-enters our hooks.
+// Open-addressing void* map using std::malloc/std::free so our own storage
+// doesn't re-enter the hooks.
 struct LeakMap {
     Entry *  entries   = nullptr;
     size_t   capacity  = 0;
-    size_t   live      = 0;     // real entries
-    size_t   filled    = 0;     // real + tombstones (for rehash threshold)
+    size_t   live      = 0;
+    size_t   filled    = 0;     // live + tombstones (rehash threshold)
 
     void init() {
         capacity = 4096;
@@ -115,7 +113,6 @@ struct LeakMap {
         entries[i].info = info;
         if (k == nullptr) { ++filled; ++live; }
         else if (k == kTombstone) { ++live; }
-        // else: replacement of existing key, counts unchanged
     }
 
     void erase(void *key) {
@@ -128,8 +125,8 @@ struct LeakMap {
     }
 };
 
-// Leaked Meyers singleton: the map is never destroyed, so track_free after static
-// destructors is safe.
+// Placement-new into static storage: never destructed, so track_free during
+// static teardown stays safe.
 static LeakMap & getMap() {
     alignas(LeakMap) static unsigned char storage[sizeof(LeakMap)];
     static LeakMap *m = ::new (storage) LeakMap();
@@ -143,7 +140,7 @@ static std::mutex & getMutex() {
 }
 
 static std::atomic<bool>     g_armed{false};
-static std::atomic<uint64_t> g_orphan_free{0}; // free() of ptr not in map — cross-module guard
+static std::atomic<uint64_t> g_orphan_free{0};
 static thread_local bool     tl_inside = false;
 
 struct ReentryGuard {
@@ -153,24 +150,19 @@ struct ReentryGuard {
 };
 
 #if defined(_MSC_VER) && defined(_M_X64)
-// Implemented in alloc_tracker_fast_stack.cpp — cached .pdata + lightweight
-// unwinder + landmark tail-memoize. Drop-in replacement for CaptureStackBackTrace.
-// skipFrames drops the N deepest frames; default 2 hides das_fast_stack_capture
-// itself and the tracker hook that called it.
+// In alloc_tracker_fast_stack.cpp — cached .pdata unwinder, drop-in for
+// CaptureStackBackTrace. Default skipFrames=2 hides itself + the tracker hook.
 unsigned das_fast_stack_capture(void **stack, unsigned maxFrames, int skipFrames = 2) noexcept;
 #endif
 
+// skipFrames/skip = 2: drop the capture function and the tracker hook so the
+// visible top frame is the caller (operator new wrapper, etc).
 static int capture_stack(void **frames, int max_frames) noexcept {
 #if defined(_MSC_VER) && defined(_M_X64)
-    // skipFrames=2: drop das_fast_stack_capture + track_alloc_hook so the
-    // visible top frame is the caller of the tracker (operator new wrapper,
-    // das_aligned_alloc16, etc.).
     return (int)das_fast_stack_capture(frames, (unsigned)max_frames, 2);
 #elif defined(_MSC_VER)
-    // FramesToSkip=1: drop the noinline track_alloc_hook itself.
     return (int)CaptureStackBackTrace(1, (DWORD)max_frames, frames, nullptr);
 #elif defined(__linux__) || defined(__APPLE__)
-    // Drop backtrace()'s own frame and track_alloc_hook.
     void * raw[64];
     int n = max_frames + 2 > 64 ? 64 : max_frames + 2;
     int got = backtrace(raw, n);
@@ -185,8 +177,7 @@ static int capture_stack(void **frames, int max_frames) noexcept {
 #endif
 }
 
-// noinline so skipFrames=2 in capture_stack (via das_fast_stack_capture) reliably
-// drops this frame regardless of /Ob level.
+// noinline so the skipFrames count above reliably drops this frame.
 #if defined(_MSC_VER)
 __declspec(noinline)
 #else
@@ -207,6 +198,7 @@ void track_free_hook(void *p) noexcept {
     if (!g_armed.load(std::memory_order_relaxed)) return;
     if (!p || tl_inside) return;
     ReentryGuard g;
+    lexer_track_free(reinterpret_cast<std::string*>(p));
     std::lock_guard<std::mutex> lock(getMutex());
     LeakMap &m = getMap();
     if (m.entries && m.live) {
@@ -217,8 +209,7 @@ void track_free_hook(void *p) noexcept {
             return;
         }
     }
-    // Pointer not in our map. Either allocated pre-arm, or freed by a module that
-    // doesn't share our override (cross-DLL). Counted for diagnostics.
+    // Allocated pre-arm or freed cross-DLL — counted for diagnostics.
     g_orphan_free.fetch_add(1, std::memory_order_relaxed);
 }
 
@@ -233,23 +224,20 @@ static bool g_symInitialized = false;
 
 static void init_symbols() {
     if (g_symInitialized) return;
-    // FAIL_CRITICAL_ERRORS + NO_PROMPTS: never pop message boxes from DBGHELP.
-    // OMAP_FIND_NEAREST: handle BBT-optimized binaries correctly.
-    // fInvadeProcess=TRUE enumerates all loaded modules at init; combined with
-    // DEFERRED_LOADS, PDBs are mapped on first SymFromAddr for each module.
+    // FAIL_CRITICAL_ERRORS + NO_PROMPTS: never pop dialogs.
+    // OMAP_FIND_NEAREST: BBT-optimized binaries.
+    // fInvadeProcess=TRUE + DEFERRED_LOADS: enumerate now, map PDBs on first use.
     SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS |
                   SYMOPT_OMAP_FIND_NEAREST | SYMOPT_FAIL_CRITICAL_ERRORS |
                   SYMOPT_NO_PROMPTS | SYMOPT_INCLUDE_32BIT_MODULES);
     if (SymInitialize(GetCurrentProcess(), nullptr, TRUE)) {
         g_symInitialized = true;
-        // Refresh catches any modules loaded after init (late-bound DLLs).
         SymRefreshModuleList(GetCurrentProcess());
     }
 }
 
-// disp larger than this means SymFromAddr fell back to a distant symbol;
-// suppress the name and show module+offset instead. 64KB is generous for a
-// single C++ function; typical codegen functions are under 4KB.
+// Suppress symbol name when SymFromAddr falls back to a distant match —
+// 64KB is generous for one function; typical codegen funcs are under 4KB.
 static constexpr DWORD64 kMaxTrustedSymbolOffset = 0x10000;
 
 static void print_module_fallback(FILE *out, HANDLE proc, void *addr, DWORD64 addr64) {
@@ -277,9 +265,7 @@ static void print_frame(FILE *out, void *addr) {
     DWORD64 disp = 0;
     bool haveSym = SymFromAddr(proc, addr64, &disp, sym) != FALSE;
     if (!haveSym || disp >= kMaxTrustedSymbolOffset) {
-        // SymFromAddr failed, or matched a symbol so far away it's almost
-        // certainly a misattribution. Show module+offset instead — more
-        // useful than `transform_syntax+0x747d`.
+        // Distant symbol match is likely misattributed — module+offset is more useful.
         print_module_fallback(out, proc, addr, addr64);
         return;
     }
@@ -345,7 +331,6 @@ static uint64_t hash_frames(void * const *frames, int n) {
 static void format_with_commas(char *buf, size_t buflen, uint64_t v) {
     char tmp[32];
     int n = snprintf(tmp, sizeof(tmp), "%llu", (unsigned long long)v);
-    // insert commas
     int out = 0;
     for (int i = 0; i < n && out < (int)buflen - 1; ++i) {
         int remaining = n - i;
@@ -358,15 +343,14 @@ static void format_with_commas(char *buf, size_t buflen, uint64_t v) {
 }
 
 size_t dump_alloc_leaks(FILE *out) {
-    // Disarm tracking during dump so fprintf/Sym*/etc don't churn the map.
+    // Disarm so fprintf/Sym*/etc don't churn the map during the dump.
     bool was_armed = g_armed.exchange(false);
     (void)was_armed;
     tl_inside = true;
 
     auto t0 = std::chrono::steady_clock::now();
 
-    // Snapshot groups under lock so other threads (if any) don't race us.
-    // Use std::malloc for snapshot storage — no tracker re-entry.
+    // Snapshot under lock; std::malloc keeps storage out of the tracker.
     Group *groups = nullptr;
     size_t groupCount = 0;
     size_t groupCap   = 0;
@@ -386,11 +370,10 @@ size_t dump_alloc_leaks(FILE *out) {
             totalBytes += info.size;
             if (info.size > largestSingle) largestSingle = info.size;
 
-            if (groupsExhausted) continue; // keep counting totals, drop per-site detail
+            if (groupsExhausted) continue;
 
             uint64_t h = hash_frames(info.frames, info.frameCount);
 
-            // linear scan for existing group (small N typical; replace w/ hash later if needed)
             Group *g = nullptr;
             for (size_t j = 0; j < groupCount; ++j) {
                 if (groups[j].hash == h) { g = &groups[j]; break; }
@@ -400,8 +383,7 @@ size_t dump_alloc_leaks(FILE *out) {
                     size_t newCap = groupCap ? groupCap * 2 : 64;
                     Group *resized = (Group*)std::realloc(groups, newCap * sizeof(Group));
                     if (!resized) {
-                        // OOM during shutdown report: keep the buffer we already have,
-                        // tally totals on the remaining entries but stop adding sites.
+                        // OOM mid-shutdown: keep counting totals, drop new sites.
                         groupsExhausted = true;
                         continue;
                     }
@@ -425,8 +407,8 @@ size_t dump_alloc_leaks(FILE *out) {
         }
     }
 
-    // Sort groups: by totalBytes desc, then count desc, then hash for stability.
-    // Simple insertion sort — groupCount is typically small.
+    // Sort: totalBytes desc, count desc, hash for stability. Insertion sort
+    // — groupCount is typically small.
     for (size_t i = 1; i < groupCount; ++i) {
         Group key = groups[i];
         size_t j = i;
@@ -442,14 +424,12 @@ size_t dump_alloc_leaks(FILE *out) {
         groups[j] = key;
     }
 
-    // No leaks → silent. Skip the entire report (header, body, footer).
     if (totalLeaks == 0) {
         std::free(groups);
         tl_inside = false;
         return 0;
     }
 
-    // Header.
     char b1[32], b2[32], b3[32];
     format_with_commas(b1, sizeof(b1), totalLeaks);
     format_with_commas(b2, sizeof(b2), totalBytes);
@@ -498,31 +478,18 @@ size_t dump_alloc_leaks(FILE *out) {
 
     std::free(groups);
     tl_inside = false;
-    // intentionally leave disarmed after dump
+    // intentionally leave disarmed
     return totalLeaks;
 }
 
 // ------------------------- Atexit registration -------------------------
-//
-// With #pragma init_seg(lib) at the top of this TU, the constructor of
-// g_register_leak_dump_atexit runs before any init_seg(user) static ctor.
-// std::atexit() pushes onto a LIFO stack shared with __cxa_atexit (which
-// C++ static destructors use). Because we register first, our handler sits
-// at the bottom of the stack and fires LAST — after every user-level
-// static destructor. This means static-lifetime allocations (Meyers
-// singletons, static vectors, etc.) are freed before we report, and only
-// genuine leaks remain in the dump.
-//
-// Idempotence guard: protects against the explicit dump_alloc_leaks(stderr)
-// call from main.cpp or a double-registered atexit.
 
+// Idempotence guard against explicit main.cpp dump call + atexit firing.
 static std::atomic<bool> g_dumped{false};
 
-// Defined in src/ast/ast_module.cpp. Incremented in Module::Initialize, decremented
-// in Module::Shutdown. If nonzero at exit time, the process bypassed cleanup
-// (e.g., dastest exits via fio::exit -> C exit() without calling Module::Shutdown),
-// so live allocations are not real leaks — they're memory the cleanup never got
-// a chance to free. Suppress the dump in that case to avoid noise.
+// In ast_module.cpp: ++Module::Initialize, --Module::Shutdown. Nonzero at
+// exit means cleanup was bypassed (e.g. dastest's fio::exit), so live
+// allocations may still be owned and the dump is suppressed.
 extern std::atomic<int> g_envTotal;
 
 static void dump_alloc_leaks_atexit() {
@@ -539,6 +506,7 @@ static void dump_alloc_leaks_atexit() {
         return;
     }
     dump_alloc_leaks(stderr);
+    dump_lexer_string_leaks(stderr);
 }
 
 struct RegisterLeakDumpAtExit {

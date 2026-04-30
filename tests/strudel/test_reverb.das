@@ -43,7 +43,7 @@ def private rms_range(samples : array<float>; startSample, endSample : int) : fl
 def test_osc_voice_reverb_send_field(t : T?) {
     t |> run("OscVoice reverb_send populated from Event.room") @(t : T?) {
         // Spawn an osc voice with room=0.5 via the scheduler
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         init_reverb(sched)
         let pat <- atom("sine") |> set_room(0.5) |> set_sustain(1.0)
@@ -58,7 +58,7 @@ def test_osc_voice_reverb_send_field(t : T?) {
 [test]
 def test_reverb_auto_init(t : T?) {
     t |> run("reverb auto-initializes when room > 0") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         // reverb is null initially
         t |> success(get_orbit_reverb(sched) == null)
@@ -73,7 +73,7 @@ def test_reverb_auto_init(t : T?) {
 [test]
 def test_no_reverb_when_room_zero(t : T?) {
     t |> run("reverb stays null when room = 0") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine")  // room defaults to 0.0
         let bank : SampleBank
@@ -86,7 +86,7 @@ def test_no_reverb_when_room_zero(t : T?) {
 def test_reverb_send_produces_output(t : T?) {
     t |> run("room > 0 produces reverb tail after voice ends") @(t : T?) {
         // Short pluck with reverb — slow cps so only one event fires
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_reverb(sched)
         // Short note with room=1.0, gain=1.0 to maximize send level (osc voices have OSC_TURN_DOWN=0.3)
@@ -104,7 +104,7 @@ def test_reverb_send_produces_output(t : T?) {
 [test]
 def test_no_reverb_tail_when_dry(t : T?) {
     t |> run("room = 0 produces no reverb tail") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf  // slow: one event in 2s
         // Same note but dry (room=0)
         let pat <- atom("sine") |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
@@ -120,7 +120,7 @@ def test_no_reverb_tail_when_dry(t : T?) {
 [test]
 def test_reverb_on_drums(t : T?) {
     t |> run("pre-rendered drum with room > 0 has reverb send") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_reverb(sched)
         let pat <- atom("bd") |> set_room(0.8) |> set_sustain(0.0)
@@ -137,7 +137,7 @@ def test_reverb_on_drums(t : T?) {
 def test_reverb_roomsize_decay(t : T?) {
     t |> run("larger roomsize produces longer reverb tail") @(t : T?) {
         // Small room (short decay)
-        var sched1 : Scheduler
+        var inscope sched1 : Scheduler
         sched1.cps = 0.5lf
         init_reverb(sched1)
         let pat1 <- atom("sine") |> set_room(0.8) |> set_roomsize(0.5) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
@@ -145,7 +145,7 @@ def test_reverb_roomsize_decay(t : T?) {
         let out1 <- tick_chunks(sched1, pat1, bank, 40, 0.05)
 
         // Large room (long decay)
-        var sched2 : Scheduler
+        var inscope sched2 : Scheduler
         sched2.cps = 0.5lf
         init_reverb(sched2)
         let pat2 <- atom("sine") |> set_room(0.8) |> set_roomsize(8.0) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
@@ -162,7 +162,7 @@ def test_reverb_roomsize_decay(t : T?) {
 [test]
 def test_reverb_supersaw(t : T?) {
     t |> run("supersaw with room produces reverb tail") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_reverb(sched)
         let pat <- atom("supersaw") |> set_room(1.0) |> set_gain(1.0) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.1) |> set_note(48.0)

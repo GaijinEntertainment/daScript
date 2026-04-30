@@ -16,13 +16,13 @@ namespace das
     template <typename T, typename Element, Element T::*BaseField = &T::x>
     struct WrapVec2Arg : T {
         WrapVec2Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t)) {}
-        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+        operator vec4f() const { return das::vec_loadu_half(&(this->*BaseField)); }
     };
 
     template <typename T, typename Element, Element T::*BaseField = &T::x>
     struct WrapVec3Arg : T {
         WrapVec3Arg(vec4f t) : T(vec_extract<Element>::x(t), vec_extract<Element>::y(t), vec_extract<Element>::z(t)) {}
-        operator vec4f() const { return das::vec_loadu(&(this->*BaseField)); }
+        operator vec4f() const { return das::vec_loadu3(&(this->*BaseField)); }
     };
 
     template <typename T, typename Element, Element T::*BaseField = &T::x>

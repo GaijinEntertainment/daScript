@@ -1078,6 +1078,7 @@ expression_with_alias
     }
     |   DAS_TYPEDEF[loc] NAME[aname] '=' type_declaration[decl] {
         $$ = new ExprAssume(tokAt(scanner,@loc), *$aname, TypeDeclPtr($decl));
+        delete $aname;
     }
     ;
 

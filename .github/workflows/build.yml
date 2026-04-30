@@ -66,37 +66,31 @@ jobs:
             archive_ext: tar.gz
             sanitizers: none
 
-          # ASAN — disabled, see issue #2530. The small-test variant (skip the
-          # dastest step, run only ctest -L small) was tried in #2526 but
-          # daslang itself is not yet ASAN-clean — one OOB fixed there, more may
-          # lurk past startup. Re-enable after a dedicated cleanup pass.
-          # - target: linux
-          #   architecture: 64
-          #   runner: ubuntu-latest-fat
-          #   cmake_preset: Debug
-          #   sanitizers: asan
-          #   build_name: linux_asan_small
-          #   build_system: cmake
-          #   cmake_generator: Ninja
-          #   small_only: 'true'
-
-          # TSAN — small C++ tests only (forward-looking; useful when small-test
-          # coverage adds threading scenarios; full dastest under TSAN is impractical)
+          # Sanitizer matrix — Linux + Release + full tests (dastest + test_aot
+          # + ctest). Release keeps walltime in budget; the previous Debug+ASAN
+          # was prohibitive for production CI. See issue #2530.
           - target: linux
             architecture: 64
             runner: ubuntu-latest-fat
-            cmake_preset: Debug
-            sanitizers: tsan
-            build_name: linux_tsan_small
+            cmake_preset: Release
+            sanitizers: asan
+            build_name: linux_asan
             build_system: cmake
             cmake_generator: Ninja
-            small_only: 'true'
 
-          # single ubsan build
           - target: linux
             architecture: 64
             runner: ubuntu-latest-fat
-            cmake_preset: Debug
+            cmake_preset: Release
+            sanitizers: tsan
+            build_name: linux_tsan
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: linux
+            architecture: 64
+            runner: ubuntu-latest-fat
+            cmake_preset: Release
             sanitizers: ubsan
             build_name: linux_ubsan
             build_system: cmake
@@ -288,15 +282,18 @@ jobs:
             ;;
         esac
     - name: "Test"
-      if: matrix.small_only != 'true'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            linux64)
             cd bin
-            # when exceptions disabled, we still throw in tests and there'll be memory leaks
-            echo -e "leak:format_error\n" > suppressions.txt
-            export LSAN_OPTIONS="suppressions='suppressions.txt'"
+            # LSan suppressions: format_error (fmt::throw_format_error allocates
+            # std::runtime_error whose internal string is reported as leaked
+            # because the exception object isn't always destroyed); uriParseSingleUriA
+            # / uriMakeOwner (Uri handle bound to daslang without auto-finalize —
+            # tracked separately, real fix is in the binding).
+            printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
+            export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
             [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
@@ -321,8 +318,8 @@ jobs:
         set -eux
         # Suppress LSan false-positives from format_error and JIT-mode exit() paths;
         # see "Test" step above for the same suppressions.
-        echo -e "leak:format_error\n" > build/suppressions.txt
-        export LSAN_OPTIONS="suppressions='$(pwd)/build/suppressions.txt'"
+        printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > build/suppressions.txt
+        export LSAN_OPTIONS="suppressions=$(pwd)/build/suppressions.txt"
         cd build
         case "${{ matrix.target }}${{ matrix.architecture }}" in
            windows*)
@@ -333,7 +330,7 @@ jobs:
             ;;
         esac
     - name: "Slow Release Tests"
-      if: matrix.cmake_preset == 'Release' && matrix.small_only != 'true'
+      if: matrix.cmake_preset == 'Release'
       run: |
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
@@ -346,6 +343,10 @@ jobs:
             ;;
            *)
             cd bin
+            # Same suppressions as the "Test" step — sanitizer matrix entries
+            # need them here too.
+            printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
+            export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
             ./test_aot -use-aot _dasroot_/dastest/dastest.das -- --use-aot --color --failures-only --timeout 900 --test ../tests
             ;;
         esac

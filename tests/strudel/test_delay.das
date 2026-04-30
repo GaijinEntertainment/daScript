@@ -42,7 +42,7 @@ def private rms_range(samples : array<float>; startSample, endSample : int) : fl
 [test]
 def test_delay_auto_init(t : T?) {
     t |> run("delay auto-initializes when delay_amount > 0") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         t |> success(get_orbit_delay(sched) == null)
         let pat <- atom("sine") |> set_delay(0.5) |> set_delaytime(0.25)
@@ -55,7 +55,7 @@ def test_delay_auto_init(t : T?) {
 [test]
 def test_no_delay_when_zero(t : T?) {
     t |> run("delay stays null when delay_amount = 0") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine")  // delay_amount defaults to 0.0
         let bank : SampleBank
@@ -67,7 +67,7 @@ def test_no_delay_when_zero(t : T?) {
 [test]
 def test_osc_voice_delay_send_field(t : T?) {
     t |> run("OscVoice delay_send populated from Event.delay_amount") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> set_delay(0.7) |> set_delaytime(0.25)
         let bank : SampleBank
@@ -80,7 +80,7 @@ def test_osc_voice_delay_send_field(t : T?) {
 [test]
 def test_delay_produces_echo(t : T?) {
     t |> run("delay_amount > 0 produces echo after voice ends") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_delay(sched)
         // Short percussive sine with delay. delaytime=0.25s should produce audible echo.
@@ -97,7 +97,7 @@ def test_delay_produces_echo(t : T?) {
 [test]
 def test_no_delay_tail_when_dry(t : T?) {
     t |> run("delay_amount = 0 produces no echo tail") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         let pat <- atom("sine") |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
         let bank : SampleBank
@@ -113,7 +113,7 @@ def test_no_delay_tail_when_dry(t : T?) {
 def test_delay_feedback_decay(t : T?) {
     t |> run("higher feedback produces longer echo trail") @(t : T?) {
         // Low feedback
-        var sched1 : Scheduler
+        var inscope sched1 : Scheduler
         sched1.cps = 0.5lf
         init_delay(sched1)
         let pat1 <- atom("sine") |> set_delay(1.0) |> set_delaytime(0.2) |> set_delayfeedback(0.2) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
@@ -121,7 +121,7 @@ def test_delay_feedback_decay(t : T?) {
         let out1 <- tick_chunks(sched1, pat1, bank, 40, 0.05)
 
         // High feedback
-        var sched2 : Scheduler
+        var inscope sched2 : Scheduler
         sched2.cps = 0.5lf
         init_delay(sched2)
         let pat2 <- atom("sine") |> set_delay(1.0) |> set_delaytime(0.2) |> set_delayfeedback(0.9) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.05)
@@ -138,7 +138,7 @@ def test_delay_feedback_decay(t : T?) {
 [test]
 def test_delay_on_drums(t : T?) {
     t |> run("pre-rendered drum with delay has echo") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_delay(sched)
         let pat <- atom("bd") |> set_delay(0.8) |> set_delaytime(0.3) |> set_delayfeedback(0.5) |> set_sustain(0.0)
@@ -154,7 +154,7 @@ def test_delay_on_drums(t : T?) {
 [test]
 def test_delay_supersaw(t : T?) {
     t |> run("supersaw with delay produces echo") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_delay(sched)
         let pat <- atom("supersaw") |> set_delay(1.0) |> set_delaytime(0.3) |> set_delayfeedback(0.5) |> set_gain(1.0) |> set_sustain(0.0) |> set_release(0.05) |> set_decay(0.1) |> set_note(48.0)
@@ -169,7 +169,7 @@ def test_delay_supersaw(t : T?) {
 [test]
 def test_delay_plus_reverb(t : T?) {
     t |> run("delay and reverb can coexist") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         init_delay(sched)
         init_reverb(sched)
