@@ -64,7 +64,7 @@ def do_format_file(file : string) : string {
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {
-        let err = [FormatResult(file = "", status = "error", message = "no files matched: {file}")]
+        let err = [FormatResult(file = file, status = "error", message = "no files matched: {file}")]
         return make_tool_result(sprint_json(err, false), true)
     }
     var results : array<FormatResult>
