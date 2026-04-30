@@ -11,7 +11,7 @@ require math
 [test]
 def test_chorus_orbit_lazy_init(t : T?) {
     t |> run("chorus on orbit allocated only when event uses chorus") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         // Dry orbit 0 — no chorus should be created
         let pat <- atom("sine") |> set_orbit(0)
@@ -24,7 +24,7 @@ def test_chorus_orbit_lazy_init(t : T?) {
 [test]
 def test_chorus_orbit_init_on_send(t : T?) {
     t |> run("chorus instance created when an event with chorus arrives") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> chorus(0.6) |> set_orbit(2)
         let bank : SampleBank
@@ -37,7 +37,7 @@ def test_chorus_orbit_init_on_send(t : T?) {
 [test]
 def test_chorus_per_orbit_independence(t : T?) {
     t |> run("two orbits with chorus get independent chorus instances") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- stack([
             atom("sine") |> chorus(0.5) |> set_orbit(0),
@@ -54,7 +54,7 @@ def test_chorus_per_orbit_independence(t : T?) {
 [test]
 def test_chorus_isolation_between_orbits(t : T?) {
     t |> run("chorus on orbit 0 leaves orbit 1 dry") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         // Only orbit 0 has chorus; orbit 1 plays the same note dry.
         let pat <- stack([
@@ -71,7 +71,7 @@ def test_chorus_isolation_between_orbits(t : T?) {
 [test]
 def test_chorus_voice_field(t : T?) {
     t |> run("OscVoice carries chorus_send from Event.chorus") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> chorus(0.4)
         let bank : SampleBank

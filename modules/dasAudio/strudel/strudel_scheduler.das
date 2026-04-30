@@ -1224,6 +1224,12 @@ def get_orbit_chorus(var sched : Scheduler; orbit : int = 0) : ma_chorus? {
 }
 
 def shutdown_scheduler(var sched : Scheduler) {
+    //! Explicit alias for `finalize` — kept for callers that release a long-lived
+    //! Scheduler (audio thread context, track pool) outside of `var inscope`.
+    finalize(sched)
+}
+
+def finalize(var sched : Scheduler) {
     //! Release every resource owned by the scheduler: pre-rendered sample voices (each carrying
     //! a large PCM buffer), SF2/oscillator voice pools, per-orbit effect buses (reverb / delay /
     //! chorus) and their scratch buffers, and the per-tick output buffer.

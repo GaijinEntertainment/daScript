@@ -259,9 +259,9 @@ def private diff_rms(a, b : array<float>) : float {
 [test]
 def test_scheduler_osc_crush_differs_from_dry(t : T?) {
     t |> run("crush applied to osc voice changes output") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("sawtooth") |> note(60.0)
@@ -282,9 +282,9 @@ def test_scheduler_osc_crush_differs_from_dry(t : T?) {
 [test]
 def test_scheduler_osc_bpf_reduces_rms(t : T?) {
     t |> run("narrow bandpass reduces overall energy") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("sawtooth") |> note(60.0)
@@ -304,7 +304,7 @@ def test_scheduler_osc_bpf_reduces_rms(t : T?) {
 [test]
 def test_scheduler_osc_voicefx_marked_active(t : T?) {
     t |> run("osc voice gets fx.active when event has effect params") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let bank : SampleBank
         let pat <- atom("sawtooth") |> note(60.0) |> crush(6.0) |> bpf(1000.0)
@@ -321,9 +321,9 @@ def test_scheduler_osc_voicefx_marked_active(t : T?) {
 [test]
 def test_scheduler_drum_crush_differs_from_dry(t : T?) {
     t |> run("crush applied to pre-rendered drum changes output") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("bd")
@@ -340,9 +340,9 @@ def test_scheduler_drum_crush_differs_from_dry(t : T?) {
 [test]
 def test_scheduler_djf_lpf_vs_bypass(t : T?) {
     t |> run("djf=0.1 (full LPF) differs from djf=0.5 (bypass)") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("sawtooth") |> note(60.0)  // djf default 0.5 = bypass
@@ -359,9 +359,9 @@ def test_scheduler_djf_lpf_vs_bypass(t : T?) {
 [test]
 def test_scheduler_shape_distorts(t : T?) {
     t |> run("shape adds harmonic distortion to osc voice") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("sine") |> note(60.0)
@@ -599,9 +599,9 @@ def test_fx_apply_compressor_reduces_peaks(t : T?) {
 [test]
 def test_scheduler_osc_phaser_differs_from_dry(t : T?) {
     t |> run("phaser changes osc voice output") @(t : T?) {
-        var dry_sched : Scheduler
+        var inscope dry_sched : Scheduler
         dry_sched.cps = 1.0lf
-        var wet_sched : Scheduler
+        var inscope wet_sched : Scheduler
         wet_sched.cps = 1.0lf
         let bank : SampleBank
         let dry_pat <- atom("sawtooth") |> note(60.0)
@@ -618,7 +618,7 @@ def test_scheduler_osc_phaser_differs_from_dry(t : T?) {
 [test]
 def test_scheduler_osc_tremolo_marks_fx(t : T?) {
     t |> run("tremolo on osc voice sets has_tremolo") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let bank : SampleBank
         let pat <- atom("sawtooth") |> note(60.0) |> tremolo(8.0)

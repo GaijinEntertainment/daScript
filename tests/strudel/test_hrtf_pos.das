@@ -13,7 +13,7 @@ require math
 [test]
 def test_hrtf_setters_engage_active(t : T?) {
     t |> run("hrtf_azimuth flips hrtf_active true on every event") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> hrtf_azimuth(-45.0)
         let bank : SampleBank
@@ -27,7 +27,7 @@ def test_hrtf_setters_engage_active(t : T?) {
 [test]
 def test_hrtf_combined_setter(t : T?) {
     t |> run("hrtf(az, el) sets both axes and engages") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> hrtf(60.0, 15.0)
         let bank : SampleBank
@@ -42,7 +42,7 @@ def test_hrtf_combined_setter(t : T?) {
 [test]
 def test_no_hrtf_means_inactive(t : T?) {
     t |> run("plain pattern leaves hrtf_active = false") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         let pat <- atom("sine") |> pan(0.5)
         let bank : SampleBank
@@ -55,7 +55,7 @@ def test_no_hrtf_means_inactive(t : T?) {
 [test]
 def test_hrtf_overrides_pan(t : T?) {
     t |> run("setting hrtf alongside pan still engages HRTF (pan path is bypassed)") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         // Pan first, then hrtf — hrtf must win.
         let pat <- atom("sine") |> pan(0.5) |> hrtf(-90.0, 0.0)
@@ -69,7 +69,7 @@ def test_hrtf_overrides_pan(t : T?) {
 [test]
 def test_hrtf_renders_audible_output(t : T?) {
     t |> run("HRTF-positioned sine produces audible stereo output without crashing") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         let pat <- atom("sine") |> hrtf(-90.0, 0.0) |> set_gain(0.8) |> set_release(0.2)
         let bank : SampleBank
@@ -89,7 +89,7 @@ def test_hrtf_renders_audible_output(t : T?) {
 [test]
 def test_hrtf_pattern_modulated(t : T?) {
     t |> run("pattern-valued hrtf_azimuth animates per event") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 1.0lf
         // 4 events per cycle, azimuths -90, -30, 30, 90
         let pat <- s("sine sine sine sine") |> hrtf_azimuth(s("-90 -30 30 90"))
@@ -111,7 +111,7 @@ def test_hrtf_pattern_modulated(t : T?) {
 [test]
 def test_hrtf_lazy_alloc(t : T?) {
     t |> run("ma_hrtf instances allocated lazily on first render") @(t : T?) {
-        var sched : Scheduler
+        var inscope sched : Scheduler
         sched.cps = 0.5lf
         let pat <- atom("sine") |> hrtf(45.0, 0.0) |> set_release(0.1)
         let bank : SampleBank

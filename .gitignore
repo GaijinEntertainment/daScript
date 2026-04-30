@@ -11,6 +11,8 @@ benchdata.db
 build/
 build-track/
 build-rwdi/
+build-asan/
+build-ubsan/
 # All build binaries stored here
 bin/
 # JIT stores dll's here
@@ -92,3 +94,4 @@ modules/dasSQLITE/dasModuleSQLITE_debug.pdb
 modules/dasStbImage/dasModuleStbImage_debug.pdb
 modules/dasStdDlg/dasModuleStdDlg_debug.pdb
 modules/dasUnitTest/dasModuleUnitTest_debug.pdb
+build-ubsan/.ninja_log

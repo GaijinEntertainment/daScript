@@ -742,7 +742,6 @@ SET(MISC_SRC
 include/daScript/misc/enums.h
 include/daScript/misc/hal.h
 include/daScript/misc/fpe.h
-include/daScript/misc/copy_bytes.h
 include/daScript/misc/platform.h
 include/daScript/misc/vectypes.h
 include/daScript/misc/arraytype.h
@@ -763,6 +762,7 @@ include/daScript/misc/gc_node.h
 include/daScript/misc/job_que.h
 include/daScript/misc/handle_registry.h
 include/daScript/misc/uric.h
+include/daScript/misc/lexer_alloc_track.h
 src/misc/gc_node.cpp
 src/misc/sysos.cpp
 src/misc/string_writer.cpp
@@ -772,6 +772,7 @@ src/misc/handle_registry.cpp
 src/misc/free_list.cpp
 src/misc/alloc_tracker.cpp
 src/misc/alloc_tracker_fast_stack.cpp
+src/misc/lexer_alloc_track.cpp
 src/misc/uric.cpp
 src/misc/format.cpp
 )
@@ -1265,7 +1266,6 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/anyhash.h
     include/daScript/misc/arraytype.h
     include/daScript/misc/callable.h
-    include/daScript/misc/copy_bytes.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/enums.h
     include/daScript/misc/fpe.h
