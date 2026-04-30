@@ -324,6 +324,11 @@ Run any tutorial from the project root::
    tutorials/sql_33_pragma.rst
    tutorials/sql_34_backup_vacuum.rst
    tutorials/sql_35_streaming.rst
+   tutorials/sql_36_attach.rst
+   tutorials/sql_37_bulk_operations.rst
+   tutorials/sql_38_concurrency.rst
+   tutorials/sql_40_fts5.rst
+   tutorials/sql_41_triggers.rst
 
 .. _tutorials_dasaudio:
 

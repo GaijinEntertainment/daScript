@@ -7,11 +7,12 @@ options gen2
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field) and `some_unknown_func(_)`
 // hits the unresolved function. Those cascades are expected.
-expect 40104:21, 30304:2, 30503:2
+expect 40104:22, 30304:2, 30503:2
 
 require daslib/sql
 require sqlite/sqlite_boost
 require sqlite/sqlite_linq
+require daslib/fts5_query   // for the bad22 case
 
 [sql_table(name="Cars")]
 struct Car {
@@ -134,6 +135,12 @@ def main() {
 
     // 21. `_.Col != none()` — same fixit; the inverse is `is_some()`.
     let bad21 <- _sql(db |> select_from(type<Owner>) |> _where(_.CarId != none(type<int>)))
+
+    // 22. `text_match` on a non-FTS5 struct. The translator refuses to
+    //     emit MATCH against a regular [sql_table] column — SQLite would
+    //     accept the syntax but match on nothing useful. The fixit
+    //     suggests `contains` (LIKE-based) or `[sql_fts5]`.
+    let bad22 <- _sql(db |> select_from(type<Car>) |> _where(_.Name |> text_match("foo")))
     // (Note: the "_in subquery without _select(_.Col)" diagnostic added in
     //  this round is also belt-and-suspenders — a daslang `contains` type-
     //  check rejects mismatched element types before sqlite_linq even sees

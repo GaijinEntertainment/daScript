@@ -40,6 +40,21 @@ def test_where_ends_with_emits_like_suffix(t : T?) {
     let sql = _sql_text(_db |> select_from(type<Car>)
                           |> _where(_.Name |> ends_with(_suffix)))
     t |> equal(sql,
-        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" LIKE '%' || ?",
-        "ends_with -> LIKE '%' || ?")
+        "SELECT \"Id\", \"Name\" FROM \"Cars\" WHERE \"Name\" LIKE ? ESCAPE '\\'",
+        "ends_with -> LIKE ? ESCAPE '\\'")
+}
+
+[test]
+def test_where_ends_with_escapes_literal_underscore(t : T?) {
+    // Literal '_' must not act as the LIKE wildcard.
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<Car>)
+        db |> insert(Car(Id = 1, Name = "model_X"))
+        db |> insert(Car(Id = 2, Name = "modelAX"))
+        let suffix = "_X"
+        let cars <- _sql(db |> select_from(type<Car>)
+                           |> _where(_.Name |> ends_with(suffix)))
+        t |> equal(length(cars), 1, "literal '_' in user suffix matches only 'model_X'")
+        t |> equal(cars[0].Id, 1, "matched the literal-underscore row")
+    }
 }

@@ -285,10 +285,7 @@ def private sql_to_frags(sql : string; var orderedBinds : array<ExpressionPtr>; 
     sql_to_frags_ex(sql, orderedBinds, noInlineIds, out)
 }
 
-// Walks `sql` token by token, splitting `?` (binds) and `\x01` (runtime ids) into their respective frags.
-// Each marker pulls the next expression from the matching list in occurrence order. When a list is
-// exhausted, the marker is preserved as text — `_sql_text` deliberately passes empty binds to keep `?` in
-// the rendered SQL.
+// Splits `?` (binds) / `\x01` (runtime ids) into frags; pulls in occurrence order, preserves markers when list exhausted.
 [macro_function]
 def private sql_to_frags_ex(sql : string;
                             var orderedBinds : array<ExpressionPtr>;
@@ -368,11 +365,34 @@ def private source_rootType_for_alias(var q : SqlQuery&; alias : string) : TypeD
 
 [macro_function]
 def private column_sql_for_alias(alias : string; rootT : TypeDeclPtr; field : string) : string {
+    // [sql_fts5] @sql_fts_rank → emit FTS5's hidden `rank` unquoted (quoting names a real column).
+    if (is_fts_rank_field(rootT, field)) {
+        return "rank"
+    }
     let sqlCol = field_to_column_name(rootT, field)
     if (empty(alias)) {
         return "\"{sqlCol}\""
     }
     return "\"{alias}\".\"{sqlCol}\""
+}
+
+[macro_function]
+def private is_fts_rank_field(rootT : TypeDeclPtr; fieldName : string) : bool {
+    if (rootT == null || rootT.structType == null) {
+        return false
+    }
+    var st = rootT.structType
+    for (field in st.fields) {
+        if (field.name == fieldName) {
+            for (annDecl in field.annotation) {
+                if (annDecl.name == "sql_fts_rank") {
+                    return true
+                }
+            }
+            return false
+        }
+    }
+    return false
 }
 
 [macro_function]
@@ -553,9 +573,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     }
     q.seenJoin = true
     q.rootAlias = "t0"
-    // 2. Recurse into srca — populates q.rootType, q.tableName, processes
-    //    any inner `_where`. Inner `_where`'s pred_to_sql emits qualified
-    //    column refs (`"t0"."Col"`) because q.seenJoin is now true.
+    // 2. Recurse into srca — inner _where emits qualified refs because seenJoin is now true.
     if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
         return false
     }
@@ -613,8 +631,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         spec.rightOnBindExprs |> push <| clone_expression(b)
     }
     q.joins |> emplace(spec)
-    // 5. Process `into` projection — 2-arg lambda; bind arg0 → source 0,
-    //    arg1 → source 1, then run analyze_projection on the body.
+    // 5. Process `into` projection — 2-arg lambda; bind args → sources 0/1, run analyze_projection.
     var intoLambda = jCall.arguments[4]
     if (intoLambda == null || !(intoLambda is ExprMakeBlock)) {
         macro_error(prog, at, "_sql: _join `into` projection has unexpected shape (not a lambda)")
@@ -650,8 +667,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         macro_error(prog, at, "_sql: empty chain")
         return false
     }
-    // ---- Terminals (one per chain, must precede _select / _where peel) ----
-    // Peel _to_array(prev) — materializer flag only; position-irrelevant.
+    // ---- Terminals: one per chain, must precede _select / _where peel; _to_array sets materializer flag.
     {
         var inner : ExpressionPtr
         if (qmatch(node, _to_array($e(inner))).matched) {
@@ -739,8 +755,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return q.aggregateExpr != ""
         }
     }
-    // ---- Stage operators ----
-    // Peel distinct(prev) — emits SELECT DISTINCT.
+    // ---- Stage operators: peel distinct(prev) — emits SELECT DISTINCT.
     {
         var dCall = match_linq_call(node, "distinct")
         if (dCall != null) {
@@ -757,10 +772,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(dCall.arguments[0], q, prog, at)
         }
     }
-    // Peel take(prev, n) — linq.das's `take(arr, int)`. Sets LIMIT n.
-    // `n` is stashed on q.limitBindExpr; the bind statement is emitted in
-    // emit_sql_macro_body AFTER the WHERE binds so the placeholder index
-    // (LIMIT comes after WHERE in SQL) lines up correctly.
+    // Peel take(prev, n) — sets LIMIT n; bind emitted after WHERE so placeholder index lines up.
     {
         var tCall = match_linq_call(node, "take")
         if (tCall != null) {
@@ -777,9 +789,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return analyze_chain(tCall.arguments[0], q, prog, at)
         }
     }
-    // Peel order_by(prev, lambda) — post-expansion of `_order_by(prev, expr)`.
-    // Single-column: body is `_.Col` → push `"Col" ASC`.
-    // Recurse first so q.seenGroupBy/groupByCols are populated before collect_order_keys routes `_._0`.
+    // Peel order_by(prev, lambda) — body `_.Col` → `"Col" ASC`. Recurse first so groupBy state is in place for `_._N`.
     {
         var obCall = match_linq_call(node, "order_by")
         if (obCall != null) {
@@ -855,8 +865,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 q.seenSelect = true
                 return analyze_chain(sCall.arguments[0], q, prog, at)
             }
-            // Recurse first so q.seenGroupBy reflects whether a downstream
-            // `_group_by` will fuse with this `_select`.
+            // Recurse first so q.seenGroupBy reflects any downstream `_group_by` fusing with this `_select`.
             if (!analyze_chain(sCall.arguments[0], q, prog, at)) {
                 return false
             }
@@ -899,8 +908,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (beforeGroupBy) {
-                // _group_by was set BEFORE we recursed → it sits OUTSIDE this
-                // _having in source order = HAVING came before GROUP BY.
+                // _group_by set before recursion → it sits OUTSIDE this _having (HAVING came first in source order).
                 macro_error(prog, at, "_sql: _having must appear AFTER _group_by in the chain")
                 return false
             }
@@ -1116,10 +1124,7 @@ def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
     if (!q.seenJoin) {
         return ""
     }
-    // Require a bare ExprVar — `qmatch(node, $i(argName))` would match any
-    // expression and capture an empty (or worse, foreign) name from
-    // ExprField/ExprCall receivers, opening rare collisions with join-arg
-    // names. Use an inline shape check instead.
+    // Require a bare ExprVar — `$i` would over-match on ExprField/ExprCall receivers, capturing foreign names.
     var n = node
     if (n is ExprRef2Value) {
         n = (n as ExprRef2Value).subexpr
@@ -1175,8 +1180,7 @@ def private try_recognize_json_path_proj(val : ExpressionPtr; var q : SqlQuery&;
         return 0
     }
     let argName = string((cur as ExprVar).name)
-    // Silent resolution (mirror of pred_to_sql): unrecognized arg names
-    // fall through so unrelated chains keep their existing diagnostics.
+    // Silent resolution (mirror of pred_to_sql): unrecognized names fall through, preserving sibling diagnostics.
     var srcIdx = -1
     if (q.seenJoin) {
         srcIdx = lookup_arg_source(q, argName)
@@ -1579,8 +1583,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         }
         let outerName = string(ef.name)
         let nKeys = length(q.groupByCols)
-        // Single-key: `_._0` → first group-by column.
-        // groupByCols stores daslang names; translate to SQL identifier here
+        // Single-key: `_._0` → first group-by column (groupByCols stores daslang names; translate here).
         if (nKeys == 1 && recv != null && recv is ExprVar
                 && (recv as ExprVar).name == "_"
                 && outerName == "_0") {
@@ -1620,8 +1623,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
             return true
         }
     }
-    // Multi-column form: tuple literal `(_.k1, _.k2)` — each entry independently
-    // chooses compile-time `_.Field` or runtime string column name.
+    // Multi-column tuple `(_.k1, _.k2)` — each entry picks compile-time `_.Field` or runtime string column.
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
         if (length(mkTup.values) == 0) {
@@ -1644,8 +1646,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
         }
         return true
     }
-    // Runtime form: a string-typed expression naming the column at runtime.
-    // Quoted via sql_quote_id at emission so embedded `"` is escaped safely.
+    // Runtime form: string-typed expression naming the column; quoted via sql_quote_id at emission.
     if (body._type != null && body._type.baseType == Type.tString) {
         q.orderByInlineExprs |> push <| clone_expression(body)
         q.orderByCols |> push("\x01 {direction}")
@@ -1738,9 +1739,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             return pred_fail(q, prog, at, "_sql: _where: ExprRef2Value with null subexpr")
         }
     }
-    // Logical NOT — special case `_not_in` (which lowers to `!contains(subq, x)`):
-    // the inner contains call may be unresolved at this point, so dispatch on
-    // textual name (ExprLooksLikeCall populates `.name` pre-typer).
+    // Logical NOT — `_not_in` lowers to `!contains(subq, x)`; dispatch on textual name (pre-typer).
     {
         var inner : ExpressionPtr
         if (qmatch(node, !$e(inner)).matched) {
@@ -1749,8 +1748,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 let iname = string(icall.name)
                 let iargc = user_arg_count(icall)
                 if (iname == "contains" && iargc == 2) {
-                    // Disambiguate string contains vs iterator contains by the
-                    // inferred type of the first arg (the subquery).
+                    // Disambiguate string contains vs iterator contains by first-arg inferred type.
                     var firstT = icall.arguments[0]._type
                     if (firstT != null && (firstT.isIterator || firstT.isGoodArrayType)) {
                         let xSql = pred_to_sql(icall.arguments[1], q, prog, at)
@@ -1992,10 +1990,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             return "{xSql} IN ({subSql})"
         }
         if ((mname == "_any" || mname == "_none") && length(mcall.arguments) >= 1) {
-            // `subq._any()` / `subq._none()` (1 arg) or
-            // `subq._any(pred)` / `subq._none(pred)` (2 args, pred is a
-            // bare expression — the call_macro hasn't lambda-wrapped it
-            // yet because expansion didn't fire).
+            // 1-arg `subq._any()/_none()` or 2-arg `_any(pred)/_none(pred)` (pred bare; call_macro hasn't lambda-wrapped).
             var subSql : string
             var binds : array<ExpressionPtr>
             if (length(mcall.arguments) == 1) {
@@ -2048,6 +2043,10 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         let sql = fn_call_to_sql(node as ExprCall, q, prog, at)
         if (!empty(sql)) {
             return sql
+        }
+        // fn_call_to_sql may have emitted a targeted macro_error via pred_fail (e.g. text_match on non-FTS5 struct); stop here so the generic "unsupported expression" doesn't double-fire.
+        if (q.hadError) {
+            return ""
         }
     }
     // Literal / captured var → bind param. Inside `_having`, route to havingBindExprs to keep placeholder order.
@@ -2196,16 +2195,28 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         fname = string(call.name)
     }
     let argc = user_arg_count(call)
-    // ---- String predicates: LIKE patterns ----
+    // ---- String predicates: LIKE patterns — RHS wrapped via `_::like_escape_*` so user `%`/`_`/`\` match literally.
     if (fname == "starts_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-        let rhs = pred_to_sql(call.arguments[1], q, prog, at)
-        return "{lhs} LIKE {rhs} || '%'"
+        var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
+        var wrapped : ExpressionPtr = qmacro(_::like_escape_prefix($e(rawArg)))
+        if (q.inHaving) {
+            q.havingBindExprs |> push(wrapped)
+        } else {
+            q.bindExprs |> push(wrapped)
+        }
+        return "{lhs} LIKE ? ESCAPE '\\'"
     }
     if (fname == "ends_with" && argc == 2) {
         let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-        let rhs = pred_to_sql(call.arguments[1], q, prog, at)
-        return "{lhs} LIKE '%' || {rhs}"
+        var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
+        var wrapped : ExpressionPtr = qmacro(_::like_escape_suffix($e(rawArg)))
+        if (q.inHaving) {
+            q.havingBindExprs |> push(wrapped)
+        } else {
+            q.bindExprs |> push(wrapped)
+        }
+        return "{lhs} LIKE ? ESCAPE '\\'"
     }
     if (fname == "contains" && argc == 2) {
         // String contains → LIKE; iterator/array contains → IN subquery (handled below).
@@ -2214,9 +2225,28 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
             // Fall through to subquery branch.
         } else {
             let lhs = pred_to_sql(call.arguments[0], q, prog, at)
-            let rhs = pred_to_sql(call.arguments[1], q, prog, at)
-            return "{lhs} LIKE '%' || {rhs} || '%'"
+            var rawArg : ExpressionPtr = clone_expression(call.arguments[1])
+            var wrapped : ExpressionPtr = qmacro(_::like_escape_substring($e(rawArg)))
+            if (q.inHaving) {
+                q.havingBindExprs |> push(wrapped)
+            } else {
+                q.bindExprs |> push(wrapped)
+            }
+            return "{lhs} LIKE ? ESCAPE '\\'"
         }
+    }
+    // ---- FTS5 (tut 40): text_match(_.Body, q) on [sql_fts5] → `Body MATCH ?`; non-FTS5 is a compile error.
+    if (fname == "text_match" && argc == 2) {
+        if (!is_fts5_type(q.rootType)) {
+            return pred_fail(q, prog, at, "_sql: text_match() requires an [sql_fts5] struct, got '{describe(q.rootType)}'. Options: use contains(_.Col, q) for LIKE-based substring match, or annotate the struct with [sql_fts5] for indexed full-text search.")
+        }
+        let lhs = pred_to_sql(call.arguments[0], q, prog, at)
+        if (q.inHaving) {
+            q.havingBindExprs |> push <| clone_expression(call.arguments[1])
+        } else {
+            q.bindExprs |> push <| clone_expression(call.arguments[1])
+        }
+        return "{lhs} MATCH ?"
     }
     // ---- Case folding ----
     if (fname == "to_lower" && argc == 1) {
@@ -2237,8 +2267,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         return "ABS({inner})"
     }
-    // ---- Option<T> nullability (IS NULL / IS NOT NULL) ----
-    // _left_join special case: a bare ExprVar referring to the Option<TB> arg probes the right-key column for NULL.
+    // ---- Option<T> nullability — _left_join special case: bare ExprVar of Option<TB> arg probes right-key NULL.
     if (fname == "is_some" && argc == 1) {
         var argName : string
         let nullProbe = try_left_join_null_probe(call.arguments[0], q, argName, true)
@@ -2257,17 +2286,13 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         return "{inner} IS NULL"
     }
-    // `_.Col |> unwrap_or(default)` collapses NULL to a fallback —
-    // `COALESCE("Col", ?)`. The default goes through pred_to_sql so it
-    // can be a literal, captured local, or another column reference.
+    // `_.Col |> unwrap_or(d)` → `COALESCE("Col", ?)`; default routes through pred_to_sql (literal/local/column).
     if (fname == "unwrap_or" && argc == 2) {
         let inner = pred_to_sql(call.arguments[0], q, prog, at)
         let dflt  = pred_to_sql(call.arguments[1], q, prog, at)
         return "COALESCE({inner}, {dflt})"
     }
-    // ---- Subqueries ----
-    // `x._in(subquery)` post-expansion: `contains(subquery, x)`.
-    // `x._not_in(subq)` post-expansion: `!contains(subq, x)` — leading `!` peeled by pred_to_sql.
+    // ---- Subqueries: `x._in(subq)` → `contains(subq, x)`; `_not_in` → `!contains(...)` (leading `!` peeled).
     if (fname == "contains" && argc == 2) {
         let xSql = pred_to_sql(call.arguments[1], q, prog, at)
         var binds : array<ExpressionPtr>
@@ -2545,13 +2570,15 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
 
 [macro_function]
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
-    // Read [sql_table]/[sql_view] name from struct metadata directly — we can't reach the user's _::_sql_table_name from this module's macro context.
+    // Read [sql_table]/[sql_view]/[sql_fts5] name from struct metadata directly — we can't reach the user's _::_sql_table_name from this module's macro context.
     if (rootT == null || rootT.structType == null) {
         return ""
     }
     var st = rootT.structType
     for (annDecl in st.annotations) {
-        if (annDecl.annotation.name == "sql_table" || annDecl.annotation.name == "sql_view") {
+        if (annDecl.annotation.name == "sql_table"
+                || annDecl.annotation.name == "sql_view"
+                || annDecl.annotation.name == "sql_fts5") {
             for (arg in annDecl.arguments) {
                 if (arg.name == "name" && arg.basicType == Type.tString) {
                     return string(arg.sValue)
@@ -2571,6 +2598,20 @@ def private is_view_type(rootT : TypeDeclPtr) : bool {
     var st = rootT.structType
     for (annDecl in st.annotations) {
         if (annDecl.annotation.name == "sql_view") {
+            return true
+        }
+    }
+    return false
+}
+
+[macro_function]
+def private is_fts5_type(rootT : TypeDeclPtr) : bool {
+    if (rootT == null || rootT.structType == null) {
+        return false
+    }
+    var st = rootT.structType
+    for (annDecl in st.annotations) {
+        if (annDecl.annotation.name == "sql_fts5") {
             return true
         }
     }
@@ -2623,22 +2664,13 @@ def private build_sql_select(var q : SqlQuery&) : string {
                     w |> write(q.selectColSqlFragments[i])
                 } elif (i < length(q.selectColAliases) && !empty(q.selectColAliases[i])) {
                     let owningT = source_rootType_for_alias(q, q.selectColAliases[i])
-                    let sqlCol = field_to_column_name(owningT, q.selectCols[i])
-                    w |> write("\"")
-                    w |> write(q.selectColAliases[i])
-                    w |> write("\".\"")
-                    w |> write(sqlCol)
-                    w |> write("\"")
+                    w |> write(column_sql_for_alias(q.selectColAliases[i], owningT, q.selectCols[i]))
                 } else {
-                    let sqlCol = field_to_column_name(q.rootType, q.selectCols[i])
-                    w |> write("\"")
-                    w |> write(sqlCol)
-                    w |> write("\"")
+                    w |> write(column_sql_for_alias("", q.rootType, q.selectCols[i]))
                 }
             }
         }
-        // FROM clause: alias the root table only when joins are present.
-        // Single-source mode keeps the unaliased `FROM "Tbl"` shape.
+        // FROM clause: alias the root table only when joins are present (single-source keeps unaliased `FROM "Tbl"`).
         if (q.seenJoin) {
             w |> write(" FROM \"")
             w |> write(q.tableName)
@@ -3144,11 +3176,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     if (!analyze_chain(call.arguments[0], q, prog, call.at)) {
         return null
     }
-    // `take(n)` / `skip(n)` upstream of an aggregate (sum / average /
-    // min / max / count) is degenerate in SQL: the aggregate already
-    // collapses to one row, so `LIMIT n` / `OFFSET n` become no-ops
-    // (e.g. `SELECT SUM(p) FROM Cars LIMIT 2` returns the sum of
-    // take(n)/skip(n) AFTER an aggregate is a no-op in SQL; users likely want a subquery — reject loudly.
+    // take(n)/skip(n) before an aggregate is degenerate in SQL — aggregate collapses to one row, LIMIT/OFFSET no-op; reject loudly.
     if (q.proj == ProjectionShape.Aggregate
             && (q.limitBindExpr != null || q.offsetBindExpr != null)) {
         macro_error(prog, call.at, "_sql: take(n)/skip(n) before an aggregate is not translatable — `LIMIT`/`OFFSET` after an aggregate has no effect (aggregate collapses to one row); use `_where(...)` for pre-aggregate filtering, or wait for subquery support in chunk 5+")
@@ -3319,9 +3347,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         return null
     }
     var dbExpr = q.dbExpr
-    // bind_blk is a `block` (one-shot, runs before the generator). row_blk
-    // is a capturing `lambda` so it can outlive the run_each_select call
-    // inside the generator body.
+    // bind_blk = block (one-shot, before the generator); row_blk = capturing lambda (outlives run_each_select).
     var res = qmacro(_::run_each_select($e(dbExpr), $e(sqlExpr),
         $(var _sql_stmt : sqlite3_stmt?) {
             $b(bind_stmts)
