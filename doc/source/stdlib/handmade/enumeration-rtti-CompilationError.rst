@@ -103,5 +103,6 @@ No global heap is specified, but program requests it.
 No global variables are allowed in this context.
 Unused function argument.
 Unsafe function.
+Performance lint warning.
 Too many infer passes.
 Missing simulation node.
