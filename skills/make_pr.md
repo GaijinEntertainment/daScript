@@ -210,7 +210,7 @@ See `skills/documentation_rst.md` for full details on doc conventions, tutorial 
 
 ## 5. Format all changed `.das` files
 
-Run the MCP `format_file` tool on every changed `.das` file. Verify each still compiles after formatting.
+Run the MCP `format_file` tool on all changed `.das` files in a single batched call using a comma-separated list or glob pattern. Verify the changed files still compile after formatting.
 
 **Format every changed `.das` file regardless of syntax era** — the formatter handles both gen2 and gen1 (`options gen2 = false`) cleanly, including `.das_project` files. CI fails on unformatted gen1 files (e.g. spacing around `=` in `options gen2 = false`), so don't skip them.
 
@@ -350,6 +350,6 @@ Each iteration: triage → discuss → fix → gate → amend → force-push →
 | AOT build | `cmake --build build --config Release --target test_aot -j 64` | Kill daslang first. Register new test dirs |
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
 | Docs | `das2rst.das` + stubs + Sphinx | Only if daslib/C++ bindings/RST changed |
-| Format | MCP `format_file` on each changed `.das` | Only changed files |
+| Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
 | Review iter | Triage → discuss → fix → gates → amend → force-push → reply → resolve all threads → re-request | One round per Copilot pass; convergence in 1-3 rounds is normal |

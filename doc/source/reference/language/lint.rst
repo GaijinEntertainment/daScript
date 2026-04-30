@@ -43,6 +43,7 @@ Options:
 
 - ``--quiet`` — suppress PASS lines and progress messages
 - ``--postfix-conditionals`` — enable STYLE005 check
+- ``--comment-hygiene`` — enable STYLE014/STYLE015 comment-length checks
 - ``--paranoid-only`` — only run paranoid lint
 - ``--perf-only`` — only run performance lint
 - ``--style-only`` — only run style lint
@@ -689,6 +690,11 @@ generic instantiations (same exclusions as STYLE011).
 STYLE014 — comment block exceeds 3 lines at module/public scope
 ================================================================
 
+.. note::
+
+   This check is **opt-in**. Enable it by adding ``options _comment_hygiene = true``
+   at the top of your file, or pass ``--comment-hygiene`` to the standalone utility.
+
 A contiguous run of more than three ``//`` or ``//!`` comment lines at
 module scope or above a public symbol is flagged as
 multi-paragraph prose. The convention is "no architectural prose at the
@@ -726,6 +732,11 @@ line; those blocks never reach the doc generator.
 
 STYLE015 — comment block exceeds 1 line inside a ``def private``
 ================================================================
+
+.. note::
+
+   This check is **opt-in**. Enable it by adding ``options _comment_hygiene = true``
+   at the top of your file, or pass ``--comment-hygiene`` to the standalone utility.
 
 Private symbols don't surface in any doc generator, so multi-line
 comment prose inside a ``def private`` body is dead weight. Trim to one

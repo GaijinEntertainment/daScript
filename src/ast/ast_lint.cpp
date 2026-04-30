@@ -1177,8 +1177,13 @@ namespace das {
                       + "', expecting '" + das_to_string(optT) + "'", "", "",
                         LineInfo(), CompilationError::invalid_option);
             } else if ( optT==Type::none ){
-                error("invalid option '" + opt.name + "'",  "", "",
-                    LineInfo(), CompilationError::invalid_option);
+                if ( opt.name[0]!='_' ) {
+                    error("invalid option '" + opt.name + "'",  "", "",
+                        LineInfo(), CompilationError::invalid_option);
+                } else {
+                    // custom user option (name starts with '_'), we don't care what's in there
+                    continue;
+                }
             }
         }
         set<Module *> lints;

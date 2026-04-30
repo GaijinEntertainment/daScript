@@ -4,6 +4,9 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
 
+// Intentionally opt in for user-facing docs: keep comments concise and actionable.
+options _comment_hygiene
+
 module sqlite_linq shared public
 
 require sqlite/sqlite_boost public
