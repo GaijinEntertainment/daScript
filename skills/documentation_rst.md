@@ -86,6 +86,27 @@ in the `.das` source.
 fix is to add a `//!` comment in the `.das` source** — not to fill the
 handmade stub. Then regenerate; the stub disappears.
 
+### Suppressing the STYLE014 lint on a `//!` block
+
+When a long-form `//!` block on a public symbol is intentional and you
+want to keep it visible in generated RST without tripping the
+STYLE014 lint, put `//!@nolint` on the first line:
+
+```das
+//!@nolint
+//! Long doc — kept verbose intentionally; appears in the generated RST.
+//! …
+def public foo() { … }
+```
+
+`daslib/rst_comment.das` recognises the `@nolint` first line and drops
+**only that marker line** from the emitted doc, so the rest of the
+`//!` block still reaches `doc/source/stdlib/generated/detail/`.
+The marker also suppresses the `style_lint` STYLE014 warning for the
+block. For `//` blocks (no doc-comment), use `// nolint:STYLE014` /
+`// nolint:STYLE015` on the first line — those bypass lint without
+involving the doc generator.
+
 The only handmade artifact allowed for a daslang module is a trivial
 one-line `module-<name>.rst` header (e.g. `module-strudel_midi.rst`
 contains just `Module strudel_midi`). The real module description goes

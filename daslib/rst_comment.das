@@ -127,6 +127,13 @@ class RstComment : AstCommentReader {
             delete chars
             return
         }
+        // `//!@nolint` — style_lint suppression marker. Drop the line so it
+        // never reaches generated RST.
+        let after_bang = strip_left(slice(string(chars), 1))
+        if (after_bang |> starts_with("@nolint")) {
+            delete chars
+            return
+        }
         if (length(chars)>1 && int(chars[1])==' ') {
             chars |> erase(1)
         }

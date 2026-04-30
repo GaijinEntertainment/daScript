@@ -22,6 +22,8 @@ module style_lint shared private
 //!   STYLE011 — variable declaration followed by immediate assignment
 //!   STYLE012 — array<T> var initialized via push/emplace; use an array literal
 //!   STYLE013 — struct var with default/empty init followed by a run of field assignments
+//!   STYLE014 — comment block exceeds 3 lines at module/public scope (suppress with '//!@nolint' or '// nolint:STYLE014')
+//!   STYLE015 — comment block exceeds 1 line inside a 'def private' (suppress with '// nolint:STYLE015')
 
 require daslib/ast_boost
 require strings
@@ -540,6 +542,340 @@ class StyleLintVisitor : AstVisitor {
         return (arg as ExprVar).variable == target
     }
 
+    // --- STYLE014/STYLE015: large comment blocks (post-visit pass) ---
+
+    def scan_long_comment_blocks(prog : ProgramPtr) : void {
+        let mod = prog.getThisModule
+        if (mod == null) {
+            return
+        }
+        var file_first_decl : table<string; uint>
+        var file_max_line : table<string; uint>
+        var fn_file : array<string>
+        var fn_starts : array<uint>
+        var fn_ends : array<uint>
+        var fn_private : array<bool>
+        for_each_function(mod, "") $(var fn) {
+            if (fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u) {
+                return
+            }
+            if (fn.flags.generated || fn.fromGeneric != null || fn._module != mod) {
+                return
+            }
+            if (fn.moreFlags.isTemplate) {
+                return
+            }
+            let fname = string(fn.at.fileInfo.name)
+            let s = fn.at.line
+            let e = fn.body.at.last_line
+            if (file_first_decl |> key_exists(fname)) {
+                if (s < file_first_decl[fname]) {
+                    file_first_decl[fname] = s
+                }
+                if (e > file_max_line[fname]) {
+                    file_max_line[fname] = e
+                }
+            } else {
+                file_first_decl |> insert(fname, s)
+                file_max_line |> insert(fname, e)
+            }
+            fn_file |> push(fname)
+            fn_starts |> push(s)
+            fn_ends |> push(e)
+            fn_private |> push(fn.flags.privateFunction)
+        }
+        for_each_structure(mod) $(var st) {
+            if (st.at.fileInfo == null || st.at.line == 0u) {
+                return
+            }
+            if (st.flags.generated || st._module != mod || st.flags.isTemplate) {
+                return
+            }
+            var is_template_instance = false
+            peek(st.name) $(name) {
+                is_template_instance = find(name, "<") >= 0
+            }
+            if (is_template_instance) {
+                return
+            }
+            let fname = string(st.at.fileInfo.name)
+            let s = st.at.line
+            if (file_first_decl |> key_exists(fname)) {
+                if (s < file_first_decl[fname]) {
+                    file_first_decl[fname] = s
+                }
+                if (s > file_max_line[fname]) {
+                    file_max_line[fname] = s
+                }
+            } else {
+                file_first_decl |> insert(fname, s)
+                file_max_line |> insert(fname, s)
+            }
+        }
+        for_each_enumeration(mod) $(var en) {
+            if (en.at.fileInfo == null || en.at.line == 0u) {
+                return
+            }
+            let fname = string(en.at.fileInfo.name)
+            let s = en.at.line
+            if (file_first_decl |> key_exists(fname)) {
+                if (s < file_first_decl[fname]) {
+                    file_first_decl[fname] = s
+                }
+                if (s > file_max_line[fname]) {
+                    file_max_line[fname] = s
+                }
+            } else {
+                file_first_decl |> insert(fname, s)
+                file_max_line |> insert(fname, s)
+            }
+        }
+        for_each_global(mod) $(var v) {
+            if (v.at.fileInfo == null || v.at.line == 0u) {
+                return
+            }
+            if (v.flags.generated) {
+                return
+            }
+            let fname = string(v.at.fileInfo.name)
+            let s = v.at.line
+            if (file_first_decl |> key_exists(fname)) {
+                if (s < file_first_decl[fname]) {
+                    file_first_decl[fname] = s
+                }
+                if (s > file_max_line[fname]) {
+                    file_max_line[fname] = s
+                }
+            } else {
+                file_first_decl |> insert(fname, s)
+                file_max_line |> insert(fname, s)
+            }
+        }
+        for_each_typedef(mod) $(name, value) {
+            if (value.at.fileInfo == null || value.at.line == 0u) {
+                return
+            }
+            let fname = string(value.at.fileInfo.name)
+            let s = value.at.line
+            if (file_first_decl |> key_exists(fname)) {
+                if (s < file_first_decl[fname]) {
+                    file_first_decl[fname] = s
+                }
+                if (s > file_max_line[fname]) {
+                    file_max_line[fname] = s
+                }
+            } else {
+                file_first_decl |> insert(fname, s)
+                file_max_line |> insert(fname, s)
+            }
+        }
+        var seen : table<string; bool>
+        for_each_function(mod, "") $(var fn) {
+            if (fn.at.fileInfo == null || fn._module != mod) {
+                return
+            }
+            if (fn.flags.generated || fn.fromGeneric != null || fn.moreFlags.isTemplate) {
+                return
+            }
+            let fname = string(fn.at.fileInfo.name)
+            if (seen |> key_exists(fname)) {
+                return
+            }
+            if (!file_first_decl |> key_exists(fname)) {
+                return
+            }
+            seen |> insert(fname, true)
+            self->scan_file_lines(fn.at, fname,
+                file_first_decl[fname], file_max_line[fname],
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+        for_each_structure(mod) $(var st) {
+            if (st.at.fileInfo == null || st._module != mod) {
+                return
+            }
+            if (st.flags.generated || st.flags.isTemplate) {
+                return
+            }
+            var is_template_instance = false
+            peek(st.name) $(name) {
+                is_template_instance = find(name, "<") >= 0
+            }
+            if (is_template_instance) {
+                return
+            }
+            let fname = string(st.at.fileInfo.name)
+            if (seen |> key_exists(fname)) {
+                return
+            }
+            if (!file_first_decl |> key_exists(fname)) {
+                return
+            }
+            seen |> insert(fname, true)
+            self->scan_file_lines(st.at, fname,
+                file_first_decl[fname], file_max_line[fname],
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+        for_each_enumeration(mod) $(var en) {
+            if (en.at.fileInfo == null) {
+                return
+            }
+            let fname = string(en.at.fileInfo.name)
+            if (seen |> key_exists(fname)) {
+                return
+            }
+            if (!file_first_decl |> key_exists(fname)) {
+                return
+            }
+            seen |> insert(fname, true)
+            self->scan_file_lines(en.at, fname,
+                file_first_decl[fname], file_max_line[fname],
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+        for_each_global(mod) $(var v) {
+            if (v.at.fileInfo == null || v.flags.generated) {
+                return
+            }
+            let fname = string(v.at.fileInfo.name)
+            if (seen |> key_exists(fname)) {
+                return
+            }
+            if (!file_first_decl |> key_exists(fname)) {
+                return
+            }
+            seen |> insert(fname, true)
+            self->scan_file_lines(v.at, fname,
+                file_first_decl[fname], file_max_line[fname],
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+        for_each_typedef(mod) $(name, value) {
+            if (value.at.fileInfo == null) {
+                return
+            }
+            let fname = string(value.at.fileInfo.name)
+            if (seen |> key_exists(fname)) {
+                return
+            }
+            if (!file_first_decl |> key_exists(fname)) {
+                return
+            }
+            seen |> insert(fname, true)
+            self->scan_file_lines(value.at, fname,
+                file_first_decl[fname], file_max_line[fname],
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+    }
+
+    def scan_file_lines(sample_at : LineInfo; file_name : string;
+                        first_decl, max_line : uint;
+                        fn_file : array<string>; fn_starts, fn_ends : array<uint>;
+                        fn_private : array<bool>) : void {
+        var ln : uint = 1u
+        var in_block = false
+        var block_start : uint = 0u
+        var block_count = 0
+        var block_first_line = ""
+        while (true) {
+            var got = false
+            var line_text = ""
+            get_file_source_line(sample_at.fileInfo, ln) $(s) {
+                got = true
+                line_text = string(s)
+            }
+            if (!got) {
+                break
+            }
+            let trimmed = strip_left(line_text)
+            let is_comment = starts_with(trimmed, "//")
+            if (is_comment) {
+                if (!in_block) {
+                    in_block = true
+                    block_start = ln
+                    block_count = 0
+                    block_first_line = trimmed
+                }
+                block_count++
+            } else {
+                if (in_block) {
+                    self->emit_long_comment(sample_at, file_name, first_decl, block_start, block_count, block_first_line,
+                        fn_file, fn_starts, fn_ends, fn_private)
+                    in_block = false
+                }
+            }
+            ln++
+        }
+        if (in_block) {
+            self->emit_long_comment(sample_at, file_name, first_decl, block_start, block_count, block_first_line,
+                fn_file, fn_starts, fn_ends, fn_private)
+        }
+    }
+
+    def has_nolint_directive(first_line : string) : bool {
+        // Positional check — `@nolint` MUST be the first token after `//`/`//!`
+        // (and optional whitespace) so we don't mis-match URLs/prose that
+        // happen to contain the literal `@nolint`.
+        var rest = first_line
+        if (starts_with(rest, "//!")) {
+            rest = slice(rest, 3)
+        } elif (starts_with(rest, "//")) {
+            rest = slice(rest, 2)
+        } else {
+            return false
+        }
+        rest = strip_left(rest)
+        return starts_with(rest, "@nolint")
+    }
+
+    def emit_long_comment(sample_at : LineInfo; file_name : string;
+                          first_decl_line, block_start : uint; line_count : int;
+                          first_line_text : string;
+                          fn_file : array<string>; fn_starts, fn_ends : array<uint>;
+                          fn_private : array<bool>) : void {
+        if (line_count <= 1) {
+            return
+        }
+        if (block_start < first_decl_line) {
+            return
+        }
+        if (self->has_nolint_directive(first_line_text)) {
+            return
+        }
+        var enclosing_priv = false
+        var inside_function = false
+        var enclosing_size : uint = 0xFFFFFFFFu
+        for (i in range(length(fn_file))) {
+            if (fn_file[i] != file_name) {
+                continue
+            }
+            let s = fn_starts[i]
+            let e = fn_ends[i]
+            if (s <= block_start && block_start <= e) {
+                let size = e - s
+                if (size < enclosing_size) {
+                    enclosing_size = size
+                    enclosing_priv = fn_private[i]
+                    inside_function = true
+                }
+            }
+        }
+        let private_ctx = inside_function && enclosing_priv
+        let threshold = private_ctx ? 1 : 3
+        if (line_count <= threshold) {
+            return
+        }
+        var at = sample_at
+        at.line = block_start
+        at.last_line = block_start
+        at.column = 1u
+        at.last_column = 1u
+        var msg = ""
+        if (private_ctx) {
+            msg = "STYLE015: {line_count}-line comment inside 'def private' exceeds 1-line cap; private symbols don't get public docs — keep at most one WHY line, or suppress on the first line with '// nolint:STYLE015'"
+        } else {
+            msg = "STYLE014: comment block of {line_count} lines exceeds 3-line cap; trim multi-paragraph prose to a 1-line WHY (move design notes to .md), or suppress on the first line with '//!@nolint' (//! blocks) or '// nolint:STYLE014' (// blocks)"
+        }
+        self->style_warning(msg, at)
+    }
+
     // --- helpers ---
 
     def is_string_rtti_comparison(expr : Expression?) : bool {
@@ -577,6 +913,7 @@ def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_con
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
+    astVisitor->scan_long_comment_blocks(prog)
     let count = astVisitor.warning_count
     unsafe { delete astVisitor; }
     return count
@@ -589,6 +926,7 @@ def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; p
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit_with_generics(prog, astVisitorAdapter)
     }
+    astVisitor->scan_long_comment_blocks(prog)
     let count = astVisitor.warning_count
     warnings |> reserve(length(astVisitor.warnings))
     for (w in astVisitor.warnings) {

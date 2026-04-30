@@ -686,6 +686,65 @@ generic instantiations (same exclusions as STYLE011).
         b |> push(i)
     }
 
+STYLE014 — comment block exceeds 3 lines at module/public scope
+================================================================
+
+A contiguous run of more than three ``//`` or ``//!`` comment lines at
+module scope or above a public symbol is flagged as
+multi-paragraph prose. The convention is "no architectural prose at the
+head of a section" — long-form design notes belong in design docs
+(``.md``), not in source.
+
+The block before the file's first AST decl (the module-leading
+docstring, e.g. ``daslib/regex_boost.das`` lines 9–18) is always
+allowed. Suppress an individual block on its first line:
+
+.. code-block:: das
+
+    // Bad — 5 contiguous //! lines on a public function
+    //! First sentence.                          // STYLE014
+    //! Second.
+    //! Third.
+    //! Fourth.
+    //! Fifth.
+    def foo() { ... }
+
+    //!@nolint
+    //! First sentence — kept verbose intentionally.   // suppressed
+    //! Second.
+    //! Third.
+    //! Fourth.
+    def bar() { ... }
+
+``daslib/rst_comment`` recognises the ``//!@nolint`` first line and
+strips **only that marker line** from the emitted doc, so the rest of
+the ``//!`` block still appears in
+``doc/source/stdlib/generated/detail/*.rst``. The marker's only job is
+to suppress the lint — the rest of the block stays visible. For a
+``//`` block (no doc-comment), put ``// nolint:STYLE014`` on the first
+line; those blocks never reach the doc generator.
+
+STYLE015 — comment block exceeds 1 line inside a ``def private``
+================================================================
+
+Private symbols don't surface in any doc generator, so multi-line
+comment prose inside a ``def private`` body is dead weight. Trim to one
+line, or suppress with ``// nolint:STYLE015`` on the first line of the
+block.
+
+.. code-block:: das
+
+    def private bad() {
+        // First line — explanation                // STYLE015
+        // Second line — fires (>1 line in private)
+        ...
+    }
+
+    def private good() {
+        // single WHY line — silent
+        ...
+    }
+
 -----
 Tests
 -----
