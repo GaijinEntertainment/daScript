@@ -3127,6 +3127,7 @@ namespace das {
                 if (!safeExpression(expr)) {
                     error("safe-index of pointer must be inside the 'unsafe' block", "", "",
                           expr->at, CompilationError::unsafe);
+                    return Visitor::visit(expr);
                 }
                 expr->type = new TypeDecl(*expr->subexpr->type);
                 expr->type->constant |= seT->constant;
