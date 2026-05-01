@@ -44,6 +44,7 @@ static JitMode jitEnabled = JitMode::None; // Disabled by default.
 static string jitOutPath = ""; // Empty, JIT module will choose default.
 
 static bool noDynamicModules = false;
+static bool noLint = false;
 #ifdef DAS_TEST_AOT
 static bool useAot = true;
 #else
@@ -69,6 +70,7 @@ static CodeOfPolicies getPolicies() {
     policies.gen2_make_syntax = gen2MakeSyntax;
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
+    policies.no_lint = noLint;
     return policies;
 }
 
@@ -139,7 +141,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
     #endif
     if ( argc<=3 ) {
-        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform]\n";
+        tout << "daslang -aot <in_script.das> <out_script.das.cpp> [-v2Syntax] [-v1Syntax] [-v2makeSyntax] [-project <project file>] [-dasroot <dasroot folder>] [-q] [-j] [-aot-macros] [-cross-platform] [-no-lint]\n";
         return -1;
     }
     bool dryRun = false;
@@ -195,6 +197,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 gen2MakeSyntax = true;
             } else if ( strcmp(argv[ai],"-no-dynamic-modules")==0 ) {
                 noDynamicModules = true;
+            } else if ( strcmp(argv[ai],"-no-lint")==0 ) {
+                noLint = true;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
@@ -271,6 +275,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.gen2_make_syntax = gen2MakeSyntax;
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
+    policies.no_lint = noLint;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
@@ -432,6 +437,7 @@ void print_help() {
         << "    --das-profiler-global install profiler as singleton agent (default with --das-profiler-memory)\n"
         << "    --das-profiler-leaks track live heap allocations and dump leaks on context destroy\n"
         << "    -no-dynamic-modules  skip loading dynamic modules from dasroot and project root\n"
+        << "    -no-lint    skip the lint pass (Program::lint)\n"
         << "    --          separator for script arguments\n"
         << "daslang -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
@@ -550,6 +556,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 dryRun = true;
             } else if ( cmd=="compile-only" ) {
                 compileOnly = true;
+            } else if ( cmd=="no-lint" ) {
+                noLint = true;
             } else if ( cmd=="project-root" || cmd=="project_root" ) {
                 project_root = argv[i + 1];
                 i++;

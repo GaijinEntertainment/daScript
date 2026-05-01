@@ -1495,6 +1495,7 @@ namespace das
     // End aot config
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        lint_check = false;                 // this code is being compiled for lint/style checking
+        bool        no_lint = false;                    // skip Program::lint() entirely
         bool        export_all = false;                 // when user compiles, export all (public?) functions
         bool        serialize_main_module = true;       // if false, then we recompile main module each time
         bool        keep_alive = false;                 // produce keep-alive noodes
