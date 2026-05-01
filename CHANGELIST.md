@@ -1,5 +1,94 @@
 # daslang Changelog
 
+## 0.6.2 (May 2026)
+
+### New Features
+
+#### daSQLite: Typed SQLite Query Layer Expansion (#2481, #2485, #2487, #2489, #2492, #2496, #2507, #2509, #2511, #2518, #2524, #2528, #2534)
+
+`modules/dasSQLITE` now extends `daslib/linq` with SQL-backed queries, letting familiar linq-style transforms compile down to typed SQLite operations. This release then broadens that foundation with a large tutorial-driven expansion across the rest of the SQLite layer.
+
+- **Insert + query macros** — typed insert flows, raw `query` / `try_query` helpers, and much deeper `_sql(...)` analysis
+- **Read-side operators** — `distinct`, `take`, `skip`, ordering, aggregates, grouping, joins, set operations, and multi-source queries
+- **Write-side operations** — typed update/delete flows, transaction helpers, and UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns
+- **Custom storage types** — custom adapters plus `@sql_json` and `@sql_blob` field support, JSON-path descent inside `_sql`, and column metadata introspection
+- **Operational SQLite features** — SQL fragment building, `ATTACH DATABASE`, FTS5 groundwork, and pre-migration utilities
+
+#### Style Lint and Unified Linting (#2386, #2390, #2391, #2417, #2441, #2516, #2517, #2533, #2538)
+
+New compile-time linting now covers daslang style in addition to the existing correctness and performance passes.
+
+- **`daslib/style_lint`** — detects non-idiomatic gen2 patterns such as unnecessary block pipes, declaration-then-assignment, array literal construction via repeated `push`, and long comment blocks
+- **Unified lint flow** — shared warning collection, `nolint` suppression, comment-hygiene rules, and codebase-wide cleanup to drive warnings back down
+- **Noise reduction** — one-line style enforcement was relaxed where it produced more friction than signal
+
+#### Duplicate Detection Pipeline: `detect-dupe` and `find-dupe` (#2491, #2493, #2497, #2502, #2508, #2510, #2522)
+
+New utility tooling helps find and triage duplicate daslang functions across large codebases.
+
+- **`utils/detect-dupe`** — scans files, canonicalizes functions, and clusters exact and fuzzy duplicates with corpus export/import support
+- **Pattern filtering** — suppresses boilerplate-heavy false positives and handles generics more cleanly
+- **AI-assisted triage** — `utils/find-dupe` consumes detect-dupe reports and asks Claude to partition clusters into real duplicates vs false positives, with JSON and Markdown output
+- **MCP integration** — export, duplicate detection, and judgment workflows are exposed to AI tooling
+
+#### `daslib/clargs`: Declarative CLI Parsing (#2454, #2482, #2525)
+
+A new command-line parsing module standardizes how daslang tools read flags.
+
+- **Long + short flags** — generated `--flag` and `-f` aliases, help text, required-flag handling, and array/bool parsing
+- **Execution-mode awareness** — `get_user_args()` handles both interpreter `--` invocation and standalone executables correctly
+- **Tool migration** — utilities can share one parser instead of hand-rolling `get_command_line_arguments()` logic
+
+#### Memory Leak Tracking and Diagnostics (#2436, #2448, #2449, #2453, #2462)
+
+daslang now has a much clearer leak-debugging story for both language-side and C++-side allocations.
+
+- **Leak-tracker mode** — `--das-profiler --das-profiler-leaks` records live allocations with captured daslang call stacks
+- **Cheat-sheet documentation** — unified guidance explains GC leaks, heap reports, smart-pointer tracking, jobque leaks, and handle-registry dumps
+- **Profiler and heap tooling** — better reporting and supporting leak-audit work across the runtime
+
+### Improvements
+
+#### Strudel Audio Engine: Second Wave (#2403, #2423, #2425, #2426, #2427, #2428, #2429, #2430, #2435, #2440, #2457, #2464, #2519)
+
+The new Strudel engine from `0.6.1` received a broad follow-up pass across synthesis, playback, docs, and memory behavior.
+
+- Better synth and drum voices, more SF2 support, unique per-event HRTF binaural 3D positioning, offline/WAV rendering workflows, and further live/demo polish
+- Reduced memory usage and multiple leak fixes in the threaded player, visualizer, and shutdown path
+- Expanded documentation and examples for the newer audio stack
+
+#### Compiler, AOT, and JIT Work (#2396, #2402, #2405, #2406, #2416, #2422, #2433, #2442, #2445, #2458, #2461, #2480, #2499, #2500)
+
+A substantial runtime/compiler pass improved code generation, packaging flexibility, and test coverage.
+
+- Continued push toward more daslang-authored AOT logic and cleaner AOT/JIT boundaries
+- Better standalone-exe behavior, transitive JIT type resolution, prologue sizing, and function registration
+- More build configurations (`RelWithDebInfo`, static PIC), more daslib AOT coverage, and platform-specific AOT fixes
+
+#### GC / AST / Ownership Cleanup (#2400, #2404, #2407, #2409, #2410, #2411, #2415, #2420, #2421, #2470, #2506)
+
+Core compiler internals continued the transition away from older `smart_ptr`-style AST ownership, with the biggest user-facing result being that macros became much easier to write.
+
+- `TypeDecl`, `Expression`, annotations, and related AST paths were moved deeper into `gc_node`-style ownership
+- Macro, visitor, binding, and validator code no longer has to fight as many `smart_ptr`-era ownership patterns and pointer conversions
+- Tracker stability improved when GC is active, reducing false crashes during debugging
+
+#### Runtime Libraries and Infrastructure (#2393, #2398, #2399, #2412, #2413, #2414, #2431, #2443, #2451, #2455, #2466, #2467, #2474, #2488, #2494, #2495, #2512, #2514, #2536, #2539)
+
+A broad utility pass landed across libraries, docs, and developer workflow.
+
+- **dasPEG** — more tests, docs, CI coverage, and standalone/LLVM fixes
+- **Core libraries** — validated numeric conversions in `daslib/strings_convert`, continued `Option` / `Result` work including non-copyable support, and C API completeness fixes
+- **Runtime data structures** — new in-tree `das_hash_map` backend to avoid empty-construction allocations and behave better in thread-local usage
+- **Tooling/docs** — filesystem guidance, handle-registry tutorial work, class-boost coverage, integer-returning `main()` for tools, compilation progress reporting, and assorted AST/class-method polish
+
+### Bug Fixes
+
+- **Build, tooling, and CI fixes** (#2385, #2394, #2395, #2424, #2447, #2521, #2537) — package `.gitignore` handling, PEG standalone/LLVM issues, `require` fixes, `dasbind` fixes, glob dependency tracking, and documentation/error-position corrections
+- **Runtime/compiler correctness** (#2387, #2392, #2486, #2520, #2526, #2531) — JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, `runWithCatch` state cleanup, and ASAN/diagnostic follow-up
+- **Language/runtime edge cases** (#2444, #2446, #2463, #2468) — `finally` loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, and strict-weak-ordering cleanup
+- **Graphics and platform fixes** (#2540) — OpenGL/package integration cleanup after the daspkg migration work
+
 ## 0.6.1 (April 2026)
 
 ### New Features

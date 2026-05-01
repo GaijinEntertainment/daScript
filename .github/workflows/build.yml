@@ -176,6 +176,10 @@ jobs:
 
         exclude:
           - target: darwin15
+            architecture: 64
+            cmake_preset: Debug
+
+          - target: darwin15
             architecture: 32
 
           - target: darwin26
