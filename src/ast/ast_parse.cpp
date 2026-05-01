@@ -678,7 +678,6 @@ namespace das {
         }
     };
 
-
     ProgramPtr parseDaScript ( const string & fileName,
                                const string & moduleName,
                               const FileAccessPtr & access,
@@ -687,6 +686,7 @@ namespace das {
                               bool exportAll,
                               bool isDep,
                               CodeOfPolicies policies ) {
+        CompilationCallbackGuard compilationCallbackGuard(moduleName, fileName);
         ProgramPtr program = make_smart<Program>();
         gc_guard parse_gc_scope;
         GcCollectOnExit parse_gc_collect(parse_gc_scope, program.get());
@@ -723,6 +723,7 @@ namespace das {
         yyscan_t scanner = nullptr;
         int64_t file_mtime = access->getFileMtime(fileName.c_str());
         if ( auto fi = access->getFileInfo(fileName) ) {
+            callCompilationCallback(moduleName, fileName, "parse");
             parserState.g_FileAccessStack.push_back(fi);
             const char * src = nullptr;
             uint32_t len = 0;
@@ -799,6 +800,7 @@ namespace das {
             if ( policies.solid_context || program->options.getBoolOption("solid_context",false) ) {
                 program->thisModule->isSolidContext = true;
             }
+            callCompilationCallback(moduleName, fileName, "infer");
             auto timeI = ref_time_ticks();
             restartInfer: program->inferTypes(logs, libGroup);
             if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
@@ -822,6 +824,7 @@ namespace das {
                 auto timeO = ref_time_ticks();
                 if (!program->failed()) {
                     if (program->getOptimize()) {
+                        callCompilationCallback(moduleName, fileName, "optimize");
                         program->optimize(logs,libGroup);
                     } else {
                         program->buildAccessFlags(logs);
@@ -868,6 +871,7 @@ namespace das {
                             "module Module_Name is required", "", LineInfo(),
                                 CompilationError::module_does_not_have_a_name);
                     }
+                    callCompilationCallback(moduleName, fileName, "macro_module");
                     auto timeM = ref_time_ticks();
                     if (!program->failed())
                         program->markMacroSymbolUse();

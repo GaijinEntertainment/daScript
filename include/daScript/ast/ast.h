@@ -1900,4 +1900,26 @@ namespace das
         daScriptEnvironmentGuard(das::daScriptEnvironment *bound = nullptr, das::daScriptEnvironment *owned = nullptr);
         ~daScriptEnvironmentGuard();
     };
+
+    typedef void (*daScriptCompilationCallback)(const string & moduleName, const string & fileName, const string & status);
+
+    DAS_API void setCompilationCallback(daScriptCompilationCallback callback);
+    DAS_API void callCompilationCallback(const string & moduleName, const string & fileName, const string & status);
+
+    struct CompilationCallbackGuard {
+        CompilationCallbackGuard(const string & _moduleName, const string & _fileName, const string & _prefix = "compilation")
+        : moduleName(_moduleName), fileName(_fileName), prefix(_prefix) {
+            callCompilationCallback(moduleName, fileName, prefix + " start");
+        }
+        CompilationCallbackGuard(const CompilationCallbackGuard &) = delete;
+        CompilationCallbackGuard & operator = (const CompilationCallbackGuard &) = delete;
+        CompilationCallbackGuard(CompilationCallbackGuard &&) = delete;
+        CompilationCallbackGuard & operator = (CompilationCallbackGuard &&) = delete;
+        ~CompilationCallbackGuard() {
+            callCompilationCallback(moduleName, fileName, prefix + " end");
+        }
+        string moduleName;
+        string fileName;
+        string prefix;
+    };
 }
