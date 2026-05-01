@@ -190,6 +190,22 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		ENDIF()
 	ENDIF()
 
+	# Install GLFW development artifacts expected by packages like dasImgui.
+	# Keep Release subdir to preserve existing include/lib lookup conventions.
+	install(DIRECTORY ${DAS_GLFW_DIR}/glfw/Release
+		DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlfw/glfw
+	)
+	install(DIRECTORY ${DAS_GLFW_DIR}/glfw_dyn/Release
+		DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlfw/glfw_dyn
+	)
+	# Install generated GLFW binding headers used by external modules (e.g. imguiApp).
+	install(DIRECTORY ${DAS_GLFW_DIR}/src/
+		DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlfw/src
+		FILES_MATCHING
+		PATTERN "*.h"
+		PATTERN "*.inc"
+	)
+
     file(GLOB DASGLFW_SOURCES
 		${DAS_GLFW_DIR}/dasglfw/*.das
     )

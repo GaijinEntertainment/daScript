@@ -101,12 +101,4 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
         FILES_MATCHING
         PATTERN "*.das"
     )
-    file(GLOB DAS_SQLITE_EXAMPLES
-        ${PROJECT_SOURCE_DIR}/modules/dasSQLITE/tutorial/*.das
-    )
-
-    install(FILES ${DAS_SQLITE_EXAMPLES}
-        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/sqlite
-    )
-
 ENDIF()

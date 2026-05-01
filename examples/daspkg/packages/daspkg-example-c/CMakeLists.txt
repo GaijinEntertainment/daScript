@@ -13,16 +13,22 @@ add_library(dasModuleFastMath SHARED
 target_compile_definitions(dasModuleFastMath PRIVATE DAS_ENABLE_DLL=1)
 
 target_include_directories(dasModuleFastMath PRIVATE
-    ${DASLANG_DIR}/include
+    "${DASLANG_DIR}/include"
 )
 
 if(WIN32)
-    target_link_libraries(dasModuleFastMath PRIVATE
-        ${DASLANG_DIR}/lib/Release/libDaScriptDyn.lib
-    )
+    if(EXISTS "${DASLANG_DIR}/lib/Release/libDaScriptDyn.lib")
+        target_link_libraries(dasModuleFastMath PRIVATE
+            "${DASLANG_DIR}/lib/Release/libDaScriptDyn.lib"
+        )
+    else()
+        target_link_libraries(dasModuleFastMath PRIVATE
+            "${DASLANG_DIR}/lib/libDaScriptDyn.lib"
+        )
+    endif()
 else()
     target_link_libraries(dasModuleFastMath PRIVATE
-        ${DASLANG_DIR}/lib/libDaScriptDyn.so
+        "${DASLANG_DIR}/lib/libDaScriptDyn.so"
     )
 endif()
 
