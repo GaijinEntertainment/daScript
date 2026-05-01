@@ -143,7 +143,7 @@ namespace das {
     }
 
     StructInfo * DebugInfoHelper::makeStructureDebugInfo ( const Structure & st ) {
-        DAS_VERIFYF(!st.isTemplate,"cannot make debug info for template structure");
+        DAS_VERIFYF(!st.isTemplate,"cannot make debug info for template structure %s", st.name.c_str());
         string mangledName = st.getMangledName();
         auto it = smn2s.find(mangledName);
         if ( it!=smn2s.end() ) return it->second;

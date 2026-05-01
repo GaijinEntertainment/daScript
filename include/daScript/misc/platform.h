@@ -287,17 +287,26 @@ __forceinline uint64_t rotr64_c(uint64_t a, uint64_t b) {
 #include "daScript/misc/hal.h"
 
 void DAS_API os_debug_break();
+void DAS_API print_current_stack_trace();
 
 #ifndef DAS_FATAL_LOG
 #define DAS_FATAL_LOG(...)   do { printf(__VA_ARGS__); fflush(stdout); } while(0)
 #endif
 
 #ifndef DAS_FATAL_ERROR
-#define DAS_FATAL_ERROR(...) { \
-    DAS_FATAL_LOG(__VA_ARGS__); \
-    assert(0 && "fatal error"); \
-    exit(-1); \
-}
+    #ifdef DAS_NO_ASSERTIONS
+        #define DAS_FATAL_ERROR(...) { \
+            DAS_FATAL_LOG(__VA_ARGS__); \
+            exit(-1); \
+        }
+    #else
+        #define DAS_FATAL_ERROR(...) { \
+            DAS_FATAL_LOG(__VA_ARGS__); \
+            print_current_stack_trace(); \
+            os_debug_break(); \
+            exit(-1); \
+        }
+    #endif
 #endif
 
 #ifndef DAS_ASSERT

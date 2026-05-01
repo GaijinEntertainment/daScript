@@ -63,6 +63,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/version_update.md` | Bumping the daslang version number |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
+| `skills/pr_review_iteration.md` | Working an open PR through CI failures and Copilot/human review feedback after the PR is created |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/gc_use_after_sweep.md` | Debugging `bad_alloc` / `length_error` in TypeDecl/Expression copy-ctors (use-after-sweep) |
 | `skills/clargs_migration.md` | Editing any tool that still parses `get_command_line_arguments()` directly — migrate to `daslib/clargs` in the same PR |

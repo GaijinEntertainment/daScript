@@ -1130,7 +1130,7 @@ namespace das {
                             auto block = static_cast<ExprBlock*>(mkBlock->block);
                             auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
                             if ( !retT ) {
-                                error("default arguments don't match the function signature", "", "", expr->at, CompilationError::invalid_type);
+                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "", expr->at, CompilationError::invalid_type);
                                 return nullptr;
                             }
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);

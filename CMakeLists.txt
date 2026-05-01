@@ -822,6 +822,7 @@ SET(SIMULATE_SRC
 src/hal/performance_time.cpp
 include/daScript/misc/performance_time.h
 src/hal/debug_break.cpp
+src/hal/crash_handler.cpp
 src/hal/project_specific.cpp
 src/hal/project_specific_file_info.cpp
 src/hal/project_specific_crash_handler.cpp
