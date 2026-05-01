@@ -245,8 +245,8 @@ namespace das {
             bool dasRoot = (req.size() >= 2 && req[0] == '%' && req[1] == '/');
             if ( relCur || relPar || dasRoot ) {
                 namespace fs = std::filesystem;
-                fs::path base = dasRoot ? fs::path(getDasRoot()) : fs::path(from).parent_path();
-                fs::path rel  = dasRoot ? fs::path(req.substr(2)) : fs::path(req);
+                fs::path base = dasRoot ? fs::path(getDasRoot().c_str()) : fs::path(from.c_str()).parent_path();
+                fs::path rel  = dasRoot ? fs::path(req.substr(2).c_str()) : fs::path(req.c_str());
                 // refuse absolute paths in the right-hand side: fs::path::operator/
                 // discards the LHS when RHS is absolute, which would let `%//etc/x.das`
                 // (or `%/C:/x.das` on Windows) escape getDasRoot() and the `from` dir.
@@ -263,8 +263,8 @@ namespace das {
                 }
                 fs::path full = (base / rel).lexically_normal();
                 ModuleInfo info;
-                info.fileName   = full.generic_string();
-                info.moduleName = full.stem().generic_string();
+                info.fileName   = full.generic_string().c_str();
+                info.moduleName = full.stem().generic_string().c_str();
                 info.importName = info.moduleName;
                 return info;
             }

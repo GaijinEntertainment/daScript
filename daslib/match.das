@@ -442,12 +442,12 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var t
 
 [macro_function]
 def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) {
-    var inscope toL : MatchTo
+    var toL : MatchTo
     toL.declarations := to.declarations
     if (!match_any(what, wth.left, access, toL)) {
         return false
     }
-    var inscope toR : MatchTo
+    var toR : MatchTo
     if (!match_any(what, wth.right, access, toR)) {
         return false
     }
@@ -465,7 +465,6 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
             return false
         }
     }
-    delete to.declarations
     unsafe {
         to.declarations <- toL.declarations // because its a superset
     }
@@ -684,7 +683,7 @@ class MatchMacro : AstCallMacro {
         for (ei in range(eli)) {
             {
                 var eto = (eblk.list[multi_match ? ei : eli - ei - 1]) as ExprIfThenElse
-                var inscope to : MatchTo
+                var to : MatchTo
                 if (match_any(what._type, eto.cond, access, to)) {
                     log_m("match_any ok\n\n")
                     var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))

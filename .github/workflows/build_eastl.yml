@@ -1,0 +1,24 @@
+name: build_eastl
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build_eastl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - run: sudo apt-get update -y && sudo apt-get install -y bison flex
+      - run: git clone --depth 1 --recurse-submodules https://github.com/electronicarts/EASTL.git eastl
+      - run: |
+          CC=clang CXX=clang++ cmake -B build -G Ninja \
+            -DDAS_LLVM_DISABLED=ON -DDAS_GLFW_DISABLED=ON \
+            -DDAS_TESTS_DISABLED=ON -DDAS_TUTORIAL_DISABLED=ON \
+            -DDAS_AOT_EXAMPLES_DISABLED=ON \
+            -DDAS_CONFIG_INCLUDE_DIR=cmake/das_config_eastl \
+            -DCMAKE_CXX_FLAGS="-isystem $PWD/eastl/include -isystem $PWD/eastl/test/packages/EABase/include/Common"
+      - run: cmake --build build --target daslang --parallel

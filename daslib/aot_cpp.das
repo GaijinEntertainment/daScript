@@ -415,13 +415,15 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         }
         // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
         // even when daslang marks the expression result as ref (stack temp). Skip the
-        // &/* suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
+        // & suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
+        // Keep the * suffix when substitute_ref is requested (e.g. iteration variables),
+        // since das_iterator::first(Context*, QQ*&) demands a real pointer regardless.
         let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
-        if (typeDecl.flags.ref && cfg.skip_ref == false && !valueHandle) {
-            if (cfg.substitute_ref == false) {
-                write(writer, " &");
-            } else {
+        if (typeDecl.flags.ref && cfg.skip_ref == false) {
+            if (cfg.substitute_ref) {
                 write(writer, " *");
+            } elif (!valueHandle) {
+                write(writer, " &");
             }
         }
     }
@@ -2373,7 +2375,7 @@ class public CppAot : AstVisitor {
     }
     def override visitExprConstRange64(var c : ExprConstRange64?) : ExpressionPtr {
         let val = c.getValue;
-        write(*ss, "range64({val.x:d},{val.y:d})");
+        write(*ss, "range64({val.x:d}ll,{val.y:d}ll)");
         return c;
     }
     def override visitExprConstInt3(var c : ExprConstInt3?) : ExpressionPtr {
@@ -2398,7 +2400,7 @@ class public CppAot : AstVisitor {
     }
     def override visitExprConstURange64(var c : ExprConstURange64?) : ExpressionPtr {
         let val = c.getValue;
-        write(*ss, "urange64({val.x:d},{val.y:d})");
+        write(*ss, "urange64({val.x:d}ull,{val.y:d}ull)");
         return c;
     }
     def override visitExprConstUInt3(var c : ExprConstUInt3?) : ExpressionPtr {

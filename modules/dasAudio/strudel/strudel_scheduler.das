@@ -1250,7 +1250,9 @@ def finalize(var sched : Scheduler) {
             sched.voices[i] = null
         }
     }
-    delete sched.voices
+    unsafe {
+        delete sched.voices
+    }
     // streaming oscillator voices — release any HRTF state
     for (i in range(length(sched.osc_voices))) {
         if (sched.osc_voices[i].hrtf_l != null) {
@@ -1264,7 +1266,9 @@ def finalize(var sched : Scheduler) {
             sched.osc_voices[i].hrtf_r = null
         }
     }
-    delete sched.osc_voices
+    unsafe {
+        delete sched.osc_voices
+    }
     // SF2 voices — release HRTF state from parallel meta
     for (i in range(length(sched.sf2_meta))) {
         if (sched.sf2_meta[i].hrtf_l != null) {
@@ -1278,8 +1282,9 @@ def finalize(var sched : Scheduler) {
             sched.sf2_meta[i].hrtf_r = null
         }
     }
-    delete sched.sf2_voices
-    delete sched.sf2_meta
+    unsafe {
+        delete sched.sf2_voices
+    }
     // per-orbit buses — free native effect instances then send/output scratch buffers
     for (bus in sched.orbit_buses) {
         if (bus != null) {
@@ -1309,7 +1314,9 @@ def finalize(var sched : Scheduler) {
             sched.orbit_buses[i] = null
         }
     }
-    delete sched.orbit_buses
+    unsafe {
+        delete sched.orbit_buses
+    }
     // per-tick scratch buffers (including HRTF mono/stereo)
     delete sched.hrtf_mono_buf
     delete sched.hrtf_stereo_buf

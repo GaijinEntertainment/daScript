@@ -165,7 +165,7 @@ def main() {
             ast_gc_guard() {
                 let res = aot(aot_in, false, cross_platform, cop)
                 if (res |> empty()) {
-                    to_log(LOG_ERROR, "Failed to compile `{aot_in}` in standalone.\n")
+                    to_log(LOG_ERROR, "Failed to compile `{aot_in}` in aot.\n")
                     result = false
                 } else {
                     let written = write_result(res, aot_out, "Aot", force_overwrite)

@@ -437,7 +437,9 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         dump_context_stack(tid)
         dump_meta(ctx, tid)
         dump_events(tid)
-        delete events[tid].events
+        unsafe {
+            delete events[tid].events
+        }
         events |> erase(tid)
     }
 }

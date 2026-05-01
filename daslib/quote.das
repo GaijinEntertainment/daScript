@@ -76,7 +76,6 @@ def public clone(var args : rtti::AnnotationList; var nargs : array<rtti::Annota
     for (narg in nargs) {
         _::emplace(args, narg)
     }
-    delete nargs
 }
 
 

@@ -4,9 +4,6 @@
 
 #include <inttypes.h>
 #include <stdlib.h>
-#ifndef _MSC_VER
-#include <signal.h>
-#endif
 
 namespace das {
 
