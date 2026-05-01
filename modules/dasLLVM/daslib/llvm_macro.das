@@ -15,6 +15,7 @@ require daslib/strings_boost
 require daslib/defer
 
 require daslib/fio
+require daslib/clargs
 require jit
 
 module llvm_macro shared private
@@ -126,6 +127,28 @@ def finalize_jit(use_dll : bool; gen_exe : bool; lib_handle : DLLHandle?) : JitS
 }
 
 
+[CommandLineArgs]
+struct JitCliOptions {
+    @clarg_name = "jit-opt-level"
+    @clarg_doc = "JIT: LLVM optimization level (0..3); 0 disables all passes"
+    opt_level : Option<int>
+
+    @clarg_name = "jit-size-level"
+    @clarg_doc = "JIT: LLVM size-optimization level (0..2)"
+    size_level : Option<int>
+
+    @clarg_short = "g"
+    @clarg_name = "jit-debug"
+    @clarg_doc = "JIT: emit debug info / symbols"
+    debug_info : Option<bool>
+
+    @clarg_short = "d"
+    @clarg_name = "jit-dump"
+    @clarg_doc = "JIT: dump generated LLVM IR"
+    dump_ir : Option<bool>
+}
+
+
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro {
     def override simulate(prog : Program?; var ctx : Context?) : bool {
@@ -134,8 +157,11 @@ class JIT_LLVM : AstSimulateMacro {
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
 
+        var cli_opts = JitCliOptions()
+        let _ = parse_args(cli_opts)
         assume jit_all_functions = prog.policies.jit_jit_all_functions
-        assume debug_info = prog.policies.jit_debug_info
+        let debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info)
+        let dump_ir = cli_opts.dump_ir |> unwrap_or(false)
         if (prog.policies.jit_dll_mode && !das_is_dll_build()) {
             to_log(LOG_WARNING, "LLVM JIT: dll mode is enabled, however " +
                 "daslang build is static, disabling dll mode.\n")
@@ -147,8 +173,8 @@ class JIT_LLVM : AstSimulateMacro {
         defer() { llvm_jit_intrin::g_jit_exe_mode = false; }
         let exe_main = "main" // prog.policies.jit_entry_point |> empty() ? "main" : prog.policies.jit_entry_point
         let use_dll = prog.policies.jit_dll_mode && das_is_dll_build() && !gen_exe
-        let opt_level = prog.policies.jit_opt_level
-        let size_level = prog.policies.jit_size_level
+        let opt_level = cli_opts.opt_level |> unwrap_or(prog.policies.jit_opt_level)
+        let size_level = cli_opts.size_level |> unwrap_or(prog.policies.jit_size_level)
         let emit_prologue = prog.policies.emit_prologue
         // If you're sure `dynamic` functions is not reachable set this flag
         // to `true` and fail in runtime on `jit_trap` if they turns
@@ -265,7 +291,7 @@ class JIT_LLVM : AstSimulateMacro {
                 }
                 generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
                 optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
-                if (false) {
+                if (dump_ir) {
                     // Let's remove unused attributes before we print IR.
                     var pm = LLVMCreatePassManager()
                     LLVMAddGlobalDCEPass(pm)
@@ -274,7 +300,7 @@ class JIT_LLVM : AstSimulateMacro {
                     let module_str = LLVMPrintModuleToString(g_mod)
                     let msg = clone_string(module_str)
                     LLVMDisposeMessage(module_str)
-                    to_log(LOG_DEBUG, "LLVM JIT: {msg}\n");
+                    to_log(LOG_INFO, "LLVM JIT: {msg}\n");
                 }
                 if (!LLVMVerifyModule(g_mod, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                     g_failed = true

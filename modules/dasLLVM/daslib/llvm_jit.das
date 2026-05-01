@@ -341,6 +341,8 @@ class public LlvmJitVisitor : AstVisitor {
     def debug_before_function(fun : FunctionPtr) {
         if (debug_info_enabled()) {
             clear_builder_location()
+            di_function = null
+            return
             let unit = get_debug_file_location(fun.at)
             let implName = uid.get_dll_fn_name(fun).impl()
             var ty = LLVMDIBuilderCreateSubroutineType(     // TODO: generate correct function type
