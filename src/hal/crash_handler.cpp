@@ -25,6 +25,7 @@ namespace das {
 #endif
 #include <windows.h>
 #include <dbghelp.h>
+#include <process.h>
 #pragma comment(lib, "dbghelp.lib")
 
 namespace das {
