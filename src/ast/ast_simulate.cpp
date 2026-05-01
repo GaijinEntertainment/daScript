@@ -3565,6 +3565,7 @@ namespace das
     }
 
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
+        CompilationCallbackGuard callbackGuard("", thisModule->fileName, "simulation");
         auto time0 = ref_time_ticks();
     #if !(DAS_ENABLE_KEEPALIVE)
         if ( policies.keep_alive ) {
