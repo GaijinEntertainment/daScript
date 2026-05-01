@@ -20,6 +20,11 @@ require dastest_clargs
 
 options multiple_contexts
 
+// BBATKIN:
+//  temporary: disables persistent heap, because this crashes /tests/dastest
+//  it needs investigation but disabling for now to unblock other work
+options persistent_heap = false
+
 let private jsonResultPrefix = "##dastest##\n"
 
 struct FileTiming {

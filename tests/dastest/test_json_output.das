@@ -28,15 +28,18 @@ def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let json_file = "{das_root}/tests/dastest/_temp_{fixture}.json"
     let test_file = "{das_root}/tests/dastest/_fixture_{fixture}.das"
     let cmd = "{compiler} {dastest_path} -- --test {test_file} --json-file {json_file} {extra_args}"
-    unsafe {
-        popen(cmd) <| $(f) {
-            while (!feof(f)) {
-                fgets(f)
+    var exitCode = 0
+    let output = build_string() $(writer) {
+        unsafe {
+            exitCode = popen(cmd) $(f) {
+                while (!feof(f)) {
+                    writer |> write <| fgets(f)
+                }
             }
         }
     }
     var json_text = ""
-    fopen(json_file, "rb") <| $(f) {
+    fopen(json_file, "rb") $(f) {
         if (f != null) {
             json_text = fread(f)
         }
@@ -45,6 +48,7 @@ def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     var error = ""
     var json = read_json(json_text, error)
     if (json == null) {
+        to_log(LOG_ERROR, "Command output ({exitCode}):\n\n{output}\n")
         panic("Failed to parse JSON from {json_file}: {error}")
     }
     return from_JV(json, type<JsonReport>)
