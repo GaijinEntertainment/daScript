@@ -28,6 +28,36 @@ class Dog : Animal {
     }
 }
 
+class Food {
+    calories : int = 100
+}
+
+class Biscuits {
+    health : int = 25
+}
+
+class GenericAnimal {
+    meals : int = 0
+
+    [class_method]
+    def static eat(var food : auto ?) : void {
+        meals += 1
+    }
+
+    def drink() : int {
+        eat(self, new Food())   // version with self
+        return meals
+    }
+}
+
+class GenericDog : GenericAnimal {
+    def lazy() : int {
+        eat(new Biscuits())     // version without self
+        drink()
+        return meals
+    }
+}
+
 class Counter {
     value : int = 0
 
@@ -79,5 +109,20 @@ def test_explicit_const_class_method_overload(t : T?) {
         it |> equal(cc.touch(), 2)
         it |> equal(c.touch(), 3)
         it |> equal(cc.touch(), 3)
+    }
+}
+
+[test]
+def test_unqualified_generic_class_method_calls(t : T?) {
+    t |> run("base_regular_method_calls_generic_static_without_self") @(it : T?) {
+        var a : GenericAnimal? = new GenericAnimal()
+        it |> equal(a.drink(), 1)
+        it |> equal(a.meals, 1)
+    }
+
+    t |> run("derived_regular_method_calls_generic_static_without_self") @(it : T?) {
+        var d : GenericDog? = new GenericDog()
+        it |> equal(d.lazy(), 2)
+        it |> equal(d.meals, 2)
     }
 }

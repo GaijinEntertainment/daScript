@@ -5463,19 +5463,38 @@ namespace das {
                             }
                         }
                     } else {
-                        auto staticName = bt->structType->name + "`" + expr->name;
-                        vector<TypeDeclPtr> types;
-                        if (inferArguments(types, expr->arguments)) {
-                            auto functions = findMatchingFunctions(staticName, types, true);
-                            if (functions.size() == 1) {
-                                auto staticFunc = functions.back();
-                                if (staticFunc->isStaticClassMethod) {
-                                    reportAstChanged();
-                                    expr->name = staticName;
-                                    return Visitor::visit(expr);
-                                }
+                        auto newCall = new ExprCall(expr->at, expr->name);
+                        newCall->atEnclosure = expr->atEnclosure;
+                        newCall->alwaysSafe = expr->alwaysSafe;
+                        for (size_t i = 0; i != expr->arguments.size(); ++i) {
+                            newCall->arguments.push_back(expr->arguments[i]);
+                        }
+                        for ( auto st = bt->structType; st; st = st->parent ) {
+                            auto callName = "_::" + st->name + "`" + expr->name;
+                            newCall->name = callName;
+                            auto fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
+                            if ((fcall != nullptr && fcall->isStaticClassMethod) || newCall->name != callName) {
+                                reportAstChanged();
+                                return newCall;
                             }
                         }
+                        auto self = new ExprVar(expr->at, "self");
+                        self->type = new TypeDecl(*bt);
+                        self->type->baseType = Type::tStructure;
+                        self->type->structType = bt->structType;
+                        newCall->arguments.insert(newCall->arguments.begin(), self);
+                        for ( auto st = bt->structType; st; st = st->parent ) {
+                            auto callName = "_::" + st->name + "`" + expr->name;
+                            newCall->name = callName;
+                            auto fcall = inferFunctionCall(newCall, InferCallError::tryOperator);
+                            if ((fcall != nullptr && fcall->isClassMethod) || newCall->name != callName) {
+                                reportAstChanged();
+                                return newCall;
+                            }
+                        }
+                        // note: gc will collect, but why waste memory
+                        newCall->gc_unlink(); delete newCall;
+                        self->gc_unlink(); delete self;
                     }
                 }
             }
