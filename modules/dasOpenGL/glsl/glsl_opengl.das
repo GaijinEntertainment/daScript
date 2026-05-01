@@ -46,7 +46,7 @@ def private generate_bind_uniform_dummy(fnMain : FunctionPtr) {
     fn.flags |= FunctionFlags.exports   // note: this is temporary, until we are done with dependency collecting etc
     fn.result = new TypeDecl(baseType = Type.tVoid, at = fnMain.at)
     fn.arguments |> emplace_new() <| new Variable(at = fnMain.at,
-        name := "__program",
+        name := "_opengl_program",
         _type <- new TypeDecl(at = fnMain.at, baseType = Type.tUInt)
     )
     fn.body = new ExprBlock(at = fnMain.at)
@@ -75,7 +75,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     blk.list |> emplace(cll_bind)
                     // glUniformAny(gl_GetUniformLocation("varName"),binding)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
+                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
                     var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
@@ -94,7 +94,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                     blk.list |> emplace(cll_bind)
                     // glUniformAny(gl_GetUniformLocation("varName"),binding)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
+                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
                     var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
@@ -126,7 +126,7 @@ def private generate_bind_uniform(fnMain : FunctionPtr; var fn : FunctionPtr) {
                 } else {
                     // glUniformAny(gl_GetUniformLocation("varName"),varName)
                     var cll_gul = new ExprCall(at = vv.at, name := "glGetUniformLocation")
-                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "__program")
+                    cll_gul.arguments |> emplace_new() <| new ExprVar(at = vv.at, name := "_opengl_program")
                     cll_gul.arguments |> emplace_new() <| new ExprConstString(at = vv.at, value := vv.name)
                     var cll_uni = new ExprCall(at = vv.at, name := "glUniformAny")
                     cll_uni.arguments |> emplace(cll_gul)
