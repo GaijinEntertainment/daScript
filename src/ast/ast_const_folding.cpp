@@ -951,8 +951,12 @@ namespace das {
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (allocate stack)?" );
                         runProgram->updateSemanticHash();
                         runProgram->simulate(ctx, dummy);
-                        DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (simulate)?" );
                         runProgram->folding = false;
+                        if ( runProgram->failed() ) {
+                            // its ok to not reset anySimulated here, because if it failed here - it will fail on final simulate
+                            // not resetting will make it fail faster, hence cutting time of the failed compilation anyway
+                            return Visitor::visit(expr);
+                        }
                     }
                     if ( expr->func->index==-1 ) {
                         runProgram->error("internal compilation error, folding symbol was not marked as used","","",

@@ -1846,7 +1846,12 @@ namespace das {
         if (expr->typeexpr->isExprType()) {
             return Visitor::visit(expr);
         }
-        if (!expr->subexpr->type || expr->subexpr->type->isAutoOrAlias()) {
+        if (!expr->subexpr->type) {
+            return Visitor::visit(expr);
+        }
+        if (expr->subexpr->type->isAutoOrAlias()) {
+            error("is expression type can't be inferred, subexpression type is not fully inferred yet: " + describeType(expr->subexpr->type), "", "",
+                  expr->at, CompilationError::type_not_found);
             return Visitor::visit(expr);
         }
         // generic operator
