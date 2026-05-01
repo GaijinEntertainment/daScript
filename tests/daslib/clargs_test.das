@@ -65,6 +65,18 @@ struct ShortFlagsRequiredConfig {
     file : string
 }
 
+[CommandLineArgs]
+struct OptionalConfig {
+    @clarg_doc = "verbose flag (None when absent)"
+    verbose : Option<bool>
+
+    @clarg_doc = "iteration count (None when absent)"
+    count : Option<int>
+
+    @clarg_doc = "user name (None when absent)"
+    name : Option<string>
+}
+
 [test]
 def test_string_flag(t : T?) {
     var cfg = Config()
@@ -447,4 +459,61 @@ def test_format_help_no_short_alignment(t : T?) {
     // No fields have short flags — every flag line should start with "      --"
     // (two spaces of margin + four spaces where "-X, " would go).
     t |> success(find(help, "      --name") != -1, "long-only flags align with short slot blank")
+}
+
+// --- Option<T> fields ----------------------------------------------------
+
+[test]
+def test_optional_bool_absent_is_none(t : T?) {
+    var cfg = OptionalConfig()
+    let a : array<string>
+    t |> success(parse_args(cfg, a) == "", "parse succeeds with no args")
+    t |> success(cfg.verbose |> is_none, "verbose stays None when flag absent")
+    t |> success(cfg.count |> is_none, "count stays None when flag absent")
+    t |> success(cfg.name |> is_none, "name stays None when flag absent")
+}
+
+[test]
+def test_optional_bool_set_true(t : T?) {
+    var cfg = OptionalConfig()
+    let a <- ["--verbose"]
+    t |> success(parse_args(cfg, a) == "", "parse succeeds")
+    t |> success(cfg.verbose |> is_some, "verbose becomes Some")
+    t |> equal(cfg.verbose |> unwrap, true)
+}
+
+[test]
+def test_optional_bool_set_false_explicit(t : T?) {
+    var cfg = OptionalConfig()
+    let a <- ["--verbose=false"]
+    t |> success(parse_args(cfg, a) == "", "parse succeeds")
+    t |> success(cfg.verbose |> is_some, "explicit --verbose=false produces Some(false)")
+    t |> equal(cfg.verbose |> unwrap, false)
+}
+
+[test]
+def test_optional_int_set(t : T?) {
+    var cfg = OptionalConfig()
+    let a <- ["--count", "7"]
+    t |> success(parse_args(cfg, a) == "", "parse succeeds")
+    t |> success(cfg.count |> is_some, "count Some")
+    t |> equal(cfg.count |> unwrap, 7)
+}
+
+[test]
+def test_optional_string_set(t : T?) {
+    var cfg = OptionalConfig()
+    let a <- ["--name=Alice"]
+    t |> success(parse_args(cfg, a) == "", "parse succeeds")
+    t |> success(cfg.name |> is_some, "name Some")
+    t |> equal(cfg.name |> unwrap, "Alice")
+}
+
+[test]
+def test_optional_int_invalid_value(t : T?) {
+    var cfg = OptionalConfig()
+    let a <- ["--count=notanumber"]
+    let err = parse_args(cfg, a)
+    t |> success(err != "", "parse fails on bad int")
+    t |> success(find(err, "--count") != -1, "error mentions flag name")
 }

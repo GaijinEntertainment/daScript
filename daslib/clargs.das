@@ -433,6 +433,38 @@ def public print_help(info : CommandInfo; prog_name : string) : void {
     print(format_help(info, prog_name))
 }
 
+def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
+    if (t.baseType == Type.typeMacro) {
+        if (length(t.dimExpr) < 2 || t.dimExpr[0] == null || !(t.dimExpr[0] is ExprConstString)) {
+            return null
+        }
+        if (string((t.dimExpr[0] as ExprConstString).value) != "Option") {
+            return null
+        }
+        if (t.dimExpr[1] == null || !(t.dimExpr[1] is ExprTypeDecl)) {
+            return null
+        }
+        return clone_type((t.dimExpr[1] as ExprTypeDecl).typeexpr)
+    }
+    if (t.baseType != Type.tStructure || t.structType == null) {
+        return null
+    }
+    var has_flag = false
+    var value_t : TypeDeclPtr = null
+    for (f in t.structType.fields) {
+        if ("{f.name}" == "_has_value" && f._type.baseType == Type.tBool) {
+            has_flag = true
+        } elif ("{f.name}" == "_value") {
+            value_t = clone_type(f._type)
+        }
+    }
+    if (!has_flag || value_t == null) {
+        return null
+    }
+    return value_t
+}
+
+
 [structure_macro(name=CommandLineArgs)]
 class ArgsMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
@@ -516,6 +548,11 @@ class ArgsMacro : AstStructureAnnotation {
             if (field._type.baseType == Type.tArray) {
                 arg.value_type = field._type.firstType.baseType
                 arg.is_array = true
+            } else {
+                let inner = option_inner_type(field._type)
+                if (inner != null) {
+                    arg.value_type = inner.baseType
+                }
             }
             if (arg.value_type == Type.tEnumeration) {
                 if (arg.is_array) {
@@ -572,6 +609,18 @@ class ArgsMacro : AstStructureAnnotation {
         }
     }
 
+    def make_optional_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int; inner_t : TypeDeclPtr) : ExpressionPtr {
+        return qmacro_block() {
+            {
+                var r <- parse_argument(args, command_info.args[$v(i)], type<$t(inner_t)>)
+                if (r |> is_err) {
+                    return "{$v(arg.flag_name)}: {r |> unwrap_err}"
+                }
+                dst.$f(arg.field_name) <- r |> move_unwrap
+            }
+        }
+    }
+
     def make_enum_init_expr(var st : StructurePtr; i : int; arg : CommandArgumentInfo; field_index : int) : ExpressionPtr {
         return qmacro_block() {
             {
@@ -596,6 +645,11 @@ class ArgsMacro : AstStructureAnnotation {
         var init_exprs : array<ExpressionPtr>
         for (i, arg in range(length(info.args)), info.args) {
             let field_index = field_index_by_name[arg.field_name]
+            let inner_t = option_inner_type(st.fields[field_index]._type)
+            if (inner_t != null) {
+                init_exprs |> push(make_optional_init_expr(st, i, arg, field_index, inner_t))
+                continue
+            }
             if (arg.value_type != Type.tEnumeration) {
                 init_exprs |> push(make_simple_init_expr(st, i, arg, field_index))
                 continue

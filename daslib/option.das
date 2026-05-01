@@ -26,7 +26,7 @@ require daslib/typemacro_boost
 //!
 //! When ``_has_value`` is ``false``, ``value`` holds the zero value of ``T`` and
 //! must not be read. Accessor functions should be used for reads/writes.
-[template_structure(T)]
+[template_structure(T), safe_when_uninitialized]
 struct template Option {
     _has_value : bool = false
     @safe_when_uninitialized
