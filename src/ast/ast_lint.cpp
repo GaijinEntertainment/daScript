@@ -1126,7 +1126,7 @@ namespace das {
     vector<pair<string,Type>> getCodeOfPolicyOptions();
 
     void Program::lint ( TextWriter & /*logs*/, ModuleGroup & libGroup ) {
-        if (!options.getBoolOption("lint", true)) {
+        if (!options.getBoolOption("lint", !policies.no_lint)) {
             return;
         }
         // note: build access flags is now called before patchAnnotations, and is no longer needed in lint
