@@ -276,6 +276,7 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     policies.scoped_stack_allocator = scopedStackAllocator;
     policies.track_allocations = trackAllocations;
     policies.no_lint = noLint;
+    policies.persistent_heap = true;
     if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
