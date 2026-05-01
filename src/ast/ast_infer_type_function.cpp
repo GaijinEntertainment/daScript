@@ -1129,7 +1129,10 @@ namespace das {
                             auto mkBlock = static_cast<ExprMakeBlock*>(arg);
                             auto block = static_cast<ExprBlock*>(mkBlock->block);
                             auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
-                            DAS_ASSERTF(retT, "how? it matched during findMatchingFunctions the same way");
+                            if ( !retT ) {
+                                error("default arguments don't match the function signature", "", "", expr->at, CompilationError::invalid_type);
+                                return nullptr;
+                            }
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                             TypeDecl::clone(block->returnType, retT->firstType);
                             for (size_t ba = 0, bas = retT->argTypes.size(); ba != bas; ++ba) {
