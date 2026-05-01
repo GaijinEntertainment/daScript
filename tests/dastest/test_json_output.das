@@ -32,8 +32,12 @@ def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     let output = build_string() $(writer) {
         unsafe {
             exitCode = popen(cmd) $(f) {
-                while (!feof(f)) {
-                    writer |> write <| fgets(f)
+                if (f != null) {
+                    while (!feof(f)) {
+                        writer |> write <| fgets(f)
+                    }
+                } else {
+                    writer |> write <| "Failed to execute command via popen: {cmd}\n"
                 }
             }
         }
