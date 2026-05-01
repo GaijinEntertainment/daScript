@@ -197,6 +197,237 @@ def test_install_local(t : T?) {
     }
 }
 
+// ===== Local-package fixture helpers =====
+
+// Writes a .das_package + CMakeLists.txt that always FATAL_ERRORs on configure.
+def private write_failing_pkg(src_dir, pkg_name : string) {
+    mkdir(src_dir)
+    let manifest = "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"{pkg_name}\")\n\}\n[export]\ndef build() \{\n    cmake_build()\n\}\n"
+    fwrite("{src_dir}/.das_package", manifest)
+    fwrite("{src_dir}/CMakeLists.txt", "cmake_minimum_required(VERSION 3.16)\nproject({pkg_name})\nmessage(FATAL_ERROR \"forced test failure\")\n")
+}
+
+// Writes a .das_package with no build() — install always succeeds.
+def private write_passing_pkg(src_dir, pkg_name : string) {
+    let no_deps : array<string>
+    write_passing_pkg(src_dir, pkg_name, no_deps)
+}
+
+// Writes a .das_package with optional dependencies (each entry is a require_package source).
+def private write_passing_pkg(src_dir, pkg_name : string; deps : array<string>) {
+    mkdir(src_dir)
+    let manifest = build_string() $(var w) {
+        w |> write("options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"")
+        w |> write(pkg_name)
+        w |> write("\")\n\}\n")
+        if (length(deps) > 0) {
+            w |> write("[export]\ndef dependencies(version : string) \{\n")
+            for (d in deps) {
+                w |> write("    require_package(\"")
+                w |> write(d)
+                w |> write("\")\n")
+            }
+            w |> write("\}\n")
+        }
+    }
+    fwrite("{src_dir}/.das_package", manifest)
+}
+
+[test]
+def test_install_local_build_failure_not_recorded(t : T?) {
+    t |> run("failed build does not stay installed") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_fail_root"
+        let tmp_src = "{get_das_root()}/_daspkg_test_fail_src"
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+        mkdir(tmp_root)
+        write_failing_pkg(tmp_src, "failpkg")
+
+        var lf : LockFile
+        let rc = install_local(tmp_root, "failpkg", tmp_src, lf)
+        t |> success(rc != 0)
+        t |> success(!has_package(lf, "failpkg"))
+        t |> success(!fexist("{tmp_root}/modules/failpkg"))
+        // failure with no prior install must NOT create an empty lock file
+        t |> success(!fexist("{tmp_root}/{LOCK_FILE_NAME}"))
+
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src)
+    }
+}
+
+[test]
+def test_install_local_reinstall_failure_clears_entry(t : T?) {
+    // First install a healthy pkg, then reinstall in place with a failing source.
+    // The reinstall must remove both the directory AND the prior lockfile entry,
+    // so the lockfile is consistent with the on-disk state.
+    t |> run("reinstall over healthy pkg with failing src clears lock entry") @(t : T?) {
+        let tmp_root = "{get_das_root()}/_daspkg_test_reinst_root"
+        let tmp_src_ok = "{get_das_root()}/_daspkg_test_reinst_ok_src"
+        let tmp_src_bad = "{get_das_root()}/_daspkg_test_reinst_bad_src"
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src_ok)
+        force_rmdir(tmp_src_bad)
+        mkdir(tmp_root)
+        write_passing_pkg(tmp_src_ok, "reinstpkg")
+        write_failing_pkg(tmp_src_bad, "reinstpkg")
+
+        var lf : LockFile
+        let rc1 = install_local(tmp_root, "reinstpkg", tmp_src_ok, lf)
+        t |> success(rc1 == 0)
+        t |> success(has_package(lf, "reinstpkg"))
+        t |> success(fexist("{tmp_root}/modules/reinstpkg"))
+
+        let rc2 = install_local(tmp_root, "reinstpkg", tmp_src_bad, lf)
+        t |> success(rc2 != 0)
+        t |> success(!has_package(lf, "reinstpkg"))
+        t |> success(!fexist("{tmp_root}/modules/reinstpkg"))
+
+        // disk lock file must agree with in-memory lf
+        var lf2 : LockFile
+        if (read_lock_file(tmp_root, lf2)) {
+            t |> success(!has_package(lf2, "reinstpkg"))
+        }
+
+        force_rmdir(tmp_root)
+        force_rmdir(tmp_src_ok)
+        force_rmdir(tmp_src_bad)
+    }
+}
+
+[test]
+def test_install_local_failing_transitive_dep(t : T?) {
+    // Parent depends on a failing local child. Both should be rolled back.
+    // Pkg names must match the source-dir basenames — install_dependencies
+    // derives dep names from the source path, not the .das_package manifest.
+    t |> run("failing transitive dep rolls back parent") @(t : T?) {
+        let fix = "{get_das_root()}/_daspkg_test_dep_fix"
+        force_rmdir(fix)
+        mkdir(fix)
+        let proj = "{fix}/proj"
+        let parent_src = "{fix}/depparent"
+        let child_src = "{fix}/depchild"
+        mkdir(proj)
+        write_failing_pkg(child_src, "depchild")
+        let parent_deps <- [child_src]
+        write_passing_pkg(parent_src, "depparent", parent_deps)
+
+        var lf : LockFile
+        let rc = install_local(proj, "depparent", parent_src, lf)
+        t |> success(rc != 0)
+        t |> success(!has_package(lf, "depparent"))
+        t |> success(!has_package(lf, "depchild"))
+        t |> success(!fexist("{proj}/modules/depparent"))
+        t |> success(!fexist("{proj}/modules/depchild"))
+
+        force_rmdir(fix)
+    }
+}
+
+[test]
+def test_install_local_cycle(t : T?) {
+    // A depends on B, B depends on A. Both passing — should install once each
+    // without infinite recursion or directory wipes.
+    t |> run("cycle between two healthy packages installs both") @(t : T?) {
+        let fix = "{get_das_root()}/_daspkg_test_cycle_fix"
+        force_rmdir(fix)
+        mkdir(fix)
+        let proj = "{fix}/proj"
+        let a_src = "{fix}/cycleA"
+        let b_src = "{fix}/cycleB"
+        mkdir(proj)
+        let a_deps <- [b_src]
+        let b_deps <- [a_src]
+        write_passing_pkg(a_src, "cycleA", a_deps)
+        write_passing_pkg(b_src, "cycleB", b_deps)
+
+        var lf : LockFile
+        let rc = install_local(proj, "cycleA", a_src, lf)
+        t |> success(rc == 0)
+        t |> success(has_package(lf, "cycleA"))
+        t |> success(has_package(lf, "cycleB"))
+        t |> success(fexist("{proj}/modules/cycleA"))
+        t |> success(fexist("{proj}/modules/cycleB"))
+        // root vs transitive flags
+        let a_entry = get_package(lf, "cycleA")
+        let b_entry = get_package(lf, "cycleB")
+        t |> success(a_entry.root)
+        t |> success(!b_entry.root)
+
+        force_rmdir(fix)
+    }
+}
+
+[test]
+def test_install_local_diamond_dep(t : T?) {
+    // P depends on A and B; both A and B depend on shared C.
+    // C should install once; the second sibling's iteration must take the
+    // has_package path, NOT the cycle-detection path. Without erasing
+    // visiting on unwind, C would still be in `visiting` when B is
+    // processed and would emit a misleading "cycle detected" log.
+    t |> run("shared dep installs once via has_package, not cycle path") @(t : T?) {
+        let fix = "{get_das_root()}/_daspkg_test_diamond_fix"
+        force_rmdir(fix)
+        mkdir(fix)
+        let proj = "{fix}/proj"
+        let p_src = "{fix}/diamondP"
+        let a_src = "{fix}/diamondA"
+        let b_src = "{fix}/diamondB"
+        let c_src = "{fix}/diamondC"
+        mkdir(proj)
+        write_passing_pkg(c_src, "diamondC")
+        let a_deps <- [c_src]
+        let b_deps <- [c_src]
+        write_passing_pkg(a_src, "diamondA", a_deps)
+        write_passing_pkg(b_src, "diamondB", b_deps)
+        let p_deps <- [a_src, b_src]
+        write_passing_pkg(p_src, "diamondP", p_deps)
+
+        var lf : LockFile
+        let rc = install_local(proj, "diamondP", p_src, lf)
+        t |> success(rc == 0)
+        t |> success(has_package(lf, "diamondP"))
+        t |> success(has_package(lf, "diamondA"))
+        t |> success(has_package(lf, "diamondB"))
+        t |> success(has_package(lf, "diamondC"))
+        t |> success(fexist("{proj}/modules/diamondC"))
+
+        force_rmdir(fix)
+    }
+}
+
+[test]
+def test_install_local_cycle_with_failure(t : T?) {
+    // A depends on B, B depends on A — but B's build fails.
+    // Both must be rolled back; nothing left in lockfile or on disk.
+    t |> run("cycle with failing dep rolls back both") @(t : T?) {
+        let fix = "{get_das_root()}/_daspkg_test_cyclefail_fix"
+        force_rmdir(fix)
+        mkdir(fix)
+        let proj = "{fix}/proj"
+        let a_src = "{fix}/cyclefailA"
+        let b_src = "{fix}/cyclefailB"
+        mkdir(proj)
+        let a_deps <- [b_src]
+        write_passing_pkg(a_src, "cyclefailA", a_deps)
+        // failing B with a back-edge to A to form the cycle
+        mkdir(b_src)
+        let b_manifest = "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"cyclefailB\")\n\}\n[export]\ndef dependencies(version : string) \{\n    require_package(\"{a_src}\")\n\}\n[export]\ndef build() \{\n    cmake_build()\n\}\n"
+        fwrite("{b_src}/.das_package", b_manifest)
+        fwrite("{b_src}/CMakeLists.txt", "cmake_minimum_required(VERSION 3.16)\nproject(cyclefailB)\nmessage(FATAL_ERROR \"forced test failure\")\n")
+
+        var lf : LockFile
+        let rc = install_local(proj, "cyclefailA", a_src, lf)
+        t |> success(rc != 0)
+        t |> success(!has_package(lf, "cyclefailA"))
+        t |> success(!has_package(lf, "cyclefailB"))
+        t |> success(!fexist("{proj}/modules/cyclefailA"))
+        t |> success(!fexist("{proj}/modules/cyclefailB"))
+
+        force_rmdir(fix)
+    }
+}
+
 [test]
 def test_cmd_remove(t : T?) {
     t |> run("removes package and updates lockfile") @(t : T?) {
@@ -933,14 +1164,15 @@ def test_serialize_index_rich(t : T?) {
 [test]
 def test_add_to_index_json_rich(t : T?) {
     t |> run("adds package with full manifest") @(t : T?) {
-        var manifest : PackageManifest
-        manifest.name = "rich"
-        manifest.description = "A rich package"
-        manifest.author = "alice"
-        manifest.license = "MIT"
+        var manifest = PackageManifest(
+            name = "rich",
+            description = "A rich package",
+            author = "alice",
+            license = "MIT",
+            min_sdk = "0.4",
+            has_native = true
+        )
         manifest.tags |> push_clone("ai")
-        manifest.min_sdk = "0.4"
-        manifest.has_native = true
         manifest.dependencies |> push_clone("dep-x")
         let result = add_to_index_json_rich("[]", "rich", manifest, "github.com/alice/rich")
         t |> success(!empty(result))

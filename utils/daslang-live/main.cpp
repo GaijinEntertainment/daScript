@@ -564,18 +564,19 @@ static int run_lifecycle(const string & fn) {
 // --- Arg parsing ---
 
 static void print_help() {
-    tout << "daslang-live — live-reloading application host for daScript\n";
+    tout << "daslang-live version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n";
+    tout << "daslang-live - live-reloading application host for daScript\n";
     tout << "Usage: daslang-live [options] <script.das> [-- script arguments]\n";
-    tout << "  -project <file>   — project file (.das_project)\n";
-    tout << "  -dasroot <path>   — override DAS_ROOT\n";
-    tout << "  -cwd              — change working directory to script's folder\n";
-    tout << "  -v1syntax         — use v1 syntax (default: v2)\n";
-    tout << "  -track-allocations — track where heap allocations came from\n";
-    tout << "  -heap-report      — dump heap contents on shutdown\n";
-    tout << "  --no-dyn-modules  — skip loading dynamic modules\n";
-    tout << "  --no-dump-leaks   — silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
-    tout << "  --                — separator for script arguments\n";
-    tout << "  -h, --help        — this help\n";
+    tout << "  -project <file>    - project file (.das_project)\n";
+    tout << "  -dasroot <path>    - override DAS_ROOT\n";
+    tout << "  -cwd               - change working directory to script's folder\n";
+    tout << "  -v1syntax          - use v1 syntax (default: v2)\n";
+    tout << "  -track-allocations - track where heap allocations came from\n";
+    tout << "  -heap-report       - dump heap contents on shutdown\n";
+    tout << "  --no-dyn-modules   - skip loading dynamic modules\n";
+    tout << "  --no-dump-leaks    - silence JobStatus + HandleRegistry leak dumps at exit (default: dump)\n";
+    tout << "  --                 - separator for script arguments\n";
+    tout << "  -h, --help         - this help\n";
 }
 
 // --- Single instance ---

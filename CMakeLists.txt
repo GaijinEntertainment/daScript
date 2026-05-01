@@ -1,5 +1,5 @@
 cmake_minimum_required (VERSION 3.16)
-project (DAS VERSION 0.6.1)
+project (DAS VERSION 0.6.2)
 # enable_testing() must live at the top-level scope of the top-level
 # CMakeLists.txt for `ninja test` / ctest to work from the build root.
 # The actual add_test() calls live under tests-cpp/.
@@ -1243,10 +1243,12 @@ SET(DAS_RELEASE_AST_INCLUDE
     include/daScript/ast/ast_policy_types.h
     include/daScript/ast/ast_serialize_macro.h
     include/daScript/ast/ast_serializer.h
+    include/daScript/ast/ast_simulate.h
     include/daScript/ast/ast_typedecl.h
     include/daScript/ast/ast_typefactory_bind.h
     include/daScript/ast/ast_typefactory.h
     include/daScript/ast/ast_visitor.h
+    include/daScript/ast/ast_aot_cpp.h
     include/daScript/ast/compilation_errors.h
     include/daScript/ast/dyn_modules.h
 )
@@ -1257,7 +1259,9 @@ SET(DAS_RELEASE_C_API
 
 SET(DAS_RELEASE_INCLUDE
     include/daScript/daScript.h
+    include/daScript/daScriptBind.h
     include/daScript/daScriptModule.h
+    include/daScript/das_common.h
     include/daScript/das_config.h
     include/daScript/das_project_specific.h
 )
@@ -1266,14 +1270,17 @@ SET(DAS_RELEASE_MISC_INCLUDE
     include/daScript/misc/anyhash.h
     include/daScript/misc/arraytype.h
     include/daScript/misc/callable.h
+    include/daScript/misc/crash_handler.h
     include/daScript/misc/debug_break.h
     include/daScript/misc/enums.h
     include/daScript/misc/fpe.h
     include/daScript/misc/free_list.h
+    include/daScript/misc/gc_node.h
     include/daScript/misc/hal.h
     include/daScript/misc/hash.h
     include/daScript/misc/instance_debugger.h
     include/daScript/misc/job_que.h
+    include/daScript/misc/lexer_alloc_track.h
     include/daScript/misc/handle_registry.h
     include/daScript/misc/macro.h
     include/daScript/misc/memory_model.h
@@ -1481,6 +1488,10 @@ install(FILES ${PROJECT_SOURCE_DIR}/utils/benchctl/README.md DESTINATION utils/b
 # Install lint (unified linter)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/lint/main.das DESTINATION utils/lint)
 
+# Install hygiene (comment/doc hygiene checker)
+file(GLOB DAS_HYGIENE_FILES ${PROJECT_SOURCE_DIR}/utils/hygiene/*.das)
+install(FILES ${DAS_HYGIENE_FILES} DESTINATION utils/hygiene)
+
 # Install detect-dupe (cross-file duplicate-function detector)
 file(GLOB DAS_DETECT_DUPE_FILES ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
 install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
@@ -1535,6 +1546,17 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daslive/
     PATTERN ".jitted_scripts" EXCLUDE
     PATTERN "_aot_generated" EXCLUDE
     PATTERN "jitted_scripts" EXCLUDE
+)
+
+# Install game examples with their full directory structure.
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/games/
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/games
+    PATTERN ".daspkg_cache" EXCLUDE
+    PATTERN ".daspkg_tmp" EXCLUDE
+    PATTERN ".daspkg.log" EXCLUDE
+    PATTERN ".jitted_scripts" EXCLUDE
+    PATTERN "jitted_scripts" EXCLUDE
+    PATTERN "_aot_generated" EXCLUDE
 )
 
 # Install core example files
@@ -1695,6 +1717,22 @@ file(GLOB SQL_TUTORIAL_SOURCES
 )
 install(FILES ${SQL_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/sql
+)
+
+# Install dasPEG tutorial .das files
+file(GLOB DASPEG_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasPEG/*.das
+)
+install(FILES ${DASPEG_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasPEG
+)
+
+# Install daStrudel tutorial .das files
+file(GLOB DASTRUDEL_TUTORIAL_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/daStrudel/*.das
+)
+install(FILES ${DASTRUDEL_TUTORIAL_SOURCES}
+    DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/daStrudel
 )
 
 # ── Documentation build (optional) ──────────────────────────────────────────

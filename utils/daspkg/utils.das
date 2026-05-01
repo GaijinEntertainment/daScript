@@ -13,6 +13,7 @@ require strings
 
 var log_file_path : string
 var log_verbose_flag = false
+var run_cmd_counter = 0
 
 def log_init(root : string) {
     let modules_dir = "{root}/modules"
@@ -53,7 +54,8 @@ def log_debug(msg : string) {
 
 def run_cmd(cmd : string; var output : string&) : int {
     log_debug("$ {cmd}")
-    let tmp_out = "{get_das_root()}/_daspkg_cmd_output.txt"
+    run_cmd_counter ++
+    let tmp_out = "{get_das_root()}/_daspkg_cmd_output_{run_cmd_counter}.txt"
     let full_cmd = "{cmd} > \"{tmp_out}\" 2>&1"
     var exit_code = -1
     unsafe {
@@ -369,7 +371,7 @@ def copy_dir_rec(src, dst : string) : bool {
         }
         let src_child = "{src}/{name}"
         let dst_child = "{dst}/{name}"
-        var st = stat(src_child)
+        let st = stat(src_child)
         if (st.is_dir) {
             if (!copy_dir_rec(src_child, dst_child)) {
                 ok = false
