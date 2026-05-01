@@ -691,6 +691,46 @@ def fibI(n)
         <div class="page" id="page-work">
         <h2 id="work">Change List</h2>
 
+        <h3>0.6.2 (May 2026)</h3>
+
+        <h4>daSQLite: SQL-backed LINQ</h4>
+        <ul>
+            <li>modules/dasSQLITE now extends daslib/linq with SQL-backed queries, compiling familiar linq-style transforms into typed SQLite operations</li>
+            <li>Large expansion across insert/query macros, read-side operators, update/delete/upsert flows, custom types, JSON/BLOB columns, introspection, ATTACH, and FTS5 groundwork</li>
+        </ul>
+
+        <h4>Style Lint and Duplicate Detection</h4>
+        <ul>
+            <li>New daslib/style_lint covers non-idiomatic gen2 patterns, comment hygiene, and unified lint suppression</li>
+            <li>New detect-dupe and find-dupe tools find duplicate functions, reduce false positives, and support AI-assisted cluster triage</li>
+        </ul>
+
+        <h4>Tooling and Diagnostics</h4>
+        <ul>
+            <li>New daslib/clargs module standardizes long/short flag parsing for tools and standalone executables</li>
+            <li>New leak-tracker workflow with --das-profiler --das-profiler-leaks plus expanded leak-diagnostics documentation</li>
+        </ul>
+
+        <h4>daStrudel Improvements</h4>
+        <ul>
+            <li>Second wave of Strudel work: better synth/drum voices, more SF2 support, offline/WAV rendering, and further live/demo polish</li>
+            <li>Unique per-event HRTF binaural 3D positioning with dedicated demos and tutorials</li>
+            <li>Reduced memory usage and multiple leak fixes in the threaded player, visualizer, and shutdown path</li>
+        </ul>
+
+        <h4>Compiler and Macro Authoring</h4>
+        <ul>
+            <li>Continued AOT/JIT/runtime work, better standalone-exe behavior, more build configurations, and more daslib AOT coverage</li>
+            <li>AST ownership moved further from smart_ptr-era patterns to gc_node-style ownership, making macros much easier to write</li>
+            <li>Macro, visitor, binding, and validator code now deals with far fewer ownership and pointer-conversion issues</li>
+        </ul>
+
+        <h4>Libraries, Infrastructure, and Fixes</h4>
+        <ul>
+            <li>dasPEG improvements, strings_convert validation, Option/Result follow-up, new in-tree das_hash_map, and broader docs/tooling polish</li>
+            <li>Build/runtime fixes across PEG, dasbind, JIT, inference, ASAN, ordering, glob tracking, and OpenGL/package integration</li>
+        </ul>
+
         <h3>0.6.1 (April 2026)</h3>
 
         <h4>VSCode Extension: dastest Integration</h4>
