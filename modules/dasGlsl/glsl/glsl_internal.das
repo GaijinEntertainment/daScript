@@ -1372,7 +1372,7 @@ class GlslExport : AstVisitor {
             *writer |> write("{repeat("\t",tab)}int {expr.iteratorVariables[index].name} = 0; //")
         } elif (self->isRangeFor(source)) {
             let svtype = "{self->describe_glsl_type(source._type)}"
-            *writer |> write("{repeat("\t",tab)}{svtype} _for_range_{expr.iteratorVariables[index].name} = ")
+            *writer |> write("{repeat("\t",tab)}{svtype} _for_range_v{expr.iteratorVariables[index].name} = ")
         }
     }
     def override visitExprForSource(expr : ExprFor?; source : ExpressionPtr; last : bool) : ExpressionPtr {
@@ -1384,7 +1384,7 @@ class GlslExport : AstVisitor {
             self->newLine(1)
             let sname = "{expr.iteratorVariables[index].name}"
             let stype = "{self->describe_glsl_type(expr.iteratorVariables[index]._type)}"
-            *writer |> write("{repeat("\t",tab)}{stype} {sname} = _for_range_{sname}.x;")
+            *writer |> write("{repeat("\t",tab)}{stype} {sname} = _for_range_v{sname}.x;")
         }
         return source
     }
@@ -1401,7 +1401,7 @@ class GlslExport : AstVisitor {
                 let newsrc = "{self->describe_subexpression(source)}[{svar.name}]"
                 renames |> push(("{iter}", newsrc))
             } elif (self->isRangeFor(source)) {
-                *writer |> write("{svar.name}!=_for_range_{svar.name}.y")
+                *writer |> write("{svar.name}!=_for_range_v{svar.name}.y")
             }
         }
         *writer |> write(" )")

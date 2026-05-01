@@ -178,8 +178,8 @@ def create_shader(src : string implicit; shaderType : uint; canfail : bool = fal
                 resize(log, 16384)
                 let slog = reinterpret<string> addr(log[0])
                 glGetShaderInfoLog(s, 16384, null, slog)
-                panic("{slog}\n\nFAILED TO CREATE SHADER ({status}):\n{src}\n")
-                delete log
+                to_log(LOG_ERROR, "Shader source:\n{src}\n")
+                panic("{slog}\n\nFAILED TO CREATE SHADER ({status})\n")
             }
         }
         return 0u
