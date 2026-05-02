@@ -98,6 +98,11 @@
             <h2>News</h2>
             <ul  style="list-style-type:none;">
             <li>
+                <b>May 1st, 2026</b>: 0.6.2 is just about ready.
+                See the <a href="#" data-page="work">Change List</a>, or grab the
+                <a href="https://github.com/GaijinEntertainment/daScript/releases/tag/v0.6.2-RC1">0.6.2-RC1 pre-release</a>.
+            </li>
+            <li>
                 <b>April 17th, 2026</b>: daStrudel gets <a href="doc/stdlib/sec_strudel.html">module reference</a> and <a href="doc/reference/tutorials.html#tutorials-dastrudel">a 15-part tutorial series</a>.
             </li>
             <li>
@@ -693,42 +698,83 @@ def fibI(n)
 
         <h3>0.6.2 (May 2026)</h3>
 
-        <h4>daSQLite: SQL-backed LINQ</h4>
+        <h4>dasSQLITE: Typed SQLite Query Layer</h4>
+        <p>modules/dasSQLITE extends daslib/linq with SQL-backed queries &mdash; familiar linq-style transforms compile down to typed SQLite operations. After the initial landing, the layer was broadened tutorial-by-tutorial across the rest of the SQLite surface.</p>
         <ul>
-            <li>modules/dasSQLITE now extends daslib/linq with SQL-backed queries, compiling familiar linq-style transforms into typed SQLite operations</li>
-            <li>Large expansion across insert/query macros, read-side operators, update/delete/upsert flows, custom types, JSON/BLOB columns, introspection, ATTACH, and FTS5 groundwork</li>
+            <li><b>Insert + query macros</b> &mdash; typed insert flows, raw query / try_query helpers, much deeper _sql(...) analysis</li>
+            <li><b>Read-side operators</b> &mdash; distinct, take, skip, ordering, aggregates, grouping, joins, set operations, multi-source queries</li>
+            <li><b>Write-side</b> &mdash; typed update/delete flows, transaction helpers, UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns</li>
+            <li><b>Custom storage types</b> &mdash; user-defined adapters plus @sql_json and @sql_blob field support, JSON-path descent inside _sql, column metadata introspection</li>
+            <li><b>Operational</b> &mdash; SQL fragment building, ATTACH DATABASE, FTS5 groundwork, pre-migration utilities</li>
         </ul>
 
-        <h4>Style Lint and Duplicate Detection</h4>
+        <h4>Style Lint and Unified Linting</h4>
+        <p>Compile-time linting now covers daslang style alongside the existing correctness and performance passes.</p>
         <ul>
-            <li>New daslib/style_lint covers non-idiomatic gen2 patterns, comment hygiene, and unified lint suppression</li>
-            <li>New detect-dupe and find-dupe tools find duplicate functions, reduce false positives, and support AI-assisted cluster triage</li>
+            <li><b>daslib/style_lint</b> &mdash; flags non-idiomatic gen2 patterns: unnecessary block pipes, declaration-then-assignment, array literal construction via repeated push, long comment blocks</li>
+            <li><b>Unified lint flow</b> &mdash; shared warning collection, nolint suppression, comment-hygiene rules, and a codebase-wide cleanup that drove warnings back to zero</li>
+            <li><b>Noise reduction</b> &mdash; one-line style enforcement was relaxed where it produced more friction than signal</li>
         </ul>
 
-        <h4>Tooling and Diagnostics</h4>
+        <h4>Duplicate Detection: detect-dupe and find-dupe</h4>
         <ul>
-            <li>New daslib/clargs module standardizes long/short flag parsing for tools and standalone executables</li>
-            <li>New leak-tracker workflow with --das-profiler --das-profiler-leaks plus expanded leak-diagnostics documentation</li>
+            <li><b>utils/detect-dupe</b> &mdash; scans files, canonicalizes functions, and clusters exact and fuzzy duplicates with corpus export/import</li>
+            <li><b>Pattern filtering</b> &mdash; suppresses boilerplate-heavy false positives and handles generics more cleanly</li>
+            <li><b>AI-assisted triage</b> &mdash; utils/find-dupe consumes detect-dupe reports and asks Claude to partition clusters into real duplicates vs false positives, with JSON and Markdown output</li>
+            <li><b>MCP integration</b> &mdash; export, duplicate detection, and judgment workflows exposed to AI tooling</li>
         </ul>
 
-        <h4>daStrudel Improvements</h4>
+        <h4>daslib/clargs: Declarative CLI Parsing</h4>
         <ul>
-            <li>Second wave of Strudel work: better synth/drum voices, more SF2 support, offline/WAV rendering, and further live/demo polish</li>
-            <li>Unique per-event HRTF binaural 3D positioning with dedicated demos and tutorials</li>
+            <li>Generated --flag and -f aliases, help text, required-flag handling, and array/bool parsing</li>
+            <li>get_user_args() handles both interpreter -- invocation and standalone executables correctly</li>
+            <li>In-tree tools migrated off hand-rolled get_command_line_arguments() onto a shared parser</li>
+        </ul>
+
+        <h4>Memory Leak Tracking and Diagnostics</h4>
+        <ul>
+            <li><b>Leak-tracker mode</b> &mdash; --das-profiler --das-profiler-leaks records live allocations with captured daslang call stacks</li>
+            <li><b>Cheat-sheet documentation</b> &mdash; unified guidance for GC leaks, heap reports, smart-pointer tracking, jobque leaks, and handle-registry dumps</li>
+            <li>Profiler and heap tooling polish supporting leak-audit work across the runtime</li>
+        </ul>
+
+        <h4>daStrudel: Second Wave</h4>
+        <ul>
+            <li>Better synth and drum voices, more SF2 support, offline/WAV rendering workflows, further live and demo polish</li>
+            <li>Unique per-event HRTF binaural 3D positioning</li>
             <li>Reduced memory usage and multiple leak fixes in the threaded player, visualizer, and shutdown path</li>
+            <li>Expanded documentation and examples for the newer audio stack</li>
         </ul>
 
-        <h4>Compiler and Macro Authoring</h4>
+        <h4>GC / AST / Ownership Cleanup</h4>
+        <p>Core compiler internals continued the transition away from older smart_ptr-style AST ownership. The biggest user-facing result: macros became much easier to write.</p>
         <ul>
-            <li>Continued AOT/JIT/runtime work, better standalone-exe behavior, more build configurations, and more daslib AOT coverage</li>
-            <li>AST ownership moved further from smart_ptr-era patterns to gc_node-style ownership, making macros much easier to write</li>
-            <li>Macro, visitor, binding, and validator code now deals with far fewer ownership and pointer-conversion issues</li>
+            <li>TypeDecl, Expression, annotations, and related AST paths moved deeper into gc_node-style ownership</li>
+            <li>Macro, visitor, binding, and validator code no longer fights smart_ptr-era ownership patterns and pointer conversions</li>
+            <li>Tracker stability improved when GC is active, reducing false crashes during debugging</li>
         </ul>
 
-        <h4>Libraries, Infrastructure, and Fixes</h4>
+        <h4>Compiler, AOT, and JIT</h4>
         <ul>
-            <li>dasPEG improvements, strings_convert validation, Option/Result follow-up, new in-tree das_hash_map, and broader docs/tooling polish</li>
-            <li>Build/runtime fixes across PEG, dasbind, JIT, inference, ASAN, ordering, glob tracking, and OpenGL/package integration</li>
+            <li>Continued push toward more daslang-authored AOT logic and cleaner AOT/JIT boundaries</li>
+            <li>Better standalone-exe behavior, transitive JIT type resolution, prologue sizing, function registration</li>
+            <li>More build configurations (RelWithDebInfo, static PIC), more daslib AOT coverage, platform-specific AOT fixes</li>
+        </ul>
+
+        <h4>Runtime Libraries and Infrastructure</h4>
+        <ul>
+            <li><b>dasPEG</b> &mdash; more tests, docs, CI coverage, and standalone/LLVM fixes</li>
+            <li><b>Core libraries</b> &mdash; validated numeric conversions in daslib/strings_convert, continued Option/Result work including non-copyable support, C API completeness</li>
+            <li><b>das_hash_map</b> &mdash; new in-tree hash map backend that avoids empty-construction allocations and behaves better in thread-local usage</li>
+            <li>Filesystem guidance, handle-registry tutorial work, class-boost coverage, integer-returning main() for tools, compilation progress reporting</li>
+        </ul>
+
+        <h4>Bug Fixes</h4>
+        <ul>
+            <li><b>Build, tooling, CI</b> &mdash; package .gitignore handling, PEG standalone/LLVM, require fixes, dasbind fixes, glob dependency tracking, doc/error-position corrections</li>
+            <li><b>Runtime/compiler correctness</b> &mdash; JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, runWithCatch state cleanup, ASAN follow-up</li>
+            <li><b>Language edge cases</b> &mdash; finally loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, strict-weak-ordering cleanup</li>
+            <li><b>Graphics and platform</b> &mdash; OpenGL/package integration cleanup after the daspkg migration</li>
         </ul>
 
         <h3>0.6.1 (April 2026)</h3>
