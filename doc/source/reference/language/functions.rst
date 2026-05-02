@@ -65,6 +65,8 @@ The return type can be specified explicitly with ``:`` or ``->`` — both are eq
     }
 
 
+.. _functions_single_expression_body:
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Single-expression body
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

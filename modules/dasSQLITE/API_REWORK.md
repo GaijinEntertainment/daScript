@@ -3684,9 +3684,13 @@ let big = db |> _sql(
 - **Bind expression has no `to_sql_literal` overload.** The
   macro emits `_::to_sql_literal(<bind>)`; if the bind's type
   isn't covered by the default set (numeric / bool / string)
-  and the user has no overload in scope, daslang's typer
-  reports `no matching overload for to_sql_literal`. Fix:
-  add a one-line overload in the user's module.
+  and the user has no overload in scope, the
+  `to_sql_literal(auto(TT))` catch-all in `sqlite_linq.das`
+  emits enums via `int(v)` and otherwise `concept_assert`s
+  (40103) with: *to_sql_literal: unsupported type for
+  `_create_view` body inlining. Define `def to_sql_literal(v
+  : YourType) : string` in YourType's module.* Fix: add the
+  one-line overload in the user's module.
 
 **Deferred / out of scope:**
 
