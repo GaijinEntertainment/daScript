@@ -1908,7 +1908,7 @@ expr_full_block
 
 expr_full_block_assumed_piped
     :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
-                                optional_function_type[result] optional_emit_semis expression_block[block] {
+                                optional_function_type[result] optional_emit_semis block_or_simple_block[block] {
         $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL),tokAt(scanner,@clist));
     }
     |   '{' expressions[block] '}' {
