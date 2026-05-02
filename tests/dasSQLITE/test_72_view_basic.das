@@ -100,13 +100,9 @@ def test_try_drop_view_if_exists_idempotent(t : T?) {
 }
 
 // --- Enum + bitfield literals in `_create_view` predicates -------------
-// `is_const_or_captured_var` (collection side) recognized
-// ExprConstEnumeration / ExprConstBitfield as bindable constants, but
-// `is_const_literal` (CREATE VIEW inlining) didn't — so a chain like
-// `_where(_.Status == Status.Shipped)` failed with "cannot reference local
-// variables" even though the enum value is a compile-time constant.
-// These tests exercise both shapes; before the fix, both failed at
-// _create_view's compile-time inlining pass.
+// Both arms cast the enum/bitfield to its underlying integer at the call
+// site. The macro emits `_::to_sql_literal(<int-cast-expr>)` which the
+// runtime evaluates once at CREATE VIEW time and inlines into the DDL.
 
 enum Status {
     Pending = 1
@@ -172,5 +168,211 @@ def test_view_predicate_with_bitfield_literal(t : T?) {
         let rows <- db |> select_from(type<WriteableOrder>)
         t |> equal(length(rows), 1, "exactly one row with permbits == Write")
         t |> equal(rows[0].Id, 2, "Id 2 has just Write")
+    }
+}
+
+// --- Captured locals in _create_view bodies --------------------------
+// The macro emits `_::to_sql_literal(<bind-expr>)` per bind expression;
+// the value is evaluated once at view-creation time and inlined into the
+// DDL stored in sqlite_schema. To rebind, drop and re-create the view.
+
+[sql_table(name="Inventory")]
+struct Item {
+    @sql_primary_key Id : int
+    Name   : string
+    Price  : int
+    Weight : double
+    OnSale : bool
+}
+
+[sql_view(name="ExpensiveItems")]
+struct ExpensiveItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+[sql_view(name="HeavyItems")]
+struct HeavyItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+[sql_view(name="OnSaleItems")]
+struct OnSaleItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+[sql_view(name="NamedItems")]
+struct NamedItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+def private inv_fixture(db : SqlRunner) {
+    db |> create_table(type<Item>)
+    db |> insert(Item(Id = 1, Name = "Apple",  Price =  50, Weight = 0.2lf, OnSale = false))
+    db |> insert(Item(Id = 2, Name = "Bread",  Price = 200, Weight = 0.5lf, OnSale = false))
+    db |> insert(Item(Id = 3, Name = "Cheese", Price = 800, Weight = 1.2lf, OnSale = true))
+    db |> insert(Item(Id = 4, Name = "Diamond", Price = 9999, Weight = 0.01lf, OnSale = false))
+    db |> insert(Item(Id = 5, Name = "Apple",  Price = 100, Weight = 0.2lf, OnSale = true))
+}
+
+[test]
+def test_view_captured_int_local(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        let cutoff = 200
+        db |> _create_view(type<ExpensiveItem>,
+            db |> select_from(type<Item>) |> _where(_.Price > cutoff))
+        let rows <- db |> select_from(type<ExpensiveItem>)
+        t |> equal(length(rows), 2, "Cheese + Diamond over 200")
+    }
+}
+
+[test]
+def test_view_captured_double_local(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        // Use a value that needs precision past float to verify the .17g formatter.
+        let weight_min = 0.4999999999999999lf
+        db |> _create_view(type<HeavyItem>,
+            db |> select_from(type<Item>) |> _where(_.Weight > weight_min))
+        let rows <- db |> select_from(type<HeavyItem>)
+        t |> equal(length(rows), 2, "Bread (0.5) + Cheese (1.2) above 0.4999…")
+    }
+}
+
+[test]
+def test_view_captured_bool_local(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        let want_on_sale = true
+        db |> _create_view(type<OnSaleItem>,
+            db |> select_from(type<Item>) |> _where(_.OnSale == want_on_sale))
+        let rows <- db |> select_from(type<OnSaleItem>)
+        t |> equal(length(rows), 2, "Cheese + Apple(5) on sale")
+    }
+}
+
+[test]
+def test_view_captured_string_local(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        // String with an embedded apostrophe: sql_quote_lit must double it.
+        db |> exec("INSERT INTO Inventory (Id, Name, Price, Weight, OnSale) VALUES (6, 'O''Brien', 1, 0.1, 0)")
+        let needle = "O'Brien"
+        db |> _create_view(type<NamedItem>,
+            db |> select_from(type<Item>) |> _where(_.Name == needle))
+        let rows <- db |> select_from(type<NamedItem>)
+        t |> equal(length(rows), 1, "exactly one O'Brien")
+        t |> equal(rows[0].Id, 6, "Id 6 is the O'Brien row")
+    }
+}
+
+// --- Struct-field and function-call binds in view bodies ----------
+// The chain analyzer accepts any expression as a bind (column refs are
+// recognized first; everything else falls through to ?-bind via
+// _::to_sql_literal at view-creation time). User overloads still win
+// when types fall outside the default set.
+
+struct private Threshold {
+    min_price : int
+    qualifier : string
+}
+
+[sql_view(name="StructFieldFiltered")]
+struct StructFieldFilteredItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+def private compute_threshold() : int => 100
+
+[test]
+def test_view_struct_field_bind(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        let cfg = Threshold(min_price = 200, qualifier = "Cheese")
+        db |> _create_view(type<StructFieldFilteredItem>,
+            db |> select_from(type<Item>) |> _where(_.Price >= cfg.min_price))
+        let rows <- db |> select_from(type<StructFieldFilteredItem>)
+        t |> equal(length(rows), 3, "Bread + Cheese + Diamond at or above 200")
+    }
+}
+
+[sql_view(name="FnCallFiltered")]
+struct FnCallFilteredItem {
+    Id    : int
+    Name  : string
+    Price : int
+    Weight : double
+    OnSale : bool
+}
+
+[test]
+def test_view_fn_call_bind(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        inv_fixture(db)
+        db |> _create_view(type<FnCallFilteredItem>,
+            db |> select_from(type<Item>) |> _where(_.Price >= compute_threshold()))
+        let rows <- db |> select_from(type<FnCallFilteredItem>)
+        t |> equal(length(rows), 4, "items at or above compute_threshold() == 100")
+    }
+}
+
+// --- User-defined `to_sql_literal` overload --------------------------
+// Demonstrates the extension point: a user type that's NOT in the
+// default set can join the `_create_view` body by supplying a one-line
+// overload. Resolution at the user's call site picks this up via `_::`.
+
+enum private Tier {
+    Bronze = 10
+    Silver = 20
+    Gold   = 30
+}
+
+def to_sql_literal(t : Tier) : string => "{int(t)}"
+
+[sql_table(name="Members")]
+struct MemberRow {
+    @sql_primary_key Id : int
+    TierVal : int
+}
+
+[sql_view(name="GoldMembers")]
+struct GoldMemberRow {
+    Id      : int
+    TierVal : int
+}
+
+[test]
+def test_view_user_enum_overload(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<MemberRow>)
+        db |> insert(MemberRow(Id = 1, TierVal = int(Tier.Bronze)))
+        db |> insert(MemberRow(Id = 2, TierVal = int(Tier.Silver)))
+        db |> insert(MemberRow(Id = 3, TierVal = int(Tier.Gold)))
+        let want = Tier.Gold
+        db |> _create_view(type<GoldMemberRow>,
+            db |> select_from(type<MemberRow>) |> _where(_.TierVal == want))
+        let rows <- db |> select_from(type<GoldMemberRow>)
+        t |> equal(length(rows), 1, "exactly one Gold member")
+        t |> equal(rows[0].Id, 3, "Id 3 is Gold")
     }
 }

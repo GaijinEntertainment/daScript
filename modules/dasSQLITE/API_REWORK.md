@@ -695,12 +695,16 @@ foundation.
   rejects `?` placeholders inside CREATE VIEW). Emits `db |> exec(...)`
   with the view's column list using V's field names (and `@sql_column`
   renames) authoritative.
-- **Literal-inlining** for `_create_view`: chain bind-exprs that are
-  `ExprConst*` (Int/Bool/Float/Double/String with `'` doubling) are
-  formatted into the SQL text; captured locals rejected with a clear
-  pointer at the literal-only requirement. Acknowledged as a hack for
-  this chunk; replacement design is the SQL-fragment refactor
-  (deferred — see "Carried" below).
+- **Runtime-stringifier inlining** for `_create_view`: each bind expression
+  goes through `_::to_sql_literal(<expr>)` at view-creation time, with the
+  resulting literal concatenated into the DDL stored in `sqlite_schema`.
+  Default overload set covers all numeric primitives, `bool`, and `string`
+  (the `string` arm uses `sql_quote_lit`); float/double use round-trip-safe
+  `%.9g` / `%.17g`. Captured locals work; the value is frozen at
+  view-creation time. User types extend with a one-line overload
+  (`def to_sql_literal(s : Status) : string => "{int(s)}"`); resolution at
+  the call site picks them up via `_::`. Types without an overload fail
+  with daslang's "no matching overload for to_sql_literal".
 - **`drop_view_if_exists(type<V>)` / `try_drop_view_if_exists`** template
   wrappers.
 - Tutorial: [tutorials/sql/31-views.das](../../tutorials/sql/31-views.das).
@@ -3676,6 +3680,12 @@ let big = db |> _sql(
 - **Pipeline uses a feature `_sql` can't translate.** Falls
   through to `_sql`'s normal translation-failure path;
   suggests the raw-SQL escape in the error message.
+- **Bind expression has no `to_sql_literal` overload.** The
+  macro emits `_::to_sql_literal(<bind>)`; if the bind's type
+  isn't covered by the default set (numeric / bool / string)
+  and the user has no overload in scope, daslang's typer
+  reports `no matching overload for to_sql_literal`. Fix:
+  add a one-line overload in the user's module.
 
 **Deferred / out of scope:**
 

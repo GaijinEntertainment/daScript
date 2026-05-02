@@ -1464,7 +1464,7 @@ function_declaration
             auto tak = tokAt(scanner,@pub_func);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
         }
-    } function_declaration_header[func] optional_emit_semis expression_block[block] {
+    } function_declaration_header[func] optional_emit_semis block_or_simple_block[block] {
         $func->body = $block;
         $func->privateFunction = !$pub_func;
         $$ = $func;

@@ -87,9 +87,11 @@ def main {
         to_log(LOG_INFO, "total Message bytes streamed: {total_chars}\n")
 
         // --- Captured local in the predicate -------------------------
-        // Unlike `_create_view`, `_each_sql` accepts captured locals in
-        // the chain — they bind to the prepared statement at run time
-        // (the standard `?` placeholder mechanism).
+        // `_each_sql` binds captured locals to the prepared statement at
+        // run time via the standard `?` placeholder mechanism — re-evaluated
+        // per query. Contrast with `_create_view` (tut 31): views freeze
+        // the captured value at view-creation time since SQLite forbids
+        // `?` in DDL.
         let cutoff = 2
         for (e in _each_sql(db |> select_from(type<LogEntry>) |> _where(_.Severity >= cutoff))) {
             to_log(LOG_INFO, "  bound-cutoff: id={e.Id}\n")

@@ -120,29 +120,82 @@ type:
                      $(o : Order, c : Customer) =>
                         (OrderId = o.Id, Customer = c.Name, Amount = o.Amount)))
 
-Bound parameters are rejected
-=============================
+Captured locals via ``to_sql_literal``
+======================================
 
-SQLite stores view bodies as text in ``sqlite_schema``, so ``?``
-placeholders are not allowed inside a view definition. ``_create_view``
-rejects chains that reference captured locals at compile time:
+SQLite stores view bodies as text in ``sqlite_schema`` and rejects ``?``
+placeholders inside a view definition, so ``_create_view`` cannot use
+parameter binds the way ``_sql(...)`` does. Instead, it stringifies each
+bind expression once when the ``CREATE VIEW`` DDL runs and inlines the
+resulting literal into the view body. Anything that's not a column ref
+or a recognized SQL operator is treated as a bind --- captured locals,
+struct fields, function calls, arithmetic over the above:
 
 .. code-block:: das
 
     let cutoff = 100
-    db |> _create_view(type<BigOrder>,                       // compile error
+    db |> _create_view(type<BigOrder>,
         db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
+    // sqlite_schema now stores: ... WHERE "Amount" >= 100
 
-The fix is to inline literals into the view body and apply runtime
-filtering at the query site:
+    struct Cfg { threshold : int }
+    let cfg = Cfg(threshold = 200)
+    db |> _create_view(type<HugeOrder>,
+        db |> select_from(type<Order>) |> _where(_.Amount >= cfg.threshold))
+
+    def compute_limit() : int => 500
+    db |> _create_view(type<MaxOrder>,
+        db |> select_from(type<Order>) |> _where(_.Amount >= compute_limit()))
+
+The value is **frozen at view-creation time**: changing ``cutoff`` later
+does not update the view. To re-bake, drop and re-create:
 
 .. code-block:: das
 
+    db |> drop_view_if_exists(type<BigOrder>)
+    let cutoff = 200
     db |> _create_view(type<BigOrder>,
-        db |> select_from(type<Order>) |> _where(_.Amount >= 100))
+        db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
+
+Per-query filtering still uses ``_sql(...)`` with normal ``?``-binds:
+
+.. code-block:: das
 
     let recent <- _sql(db |> select_from(type<BigOrder>)
-                         |> _where(_.Amount >= cutoff))      // bind here
+                         |> _where(_.Amount >= cutoff))      // ?-bind, re-bound each query
+
+Default-supported types
+-----------------------
+
+All numeric primitives (``int``, ``int8``, ``int16``, ``int64``, ``uint``,
+``uint8``, ``uint16``, ``uint64``, ``float``, ``double``), ``bool``, and
+``string`` work out of the box. Strings are SQL-quoted (single quotes,
+embedded ``'`` doubled). Floats and doubles use round-trip-safe
+formatting (``%.9g`` / ``%.17g``).
+
+Extending to user types
+-----------------------
+
+Types outside the default set (custom enums, struct-wrapped values,
+domain types) join by supplying a one-line ``to_sql_literal`` overload.
+The macro emits ``_::to_sql_literal(<expr>)`` per bind, so resolution
+happens at the user's call site --- a user-supplied overload takes
+precedence over the default set.
+
+.. code-block:: das
+
+    enum Status { Pending = 1; Shipped = 2 }
+
+    def to_sql_literal(s : Status) : string => "{int(s)}"
+
+    let want = Status.Shipped
+    db |> _create_view(type<ShippedOrders>,
+        db |> select_from(type<Order>) |> _where(_.StatusVal == want))
+
+Types with no overload fail at compile time with the catch-all's
+``concept_assert`` message: *to_sql_literal: unsupported type for
+`_create_view` body inlining. Define `def to_sql_literal(v : YourType) :
+string` in YourType's module.* Supply a one-liner to fix.
 
 Raw-SQL escape hatch
 ====================

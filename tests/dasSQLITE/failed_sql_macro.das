@@ -5,9 +5,8 @@ options gen2
 // (canVisitArgument=true, inner call_macros expand before outer fires),
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
-// genuine type bug (string has no `Price` field) and `some_unknown_func(_)`
-// hits the unresolved function. Those cascades are expected.
-expect 40104:22, 30304:2, 30503:2
+// genuine type bug (string has no `Price` field). Those cascades are expected.
+expect 40104:21, 30304:1, 30503:2
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -47,8 +46,10 @@ def main() {
     // 5. _sql with _select projection that's not a column ref (chunk 2 only supports _.Field)
     let bad5 <- _sql(db |> select_from(type<Car>) |> _select(_.Price * 2))
 
-    // 6. _sql with _where containing an unsupported expression (function call inside)
-    let bad6 <- _sql(db |> select_from(type<Car>) |> _where(some_unknown_func(_.Id)))
+    // (bad6 removed: pred_to_sql no longer has an "unsupported expression"
+    //  catch-all — unrecognized AST shapes fall through to a `?`-bind, and
+    //  the typer produces the user-facing error if the bind type isn't
+    //  supported by the `sql_bind` adapter rail.)
 
     // 7. _sql_text with non-chain
     let bad7 = _sql_text(42)

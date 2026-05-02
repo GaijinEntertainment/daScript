@@ -127,6 +127,33 @@ def test_sql_where_captured_var(t : T?) {
     }
 }
 
+struct private Cfg {
+    target : int
+}
+
+def private compute_target() : int => 4
+
+[test]
+def test_sql_where_struct_field_bind(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let cfg = Cfg(target = 4)
+        let cars <- _sql(db |> select_from(type<Car>) |> _where(_.Id == cfg.target))
+        t |> equal(length(cars), 1, "one row matches struct-field target")
+        t |> equal(cars[0].Name, "Lada", "matched Lada")
+    }
+}
+
+[test]
+def test_sql_where_fn_call_bind(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let cars <- _sql(db |> select_from(type<Car>) |> _where(_.Id == compute_target()))
+        t |> equal(length(cars), 1, "one row matches fn-call target")
+        t |> equal(cars[0].Name, "Lada", "matched Lada")
+    }
+}
+
 [test]
 def test_sql_where_gt_literal(t : T?) {
     with_sqlite(":memory:") $(db) {

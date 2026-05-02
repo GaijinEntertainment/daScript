@@ -51,6 +51,43 @@ def _first(arr : array<auto(TT)>) : TT -const -& {
 }
 
 
+// ===== to_sql_literal — runtime stringifier for `_create_view` body inlining =====
+//
+// SQLite stores view bodies as text in `sqlite_schema` and rejects `?` placeholders
+// inside `CREATE VIEW`, so any value referenced by a view body must be inlined as a
+// SQL literal at view-creation time. `_create_view` emits `_::to_sql_literal(<expr>)`
+// per bound expression; `_::` resolves at the user's call site, so a user can extend
+// the set with their own one-liner overload (`def to_sql_literal(s : Status) : string => "{int(s)}"`).
+//
+// Defaults cover all numeric primitives, bool, and string. Wrong types fall through
+// to daslang's "no matching overload" error — informative, no special macro plumbing.
+
+def to_sql_literal(v : int)    : string => "{v}"
+def to_sql_literal(v : int8)   : string => "{v}"
+def to_sql_literal(v : int16)  : string => "{v}"
+def to_sql_literal(v : int64)  : string => "{v}"
+def to_sql_literal(v : uint)   : string => "{v}"
+def to_sql_literal(v : uint8)  : string => "{v}"
+def to_sql_literal(v : uint16) : string => "{v}"
+def to_sql_literal(v : uint64) : string => "{v}"
+def to_sql_literal(v : float)  : string => fmt(":.9g",  v)
+def to_sql_literal(v : double) : string => fmt(":.17g", v)
+def to_sql_literal(v : bool)   : string => v ? "1" : "0"
+def to_sql_literal(v : string) : string => sql_quote_lit(v)
+
+def to_sql_literal(value : auto(TT)) : string {
+    //! Catch-all for `_create_view` body inlining. Enums emit their underlying
+    //! integer; user types must supply their own `def to_sql_literal(v : YourType) : string`
+    //! overload (the concrete overload beats this generic at the user's call site via _::).
+    static_if (typeinfo is_enum(value)) {
+        return "{int(value)}"
+    } else {
+        concept_assert(false, "to_sql_literal: unsupported type for `_create_view` body inlining. Define `def to_sql_literal(v : YourType) : string` in YourType's module.")
+        return ""
+    }
+}
+
+
 // ===== SqlQuery — accumulator for chain analysis =====
 
 enum private Materializer {
@@ -2052,16 +2089,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             return ""
         }
     }
-    // Literal / captured var → bind param. Inside `_having`, route to havingBindExprs to keep placeholder order.
-    if (is_const_or_captured_var(node)) {
-        if (q.inHaving) {
-            q.havingBindExprs |> push <| clone_expression(node)
-        } else {
-            q.bindExprs |> push <| clone_expression(node)
-        }
-        return "?"
-    }
     // Detect post-typer `operator==(a, none())` (qmatch shape is gone) — fixit for is_none/is_some.
+    // Must run BEFORE the bind fallthrough, otherwise `none()` would silently bind an empty placeholder.
     if (node is ExprCall) {
         let c = node as ExprCall
         let cname = string(c.name)
@@ -2077,7 +2106,16 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             }
         }
     }
-    return pred_fail(q, prog, at, "_sql: _where: unsupported expression. Got: {describe(node)}")
+    // Bind fallthrough — anything not recognized as column/operator/subquery/SQL-fn is treated as
+    // a runtime value. Splice goes through `sql_bind_to_stmt(stmt, idx, $e(node))`; daslang's
+    // typer + the catch-all `sql_bind(auto(TT))` with `concept_assert` produce the user-facing
+    // error if the type isn't bindable.
+    if (q.inHaving) {
+        q.havingBindExprs |> push <| clone_expression(node)
+    } else {
+        q.bindExprs |> push <| clone_expression(node)
+    }
+    return "?"
 }
 
 // ===== SQL function dispatch (daslang call -> SQL expression) =====
@@ -2407,79 +2445,6 @@ def private is_none_call(node : ExpressionPtr) : bool {
 }
 
 [macro_function]
-def private is_const_literal(var node : ExpressionPtr) : bool {
-    if (node == null) {
-        return false
-    }
-    if (node is ExprRef2Value) {
-        node = (node as ExprRef2Value).subexpr
-        if (node == null) {
-            return false
-        }
-    }
-    return (node is ExprConstInt || node is ExprConstInt8 || node is ExprConstInt16 || node is ExprConstInt64 ||
-            node is ExprConstUInt || node is ExprConstUInt8 || node is ExprConstUInt16 || node is ExprConstUInt64 ||
-            node is ExprConstFloat || node is ExprConstDouble || node is ExprConstBool || node is ExprConstString ||
-            node is ExprConstEnumeration || node is ExprConstBitfield)
-}
-
-[macro_function]
-def private format_const_as_sql_literal(var node : ExpressionPtr) : string {
-    if (node is ExprRef2Value) {
-        node = (node as ExprRef2Value).subexpr
-    }
-    if (node is ExprConstInt) {
-        return "{(node as ExprConstInt).getValue}"
-    }
-    if (node is ExprConstInt8) {
-        return "{(node as ExprConstInt8).getValue}"
-    }
-    if (node is ExprConstInt16) {
-        return "{(node as ExprConstInt16).getValue}"
-    }
-    if (node is ExprConstInt64) {
-        return "{(node as ExprConstInt64).getValue}"
-    }
-    if (node is ExprConstUInt) {
-        return "{(node as ExprConstUInt).getValue}"
-    }
-    if (node is ExprConstUInt8) {
-        return "{(node as ExprConstUInt8).getValue}"
-    }
-    if (node is ExprConstUInt16) {
-        return "{(node as ExprConstUInt16).getValue}"
-    }
-    if (node is ExprConstUInt64) {
-        return "{(node as ExprConstUInt64).getValue}"
-    }
-    if (node is ExprConstFloat) {
-        return "{(node as ExprConstFloat).getValue}"
-    }
-    if (node is ExprConstDouble) {
-        return "{(node as ExprConstDouble).getValue}"
-    }
-    if (node is ExprConstBool) {
-        return (node as ExprConstBool).getValue ? "1" : "0"
-    }
-    if (node is ExprConstString) {
-        let raw = string((node as ExprConstString).value)
-        // SQLite-quoted: wrap in single quotes, double any embedded `'`.
-        let doubled = raw |> replace("'", "''")
-        return "'{doubled}'"
-    }
-    if (node is ExprConstEnumeration) {
-        // Emit underlying integer (matches SQLite's INTEGER cell, name string is meaningless).
-        let c = node as ExprConstEnumeration
-        let value = find_enum_value(unsafe(reinterpret<EnumerationPtr> c._type.enumType), string(c.value))
-        return "{value}"
-    }
-    if (node is ExprConstBitfield) {
-        return "{(node as ExprConstBitfield).getValue}"
-    }
-    return ""
-}
-
-[macro_function]
 def private next_bind_placeholder(sql : string) : int {
     return next_placeholder(sql)._0
 }
@@ -2514,49 +2479,6 @@ def private next_placeholder(sql : string) : tuple<int; uint8> {
         }
     }
     return (found_pos, found_ch)
-}
-
-[macro_function]
-def private inline_binds_into_sql(sql : string; var ordered_binds : array<ExpressionPtr>) : string {
-    var rest = sql
-    return build_string() $(var w) {
-        for (i in range(length(ordered_binds))) {
-            let pos = next_bind_placeholder(rest)
-            if (pos < 0) {
-                w |> write(rest)
-                rest = ""
-                break
-            }
-            w |> write(rest |> slice(0, pos))
-            w |> write(format_const_as_sql_literal(ordered_binds[i]))
-            rest = rest |> slice(pos + 1)
-        }
-        w |> write(rest)
-    }
-}
-
-[macro_function]
-def private is_const_or_captured_var(var node : ExpressionPtr) : bool {
-    if (node == null) {
-        return false
-    }
-    if (node is ExprRef2Value) {
-        node = (node as ExprRef2Value).subexpr
-        if (node == null) {
-            return false
-        }
-    }
-    if (node is ExprConstInt || node is ExprConstInt8 || node is ExprConstInt16 || node is ExprConstInt64
-        || node is ExprConstUInt || node is ExprConstUInt8 || node is ExprConstUInt16 || node is ExprConstUInt64
-        || node is ExprConstFloat || node is ExprConstDouble || node is ExprConstBool || node is ExprConstString
-        || node is ExprConstEnumeration || node is ExprConstBitfield) {
-        return true
-    }
-    if (node is ExprVar) {
-        let v = node as ExprVar
-        return v.name != "_"   // `_` is the row, not a captured var
-    }
-    return false
 }
 
 [macro_function]
@@ -2833,7 +2755,10 @@ class private SqlCreateViewMacro : AstCallMacro {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
             return null
         }
-        // Collect binds in placeholder order (joins ON → WHERE → HAVING → LIMIT → OFFSET); each must be inlinable since CREATE VIEW rejects `?`.
+        // Collect binds in placeholder order (joins ON → WHERE → HAVING → LIMIT → OFFSET).
+        // Each bind expression goes through `_::to_sql_literal(...)` at runtime — the
+        // value is evaluated once when CREATE VIEW DDL executes and inlined into the
+        // view body text stored in sqlite_schema.
         var n_join_binds = 0
         for (j in q.joins) {
             n_join_binds += length(j.rightOnBindExprs)
@@ -2858,12 +2783,6 @@ class private SqlCreateViewMacro : AstCallMacro {
         }
         if (q.offsetBindExpr != null) {
             ordered_binds |> push(q.offsetBindExpr)
-        }
-        for (be in ordered_binds) {
-            if (!is_const_literal(be)) {
-                macro_error(prog, call.at, "_create_view: view bodies cannot reference local variables — only literal values are allowed (got `{describe(be._type)}`). Captured locals would need `?` placeholders, which SQLite rejects inside CREATE VIEW.")
-                return null
-            }
         }
         // Validate projection column count vs V's fields.
         let nFields = length(viewT.structType.fields)
@@ -2922,21 +2841,38 @@ class private SqlCreateViewMacro : AstCallMacro {
                 w |> write("\"")
             }
         }
-        let select_sql_with_placeholders = build_sql_string(q)
-        let select_sql = inline_binds_into_sql(select_sql_with_placeholders, ordered_binds)
-        let create_sql = "CREATE VIEW \"{view_name}\"({col_list}) AS {select_sql}"
-        // create_sql has all binds inlined (CREATE VIEW rejects `?`); fold to builder for AOT-uniformity.
-        var noBinds : array<ExpressionPtr>
-        var frags : array<SqlFrag>
-        sql_to_frags(create_sql, noBinds, frags)
-        var sqlExpr : ExpressionPtr
-        var bindExprs : array<ExpressionPtr>
-        fold_to_builder(frags, call.at, sqlExpr, bindExprs)
-        // Use the user's outer db argument (call.arguments[0]) — pipe-rewrite
-        // turns `db |> _create_view(...)` into `_create_view(db, ...)`, so
+        // Emit ExprStringBuilder = "CREATE VIEW … AS " + text frags interleaved with
+        // `_::to_sql_literal(<bind>)` runtime calls. `_::` resolves at the user's call
+        // site, so user-defined `to_sql_literal` overloads (for enums, structs, etc.)
+        // take precedence over the defaults shipped in this module.
+        let select_sql_template = build_sql_string(q)
+        var sb = new ExprStringBuilder(at = call.at)
+        var pending = "CREATE VIEW \"{view_name}\"({col_list}) AS "
+        var rest = select_sql_template
+        var bind_idx = 0
+        // macro_function: short-burst string accumulation, flushed into ExprConstString nodes
+        while (true) {
+            let pos = next_bind_placeholder(rest)
+            if (pos < 0) {
+                pending += rest // nolint:PERF001
+                break
+            }
+            pending += rest |> slice(0, pos) // nolint:PERF001
+            if (!empty(pending)) {
+                sb.elements |> push <| new ExprConstString(at = call.at, value := pending)
+                pending = ""
+            }
+            sb.elements |> push <| qmacro(_::to_sql_literal($e(ordered_binds[bind_idx])))
+            rest = rest |> slice(pos + 1)
+            bind_idx++
+        }
+        if (!empty(pending)) {
+            sb.elements |> push <| new ExprConstString(at = call.at, value := pending)
+        }
+        // Pipe-rewrite turns `db |> _create_view(...)` into `_create_view(db, ...)` —
         // arg 0 is exactly what the user wrote.
         var dbExpr = clone_expression(call.arguments[0])
-        var res = qmacro(_::exec($e(dbExpr), $e(sqlExpr)))
+        var res = qmacro(_::exec($e(dbExpr), $e(sb)))
         res.force_at(call.at)
         return res
     }
