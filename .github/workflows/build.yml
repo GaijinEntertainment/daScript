@@ -49,7 +49,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       das_dll_build: 'NO'
-      das_llvm_disabled: ${{ github.event_name == 'release' && 'ON' || 'OFF' }}
+      das_llvm_disabled: 'OFF'
     strategy:
       fail-fast: false
       matrix:
