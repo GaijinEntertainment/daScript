@@ -691,20 +691,21 @@ foundation.
 - **`_create_view(db, type<V>, chain)` call macro.** Validates: `type<V>`
   carries `[sql_view]`; chain projection's column count matches V's
   field count; per-position type matches V's field type (compared via
-  `describe()`); chain has no bound-parameter expressions (SQLite
-  rejects `?` placeholders inside CREATE VIEW). Emits `db |> exec(...)`
-  with the view's column list using V's field names (and `@sql_column`
-  renames) authoritative.
+  `describe()`). Emits `db |> exec(...)` with the view's column list
+  using V's field names (and `@sql_column` renames) authoritative.
 - **Runtime-stringifier inlining** for `_create_view`: each bind expression
   goes through `_::to_sql_literal(<expr>)` at view-creation time, with the
   resulting literal concatenated into the DDL stored in `sqlite_schema`.
   Default overload set covers all numeric primitives, `bool`, and `string`
   (the `string` arm uses `sql_quote_lit`); float/double use round-trip-safe
-  `%.9g` / `%.17g`. Captured locals work; the value is frozen at
-  view-creation time. User types extend with a one-line overload
-  (`def to_sql_literal(s : Status) : string => "{int(s)}"`); resolution at
-  the call site picks them up via `_::`. Types without an overload fail
-  with daslang's "no matching overload for to_sql_literal".
+  `%.9g` / `%.17g`. Captured locals, struct fields, and function calls all
+  work; the value is frozen at view-creation time. User types extend with
+  a one-line overload (`def to_sql_literal(s : Status) : string =>
+  "{int(s)}"`); resolution at the call site picks them up via `_::`.
+  Types without an overload hit the `to_sql_literal(auto(TT))` catch-all
+  in `sqlite_linq.das`, which emits enums as `int(v)` and otherwise
+  `concept_assert`s with a "define a one-line overload in YourType's
+  module" pointer (40103).
 - **`drop_view_if_exists(type<V>)` / `try_drop_view_if_exists`** template
   wrappers.
 - Tutorial: [tutorials/sql/31-views.das](../../tutorials/sql/31-views.das).

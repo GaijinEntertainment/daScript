@@ -59,8 +59,10 @@ def _first(arr : array<auto(TT)>) : TT -const -& {
 // per bound expression; `_::` resolves at the user's call site, so a user can extend
 // the set with their own one-liner overload (`def to_sql_literal(s : Status) : string => "{int(s)}"`).
 //
-// Defaults cover all numeric primitives, bool, and string. Wrong types fall through
-// to daslang's "no matching overload" error — informative, no special macro plumbing.
+// Defaults cover all numeric primitives, bool, and string. Enums are handled by
+// the `to_sql_literal(auto(TT))` catch-all below (emitted as their underlying
+// integer); other types hit the catch-all's `concept_assert` with a "define a
+// one-line overload in YourType's module" pointer.
 
 def to_sql_literal(v : int)    : string => "{v}"
 def to_sql_literal(v : int8)   : string => "{v}"
