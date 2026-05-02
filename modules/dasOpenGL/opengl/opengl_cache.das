@@ -92,6 +92,8 @@ def public reset_opengl_cache : bool {
         }
         fnt = null
     }
-    delete fonts
+    unsafe {
+        delete fonts
+    }
     return true
 }
