@@ -2,7 +2,7 @@ options gen2
 
 // _create_view shape errors. Each block triggers exactly one macro_error
 // (40104) from `SqlCreateViewMacro`.
-expect 40104:7
+expect 40104:6
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -65,14 +65,10 @@ def main {
         db |> _create_view(type<BadType>, db |> select_from(type<Car>))
         // 4. type<V> lacks [sql_view]
         db |> _create_view(type<NotAView>, db |> select_from(type<Car>))
-        // 5. captured-local in chain — bound parameters not allowed in CREATE VIEW
-        let cutoff = 200
-        db |> _create_view(type<CarName3>,
-            db |> select_from(type<Car>) |> _where(_.Price >= cutoff))
-        // 6. _to_array() terminal — redundant for a view
+        // 5. _to_array() terminal — redundant for a view
         db |> _create_view(type<CarName3>,
             db |> select_from(type<Car>) |> _to_array())
-        // 7. runtime _order_by(string) — column name would be baked at view-creation
+        // 6. runtime _order_by(string) — column name would be baked at view-creation
         let runtime_col = "Price"
         db |> _create_view(type<CarName3>,
             db |> select_from(type<Car>) |> _order_by(runtime_col))

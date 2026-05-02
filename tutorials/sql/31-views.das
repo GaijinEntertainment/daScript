@@ -157,20 +157,38 @@ def main {
 // same message. Real mutating workflows update the underlying tables
 // (Customer / Order here) and re-query the view to see the new state.
 
-// --- Bound-parameter limitation ---------------------------------------
+// --- Captured locals via `to_sql_literal` -------------------------------
 //
-// SQLite stores view bodies as text in `sqlite_schema`, so `?`
-// placeholders are not allowed inside a view definition. `_create_view`
-// rejects chains that reference captured locals:
+// SQLite stores view bodies as text in `sqlite_schema` and rejects `?`
+// inside a view definition, so `_create_view` cannot use parameter binds
+// the way `_sql(...)` does. Instead it stringifies each bind expression
+// once when the CREATE VIEW DDL runs and inlines the literal into the
+// view body. Anything that's not a column ref or a recognized SQL
+// operator is treated as a bind — captured locals, struct fields,
+// function calls, arithmetic over the above:
 //
 //     let cutoff = 100
-//     db |> _create_view(type<BigOrder>,                  // ← compile error
-//         db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
-//
-// Use literal values inside the view body (compile-time constants
-// inline into the SQL); apply runtime filtering at the call site:
-//
 //     db |> _create_view(type<BigOrder>,
-//         db |> select_from(type<Order>) |> _where(_.Amount >= 100))
-//     let recent <- _sql(db |> select_from(type<BigOrder>)
-//                         |> _where(_.Amount >= cutoff))   // ← bind at query
+//         db |> select_from(type<Order>) |> _where(_.Amount >= cutoff))
+//     // sqlite_schema now stores: ... WHERE "Amount" >= 100
+//
+//     struct Cfg { threshold : int }
+//     let cfg = Cfg(threshold = 200)
+//     db |> _create_view(type<HugeOrder>,
+//         db |> select_from(type<Order>) |> _where(_.Amount >= cfg.threshold))
+//
+// The value is FROZEN at view-creation time. Changing `cutoff` later
+// does not update the view; drop and re-create to re-bake.
+//
+// All numeric primitives, `bool`, and `string` work out of the box.
+// User types extend by supplying a one-line `to_sql_literal` overload:
+//
+//     enum Status { Pending = 1; Shipped = 2 }
+//     def to_sql_literal(s : Status) : string => "{int(s)}"
+//
+//     let want = Status.Shipped
+//     db |> _create_view(type<ShippedOrders>,
+//         db |> select_from(type<Order>) |> _where(_.StatusVal == want))
+//
+// Runtime filtering still uses `_sql(...)` with normal `?`-binds at the
+// query site — `?` placeholders are fine in SELECTs, just not in DDL.

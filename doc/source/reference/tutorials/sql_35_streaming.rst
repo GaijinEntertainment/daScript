@@ -114,8 +114,7 @@ FullRow streams structs:
 Captured locals in predicates
 =============================
 
-Unlike ``_create_view`` (:ref:`tut 31 <tutorial_sql_views>`),
-``_each_sql`` accepts captured locals in the chain --- they bind to
+``_each_sql`` accepts captured locals in the chain and binds them to
 the prepared statement at run time via the standard ``?`` placeholder
 mechanism:
 
@@ -126,6 +125,13 @@ mechanism:
                          |> _where(_.Severity >= cutoff))) {
         to_log(LOG_INFO, "  bound-cutoff: id={e.Id}\n")
     }
+
+This is **re-evaluated per query**: change ``cutoff`` between calls and
+each ``_each_sql`` run picks up the new value. Contrast with
+``_create_view`` (:ref:`tut 31 <tutorial_sql_views>`), which **freezes**
+the captured value into the view body at view-creation time --- SQLite
+forbids ``?`` placeholders in DDL, so views inline values once via
+``to_sql_literal`` rather than re-binding per query.
 
 When to pick ``_each_sql`` vs ``_sql``
 ======================================

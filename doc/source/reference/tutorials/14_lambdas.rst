@@ -26,6 +26,9 @@ Simplified syntax with ``=>``::
 
   var add <- @(a, b : int) : int => a + b
 
+Top-level functions accept the same arrow form — see
+:ref:`Single-expression body <functions_single_expression_body>`.
+
 Call syntax
 ===========
 

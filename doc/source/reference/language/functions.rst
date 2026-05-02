@@ -65,6 +65,36 @@ The return type can be specified explicitly with ``:`` or ``->`` — both are eq
     }
 
 
+.. _functions_single_expression_body:
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Single-expression body
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A function whose body is a single expression can use ``=>`` (arrow) form
+instead of a brace block:
+
+.. code-block:: das
+
+    def add(a, b : int) : int => a + b
+    def greeting(name : string) : string => "hello, {name}"
+
+The return type may be omitted; it is inferred from the expression:
+
+.. code-block:: das
+
+    def succ(x : int) => x + 1
+
+Move-return uses ``=> <-``:
+
+.. code-block:: das
+
+    def make_arr() : array<int> => <- [1, 2, 3]
+
+This mirrors the lambda inline-arrow form (see :ref:`tutorial 14 <tutorial_lambdas>`)
+and desugars to ``{ return expr }``.
+
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Publicity
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

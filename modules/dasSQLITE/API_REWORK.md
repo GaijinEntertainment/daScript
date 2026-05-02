@@ -691,16 +691,21 @@ foundation.
 - **`_create_view(db, type<V>, chain)` call macro.** Validates: `type<V>`
   carries `[sql_view]`; chain projection's column count matches V's
   field count; per-position type matches V's field type (compared via
-  `describe()`); chain has no bound-parameter expressions (SQLite
-  rejects `?` placeholders inside CREATE VIEW). Emits `db |> exec(...)`
-  with the view's column list using V's field names (and `@sql_column`
-  renames) authoritative.
-- **Literal-inlining** for `_create_view`: chain bind-exprs that are
-  `ExprConst*` (Int/Bool/Float/Double/String with `'` doubling) are
-  formatted into the SQL text; captured locals rejected with a clear
-  pointer at the literal-only requirement. Acknowledged as a hack for
-  this chunk; replacement design is the SQL-fragment refactor
-  (deferred — see "Carried" below).
+  `describe()`). Emits `db |> exec(...)` with the view's column list
+  using V's field names (and `@sql_column` renames) authoritative.
+- **Runtime-stringifier inlining** for `_create_view`: each bind expression
+  goes through `_::to_sql_literal(<expr>)` at view-creation time, with the
+  resulting literal concatenated into the DDL stored in `sqlite_schema`.
+  Default overload set covers all numeric primitives, `bool`, and `string`
+  (the `string` arm uses `sql_quote_lit`); float/double use round-trip-safe
+  `%.9g` / `%.17g`. Captured locals, struct fields, and function calls all
+  work; the value is frozen at view-creation time. User types extend with
+  a one-line overload (`def to_sql_literal(s : Status) : string =>
+  "{int(s)}"`); resolution at the call site picks them up via `_::`.
+  Types without an overload hit the `to_sql_literal(auto(TT))` catch-all
+  in `sqlite_linq.das`, which emits enums as `int(v)` and otherwise
+  `concept_assert`s with a "define a one-line overload in YourType's
+  module" pointer (40103).
 - **`drop_view_if_exists(type<V>)` / `try_drop_view_if_exists`** template
   wrappers.
 - Tutorial: [tutorials/sql/31-views.das](../../tutorials/sql/31-views.das).
@@ -3676,6 +3681,16 @@ let big = db |> _sql(
 - **Pipeline uses a feature `_sql` can't translate.** Falls
   through to `_sql`'s normal translation-failure path;
   suggests the raw-SQL escape in the error message.
+- **Bind expression has no `to_sql_literal` overload.** The
+  macro emits `_::to_sql_literal(<bind>)`; if the bind's type
+  isn't covered by the default set (numeric / bool / string)
+  and the user has no overload in scope, the
+  `to_sql_literal(auto(TT))` catch-all in `sqlite_linq.das`
+  emits enums via `int(v)` and otherwise `concept_assert`s
+  (40103) with: *to_sql_literal: unsupported type for
+  `_create_view` body inlining. Define `def to_sql_literal(v
+  : YourType) : string` in YourType's module.* Fix: add the
+  one-line overload in the user's module.
 
 **Deferred / out of scope:**
 
