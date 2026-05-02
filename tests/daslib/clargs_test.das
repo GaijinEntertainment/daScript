@@ -77,6 +77,70 @@ struct OptionalConfig {
     name : Option<string>
 }
 
+[CommandLineArgs]
+struct PositionalConfig {
+    @clarg_positional
+    @clarg_doc = "subcommand name"
+    command : string
+
+    @clarg_positional
+    @clarg_doc = "subcommand argument"
+    command_arg : Option<string>
+
+    @clarg_doc = "project root"
+    root : string = "."
+
+    @clarg_doc = "force"
+    force : bool
+
+    @clarg_short = "v"
+    @clarg_doc = "verbose"
+    verbose : bool
+}
+
+[CommandLineArgs]
+struct PositionalArrayTailConfig {
+    @clarg_positional
+    @clarg_doc = "first arg"
+    head : string
+
+    @clarg_positional
+    @clarg_doc = "remaining args"
+    rest : array<string>
+}
+
+[CommandLineArgs]
+struct AutoHelpConfig {
+    @clarg_doc = "user name"
+    name : string
+}
+
+[CommandLineArgs]
+struct MutexConfig {
+    @clarg_mutex_group = "color"
+    color : bool
+
+    @clarg_name = "no-color"
+    @clarg_mutex_group = "color"
+    no_color : bool
+
+    @clarg_mutex_group = "verbosity"
+    quiet : bool
+
+    @clarg_mutex_group = "verbosity"
+    loud : bool
+
+    flag_outside_groups : bool
+}
+
+[CommandLineArgs]
+struct CountConfig {
+    @clarg_count
+    @clarg_short = "v"
+    @clarg_doc = "verbosity"
+    verbose : int
+}
+
 [test]
 def test_string_flag(t : T?) {
     var cfg = Config()
@@ -516,4 +580,238 @@ def test_optional_int_invalid_value(t : T?) {
     let err = parse_args(cfg, a)
     t |> success(err != "", "parse fails on bad int")
     t |> success(find(err, "--count") != -1, "error mentions flag name")
+}
+
+// --- Positional arguments -------------------------------------------------
+// `@clarg_positional` lets a struct field be filled from non-flag tokens,
+// in declaration order.  Required positionals (plain `string`) error if
+// missing; optional positionals (`Option<string>`) silently default; an
+// `array<string>` positional collects all remaining tokens.
+
+[test]
+def test_positional_basic(t : T?) {
+    var cfg = PositionalConfig()
+    let a <- ["install", "dasImgui"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.command, "install")
+    t |> success(cfg.command_arg |> is_some, "command_arg present")
+    t |> equal(cfg.command_arg |> unwrap, "dasImgui")
+}
+
+[test]
+def test_positional_only_required(t : T?) {
+    var cfg = PositionalConfig()
+    let a <- ["list"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.command, "list")
+    t |> success(cfg.command_arg |> is_none, "command_arg absent")
+}
+
+[test]
+def test_positional_missing_required(t : T?) {
+    var cfg = PositionalConfig()
+    let a : array<string>
+    let err = parse_args(cfg, a)
+    t |> success(err != "", "parse fails when required positional missing")
+    t |> success(find(err, "command") != -1, "error mentions positional name")
+}
+
+[test]
+def test_positional_mixed_with_flags(t : T?) {
+    var cfg = PositionalConfig()
+    let a <- ["--root", "/tmp", "install", "dasImgui", "--force"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.command, "install")
+    t |> equal(cfg.command_arg |> unwrap, "dasImgui")
+    t |> equal(cfg.root, "/tmp")
+    t |> success(cfg.force, "force flag set")
+}
+
+[test]
+def test_positional_equals_form_flag_no_consumption(t : T?) {
+    // `--root=/tmp` MUST NOT consume `install` as the flag value.
+    var cfg = PositionalConfig()
+    let a <- ["--root=/tmp", "install"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.root, "/tmp")
+    t |> equal(cfg.command, "install")
+    t |> success(cfg.command_arg |> is_none, "no second positional")
+}
+
+[test]
+def test_positional_short_flag_with_value(t : T?) {
+    // Space-separated short flag form takes the next token as value.
+    var cfg = PositionalConfig()
+    let a <- ["-v", "install", "foo"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> success(cfg.verbose, "verbose set")
+    t |> equal(cfg.command, "install")
+    t |> equal(cfg.command_arg |> unwrap, "foo")
+}
+
+[test]
+def test_positional_unknown_flag_skipped(t : T?) {
+    // Unknown `--unknown` is silently dropped, NOT treated as positional.
+    var cfg = PositionalConfig()
+    let a <- ["--unknown", "install"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.command, "install")
+}
+
+[test]
+def test_positional_array_tail(t : T?) {
+    var cfg = PositionalArrayTailConfig()
+    let a <- ["a", "b", "c", "d"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.head, "a")
+    t |> equal(cfg.rest, ["b", "c", "d"])
+}
+
+[test]
+def test_positional_array_tail_empty(t : T?) {
+    var cfg = PositionalArrayTailConfig()
+    let a <- ["only"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.head, "only")
+    t |> equal(length(cfg.rest), 0)
+}
+
+[test]
+def test_positional_help_renders_usage(t : T?) {
+    let info = get_command_info(type<PositionalConfig>)
+    let help = format_help(info, "test")
+    t |> success(find(help, "<command>") != -1, "required positional in usage")
+    t |> success(find(help, "[<command_arg>]") != -1, "optional positional bracketed in usage")
+    t |> success(find(help, "Positional arguments:") != -1, "positionals section header")
+}
+
+// --- Auto --help / -h -----------------------------------------------------
+// `parse_args_with_help` is auto-generated when the user did not declare
+// their own `--help` / `-h` flag.  It returns -1 on clean parse, 0 on help,
+// 1 on parse error.
+
+[test]
+def test_auto_help_long(t : T?) {
+    // format_help_with_auto_help injects --help / -h into the help table when
+    // the user did not declare their own (AutoHelpConfig has none).
+    let info = get_command_info(type<AutoHelpConfig>)
+    let help = format_help_with_auto_help(info, "test")
+    t |> success(find(help, "--help") != -1, "auto-injected --help row")
+    t |> success(find(help, "-h, --help") != -1, "auto-injected -h short alias")
+}
+
+[test]
+def test_auto_help_user_help_no_inject(t : T?) {
+    // ShortFlagsConfig (defined above) declares its OWN help field; auto-help
+    // must NOT add a duplicate row.
+    let info = get_command_info(type<ShortFlagsConfig>)
+    let help = format_help_with_auto_help(info, "test")
+    // count occurrences of "--help" — should be exactly 1 (the user's one).
+    var n = 0
+    var search_from = 0
+    while (true) {
+        let idx = find(help, "--help", search_from)
+        if (idx == -1) {
+            break
+        }
+        n++
+        search_from = idx + 1
+    }
+    t |> equal(n, 1, "exactly one --help row")
+}
+
+// --- Mutex groups ---------------------------------------------------------
+
+[test]
+def test_mutex_group_one_member(t : T?) {
+    var cfg = MutexConfig()
+    let a <- ["--color"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> success(cfg.color, "color set")
+    t |> success(!cfg.no_color, "no_color clear")
+}
+
+[test]
+def test_mutex_group_violation(t : T?) {
+    var cfg = MutexConfig()
+    let a <- ["--color", "--no-color"]
+    let err = parse_args(cfg, a)
+    t |> success(err != "", "mutex violation reported")
+    t |> success(find(err, "--color") != -1, "error mentions --color")
+    t |> success(find(err, "--no-color") != -1, "error mentions --no-color")
+    t |> success(find(err, "color") != -1, "error mentions group name")
+}
+
+[test]
+def test_mutex_group_none_set(t : T?) {
+    var cfg = MutexConfig()
+    let a : array<string>
+    t |> equal(parse_args(cfg, a), "")
+}
+
+[test]
+def test_mutex_different_groups_coexist(t : T?) {
+    var cfg = MutexConfig()
+    let a <- ["--color", "--quiet"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> success(cfg.color, "color set")
+    t |> success(cfg.quiet, "quiet set")
+}
+
+[test]
+def test_mutex_help_decoration(t : T?) {
+    let info = get_command_info(type<MutexConfig>)
+    let help = format_help(info, "test")
+    t |> success(find(help, "(mutex: color)") != -1, "color group annotated")
+    t |> success(find(help, "(mutex: verbosity)") != -1, "verbosity group annotated")
+}
+
+// --- Count action ---------------------------------------------------------
+
+[test]
+def test_count_default(t : T?) {
+    var cfg = CountConfig()
+    let a : array<string>
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.verbose, 0)
+}
+
+[test]
+def test_count_long_once(t : T?) {
+    var cfg = CountConfig()
+    let a <- ["--verbose"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.verbose, 1)
+}
+
+[test]
+def test_count_short_thrice(t : T?) {
+    var cfg = CountConfig()
+    let a <- ["-v", "-v", "-v"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.verbose, 3)
+}
+
+[test]
+def test_count_mixed_long_short(t : T?) {
+    var cfg = CountConfig()
+    let a <- ["-v", "--verbose"]
+    t |> equal(parse_args(cfg, a), "")
+    t |> equal(cfg.verbose, 2)
+}
+
+[test]
+def test_count_rejects_value_form(t : T?) {
+    var cfg = CountConfig()
+    let a <- ["--verbose=2"]
+    let err = parse_args(cfg, a)
+    t |> success(err != "", "value form rejected")
+    t |> success(find(err, "--verbose") != -1, "error mentions flag")
+}
+
+[test]
+def test_count_help_decoration(t : T?) {
+    let info = get_command_info(type<CountConfig>)
+    let help = format_help(info, "test")
+    t |> success(find(help, "(repeats)") != -1, "count flag annotated as repeats")
 }
