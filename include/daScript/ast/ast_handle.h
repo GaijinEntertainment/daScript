@@ -869,14 +869,6 @@ namespace das
     struct WrapType<Handle<T>> { enum { value = true }; typedef uint64_t type; typedef uint64_t rettype; };
 
     template <typename T>
-    struct WrapArgType<Handle<T>> { typedef uint64_t type; };
-
-    // Must stay Handle<T> (not uint64_t): explicit Handle(uint64_t) makes MSVC return via CMRES,
-    // not RAX -- the FuncType cast in jit_abi.h must preserve the actual return ABI.
-    template <typename T>
-    struct WrapRetType<Handle<T>> { typedef Handle<T> type; };
-
-    template <typename T>
     struct typeName<Handle<T>> {
         static string name() {
             return string("Handle<") + typeName<T>::name() + ">";

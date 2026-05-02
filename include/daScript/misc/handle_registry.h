@@ -14,7 +14,7 @@ namespace das {
     struct Handle {
         uint64_t value = 0;   // 0 = null/invalid; encodes (gen << 32) | (idx+1)
         Handle () = default;
-        explicit Handle ( uint64_t v ) : value(v) {}
+        Handle ( uint64_t v ) : value(v) {}
         bool operator == ( Handle o ) const { return value == o.value; }
         bool operator != ( Handle o ) const { return value != o.value; }
         explicit operator bool () const { return value != 0; }
