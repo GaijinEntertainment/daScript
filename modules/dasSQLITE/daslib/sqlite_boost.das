@@ -122,10 +122,20 @@ def try_open_sqlite(path : string) : Result<SqlRunner, string> {
     //! Opens a connection to ``path`` (``:memory:`` for an in-memory DB).
     //! Returns ``ok(runner)`` on success, ``err(errmsg)`` on failure.
     //! On failure, the partial libsqlite3 handle is closed per the SQLite contract.
+    //! On success, every ``[sql_function]``-tagged function in scope is registered
+    //! against the new connection (see ``_install_sql_function_registry``); a
+    //! registration error closes the handle and surfaces as ``err(...)``.
     var db = SqlRunner()
     let rc = sqlite3_open(path, db.sqlite_handle)
     if (rc != SQLITE_OK) {
         let msg = "sqlite3_open(\"{path}\") failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_close_v2(db.sqlite_handle)
+        db.sqlite_handle = null
+        return err(msg, type<SqlRunner>)
+    }
+    let install_err = _install_sql_function_registry(db)
+    if (install_err |> is_some) {
+        let msg = install_err |> unwrap
         sqlite3_close_v2(db.sqlite_handle)
         db.sqlite_handle = null
         return err(msg, type<SqlRunner>)
@@ -3704,16 +3714,198 @@ class private RegisterFunctionMacro : AstCallMacro {
     }
 }
 
+def _try_register_function_check_rc(db : SqlRunner; name : string; fn : auto(FN);
+                                    nArgs : int;
+                                    tag0 : uint8; tag1 : uint8; tag2 : uint8; tag3 : uint8;
+                                    retTag : uint8; deterministic : bool; directonly : bool) : SqlError {
+    //! Soft variant: returns ``some(errmsg)`` instead of panicking. Used by the
+    //! ``[sql_function]`` install loop so ``try_open_sqlite`` can preserve its
+    //! ``Result`` contract.
+    let rc = sqlite3_register_function(db.sqlite_handle, name, fn, nArgs,
+        tag0, tag1, tag2, tag3,
+        retTag, deterministic, directonly)
+    if (rc != SQLITE_OK) {
+        return some("register_function('{name}') failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    }
+    return none(type<string>)
+}
+
 def _register_function_check_rc(db : SqlRunner; name : string; fn : auto(FN);
                                 nArgs : int;
                                 tag0 : uint8; tag1 : uint8; tag2 : uint8; tag3 : uint8;
                                 retTag : uint8; deterministic : bool; directonly : bool) : void {
     //! Runtime tail of the `register_function` macro. Calls the C++ trampoline-
     //! registration shim and panics with the libsqlite3 errmsg on failure.
-    let rc = sqlite3_register_function(db.sqlite_handle, name, fn, nArgs,
+    let err = _try_register_function_check_rc(db, name, fn, nArgs,
         tag0, tag1, tag2, tag3,
         retTag, deterministic, directonly)
-    if (rc != SQLITE_OK) {
-        panic("register_function('{name}') failed: {sqlite3_errmsg(db.sqlite_handle)}")
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
+def private _is_valid_sql_function_name(s : string) : bool {
+    // Accept the standard SQLite unquoted identifier shape: [A-Za-z_][A-Za-z0-9_]*.
+    // SQLite is more permissive at the C API, but anything outside this set
+    // would need quoting in the chain analyzer's emitted SQL — reject early.
+    if (empty(s)) {
+        return false
+    }
+    var ok = true
+    peek_data(s) $(arr) {
+        let c0 = int(arr[0])
+        if (!(is_alpha(c0) || c0 == '_')) {
+            ok = false
+            return
+        }
+        for (i in range(1, length(arr))) {
+            let c = int(arr[i])
+            if (!(is_alnum(c) || c == '_')) {
+                ok = false
+                return
+            }
+        }
+    }
+    return ok
+}
+
+// ===== [sql_function] — auto-registered SQLite scalar UDF, visible in `_sql` chains =====
+
+struct private SqlFunctionThunk {
+    name    : string
+    nArgs   : int
+    install : lambda<(db : SqlRunner) : SqlError>
+}
+
+var private sql_function_registry : array<SqlFunctionThunk>
+//! Compile-time-built registry of `[sql_function]` registration thunks. Populated by
+//! generated `[init]` functions via ``_add_sql_function_thunk``; iterated by
+//! ``_install_sql_function_registry`` on every ``try_open_sqlite``. Each entry carries
+//! its SQL ``name`` + ``nArgs`` so the install loop can detect cross-module collisions
+//! (SQLite dispatches by name+arity, with later registrations silently replacing earlier
+//! ones — surface that here as an explicit ``err(...)`` instead).
+
+def _add_sql_function_thunk(name : string; nArgs : int;
+                            var install : lambda<(db : SqlRunner) : SqlError>) : void {
+    //! Public entry point used by ``[sql_function]``-generated ``[init]`` blocks
+    //! to append a registration thunk to ``sql_function_registry``.
+    var entry <- SqlFunctionThunk(name = name, nArgs = nArgs, install <- install)
+    sql_function_registry |> emplace(entry)
+}
+
+def private _install_sql_function_registry(db : SqlRunner) : SqlError {
+    //! Walk the registry; bail on first failure so ``try_open_sqlite`` preserves
+    //! its ``Result`` contract (no panic, no leaked handle). Detects duplicate
+    //! ``(name, nArgs)`` registrations across modules — silent SQLite override is a
+    //! footgun, so surface it as an err.
+    var seen : table<string; bool>
+    for (thunk in sql_function_registry) {
+        let key = "{thunk.name}/{thunk.nArgs}"
+        if (key_exists(seen, key)) {
+            return some("[sql_function] duplicate registration: '{thunk.name}' with {thunk.nArgs} args is tagged in more than one place; SQLite would silently replace the earlier binding")
+        }
+        seen |> insert(key, true)
+        let err = invoke(thunk.install, db)
+        if (err |> is_some) {
+            return err
+        }
+    }
+    return none(type<string>)
+}
+
+[function_macro(name="sql_function")]
+class SqlFunctionMacro : AstFunctionAnnotation {
+    //! Marks a daslang function as a SQLite scalar UDF.
+    //! At context init the function is registered against every opened SQL connection;
+    //! inside `_sql(...)` chains, calls to the function emit `<name>(args)` SQL instead
+    //! of binding the value at compile time. Optional args: `name`, `deterministic`,
+    //! `directonly`.
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                       args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (func.fromGeneric != null) {
+            errors := "[sql_function] is not supported on generic functions; instantiate with concrete types and tag the concrete instance"
+            return false
+        }
+        let nArgs = func.arguments |> length
+        if (nArgs > 4) {
+            errors := "[sql_function]: SQLite scalar functions support up to 4 arguments; got {nArgs}"
+            return false
+        }
+        var tags : array<uint8>
+        tags |> reserve(4)
+        for (i in range(nArgs)) {
+            let r = sql_fn_tag_for_type(func.arguments[i]._type)
+            if (!r.ok) {
+                errors := "[sql_function]: argument #{i + 1} of '{func.name}' has unsupported type '{describe(func.arguments[i]._type)}' — supported: int, int64, float, double, bool, string"
+                return false
+            }
+            tags |> push(r.tag)
+        }
+        while (tags |> length < 4) {
+            tags |> push(uint8(0))
+        }
+        let retR = sql_fn_tag_for_type(func.result)
+        if (!retR.ok) {
+            errors := "[sql_function]: return type '{describe(func.result)}' of '{func.name}' is unsupported — supported: int, int64, float, double, bool, string"
+            return false
+        }
+        let funcDasName = "{func.name}"
+        var sqlName = funcDasName
+        let nameArg = args |> find_arg("name")
+        if (nameArg is tString) {
+            sqlName = nameArg as tString
+            if (empty(sqlName)) {
+                errors := "[sql_function]: name= cannot be empty"
+                return false
+            }
+            if (!_is_valid_sql_function_name(sqlName)) {
+                errors := "[sql_function]: name='{sqlName}' is not a valid SQL identifier (must match [A-Za-z_][A-Za-z0-9_]*)"
+                return false
+            }
+        } elif (!(nameArg is nothing)) {
+            errors := "[sql_function]: name= must be a string literal"
+            return false
+        }
+        var deterministic = false
+        let detArg = args |> find_arg("deterministic")
+        if (detArg is tBool) {
+            deterministic = detArg as tBool
+        } elif (!(detArg is nothing)) {
+            errors := "[sql_function]: deterministic= must be a bool literal (true/false)"
+            return false
+        }
+        var directonly = false
+        let donArg = args |> find_arg("directonly")
+        if (donArg is tBool) {
+            directonly = donArg as tBool
+        } elif (!(donArg is nothing)) {
+            errors := "[sql_function]: directonly= must be a bool literal (true/false)"
+            return false
+        }
+        var reg <- setup_call_list("register`sqlite`functions", func.at, true/*isInit*/, true/*isPrivate*/)
+        let nArgsLit = int(nArgs)
+        let tag0 = tags[0]
+        let tag1 = tags[1]
+        let tag2 = tags[2]
+        let tag3 = tags[3]
+        let retTag = retR.tag
+        // Build an ExprAddr with explicit funcType so the typer resolves to OUR `func`
+        // even when an imported module exports a same-named function with a different
+        // signature (e.g. user `normalize(string)` colliding with `math::normalize(float2)`).
+        var fnType = new TypeDecl(at = func.at, baseType = Type.tFunction)
+        for (a in func.arguments) {
+            fnType.argTypes |> emplace_new <| clone_type(a._type)
+        }
+        fnType.firstType = clone_type(func.result)
+        var fnAddr = new ExprAddr(at = func.at, target := funcDasName, funcType <- fnType)
+        reg.list |> emplace_new <| qmacro_block() {
+            let thunk <- @(db : SqlRunner) : SqlError {
+                return _::_try_register_function_check_rc(db, $v(sqlName), $e(fnAddr),
+                    $v(nArgsLit), $v(tag0), $v(tag1), $v(tag2), $v(tag3),
+                    $v(retTag), $v(deterministic), $v(directonly))
+            }
+            sqlite_boost::_add_sql_function_thunk($v(sqlName), $v(nArgsLit), thunk)
+        }
+        return true
     }
 }

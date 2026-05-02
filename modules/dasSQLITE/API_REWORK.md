@@ -828,6 +828,87 @@ foundation.
   `failed_register_function.das` (5 errors — struct arg, struct
   return, pointer arg, lambda instead of `@@fn`, > 4 args).
 
+### Tut 39 follow-up — `[sql_function]` auto-registration + chain visibility
+
+`register_function` is per-connection: open a second DB and you have to
+remember to repeat the call. The `[sql_function]` annotation removes
+that ceremony AND makes the function visible inside `_sql(...)` chain
+analysis (so it can be used as a SQL predicate / projection just like
+a built-in scalar, instead of falling through to a per-row daslang
+bind).
+
+- **`[sql_function]` function annotation** in `sqlite_boost.das`. Same
+  validation rails as `register_function` (≤4 args, scalar types only,
+  `sql_fn_tag_for_type`); the auto-registration path uses the soft
+  variant `_try_register_function_check_rc` which returns `SqlError`
+  rather than panicking, so `try_open_sqlite` can surface a failed
+  registration as `err(...)` instead of an unwound stack. Optional args:
+  `name`, `deterministic`, `directonly`.
+- **Compile-time-built lambda registry.** The macro emits a thunk
+  (`@(db : SqlRunner) : SqlError { return _try_register_function_check_rc(
+  db, "name", @@fn, ...) }`) and pipes it into the private
+  `sql_function_registry` array (of `SqlFunctionThunk` entries carrying
+  SQL `name` + `nArgs` alongside the install closure) via the public
+  `_add_sql_function_thunk(name, nArgs, thunk)` adder, all inside an
+  `[init]` block built by `setup_call_list("register`sqlite`functions",
+  at, true, true)` — same mechanism `[live_command]` and `[decs]` use.
+  The registry itself stays module-private; user-module init blocks reach
+  it only through the adder. The install loop deduplicates `(name, arity)`
+  across modules — silent SQLite override is a footgun, surface as err.
+- **Auto-installation hook in `try_open_sqlite`.** After
+  `sqlite3_open` returns OK, `_install_sql_function_registry(db)`
+  walks the registry and registers every thunk against the new
+  connection. Single hook covers `try_open_sqlite`, `open_sqlite`,
+  and `with_sqlite`. ATTACH DATABASE shares the same `sqlite3*`
+  handle so functions stay visible — no second hook needed.
+- **Chain visibility in `fn_call_to_sql` + `analyze_projection`.** New
+  branch at the end of the predicate dispatch table checks
+  `find_annotation(call.func, "sql_function")`; if tagged, emits
+  `<name>(args...)` SQL. The SQL name is taken from the annotation's
+  `name` arg (defaults to the function's daslang name). The same
+  recognizer (`try_recognize_sql_function_proj`) also fires from the
+  single-column and named-tuple branches of `analyze_projection`, so
+  `_select(my_upper(_.Name))` and `_select((Loud = my_upper(_.Name),
+  Id = _.Id))` both push computed-fragment slots through the shared
+  `push_computed_proj_slot` helper (also used by the JSON-path and
+  LEFT JOIN `is_some/is_none` projection paths).
+- **Function-pointer disambiguation via explicit `funcType`.** The
+  emitted thunk uses `new ExprAddr(target, funcType)` rather than the
+  qmacro `@@$c(name)` shape so the typer resolves to the user's
+  `func` even when an imported module exports a same-named function
+  with a different signature (e.g. user `normalize(string)` colliding
+  with `math::normalize(float2)`).
+- **Coexists with manual `register_function`.** Both go through
+  `_register_function_check_rc`. Registry installs first at open;
+  later manual calls override. Use `register_function` for
+  per-connection / one-off; `[sql_function]` for ambient SQL helpers
+  visible to chain analysis.
+- **Failure modes:** generic functions rejected (no concrete name to
+  emit); unsupported arg/return types rejected per-position; >4 args
+  rejected — all surface as 30111 macro-apply failures with the
+  per-position diagnostic from the underlying tag derivation.
+- Tutorial: [tutorials/sql/32-sql_functions.das](../../tutorials/sql/32-sql_functions.das)
+  (extended with `[sql_function]` examples after the manual
+  `register_function` section).
+  Tests: `test_78_sql_function_annotation.das` (14 positive — auto-reg
+  raw SQL, chain visibility 1-arg + 2-arg, `name=` override raw +
+  chain, `deterministic=true` accepted, multiple opened DBs see same
+  function, `directonly=true` works in raw SQL + non-view chain,
+  collision with `math::normalize` resolves via `ExprAddr.funcType`,
+  single-column projection `_select(my_upper(_.Name))` + emit-shape
+  pin, named-tuple projection mixing computed and column-ref slots,
+  named-tuple with two-arg `[sql_function]`),
+  `test_79_sql_function_dup.das` (1 — install-time detection of
+  duplicate `(name, arity)` registrations, isolated file because the
+  dup poisons the registry for the whole context),
+  `failed_sql_function_annotation.das` (9 errors — struct arg,
+  pointer arg, > 4 args, struct return, empty `name=`,
+  invalid-identifier `name=`, non-string `name=`, non-bool
+  `deterministic=`, non-bool `directonly=`),
+  `failed_sql_function_in_view.das` (3 cases — `[sql_function(directonly=true)]`
+  rejected inside `_create_view` body via `pred_fail`: outer WHERE,
+  nested `_in(...)` subquery WHERE, and `_select` projection slot).
+
 ### Cumulative state after chunk 10
 
 381 (chunk 9) + 21 (chunk 10) = ~402 dasSQLITE tests passing.
@@ -860,8 +941,10 @@ foundation.
   audit semantics.
 - **Aggregate / window UDFs** — `xStep` / `xFinal` / `xValue` /
   `xInverse`. v1's `register_function` is scalar-only.
-- **`[sql_function]` annotation macro** — auto-registration on
-  connect, custom-type adapter composition.
+- **`[sql_function]` custom-type adapter composition** — base
+  `[sql_function]` shipped (auto-registration on connect + chain
+  visibility, see Tut 39 follow-up above); custom-type adapter
+  composition for non-scalar return / arg types still deferred.
 - **Updatable views via INSTEAD OF triggers.**
 - **ATTACH DATABASE** (tut 36 — independent SQLite extension).
 - **`_try_each_sql`** — Result-yielding iterator variant.

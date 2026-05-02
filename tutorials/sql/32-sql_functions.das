@@ -151,5 +151,53 @@ def main {
         //
         // The arity is positional: `register_function(db, name, fn,
         // deterministic, directonly)`. Pipe form just reorders db.
+
+        // --- Auto-registration with [sql_function] ------------------------
+        // For functions intended to be SQL-callable from anywhere, the
+        // [sql_function] annotation removes the per-connection ceremony AND
+        // makes the function visible inside `_sql(...)` chain analysis.
+        // See the tagged definitions at the bottom of this file:
+        //   - normalize    — tagged [sql_function]
+        //   - score        — tagged [sql_function(deterministic=true)]
+        //   - sql_event    — tagged [sql_function(name="event_id")]
+        // No `register_function` call needed — the open hook installs them.
+        let upper_first = db |> query_scalar(
+            "SELECT normalize(Name) FROM Enemies ORDER BY Id LIMIT 1",
+            type<string>)
+        to_log(LOG_INFO, "normalize(first enemy name): {upper_first}\n")
+
+        // Inside an _sql chain — the analyzer emits `score("Hp", "Armor")`
+        // as SQL, instead of binding a per-row daslang result.
+        let strong_rows <- _sql(db |> select_from(type<Enemy>)
+            |> _where(score(_.Hp, _.Armor) >= 100.0lf)
+            |> _to_array)
+        to_log(LOG_INFO, "enemies with score >= 100: {length(strong_rows)}\n")
+
+        // Name override — daslang `sql_event` registers as SQL `event_id`.
+        let evid = db |> query_scalar(
+            "SELECT event_id('boss-spawn')", type<int>)
+        to_log(LOG_INFO, "event_id('boss-spawn') = {evid}\n")
     }
+}
+
+// --- [sql_function] examples — auto-registered on every open() ---------
+// Same daslang/SQL type rules as register_function: int/int64/float/double/
+// bool/string only, ≤4 args, scalar return.
+
+[sql_function]
+def normalize(s : string) : string => s |> to_upper
+
+[sql_function(deterministic=true)]
+def score(hp : float; armor : int) : double {
+    return double(hp) * (1.0lf - double(armor) / 100.0lf)
+}
+
+[sql_function(name="event_id")]
+def sql_event(tag : string) : int {
+    // Trivial demo hash — real code would do something useful.
+    var h = 0
+    for (c in tag) {
+        h = h * 31 + int(c)
+    }
+    return h
 }

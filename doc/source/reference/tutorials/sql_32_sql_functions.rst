@@ -167,6 +167,65 @@ Once registered, the function is just another SQL scalar:
         "SELECT SUM(euclid(StartX, StartY, EndX, EndY)) FROM Trips",
         type<double>)
 
+Auto-registration with ``[sql_function]``
+=========================================
+
+The manual ``register_function`` call is per-connection: open a second
+DB and you have to remember to repeat the call. The ``[sql_function]``
+annotation removes that ceremony **and** makes the function visible
+inside ``_sql(...)`` chain analysis, so it can be used as a SQL
+predicate or projection just like a built-in scalar.
+
+.. code-block:: das
+
+    [sql_function]
+    def normalize(s : string) : string => s |> to_upper
+
+    [sql_function(deterministic=true)]
+    def score(hp : float; armor : int) : double {
+        return double(hp) * (1.0lf - double(armor) / 100.0lf)
+    }
+
+    [sql_function(name="event_id")]
+    def sql_event(tag : string) : int { ... }
+
+The annotation does two things at compile time:
+
+1. **Auto-registration on every open.** Each ``[sql_function]`` adds a
+   thunk to a global registry; ``open_sqlite`` (and ``with_sqlite``,
+   ``try_open_sqlite``) call ``register_function`` against the new
+   connection automatically. Every opened DB sees every tagged function.
+2. **Chain-analyzer visibility.** Inside ``_sql(...)``, calls to a
+   ``[sql_function]``-tagged function are emitted as
+   ``<name>(args...)`` SQL — SQLite calls the registered UDF in the
+   query engine, instead of falling through to a per-row daslang bind.
+
+   .. code-block:: das
+
+       let strong <- _sql(db |> select_from(type<Enemy>)
+           |> _where(score(_.Hp, _.Armor) >= 100.0lf)
+           |> _to_array)
+
+   Emits: ``SELECT ... FROM "Enemies" WHERE score("Hp", "Armor") >= ?``.
+
+Optional annotation args (all default sensibly):
+
+* ``name`` --- override the SQL-side identifier (default: the daslang
+  function name). Use when you want the daslang code to read like
+  daslang but the SQL to read like SQL --- e.g. ``sql_event`` registers
+  as ``event_id`` above.
+* ``deterministic`` --- same as ``register_function``'s positional flag
+  (default ``false``). Set true for indexable / generated-column use.
+* ``directonly`` --- same as ``register_function``'s positional flag
+  (default ``false``). Locks the function out of triggers / views /
+  ``CHECK`` constraints.
+
+**Manual ``register_function`` still works** --- it's the right tool when
+you only need the function on a specific connection, when the function
+isn't a fit for chain-analyzer use, or when you're managing UDFs by
+hand. ``[sql_function]`` is the right tool when the function should be
+ambient SQL and visible to ``_sql`` chains.
+
 Provider-specific
 =================
 
