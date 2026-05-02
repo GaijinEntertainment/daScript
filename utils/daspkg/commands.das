@@ -13,6 +13,7 @@ require daslib/json
 require daslib/json_boost
 
 require daslib/ansi_colors
+require daslib/clargs public
 
 require lockfile
 require utils
@@ -20,55 +21,59 @@ require index
 require package_runner
 
 
-struct ParsedArgs {
-    root : string
-    command : string
-    command_arg : string
+[CommandLineArgs]
+struct DaspkgArgs {
+    @clarg_positional
+    @clarg_doc = "Subcommand (install / remove / list / search / ...)"
+    command : Option<string>
+
+    @clarg_positional
+    @clarg_doc = "Argument to the subcommand (package name, search query, ...)"
+    command_arg : Option<string>
+
+    @clarg_doc = "Project root (default: current directory)"
+    root : string = "."
+
+    @clarg_doc = "Force reinstall"
     force : bool
-    json : bool
+
+    @clarg_name = "global"
+    @clarg_short = "g"
+    @clarg_doc = "Operate on global modules (das_root/modules/)"
     global_flag : bool
+
+    @clarg_short = "v"
+    @clarg_doc = "Print detailed progress"
+    verbose : bool
+
+    @clarg_doc = "Machine-readable JSON output (list, check, search)"
+    json : bool
+
+    @clarg_short = "b"
+    @clarg_doc = "Install from a branch instead of a tag"
     branch : string
+
+    @clarg_mutex_group = "color"
+    @clarg_doc = "Enable colored output"
+    color : bool
+
+    @clarg_name = "no-color"
+    @clarg_mutex_group = "color"
+    @clarg_doc = "Disable colored output"
+    no_color : bool
 }
 
-def parse_args(args : array<string>) : ParsedArgs {
-    var result = ParsedArgs(root = ".")
-    // args: [exe, script.das, --, command, ...]
-    var i = 0
-    while (i < length(args)) {
-        if (args[i] == "--") {
-            i ++
-            break
-        }
-        i ++
+// Apply parsed flags that flip module-level globals.  Called by main after
+// a successful parse so the rest of daspkg sees the right state.
+def public apply_global_flags(args : DaspkgArgs) {
+    if (args.verbose) {
+        log_verbose_flag = true
     }
-    while (i < length(args)) {
-        let arg = args[i]
-        if (arg == "--force") {
-            result.force = true
-        } elif (arg == "--color") {
-            use_tty_colors = true
-        } elif (arg == "--no-color") {
-            use_tty_colors = false
-        } elif (arg == "--json") {
-            result.json = true
-        } elif (arg == "--global" || arg == "-g") {
-            result.global_flag = true
-        } elif (arg == "--verbose" || arg == "-v") {
-            log_verbose_flag = true
-        } elif (arg == "--root" && i + 1 < length(args)) {
-            i ++
-            result.root = args[i]
-        } elif ((arg == "--branch" || arg == "-b") && i + 1 < length(args)) {
-            i ++
-            result.branch = args[i]
-        } elif (empty(result.command)) {
-            result.command = arg
-        } elif (empty(result.command_arg)) {
-            result.command_arg = arg
-        }
-        i ++
+    if (args.no_color) {
+        use_tty_colors = false
+    } elif (args.color) {
+        use_tty_colors = true
     }
-    return result
 }
 
 def cmd_list(root : string; json : bool = false; is_global : bool = false) {

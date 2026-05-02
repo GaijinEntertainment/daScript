@@ -91,50 +91,60 @@ def test_is_index_name(t : T?) {
 [test]
 def test_parse_args(t : T?) {
     t |> run("install command") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "install", "dasImgui"])
-        t |> equal(parsed.command, "install")
-        t |> equal(parsed.command_arg, "dasImgui")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["install", "dasImgui"]), "")
+        t |> equal(parsed.command ?? "", "install")
+        t |> equal(parsed.command_arg ?? "", "dasImgui")
         t |> success(!parsed.force)
     }
     t |> run("install with force") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "install", "dasImgui", "--force"])
-        t |> equal(parsed.command, "install")
-        t |> equal(parsed.command_arg, "dasImgui")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["install", "dasImgui", "--force"]), "")
+        t |> equal(parsed.command ?? "", "install")
+        t |> equal(parsed.command_arg ?? "", "dasImgui")
         t |> success(parsed.force)
     }
     t |> run("install with root") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "--root", "/tmp/proj", "install", "foo"])
-        t |> equal(parsed.command, "install")
-        t |> equal(parsed.command_arg, "foo")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["--root", "/tmp/proj", "install", "foo"]), "")
+        t |> equal(parsed.command ?? "", "install")
+        t |> equal(parsed.command_arg ?? "", "foo")
         t |> equal(parsed.root, "/tmp/proj")
     }
     t |> run("list command no arg") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "list"])
-        t |> equal(parsed.command, "list")
-        t |> success(empty(parsed.command_arg))
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["list"]), "")
+        t |> equal(parsed.command ?? "", "list")
+        t |> success(parsed.command_arg |> is_none)
     }
     t |> run("no command") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--"])
-        t |> success(empty(parsed.command))
+        var parsed = DaspkgArgs()
+        let empty_args : array<string>
+        t |> equal(parse_args(parsed, empty_args), "")
+        t |> success(parsed.command |> is_none)
     }
     t |> run("cleanup command") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup"])
-        t |> equal(parsed.command, "cleanup")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["cleanup"]), "")
+        t |> equal(parsed.command ?? "", "cleanup")
         t |> success(!parsed.force)
     }
     t |> run("cleanup with force") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup", "--force"])
-        t |> equal(parsed.command, "cleanup")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["cleanup", "--force"]), "")
+        t |> equal(parsed.command ?? "", "cleanup")
         t |> success(parsed.force)
     }
     t |> run("cleanup with global and force") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "cleanup", "--global", "--force"])
-        t |> equal(parsed.command, "cleanup")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["cleanup", "--global", "--force"]), "")
+        t |> equal(parsed.command ?? "", "cleanup")
         t |> success(parsed.force)
         t |> success(parsed.global_flag)
     }
     t |> run("default root is dot") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "list"])
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["list"]), "")
         t |> equal(parsed.root, ".")
     }
 }
@@ -1287,19 +1297,33 @@ def test_ansi_colors(t : T?) {
 }
 
 // --- parse_args color flags ---
+// Under clargs, --color/--no-color populate parsed.color/.no_color and
+// main.das's apply_global_flags flips use_tty_colors.  We test the parse +
+// apply pipeline together so the integration stays covered.
 
 [test]
 def test_parse_args_color_flags(t : T?) {
     t |> run("--color sets use_tty_colors") @(t : T?) {
         use_tty_colors = false
-        parse_args(["exe", "main.das", "--", "list", "--color"])
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["list", "--color"]), "")
+        t |> success(parsed.color, "color flag parsed")
+        apply_global_flags(parsed)
         t |> success(use_tty_colors)
         use_tty_colors = false
     }
     t |> run("--no-color clears use_tty_colors") @(t : T?) {
         use_tty_colors = true
-        parse_args(["exe", "main.das", "--", "list", "--no-color"])
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["list", "--no-color"]), "")
+        t |> success(parsed.no_color, "no_color flag parsed")
+        apply_global_flags(parsed)
         t |> success(!use_tty_colors)
+    }
+    t |> run("--color and --no-color together is mutex error") @(t : T?) {
+        var parsed = DaspkgArgs()
+        let err = parse_args(parsed, ["list", "--color", "--no-color"])
+        t |> success(!empty(err), "mutex group rejects both")
     }
 }
 
@@ -1327,18 +1351,21 @@ def test_read_manifest_rich(t : T?) {
 [test]
 def test_parse_args_global_flag(t : T?) {
     t |> run("--global flag parsed") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "install", "foo", "--global"])
-        t |> equal(parsed.command, "install")
-        t |> equal(parsed.command_arg, "foo")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["install", "foo", "--global"]), "")
+        t |> equal(parsed.command ?? "", "install")
+        t |> equal(parsed.command_arg ?? "", "foo")
         t |> success(parsed.global_flag)
     }
     t |> run("-g shorthand") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "-g", "list"])
-        t |> equal(parsed.command, "list")
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["-g", "list"]), "")
+        t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.global_flag)
     }
     t |> run("default global is false") @(t : T?) {
-        let parsed = parse_args(["daslang.exe", "main.das", "--", "install", "foo"])
+        var parsed = DaspkgArgs()
+        t |> equal(parse_args(parsed, ["install", "foo"]), "")
         t |> success(!parsed.global_flag)
     }
 }
