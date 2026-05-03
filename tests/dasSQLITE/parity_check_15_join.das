@@ -168,6 +168,62 @@ def sort_by_pair_with_orderid(var rows : array<auto(R)>) : array<R> {
     return <- rows
 }
 
+def sort_by_buyer_orderid(var rows : array<auto(R)>) : array<R> {
+    rows |> sort() <| $(a, b) {
+        if (a.Buyer != b.Buyer) {
+            return a.Buyer < b.Buyer
+        }
+        return a.OrderId < b.OrderId
+    }
+    return <- rows
+}
+
+[test]
+def parity_join_with_outer_where(t : T?) {
+    // v2.1: outer WHERE on a single _join's projected alias must filter PROJECTED rows.
+    // The WHERE peel snapshots the analyzed q in place; SQL renders as
+    // `... FROM (joinSql) AS "t0" WHERE "alias" = ?` with the alias resolved through
+    // q.fromRowType. Tuple shape: (Buyer:string, Spend:int, OrderId:int, Win:bool) →
+    // tuple<string;int;int;bool> — structurally distinct from the other tests in this file.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _join(db |> select_from(type<Order>),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (Buyer = u.Name, Spend = o.Total, OrderId = o.Id, Win = u.Active))
+                         |> _where(_.Spend > 75))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _join(db |> select_from(type<Order>),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (Buyer = u.Name, Spend = o.Total, OrderId = o.Id, Win = u.Active))
+                     |> _where(_.Spend > 75))
+        var m3 <- (users |> _join(orders,
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (Buyer = u.Name, Spend = o.Total, OrderId = o.Id, Win = u.Active))
+                         |> _where(_.Spend > 75))
+
+        m1 <- sort_by_buyer_orderid(m1)
+        m2 <- sort_by_buyer_orderid(m2)
+        m3 <- sort_by_buyer_orderid(m3)
+
+        // Alice: orders 100, 250 → both > 75. Bob: 50 → dropped. Expect 2 rows.
+        t |> equal(length(m1), 2, "join + outer WHERE Spend>75: 2 rows (Alice ×2, Bob's 50 dropped)")
+        t |> equal(length(m1), length(m2), "M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].Buyer,   m2[i].Buyer,   "row[{i}].Buyer:   M1 ≡ M2")
+            t |> equal(m1[i].Spend,   m2[i].Spend,   "row[{i}].Spend:   M1 ≡ M2")
+            t |> equal(m1[i].OrderId, m2[i].OrderId, "row[{i}].OrderId: M1 ≡ M2")
+            t |> equal(m2[i].Buyer,   m3[i].Buyer,   "row[{i}].Buyer:   M2 ≡ M3")
+            t |> equal(m2[i].Spend,   m3[i].Spend,   "row[{i}].Spend:   M2 ≡ M3")
+            t |> equal(m2[i].OrderId, m3[i].OrderId, "row[{i}].OrderId: M2 ≡ M3")
+        }
+    }
+}
+
 [test]
 def parity_right_filter_join(t : T?) {
     // Tuple shape: (UserName, OrderTotal, OrderId) → tuple<string;int;int>.

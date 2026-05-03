@@ -151,9 +151,111 @@ def parity_three_table_join(t : T?) {
     }
 }
 
-// V2 deferred: outer WHERE on a multi-join's projected alias (`_join |> _join |> _where(_.alias)`)
-// needs an additional divert in the WHERE peel. The simple "wrap when q.proj != FullRow"
-// triggers a typer cascade in linq Mode-2/3 generic instantiation; the right shape requires
-// distinguishing "first wrap" from "passthrough wrap" and threading carefully. Tracked as v2.1.
-// In the meantime, the chain compiles via _sql but errors at SQL prepare with `no such column`,
-// which surfaces the gap to the user.
+[test]
+def parity_three_table_join_with_outer_where(t : T?) {
+    // Case 2 (v2.1): outer WHERE on a multi-join's projected alias. The WHERE peel
+    // snapshots the analyzed q in place (in-place to avoid the linq Mode-2/3 typer
+    // cascade that re-analysis would tickle) and renders as
+    // `... FROM (3-table joinSql) AS "t0" WHERE "alias" = ?`, with `alias` resolved
+    // through q.fromRowType set by the snapshot.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+        var items  <- fixture_items()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _join(db |> select_from(type<Order>),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                         |> _join(db |> select_from(type<Item>),
+                                  $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                  $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                         |> _where(_.Sku == "BOOK"))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _join(db |> select_from(type<Order>),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                     |> _join(db |> select_from(type<Item>),
+                              $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                              $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                     |> _where(_.Sku == "BOOK"))
+        var m3 <- (users |> _join(orders,
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                         |> _join(items,
+                                  $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                  $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                         |> _where(_.Sku == "BOOK"))
+
+        m1 <- sort_by_user_sku(m1)
+        m2 <- sort_by_user_sku(m2)
+        m3 <- sort_by_user_sku(m3)
+
+        // Fixture has 3 BOOK items (Item 100, 102 — Item 101 is PEN, 103 is PAPER). Item 102 belongs to
+        // Order 11 (Alice, total 250); Item 100 to Order 10 (Alice, 100). Bob has no BOOK item. Expect 2 rows.
+        t |> equal(length(m1), 2, "3-table + WHERE Sku=BOOK: 2 rows")
+        t |> equal(length(m1), length(m2), "M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].UserName,   m2[i].UserName,   "row[{i}].UserName:   M1 ≡ M2")
+            t |> equal(m1[i].OrderTotal, m2[i].OrderTotal, "row[{i}].OrderTotal: M1 ≡ M2")
+            t |> equal(m1[i].Sku,        m2[i].Sku,        "row[{i}].Sku:        M1 ≡ M2")
+            t |> equal(m1[i].Qty,        m2[i].Qty,        "row[{i}].Qty:        M1 ≡ M2")
+            t |> equal(m2[i].UserName,   m3[i].UserName,   "row[{i}].UserName:   M2 ≡ M3")
+            t |> equal(m2[i].OrderTotal, m3[i].OrderTotal, "row[{i}].OrderTotal: M2 ≡ M3")
+            t |> equal(m2[i].Sku,        m3[i].Sku,        "row[{i}].Sku:        M2 ≡ M3")
+            t |> equal(m2[i].Qty,        m3[i].Qty,        "row[{i}].Qty:        M2 ≡ M3")
+            t |> equal(m1[i].Sku,        "BOOK",           "row[{i}].Sku == BOOK (predicate)")
+        }
+    }
+}
+
+[test]
+def parity_three_table_join_with_outer_where_int(t : T?) {
+    // v2.1: outer WHERE on a numeric outer-projection alias (Qty), with multi-arg AND.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+        var items  <- fixture_items()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _join(db |> select_from(type<Order>),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                         |> _join(db |> select_from(type<Item>),
+                                  $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                  $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                         |> _where(_.Qty >= 2 && _.UserName == "Alice"))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _join(db |> select_from(type<Order>),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                     |> _join(db |> select_from(type<Item>),
+                              $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                              $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                     |> _where(_.Qty >= 2 && _.UserName == "Alice"))
+        var m3 <- (users |> _join(orders,
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                         |> _join(items,
+                                  $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                  $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                         |> _where(_.Qty >= 2 && _.UserName == "Alice"))
+
+        m1 <- sort_by_user_sku(m1)
+        m2 <- sort_by_user_sku(m2)
+        m3 <- sort_by_user_sku(m3)
+
+        // Alice's items with Qty >= 2: Item 100 (BOOK, Qty 2), Item 101 (PEN, Qty 5). Two rows.
+        t |> equal(length(m1), 2, "3-table + WHERE Qty>=2 AND UserName=Alice: 2 rows")
+        t |> equal(length(m1), length(m2), "M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].UserName, m2[i].UserName, "row[{i}].UserName: M1 ≡ M2")
+            t |> equal(m1[i].Sku,      m2[i].Sku,      "row[{i}].Sku:      M1 ≡ M2")
+            t |> equal(m1[i].Qty,      m2[i].Qty,      "row[{i}].Qty:      M1 ≡ M2")
+        }
+    }
+}

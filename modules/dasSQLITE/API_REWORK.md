@@ -1321,17 +1321,35 @@ Both v2 capabilities now ship.
 the 5 peel-divert sites + the SELECT one (which uses a tighter
 `max_outer_phase = PHASE_WHERE`) into one helper.
 
-### v2.1 deferred (next follow-up)
+### v2.1 shipped
 
-- **Outer WHERE on a multi-join's projected alias**
-  (`_join(...) |> _join(...) |> _where(_.outerProjAlias)`).
-  Currently errors at SQL prepare with `no such column: t0.<alias>`.
-  Needs the WHERE peel to detect post-projection state without
-  double-wrapping the `_select |> _where` path (which already
-  arrives wrapped via the SELECT peel divert). Naive
-  `if (q.proj != FullRow) wrap` in WHERE peel triggers a typer
-  cascade in linq Mode-2/3 generic instantiation; the right shape
-  requires distinguishing "first wrap" from "passthrough wrap".
+- **Outer WHERE on a JOIN's projected alias** —
+  `_join(...) |> _where(_.outerAlias)` and
+  `_join(_join(A, B, …), C, …) |> _where(_.outerAlias)`. The WHERE peel
+  now snapshots the analyzed q in place (`snapshot_q_to_subquery_wrap`
+  with new `fillPassthrough = true` mode) when
+  `q.seenJoin && q.proj == NamedTuple`. Discriminator skips the
+  `_select |> _where` path (`q.seenJoin` is false there — the SELECT
+  peel already wrapped via `divert_to_inner`). Using the in-place
+  snapshot helper instead of `divert_to_inner` avoids the linq Mode-2/3
+  typer cascade that re-analysis triggers (the deferred-note's
+  hypothesised "first vs passthrough wrap" distinction was a red
+  herring — re-analysis itself was the cascade trigger). The new
+  `fillPassthrough` mode mirrors `divert_to_inner`'s NamedTuple branch:
+  emit passthrough column fragments from the synthesized `fromRowType`
+  so the outer SELECT renders as
+  `SELECT "alias", … FROM (joinSql) AS "t0" WHERE "alias" = ?`.
+  Coverage:
+  - `parity_check_15_join.das parity_join_with_outer_where` — single
+    `_join` + outer WHERE on `_.Spend` (numeric predicate, 4-arg
+    projection tuple `(Buyer, Spend, OrderId, Win)`).
+  - `parity_check_15b_multi_join.das parity_three_table_join_with_outer_where`
+    — 3-table join + outer `_where(_.Sku == "BOOK")`.
+  - `parity_check_15b_multi_join.das parity_three_table_join_with_outer_where_int`
+    — 3-table join + outer `_where(_.Qty >= 2 && _.UserName == "Alice")`
+    (multi-arg AND on numeric + string aliases).
+
+### v2.1 deferred (next follow-up)
 
 - **Daslang typedef in lambda parameter type position works in
   isolation but fails in the multi-join chain context** — possibly

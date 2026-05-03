@@ -232,7 +232,8 @@ subquery" form, with the row-count change explained.
 - `parity_check_11d_skip_then_where.das` — 2 cases: skip|where, plus
   skip|where|order_desc.
 
-**v2 RESOLVED:** Both deferred capabilities below now ship.
+**v2.1 RESOLVED:** All multi-Q lowering capabilities below now ship; v2.1 closes
+the outer-WHERE-on-projected-alias gap.
 
 **v2 capabilities — shipped:**
 - **Aggregate-then-filter** — `_select` peel diverts when outer chain pinned
@@ -256,15 +257,20 @@ subquery" form, with the row-count change explained.
   `source_rootType_for_idx`'s new fromRowType fallback +
   `lookup_struct_field_type`'s new tuple-handling.
 
-**v2.1 deferred (next follow-up):**
-- **Outer WHERE on a multi-join's projected alias**
-  (`_join(...) |> _join(...) |> _where(_.outerProjAlias)`). Currently
-  errors at SQL prepare with "no such column: t0.<alias>". Needs the
-  WHERE peel to detect post-projection state without double-wrapping the
-  `_select |> _where` path (which already arrives wrapped via the SELECT
-  peel divert). Naive `if (q.proj != FullRow) wrap` triggers a typer
-  cascade in linq Mode-2/3 generic instantiation; the right shape requires
-  distinguishing "first wrap" from "passthrough wrap".
+**v2.1 capability — shipped:**
+- **Outer WHERE on a JOIN's projected alias**
+  (`_join(...) |> _where(_.alias)` and `_join(_join(A,B,...), C, ...) |> _where(_.alias)`).
+  The WHERE peel now snapshots the analyzed q in place via
+  `snapshot_q_to_subquery_wrap(q, prog, at, fillPassthrough = true)` when
+  `q.seenJoin && q.proj == NamedTuple`. Discriminator skips the
+  `_select |> _where` path (`q.seenJoin` is false there — the SELECT peel
+  already wrapped). Using the in-place snapshot helper instead of
+  `divert_to_inner` avoids the linq Mode-2/3 typer cascade that re-analysis
+  triggers; the new `fillPassthrough` mode emits passthrough column
+  fragments from the synthesized `fromRowType` so the outer WHERE renders as
+  `... FROM (joinSql) AS "t0" WHERE "alias" = …`. Coverage:
+  `parity_check_15_join.das parity_join_with_outer_where`,
+  `parity_check_15b_multi_join.das parity_three_table_join_with_outer_where[_int]`.
 
 ### F2 — `average(array<int>)` truncates in linq, promotes to double in `_sql` — RESOLVED
 
