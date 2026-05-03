@@ -14,7 +14,7 @@
 // a separate sort step that needs cloneable elements.
 //
 // See API_CHECKED.md F3 for the resolution direction.
-expect 30304:1
+// expect 30304:1
 
 options gen2
 

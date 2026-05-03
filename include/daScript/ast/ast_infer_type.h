@@ -418,6 +418,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprVar *expr) override;
         // ExprOp1
         bool isBitfieldOp(const Function *fnc) const;
+        bool hasExtraCloneFor(const TypeDeclPtr & cloneType, bool srcConst) const;
         virtual ExpressionPtr visit(ExprOp1 *expr) override;
         // ExprOp2
         bool isAssignmentOperator(const string &op);

@@ -792,7 +792,12 @@ namespace das {
             const auto &funType = fn->arguments[i]->type;
             if (!argType->isSameType(*funType, RefMatters::no, ConstMatters::no,
                                      TemporaryMatters::no, AllowSubstitute::no)) {
-                distance++;
+                distance += 100;
+            }
+            // tiebreaker: a candidate that exactly matches caller's constness
+            // is more specific than one accepting a wider const range.
+            if (funType->constant != argType->constant) {
+                distance += 1;
             }
         }
         return distance;
