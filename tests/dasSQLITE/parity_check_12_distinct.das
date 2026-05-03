@@ -51,8 +51,8 @@ def sorted_strings(var a : array<string>) : array<string> {
     return <- a
 }
 
-def sorted_int_pairs(cars : array<Car>) : array<tuple<int;int>> {
-    var pairs : array<tuple<int;int>>
+def sorted_int_pairs(cars : array<Car>) : array<tuple<int; int>> {
+    var pairs : array<tuple<int; int>>
     for (c in cars) {
         pairs |> push((c.Id, c.Price))
     }
@@ -77,7 +77,7 @@ def string_arrays_eq(a : array<string>; b : array<string>) : bool {
     return true
 }
 
-def pair_arrays_eq(a : array<tuple<int;int>>; b : array<tuple<int;int>>) : bool {
+def pair_arrays_eq(a : array<tuple<int; int>>; b : array<tuple<int; int>>) : bool {
     if (length(a) != length(b)) {
         return false
     }
