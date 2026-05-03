@@ -137,6 +137,40 @@ def spawn_island(pos : float3) {
     }
 }
 
+def spawn_river_tree(pos : float3; size : float; tiers : int; green_tint, green_shift, trunk_ratio : float) {
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, RiverTree(
+            pos = pos,
+            size = size,
+            tiers = tiers,
+            green_tint = green_tint,
+            green_shift = green_shift,
+            trunk_ratio = trunk_ratio
+        ))
+    }
+}
+
+def spawn_river_house(pos : float3; size, body_tint, roof_tint : float) {
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, RiverHouse(
+            pos = pos,
+            size = size,
+            body_tint = body_tint,
+            roof_tint = roof_tint
+        ))
+    }
+}
+
+def spawn_bonus_pickup(pos : float3; bonus_type : BonusType) {
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, BonusPickup(
+            pos = pos,
+            bonus_type = bonus_type,
+            bob_phase = random_f() * 2.0 * PI
+        ))
+    }
+}
+
 def find_safe_respawn_pos(from_pos : float3) : float3 {
     // Keep respawn roughly where player died (same Y), only nudge X to a safe lane.
     let seg = sample_river_segment(from_pos.y)
@@ -200,6 +234,70 @@ def spawn_section_objects() {
         }
         if (!placed) {
             // Skip island if only split terrain was sampled in this pass.
+        }
+    }
+    commit()
+
+    // River-side trees — denser and varied.
+    let tree_attempts = int(18.0 + random_f() * 9.0)
+    for (_i in range(tree_attempts)) {
+        if (random_f() > 0.52) {
+            continue
+        }
+        let ty = base_y + random_range(8.0, SECTION_LENGTH - 8.0)
+        let seg = sample_river_segment(ty)
+        let left_side = random_f() < 0.5
+        let bank_x = (left_side ? seg.left_bank_x : seg.right_bank_x)
+        let away = (random_f() < 0.32 ? random_range(5.2, 10.0) : random_range(1.4, 5.2))
+        let tx = bank_x + (left_side ? -away : away)
+        let tsize = random_range(0.9, 2.1)
+        let tiers = (random_f() < 0.48 ? 2 : 3)
+        let tint = random_range(0.25, 1.0)
+        let shift = random_range(-0.08, 0.08)
+        let trunk = random_range(0.35, 0.55)
+        spawn_river_tree(float3(tx, ty, 0.0), tsize, tiers, tint, shift, trunk)
+    }
+    commit()
+
+    // Occasional houses on banks.
+    let house_attempts = int(3.0 + random_f() * 3.0)
+    for (_i in range(house_attempts)) {
+        if (random_f() > 0.42) {
+            continue
+        }
+        var placed = false
+        for (_try in range(8)) {
+            let hy = base_y + random_range(12.0, SECTION_LENGTH - 12.0)
+            let seg = sample_river_segment(hy)
+            let left_side = random_f() < 0.5
+            let bank_x = (left_side ? seg.left_bank_x : seg.right_bank_x)
+            let away = random_range(2.8, 9.0)
+            let hx = bank_x + (left_side ? -away : away)
+            let hsize = random_range(0.8, 1.55)
+
+            var clear_of_trees = true
+            query() $(t : RiverTree) {
+                if (clear_of_trees) {
+                    let min_dist = hsize * 1.5 + t.size * 0.9
+                    let d2 = dist2d_sq(float3(hx, hy, 0.0), t.pos)
+                    if (d2 < min_dist * min_dist) {
+                        clear_of_trees = false
+                    }
+                }
+            }
+
+            if (!clear_of_trees) {
+                continue
+            }
+
+            let body_tint = random_range(0.0, 1.0)
+            let roof_tint = random_range(0.0, 1.0)
+            spawn_river_house(float3(hx, hy, 0.0), hsize, body_tint, roof_tint)
+            placed = true
+            break
+        }
+        if (!placed) {
+            // Skip this house when no clear spot near the bank was found.
         }
     }
     commit()
@@ -331,6 +429,8 @@ def reset_game() {
     player_invuln_timer = 0.0
     player_respawn_timer = 0.0
     player_shoot_cooldown = 0.0
+    player_multishot_timer = 0.0
+    player_fastshot_timer = 0.0
     cam_x = 0.0
     current_section = 0
     section_dist = 0.0
@@ -389,6 +489,22 @@ def update_player_input() {
     )
 }
 
+def spawn_player_bullet(pos, vel : float3) {
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, PlayerBullet(
+            pos = pos,
+            vel = vel,
+            age = 0.0
+        ))
+    }
+}
+
+def rotate_xy(v : float2; angle : float) : float2 {
+    let ca = cos(angle)
+    let sa = sin(angle)
+    return float2(v.x * ca - v.y * sa, v.x * sa + v.y * ca)
+}
+
 def update_player_shoot() {
     player_shoot_cooldown = max(player_shoot_cooldown - tick_dt, 0.0)
     let fire = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
@@ -396,15 +512,18 @@ def update_player_shoot() {
         let max_lateral = BULLET_SPEED * 0.259  // sin(15°) ≈ 0.259
         let lateral = clamp(player_vel.x, -max_lateral, max_lateral)
         let fwd = sqrt(BULLET_SPEED * BULLET_SPEED - lateral * lateral)
-        create_entity() @(eid, cmp) {
-            apply_decs_template(cmp, PlayerBullet(
-                pos = player_pos + float3(0.0, 0.8, 0.0),
-                vel = float3(lateral, fwd, 0.0),
-                age = 0.0
-            ))
+        let muzzle = player_pos + float3(0.0, 0.8, 0.0)
+        let base_dir = float2(lateral, fwd)
+        if (player_multishot_timer > 0.0) {
+            for (deg in fixed_array(-7.5, 0.0, 7.5)) {
+                let d = rotate_xy(base_dir, deg * PI / 180.0)
+                spawn_player_bullet(muzzle, float3(d.x, d.y, 0.0))
+            }
+        } else {
+            spawn_player_bullet(muzzle, float3(base_dir.x, base_dir.y, 0.0))
         }
         play_sfx(snd_shoot)
-        player_shoot_cooldown = FIRE_COOLDOWN
+        player_shoot_cooldown = (player_fastshot_timer > 0.0 ? FIRE_COOLDOWN * 0.5 : FIRE_COOLDOWN)
     }
 }
 
@@ -454,6 +573,8 @@ def update_player(var esc_just : bool) {
 
     player_respawn_timer = max(player_respawn_timer - tick_dt, 0.0)
     player_invuln_timer = max(player_invuln_timer - tick_dt, 0.0)
+    player_multishot_timer = max(player_multishot_timer - tick_dt, 0.0)
+    player_fastshot_timer = max(player_fastshot_timer - tick_dt, 0.0)
 
     // Low fuel beep
     if (player_fuel < LOW_FUEL_THRESHOLD) {
@@ -686,6 +807,15 @@ def cull_far_entities() {
     query() $(eid : EntityId; d : FuelDepot) {
         if (d.pos.y < cull_y) { to_del |> push(eid); }
     }
+    query() $(eid : EntityId; t : RiverTree) {
+        if (t.pos.y < cull_y) { to_del |> push(eid); }
+    }
+    query() $(eid : EntityId; h : RiverHouse) {
+        if (h.pos.y < cull_y) { to_del |> push(eid); }
+    }
+    query() $(eid : EntityId; b : BonusPickup) {
+        if (b.pos.y < cull_y) { to_del |> push(eid); }
+    }
     for (eid in to_del) {
         delete_entity(eid)
     }
@@ -714,7 +844,14 @@ def process_collisions() {
         find_query() $(eid : EntityId; b : EnemyBoat) {
             let r = BOAT_SIZE + BULLET_SIZE
             if (dist2d_sq(pb.pos, b.pos) < r * r) {
-                enemy_hits |> push(EnemyHitInfo(bullet_eid = b_eid, enemy_eid = eid, pos = b.pos, score_value = 100, blast_radius = BOAT_SIZE))
+                enemy_hits |> push(EnemyHitInfo(
+                    bullet_eid = b_eid,
+                    enemy_eid = eid,
+                    pos = b.pos,
+                    enemy_kind = EnemyKind.boat,
+                    score_value = 100,
+                    blast_radius = BOAT_SIZE
+                ))
                 bullet_hit = true
                 return true
             }
@@ -725,7 +862,14 @@ def process_collisions() {
             find_query() $(eid : EntityId; p : EnemyPlane) {
                 let r = PLANE_SIZE + BULLET_SIZE
                 if (dist2d_sq(pb.pos, p.pos) < r * r) {
-                    enemy_hits |> push(EnemyHitInfo(bullet_eid = b_eid, enemy_eid = eid, pos = p.pos, score_value = 150, blast_radius = PLANE_SIZE))
+                    enemy_hits |> push(EnemyHitInfo(
+                        bullet_eid = b_eid,
+                        enemy_eid = eid,
+                        pos = p.pos,
+                        enemy_kind = EnemyKind.plane,
+                        score_value = 150,
+                        blast_radius = PLANE_SIZE
+                    ))
                     bullet_hit = true
                     return true
                 }
@@ -737,7 +881,14 @@ def process_collisions() {
             find_query() $(eid : EntityId; h : EnemyHelicopter) {
                 let r = ENEMY_HELI_SIZE + BULLET_SIZE
                 if (dist2d_sq(pb.pos, h.pos) < r * r) {
-                    enemy_hits |> push(EnemyHitInfo(bullet_eid = b_eid, enemy_eid = eid, pos = h.pos, score_value = 200, blast_radius = ENEMY_HELI_SIZE))
+                    enemy_hits |> push(EnemyHitInfo(
+                        bullet_eid = b_eid,
+                        enemy_eid = eid,
+                        pos = h.pos,
+                        enemy_kind = EnemyKind.helicopter,
+                        score_value = 200,
+                        blast_radius = ENEMY_HELI_SIZE
+                    ))
                     bullet_hit = true
                     return true
                 }
@@ -757,6 +908,7 @@ def process_collisions() {
                             bullet_eid = b_eid,
                             enemy_eid = eid,
                             pos = br.pos,
+                            enemy_kind = EnemyKind.bridge,
                             score_value = 50,
                             blast_radius = (br.right_x - br.left_x) * 0.5
                         ))
@@ -772,7 +924,14 @@ def process_collisions() {
             find_query() $(eid : EntityId; d : FuelDepot) {
                 let r = FUEL_DEPOT_SIZE + BULLET_SIZE
                 if (dist2d_sq(pb.pos, d.pos) < r * r) {
-                    enemy_hits |> push(EnemyHitInfo(bullet_eid = b_eid, enemy_eid = eid, pos = d.pos, score_value = 75, blast_radius = FUEL_DEPOT_SIZE))
+                    enemy_hits |> push(EnemyHitInfo(
+                        bullet_eid = b_eid,
+                        enemy_eid = eid,
+                        pos = d.pos,
+                        enemy_kind = EnemyKind.depot,
+                        score_value = 75,
+                        blast_radius = FUEL_DEPOT_SIZE
+                    ))
                     return true
                 }
                 return false
@@ -868,6 +1027,23 @@ def process_collisions() {
             }
             play_sfx(is_bridge ? snd_bridge_destroy : snd_enemy_explode)
             score += h.score_value
+
+            let drop_chance = (
+                h.enemy_kind == EnemyKind.helicopter ? 0.75
+                    : (h.enemy_kind == EnemyKind.plane ? 0.55
+                        : (h.enemy_kind == EnemyKind.boat ? BONUS_DROP_CHANCE : 0.0))
+            )
+            if (drop_chance > 0.0 && random_f() < drop_chance) {
+                let r = random_f()
+                let bt = (
+                    r < 0.3
+                        ? BonusType.fuel
+                        : (r < 0.6 ? BonusType.multishot : (r < 0.9 ? BonusType.fastshot : BonusType.life))
+                )
+                let drop_bounds = river_clamp_x(h.pos.y)
+                let drop_x = clamp(h.pos.x, drop_bounds.x + BONUS_PICKUP_RADIUS, drop_bounds.y - BONUS_PICKUP_RADIUS)
+                spawn_bonus_pickup(float3(drop_x, h.pos.y, 0.42), bt)
+            }
         }
     }
     commit()
@@ -902,6 +1078,28 @@ def process_collisions() {
             }
         }
     }
+
+    // Player vs bonuses
+    query() $(eid : EntityId; b : BonusPickup) {
+        let r = PLAYER_SIZE + BONUS_PICKUP_RADIUS
+        if (dist2d_sq(b.pos, player_pos) < r * r) {
+            if (b.bonus_type == BonusType.fuel) {
+                player_fuel = min(player_fuel + BONUS_FUEL_AMOUNT, PLAYER_FUEL_MAX)
+                play_sfx(snd_bonus_fuel)
+            } elif (b.bonus_type == BonusType.multishot) {
+                player_multishot_timer = max(player_multishot_timer, BONUS_MULTISHOT_TIME)
+                play_sfx(snd_bonus_multishot)
+            } elif (b.bonus_type == BonusType.fastshot) {
+                player_fastshot_timer = max(player_fastshot_timer, BONUS_FASTSHOT_TIME)
+                play_sfx(snd_bonus_fastshot)
+            } else {
+                player_lives += 1
+                play_sfx(snd_bonus_life)
+            }
+            delete_entity(eid)
+        }
+    }
+    commit()
 
     // Player vs islands
     if (player_invuln_timer <= 0.0) {
@@ -1024,6 +1222,7 @@ def render_enemies(game_time : float) {
 }
 
 def render_obstacles(game_time : float) {
+    glDisable(GL_CULL_FACE)
     glUseProgram(phong_program)
     active_program = phong_program
 
@@ -1088,6 +1287,69 @@ def render_obstacles(game_time : float) {
         draw_with_phong(beacon_pos, float3(0.1, 0.1, FUEL_DEPOT_SIZE * 0.8), beacon_color)
         geo_cube |> draw_geometry_fragment()
     }
+
+    // Pine trees: trunk + stacked cones
+    query() $(t : RiverTree) {
+        let trunk_h = t.size * t.trunk_ratio
+        let trunk_pos = t.pos + float3(0.0, 0.0, trunk_h * 0.5)
+        let trunk_col = float3(0.24 + t.green_shift * 0.25, 0.18, 0.1)
+        draw_with_phong(trunk_pos, float3(0.11 * t.size, 0.11 * t.size, trunk_h), trunk_col)
+        geo_cylinder |> draw_geometry_fragment()
+
+        let tier_den = max(1, t.tiers - 1)
+        let pine_dark = float3(0.07, 0.3, 0.08)
+        let pine_light = float3(0.16, 0.52, 0.16)
+        for (ti in range(t.tiers)) {
+            let tf = float(ti) / float(tier_den)
+            let cone_h = t.size * (1.2 - tf * 0.28)
+            let cone_r = t.size * (0.72 - tf * 0.18)
+            let cone_z = trunk_h * 0.72 + tf * (t.size * 0.58) + cone_h * 0.5
+            let base_green = pine_dark * (1.0 - t.green_tint) + pine_light * t.green_tint
+            let cone_color = base_green + float3(t.green_shift * 0.35, t.green_shift * 0.1 - tf * 0.03, -t.green_shift * 0.2)
+            draw_with_phong(t.pos + float3(0.0, 0.0, cone_z), float3(cone_r, cone_r, cone_h), cone_color)
+            geo_cone |> draw_geometry_fragment()
+        }
+    }
+
+    // Houses: cube body + prism roof.
+    query() $(h : RiverHouse) {
+        let body_color_a = float3(0.75, 0.68, 0.58)
+        let body_color_b = float3(0.6, 0.67, 0.73)
+        let roof_color_a = float3(0.62, 0.23, 0.2)
+        let roof_color_b = float3(0.24, 0.28, 0.34)
+        let body_color = body_color_a * (1.0 - h.body_tint) + body_color_b * h.body_tint
+        let roof_color = roof_color_a * (1.0 - h.roof_tint) + roof_color_b * h.roof_tint
+
+        let body_h = h.size * 1.0
+        let body_pos = h.pos + float3(0.0, 0.0, body_h * 0.5)
+        draw_with_phong(body_pos, float3(h.size * 0.95, h.size * 1.1, body_h * 0.5), body_color)
+        geo_cube |> draw_geometry_fragment()
+
+        let roof_h = h.size * 0.55
+        let roof_pos = h.pos + float3(0.0, 0.0, body_h + roof_h * 0.45)
+        draw_with_phong(roof_pos, float3(h.size * 1.05, h.size * 1.18, roof_h), roof_color)
+        geo_prism |> draw_geometry_fragment()
+    }
+
+    // Bonuses: distinct silhouettes + color (not color-only).
+    query() $(b : BonusPickup) {
+        let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
+        let p = b.pos + float3(0.0, 0.0, 0.55 + bob)
+        if (b.bonus_type == BonusType.fuel) {
+            draw_with_phong(p, float3(0.28, 0.28, 0.28), float3(0.15, 0.9, 0.95))
+            geo_sphere |> draw_geometry_fragment()
+        } elif (b.bonus_type == BonusType.multishot) {
+            draw_with_phong(p, float3(0.26, 0.26, 0.36), float3(1.0, 0.45, 0.12))
+            geo_prism |> draw_geometry_fragment()
+        } elif (b.bonus_type == BonusType.fastshot) {
+            draw_with_phong(p, float3(0.23, 0.23, 0.42), float3(1.0, 0.7, 0.05))
+            geo_cone |> draw_geometry_fragment()
+        } else {
+            draw_with_phong(p, float3(0.2, 0.2, 0.36), float3(0.95, 1.0, 0.3))
+            geo_cylinder |> draw_geometry_fragment()
+        }
+    }
+    glEnable(GL_CULL_FACE)
 }
 
 def render_projectiles() {
@@ -1162,6 +1424,7 @@ def render_projectiles() {
 }
 
 def render_rotors(game_time : float) {
+    glDisable(GL_CULL_FACE)
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     glDepthMask(false)
@@ -1197,6 +1460,7 @@ def render_rotors(game_time : float) {
 
     glDepthMask(true)
     glDisable(GL_BLEND)
+    glEnable(GL_CULL_FACE)
 }
 
 def render_all(game_time : float) {

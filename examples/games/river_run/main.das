@@ -19,6 +19,8 @@ def create_gl_objects() {
     geo_cube <- create_geometry_fragment <| gen_cube()
     geo_plane_xz <- create_geometry_fragment <| gen_plane(GenDirection.xz)
     geo_cylinder <- create_geometry_fragment <| gen_cylinder(GenDirection.xy, 8)
+    geo_cone <- create_geometry_fragment <| gen_cone(GenDirection.xy, 10)
+    geo_prism <- create_geometry_fragment <| gen_prism(GenDirection.xy)
 
     cache_ttf_objects()
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
@@ -108,6 +110,9 @@ def update() {
     glClearColor(sky.x, sky.y, sky.z, 1.0)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glEnable(GL_DEPTH_TEST)
+    glEnable(GL_CULL_FACE)
+    glCullFace(GL_BACK)
+    glFrontFace(GL_CCW)
 
     let aspect = (display_h != 0 ? float(display_w) / float(display_h) : 1.0)
     v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 500.0)
@@ -141,6 +146,7 @@ def update() {
     }
 
     update_music_state()
+    update_engine_sound(game_state == GameState.playing, player_fwd_speed, PLAYER_FWD_SPEED_MAX * section_speed_mult())
 
     // Fog uniforms — set once per frame before any render
     f_FogColor = get_fog_color()
@@ -150,7 +156,9 @@ def update() {
     render_river(game_time)
     render_all(game_time)
 
+    glDisable(GL_CULL_FACE)
     draw_hud()
+    glEnable(GL_CULL_FACE)
 
     live_end_frame()
 }

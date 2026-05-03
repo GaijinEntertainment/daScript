@@ -58,7 +58,15 @@ let PLAYER_ROTOR_SIZE = 1.0
 let BULLET_SPEED = 38.0
 let BULLET_LIFETIME = 1.2
 let BULLET_SIZE = 0.12
-let FIRE_COOLDOWN = 0.18
+let FIRE_COOLDOWN = 0.312
+
+let BONUS_DROP_CHANCE = 0.33
+let BONUS_PICKUP_RADIUS = 0.9
+let BONUS_FUEL_AMOUNT = 30.0
+let BONUS_MULTISHOT_TIME = 12.0
+let BONUS_FASTSHOT_TIME = 7.0
+let BONUS_BOB_AMPLITUDE = 0.22
+let BONUS_BOB_SPEED = 2.6
 
 let ENEMY_BULLET_SPEED = 10.0
 let ENEMY_HELI_BULLET_SPEED = 18.0
@@ -107,6 +115,21 @@ let AUDIO_CHANNELS = 1
 // --- Enums ---
 
 enum GameState { menu, playing, paused, game_over_state, win_state }
+
+enum BonusType {
+    fuel
+    multishot
+    life
+    fastshot
+}
+
+enum EnemyKind {
+    boat
+    plane
+    helicopter
+    bridge
+    depot
+}
 
 // --- DECS Templates ---
 
@@ -174,6 +197,31 @@ struct Island {
 }
 
 [decs_template]
+struct RiverTree {
+    pos : float3
+    size : float
+    tiers : int
+    green_tint : float
+    green_shift : float
+    trunk_ratio : float
+}
+
+[decs_template]
+struct RiverHouse {
+    pos : float3
+    size : float
+    body_tint : float
+    roof_tint : float
+}
+
+[decs_template]
+struct BonusPickup {
+    pos : float3
+    bonus_type : BonusType
+    bob_phase : float
+}
+
+[decs_template]
 struct Particle {
     pos : float3
     vel : float3
@@ -202,6 +250,7 @@ struct EnemyHitInfo {
     bullet_eid : EntityId
     enemy_eid : EntityId
     pos : float3
+    enemy_kind : EnemyKind
     score_value : int
     blast_radius : float
 }
@@ -218,6 +267,8 @@ var @live player_fuel = PLAYER_FUEL_MAX
 var @live player_invuln_timer = 0.0
 var @live player_respawn_timer = 0.0
 var @live player_shoot_cooldown = 0.0
+var @live player_multishot_timer = 0.0
+var @live player_fastshot_timer = 0.0
 var @live cam_x = 0.0
 
 var @live current_section = 0
@@ -410,6 +461,8 @@ var geo_sphere : OpenGLGeometryFragment
 var geo_cube : OpenGLGeometryFragment
 var geo_plane_xz : OpenGLGeometryFragment
 var geo_cylinder : OpenGLGeometryFragment
+var geo_cone : OpenGLGeometryFragment
+var geo_prism : OpenGLGeometryFragment
 var hud_font : Font?
 var river_bank_geo : OpenGLGeometryFragment
 var river_surface_geo : OpenGLGeometryFragment

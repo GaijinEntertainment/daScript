@@ -13,6 +13,13 @@ var @live snd_bridge_destroy : array<float>
 var @live snd_section_clear : array<float>
 var @live snd_low_fuel_beep : array<float>
 var @live snd_game_over : array<float>
+var @live snd_bonus_fuel : array<float>
+var @live snd_bonus_multishot : array<float>
+var @live snd_bonus_life : array<float>
+var @live snd_bonus_fastshot : array<float>
+var @live snd_engine_loop : array<float>
+
+var @live engine_sid : SID = INVALID_SID
 
 var @live audio_initialized = false
 var asch : AudioSystemChannels
@@ -109,6 +116,35 @@ def init_audio_samples() {
     // game over: descending sweep
     let go_notes = fixed_array(523.0, 415.0, 330.0, 247.0, 196.0)
     snd_game_over <- build_note_sequence(go_notes, 0.13, 0.22, false)
+
+    // bonus fuel: bright 2-note up chirp
+    let bf_notes = fixed_array(440.0, 660.0)
+    snd_bonus_fuel <- build_note_sequence(bf_notes, 0.06, 0.16, true)
+
+    // bonus multishot: sharper metallic rise
+    snd_bonus_multishot <- gen_sine_sweep(700.0, 1600.0, 0.1, 0.2)
+
+    // bonus life: celebratory triad climb
+    let bl_notes = fixed_array(392.0, 523.0, 659.0)
+    snd_bonus_life <- build_note_sequence(bl_notes, 0.08, 0.2, true)
+
+    // bonus fast shot: rapid double-blip
+    snd_bonus_fastshot <- gen_sine_sweep(900.0, 1800.0, 0.06, 0.18)
+
+    // Engine rumble loop: 0.5 s periodic harmonics so the loop seam is click-free.
+    let eng_samples = int(float(AUDIO_RATE) * 0.5)
+    var inscope eng : array<float>
+    eng |> resize(eng_samples)
+    for (i in range(eng_samples)) {
+        let t = float(i) / float(AUDIO_RATE)
+        eng[i] = (
+            sin(2.0 * PI * 80.0 * t) * 0.55 +
+            sin(2.0 * PI * 160.0 * t) * 0.28 +
+            sin(2.0 * PI * 240.0 * t) * 0.12
+        ) * 0.13
+    }
+    eng[eng_samples - 1] = eng[0]
+    snd_engine_loop <- eng
 }
 
 def play_sfx(samples : array<float>) {
@@ -117,6 +153,22 @@ def play_sfx(samples : array<float>) {
     }
     var copy <- clone(samples)
     play_sound_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, copy)
+}
+
+def update_engine_sound(active : bool; speed, max_speed : float) {
+    if (!audio_initialized || engine_sid == INVALID_SID) {
+        return
+    }
+    set_pause(engine_sid, !active)
+    if (active) {
+        // Speed range PLAYER_FWD_SPEED_MIN..max_speed maps to pitch 0.75..1.55.
+        let hi = max(max_speed, PLAYER_FWD_SPEED_MIN + 0.01)
+        let t = clamp((speed - PLAYER_FWD_SPEED_MIN) / (hi - PLAYER_FWD_SPEED_MIN), 0.0, 1.0)
+        set_pitch(engine_sid, 0.75 + t * 0.80)
+        set_volume(engine_sid, 0.55, 0.05)
+    } else {
+        set_volume(engine_sid, 0.0, 0.1)
+    }
 }
 
 // --- Music ---
@@ -277,6 +329,10 @@ def init_audio() {
         asch = audio_system_create()
         audio_initialized = true
         init_audio_samples()
+        var loop_copy <- clone(snd_engine_loop)
+        engine_sid = play_sound_loop_from_pcm(AUDIO_RATE, AUDIO_CHANNELS, loop_copy)
+        set_volume(engine_sid, 0.0)
+        set_pause(engine_sid, true)
     }
     if (!music_initialized) {
         strudel_init(@@strudel_music_main)

@@ -222,6 +222,124 @@ def gen_cylinder(plt : GenDirection; sectorCount : int) {
     return <- frag
 }
 
+def gen_cone(plt : GenDirection; sectorCount : int) {
+    var frag : GeometryFragment
+    frag.vertices |> reserve(2 * (sectorCount + 1) + 2)
+    frag.indices |> reserve(sectorCount * 6)
+    var unitVertices <- get_unit_circle_veritces(sectorCount)
+
+    // side vertices
+    for (j in range(sectorCount + 1)) {
+        let u = unitVertices[j]
+        let s = float(j) / float(sectorCount)
+        frag.vertices |> push(GeometryPreviewVertex(
+            xyz = float3(u.x, u.y, -1.0),
+            normal = normalize(float3(u.x, u.y, 0.5)),
+            uv = float2(s, 1.0)
+        ))
+    }
+
+    let tip = length(frag.vertices)
+    frag.vertices |> push(GeometryPreviewVertex(
+        xyz = float3(0.0, 0.0, 1.0),
+        normal = float3(0.0, 0.0, 1.0),
+        uv = float2(0.5, 0.0)
+    ))
+
+    // base cap vertices
+    let base = length(frag.vertices)
+    for (j in range(sectorCount + 1)) {
+        let u = unitVertices[j]
+        frag.vertices |> push(GeometryPreviewVertex(
+            xyz = float3(u.x, u.y, -1.0),
+            normal = float3(0.0, 0.0, -1.0),
+            uv = float2(u.x * 0.5 + 0.5, u.y * 0.5 + 0.5)
+        ))
+    }
+
+    let center = length(frag.vertices)
+    frag.vertices |> push(GeometryPreviewVertex(
+        xyz = float3(0.0, 0.0, -1.0),
+        normal = float3(0.0, 0.0, -1.0),
+        uv = float2(0.5, 0.5)
+    ))
+
+    // side triangles
+    for (i in range(sectorCount)) {
+        frag.indices |> push(i)
+        frag.indices |> push(tip)
+        frag.indices |> push(i + 1)
+    }
+
+    // base triangles
+    for (i in range(sectorCount)) {
+        let k = base + i
+        frag.indices |> push(center)
+        frag.indices |> push(k + 1)
+        frag.indices |> push(k)
+    }
+
+    apply_gen_direction_tm(plt, frag)
+    delete unitVertices
+    frag.prim = GeometryFragmentType.triangles
+    gen_bbox(frag)
+    return <- frag
+}
+
+def gen_prism(plt : GenDirection) {
+    var frag = GeometryFragment()
+
+    let n_front = float3(0.0, -1.0, 0.0)
+    let n_back = float3(0.0, 1.0, 0.0)
+    let n_bottom = float3(0.0, 0.0, -1.0)
+    let n_left = normalize(float3(-1.0, 0.0, 1.0))
+    let n_right = normalize(float3(1.0, 0.0, 1.0))
+
+    // front cap (y = -1)
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_front, uv = float2(0.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_front, uv = float2(0.5, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_front, uv = float2(1.0, 1.0)))
+
+    // back cap (y = 1)
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_back, uv = float2(0.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_back, uv = float2(1.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_back, uv = float2(0.5, 0.0)))
+
+    // bottom rectangle
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_bottom, uv = float2(0.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_bottom, uv = float2(1.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_bottom, uv = float2(1.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_bottom, uv = float2(0.0, 1.0)))
+
+    // left slope rectangle
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, -1.0, -1.0), normal = n_left, uv = float2(0.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(-1.0, 1.0, -1.0), normal = n_left, uv = float2(1.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_left, uv = float2(1.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_left, uv = float2(0.0, 1.0)))
+
+    // right slope rectangle
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, -1.0, -1.0), normal = n_right, uv = float2(0.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, -1.0, 1.0), normal = n_right, uv = float2(1.0, 0.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(0.0, 1.0, 1.0), normal = n_right, uv = float2(1.0, 1.0)))
+    frag.vertices |> push(GeometryPreviewVertex(xyz = float3(1.0, 1.0, -1.0), normal = n_right, uv = float2(0.0, 1.0)))
+
+    frag.indices <- array<int>(
+        0, 2, 1,
+        3, 5, 4,
+        6, 8, 7,
+        8, 6, 9,
+        10, 12, 11,
+        12, 10, 13,
+        14, 16, 15,
+        16, 14, 17
+    )
+
+    apply_gen_direction_tm(plt, frag)
+    frag.prim = GeometryFragmentType.triangles
+    gen_bbox(frag)
+    return <- frag
+}
+
 def gen_cube {
     // cube ////////
     //    v6----- v5
@@ -231,7 +349,7 @@ def gen_cube {
     //  | |v7---|-|v4
     //  |/      |/
     //  v2------v3
-    var frag : GeometryFragment
+    var frag = GeometryFragment()
     frag.vertices <- [GeometryPreviewVertex(
         xyz=float3(1, 1, 1), normal=float3(0, 0, 1),  uv=float2(0, 0)), GeometryPreviewVertex(                // v0 (front)
         xyz=float3(-1, 1, 1), normal=float3(0, 0, 1),  uv=float2(1, 0)), GeometryPreviewVertex(               // v1
