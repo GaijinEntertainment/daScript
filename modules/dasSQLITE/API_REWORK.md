@@ -1283,17 +1283,61 @@ Existing canonical-order chains stay flat: `_where |> _order_by |>
 take`, single-join + post-join `_where`, set-ops, all subqueries
 (`_in`/`_any`/`_none`) — no inner subquery pushed, byte-identical SQL.
 
-### v2 deferred (separate PR)
+### v2 — shipped
 
-- **Aggregate-then-filter** (`_select(... |> sum) |> _where`) —
-  divert on `_select` (P=5), thread `q.fromRowType` through
-  `pred_to_sql` for alias-aware column resolution. Inner Q must emit
-  `AS "<alias>"` SQL aliases on grouped/named-tuple projections.
-- **Multi-join** (`_join |> _where |> _join`) — `process_join_call`
-  rework to accept inner-subquery LHS; lift the single-join restriction.
+Both v2 capabilities now ship.
 
-The v1 `divert_to_inner` emits a clear `macro_error` when the inner
-Q has a non-`FullRow` projection, pointing users at the v2 boundary.
+- **Aggregate-then-filter** (`_select(... |> sum) |> _where(_.alias)`):
+  the `_select` peel diverts when the outer chain pinned a WHERE
+  (`q.minPhaseSeen <= PHASE_WHERE`). DISTINCT / TAKE / SKIP / ORDER_BY
+  / set-op don't trigger the divert — they apply to projected output
+  in both SQL and linq positional (same semantics, no wrap needed).
+  `divert_to_inner` accepts NamedTuple / GroupedNamedTuple inner now
+  (SingleColumn / Aggregate still rejected — the outer would have no
+  named row to filter on). Inner SQL forces `AS "<alias>"` on every
+  projected column via `build_sql_string(q, force_aliases=true)` so
+  outer references resolve. Standalone Mode-1 SQL keeps the minimal
+  form (no AS) — snapshot tests are stable. `pred_to_sql` consults
+  `q.fromRowType` (synthesized by `inner_projection_type` from the
+  inner's `selectColTypes`/`groupedSelectTypes` + `projRecordNames`)
+  when `q.rootType` is null. Outer Q's `selectCols` get populated
+  with passthrough `"<alias>"` SQL fragments.
+
+- **Multi-join** (`_join(_join(A, B, …), C, …)`):
+  `process_join_call` now recurses srca into q first, detects
+  multi-join via `q.seenJoin` after recursion, and snapshots q (which
+  carries the inner _join's joins[]/whereSql/projection state) into a
+  subquery via `snapshot_q_to_subquery_wrap`. The reset clears all
+  query state (joins, projection, where, etc.) but preserves
+  context (`dbExpr`, `inView`, `hadError`). `build_sql_select`'s FROM
+  clause gains a branch: when `q.seenJoin && q.innerSql != ""`, emits
+  `FROM (<innerSql>) AS "t0" INNER JOIN ... ON ...` instead of
+  `FROM "Tab" AS "t0"`. The outer `into` projection's
+  `<lhsArg>.<alias>` resolves through `source_rootType_for_idx`'s new
+  fromRowType fallback + `lookup_struct_field_type`'s new tuple
+  branch.
+
+`maybe_divert(q, my_phase, node, prog, at, max_outer_phase)` factors
+the 5 peel-divert sites + the SELECT one (which uses a tighter
+`max_outer_phase = PHASE_WHERE`) into one helper.
+
+### v2.1 deferred (next follow-up)
+
+- **Outer WHERE on a multi-join's projected alias**
+  (`_join(...) |> _join(...) |> _where(_.outerProjAlias)`).
+  Currently errors at SQL prepare with `no such column: t0.<alias>`.
+  Needs the WHERE peel to detect post-projection state without
+  double-wrapping the `_select |> _where` path (which already
+  arrives wrapped via the SELECT peel divert). Naive
+  `if (q.proj != FullRow) wrap` in WHERE peel triggers a typer
+  cascade in linq Mode-2/3 generic instantiation; the right shape
+  requires distinguishing "first wrap" from "passthrough wrap".
+
+- **Daslang typedef in lambda parameter type position works in
+  isolation but fails in the multi-join chain context** — possibly
+  related to nested macro expansion order. Worked around in
+  `parity_check_15b_multi_join.das` by spelling the inner-tuple type
+  inline. Track separately if the typer fix becomes possible.
 
 ### Coverage
 

@@ -232,25 +232,39 @@ subquery" form, with the row-count change explained.
 - `parity_check_11d_skip_then_where.das` — 2 cases: skip|where, plus
   skip|where|order_desc.
 
-**v2 deferred:** inner-Q-with-`_select` (aggregate-then-filter:
-`_select(... |> sum) |> _where`) and multi-join
-(`_join |> _where |> _join`) require alias-aware column resolution
-in `pred_to_sql` and a `process_join_call` rework — see "v2 capabilities"
-below for the punch list.
+**v2 RESOLVED:** Both deferred capabilities below now ship.
 
-**v2 capabilities (deferred to follow-up PR):**
-- **Aggregate-then-filter** — divert on `_select` (P=5) when outer is
-  `_where` (P=2). Requires `pred_to_sql` to resolve `_.<alias>` against
-  the inner Q's projected named-tuple (a new `q.fromRowType` consult path)
-  and inner Q to emit `AS "<alias>"` SQL aliases on grouped/named-tuple
-  projections.
-- **Multi-join** (`_join |> _where |> _join`) — `process_join_call`
-  needs to accept an inner-subquery LHS (FROM `(innerSql) AS t0 JOIN ...`)
-  and the single-join restriction lifted.
-- A `divert_to_inner` v1 stub (`subQ.proj != FullRow`) currently emits
-  a clear `macro_error` pointing at this v2 boundary, so users hit the
-  v2 cases get a precise error message instead of a silent miscompute
-  or a deep typer trace.
+**v2 capabilities — shipped:**
+- **Aggregate-then-filter** — `_select` peel diverts when outer chain pinned
+  WHERE (`q.minPhaseSeen <= PHASE_WHERE`). The inner Q (with `_group_by` +
+  named/grouped projection) is snapshotted via `build_sql_string(q, true)`
+  which forces `AS "<alias>"` on every projected column; outer Q references
+  those aliases via `pred_to_sql`'s new `q.fromRowType` consult path. Outer
+  Q's `selectColSqlFragments` are populated with `"<alias>"` so the outer
+  SELECT clause emits `SELECT "alias", ... FROM (<innerSql>) AS "t0" WHERE …`.
+  DISTINCT / TAKE / SKIP / ORDER_BY / set-op don't trigger the divert
+  (they apply to projected output in both SQL and linq positional — same
+  semantics, no wrap needed).
+- **Multi-join (`_join(_join(A, B, …), C, …, into)`)** — the outer
+  `_join`'s `process_join_call` recurses into srca first; if the inner
+  recursion produced a join (`q.seenJoin == true` on return),
+  `snapshot_q_to_subquery_wrap` snapshots q (carrying the inner _join's
+  state) into an inner SQL string + bind list, then resets q so the outer
+  can install a fresh `t0`/`t1` JoinSpec on top of the wrap. `build_sql_select`
+  emits `FROM (<innerSql>) AS "t0" INNER JOIN "Ctab" AS "t1" ON …`. The outer
+  `into` projection's `<lhsArg>.<alias>` resolves through
+  `source_rootType_for_idx`'s new fromRowType fallback +
+  `lookup_struct_field_type`'s new tuple-handling.
+
+**v2.1 deferred (next follow-up):**
+- **Outer WHERE on a multi-join's projected alias**
+  (`_join(...) |> _join(...) |> _where(_.outerProjAlias)`). Currently
+  errors at SQL prepare with "no such column: t0.<alias>". Needs the
+  WHERE peel to detect post-projection state without double-wrapping the
+  `_select |> _where` path (which already arrives wrapped via the SELECT
+  peel divert). Naive `if (q.proj != FullRow) wrap` triggers a typer
+  cascade in linq Mode-2/3 generic instantiation; the right shape requires
+  distinguishing "first wrap" from "passthrough wrap".
 
 ### F2 — `average(array<int>)` truncates in linq, promotes to double in `_sql` — RESOLVED
 
