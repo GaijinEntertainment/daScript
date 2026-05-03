@@ -24,15 +24,6 @@ def create_gl_objects() {
     hud_font = cache_font("{get_das_root()}/modules/dasStbImage/fonts/droidsansmono.ttf")
 }
 
-def lock_cursor() {
-    glfwSetInputMode(live_window, int(GLFW_CURSOR), int(GLFW_CURSOR_DISABLED))
-    mouse_pos_initialized = false
-}
-
-def unlock_cursor() {
-    glfwSetInputMode(live_window, int(GLFW_CURSOR), int(GLFW_CURSOR_NORMAL))
-}
-
 // --- Camera ---
 
 def update_camera() {
@@ -57,10 +48,8 @@ def handle_menu_input() {
 
     if (game_state == GameState.menu && space_just) {
         reset_game()
-        lock_cursor()
     } elif ((game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
         reset_game()
-        lock_cursor()
     }
 }
 
@@ -74,10 +63,8 @@ def handle_pause_input() {
     }
     if (game_state == GameState.playing) {
         game_state = GameState.paused
-        unlock_cursor()
     } elif (game_state == GameState.paused) {
         game_state = GameState.playing
-        lock_cursor()
     } elif (game_state == GameState.menu) {
         pass
     }
@@ -102,6 +89,8 @@ def init() {
         current_section = 0
         cam_x = 0.0
         init_river()
+        rebuild_river_geometry()
+        river_dirty = false
     }
 }
 
@@ -169,7 +158,6 @@ def update() {
 [export]
 def shutdown() {
     shutdown_audio()
-    unlock_cursor()
     live_destroy_window()
 }
 

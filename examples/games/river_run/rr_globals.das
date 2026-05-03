@@ -85,14 +85,14 @@ let LOW_FUEL_THRESHOLD = 25.0
 
 let BRIDGE_SPAN_Z = 3.2
 let BRIDGE_GAP_WIDTH = 2.5
+let BRIDGE_HEALTH_MIN = 2
+let BRIDGE_HEALTH_MAX = 4
+let BRIDGE_HEALTH_STEP_SECTIONS = 3
 let ISLAND_SIZE_MIN = 1.0
 let ISLAND_SIZE_MAX = 2.5
 
 let PARTICLE_LIFETIME = 0.7
 let TRAIL_LIFETIME = 0.12
-
-let MOUSE_STRAFE_SENS = 0.06
-let MOUSE_SPEED_SENS = 0.03
 
 let CAM_BACK = 14.0
 let CAM_HEIGHT = 19.0
@@ -219,9 +219,6 @@ var @live player_invuln_timer = 0.0
 var @live player_respawn_timer = 0.0
 var @live player_shoot_cooldown = 0.0
 var @live cam_x = 0.0
-var @live mouse_prev_x = 0.0
-var @live mouse_prev_y = 0.0
-var mouse_pos_initialized = false
 
 var @live current_section = 0
 var @live section_dist = 0.0

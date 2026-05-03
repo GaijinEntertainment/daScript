@@ -90,7 +90,13 @@ def spawn_fuel_depot(pos : float3) {
 
 def spawn_bridge(pos : float3) {
     let seg = sample_river_segment(pos.y)
-    let bounds = float2(seg.left_bank_x, seg.right_bank_x)
+    let bounds = (
+        seg.split
+            ? (random_f() < 0.5
+                ? float2(seg.left_bank_x, seg.split_left_x)
+                : float2(seg.split_right_x, seg.right_bank_x))
+            : float2(seg.left_bank_x, seg.right_bank_x)
+    )
     let center = (bounds.x + bounds.y) * 0.5
     let width = bounds.y - bounds.x
     let gap_half = BRIDGE_GAP_WIDTH * 0.5
@@ -107,13 +113,17 @@ def spawn_bridge(pos : float3) {
             ? clamp(gap_raw, min_gap_center, max_gap_center)
             : center
     )
+    let bridge_health = min(
+        BRIDGE_HEALTH_MAX,
+        BRIDGE_HEALTH_MIN + current_section / BRIDGE_HEALTH_STEP_SECTIONS
+    )
     create_entity() @(eid, cmp) {
         apply_decs_template(cmp, Bridge(
             pos = pos,
             gap_center_x = gap_x,
             left_x = bounds.x,
             right_x = bounds.y,
-            health = 1
+            health = bridge_health
         ))
     }
 }
@@ -362,30 +372,14 @@ def update_player_input() {
         glfwGetKey(live_window, int(GLFW_KEY_DOWN)) == int(GLFW_PRESS)
     )
 
-    // Mouse delta
-    let mpos = glfwGetCursorPos(live_window)
-    let cx = mpos.x
-    let cy = mpos.y
-    var mdx = 0.0
-    var mdy = 0.0
-    if (mouse_pos_initialized) {
-        mdx = clamp(cx - mouse_prev_x, -80.0, 80.0)
-        mdy = clamp(cy - mouse_prev_y, -80.0, 80.0)
-    }
-    mouse_prev_x = cx
-    mouse_prev_y = cy
-    mouse_pos_initialized = true
-
     // Compose strafe and speed inputs
     var strafe_input = 0.0
     if (key_left) { strafe_input -= 1.0; }
     if (key_right) { strafe_input += 1.0; }
-    strafe_input += mdx * MOUSE_STRAFE_SENS
 
     var speed_input = 0.0
     if (key_up) { speed_input += 1.0; }
     if (key_down) { speed_input -= 1.0; }
-    speed_input -= mdy * MOUSE_SPEED_SENS
 
     player_vel.x += strafe_input * PLAYER_STRAFE_SPEED * tick_dt * 6.0
     player_fwd_speed = clamp(
@@ -397,10 +391,7 @@ def update_player_input() {
 
 def update_player_shoot() {
     player_shoot_cooldown = max(player_shoot_cooldown - tick_dt, 0.0)
-    let fire = (
-        glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS) ||
-        glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
-    )
+    let fire = glfwGetKey(live_window, int(GLFW_KEY_SPACE)) == int(GLFW_PRESS)
     if (fire && player_shoot_cooldown <= 0.0 && player_respawn_timer <= 0.0) {
         let max_lateral = BULLET_SPEED * 0.259  // sin(15°) ≈ 0.259
         let lateral = clamp(player_vel.x, -max_lateral, max_lateral)
@@ -542,12 +533,18 @@ def update_enemies() {
         b.shoot_timer -= tick_dt
         // Patrol
         let bounds = river_clamp_x_for(b.pos.y, b.lane_prefer_x)
-        let margin = BOAT_SIZE * 2.0
+        let lane_width = max(bounds.y - bounds.x, 0.01)
+        let margin = max(0.05, min(BOAT_SIZE * 2.0, lane_width * 0.5 - 0.08))
+        let lane_min = bounds.x + margin
+        let lane_max = bounds.y - margin
         b.vel.x = b.patrol_dir * BOAT_PATROL_SPEED * sm
         b.pos.x += b.vel.x * tick_dt
-        if (b.pos.x <= bounds.x + margin || b.pos.x >= bounds.y - margin) {
+        if (lane_min >= lane_max) {
             b.patrol_dir = -b.patrol_dir
-            b.pos.x = clamp(b.pos.x, bounds.x + margin, bounds.y - margin)
+            b.pos.x = (bounds.x + bounds.y) * 0.5
+        } elif (b.pos.x <= lane_min || b.pos.x >= lane_max) {
+            b.patrol_dir = -b.patrol_dir
+            b.pos.x = clamp(b.pos.x, lane_min, lane_max)
         }
         // Avoid islands — reverse patrol direction and back up if overlapping
         find_query() $(isle : Island) {
@@ -829,10 +826,15 @@ def process_collisions() {
             }
             return false
         }
-        // Bridges always destroyed by one hit
-        find_query() $(eid : EntityId; br : Bridge) {
+        // Bridges now take multiple hits.
+        find_query() $(eid : EntityId; var br : Bridge) {
             if (eid == h.enemy_eid) {
-                killed = true
+                if (br.health > 0) {
+                    br.health -= 1
+                    if (br.health <= 0) {
+                        killed = true
+                    }
+                }
                 return true
             }
             return false

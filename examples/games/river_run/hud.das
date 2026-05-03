@@ -51,8 +51,8 @@ def draw_hud() {
 
     if (game_state == GameState.menu) {
         draw_text_centered("RIVER RUN", cx, cy - 80, float3(0.3, 0.9, 1.0))
-        draw_text_centered("Use mouse or arrows to steer", cx, cy - 30, float3(0.8, 0.8, 0.8))
-        draw_text_centered("SPACE or LMB to fire", cx, cy, float3(0.8, 0.8, 0.8))
+        draw_text_centered("Use arrows (or A/D) to steer", cx, cy - 30, float3(0.8, 0.8, 0.8))
+        draw_text_centered("SPACE to fire", cx, cy, float3(0.8, 0.8, 0.8))
         draw_text_centered("ESC to pause", cx, cy + 28, float3(0.8, 0.8, 0.8))
         draw_text_centered("PRESS SPACE TO START", cx, cy + 74, float3(0.9, 1.0, 0.5))
         return
@@ -73,7 +73,7 @@ def draw_hud() {
     draw_fuel_bar()
 
     // Controls hint
-    draw_text("Arrows/mouse: steer  W/S: speed  SPC: fire  ESC: pause",
+    draw_text("Arrows/A,D: steer  W/S: speed  SPC: fire  ESC: pause",
         10, display_h - 54, float3(0.5, 0.5, 0.6))
 
     // Section banner
