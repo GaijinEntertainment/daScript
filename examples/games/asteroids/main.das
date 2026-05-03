@@ -23,6 +23,7 @@ require daslib/strings_boost
 require daslib/safe_addr
 require opengl/opengl_ttf
 require live_host
+require daslib/decs_boost
 
 // --- Constants ---
 
@@ -52,6 +53,7 @@ let BULLET_SPIN_MAX = 14.0
 let POWERUP_DROP_CHANCE = 0.24
 let POWERUP_LIFETIME = 9.0
 let POWERUP_PICKUP_RADIUS = 18.0
+let POWERUP_BLINK_TIME = 2.0
 let POWERUP_RAPID_FIRE_TIME = 10.0
 let POWERUP_INVULN_TIME = 10.0
 let PARTICLE_LIFETIME = 0.8
@@ -61,7 +63,8 @@ let AUDIO_CHANNELS = 1
 enum GameState { menu, playing, paused, game_over_state, win_state }
 enum PowerupType { rapid_fire, extra_life, invulnerability }
 
-struct AsteroidObj {
+[decs_template]
+struct Asteroid {
     pos : float3
     vel : float3
     rotation : float
@@ -69,7 +72,8 @@ struct AsteroidObj {
     size : float
 }
 
-struct BulletObj {
+[decs_template]
+struct Bullet {
     pos : float3
     prev_pos : float3
     vel : float3
@@ -78,7 +82,8 @@ struct BulletObj {
     lifetime : float
 }
 
-struct ParticleObj {
+[decs_template]
+struct Particle {
     pos : float3
     vel : float3
     color : float3
@@ -86,7 +91,8 @@ struct ParticleObj {
     max_life : float
 }
 
-struct PowerupObj {
+[decs_template]
+struct Powerup {
     pos : float3
     vel : float3
     kind : PowerupType
@@ -116,13 +122,17 @@ var @live wireframe_line_width = 1.8
 var tick_dt = 0.0
 var mouse_world = float3(512, 384, 0)
 
-var g_asteroids : array<AsteroidObj>
-var g_bullets : array<BulletObj>
-var g_particles : array<ParticleObj>
-var g_powerups : array<PowerupObj>
-
 var rapid_fire_timer = 0.0
 var invuln_powerup_timer = 0.0
+
+
+struct HitInfo {
+    b_eid : EntityId
+    a_eid : EntityId
+    pos : float3
+    size : float
+}
+
 
 // --- Audio ---
 
@@ -159,7 +169,7 @@ def init_audio_samples() {
 
 def gen_sine_sweep(f1, f2, dur, vol) : array<float> {
     let n = int(float(AUDIO_RATE) * dur)
-    var s : array<float>
+    var inscope s : array<float>
     s |> resize(n)
     for (i in range(n)) {
         let t = float(i) / float(AUDIO_RATE)
@@ -171,7 +181,7 @@ def gen_sine_sweep(f1, f2, dur, vol) : array<float> {
 
 def gen_noise_burst(dur, vol) : array<float> {
     let n = int(float(AUDIO_RATE) * dur)
-    var s : array<float>
+    var inscope s : array<float>
     s |> resize(n)
     var seed = 42u
     for (i in range(n)) {
@@ -192,7 +202,7 @@ def mix_into(var dst : array<float>; src : array<float>) {
 def build_note_sequence(notes : float[]; note_dur : float; volume : float; rising : bool) : array<float> {
     let total_dur = note_dur * float(length(notes))
     let total_samples = int(float(AUDIO_RATE) * total_dur)
-    var seq : array<float>
+    var inscope seq : array<float>
     seq |> resize(total_samples)
     for (ni in range(length(notes))) {
         let f1 = notes[ni]
@@ -546,27 +556,26 @@ def spawn_asteroid(pos : float3; size, speed_mult : float = 1.0) {
     let vy_abs = random_range(ASTEROID_MIN_SPEED, ASTEROID_MAX_SPEED)
     let vx = (random_f() < 0.5 ? -vx_abs : vx_abs)
     let vy = (random_f() < 0.5 ? -vy_abs : vy_abs)
-    g_asteroids |> push(AsteroidObj(
-        pos = pos,
-        vel = float3(vx, vy, 0.0) * speed_mult,
-        rotation = random_f() * 2.0 * PI,
-        rotation_speed = random_range(-2.0, 2.0),
-        size = size
-    ))
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, Asteroid(
+            pos = pos,
+            vel = float3(vx, vy, 0.0) * speed_mult,
+            rotation = random_f() * 2.0 * PI,
+            rotation_speed = random_range(-2.0, 2.0),
+            size = size
+        ))
+    }
 }
 
 def spawn_particles(origin, color : float3; count : int) {
-    g_particles |> reserve(length(g_particles) + count)
-    for (_i in range(count)) {
+    create_entities`Particle(count) $(eid : EntityId; i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
         let speed = 50.0 + random_f() * 100.0
-        g_particles |> push(ParticleObj(
-            pos = origin,
-            vel = float3(cos(angle) * speed, sin(angle) * speed, 0.0),
-            color = color,
-            lifetime = PARTICLE_LIFETIME,
-            max_life = PARTICLE_LIFETIME
-        ))
+        p.pos = origin
+        p.vel = float3(cos(angle) * speed, sin(angle) * speed, 0.0)
+        p.color = color
+        p.lifetime = PARTICLE_LIFETIME
+        p.max_life = PARTICLE_LIFETIME
     }
 }
 
@@ -598,14 +607,16 @@ def maybe_drop_powerup(pos : float3) {
     let angle = random_f() * 2.0 * PI
     let speed = 26.0 + random_f() * 20.0
     let spin = random_range(2.0, 5.0) * (random_f() < 0.5 ? -1.0 : 1.0)
-    g_powerups |> push(PowerupObj(
-        pos = pos,
-        vel = float3(cos(angle) * speed, sin(angle) * speed, 0.0),
-        kind = kind,
-        lifetime = POWERUP_LIFETIME,
-        rotation = 0.0,
-        rotation_speed = spin
-    ))
+    create_entity() @(eid, cmp) {
+        apply_decs_template(cmp, Powerup(
+            pos = pos,
+            vel = float3(cos(angle) * speed, sin(angle) * speed, 0.0),
+            kind = kind,
+            lifetime = POWERUP_LIFETIME,
+            rotation = 0.0,
+            rotation_speed = spin
+        ))
+    }
 }
 
 def apply_powerup(kind : PowerupType) {
@@ -639,6 +650,16 @@ def spawn_wave(wave : int) {
 }
 
 def reset_game() {
+    // Clear all entities by deleting them
+    var inscope to_delete : array<EntityId>
+    query() $(eid : EntityId) {
+        to_delete |> push(eid)
+    }
+    for (eid in to_delete) {
+        delete_entity(eid)
+    }
+    commit()
+
     score = 0
     lives = 3
     wave_number = 1
@@ -652,11 +673,8 @@ def reset_game() {
     ship_respawn_timer = 0.0
     rapid_fire_timer = 0.0
     invuln_powerup_timer = 0.0
-    g_asteroids |> resize(0)
-    g_bullets |> resize(0)
-    g_particles |> resize(0)
-    g_powerups |> resize(0)
     spawn_wave(wave_number)
+    commit()
     play_sfx(snd_wave_start)
 }
 
@@ -705,14 +723,16 @@ def update_ship() {
     if (ship_respawn_timer <= 0.0 && (fire_kb || fire_mouse) && now - last_shot_time > fire_cooldown) {
         let dir = ship_forward(ship_rotation)
         let bullet_spin = random_range(BULLET_SPIN_MIN, BULLET_SPIN_MAX) * (random_f() < 0.5 ? -1.0 : 1.0)
-        g_bullets |> push(BulletObj(
-            pos = ship_pos + dir * (SHIP_SIZE * 1.1),
-            prev_pos = ship_pos + dir * (SHIP_SIZE * 1.1),
-            vel = dir * BULLET_SPEED + ship_vel * 0.2,
-            rotation = 0.0,
-            rotation_speed = bullet_spin,
-            lifetime = 0.0
-        ))
+        create_entity() @(eid, cmp) {
+            apply_decs_template(cmp, Bullet(
+                pos = ship_pos + dir * (SHIP_SIZE * 1.1),
+                prev_pos = ship_pos + dir * (SHIP_SIZE * 1.1),
+                vel = dir * BULLET_SPEED + ship_vel * 0.2,
+                rotation = 0.0,
+                rotation_speed = bullet_spin,
+                lifetime = 0.0
+            ))
+        }
         spawn_particles(ship_pos + dir * (SHIP_SIZE * 1.2), float3(1.0, 0.8, 0.2), 2)
         play_sfx(snd_shoot)
         last_shot_time = now
@@ -726,54 +746,48 @@ def update_ship() {
 }
 
 def update_asteroids() {
-    for (i in range(length(g_asteroids))) {
-        g_asteroids[i].pos += g_asteroids[i].vel * tick_dt
-        g_asteroids[i].pos = wrap_pos(g_asteroids[i].pos)
-        g_asteroids[i].rotation += g_asteroids[i].rotation_speed * tick_dt
+    query() $(var a : Asteroid) {
+        a.pos += a.vel * tick_dt
+        a.pos = wrap_pos(a.pos)
+        a.rotation += a.rotation_speed * tick_dt
     }
 }
 
 def update_bullets() {
-    var i = 0
-    while (i < length(g_bullets)) {
-        g_bullets[i].lifetime += tick_dt
-        if (g_bullets[i].lifetime > BULLET_LIFETIME) {
-            g_bullets |> erase(i)
+    query() $(eid : EntityId; var b : Bullet) {
+        b.lifetime += tick_dt
+        if (b.lifetime > BULLET_LIFETIME) {
+            delete_entity(eid)
         } else {
-            g_bullets[i].prev_pos = g_bullets[i].pos
-            g_bullets[i].pos += g_bullets[i].vel * tick_dt
-            g_bullets[i].pos = wrap_pos(g_bullets[i].pos)
-            g_bullets[i].rotation += g_bullets[i].rotation_speed * tick_dt
-            i += 1
+            b.prev_pos = b.pos
+            b.pos += b.vel * tick_dt
+            b.pos = wrap_pos(b.pos)
+            b.rotation += b.rotation_speed * tick_dt
         }
     }
 }
 
 def update_particles() {
-    var i = 0
-    while (i < length(g_particles)) {
-        g_particles[i].lifetime -= tick_dt
-        if (g_particles[i].lifetime <= 0.0) {
-            g_particles |> erase(i)
+    query() $(eid : EntityId; var p : Particle) {
+        p.lifetime -= tick_dt
+        if (p.lifetime <= 0.0) {
+            delete_entity(eid)
         } else {
-            g_particles[i].pos += g_particles[i].vel * tick_dt
-            g_particles[i].pos = wrap_pos(g_particles[i].pos)
-            i += 1
+            p.pos += p.vel * tick_dt
+            p.pos = wrap_pos(p.pos)
         }
     }
 }
 
 def update_powerups() {
-    var i = 0
-    while (i < length(g_powerups)) {
-        g_powerups[i].lifetime -= tick_dt
-        if (g_powerups[i].lifetime <= 0.0) {
-            g_powerups |> erase(i)
+    query() $(eid : EntityId; var p : Powerup) {
+        p.lifetime -= tick_dt
+        if (p.lifetime <= 0.0) {
+            delete_entity(eid)
         } else {
-            g_powerups[i].pos += g_powerups[i].vel * tick_dt
-            g_powerups[i].pos = wrap_pos(g_powerups[i].pos)
-            g_powerups[i].rotation += g_powerups[i].rotation_speed * tick_dt
-            i += 1
+            p.pos += p.vel * tick_dt
+            p.pos = wrap_pos(p.pos)
+            p.rotation += p.rotation_speed * tick_dt
         }
     }
 }
@@ -782,15 +796,16 @@ def process_powerup_pickups() {
     if (game_state != GameState.playing) {
         return
     }
-    var i = 0
-    while (i < length(g_powerups)) {
-        if (wrapped_distance_sq(ship_pos, g_powerups[i].pos) <= POWERUP_PICKUP_RADIUS * POWERUP_PICKUP_RADIUS) {
-            let kind = g_powerups[i].kind
-            g_powerups |> erase(i)
-            apply_powerup(kind)
-        } else {
-            i += 1
+    // delete_entity is deferred (safe in query); apply_powerup calls create_entities`T (immediate, not safe) so collect kinds first
+    var inscope picked_kinds : array<PowerupType>
+    query() $(eid : EntityId; p : Powerup) {
+        if (wrapped_distance_sq(ship_pos, p.pos) <= POWERUP_PICKUP_RADIUS * POWERUP_PICKUP_RADIUS) {
+            delete_entity(eid)
+            picked_kinds |> push(p.kind)
         }
+    }
+    for (kind in picked_kinds) {
+        apply_powerup(kind)
     }
 }
 
@@ -800,58 +815,70 @@ def process_collisions() {
     }
 
     if (wave_banner_timer <= 0.0) {
-        var bi = 0
-        while (bi < length(g_bullets)) {
-            var hit = false
-            var ai_hit = -1
-            for (ai in range(length(g_asteroids))) {
-                let r = g_asteroids[ai].size + BULLET_SIZE
-                let b = g_bullets[bi]
-                let ok = wrapped_distance_sq(b.pos, g_asteroids[ai].pos) <= r * r || segment_hits_wrapped_circle(b.prev_pos, b.pos, g_asteroids[ai].pos, r)
+        var inscope g_hits : array<HitInfo>
+        query() $(eid aka b_eid : EntityId; b : Bullet) {
+            find_query() $(eid : EntityId; a : Asteroid) {
+                let r = a.size + BULLET_SIZE
+                let ok = (
+                    wrapped_distance_sq(b.pos, a.pos) <= r * r ||
+                    segment_hits_wrapped_circle(b.prev_pos, b.pos, a.pos, r)
+                )
                 if (ok) {
-                    hit = true
-                    ai_hit = ai
+                    g_hits |> push(HitInfo(b_eid = b_eid, a_eid = eid, pos = a.pos, size = a.size))
+                }
+                return ok
+            }
+        }
+
+        for (hi in range(length(g_hits))) {
+            let h = g_hits[hi]
+            var dupe = false
+            for (hj in range(hi)) {
+                if (g_hits[hj].a_eid == h.a_eid) {
+                    dupe = true
                     break
                 }
             }
-
-            if (hit && ai_hit >= 0) {
-                let hit_pos = g_asteroids[ai_hit].pos
-                let hit_size = g_asteroids[ai_hit].size
-                g_bullets |> erase(bi)
-                g_asteroids |> erase(ai_hit)
-                spawn_particles(hit_pos, float3(0.8, 0.8, 0.8), 10)
-                play_sfx(snd_asteroid_hit)
-                score += 100
-                maybe_drop_powerup(hit_pos)
-                if (hit_size > ASTEROID_MIN_SIZE) {
-                    let new_size = hit_size * 0.5
-                    spawn_asteroid(hit_pos, new_size, 1.0 + float(wave_number - 1) * WAVE_SPEED_STEP)
-                    spawn_asteroid(hit_pos, new_size, 1.0 + float(wave_number - 1) * WAVE_SPEED_STEP)
-                }
-            } else {
-                bi += 1
+            if (dupe) {
+                continue
+            }
+            delete_entity(h.b_eid)
+            delete_entity(h.a_eid)
+            spawn_particles(h.pos, float3(0.8, 0.8, 0.8), 10)
+            play_sfx(snd_asteroid_hit)
+            score += 100
+            maybe_drop_powerup(h.pos)
+            if (h.size > ASTEROID_MIN_SIZE) {
+                let new_size = h.size * 0.5
+                spawn_asteroid(h.pos, new_size, 1.0 + float(wave_number - 1) * WAVE_SPEED_STEP)
+                spawn_asteroid(h.pos, new_size, 1.0 + float(wave_number - 1) * WAVE_SPEED_STEP)
             }
         }
     }
 
     if (wave_banner_timer <= 0.0 && ship_invuln_timer <= 0.0 && ship_respawn_timer <= 0.0 && invuln_powerup_timer <= 0.0) {
-        for (ai in range(length(g_asteroids))) {
-            let ship_r = g_asteroids[ai].size + SHIP_SIZE * 0.7
-            if (wrapped_distance_sq(ship_pos, g_asteroids[ai].pos) < ship_r * ship_r) {
-                lives -= 1
-                spawn_particles(ship_pos, float3(1.0, 0.4, 0.3), 16)
-                ship_pos = float3(FIELD_W * 0.5, FIELD_H * 0.5, 0.0)
-                ship_vel = float3(0.0)
-                ship_respawn_timer = DEATH_HIDE_TIME + DEATH_BLINK_TIME
-                ship_invuln_timer = ship_respawn_timer + SHIP_INVULN_TIME
-                if (lives <= 0) {
-                    play_sfx(snd_game_over)
-                    game_state = GameState.game_over_state
-                } else {
-                    play_sfx(snd_ship_hit)
+        // Collect hit outside query — spawn_particles calls create_entities`T which panics inside queries
+        var ship_hit = false
+        query() $(a : Asteroid) {
+            if (!ship_hit) {
+                let ship_r = a.size + SHIP_SIZE * 0.7
+                if (wrapped_distance_sq(ship_pos, a.pos) < ship_r * ship_r) {
+                    ship_hit = true
                 }
-                break
+            }
+        }
+        if (ship_hit) {
+            lives -= 1
+            spawn_particles(ship_pos, float3(1.0, 0.4, 0.3), 16)
+            ship_pos = float3(FIELD_W * 0.5, FIELD_H * 0.5, 0.0)
+            ship_vel = float3(0.0)
+            ship_respawn_timer = DEATH_HIDE_TIME + DEATH_BLINK_TIME
+            ship_invuln_timer = ship_respawn_timer + SHIP_INVULN_TIME
+            if (lives <= 0) {
+                play_sfx(snd_game_over)
+                game_state = GameState.game_over_state
+            } else {
+                play_sfx(snd_ship_hit)
             }
         }
     }
@@ -910,16 +937,23 @@ def update() {
     }
 
     update_ship()
+    commit()  // Commit bullets/particles spawned by ship this frame
     update_asteroids()
     update_bullets()
     update_powerups()
     update_particles()
+    commit()  // Commit entity deletions from update passes
     process_collisions()
+    commit()  // Commit collision deletions
     process_powerup_pickups()
+    commit()  // Commit powerup pickups
     update_music_state()
     update_overlay_music()
 
-    if (game_state == GameState.playing && length(g_asteroids) == 0) {
+    let has_asteroids = find_query() $(a : Asteroid) {
+        return true
+    }
+    if (game_state == GameState.playing && !has_asteroids) {
         if (wave_number >= MAX_WAVES) {
             game_state = GameState.win_state
             wave_banner_timer = 0.0
@@ -927,9 +961,17 @@ def update() {
             wave_number += 1
             lives += 1
             wave_banner_timer = WAVE_BANNER_DURATION
-            g_bullets |> resize(0)
+            var inscope to_delete : array<EntityId>
+            query() $(eid : EntityId; b : Bullet) {
+                to_delete |> push(eid)
+            }
+            for (eid in to_delete) {
+                delete_entity(eid)
+            }
+            commit()
             ship_invuln_timer = max(ship_invuln_timer, 1.0)
             spawn_wave(wave_number)
+            commit()
             play_sfx(snd_wave_start)
         }
     }
@@ -950,7 +992,12 @@ def update() {
     if (!ship_is_transitioning || (!ship_is_hidden && blink_visible)) {
         let ship_rot = float4(0.0, 0.0, sin(ship_rotation * 0.5), cos(ship_rotation * 0.5))
         v_model = compose(ship_pos, ship_rot, float3(SHIP_SIZE, SHIP_SIZE, SHIP_SIZE))
-        f_Color = float4(1, 1, 1, 1)
+        if (invuln_powerup_timer > 0.0) {
+            let pulse = 0.7 + 0.3 * abs(sin(get_uptime() * 9.0))
+            f_Color = float4(1.0, pulse, 0.25, 1.0)
+        } else {
+            f_Color = float4(1, 1, 1, 1)
+        }
         vs_asteroids_bind_uniform(active_program)
         fs_asteroids_bind_uniform(active_program)
         ship_geo |> draw_geometry_fragment()
@@ -965,8 +1012,7 @@ def update() {
     let asteroids_blink = game_state == GameState.playing && wave_banner_timer > 0.0
     let asteroids_visible = !asteroids_blink || int(get_uptime() * 10.0) % 2 == 0
     if (asteroids_visible) {
-        for (i in range(length(g_asteroids))) {
-            let a = g_asteroids[i]
+        query() $(a : Asteroid) {
             v_model = compose(a.pos, float4(0), float3(a.size, a.size, a.size))
             f_Color = float4(0.7, 0.7, 0.7, 1.0)
             vs_asteroids_bind_uniform(active_program)
@@ -975,20 +1021,22 @@ def update() {
         }
     }
 
-    for (i in range(length(g_powerups))) {
-        let p = g_powerups[i]
-        let pulse = 0.85 + 0.25 * abs(sin(get_uptime() * 8.0 + p.rotation * 0.7))
-        let c = powerup_color(p.kind)
-        let rot = float4(0.0, 0.0, sin(p.rotation * 0.5), cos(p.rotation * 0.5))
-        v_model = compose(p.pos, rot, float3(5.0 * pulse, 5.0 * pulse, 5.0 * pulse))
-        f_Color = float4(c.x, c.y, c.z, 0.95)
-        vs_asteroids_bind_uniform(active_program)
-        fs_asteroids_bind_uniform(active_program)
-        bullet_geo |> draw_geometry_fragment()
+    query() $(p : Powerup) {
+        let blink = p.lifetime <= POWERUP_BLINK_TIME
+        let visible = !blink || int(get_uptime() * 15.0) % 2 == 0
+        if (visible) {
+            let pulse = 0.85 + 0.25 * abs(sin(get_uptime() * 8.0 + p.rotation * 0.7))
+            let c = powerup_color(p.kind)
+            let rot = float4(0.0, 0.0, sin(p.rotation * 0.5), cos(p.rotation * 0.5))
+            v_model = compose(p.pos, rot, float3(5.0 * pulse, 5.0 * pulse, 5.0 * pulse))
+            f_Color = float4(c.x, c.y, c.z, 0.95)
+            vs_asteroids_bind_uniform(active_program)
+            fs_asteroids_bind_uniform(active_program)
+            bullet_geo |> draw_geometry_fragment()
+        }
     }
 
-    for (i in range(length(g_bullets))) {
-        let b = g_bullets[i]
+    query() $(b : Bullet) {
         let bullet_rot = float4(0.0, 0.0, sin(b.rotation * 0.5), cos(b.rotation * 0.5))
         v_model = compose(b.pos, bullet_rot, float3(BULLET_SIZE, BULLET_SIZE, BULLET_SIZE))
         f_Color = float4(0.2, 1.0, 1.0, 1.0)
@@ -997,8 +1045,7 @@ def update() {
         bullet_geo |> draw_geometry_fragment()
     }
 
-    for (i in range(length(g_particles))) {
-        let p = g_particles[i]
+    query() $(p : Particle) {
         v_model = compose(p.pos, float4(0), float3(1.5, 1.5, 1.5))
         f_Color = float4(p.color, p.lifetime / p.max_life)
         vs_asteroids_bind_uniform(active_program)
