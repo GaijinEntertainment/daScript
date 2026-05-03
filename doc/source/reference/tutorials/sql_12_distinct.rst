@@ -9,7 +9,6 @@ SQL-12 --- ``distinct``
     single: Tutorial; SQLite
     single: Tutorial; distinct
     single: Tutorial; DISTINCT
-    single: Tutorial; UNION
 
 ``distinct()`` flips a single bool flag on the analyzer's
 ``SqlQuery`` and emits ``SELECT DISTINCT`` instead of plain
@@ -50,19 +49,7 @@ Composes with ``_where``
                                  |> distinct())
     // SELECT DISTINCT "Name" FROM "Cars" WHERE "Price" > ?
 
-Set operations --- deferred
-===========================
-
-``UNION`` / ``INTERSECT`` / ``EXCEPT`` are **out of chunk-4 scope**.
-The chain analyzer is single-source today: every ``SELECT`` comes
-from one ``select_from(type<T>)``. Set operations bring in a second
-``SqlQuery`` and need a multi-stage emitter --- the same engine work
-joins and subqueries need.
-
-Until that lands, work around set ops via the raw-SQL escape hatch
-(``db |> exec(...)`` for DDL plus ``CREATE TEMP VIEW``, then
-``select_from`` the view; or drive the SQLite C API directly for
-multi-row reads of arbitrary SQL).
+For ``UNION`` / ``INTERSECT`` / ``EXCEPT`` see :ref:`tutorial_sql_set_ops`.
 
 .. seealso::
 

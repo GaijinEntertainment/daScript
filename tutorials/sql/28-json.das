@@ -65,7 +65,7 @@ struct User {
 // --- @sql_blob: opaque binary archive -----------------------------------
 // SessionSnapshot is a struct with arrays + tables. @sql_blob generates
 // the daslib/archive variant of the adapter pair (const param + local
-// `clone_to_move` because the chunk-8 catch-all binder passes `v` non-`var`,
+// `clone_to_move` because the catch-all binder passes `v` non-`var`,
 // while `mem_archive_save` / `mem_archive_load` need a mutable reference):
 //
 //     def sql_bind    (v : T) : array<uint8> {

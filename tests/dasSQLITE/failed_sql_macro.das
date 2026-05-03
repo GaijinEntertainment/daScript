@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 40104:21, 30304:1, 30503:2
+expect 40104:20, 30304:1, 30503:2
 
 require daslib/sql
 require sqlite/sqlite_boost
@@ -64,12 +64,9 @@ def main() {
     // 11. _select after _group_by must be a NAMED tuple — bare scalar rejected
     let bad11 <- _sql(db |> select_from(type<Car>) |> _group_by(_.Name) |> _select(_._0))
 
-    // 12. take(n) before an aggregate is degenerate in SQL — `LIMIT` after
-    //     an aggregate is a no-op (aggregate already returns one row).
-    //     User almost certainly wants the subquery form
-    //     `SELECT SUM(c) FROM (SELECT p AS c FROM Cars LIMIT n)`, which lands
-    //     with joins/subqueries in chunk 5+. Reject loud now.
-    let bad12 <- _sql(db |> select_from(type<Car>) |> take(2) |> _select(_.Price) |> sum())
+    // (bad12 removed: `take(2) |> _select(_.Price) |> sum()` now lowers
+    // correctly via multi-Q to `SELECT SUM("Price") FROM (SELECT "Price" FROM "Cars" LIMIT ?) AS "t0"`.
+    // Coverage moved to test_33_take_skip.das as `test_take_then_select_then_aggregate_runtime`.)
 
     // 13. distinct() before an aggregate is degenerate — `SELECT DISTINCT
     //     SUM(...)` / `SELECT DISTINCT COUNT(*)` dedupes a single-row result.

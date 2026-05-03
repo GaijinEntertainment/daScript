@@ -13,7 +13,7 @@ SQL-09 --- ``_select`` Projections
     single: Tutorial; tuple recordNames
 
 ``_select(...)`` controls *what* columns the SQL emits and *what shape*
-the result has. Three forms ship in chunk 3:
+the result has. Three forms are supported:
 
 ==============================================================  ==========================================================
 Form                                                            Result shape
@@ -125,10 +125,6 @@ default (no ``_select``)                                        Full row; ``arra
 ``_select((Name=_.X, Other=_.Y))``                              Named tuple; ``array<tuple<Name:..;Other:..>>``
 ``_select((Renamed=_.Id, ...))``                                Result fields can rename source columns
 ==============================================================  ==========================================================
-
-Deferred to chunk 4: struct-type projection ``_select(type<T2>)`` for
-projecting into a different ``[sql_table]`` struct. Today users get
-the same result via named-tuple projection.
 
 .. seealso::
 

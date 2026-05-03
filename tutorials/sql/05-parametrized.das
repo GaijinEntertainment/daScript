@@ -18,9 +18,8 @@ require sqlite/sqlite_linq
 //
 //  2. For raw SQL (migrations, ad-hoc queries, statements `_sql` can't
 //     translate), the `query_one(sql, type<T>, args...)` family takes
-//     positional `?` arguments via variadic trailing args (chunk 3 ships
-//     0..3 args; named-tuple bind for `:name` placeholders ships in a
-//     follow-up).
+//     positional `?` arguments via variadic trailing args (0..3 args
+//     supported; named-tuple bind for `:name` placeholders is planned).
 
 [sql_table(name = "Cars")]
 struct Car {
@@ -62,8 +61,8 @@ def main() {
         to_log(LOG_INFO, "Raw lookup ID = {raw.Id}, name = {raw.Name}\n")
 
         // ── Multi-arg positional bind ────────────────────────────────────
-        // Up to 3 positional args this chunk; named-tuple `(id=…, name=…)`
-        // form for `:name` placeholders is a chunk-4 follow-up.
+        // Up to 3 positional args supported today; named-tuple
+        // `(id=…, name=…)` form for `:name` placeholders is planned.
         let multi = db |> query_one(
             "SELECT \"Id\", \"Name\", \"Price\" FROM Cars WHERE Id = ? AND Name = ?",
             type<Car>, 2, "Audi")

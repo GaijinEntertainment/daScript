@@ -46,12 +46,27 @@ def test_skip_emits_limit_neg1_offset(t : T?) {
 }
 
 [test]
-def test_take_then_skip_emits_limit_and_offset(t : T?) {
+def test_take_then_skip_emits_subquery(t : T?) {
     var _db = SqlRunner()
+    // Multi-Q lowering: `take(3) |> skip(1)` is divergent from canonical SQL
+    // phase order (linq positional says "take 3, drop 1"; flat `LIMIT 3 OFFSET 1`
+    // would skip-then-take = 3 rows). Lower to nested SELECT so all three modes
+    // agree (`max(0, n-m)` rows).
     let sql = _sql_text(_db |> select_from(type<Car>) |> take(3) |> skip(1))
     t |> equal(sql,
+        "SELECT \"Id\", \"Name\", \"Price\" FROM (SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" LIMIT ?) AS \"t0\" LIMIT -1 OFFSET ?",
+        "take + skip lowers to nested SELECT (take in inner, skip in outer)")
+}
+
+[test]
+def test_skip_then_take_emits_flat_limit_offset(t : T?) {
+    var _db = SqlRunner()
+    // Canonical pagination: `skip(m) |> take(n)` matches SQL `LIMIT n OFFSET m`
+    // semantics (skip-then-take). Stays a flat SELECT.
+    let sql = _sql_text(_db |> select_from(type<Car>) |> skip(1) |> take(3))
+    t |> equal(sql,
         "SELECT \"Id\", \"Name\", \"Price\" FROM \"Cars\" LIMIT ? OFFSET ?",
-        "take + skip combine into LIMIT … OFFSET …")
+        "skip + take stays flat — canonical pagination shape")
 }
 
 [test]
@@ -88,13 +103,38 @@ def test_skip_runtime_skips_n_rows(t : T?) {
 }
 
 [test]
-def test_take_and_skip_combined_runtime(t : T?) {
+def test_take_then_skip_combined_runtime(t : T?) {
     with_sqlite(":memory:") $(db) {
         fixture(db)
+        // Multi-Q lowering: `take(2) |> skip(1)` = "take 2 rows, then drop 1".
+        // n - m = 1 row remains (BMW taken, skipped, leaving Audi).
         let rows <- _sql(db |> select_from(type<Car>) |> take(2) |> skip(1))
-        t |> equal(length(rows), 2, "take(2) skip(1) returns 2 rows starting from row 1")
+        t |> equal(length(rows), 1, "take(2) |> skip(1) returns max(0, n-m) = 1 row")
+        t |> equal(rows[0].Name, "Audi",  "the second row of the inner take, after dropping the first")
+    }
+}
+
+[test]
+def test_skip_then_take_combined_runtime(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        // Canonical pagination: `skip(1) |> take(2)` = "skip 1, take next 2".
+        let rows <- _sql(db |> select_from(type<Car>) |> skip(1) |> take(2))
+        t |> equal(length(rows), 2, "skip(1) |> take(2) returns 2 rows starting from row 1")
         t |> equal(rows[0].Name, "Audi",  "row[1]")
         t |> equal(rows[1].Name, "Tesla", "row[2]")
+    }
+}
+
+[test]
+def test_take_then_select_then_aggregate_runtime(t : T?) {
+    // bad12 promoted to a positive case: multi-Q lowers `take(n) |> _select(...) |> sum`
+    // to `SELECT SUM(col) FROM (SELECT col FROM table LIMIT n)`. Sum of the first n
+    // rows' projected column.
+    with_sqlite(":memory:") $(db) {
+        fixture(db)
+        let total = _sql(db |> select_from(type<Car>) |> take(2) |> _select(_.Price) |> sum())
+        t |> equal(total, 100 + 200, "SUM over first 2 rows' Price (BMW+Audi)")
     }
 }
 

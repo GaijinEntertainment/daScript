@@ -22,10 +22,10 @@ require sqlite/sqlite_linq
 // pattern-matches the macro's textual name; a leading `!` would
 // require deep AST walking that fights with daslang's expansion order.
 //
-// For chunk 5, subqueries are **uncorrelated** — the inner WHERE
-// references only the subquery's own row (`_`), not outer columns.
-// Correlated subqueries (referring to outer columns from inside the
-// subquery's WHERE) land later. For IN-style subqueries, project a
+// Subqueries are **uncorrelated** — the inner WHERE references only
+// the subquery's own row (`_`), not outer columns. Correlated
+// subqueries (referring to outer columns from inside the subquery's
+// WHERE) are not yet supported. For IN-style subqueries, project a
 // single column with `_select(_.Col)` so the IN list shape matches.
 
 [sql_table(name = "Users")]

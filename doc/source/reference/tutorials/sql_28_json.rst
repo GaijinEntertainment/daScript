@@ -146,9 +146,9 @@ Descent is arbitrary depth --- nested struct paths concatenate dotted:
     }
 
 The macro emits the archive variant of the adapter pair. The parameter
-is ``const`` because the chunk-8 catch-all binder passes ``v`` non-\
-``var``; ``mem_archive_save`` / ``mem_archive_load`` need a mutable
-reference, so the body clones into a local through ``clone_to_move``:
+is ``const`` because the catch-all binder passes ``v`` non-\ ``var``;
+``mem_archive_save`` / ``mem_archive_load`` need a mutable reference, so
+the body clones into a local through ``clone_to_move``:
 
 .. code-block:: das
 

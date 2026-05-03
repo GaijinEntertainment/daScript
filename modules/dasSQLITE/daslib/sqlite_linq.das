@@ -92,6 +92,26 @@ def to_sql_literal(value : auto(TT)) : string {
 
 // ===== SqlQuery — accumulator for chain analysis =====
 
+let private INT_MAX_PHASE : int = int(0x7fffffff)
+
+// Phase numbers match SQL eval order: lower = earlier in eval = innermost in SQL nesting.
+// Multiple ops at the SAME phase coexist in one Q (e.g. two `_where` AND-fold).
+// On peel: P > q.minPhaseSeen → push inner subQ (this op runs AFTER something already
+// in q per chain order, but its eval phase says BEFORE — preserve linq positional
+// semantics by lowering to a nested SELECT).
+let private PHASE_SOURCE     : int = 0
+let private PHASE_JOIN       : int = 1
+let private PHASE_WHERE      : int = 2
+let private PHASE_GROUP_BY   : int = 3
+let private PHASE_DISTINCT   : int = 3
+let private PHASE_SET_OP     : int = 3
+let private PHASE_HAVING     : int = 4
+let private PHASE_SELECT     : int = 5
+let private PHASE_ORDER_BY   : int = 5   // same phase as SELECT — they commute in SQL (ORDER BY can reference projected aliases or source columns); prevents spurious divert on canonical `_group_by |> _order_by |> _select`
+let private PHASE_SKIP       : int = 7
+let private PHASE_TAKE       : int = 8
+let private PHASE_TERMINAL   : int = 9   // _first / _first_opt / _to_array / aggregate
+
 enum private Materializer {
     Array
     One
@@ -169,6 +189,7 @@ struct private SqlQuery {
     joins       : array<JoinSpec>
     setOpKind     : SetOpKind = SetOpKind.None
     setOpRhsSql   : string
+    setOpRhsBinds : array<ExpressionPtr>   // RHS placeholders, parsed AFTER LHS in `<lhs> UNION <rhs>`
     seenSetOp     : bool
     argNames    : array<string>
     argSourceIdx : array<int>
@@ -177,6 +198,14 @@ struct private SqlQuery {
     inView      : bool     //! `_create_view` body context — rejects `[sql_function(directonly=true)]` UDF calls
     hadError    : bool
     lastError   : string   //! First `pred_fail` message, re-emitted by call_macros if their deeper macro_error gets eaten by AST cascade
+    // Multi-Q lowering: when a chain conflicts with canonical SQL phase order
+    // (e.g. `take(n) |> _where(p)`), the inner subtree is analyzed into a fresh
+    // SqlQuery, snapshotted to SQL string + binds here, and the outer SELECT's
+    // FROM clause renders as `(<innerSql>) AS t0` instead of a base-table name.
+    innerSql       : string                 // null/empty = base-table FROM; else nested SELECT body
+    innerBindExprs : array<ExpressionPtr>   // FROM-subquery placeholders, parsed first
+    minPhaseSeen   : int = int(0x7fffffff)  // INT_MAX_PHASE sentinel; lowest phase added to this Q
+    fromRowType    : TypeDeclPtr            // `_` row type for outer-Q lambdas (= inner's projected output)
 }
 
 // ===== SqlFrag fragment stream =====
@@ -600,7 +629,7 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
 def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
                               kind : JoinKind; prog : ProgramPtr; at : LineInfo) : bool {
     if (q.seenJoin) {
-        macro_error(prog, at, "_sql: only one join per chain (3+ table joins are not yet supported in chunk 5; chain multiple two-table joins or use raw SQL)")
+        macro_error(prog, at, "_sql: only one join per chain (3+ table joins are not yet supported; chain multiple two-table joins or use raw SQL)")
         return false
     }
     if (q.seenSelect) {
@@ -705,6 +734,99 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     return true
 }
 
+// ===== Multi-Q lowering — phase model + bind collection =====
+
+[macro_function]
+def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr>&) {
+    // Placeholder order matches SQL parse order, depth-first inner-first:
+    //   1. Inner-Q (FROM subquery) binds — innermost SELECT parsed first
+    //   2. Per-join ON binds — within outer FROM clause
+    //   3. WHERE binds
+    //   4. HAVING binds
+    //   5. Set-op RHS binds (compound `<lhs> UNION <rhs>` — RHS parsed before any outer LIMIT)
+    //   6. LIMIT bind (compound applies to combined result, parsed last)
+    //   7. OFFSET bind
+    for (b in q.innerBindExprs) {
+        out |> push(b)
+    }
+    for (j in q.joins) {
+        for (b in j.rightOnBindExprs) {
+            out |> push(b)
+        }
+    }
+    for (b in q.bindExprs) {
+        out |> push(b)
+    }
+    for (b in q.havingBindExprs) {
+        out |> push(b)
+    }
+    for (b in q.setOpRhsBinds) {
+        out |> push(b)
+    }
+    let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
+                          && q.proj != ProjectionShape.Aggregate)
+    if (!forced_one_row && q.limitBindExpr != null) {
+        out |> push(q.limitBindExpr)
+    }
+    if (!forced_one_row && q.offsetBindExpr != null) {
+        out |> push(q.offsetBindExpr)
+    }
+}
+
+// Inner Q's projection-output type, used by the outer Q's lambdas to resolve `_.Field`.
+// Default-row inner: returns rootType (the source struct). Outer references original column
+// names as if FROM were the base table — works automatically through existing pred_to_sql.
+// v2 (projected inner with _select): would return the projection's named-tuple TypeDecl.
+[macro_function]
+def private inner_projection_type(var inner : SqlQuery&) : TypeDeclPtr {
+    return inner.rootType
+}
+
+// Phase-conflict diversion: the peeled op + the rest of the chain are analyzed into a
+// fresh sub-Q, snapshotted as SQL string + flat bind list, and attached to outer q's
+// FROM clause. Same node is re-passed: the divert handles the outer-Q decision; the
+// inner Q sees the op as a normal first peel (no conflict, since subQ.minPhaseSeen
+// starts at INT_MAX_PHASE).
+[macro_function]
+def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
+                            prog : ProgramPtr; at : LineInfo) : bool {
+    var subQ = SqlQuery(inView = q.inView)
+    if (!analyze_chain(node, subQ, prog, at)) {
+        return false
+    }
+    if (subQ.seenTerminal || subQ.seenToArray) {
+        macro_error(prog, at, "_sql: terminals (`_first`, `_to_array`, etc.) cannot appear inside a subquery — keep the terminal at the outermost chain position")
+        return false
+    }
+    if (subQ.proj != ProjectionShape.FullRow) {
+        // v2 capability: outer Q must reference the inner's projected aliases.
+        macro_error(prog, at, "_sql: chain shape with projection-changing inner subquery (e.g. `_select |> _where`, `_select(... |> sum) |> _where`) is a v2 capability — not yet supported. Restructure the chain to put the divergent op AFTER the projection, or use raw SQL.")
+        return false
+    }
+    let innerSql = build_sql_string(subQ)
+    var innerBinds : array<ExpressionPtr>
+    collect_query_binds(subQ, innerBinds)
+    q.innerSql := innerSql
+    q.innerBindExprs <- innerBinds
+    q.fromRowType = inner_projection_type(subQ)
+    if (q.rootType == null) {
+        q.rootType = subQ.rootType
+    }
+    if (empty(q.tableName)) {
+        q.tableName := subQ.tableName
+    }
+    if (q.dbExpr == null) {
+        q.dbExpr = subQ.dbExpr
+    }
+    // Outer Q sees the inner subquery as a default-row source: same column names as the
+    // base table, since inner emits `SELECT col1, col2, ... FROM ...`. Fill outer's
+    // selectCols so build_sql_select emits a non-empty SELECT clause.
+    if (q.proj == ProjectionShape.FullRow && length(q.selectCols) == 0 && q.rootType != null) {
+        fill_default_columns(q, q.rootType, prog, at)
+    }
+    return true
+}
+
 [macro_function]
 def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (node == null) {
@@ -736,7 +858,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (fCall.arguments |> length != 1) {
-                macro_error(prog, at, "_sql: _first(predicate) is chunk 4; chunk 3 supports `|> _first()` only")
+                macro_error(prog, at, "_sql: `_first(predicate)` is not yet supported — use `|> _where(predicate) |> _first()` instead")
                 return false
             }
             q.matr = Materializer.One
@@ -766,7 +888,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (cCall.arguments |> length != 1) {
-                macro_error(prog, at, "_sql: _count(predicate) is chunk 4; chunk 3 supports `|> _count()` only")
+                macro_error(prog, at, "_sql: `_count(predicate)` is not yet supported — use `|> _where(predicate) |> _count()` instead")
                 return false
             }
             q.matr = Materializer.One
@@ -803,6 +925,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var dCall = match_linq_call(node, "distinct")
         if (dCall != null) {
+            if (q.minPhaseSeen != INT_MAX_PHASE && PHASE_DISTINCT > q.minPhaseSeen) {
+                return divert_to_inner(node, q, prog, at)
+            }
+            if (PHASE_DISTINCT < q.minPhaseSeen) { q.minPhaseSeen = PHASE_DISTINCT; }
             if (q.seenDistinct) {
                 macro_error(prog, at, "_sql: distinct() can appear at most once in the chain")
                 return false
@@ -820,6 +946,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var tCall = match_linq_call(node, "take")
         if (tCall != null) {
+            if (q.minPhaseSeen != INT_MAX_PHASE && PHASE_TAKE > q.minPhaseSeen) {
+                return divert_to_inner(node, q, prog, at)
+            }
+            if (PHASE_TAKE < q.minPhaseSeen) { q.minPhaseSeen = PHASE_TAKE; }
             if (q.seenTake) {
                 macro_error(prog, at, "_sql: take(n) can appear at most once in the chain")
                 return false
@@ -837,6 +967,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var obCall = match_linq_call(node, "order_by")
         if (obCall != null) {
+            if (q.minPhaseSeen != INT_MAX_PHASE && PHASE_ORDER_BY > q.minPhaseSeen) {
+                return divert_to_inner(node, q, prog, at)
+            }
+            if (PHASE_ORDER_BY < q.minPhaseSeen) { q.minPhaseSeen = PHASE_ORDER_BY; }
             if (q.seenOrderBy) {
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering: `_order_by((_.k1, _.k2))`)")
                 return false
@@ -860,6 +994,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var odCall = match_linq_call(node, "order_by_descending")
         if (odCall != null) {
+            if (q.minPhaseSeen != INT_MAX_PHASE && PHASE_ORDER_BY > q.minPhaseSeen) {
+                return divert_to_inner(node, q, prog, at)
+            }
+            if (PHASE_ORDER_BY < q.minPhaseSeen) { q.minPhaseSeen = PHASE_ORDER_BY; }
             if (q.seenOrderBy) {
                 macro_error(prog, at, "_sql: _order_by() can appear at most once in the chain (use a tuple key for multi-column ordering)")
                 return false
@@ -883,6 +1021,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var sCall = match_linq_call(node, "skip")
         if (sCall != null) {
+            if (q.minPhaseSeen != INT_MAX_PHASE && PHASE_SKIP > q.minPhaseSeen) {
+                return divert_to_inner(node, q, prog, at)
+            }
+            if (PHASE_SKIP < q.minPhaseSeen) { q.minPhaseSeen = PHASE_SKIP; }
             if (q.seenSkip) {
                 macro_error(prog, at, "_sql: skip(n) can appear at most once in the chain")
                 return false
@@ -900,6 +1042,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var sCall = match_linq_call(node, "select")
         if (sCall != null) {
+            // v1: no divert on _select. v2 will divert + thread projected-alias resolution to outer-Q lambdas.
+            if (PHASE_SELECT < q.minPhaseSeen) { q.minPhaseSeen = PHASE_SELECT; }
             if (q.seenSelect) {
                 macro_error(prog, at, "_sql: _select can only appear once in the chain")
                 return false
@@ -935,6 +1079,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var hCall = match_linq_call(node, "having_")
         if (hCall != null) {
+            // v1: no divert on _having (paired with _group_by below; v2 handles divert when needed).
+            if (PHASE_HAVING < q.minPhaseSeen) { q.minPhaseSeen = PHASE_HAVING; }
             if (hCall.arguments |> length != 2) {
                 macro_error(prog, at, "_sql: _having has unexpected shape; expected having_(prev, predicate)")
                 return false
@@ -979,6 +1125,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var gbCall = match_linq_call(node, "group_by_lazy")
         if (gbCall != null) {
+            // v1: no divert on _group_by; v2 handles when paired with post-aggregate filter.
+            if (PHASE_GROUP_BY < q.minPhaseSeen) { q.minPhaseSeen = PHASE_GROUP_BY; }
             if (q.seenGroupBy) {
                 macro_error(prog, at, "_sql: _group_by can appear at most once in the chain")
                 return false
@@ -1003,6 +1151,8 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var wCall = match_linq_call(node, "where_")
         if (wCall != null) {
+            // _where is broadly commutative with JOIN / GROUP / SELECT in SQL — no divert; just track min phase.
+            if (PHASE_WHERE < q.minPhaseSeen) { q.minPhaseSeen = PHASE_WHERE; }
             var body = peel_lambda_body(wCall.arguments[1])
             if (body == null) {
                 macro_error(prog, at, "_sql: _where predicate lambda has unexpected shape")
@@ -1050,11 +1200,11 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             }
             // SQLite syntax-errors on per-side ORDER BY / LIMIT in compound queries — reject both sides.
             if (q.seenOrderBy) {
-                macro_error(prog, at, "_sql: set-op LHS cannot use `_order_by` (apply to the combined set-op result instead; chunk 5)")
+                macro_error(prog, at, "_sql: set-op LHS cannot use `_order_by` (apply to the combined set-op result instead)")
                 return false
             }
             if (q.limitBindExpr != null || q.offsetBindExpr != null) {
-                macro_error(prog, at, "_sql: set-op LHS cannot use `take(n)` / `skip(n)` (chunk 5)")
+                macro_error(prog, at, "_sql: set-op LHS cannot use `take(n)` / `skip(n)` (apply to the combined set-op result instead)")
                 return false
             }
             // Recurse into RHS in a fresh sub-q; reject set-ops within set-ops.
@@ -1063,7 +1213,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (subQ.seenSetOp || subQ.setOpKind != SetOpKind.None) {
-                macro_error(prog, at, "_sql: set-ops cannot themselves contain set-ops (chunk 5)")
+                macro_error(prog, at, "_sql: set-ops cannot themselves contain set-ops")
                 return false
             }
             if (subQ.seenTerminal || subQ.seenToArray) {
@@ -1071,55 +1221,24 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             if (subQ.seenOrderBy) {
-                macro_error(prog, at, "_sql: set-op RHS cannot use `_order_by` (apply to the combined set-op result instead; chunk 5)")
+                macro_error(prog, at, "_sql: set-op RHS cannot use `_order_by` (apply to the combined set-op result instead)")
                 return false
             }
             if (subQ.limitBindExpr != null || subQ.offsetBindExpr != null) {
-                macro_error(prog, at, "_sql: set-op RHS cannot use `take(n)` / `skip(n)` (chunk 5)")
+                macro_error(prog, at, "_sql: set-op RHS cannot use `take(n)` / `skip(n)` (apply to the combined set-op result instead)")
                 return false
             }
             let rhsSql = build_sql_string(subQ)
-            // Flatten both sides into q.bindExprs and clear per-pool sources, so the outer finalizer doesn't re-prepend/append (would double-bind).
-            var folded : array<ExpressionPtr>
-            var foldedCount = 0
-            for (j in q.joins) {
-                foldedCount += length(j.rightOnBindExprs)
+            // Collect RHS binds (in their internal placeholder order) into a separate slot;
+            // collect_query_binds(q) splices them after LHS WHERE/HAVING, before any outer LIMIT/OFFSET.
+            var rhsBinds : array<ExpressionPtr>
+            collect_query_binds(subQ, rhsBinds)
+            var rhsClones : array<ExpressionPtr>
+            rhsClones |> reserve(length(rhsBinds))
+            for (b in rhsBinds) {
+                rhsClones |> push <| clone_expression(b)
             }
-            for (j in subQ.joins) {
-                foldedCount += length(j.rightOnBindExprs)
-            }
-            folded |> reserve(foldedCount + length(q.bindExprs) + length(q.havingBindExprs)
-                            + length(subQ.bindExprs) + length(subQ.havingBindExprs))
-            // LHS: on → where → having
-            for (j in q.joins) {
-                for (b in j.rightOnBindExprs) {
-                    folded |> push(b)
-                }
-            }
-            for (b in q.bindExprs) {
-                folded |> push(b)
-            }
-            for (b in q.havingBindExprs) {
-                folded |> push(b)
-            }
-            // Clear LHS per-pool bind sources (q.joins itself stays for FROM/SELECT emission).
-            for (j in q.joins) {
-                j.rightOnBindExprs |> clear
-            }
-            q.havingBindExprs |> clear
-            // RHS on → where → having (after LHS in `<lhs> UNION <rhs>`).
-            for (j in subQ.joins) {
-                for (b in j.rightOnBindExprs) {
-                    folded |> push <| clone_expression(b)
-                }
-            }
-            for (b in subQ.bindExprs) {
-                folded |> push <| clone_expression(b)
-            }
-            for (b in subQ.havingBindExprs) {
-                folded |> push <| clone_expression(b)
-            }
-            q.bindExprs <- folded
+            q.setOpRhsBinds <- rhsClones
             q.setOpKind = soKind
             q.setOpRhsSql = rhsSql
             q.seenSetOp = true
@@ -2108,7 +2227,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     return ""
                 }
                 if (subQ.seenJoin || length(subQ.joins) > 0) {
-                    return pred_fail(q, prog, at, "_sql: subqueries cannot themselves contain joins (chunk 5)")
+                    return pred_fail(q, prog, at, "_sql: subqueries cannot themselves contain joins")
                 }
                 if (subQ.seenGroupBy || !empty(subQ.havingSql) || subQ.seenOrderBy
                         || subQ.distinctFlag || subQ.limitBindExpr != null
@@ -2212,19 +2331,19 @@ def private analyze_subquery(var subqExpr : ExpressionPtr; var binds : array<Exp
         return ""
     }
     if (subQ.seenJoin || length(subQ.joins) > 0) {
-        macro_error(prog, at, "_sql: subqueries cannot themselves contain joins (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot themselves contain joins")
         return ""
     }
     if (subQ.seenGroupBy || !empty(subQ.havingSql)) {
-        macro_error(prog, at, "_sql: subqueries cannot use `_group_by` / `_having` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `_group_by` / `_having`")
         return ""
     }
     if (subQ.seenOrderBy || subQ.distinctFlag) {
-        macro_error(prog, at, "_sql: subqueries cannot use `_order_by` / `distinct()` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `_order_by` / `distinct()`")
         return ""
     }
     if (subQ.limitBindExpr != null || subQ.offsetBindExpr != null) {
-        macro_error(prog, at, "_sql: subqueries cannot use `take(n)` / `skip(n)` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `take(n)` / `skip(n)`")
         return ""
     }
     if (subQ.seenTerminal || subQ.seenToArray) {
@@ -2253,19 +2372,19 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
         return ""
     }
     if (subQ.seenJoin || length(subQ.joins) > 0) {
-        macro_error(prog, at, "_sql: subqueries cannot themselves contain joins (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot themselves contain joins")
         return ""
     }
     if (subQ.seenGroupBy || !empty(subQ.havingSql)) {
-        macro_error(prog, at, "_sql: subqueries cannot use `_group_by` / `_having` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `_group_by` / `_having`")
         return ""
     }
     if (subQ.seenOrderBy || subQ.distinctFlag) {
-        macro_error(prog, at, "_sql: subqueries cannot use `_order_by` / `distinct()` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `_order_by` / `distinct()`")
         return ""
     }
     if (subQ.limitBindExpr != null || subQ.offsetBindExpr != null) {
-        macro_error(prog, at, "_sql: subqueries cannot use `take(n)` / `skip(n)` (chunk 5)")
+        macro_error(prog, at, "_sql: subqueries cannot use `take(n)` / `skip(n)`")
         return ""
     }
     if (subQ.seenTerminal || subQ.seenToArray) {
@@ -2719,6 +2838,7 @@ def private build_sql_select(var q : SqlQuery&) : string {
             }
         }
         // FROM clause: alias the root table only when joins are present (single-source keeps unaliased `FROM "Tbl"`).
+        // Multi-Q lowering: when innerSql is set, FROM renders as `(<innerSql>) AS t0` instead of base-table.
         if (q.seenJoin) {
             w |> write(" FROM \"")
             w |> write(q.tableName)
@@ -2752,6 +2872,12 @@ def private build_sql_select(var q : SqlQuery&) : string {
                     w |> write(")")
                 }
             }
+        } elif (!empty(q.innerSql)) {
+            // Outer Q wrapping a phase-conflict-pushed subquery. Inner emits default-row projection
+            // (column names visible to outer's `_.<field>` resolution against q.rootType).
+            w |> write(" FROM (")
+            w |> write(q.innerSql)
+            w |> write(") AS \"t0\"")
         } else {
             w |> write(" FROM \"")
             w |> write(q.tableName)
@@ -2886,35 +3012,13 @@ class private SqlCreateViewMacro : AstCallMacro {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
             return null
         }
-        // Collect binds in placeholder order (joins ON → WHERE → HAVING → LIMIT → OFFSET).
-        // Each bind expression goes through `_::to_sql_literal(...)` at runtime — the
-        // value is evaluated once when CREATE VIEW DDL executes and inlined into the
-        // view body text stored in sqlite_schema.
-        var n_join_binds = 0
-        for (j in q.joins) {
-            n_join_binds += length(j.rightOnBindExprs)
-        }
-        let total_binds = (n_join_binds + length(q.bindExprs) + length(q.havingBindExprs) +
-                           (q.limitBindExpr != null ? 1 : 0) + (q.offsetBindExpr != null ? 1 : 0))
+        // Collect binds in placeholder order via collect_query_binds (handles inner-Q
+        // subqueries + set-op RHS; for views the chain is bounded but we use the same
+        // helper for consistency). Each bind expression goes through `_::to_sql_literal(...)`
+        // at runtime — value is evaluated once when CREATE VIEW DDL executes and inlined
+        // into the view body text stored in sqlite_schema.
         var ordered_binds : array<ExpressionPtr>
-        ordered_binds |> reserve(total_binds)
-        for (j in q.joins) {
-            for (b in j.rightOnBindExprs) {
-                ordered_binds |> push(b)
-            }
-        }
-        for (b in q.bindExprs) {
-            ordered_binds |> push(b)
-        }
-        for (b in q.havingBindExprs) {
-            ordered_binds |> push(b)
-        }
-        if (q.limitBindExpr != null) {
-            ordered_binds |> push(q.limitBindExpr)
-        }
-        if (q.offsetBindExpr != null) {
-            ordered_binds |> push(q.offsetBindExpr)
-        }
+        collect_query_binds(q, ordered_binds)
         // Validate projection column count vs V's fields.
         let nFields = length(viewT.structType.fields)
         var nProj = 0
@@ -3249,7 +3353,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
     // take(n)/skip(n) before an aggregate is degenerate in SQL — aggregate collapses to one row, LIMIT/OFFSET no-op; reject loudly.
     if (q.proj == ProjectionShape.Aggregate
             && (q.limitBindExpr != null || q.offsetBindExpr != null)) {
-        macro_error(prog, call.at, "_sql: take(n)/skip(n) before an aggregate is not translatable — `LIMIT`/`OFFSET` after an aggregate has no effect (aggregate collapses to one row); use `_where(...)` for pre-aggregate filtering, or wait for subquery support in chunk 5+")
+        macro_error(prog, call.at, "_sql: take(n)/skip(n) before an aggregate is not translatable — `LIMIT`/`OFFSET` after an aggregate has no effect (aggregate collapses to one row); use `_where(...)` for pre-aggregate filtering")
         return null
     }
     // distinct() upstream of an aggregate is a no-op in SQL — meaningful form is COUNT(DISTINCT col), not yet implemented.
@@ -3257,45 +3361,14 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
         macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
         return null
     }
-    // Bind order: per-join ON → WHERE → HAVING → LIMIT → OFFSET. Splice ON in front of q.bindExprs, then append the rest.
-    var joinOnCount = 0
-    for (j in q.joins) {
-        joinOnCount += length(j.rightOnBindExprs)
-    }
-    var joinOnBinds : array<ExpressionPtr>
-    joinOnBinds |> reserve(joinOnCount)
-    for (j in q.joins) {
-        for (b in j.rightOnBindExprs) {
-            joinOnBinds |> push(b)
-        }
-    }
-    if (length(joinOnBinds) > 0) {
-        var ordered : array<ExpressionPtr>
-        ordered |> reserve(length(joinOnBinds) + length(q.bindExprs))
-        for (b in joinOnBinds) {
-            ordered |> push(b)
-        }
-        for (b in q.bindExprs) {
-            ordered |> push(b)
-        }
-        q.bindExprs <- ordered
-    }
-    q.bindExprs |> reserve(length(q.bindExprs) + length(q.havingBindExprs) + 2)
-    for (be in q.havingBindExprs) {
-        q.bindExprs |> push(be)
-    }
-    let forced_one_row = ((q.matr == Materializer.One || q.matr == Materializer.OneOpt)
-        && q.proj != ProjectionShape.Aggregate)
-    if (!forced_one_row && q.limitBindExpr != null) {
-        q.bindExprs |> push(q.limitBindExpr)
-    }
-    if (!forced_one_row && q.offsetBindExpr != null) {
-        q.bindExprs |> push(q.offsetBindExpr)
-    }
+    // Bind order: inner-Q (FROM subquery) → per-join ON → WHERE → HAVING → set-op-RHS → LIMIT → OFFSET.
+    // Centralized in collect_query_binds; recurses into inner subqueries for multi-Q lowering.
+    var allBinds : array<ExpressionPtr>
+    collect_query_binds(q, allBinds)
     let sql = build_sql_string(q)
-    // Convert (sqlString, q.bindExprs) → ExprStringBuilder + binds; const-fold keeps AOT byte-identical to the legacy $v(sql) path.
+    // Convert (sqlString, allBinds) → ExprStringBuilder + binds; const-fold keeps AOT byte-identical to the legacy $v(sql) path.
     var frags : array<SqlFrag>
-    sql_to_frags_ex(sql, q.bindExprs, q.orderByInlineExprs, frags)
+    sql_to_frags_ex(sql, allBinds, q.orderByInlineExprs, frags)
     var sqlExpr : ExpressionPtr
     var bindExprs : array<ExpressionPtr>
     fold_to_builder(frags, call.at, sqlExpr, bindExprs)
@@ -3364,42 +3437,12 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         macro_error(prog, call.at, "_each_sql: chain ends in `_first()` / `_first_opt()` — those terminals materialize a single row. Use `_sql(...)` for the same chain, or drop the terminal to iterate.")
         return null
     }
-    // Same bind ordering as emit_sql_macro_body. take/skip binds OK here (lazy stream).
-    var joinOnCount = 0
-    for (j in q.joins) {
-        joinOnCount += length(j.rightOnBindExprs)
-    }
-    var joinOnBinds : array<ExpressionPtr>
-    joinOnBinds |> reserve(joinOnCount)
-    for (j in q.joins) {
-        for (b in j.rightOnBindExprs) {
-            joinOnBinds |> push(b)
-        }
-    }
-    if (length(joinOnBinds) > 0) {
-        var ordered : array<ExpressionPtr>
-        ordered |> reserve(length(joinOnBinds) + length(q.bindExprs))
-        for (b in joinOnBinds) {
-            ordered |> push(b)
-        }
-        for (b in q.bindExprs) {
-            ordered |> push(b)
-        }
-        q.bindExprs <- ordered
-    }
-    q.bindExprs |> reserve(length(q.bindExprs) + length(q.havingBindExprs) + 2)
-    for (be in q.havingBindExprs) {
-        q.bindExprs |> push(be)
-    }
-    if (q.limitBindExpr != null) {
-        q.bindExprs |> push(q.limitBindExpr)
-    }
-    if (q.offsetBindExpr != null) {
-        q.bindExprs |> push(q.offsetBindExpr)
-    }
+    // Same bind ordering as emit_sql_macro_body via collect_query_binds. take/skip binds OK here (lazy stream).
+    var allBinds : array<ExpressionPtr>
+    collect_query_binds(q, allBinds)
     let sql = build_sql_string(q)
     var frags : array<SqlFrag>
-    sql_to_frags_ex(sql, q.bindExprs, q.orderByInlineExprs, frags)
+    sql_to_frags_ex(sql, allBinds, q.orderByInlineExprs, frags)
     var sqlExpr : ExpressionPtr
     var bindExprs : array<ExpressionPtr>
     fold_to_builder(frags, call.at, sqlExpr, bindExprs)

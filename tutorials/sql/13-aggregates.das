@@ -5,8 +5,7 @@ require sqlite/sqlite_boost
 require sqlite/sqlite_linq
 
 // Tutorial 13 — Column aggregates: `sum`, `average`, `min`, `max`,
-// plus `count` (already shown in tutorial 6 and used as a canary in
-// chunk 3).
+// plus `count` (already shown in tutorial 6).
 //
 // All five are *terminals* — they end the chain and produce a
 // scalar, not an array. The translation pattern is the same for the

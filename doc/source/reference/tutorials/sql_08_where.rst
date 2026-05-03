@@ -15,9 +15,9 @@ SQL-08 --- ``_where`` Predicates: the Full Surface
 
 Inside ``_sql(...)``, ``_where(predicate)`` accumulates a ``WHERE``
 clause via a recursive AST walk. Multiple ``_where`` calls compose
-with ``AND``. This tutorial walks every predicate shape the chunk-3
-analyzer recognizes; anything outside this surface raises a
-compile-time ``macro_error`` pointing at the offending node.
+with ``AND``. This tutorial walks every predicate shape the analyzer
+recognizes; anything outside this surface raises a compile-time
+``macro_error`` pointing at the offending node.
 
 Recognized predicate shapes
 ===========================

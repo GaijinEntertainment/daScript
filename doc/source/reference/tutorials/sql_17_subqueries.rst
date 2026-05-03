@@ -70,13 +70,13 @@ EXISTS / NOT EXISTS
                           |> _where((db |> select_from(type<Order>))._none(_.Total > 1000)))
     // ... WHERE NOT EXISTS (SELECT ... FROM "Orders" WHERE "Total" > ?)
 
-Uncorrelated only (chunk 5)
-===========================
+Uncorrelated only
+=================
 
-Chunk 5 ships **uncorrelated** subqueries --- the inner WHERE
+Only **uncorrelated** subqueries are supported --- the inner WHERE
 references only the subquery's own row (``_``), not outer columns.
 Correlated subqueries (referring to outer columns from inside the
-subquery's WHERE) land in a follow-up.
+subquery's WHERE) are not yet supported.
 
 .. seealso::
 

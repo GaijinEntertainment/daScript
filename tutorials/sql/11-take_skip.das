@@ -10,6 +10,12 @@ require sqlite/sqlite_linq
 // (without `take`), SQLite requires `LIMIT -1 OFFSET ?` (LIMIT-of-
 // negative-one means no limit), and the macro emits exactly that.
 //
+// Chain order matters. `_sql` honors linq's positional semantics:
+// `skip(m) |> take(n)` is the canonical pagination shape (skip first,
+// then take) and lowers to flat `LIMIT n OFFSET m`. The reverse,
+// `take(n) |> skip(m)`, means "take n, then drop m" — lowered to a
+// nested SELECT to preserve that meaning.
+//
 // Bind ordering: LIMIT and OFFSET binds always go *after* WHERE
 // binds in the placeholder index sequence, so a `_where(...) |>
 // take(n)` chain produces `WHERE col > ? LIMIT ?` with binds in
@@ -53,20 +59,19 @@ def main() {
             to_log(LOG_INFO, "  {c.Name}\n")
         }
 
-        // ── take + skip — pagination window ──────────────────────────────
-        // take(n) skip(m) = LIMIT n OFFSET m → rows m..m+n-1. So take(2)
-        // skip(1) returns rows 2..3. (For pages of size 2, page 1 = rows
-        // 1..2 with no skip; page 2 = rows 3..4 with skip(2).) Combine
-        // in either order — the SQL is identical.
-        let window <- _sql(db |> select_from(type<Car>) |> take(2) |> skip(1))
-        to_log(LOG_INFO, "take(2) skip(1) — rows 2-3:\n")
+        // ── skip + take — canonical pagination window ────────────────────
+        // `skip(m) |> take(n)` = "skip m rows, then take n" — page k of size n
+        // = `skip((k-1)*n) |> take(n)`. So `skip(2) |> take(2)` returns rows
+        // 3..4 (page 2 of size 2). Lowers to a flat `LIMIT n OFFSET m`.
+        let window <- _sql(db |> select_from(type<Car>) |> skip(2) |> take(2))
+        to_log(LOG_INFO, "skip(2) take(2) — rows 3-4:\n")
         for (c in window) {
             to_log(LOG_INFO, "  {c.Name}\n")
         }
 
         // ── take with WHERE — placeholder ordering ───────────────────────
-        // SQL emitted: WHERE Price > ? LIMIT ?
-        // Binds:       [threshold, 2]
+        // Canonical: `_where(...) |> take(n)` = filter then take; lowers
+        // flat to `WHERE Price > ? LIMIT ?` with binds `[threshold, 2]`.
         let threshold = 100
         let cheap_two <- _sql(db |> select_from(type<Car>)
                                 |> _where(_.Price > threshold)
@@ -77,12 +82,12 @@ def main() {
         }
 
         // ── Pair with order_by for stable pagination ─────────────────────
-        // LIMIT/OFFSET without ORDER BY isn't deterministic — SQLite
-        // can return rows in any order. Always combine the two when
-        // you actually care about page boundaries.
+        // LIMIT/OFFSET without ORDER BY isn't deterministic — SQLite can
+        // return rows in any order. Always combine the two when you care
+        // about page boundaries.
         let stable_page <- _sql(db |> select_from(type<Car>)
                                   |> _order_by(_.Price)
-                                  |> take(2) |> skip(1))
+                                  |> skip(1) |> take(2))
         to_log(LOG_INFO, "ORDER BY Price ASC LIMIT 2 OFFSET 1:\n")
         for (c in stable_page) {
             to_log(LOG_INFO, "  {c.Name}: {c.Price}\n")
@@ -96,7 +101,7 @@ def main() {
         // ── Inspect emitted SQL ──────────────────────────────────────────
         let sql = _sql_text(db |> select_from(type<Car>)
                               |> _order_by(_.Price)
-                              |> take(2) |> skip(1))
+                              |> skip(1) |> take(2))
         to_log(LOG_INFO, "  emitted SQL: {sql}\n")
     }
 }

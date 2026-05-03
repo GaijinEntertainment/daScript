@@ -7,7 +7,7 @@ require sqlite/sqlite_linq
 // Tutorial 09 — `_select` projections.
 //
 // `_select(...)` controls what columns the SQL emits and what shape the
-// result has. Three forms ship in chunk 3:
+// result has. Three forms are supported:
 //
 //   - default (no _select): SELECT all columns, materialize as the source
 //                           struct  →  array<Car>
@@ -21,8 +21,7 @@ require sqlite/sqlite_linq
 //
 // The named-tuple form lets you rename columns at the result-type level
 // (`(Identifier=_.Id, Label=_.Name)` returns rows whose `Identifier` field
-// holds the underlying `Id`). Struct-type projection (`_select(type<T2>)`)
-// for projecting into a different `[sql_table]` struct is a chunk-4 follow-up.
+// holds the underlying `Id`).
 
 [sql_table(name = "Cars")]
 struct Car {

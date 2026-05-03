@@ -18,7 +18,8 @@ Source shape                                    Emitted SQL
 ==============================================  =================================================
 ``take(n)``                                     ``LIMIT ?``
 ``skip(n)`` (alone)                             ``LIMIT -1 OFFSET ?``
-``take(n) |> skip(m)``                          ``LIMIT ? OFFSET ?``
+``skip(m) |> take(n)``                          ``LIMIT ? OFFSET ?`` (canonical pagination)
+``take(n) |> skip(m)``                          nested SELECT (preserves linq positional semantics)
 ``take`` followed by ``_first()``               ``LIMIT 1`` (single-row terminal wins)
 ==============================================  =================================================
 
@@ -45,17 +46,33 @@ SQLite's "no limit"):
 Combined --- a paging window
 ============================
 
-Combine ``take`` and ``skip`` for a window. Order in the chain
-doesn't change the SQL --- the macro accumulates both into a single
-``LIMIT ... OFFSET ...`` clause. Note that ``take(n) skip(m)`` is
-``LIMIT n OFFSET m`` --- rows ``m..m+n-1``, NOT "page (m+1) of
-size n" --- standard paging is ``page k of size n`` =
-``take(n) skip((k-1) * n)``:
+Chain order matters --- ``_sql`` honors linq's positional
+semantics. The canonical pagination shape is
+``skip(m) |> take(n)`` (skip first, then take), which lowers to a
+flat ``LIMIT n OFFSET m``. Standard paging is ``page k of size n``
+= ``skip((k-1) * n) |> take(n)``:
 
 .. code-block:: das
 
-    let window <- _sql(db |> select_from(type<Car>) |> take(2) |> skip(1))
-    // ... LIMIT ? OFFSET ?     (rows 2..3)
+    let window <- _sql(db |> select_from(type<Car>) |> skip(2) |> take(2))
+    // ... LIMIT ? OFFSET ?     (rows 3..4 = page 2 of size 2)
+
+The reverse, ``take(n) |> skip(m)``, means "take first n rows,
+then drop m of those" --- a strictly smaller result of
+``max(0, n - m)`` rows. ``_sql`` preserves that meaning by lowering
+to a nested SELECT:
+
+.. code-block:: das
+
+    let trimmed <- _sql(db |> select_from(type<Car>) |> take(2) |> skip(1))
+    // SELECT ... FROM (SELECT ... LIMIT ?) AS "t0" LIMIT -1 OFFSET ?
+    // result: 1 row (take 2, then drop 1)
+
+Same chain, same answer in all three modes (``_sql`` over SQL
+source, plain chain over SQL source, plain chain over
+``array<T>``). Use the canonical ``skip|take`` form when you want
+the flat fast-path SQL; the reverse is honest about its meaning
+but pays the subquery cost.
 
 Bind ordering
 =============
@@ -96,7 +113,7 @@ SQLite can return rows in any order. Pair ``take``/``skip`` with
 
     let stable_page <- _sql(db |> select_from(type<Car>)
                               |> _order_by(_.Price)
-                              |> take(2) |> skip(1))
+                              |> skip(1) |> take(2))
     // ... ORDER BY "Price" ASC LIMIT ? OFFSET ?
 
 .. seealso::

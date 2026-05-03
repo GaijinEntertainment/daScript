@@ -109,7 +109,7 @@ Aggregation
    * - ``sum(iter)``
      - Sum of elements
    * - ``average(iter)``
-     - Arithmetic mean
+     - Arithmetic mean (always returns ``double``)
    * - ``min(iter)`` / ``max(iter)``
      - Minimum / maximum
    * - ``aggregate(iter, seed, func)``

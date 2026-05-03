@@ -13,8 +13,8 @@ require sqlite/sqlite_linq
 //   - `(_.k1, _.k2, …)`      → ORDER BY "k1" ASC, "k2" ASC, …
 //   - `_order_by_descending` flips ASC to DESC for the whole chain step
 //
-// Mixed ASC/DESC across columns in a single chain step is **out of
-// scope** for chunk 4 — use the raw-SQL escape hatch
+// Mixed ASC/DESC across columns in a single chain step is **not
+// supported** — use the raw-SQL escape hatch
 // (`db |> query_one("...ORDER BY a, b DESC", ...)`) when you need it.
 
 [sql_table(name = "Cars")]
