@@ -43,6 +43,21 @@ query() $(name : string; hp : int; pos : float3) {
 
 Each block argument is a component name + type. The macro expands to `for_each_archetype(req_hash, req_factory) $(arch) { for (...) { ... } }` — one outer pass per matching archetype, one inner per-entity loop pulling each component as a temp `array<T>` view. Cost stays archetype-proportional even when only a handful of archetypes match.
 
+**EntityId in queries:** The entity id component is stored internally as `"eid"`. The query parameter name is the component key, so you **must** name it `eid` to match it. Any other name silently matches zero entities. To use a different local name, use `aka`:
+
+```das
+query() $(eid : EntityId; pos : float3) {         // correct — binds the "eid" component
+    delete_entity(eid)
+}
+
+// In nested queries where the outer eid would shadow, use aka:
+query() $(eid aka b_eid : EntityId; b : Bullet) {  // component = "eid", local name = b_eid
+    query() $(eid : EntityId; a : Asteroid) {      // inner eid is safe, outer is b_eid
+        g_hits |> push(HitInfo(b_eid = b_eid, a_eid = eid, ...))
+    }
+}
+```
+
 **Mutation:** `var name : Type&` makes that component writable. `&` alone (no `var`) is read-only-by-ref.
 
 ```das
