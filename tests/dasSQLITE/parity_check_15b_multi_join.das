@@ -323,3 +323,99 @@ def parity_three_table_join_with_outer_where_int(t : T?) {
         }
     }
 }
+
+[test]
+def parity_three_table_join_then_count(t : T?) {
+    // v2.1 review-3 regression for E1 + multi-join: `_join(_join(A,B), C) |> count()`
+    // (no WHERE). Pre-fix: outer process_join_call's analyze_projection clobbered
+    // q.proj=NamedTuple after the multi-join snapshot ran, dropping aggregateExpr=COUNT(*).
+    // Post-fix: process_join_call's save/restore preserves aggregate state across BOTH
+    // inner and outer analyze_projection calls.
+    //
+    // Outer projection: (PayPlus:int, Stock:int, Code:string, Holder:string)
+    // → tuple<int;int;string;string> — structurally distinct from every other test here.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+        var items  <- fixture_items()
+
+        let n1 = _sql(db |> select_from(type<User>)
+                        |> _join(db |> select_from(type<Order>),
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(db |> select_from(type<Item>),
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku, Holder = uo.UserName))
+                        |> count())
+        let n2 = (db |> select_from(type<User>)
+                    |> _join(db |> select_from(type<Order>),
+                             $(u : User, o : Order) => u.Id == o.UserId,
+                             $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                    |> _join(db |> select_from(type<Item>),
+                             $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                             $(uo : UserOrder, it : Item) => (PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku, Holder = uo.UserName))
+                    |> count())
+        let n3 = (users |> _join(orders,
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(items,
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku, Holder = uo.UserName))
+                        |> count())
+
+        // 4 items each join their order's user → 4 rows total.
+        t |> equal(n1, 4, "3-table | count(): 4 INNER-join rows")
+        t |> equal(n1, n2, "M1 ≡ M2 count")
+        t |> equal(n2, n3, "M2 ≡ M3 count")
+    }
+}
+
+[test]
+def parity_three_table_join_outer_where_then_count(t : T?) {
+    // v2.1 review-3 regression for stacked snapshots: multi-join (v2 snapshot via
+    // process_join_call) + WHERE-peel (v2.1 snapshot) + count() — exercises BOTH snapshot
+    // paths preserving aggregate state across the OUTER COUNT(*) projection.
+    //
+    // Outer projection: (Holder:string, PayPlus:int, Stock:int, Code:string)
+    // → tuple<string;int;int;string> — structurally distinct from every other test here.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+        var items  <- fixture_items()
+
+        let n1 = _sql(db |> select_from(type<User>)
+                        |> _join(db |> select_from(type<Order>),
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(db |> select_from(type<Item>),
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (Holder = uo.UserName, PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku))
+                        |> _where(_.PayPlus > 75)
+                        |> count())
+        let n2 = (db |> select_from(type<User>)
+                    |> _join(db |> select_from(type<Order>),
+                             $(u : User, o : Order) => u.Id == o.UserId,
+                             $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                    |> _join(db |> select_from(type<Item>),
+                             $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                             $(uo : UserOrder, it : Item) => (Holder = uo.UserName, PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku))
+                    |> _where(_.PayPlus > 75)
+                    |> count())
+        let n3 = (users |> _join(orders,
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(items,
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (Holder = uo.UserName, PayPlus = uo.OrderTotal, Stock = it.Qty, Code = it.Sku))
+                        |> _where(_.PayPlus > 75)
+                        |> count())
+
+        // Items joined to Order.Total > 75: order 10 (100, BOOK), order 11 (250, PEN+BOOK).
+        // 3 rows. Order 12 (Total=50, PAPER) excluded.
+        t |> equal(n1, 3, "3-table | WHERE PayPlus>75 | count(): 3 rows")
+        t |> equal(n1, n2, "M1 ≡ M2 count")
+        t |> equal(n2, n3, "M2 ≡ M3 count")
+    }
+}

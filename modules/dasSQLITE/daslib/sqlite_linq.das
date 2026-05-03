@@ -646,8 +646,12 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     // inner-chain terminal. The "inner LHS can't end in a terminal" check is hoisted
     // to the call sites that can do save-and-compare across analyze_chain (currently
     // process_join_call's srca recursion).
-    if (q.proj == ProjectionShape.SingleColumn || q.proj == ProjectionShape.Aggregate) {
-        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar/aggregate projection — reshape so each LHS column is named")
+    // Aggregate is acceptable here: outer-peeled `_count`/`_sum` set proj=Aggregate before
+    // recursing; we save/clear/restore it below so the inner subquery emits projection columns
+    // and the outer SELECT renders the aggregate. SingleColumn rejection still stands because
+    // inner_projection_type expects a named tuple.
+    if (q.proj == ProjectionShape.SingleColumn) {
+        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar projection — reshape so each LHS column is named")
         return false
     }
     // Save outer-terminal state pre-set by outer-peeled ops (`_first` / `_count` / `_take` /
@@ -669,6 +673,11 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     let savedSeenDistinct = q.seenDistinct
     let savedSeenTerminal = q.seenTerminal
     let savedSeenToArray = q.seenToArray
+    // Aggregate state set by outer-peeled `_count` / `_sum` / etc. The inner subquery must
+    // emit the projection columns (so the outer can wrap them); the OUTER SELECT renders
+    // `COUNT(*)` / `SUM(...)`. Save → clear → build inner → restore on outer post-wrap.
+    let savedAggExpr := q.aggregateExpr
+    var savedAggType = q.aggregateType
     // Clear them on q so the inner SQL emits without outer-only clauses.
     q.matr = Materializer.Array
     q.limitBindExpr = null
@@ -680,6 +689,14 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.seenDistinct = false
     q.seenTerminal = false
     q.seenToArray = false
+    q.aggregateExpr := ""
+    q.aggregateType = null
+    if (savedAggExpr != "") {
+        // selectCols were populated by analyze_projection (preserved by process_join_call's
+        // save/restore); inner build_sql_string must read them as a NamedTuple projection,
+        // not as an aggregate (which would emit the now-empty aggregateExpr).
+        q.proj = ProjectionShape.NamedTuple
+    }
     var savedDb = q.dbExpr
     let savedInView = q.inView
     let savedHadError = q.hadError
@@ -752,7 +769,13 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.seenDistinct = savedSeenDistinct
     q.seenTerminal = savedSeenTerminal
     q.seenToArray = savedSeenToArray
-    if (fillPassthrough) {
+    q.aggregateExpr := savedAggExpr
+    q.aggregateType = savedAggType
+    if (savedAggExpr != "") {
+        // Outer renders `SELECT COUNT(*) FROM (...) AS t0 [WHERE ...]` — no row projection.
+        // Override the FullRow that the reset block installed; ignore fillPassthrough.
+        q.proj = ProjectionShape.Aggregate
+    } elif (fillPassthrough) {
         // Terminal wrap (e.g. WHERE peel on a JOIN'd named-tuple projection): no outer op
         // will fill the projection. Emit `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS "t0"`
         // via passthrough fragments — same shape divert_to_inner uses for NamedTuple inner.
@@ -924,11 +947,27 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.argSourceIdx |> push(0)
     q.argNames |> push(arg1Name)
     q.argSourceIdx |> push(1)
+    // Save aggregate state across analyze_projection: outer-peeled `_count`/`_sum`/etc. set
+    // q.aggregateExpr + q.proj=Aggregate before recursion; analyze_projection unconditionally
+    // writes q.proj=NamedTuple (and clears nothing else) which would clobber that intent.
+    // selectCols still need to be populated for the inner subquery in the multi-join /
+    // WHERE-peel snapshot paths, so we let analyze_projection run normally and restore the
+    // aggregate state afterwards. Invariant: aggregateExpr non-empty ⇒ proj=Aggregate.
+    let savedAggExpr := q.aggregateExpr
+    var savedAggType = q.aggregateType
+    let savedAggProj = q.proj == ProjectionShape.Aggregate
     let projOk = analyze_projection(iret.subexpr, q, prog, at)
     q.argNames |> clear
     q.argSourceIdx |> clear
     if (!projOk) {
         return false
+    }
+    if (savedAggExpr != "") {
+        q.aggregateExpr := savedAggExpr
+        q.aggregateType = savedAggType
+        if (savedAggProj) {
+            q.proj = ProjectionShape.Aggregate
+        }
     }
     q.seenSelect = true
     return true
@@ -1484,7 +1523,9 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             // the SELECT peel's divert (q.seenJoin is false there). Use the in-place snapshot
             // helper, NOT divert_to_inner — re-analyzing here re-instantiates the generic chain
             // and tickles a typer cascade in linq Mode-2/3.
-            if (q.seenJoin && q.proj == ProjectionShape.NamedTuple) {
+            // Aggregate-with-WHERE (`_join | _where | _count`) needs the same wrap so the WHERE
+            // can reference the projected alias; snapshot preserves aggregate state on the outer.
+            if (q.seenJoin && (q.proj == ProjectionShape.NamedTuple || q.aggregateExpr != "")) {
                 if (!snapshot_q_to_subquery_wrap(q, prog, at, [fillPassthrough = true])) {
                     return false
                 }
