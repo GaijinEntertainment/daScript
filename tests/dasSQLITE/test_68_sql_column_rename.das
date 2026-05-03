@@ -98,8 +98,9 @@ def test_sql_text_group_by_uses_sql_column(t : T?) {
 [test]
 def test_sql_text_aggregate_uses_sql_column(t : T?) {
     var _db = SqlRunner()
-    let sql = _sql_text(_db |> select_from(type<Car>) |> _select(_.Price)
-                            |> _where(_.col_type == "sedan") |> sum())
+    let sql = _sql_text(_db |> select_from(type<Car>)
+                            |> _where(_.col_type == "sedan")
+                            |> _select(_.Price) |> sum())
     t |> success(sql |> find("\"type\" = ?") >= 0,
         "WHERE inside aggregate emits SQL identifier 'type'")
     t |> success(sql |> find("SUM(\"Price\")") >= 0,
