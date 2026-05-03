@@ -650,6 +650,36 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
         macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar/aggregate projection — reshape so each LHS column is named")
         return false
     }
+    // Save outer-terminal state pre-set by outer-peeled ops (`_first` / `_count` / `_take` /
+    // `_skip` / `_order_by` / `_distinct` etc.). Without this, `build_sql_string(q, true)` below
+    // serializes those clauses into the INNER subquery (e.g. `LIMIT 1` lands BEFORE the outer
+    // WHERE filter → wrong row), and the reset further down drops them entirely so the OUTER
+    // SELECT loses them too. Save → clear → build inner → reset → restore.
+    let savedMatr = q.matr
+    var savedLimitBindExpr = q.limitBindExpr
+    var savedOffsetBindExpr = q.offsetBindExpr
+    let savedDistinctFlag = q.distinctFlag
+    var savedOrderByCols : array<string>
+    savedOrderByCols <- q.orderByCols
+    var savedOrderByInlineExprs : array<ExpressionPtr>
+    savedOrderByInlineExprs <- q.orderByInlineExprs
+    let savedSeenTake = q.seenTake
+    let savedSeenSkip = q.seenSkip
+    let savedSeenOrderBy = q.seenOrderBy
+    let savedSeenDistinct = q.seenDistinct
+    let savedSeenTerminal = q.seenTerminal
+    let savedSeenToArray = q.seenToArray
+    // Clear them on q so the inner SQL emits without outer-only clauses.
+    q.matr = Materializer.Array
+    q.limitBindExpr = null
+    q.offsetBindExpr = null
+    q.distinctFlag = false
+    q.seenTake = false
+    q.seenSkip = false
+    q.seenOrderBy = false
+    q.seenDistinct = false
+    q.seenTerminal = false
+    q.seenToArray = false
     var savedDb = q.dbExpr
     let savedInView = q.inView
     let savedHadError = q.hadError
@@ -708,6 +738,20 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.dbExpr = savedDb
     q.inView = savedInView
     q.hadError = savedHadError
+    // Restore outer-terminal state so the outer SELECT renders WITH it (LIMIT 1 from
+    // `_first`, ORDER BY from `_order_by`, etc. all belong on outer post-wrap).
+    q.matr = savedMatr
+    q.limitBindExpr = savedLimitBindExpr
+    q.offsetBindExpr = savedOffsetBindExpr
+    q.distinctFlag = savedDistinctFlag
+    q.orderByCols <- savedOrderByCols
+    q.orderByInlineExprs <- savedOrderByInlineExprs
+    q.seenTake = savedSeenTake
+    q.seenSkip = savedSeenSkip
+    q.seenOrderBy = savedSeenOrderBy
+    q.seenDistinct = savedSeenDistinct
+    q.seenTerminal = savedSeenTerminal
+    q.seenToArray = savedSeenToArray
     if (fillPassthrough) {
         // Terminal wrap (e.g. WHERE peel on a JOIN'd named-tuple projection): no outer op
         // will fill the projection. Emit `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS "t0"`

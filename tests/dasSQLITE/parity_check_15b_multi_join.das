@@ -156,11 +156,16 @@ def parity_three_table_join_then_first(t : T?) {
     // V2 latent regression: `_join(_join(A,B,...), C, ...) |> _first()` previously
     // failed at compile time with "_join LHS chain cannot end in a terminal" — the
     // snapshot helper mistook the OUTER `_first` for an INNER terminal. Same fix as
-    // the v2.1 single-join+terminal case (hoisted check in process_join_call). Reuses
-    // case 1's projection shape (UserName, OrderTotal, Sku, Qty); the named tuple is
-    // already cached from `parity_three_table_join`, so field names match.
+    // the v2.1 single-join+terminal case (hoisted check in process_join_call).
+    // Explicit `_order_by(_.OrderTotal)` pins the chosen row so all three modes
+    // (M1=_sql, M2=linq via select_from, M3=plain linq over array) agree on the
+    // _first() result. Reuses case 1's projection shape (UserName/OrderTotal/Sku/Qty);
+    // the named tuple is already cached from `parity_three_table_join`.
     with_sqlite(":memory:") $(db) {
         fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+        var items  <- fixture_items()
 
         let m1 = _sql(db |> select_from(type<User>)
                         |> _join(db |> select_from(type<Order>),
@@ -169,6 +174,7 @@ def parity_three_table_join_then_first(t : T?) {
                         |> _join(db |> select_from(type<Item>),
                                  $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
                                  $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                        |> _order_by(_.OrderTotal)
                         |> _first())
         let m2 = (db |> select_from(type<User>)
                     |> _join(db |> select_from(type<Order>),
@@ -177,14 +183,29 @@ def parity_three_table_join_then_first(t : T?) {
                     |> _join(db |> select_from(type<Item>),
                              $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
                              $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                    |> _order_by(_.OrderTotal)
                     |> _first())
+        let m3 = (users |> _join(orders,
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(items,
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                        |> _order_by(_.OrderTotal)
+                        |> _first())
 
-        // Without ORDER BY, _first returns an arbitrary matching row — exact M1/M2/M3
-        // values may differ. Just assert the chain compiled and a plausible row came
-        // back (was a compile-time error pre-fix).
-        t |> equal(m1.UserName != "", true, "M1 _first produced a row")
-        t |> equal(m2.UserName != "", true, "M2 _first produced a row")
-        t |> equal(m1.Qty > 0 && m2.Qty > 0, true, "Qty populated in both")
+        // 4-row joined result; ORDER BY OrderTotal ASC: Bob's Order 12 (Total 50, PAPER, Qty 10) wins.
+        t |> equal(m1.UserName,   "Bob",   "M1 _first picks Bob's row (lowest OrderTotal)")
+        t |> equal(m1.OrderTotal, 50,      "M1 OrderTotal is 50")
+        t |> equal(m1.Sku,        "PAPER", "M1 Sku matches Bob's only item")
+        t |> equal(m1.UserName,   m2.UserName,   "M1 ≡ M2 UserName")
+        t |> equal(m1.OrderTotal, m2.OrderTotal, "M1 ≡ M2 OrderTotal")
+        t |> equal(m1.Sku,        m2.Sku,        "M1 ≡ M2 Sku")
+        t |> equal(m1.Qty,        m2.Qty,        "M1 ≡ M2 Qty")
+        t |> equal(m2.UserName,   m3.UserName,   "M2 ≡ M3 UserName")
+        t |> equal(m2.OrderTotal, m3.OrderTotal, "M2 ≡ M3 OrderTotal")
+        t |> equal(m2.Sku,        m3.Sku,        "M2 ≡ M3 Sku")
+        t |> equal(m2.Qty,        m3.Qty,        "M2 ≡ M3 Qty")
     }
 }
 

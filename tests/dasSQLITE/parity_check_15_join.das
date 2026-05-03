@@ -180,39 +180,82 @@ def sort_by_buyer_orderid(var rows : array<auto(R)>) : array<R> {
 
 [test]
 def parity_join_with_outer_where_then_first(t : T?) {
-    // v2.1 regression: chain `_join(...) |> _where(_.alias) |> _first()` previously
-    // failed at compile time with the misleading "_join LHS chain cannot end in a
-    // terminal" error — the snapshot helper conflated the OUTER terminal flag with
-    // an INNER terminal it was meant to reject. Hoisted check now lives in
-    // process_join_call's srca recursion (save-and-compare across analyze_chain),
-    // so outer terminals are accepted. Tuple shape: (RefId:int, Label:string,
-    // Amount:int) → tuple<int;string;int> — leading int makes the arg-type list
-    // structurally distinct from every other test in this file.
+    // v2.1 regression: `_join(...) |> _where(_.alias) |> _order_by(_.alias) |> _first()`
+    // previously failed at compile time with the misleading "_join LHS chain cannot
+    // end in a terminal" error — the snapshot helper conflated the OUTER terminal
+    // flag with an INNER terminal it was meant to reject. Hoisted check now lives in
+    // process_join_call's srca recursion. Explicit `_order_by` on the projected alias
+    // pins the chosen row deterministically across all three modes (M1=_sql,
+    // M2=linq via select_from, M3=plain linq over array). Tuple shape:
+    // (RefId:int, Label:string, Amount:int) → tuple<int;string;int> — leading int
+    // makes the arg-type list structurally distinct from every other test in this file.
     with_sqlite(":memory:") $(db) {
         fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
 
         let m1 = _sql(db |> select_from(type<User>)
                         |> _join(db |> select_from(type<Order>),
                                  $(u : User, o : Order) => u.Id == o.UserId,
                                  $(u : User, o : Order) => (RefId = o.Id, Label = u.Name, Amount = o.Total))
                         |> _where(_.Amount > 75)
+                        |> _order_by(_.Amount)
                         |> _first())
         let m2 = (db |> select_from(type<User>)
                     |> _join(db |> select_from(type<Order>),
                              $(u : User, o : Order) => u.Id == o.UserId,
                              $(u : User, o : Order) => (RefId = o.Id, Label = u.Name, Amount = o.Total))
                     |> _where(_.Amount > 75)
+                    |> _order_by(_.Amount)
                     |> _first())
+        let m3 = (users |> _join(orders,
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (RefId = o.Id, Label = u.Name, Amount = o.Total))
+                        |> _where(_.Amount > 75)
+                        |> _order_by(_.Amount)
+                        |> _first())
 
-        // _first picks an arbitrary row from the matching set; without ORDER BY the
-        // chosen row may differ between modes. Just assert the chain compiled and the
-        // returned row satisfies the predicate (the regression was a compile-time
-        // error — the macro analyzer rejected the chain shape, value-correctness
-        // didn't matter). Same applies to M3 — first() over the linq path on an
-        // unordered iterator picks an arbitrary match.
-        t |> equal(m1.Amount > 75, true, "M1 row passes the WHERE predicate")
-        t |> equal(m2.Amount > 75, true, "M2 row passes the WHERE predicate")
-        t |> equal(m1.Label != "" && m2.Label != "", true, "Label populated in both")
+        // Alice's orders 100 / 250 both pass `> 75`; ORDER BY Amount ASC picks 100
+        // (Order Id 10 = "Alice" / 100). Same row in all three modes.
+        t |> equal(m1.Amount, 100,    "M1 _first picks the ASC-min passing row")
+        t |> equal(m1.Label,  "Alice", "M1 row is Alice's")
+        t |> equal(m1.Amount, m2.Amount, "M1 ≡ M2 Amount")
+        t |> equal(m1.Label,  m2.Label,  "M1 ≡ M2 Label")
+        t |> equal(m1.RefId,  m2.RefId,  "M1 ≡ M2 RefId")
+        t |> equal(m2.Amount, m3.Amount, "M2 ≡ M3 Amount")
+        t |> equal(m2.Label,  m3.Label,  "M2 ≡ M3 Label")
+        t |> equal(m2.RefId,  m3.RefId,  "M2 ≡ M3 RefId")
+    }
+}
+
+[test]
+def parity_join_outer_where_first_inner_limit_leak(t : T?) {
+    // v2.1 review-2 regression for the inner-LIMIT leak: pre-fix, snapshot's
+    // `build_sql_string(q, true)` ran with q.matr=One pre-set by outer `_first` →
+    // inner subquery emitted `LIMIT 1` BEFORE the outer WHERE filtered. With the
+    // fixture's natural JOIN order (Alice 100, Alice 250, Bob 50), inner LIMIT 1
+    // picked Alice 100; outer WHERE OrderAmount == 50 filtered it → 0 rows →
+    // `_first()` (Materializer.One) panicked on empty result.
+    //
+    // After the fix, snapshot save→clears outer-terminal state pre-build_sql_string
+    // and restores it post-reset; inner emits no LIMIT, outer is
+    // `WHERE OrderAmount == 50 LIMIT 1` → picks Bob 50 correctly.
+    //
+    // Tuple shape (IsActive:bool, BuyerName:string, OrderAmount:int) → tuple<bool;string;int>
+    // — structurally distinct from every other test in this file.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let m1 = _sql(db |> select_from(type<User>)
+                        |> _join(db |> select_from(type<Order>),
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (IsActive = u.Active, BuyerName = u.Name, OrderAmount = o.Total))
+                        |> _where(_.OrderAmount == 50)
+                        |> _first())
+        // Without the fix: m1 would be garbage (0 rows from outer WHERE → _first panic
+        // or zeroed). With the fix: deterministically Bob's order 12 (UserId 2, Total 50).
+        t |> equal(m1.BuyerName,   "Bob", "WHERE OrderAmount==50 picks Bob (only matching row)")
+        t |> equal(m1.OrderAmount, 50,    "Picked-row Total is 50")
+        t |> equal(m1.IsActive,    true,  "Bob is active")
     }
 }
 
