@@ -1214,6 +1214,107 @@ the inner parameter sidesteps it; the macro recognizes the body as
   `sql_13_aggregates.rst`, `sql_14_group_by.rst`,
   `sql_18_null_handling.rst`. Sphinx `-W` clean.
 
+## Shipped — multi-Q lowering: F1 resolution (branch `better-docs-and-fixes`)
+
+Pivots `_sql(...)` from a "canonical-order pushdown optimizer" to an
+unconditional "same chain → same answer in all three modes" guarantee
+for the v1 chain shapes.
+
+### Problem
+
+The parity audit (`API_CHECKED.md` F1) surfaced that `_sql` collapsed
+any combination of `take` and `skip` into one `LIMIT/OFFSET` pair
+regardless of chain order. Latent siblings: `take(n) |> _where(p)`
+silently emitted `WHERE p LIMIT n` (filter-then-take) instead of
+linq's "take-then-filter" semantics. Same chain, different answers.
+
+### Solution — multi-Q tree
+
+`SqlQuery` gains four fields:
+
+```das
+innerSql       : string                 // null/empty = base-table FROM; else nested SELECT
+innerBindExprs : array<ExpressionPtr>   // FROM-subquery placeholders, parsed first
+minPhaseSeen   : int = 0x7fffffff       // sentinel; lowest phase added to this Q
+fromRowType    : TypeDeclPtr            // reserved for v2 alias-aware resolution
+```
+
+Each chain op gets a phase number matching SQL eval order
+(0=FROM, 1=JOIN, 2=WHERE, 3=GROUP_BY/DISTINCT/SET_OP, 4=HAVING,
+5=SELECT, 6=ORDER_BY, 7=SKIP, 8=TAKE, 9=TERMINAL). Higher phase =
+later in eval = outer in SQL nesting.
+
+`analyze_chain` walks outermost-first as before. Five peel blocks
+(TAKE / SKIP / ORDER_BY / ORDER_BY_DESC / DISTINCT — the ops where
+chain-order divergence is real with default-row inner) check
+`P > q.minPhaseSeen` and divert via `divert_to_inner` when true.
+WHERE stays commutative (no divert).
+
+`divert_to_inner` allocates a fresh `subQ`, recursively analyzes the
+peeled op + remainder of the chain into it, then snapshots the inner
+SELECT to SQL string + flat bind list on the outer Q. Inner subQ is
+constrained to default-row projection (v1 scope); v2 will lift this
+to support inner with `_select`.
+
+### Emission
+
+`build_sql_select` adds one branch: when `q.innerSql` is non-empty,
+FROM renders as `(<innerSql>) AS "t0"` instead of the base-table.
+Outer Q's WHERE / ORDER / GROUP / HAVING / SELECT clauses reference
+the inner's columns by their original names (default-row projection
+exposes the source struct's field names through the subquery).
+
+`collect_query_binds` centralizes bind ordering across the multi-Q
+tree: `innerBindExprs → joins-ON → bindExprs (WHERE) → havingBindExprs →
+setOpRhsBinds → LIMIT → OFFSET`. Replaces the inline splice in
+`emit_sql_macro_body` / `emit_each_sql_macro_body` / `_create_view`.
+Set-op fold simplified: `setOpRhsBinds` stores RHS's flattened binds
+instead of inline-folding everything into `q.bindExprs`.
+
+### v1 capabilities (parity tests added)
+
+- `take(n) |> skip(m)` — F1 RESOLVED. `max(0, n-m)` rows in all 3 modes.
+- `take(n) |> _where(p)` — outer-where over inner-take subquery.
+- `take(n) |> _order_by(k)` — re-sort the n taken rows.
+- `take(n) |> _order_by(k) |> take(m)` — three-level nesting.
+- `skip(n) |> _where(p)` — outer-where over inner-skip subquery.
+
+Existing canonical-order chains stay flat: `_where |> _order_by |>
+take`, single-join + post-join `_where`, set-ops, all subqueries
+(`_in`/`_any`/`_none`) — no inner subquery pushed, byte-identical SQL.
+
+### v2 deferred (separate PR)
+
+- **Aggregate-then-filter** (`_select(... |> sum) |> _where`) —
+  divert on `_select` (P=5), thread `q.fromRowType` through
+  `pred_to_sql` for alias-aware column resolution. Inner Q must emit
+  `AS "<alias>"` SQL aliases on grouped/named-tuple projections.
+- **Multi-join** (`_join |> _where |> _join`) — `process_join_call`
+  rework to accept inner-subquery LHS; lift the single-join restriction.
+
+The v1 `divert_to_inner` emits a clear `macro_error` when the inner
+Q has a non-`FullRow` projection, pointing users at the v2 boundary.
+
+### Coverage
+
+- 24 existing `parity_check_*.das` files — every previously-passing
+  case still passes, byte-identical SQL for canonical-order chains.
+- New `parity_check_11_take_skip.das` (8 cases — divergence pin removed,
+  3 new equivalence cases added).
+- New `parity_check_11b_take_then_where.das` (5 cases).
+- New `parity_check_11c_take_then_order.das` (3 cases).
+- New `parity_check_11d_skip_then_where.das` (2 cases).
+- `failed_parity_check_14_order_after_group.das` (F3 pin) still
+  reports `30304:1` as expected — F3 is orthogonal (linq side, not
+  `_sql`).
+
+### Tutorial 11
+
+`tutorials/sql/11-take_skip.das` + `doc/source/reference/tutorials/sql_11_take_skip.rst`
+updated: canonical pagination promoted to `skip(m) |> take(n)`
+(flat fast SQL); the reverse `take(n) |> skip(m)` is shown as the
+"honest, slower subquery" form with the row-count change explained.
+
 ## Appendix C — `_sql` translation boundary (cross-reference for tutorial 7)
 
 What `_sql(chain)` translates and what it refuses, in one place. The

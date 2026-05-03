@@ -92,9 +92,11 @@ finalizes, and returns the value:
     }
 
 The result type is passed as a ``type<...>`` witness — daslang's gen2
-convention for type-parameterized functions. Chunk 1 ships the ``string``
-overload; ``int``, ``int64``, and ``double`` overloads follow with the
-read-side rework.
+convention for type-parameterized functions. ``query_scalar`` is generic
+over the daslang reader-adapter rail (tutorial 26), so any type with an
+``sql_extract`` adapter works: ``string``, ``int``, ``int64``, ``double``,
+``float``, ``bool``, ``array<uint8>`` (BLOB), and user-defined custom
+types all read through the same call.
 
 ``query_scalar`` panics on prepare/step error and on zero rows. The
 ``try_query_scalar(db, sql, type<T>) : Result<T, string>`` sibling

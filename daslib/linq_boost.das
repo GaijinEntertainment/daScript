@@ -43,6 +43,9 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         // replacing function
         var iterType = clone_iterator_type(arg0type)
         var res = qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
+        // allow inner `_` to shadow an outer `_` when chains nest
+        // (e.g. `_where(_.x._in(arr |> _select(_.y)))`)
+        (((res as ExprCall).arguments[1] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
         res.force_at(call.at)
         return res
     }
@@ -293,6 +296,8 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
         // replacing function
         var iterType = clone_iterator_type(call.arguments[0]._type)
         var res = qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
+        // allow inner `_` to shadow an outer `_` when chains nest
+        (((res as ExprCall).arguments[2] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
         res.force_at(call.at)
         return res
     }

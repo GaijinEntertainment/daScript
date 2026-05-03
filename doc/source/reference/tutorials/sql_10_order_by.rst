@@ -58,9 +58,8 @@ Mixed ASC/DESC
 
 A single ``_order_by`` step emits all columns in the same direction.
 Mixed ASC/DESC across columns (e.g. ``ORDER BY a ASC, b DESC``) is
-**out of chunk-4 scope**. Until a marker syntax lands, drop down to
-the raw-SQL escape hatch (``query_one`` / ``query_scalar`` /
-``exec``) when you need it.
+**not yet supported**. Drop down to the raw-SQL escape hatch
+(``query_one`` / ``query_scalar`` / ``exec``) when you need it.
 
 Composes with ``_where`` and ``take``
 =====================================

@@ -1,0 +1,208 @@
+options gen2
+
+require dastest/testing_boost public
+
+require daslib/sql
+require daslib/linq_boost
+require sqlite/sqlite_boost
+require sqlite/sqlite_linq
+
+// Parity check for tutorial 15 — `_join`: inner equi-join.
+//
+// Shapes:
+//   1. plain inner equi-join + named-tuple projection
+//   2. pre-join `_where` (filters left source before join)
+//   3. right-side `_where` inside the joined chain (filter via JOIN ON)
+//
+// Each test uses a structurally distinct projection tuple to avoid
+// the generic-instantiation recordNames collision: any two
+// `tuple<string;int>` literals flowing through the same linq generic
+// in this compilation unit would share the cached instantiation and
+// lose the second's recordNames. (See feedback memory.)
+
+[sql_table(name = "Users")]
+struct User {
+    @sql_primary_key Id : int
+    Name   : string
+    Active : bool
+}
+
+[sql_table(name = "Orders")]
+struct Order {
+    @sql_primary_key Id : int
+    UserId : int
+    Total  : int
+}
+
+def fixture_db(db : SqlRunner) {
+    db |> create_table(type<User>)
+    db |> create_table(type<Order>)
+    db |> insert(User(Id = 1, Name = "Alice", Active = true))
+    db |> insert(User(Id = 2, Name = "Bob",   Active = true))
+    db |> insert(User(Id = 3, Name = "Carol", Active = false))
+    db |> insert(Order(Id = 10, UserId = 1, Total = 100))
+    db |> insert(Order(Id = 11, UserId = 1, Total = 250))
+    db |> insert(Order(Id = 12, UserId = 2, Total =  50))
+}
+
+def fixture_users() : array<User> {
+    var arr : array<User>
+    arr |> emplace(User(Id = 1, Name = "Alice", Active = true))
+    arr |> emplace(User(Id = 2, Name = "Bob",   Active = true))
+    arr |> emplace(User(Id = 3, Name = "Carol", Active = false))
+    return <- arr
+}
+
+def fixture_orders() : array<Order> {
+    var arr : array<Order>
+    arr |> emplace(Order(Id = 10, UserId = 1, Total = 100))
+    arr |> emplace(Order(Id = 11, UserId = 1, Total = 250))
+    arr |> emplace(Order(Id = 12, UserId = 2, Total =  50))
+    return <- arr
+}
+
+def sort_by_pair(var rows : array<auto(R)>) : array<R> {
+    rows |> sort() <| $(a, b) {
+        if (a.UserName != b.UserName) {
+            return a.UserName < b.UserName
+        }
+        return a.OrderTotal < b.OrderTotal
+    }
+    return <- rows
+}
+
+[test]
+def parity_inner_join_basic(t : T?) {
+    // Tuple shape: (UserName : string, OrderTotal : int) → tuple<string;int>
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _join(db |> select_from(type<Order>),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total)))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _join(db |> select_from(type<Order>),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total)))
+        var m3 <- (users |> _join(orders,
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total)))
+
+        m1 <- sort_by_pair(m1)
+        m2 <- sort_by_pair(m2)
+        m3 <- sort_by_pair(m3)
+
+        t |> equal(length(m1), 3, "inner join row count: 3 (Carol absent)")
+        t |> equal(length(m1), length(m2), "join: M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "join: M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].UserName,   m2[i].UserName,   "row[{i}].UserName:   M1 ≡ M2")
+            t |> equal(m1[i].OrderTotal, m2[i].OrderTotal, "row[{i}].OrderTotal: M1 ≡ M2")
+            t |> equal(m2[i].UserName,   m3[i].UserName,   "row[{i}].UserName:   M2 ≡ M3")
+            t |> equal(m2[i].OrderTotal, m3[i].OrderTotal, "row[{i}].OrderTotal: M2 ≡ M3")
+        }
+    }
+}
+
+def sort_by_pair_with_active(var rows : array<auto(R)>) : array<R> {
+    rows |> sort() <| $(a, b) {
+        if (a.UserName != b.UserName) {
+            return a.UserName < b.UserName
+        }
+        return a.OrderTotal < b.OrderTotal
+    }
+    return <- rows
+}
+
+[test]
+def parity_left_filter_join(t : T?) {
+    // Tuple shape: (UserName, OrderTotal, IsActive) → tuple<string;int;bool> —
+    // structurally distinct from parity_inner_join_basic.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _where(_.Active)
+                         |> _join(db |> select_from(type<Order>),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, IsActive = u.Active)))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _where(_.Active)
+                     |> _join(db |> select_from(type<Order>),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, IsActive = u.Active)))
+        var m3 <- (users |> _where(_.Active)
+                         |> _join(orders,
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, IsActive = u.Active)))
+
+        m1 <- sort_by_pair_with_active(m1)
+        m2 <- sort_by_pair_with_active(m2)
+        m3 <- sort_by_pair_with_active(m3)
+
+        t |> equal(length(m1), length(m2), "where|join: M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "where|join: M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].UserName,   m2[i].UserName,   "row[{i}].UserName:   M1 ≡ M2")
+            t |> equal(m1[i].OrderTotal, m2[i].OrderTotal, "row[{i}].OrderTotal: M1 ≡ M2")
+            t |> equal(m1[i].IsActive,   m2[i].IsActive,   "row[{i}].IsActive:   M1 ≡ M2")
+            t |> equal(m2[i].UserName,   m3[i].UserName,   "row[{i}].UserName:   M2 ≡ M3")
+            t |> equal(m2[i].OrderTotal, m3[i].OrderTotal, "row[{i}].OrderTotal: M2 ≡ M3")
+            t |> equal(m2[i].IsActive,   m3[i].IsActive,   "row[{i}].IsActive:   M2 ≡ M3")
+        }
+    }
+}
+
+def sort_by_pair_with_orderid(var rows : array<auto(R)>) : array<R> {
+    rows |> sort() <| $(a, b) {
+        if (a.UserName != b.UserName) {
+            return a.UserName < b.UserName
+        }
+        return a.OrderId < b.OrderId
+    }
+    return <- rows
+}
+
+[test]
+def parity_right_filter_join(t : T?) {
+    // Tuple shape: (UserName, OrderTotal, OrderId) → tuple<string;int;int>.
+    // Right-side `_where` filters the joined source before the equi-join.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users  <- fixture_users()
+        var orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _join(db |> select_from(type<Order>) |> _where(_.Total > 75),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, OrderId = o.Id)))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _join(db |> select_from(type<Order>) |> _where(_.Total > 75),
+                              $(u : User, o : Order) => u.Id == o.UserId,
+                              $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, OrderId = o.Id)))
+        var m3 <- (users |> _join(orders |> _where(_.Total > 75),
+                                  $(u : User, o : Order) => u.Id == o.UserId,
+                                  $(u : User, o : Order) => (UserName = u.Name, OrderTotal = o.Total, OrderId = o.Id)))
+
+        m1 <- sort_by_pair_with_orderid(m1)
+        m2 <- sort_by_pair_with_orderid(m2)
+        m3 <- sort_by_pair_with_orderid(m3)
+
+        t |> equal(length(m1), 2, "right-filter join row count: 2 (Bob's 50 dropped)")
+        t |> equal(length(m1), length(m2), "right-filter: M1 length ≡ M2")
+        t |> equal(length(m2), length(m3), "right-filter: M2 length ≡ M3")
+        for (i in range(length(m1))) {
+            t |> equal(m1[i].UserName,   m2[i].UserName,   "row[{i}].UserName:   M1 ≡ M2")
+            t |> equal(m1[i].OrderTotal, m2[i].OrderTotal, "row[{i}].OrderTotal: M1 ≡ M2")
+            t |> equal(m1[i].OrderId,    m2[i].OrderId,    "row[{i}].OrderId:    M1 ≡ M2")
+            t |> equal(m2[i].UserName,   m3[i].UserName,   "row[{i}].UserName:   M2 ≡ M3")
+            t |> equal(m2[i].OrderTotal, m3[i].OrderTotal, "row[{i}].OrderTotal: M2 ≡ M3")
+            t |> equal(m2[i].OrderId,    m3[i].OrderId,    "row[{i}].OrderId:    M2 ≡ M3")
+        }
+    }
+}

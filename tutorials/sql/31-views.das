@@ -95,10 +95,10 @@ def main {
         }
 
         // --- _create_view with a JOIN + named-tuple projection -------------
-        // Multi-source chains (`_join_inner` / `_join_left` from chunk 5)
-        // produce a SELECT with table aliases. The view's struct supplies
-        // the column names; the `_select((... = ...))` aliases here just
-        // have to match by position and type.
+        // Multi-source chains (`_join_inner` / `_join_left`) produce a
+        // SELECT with table aliases. The view's struct supplies the column
+        // names; the `_select((... = ...))` aliases here just have to
+        // match by position and type.
         db |> _create_view(type<OrderSummary>,
             db |> select_from(type<Order>)
                 |> _join(db |> select_from(type<Customer>),

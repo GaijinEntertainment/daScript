@@ -12,8 +12,8 @@ SQL-05 --- Parameter Binding
     single: Tutorial; _first
     single: Tutorial; _first_opt
 
-Parameter binding has two stories in dasSQLITE, and the chunk-3 design
-is to keep the everyday one **invisible**.
+Parameter binding has two stories in dasSQLITE, and the design keeps
+the everyday one **invisible**.
 
 LINQ form: capture is binding
 =============================
@@ -70,8 +70,8 @@ the right ``sqlite_bind`` for each arg:
         "SELECT \"Id\", \"Name\", \"Price\" FROM Cars WHERE Id = ? AND Name = ?",
         type<Car>, 2, "Audi")
 
-Chunk 3 ships 0..3 positional args. Named-tuple bind for ``:name``
-placeholders ships in a follow-up.
+Today 0..3 positional args are supported. Named-tuple bind for
+``:name`` placeholders is planned.
 
 Strict / Result / Option triples
 ================================

@@ -15,15 +15,15 @@ require daslib/fts5_query   // for in-memory text_match against the same query s
 // over text columns and exposes relevance ranking + Boolean / phrase
 // / prefix / NEAR query operators.
 //
-// API surface added in chunk 12:
+// API surface:
 //
 //   [sql_fts5(name="...")]    — struct annotation: virtual table
 //   @sql_fts_rank             — read-only float column → FTS5 `rank`
 //   text_match(col, query)    — _where predicate → `col MATCH ?`
 //
-// The same `text_match` is also a Phase 0.4 strings_boost predicate
-// (full FTS5-grammar parser in `daslib/fts5_query`); user code gets
-// in-memory and SQL-side matching from one call site.
+// The same `text_match` is also a `strings_boost` predicate (full
+// FTS5-grammar parser in `daslib/fts5_query`); user code gets in-memory
+// and SQL-side matching from one call site.
 
 [sql_fts5(name = "docs_idx")]
 struct Doc {

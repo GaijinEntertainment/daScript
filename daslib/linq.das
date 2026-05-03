@@ -1370,49 +1370,28 @@ def sum(src : array<auto(TT)>) : TT -const -& {
     }
 }
 
-[unused_argument(tt)]
-def private average_impl(var src; tt : auto(TT)) : TT -const -& {
-    var total : TT -const -&
-    var count : uint64
+def average(var src : iterator<auto(TT)>) : double {
+    //! Averages elements in an iterator. Always returns ``double``
+    //! (matches SQL ``AVG`` / C# ``Average``); element type must cast to ``double``.
+    var total : double = 0lf
+    var count : uint64 = 0ul
     for (x in src) {
-        total += x
+        total += double(x)
         count ++
     }
-    if (count != 0ul) {
-        static_if (typeinfo is_workhorse(type<TT>)) {
-            total /= TT(count)
-        } else {
-            total /= count
-        }
-    }
-    return <- total
+    return count != 0ul ? total / double(count) : 0lf
 }
 
-[unused_argument(tt)]
-def private average_impl_const(src : auto(ARGT); tt : auto(TT)) : TT -const -& {
-    static_if (typeinfo is_workhorse(type<TT>)) {
-        return average_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
-    } else {
-        return <- average_impl(unsafe(reinterpret<ARGT -const>(src)), type<TT -const -&>)
+def average(src : array<auto(TT)>) : double {
+    //! Averages elements in an array. Always returns ``double``
+    //! (matches SQL ``AVG`` / C# ``Average``); element type must cast to ``double``.
+    var total : double = 0lf
+    var count : uint64 = 0ul
+    for (x in src) {
+        total += double(x)
+        count ++
     }
-}
-
-def average(var src : iterator<auto(TT)>) : TT -const -& {
-    //! Averages elements in an iterator
-    static_if (typeinfo is_workhorse(type<TT>)) {
-        return average_impl(src, type<TT -const -&>)
-    } else {
-        return <- average_impl(src, type<TT -const -&>)
-    }
-}
-
-def average(src : array<auto(TT)>) : TT -const -& {
-    //! Averages elements in an array
-    static_if (typeinfo is_workhorse(type<TT>)) {
-        return average_impl_const(src, type<TT -const -&>)
-    } else {
-        return <- average_impl_const(src, type<TT -const -&>)
-    }
+    return count != 0ul ? total / double(count) : 0lf
 }
 
 [unused_argument(tt)]
