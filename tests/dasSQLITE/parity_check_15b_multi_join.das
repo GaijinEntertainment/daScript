@@ -152,6 +152,43 @@ def parity_three_table_join(t : T?) {
 }
 
 [test]
+def parity_three_table_join_then_first(t : T?) {
+    // V2 latent regression: `_join(_join(A,B,...), C, ...) |> _first()` previously
+    // failed at compile time with "_join LHS chain cannot end in a terminal" — the
+    // snapshot helper mistook the OUTER `_first` for an INNER terminal. Same fix as
+    // the v2.1 single-join+terminal case (hoisted check in process_join_call). Reuses
+    // case 1's projection shape (UserName, OrderTotal, Sku, Qty); the named tuple is
+    // already cached from `parity_three_table_join`, so field names match.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+
+        let m1 = _sql(db |> select_from(type<User>)
+                        |> _join(db |> select_from(type<Order>),
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                        |> _join(db |> select_from(type<Item>),
+                                 $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                                 $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                        |> _first())
+        let m2 = (db |> select_from(type<User>)
+                    |> _join(db |> select_from(type<Order>),
+                             $(u : User, o : Order) => u.Id == o.UserId,
+                             $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id, OrderTotal = o.Total))
+                    |> _join(db |> select_from(type<Item>),
+                             $(uo : UserOrder, it : Item) => uo.OrderId == it.OrderId,
+                             $(uo : UserOrder, it : Item) => (UserName = uo.UserName, OrderTotal = uo.OrderTotal, Sku = it.Sku, Qty = it.Qty))
+                    |> _first())
+
+        // Without ORDER BY, _first returns an arbitrary matching row — exact M1/M2/M3
+        // values may differ. Just assert the chain compiled and a plausible row came
+        // back (was a compile-time error pre-fix).
+        t |> equal(m1.UserName != "", true, "M1 _first produced a row")
+        t |> equal(m2.UserName != "", true, "M2 _first produced a row")
+        t |> equal(m1.Qty > 0 && m2.Qty > 0, true, "Qty populated in both")
+    }
+}
+
+[test]
 def parity_three_table_join_with_outer_where(t : T?) {
     // Case 2 (v2.1): outer WHERE on a multi-join's projected alias. The WHERE peel
     // snapshots the analyzed q in place (in-place to avoid the linq Mode-2/3 typer
@@ -192,8 +229,9 @@ def parity_three_table_join_with_outer_where(t : T?) {
         m2 <- sort_by_user_sku(m2)
         m3 <- sort_by_user_sku(m3)
 
-        // Fixture has 3 BOOK items (Item 100, 102 — Item 101 is PEN, 103 is PAPER). Item 102 belongs to
-        // Order 11 (Alice, total 250); Item 100 to Order 10 (Alice, 100). Bob has no BOOK item. Expect 2 rows.
+        // Fixture has 2 BOOK items: Item 100 (Order 10, Alice, total 100) and
+        // Item 102 (Order 11, Alice, total 250). Item 101 is PEN, 103 is PAPER.
+        // Bob has no BOOK item. Expect 2 rows.
         t |> equal(length(m1), 2, "3-table + WHERE Sku=BOOK: 2 rows")
         t |> equal(length(m1), length(m2), "M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "M2 length ≡ M3")
@@ -253,9 +291,14 @@ def parity_three_table_join_with_outer_where_int(t : T?) {
         t |> equal(length(m1), length(m2), "M1 length ≡ M2")
         t |> equal(length(m2), length(m3), "M2 length ≡ M3")
         for (i in range(length(m1))) {
-            t |> equal(m1[i].UserName, m2[i].UserName, "row[{i}].UserName: M1 ≡ M2")
-            t |> equal(m1[i].Sku,      m2[i].Sku,      "row[{i}].Sku:      M1 ≡ M2")
-            t |> equal(m1[i].Qty,      m2[i].Qty,      "row[{i}].Qty:      M1 ≡ M2")
+            t |> equal(m1[i].UserName,   m2[i].UserName,   "row[{i}].UserName:   M1 ≡ M2")
+            t |> equal(m1[i].OrderTotal, m2[i].OrderTotal, "row[{i}].OrderTotal: M1 ≡ M2")
+            t |> equal(m1[i].Sku,        m2[i].Sku,        "row[{i}].Sku:        M1 ≡ M2")
+            t |> equal(m1[i].Qty,        m2[i].Qty,        "row[{i}].Qty:        M1 ≡ M2")
+            t |> equal(m2[i].UserName,   m3[i].UserName,   "row[{i}].UserName:   M2 ≡ M3")
+            t |> equal(m2[i].OrderTotal, m3[i].OrderTotal, "row[{i}].OrderTotal: M2 ≡ M3")
+            t |> equal(m2[i].Sku,        m3[i].Sku,        "row[{i}].Sku:        M2 ≡ M3")
+            t |> equal(m2[i].Qty,        m3[i].Qty,        "row[{i}].Qty:        M2 ≡ M3")
         }
     }
 }

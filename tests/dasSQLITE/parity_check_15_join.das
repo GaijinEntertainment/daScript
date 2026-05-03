@@ -179,6 +179,44 @@ def sort_by_buyer_orderid(var rows : array<auto(R)>) : array<R> {
 }
 
 [test]
+def parity_join_with_outer_where_then_first(t : T?) {
+    // v2.1 regression: chain `_join(...) |> _where(_.alias) |> _first()` previously
+    // failed at compile time with the misleading "_join LHS chain cannot end in a
+    // terminal" error — the snapshot helper conflated the OUTER terminal flag with
+    // an INNER terminal it was meant to reject. Hoisted check now lives in
+    // process_join_call's srca recursion (save-and-compare across analyze_chain),
+    // so outer terminals are accepted. Tuple shape: (RefId:int, Label:string,
+    // Amount:int) → tuple<int;string;int> — leading int makes the arg-type list
+    // structurally distinct from every other test in this file.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+
+        let m1 = _sql(db |> select_from(type<User>)
+                        |> _join(db |> select_from(type<Order>),
+                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                 $(u : User, o : Order) => (RefId = o.Id, Label = u.Name, Amount = o.Total))
+                        |> _where(_.Amount > 75)
+                        |> _first())
+        let m2 = (db |> select_from(type<User>)
+                    |> _join(db |> select_from(type<Order>),
+                             $(u : User, o : Order) => u.Id == o.UserId,
+                             $(u : User, o : Order) => (RefId = o.Id, Label = u.Name, Amount = o.Total))
+                    |> _where(_.Amount > 75)
+                    |> _first())
+
+        // _first picks an arbitrary row from the matching set; without ORDER BY the
+        // chosen row may differ between modes. Just assert the chain compiled and the
+        // returned row satisfies the predicate (the regression was a compile-time
+        // error — the macro analyzer rejected the chain shape, value-correctness
+        // didn't matter). Same applies to M3 — first() over the linq path on an
+        // unordered iterator picks an arbitrary match.
+        t |> equal(m1.Amount > 75, true, "M1 row passes the WHERE predicate")
+        t |> equal(m2.Amount > 75, true, "M2 row passes the WHERE predicate")
+        t |> equal(m1.Label != "" && m2.Label != "", true, "Label populated in both")
+    }
+}
+
+[test]
 def parity_join_with_outer_where(t : T?) {
     // v2.1: outer WHERE on a single _join's projected alias must filter PROJECTED rows.
     // The WHERE peel snapshots the analyzed q in place; SQL renders as

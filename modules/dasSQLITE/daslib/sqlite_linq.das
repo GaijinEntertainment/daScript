@@ -640,10 +640,12 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
 [macro_function]
 def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
                                         fillPassthrough : bool = false) : bool {
-    if (q.seenTerminal || q.seenToArray) {
-        macro_error(prog, at, "_sql: multi-join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
-        return false
-    }
+    // NOTE: don't gate on q.seenTerminal / q.seenToArray here — analyze_chain peels
+    // outermost-first, so by the time snapshot is called, those flags reflect the OUTER
+    // chain's terminal (which is fine) and there's no way to distinguish that from an
+    // inner-chain terminal. The "inner LHS can't end in a terminal" check is hoisted
+    // to the call sites that can do save-and-compare across analyze_chain (currently
+    // process_join_call's srca recursion).
     if (q.proj == ProjectionShape.SingleColumn || q.proj == ProjectionShape.Aggregate) {
         macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar/aggregate projection — reshape so each LHS column is named")
         return false
@@ -771,7 +773,17 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.rootAlias = "t0"
     // 1. Recurse into srca FIRST. If srca itself is a `_join` chain (multi-join), the inner
     // process_join_call will set q.seenJoin / fill q.joins[]. Detect that on return below.
+    // Capture seenTerminal/seenToArray pre-recursion: if srca itself peels a terminal, we
+    // reject — the LHS of a join can't terminate in `_first`/`_count`/`_to_array`. This is
+    // the discrimination snapshot_q_to_subquery_wrap can't do (it sees the OUTER terminal
+    // flag indistinguishably set in chains like `_join(...) |> _first()`).
+    let savedSeenTerminal = q.seenTerminal
+    let savedSeenToArray = q.seenToArray
     if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
+        return false
+    }
+    if ((q.seenTerminal && !savedSeenTerminal) || (q.seenToArray && !savedSeenToArray)) {
+        macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
     // 2. Multi-join: srca contained a _join. Snapshot q as an inner subquery and reset for
