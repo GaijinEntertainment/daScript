@@ -638,14 +638,64 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
 // `into` projection resolves `<lhsArg>.<alias>` against q.fromRowType (named tuple
 // from inner_projection_type), which now also feeds source_rootType_for_idx(0).
 [macro_function]
-def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
-    if (q.seenTerminal || q.seenToArray) {
-        macro_error(prog, at, "_sql: multi-join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
+def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
+                                        fillPassthrough : bool = false) : bool {
+    // NOTE: don't gate on q.seenTerminal / q.seenToArray here — analyze_chain peels
+    // outermost-first, so by the time snapshot is called, those flags reflect the OUTER
+    // chain's terminal (which is fine) and there's no way to distinguish that from an
+    // inner-chain terminal. The "inner LHS can't end in a terminal" check is hoisted
+    // to the call sites that can do save-and-compare across analyze_chain (currently
+    // process_join_call's srca recursion).
+    // Aggregate is acceptable here: outer-peeled `_count`/`_sum` set proj=Aggregate before
+    // recursing; we save/clear/restore it below so the inner subquery emits projection columns
+    // and the outer SELECT renders the aggregate. SingleColumn rejection still stands because
+    // inner_projection_type expects a named tuple.
+    if (q.proj == ProjectionShape.SingleColumn) {
+        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar projection — reshape so each LHS column is named")
         return false
     }
-    if (q.proj == ProjectionShape.SingleColumn || q.proj == ProjectionShape.Aggregate) {
-        macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar/aggregate projection — reshape so each LHS column is named")
-        return false
+    // Save outer-terminal state pre-set by outer-peeled ops (`_first` / `_count` / `_take` /
+    // `_skip` / `_order_by` / `_distinct` etc.). Without this, `build_sql_string(q, true)` below
+    // serializes those clauses into the INNER subquery (e.g. `LIMIT 1` lands BEFORE the outer
+    // WHERE filter → wrong row), and the reset further down drops them entirely so the OUTER
+    // SELECT loses them too. Save → clear → build inner → reset → restore.
+    let savedMatr = q.matr
+    var savedLimitBindExpr = q.limitBindExpr
+    var savedOffsetBindExpr = q.offsetBindExpr
+    let savedDistinctFlag = q.distinctFlag
+    var savedOrderByCols : array<string>
+    savedOrderByCols <- q.orderByCols
+    var savedOrderByInlineExprs : array<ExpressionPtr>
+    savedOrderByInlineExprs <- q.orderByInlineExprs
+    let savedSeenTake = q.seenTake
+    let savedSeenSkip = q.seenSkip
+    let savedSeenOrderBy = q.seenOrderBy
+    let savedSeenDistinct = q.seenDistinct
+    let savedSeenTerminal = q.seenTerminal
+    let savedSeenToArray = q.seenToArray
+    // Aggregate state set by outer-peeled `_count` / `_sum` / etc. The inner subquery must
+    // emit the projection columns (so the outer can wrap them); the OUTER SELECT renders
+    // `COUNT(*)` / `SUM(...)`. Save → clear → build inner → restore on outer post-wrap.
+    let savedAggExpr := q.aggregateExpr
+    var savedAggType = q.aggregateType
+    // Clear them on q so the inner SQL emits without outer-only clauses.
+    q.matr = Materializer.Array
+    q.limitBindExpr = null
+    q.offsetBindExpr = null
+    q.distinctFlag = false
+    q.seenTake = false
+    q.seenSkip = false
+    q.seenOrderBy = false
+    q.seenDistinct = false
+    q.seenTerminal = false
+    q.seenToArray = false
+    q.aggregateExpr := ""
+    q.aggregateType = null
+    if (savedAggExpr != "") {
+        // selectCols were populated by analyze_projection (preserved by process_join_call's
+        // save/restore); inner build_sql_string must read them as a NamedTuple projection,
+        // not as an aggregate (which would emit the now-empty aggregateExpr).
+        q.proj = ProjectionShape.NamedTuple
     }
     var savedDb = q.dbExpr
     let savedInView = q.inView
@@ -705,6 +755,72 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.dbExpr = savedDb
     q.inView = savedInView
     q.hadError = savedHadError
+    // Restore outer-terminal state so the outer SELECT renders WITH it (LIMIT 1 from
+    // `_first`, ORDER BY from `_order_by`, etc. all belong on outer post-wrap).
+    q.matr = savedMatr
+    q.limitBindExpr = savedLimitBindExpr
+    q.offsetBindExpr = savedOffsetBindExpr
+    q.distinctFlag = savedDistinctFlag
+    q.orderByCols <- savedOrderByCols
+    q.orderByInlineExprs <- savedOrderByInlineExprs
+    q.seenTake = savedSeenTake
+    q.seenSkip = savedSeenSkip
+    q.seenOrderBy = savedSeenOrderBy
+    q.seenDistinct = savedSeenDistinct
+    q.seenTerminal = savedSeenTerminal
+    q.seenToArray = savedSeenToArray
+    q.aggregateExpr := savedAggExpr
+    q.aggregateType = savedAggType
+    if (savedAggExpr != "") {
+        // Outer renders `SELECT COUNT(*) FROM (...) AS t0 [WHERE ...]` — no row projection.
+        // Override the FullRow that the reset block installed; ignore fillPassthrough.
+        q.proj = ProjectionShape.Aggregate
+    } elif (fillPassthrough) {
+        // Terminal wrap (e.g. WHERE peel on a JOIN'd named-tuple projection): no outer op
+        // will fill the projection. Emit `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS "t0"`
+        // via passthrough fragments — same shape divert_to_inner uses for NamedTuple inner.
+        if (!apply_passthrough_projection(q, projType, prog, at)) {
+            return false
+        }
+    }
+    return true
+}
+
+// Replace q's projection state with passthrough column references against the
+// named-tuple `projType` (typically q.fromRowType after a divert/snapshot). Sets
+// q.proj = NamedTuple. Used both by divert_to_inner (NamedTuple inner case) and
+// snapshot_q_to_subquery_wrap with fillPassthrough = true.
+[macro_function]
+def private apply_passthrough_projection(var q : SqlQuery&; projType : TypeDeclPtr;
+                                         prog : ProgramPtr; at : LineInfo) : bool {
+    if (projType == null || projType.baseType != Type.tTuple) {
+        macro_error(prog, at, "_sql multi-Q: passthrough projection expected named-tuple type (internal)")
+        return false
+    }
+    let n = length(projType.argNames)
+    if (n != length(projType.argTypes)) {
+        macro_error(prog, at, "_sql multi-Q: passthrough projection alias count {n} != type count {length(projType.argTypes)} (internal)")
+        return false
+    }
+    q.selectCols |> clear
+    q.selectColAliases |> clear
+    q.selectColSqlFragments |> clear
+    q.selectColTypes |> clear
+    q.projRecordNames |> clear
+    q.selectCols |> reserve(n)
+    q.selectColAliases |> reserve(n)
+    q.selectColSqlFragments |> reserve(n)
+    q.selectColTypes |> reserve(n)
+    q.projRecordNames |> reserve(n)
+    for (i in range(n)) {
+        let alias = string(projType.argNames[i])
+        q.selectCols |> push(alias) // nolint:PERF006 reserved above
+        q.selectColAliases |> push("") // nolint:PERF006 reserved above
+        q.selectColSqlFragments |> push("\"{alias}\"") // nolint:PERF006 reserved above
+        q.selectColTypes |> push(clone_type(projType.argTypes[i])) // nolint:PERF006 reserved above
+        q.projRecordNames |> push(alias) // nolint:PERF006 reserved above
+    }
+    q.proj = ProjectionShape.NamedTuple
     return true
 }
 
@@ -724,7 +840,17 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.rootAlias = "t0"
     // 1. Recurse into srca FIRST. If srca itself is a `_join` chain (multi-join), the inner
     // process_join_call will set q.seenJoin / fill q.joins[]. Detect that on return below.
+    // Capture seenTerminal/seenToArray pre-recursion: if srca itself peels a terminal, we
+    // reject — the LHS of a join can't terminate in `_first`/`_count`/`_to_array`. This is
+    // the discrimination snapshot_q_to_subquery_wrap can't do (it sees the OUTER terminal
+    // flag indistinguishably set in chains like `_join(...) |> _first()`).
+    let savedSeenTerminal = q.seenTerminal
+    let savedSeenToArray = q.seenToArray
     if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
+        return false
+    }
+    if ((q.seenTerminal && !savedSeenTerminal) || (q.seenToArray && !savedSeenToArray)) {
+        macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
     // 2. Multi-join: srca contained a _join. Snapshot q as an inner subquery and reset for
@@ -821,11 +947,27 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.argSourceIdx |> push(0)
     q.argNames |> push(arg1Name)
     q.argSourceIdx |> push(1)
+    // Save aggregate state across analyze_projection: outer-peeled `_count`/`_sum`/etc. set
+    // q.aggregateExpr + q.proj=Aggregate before recursion; analyze_projection unconditionally
+    // writes q.proj=NamedTuple (and clears nothing else) which would clobber that intent.
+    // selectCols still need to be populated for the inner subquery in the multi-join /
+    // WHERE-peel snapshot paths, so we let analyze_projection run normally and restore the
+    // aggregate state afterwards. Invariant: aggregateExpr non-empty ⇒ proj=Aggregate.
+    let savedAggExpr := q.aggregateExpr
+    var savedAggType = q.aggregateType
+    let savedAggProj = q.proj == ProjectionShape.Aggregate
     let projOk = analyze_projection(iret.subexpr, q, prog, at)
     q.argNames |> clear
     q.argSourceIdx |> clear
     if (!projOk) {
         return false
+    }
+    if (savedAggExpr != "") {
+        q.aggregateExpr := savedAggExpr
+        q.aggregateType = savedAggType
+        if (savedAggProj) {
+            q.proj = ProjectionShape.Aggregate
+        }
     }
     q.seenSelect = true
     return true
@@ -1001,37 +1143,8 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
         // struct. rootType stays null; passthrough-project all aliases via SQL fragments so the
         // outer SELECT renders as `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS t0`.
         // pred_to_sql resolves `_.alias` against q.fromRowType (set above).
-        var aliasTypes : array<TypeDeclPtr>
-        if (subQ.proj == ProjectionShape.NamedTuple) {
-            aliasTypes := subQ.selectColTypes
-        } else {
-            aliasTypes := subQ.groupedSelectTypes
-        }
-        let n = length(subQ.projRecordNames)
-        if (n != length(aliasTypes)) {
-            macro_error(prog, at, "_sql multi-Q: inner projection alias count {n} != type count {length(aliasTypes)} (internal)")
+        if (!apply_passthrough_projection(q, q.fromRowType, prog, at)) {
             return false
-        }
-        q.selectCols |> clear
-        q.selectColAliases |> clear
-        q.selectColSqlFragments |> clear
-        q.selectColTypes |> clear
-        q.projRecordNames |> clear
-        q.selectCols |> reserve(n)
-        q.selectColAliases |> reserve(n)
-        q.selectColSqlFragments |> reserve(n)
-        q.selectColTypes |> reserve(n)
-        q.projRecordNames |> reserve(n)
-        for (i in range(n)) {
-            let alias = subQ.projRecordNames[i]
-            q.selectCols |> push(alias) // nolint:PERF006 reserved above
-            q.selectColAliases |> push("") // nolint:PERF006 reserved above
-            q.selectColSqlFragments |> push("\"{alias}\"") // nolint:PERF006 reserved above
-            q.selectColTypes |> push(clone_type(aliasTypes[i])) // nolint:PERF006 reserved above
-            q.projRecordNames |> push(alias) // nolint:PERF006 reserved above
-        }
-        if (q.proj == ProjectionShape.FullRow) {
-            q.proj = ProjectionShape.NamedTuple
         }
     }
     return true
@@ -1403,12 +1516,20 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             if (!analyze_chain(wCall.arguments[0], q, prog, at)) {
                 return false
             }
-            // V2 deferred: outer WHERE on a `_join(...) |> _where(_.alias)` chain would need the
-            // same wrap-and-resolve pattern as `_select |> _where`, but the SELECT case is handled
-            // by the SELECT peel's divert. For _join we'd need to detect post-projection state
-            // here (q.proj != FullRow) and snapshot — but that double-wraps the SELECT path and
-            // tickles a typer cascade in linq Mode-2/3 generic instantiation. Tracking as
-            // follow-up; for now this case is rejected at SQL prepare time with "no such column".
+            // v2.1: outer WHERE on a JOIN's named-tuple `into` projection filters PROJECTED rows;
+            // pred_to_sql against base-table scope emits `t0.alias` which doesn't exist. Snapshot
+            // the analyzed q in place so WHERE renders as `... FROM (joinSql) AS "t0" WHERE "alias" = ...`,
+            // resolved through q.fromRowType. The `_select |> _where` case is already handled by
+            // the SELECT peel's divert (q.seenJoin is false there). Use the in-place snapshot
+            // helper, NOT divert_to_inner — re-analyzing here re-instantiates the generic chain
+            // and tickles a typer cascade in linq Mode-2/3.
+            // Aggregate-with-WHERE (`_join | _where | _count`) needs the same wrap so the WHERE
+            // can reference the projected alias; snapshot preserves aggregate state on the outer.
+            if (q.seenJoin && (q.proj == ProjectionShape.NamedTuple || q.aggregateExpr != "")) {
+                if (!snapshot_q_to_subquery_wrap(q, prog, at, [fillPassthrough = true])) {
+                    return false
+                }
+            }
             return analyze_predicate(body, q, prog, at)
         }
     }

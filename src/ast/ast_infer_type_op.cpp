@@ -12,6 +12,19 @@ namespace das {
         }
         return false;
     }
+
+    bool InferTypes::hasExtraCloneFor(const TypeDeclPtr & cloneType, bool srcConst) const {
+        for (auto & ef : extraFunctions) {
+            if (ef->name != "clone") continue;
+            if (ef->arguments.size() != 2) continue;
+            auto & destT = ef->arguments[0]->type;
+            if (!destT->isSameType(*cloneType, RefMatters::no, ConstMatters::no, TemporaryMatters::no, AllowSubstitute::no, true, true)) continue;
+            auto & srcT = ef->arguments[1]->type;
+            if (srcT->constant != srcConst) continue;
+            return true;
+        }
+        return false;
+    }
     ExpressionPtr InferTypes::visit(ExprOp1 *expr) {
         if (!expr->subexpr->type || expr->subexpr->type->isAliasOrExpr())
             return Visitor::visit(expr); // failed to infer
@@ -768,9 +781,11 @@ namespace das {
                 }
             } else if (cloneType->isTuple()) {
                 reportAstChanged();
-                auto fnList = getCloneFunc(cloneType, cloneType);
+                auto rhsType = new TypeDecl(*cloneType);
+                rhsType->constant = expr->right->type->constant;
+                auto fnList = getCloneFunc(cloneType, rhsType);
                 if (verifyCloneFunc(fnList, expr->at)) {
-                    if (fnList.size() == 0) {
+                    if (fnList.size() == 0 && !hasExtraCloneFor(cloneType, expr->right->type->constant)) {
                         auto clf = makeCloneTuple(expr->at, cloneType, expr->right->type->constant);
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
@@ -784,9 +799,11 @@ namespace das {
                 }
             } else if (cloneType->isVariant()) {
                 reportAstChanged();
-                auto fnList = getCloneFunc(cloneType, cloneType);
+                auto rhsType = new TypeDecl(*cloneType);
+                rhsType->constant = expr->right->type->constant;
+                auto fnList = getCloneFunc(cloneType, rhsType);
                 if (verifyCloneFunc(fnList, expr->at)) {
-                    if (fnList.size() == 0) {
+                    if (fnList.size() == 0 && !hasExtraCloneFor(cloneType, expr->right->type->constant)) {
                         auto clf = makeCloneVariant(expr->at, cloneType, expr->right->type->constant);
                         clf->privateFunction = true;
                         extraFunctions.push_back(clf);
