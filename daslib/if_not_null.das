@@ -43,10 +43,15 @@ class ApplyMacro : AstCallMacro {
             if (!PTR._type.flags.constant) {
                 vtype.flags |= TypeDeclFlags.removeConstant
             }
+            var ptrClone = clone_expression(PTR)
+            var argClones : array<ExpressionPtr>
+            for (a in fcall.arguments) {
+                argClones |> push(clone_expression(a))
+            }
             return <- qmacro_block() {
-                let $i(ifnn_name) : $t(vtype) = $e(PTR)
+                let $i(ifnn_name) : $t(vtype) = $e(ptrClone)
                 if ($i(ifnn_name) != null) {
-                    $c(fcall.name)(*$i(ifnn_name), $a(fcall.arguments))
+                    $c(fcall.name)(*$i(ifnn_name), $a(argClones))
                 }
             }
         }
