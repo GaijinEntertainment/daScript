@@ -70,6 +70,22 @@ def draw_hud() {
     let speed_pct = int(speed_t * 100.0)
     draw_text("SPD: {speed_pct}%", 10, 108, float3(0.7, 0.8, 1.0))
 
+    // Active timed bonuses
+    var bonus_y = 136
+    if (player_multishot_timer > 0.0 || player_fastshot_timer > 0.0) {
+        draw_text("ACTIVE BONUS", 10, bonus_y, float3(0.9, 1.0, 0.65))
+        bonus_y += 22
+    }
+    if (player_multishot_timer > 0.0) {
+        let secs = int(player_multishot_timer + 0.99)
+        draw_text("MULTISHOT: {secs}s", 10, bonus_y, float3(1.0, 0.55, 0.2))
+        bonus_y += 22
+    }
+    if (player_fastshot_timer > 0.0) {
+        let secs = int(player_fastshot_timer + 0.99)
+        draw_text("FAST SHOT: {secs}s", 10, bonus_y, float3(1.0, 0.78, 0.12))
+    }
+
     draw_fuel_bar()
 
     // Controls hint
