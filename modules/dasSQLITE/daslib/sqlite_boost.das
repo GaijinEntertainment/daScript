@@ -126,7 +126,9 @@ def try_open_sqlite(path : string) : Result<SqlRunner, string> {
     var db = SqlRunner()
     let rc = sqlite3_open(path, db.sqlite_handle)
     if (rc != SQLITE_OK) {
-        let msg = "sqlite3_open(\"{path}\") failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        // SQLite leaves *ppDb non-null on most errors, but writes NULL on OOM allocation
+        // failure — sqlite3_errmsg(NULL) is undefined; sqlite3_close_v2(NULL) is a no-op.
+        let msg = db.sqlite_handle == null ? "sqlite3_open(\"{path}\") failed: out of memory" : "sqlite3_open(\"{path}\") failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_close_v2(db.sqlite_handle)
         db.sqlite_handle = null
         return err(msg, type<SqlRunner>)
@@ -2047,7 +2049,8 @@ def private try_open_sqlite_readonly(path : string) : Result<SqlRunner, string> 
     var db = SqlRunner()
     let rc = sqlite3_open_v2_no_vfs(path, unsafe(addr(db.sqlite_handle)), int(SQLITE_OPEN_READONLY))
     if (rc != SQLITE_OK) {
-        let msg = "sqlite3_open_v2(\"{path}\", READONLY) failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        // OOM-on-open writes NULL into *ppDb; sqlite3_errmsg(NULL) is undefined, close_v2(NULL) is a no-op.
+        let msg = db.sqlite_handle == null ? "sqlite3_open_v2(\"{path}\", READONLY) failed: out of memory" : "sqlite3_open_v2(\"{path}\", READONLY) failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_close_v2(db.sqlite_handle)
         db.sqlite_handle = null
         return err(msg, type<SqlRunner>)

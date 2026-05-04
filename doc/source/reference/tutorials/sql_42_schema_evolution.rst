@@ -88,12 +88,12 @@ iterator --- one row at a time, no full-array materialization.
         with_sqlite(":memory:") <| $(newDb) {
             newDb |> create_table(type<LogEntry>)
 
-            with_sqlite("schema_from_v1.db") <| $(oldDb) {
+            with_sqlite("tests/dasSQLITE/test_data/schema_from_v1.db") <| $(oldDb) {
                 for (e in _each_sql(oldDb |> select_from(type<OldLogV1>))) {
                     newDb |> insert(migrate_one_row(e))
                 }
             }
-            with_sqlite("schema_from_v2.db") <| $(oldDb) {
+            with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") <| $(oldDb) {
                 for (e in _each_sql(oldDb |> select_from(type<OldLogV2>))) {
                     newDb |> insert(migrate_one_row(e))
                 }
