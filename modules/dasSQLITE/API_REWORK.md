@@ -1366,9 +1366,6 @@ the 5 peel-divert sites + the SELECT one (which uses a tighter
 - New `parity_check_11b_take_then_where.das` (5 cases).
 - New `parity_check_11c_take_then_order.das` (3 cases).
 - New `parity_check_11d_skip_then_where.das` (2 cases).
-- `failed_parity_check_14_order_after_group.das` (F3 pin) still
-  reports `30304:1` as expected — F3 is orthogonal (linq side, not
-  `_sql`).
 
 ### Tutorial 11
 
