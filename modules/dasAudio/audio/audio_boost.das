@@ -989,7 +989,7 @@ def public audio_system_create : AudioSystemChannels {
     g_command_stream = s
     g_sound_sid = atomic64_create()
     unsafe(invoke_in_context(mixer_context(), "setup_command_processor", s))
-    return (s, g_sound_sid)
+    return (command = s, next_sid = g_sound_sid)
 }
 
 def public audio_system_finalize(var s : Stream?&; var next_sid : Atomic64?) {
@@ -1152,7 +1152,7 @@ def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuat
 
 def public append_to_pcm(sid : SID; var samples : array<float>) {
     //! append samples to PCM stream
-    push_cmd(AudioCommand(append_pcm <-  (sid, samples)))
+    push_cmd(AudioCommand(append_pcm <- (sid = sid, samples <- samples)))
     return sid
 }
 
@@ -1160,31 +1160,31 @@ def public append_box_to_pcm(sid : SID; box : LockBox?; var samples : array<floa
     //! append samples from lock box to PCM stream. Box is grabbed and released on audio thread.
     //! samples buffer must outlive the grab — caller keeps it alive until box.isReady.
     _builtin_lockbox_fill(box, unsafe(addr(samples)))
-    push_cmd(AudioCommand(append_box_pcm = (sid, intptr(box))))
+    push_cmd(AudioCommand(append_box_pcm = (sid = sid, box = intptr(box))))
     return sid
 }
 
 def public set_pause(sid : SID; paused : bool) {
     //! pause or unpause sound
-    push_cmd(AudioCommand(pause = (sid, paused)))
+    push_cmd(AudioCommand(pause = (sid = sid, paused = paused)))
     return sid
 }
 
 def public set_volume(sid : SID; volume : float; time : float = 0.002f) {
     //! set volume of sound
-    push_cmd(AudioCommand(volume = (sid, volume, time)))
+    push_cmd(AudioCommand(volume = (sid = sid, volume = volume, time = time)))
     return sid
 }
 
 def public set_pan(sid : SID; pan : float) {
     //! set pan of sound
-    push_cmd(AudioCommand(pan = (sid, pan)))
+    push_cmd(AudioCommand(pan = (sid = sid, pan = pan)))
     return sid
 }
 
 def public set_pitch(sid : SID; pitch : float) {
     //! set pitch of sound
-    push_cmd(AudioCommand(pitch = (sid, pitch)))
+    push_cmd(AudioCommand(pitch = (sid = sid, pitch = pitch)))
     return sid
 }
 
@@ -1200,7 +1200,7 @@ def public set_global_pause(pause : bool) {
 
 def public stop(sid : SID; time : float = 0.0f) {
     //! stop sound
-    push_cmd(AudioCommand(stop = (sid, time)))
+    push_cmd(AudioCommand(stop = (sid = sid, time = time)))
     return sid
 }
 
@@ -1237,7 +1237,7 @@ def public unset_status_update(sid : SID) {
 
 def public set_reverb(sid : SID; reverb : I3DL2ReverbProperties) {
     //! set reverb for sound
-    push_cmd(AudioCommand(reverb = (sid, reverb)))
+    push_cmd(AudioCommand(reverb = (sid = sid, properties = reverb)))
     return sid
 }
 
@@ -1275,7 +1275,7 @@ def public set_reverb_preset(sid : SID; preset : ReverbPreset) {
 
 def public set_chorus(sid : SID; config : ma_chorus_config) {
     //! set chorus effect for sound
-    push_cmd(AudioCommand(chorus_cmd = (sid, config)))
+    push_cmd(AudioCommand(chorus_cmd = (sid = sid, config = config)))
     return sid
 }
 
@@ -1286,7 +1286,7 @@ def public set_chorus_default(sid : SID) {
 
 def public set_playback_position(sid : SID; position : uint64) {
     //! set playback position for sound (in frames)
-    push_cmd(AudioCommand(set_playback_position = (sid, position)))
+    push_cmd(AudioCommand(set_playback_position = (sid = sid, position = position)))
     return sid
 }
 

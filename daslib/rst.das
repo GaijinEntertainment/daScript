@@ -93,25 +93,25 @@ def call_macro_label_name(mod, value) {
 def public safe_function_name(name : string) : string {
     //! Replaces special characters in a function name to produce a safe RST label identifier.
     return name |> replace_multiple([
-        (" ", "_"),
-        ("$", "_builtin_"),
-        ("#", "_hh_"),
-        (":", "_c_"),
-        ("@", "_at_"),
-        ("<", "_ls_"),
-        (">", "_gr_"),
-        ("`", "_rq_"),
-        ("!", "_ex_"),
-        ("=", "_eq_"),
-        ("*", "_st_"),
-        (".", "_dot_"),
-        ("?", "_q_"),
-        ("&", "_ref_"),
-        ("(", ""),
-        (")", ""),
-        ("[", "_lb_"),
-        ("]", "_rb_"),
-        ("|", "")])
+        (text = " ", replacement = "_"),
+        (text = "$", replacement = "_builtin_"),
+        (text = "#", replacement = "_hh_"),
+        (text = ":", replacement = "_c_"),
+        (text = "@", replacement = "_at_"),
+        (text = "<", replacement = "_ls_"),
+        (text = ">", replacement = "_gr_"),
+        (text = "`", replacement = "_rq_"),
+        (text = "!", replacement = "_ex_"),
+        (text = "=", replacement = "_eq_"),
+        (text = "*", replacement = "_st_"),
+        (text = ".", replacement = "_dot_"),
+        (text = "?", replacement = "_q_"),
+        (text = "&", replacement = "_ref_"),
+        (text = "(", replacement = ""),
+        (text = ")", replacement = ""),
+        (text = "[", replacement = "_lb_"),
+        (text = "]", replacement = "_rb_"),
+        (text = "|", replacement = "")])
 }
 
 def public function_label_file(value : FunctionPtr; drop_args : int = 0) {
@@ -605,9 +605,9 @@ def make_label(name : string) {
 
 def make_ref(name, text : string) {
     let t = (text |> replace_multiple([
-        ("<", "\\<"),
-        (">", "\\>"),
-        ("!", "\\!"
+        (text = "<", replacement = "\\<"),
+        (text = ">", replacement = "\\>"),
+        (text = "!", replacement = "\\!"
     )]))
     return " :ref:`{t} <{name}>`"
 }
@@ -1634,7 +1634,7 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     tab |> emplace(array<string>("field", "type"))
     var fields : array<tuple<name : string; typ : string; offset : uint>>
     for_each_field(*ann) $(name, cppName, xtype, offset) {
-        fields |> emplace((name, describe_type(xtype), offset))
+        fields |> emplace((name = name, typ = describe_type(xtype), offset = offset))
     }
 
     fields |> sort($(a, b) => a.offset < b.offset)
@@ -2203,14 +2203,14 @@ def public append_to_group_by_regex(var group : DocGroup; var mod : Module?; var
     for_each_function(mod, "") $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
-                push(group.func, (func, mod))
+                push(group.func, (fn = func, mod = mod))
             }
         }
     }
     for_each_generic(mod) $(func) {
         if (function_needs_documenting(func)) {
             if (regex_match(reg, string(func.name)) != -1) {
-                push(group.func, (func, mod))
+                push(group.func, (fn = func, mod = mod))
             }
         }
     }

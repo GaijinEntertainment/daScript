@@ -1395,7 +1395,7 @@ class private DAgent : DapiDebugAgent {
                         return
                     }
                 }
-                frame.state |> emplace <| (STATE_VARS + uint64(length(frame.state)), category, [ variable])
+                frame.state |> emplace <| (uid = STATE_VARS + uint64(length(frame.state)), name = category, vars = [ variable])
             }
         })
     }

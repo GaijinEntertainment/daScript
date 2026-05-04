@@ -105,7 +105,7 @@ def public create_quads(font : Font; text : string; at : float2 = float2(0.)) {
 def public quads_dim(quads : array<FontVertex>) : tuple<vmin : float2; vmax : float2> {
     //! Compute the axis-aligned bounding box of a quad array.
     if (empty(quads)) {
-        return (float2(0.), float2(0.))
+        return (vmin = float2(0.), vmax = float2(0.))
     }
     var vmin = float2(FLT_MAX, FLT_MAX)
     var vmax = float2(-FLT_MAX, -FLT_MAX)
@@ -113,7 +113,7 @@ def public quads_dim(quads : array<FontVertex>) : tuple<vmin : float2; vmax : fl
         vmin = min(vmin, q.xy)
         vmax = max(vmax, q.xy)
     }
-    return (vmin, vmax)
+    return (vmin = vmin, vmax = vmax)
 }
 
 enum public HJust {
@@ -192,7 +192,7 @@ def public create_ttf_objects {
 }
 
 def public get_ttf_program : tuple<vtx : string; frag : string> {
-    return (TTF_VERTEX_SRC, TTF_FRAGMENT_SRC)
+    return (vtx = TTF_VERTEX_SRC, frag = TTF_FRAGMENT_SRC)
 }
 
 def public set_ttf_objects(prog : uint) {

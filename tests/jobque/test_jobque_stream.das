@@ -169,9 +169,9 @@ def test_stream_archive_struct(t : T?) {
 def test_stream_archive_variant(t : T?) {
     t |> run("variant with uint64 handles serializes end-to-end") @(t : T?) {
         with_stream() $(var s : Stream?) {
-            s |> push_archive(CmdVariant(play = (1, "kick")))
+            s |> push_archive(CmdVariant(play = (id = 1, name = "kick")))
             s |> push_archive(CmdVariant(stop = 42))
-            s |> push_archive(CmdVariant(handle = (99, 0xDEADBEEFul)))
+            s |> push_archive(CmdVariant(handle = (id = 99, ptr = 0xDEADBEEFul)))
             s |> push_archive(CmdVariant(shutdown = true))
             var plays = 0
             var stops = 0

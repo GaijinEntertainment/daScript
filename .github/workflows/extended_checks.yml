@@ -113,12 +113,6 @@ jobs:
         ./vcpkg/vcpkg install openssl:x64-windows --binarycaching
         echo "VCPKG_ROOT=$(pwd)/vcpkg" >> $GITHUB_ENV
 
-    - name: "Clone required repos"
-      uses: actions/checkout@v4
-      with:
-        repository: profelis/das-fmt
-        path: das-fmt
-
     - name: "Build: Daslang (Release)"
       run: |
         set -eux
@@ -172,12 +166,12 @@ jobs:
       run: |
         set -eux
         cmake --build ./build --config Release --target all_utils_exe
-        $BIN/daslang -exe -output ./bin/das-fmt ./das-fmt/dasfmt.das
+        $BIN/daslang -exe -output ./bin/das-fmt ./utils/das-fmt/dasfmt.das
 
     - name: "Run formatter"
       run: |
         set -eux
-        $BIN/daslang ./das-fmt/dasfmt.das -- --path ./ --verify
+        $BIN/daslang ./utils/das-fmt/dasfmt.das -- --path ./ --verify
         $BIN/das-fmt.exe --path ./ --verify
 
     - name: "Test daslang_static"

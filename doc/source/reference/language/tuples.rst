@@ -13,13 +13,34 @@ A tuple type is declared with the ``tuple`` keyword followed by a list of elemen
     tuple<int; float>               // unnamed elements
     tuple<i:int; f:float>           // named elements
 
-Two tuple declarations are the same if they have the same number of types, and their respective types are the same:
+Tuple field names are part of the type. Two tuple declarations are the same only if
+they have the same number of elements, the same element types, **and the same
+field names** (in the same positions). An unnamed tuple is **not** assignable to a
+named tuple, and a named tuple is **not** assignable to a tuple with different
+names — even when the element types match:
 
 .. code-block:: das
 
-    var a : tuple<int, float>
-    var b : tuple<i:int, f:float>
-    a = b
+    var a : tuple<int; float>
+    var b : tuple<i:int; f:float>
+    var c : tuple<x:int; y:float>
+    // a = b   // error: tuple<int;float> is not the same type as tuple<i:int;f:float>
+    // b = c   // error: tuple<i:int;f:float> is not the same type as tuple<x:int;y:float>
+    var d : tuple<i:int; f:float>
+    b = d      // ok — same names, same types
+
+The same rule applies to construction: a bare positional literal ``(1, 2.0)``
+produces an unnamed ``tuple<int;float>`` and is not accepted where a named
+tuple type is expected. Use the named-field literal form to construct a named
+tuple directly:
+
+.. code-block:: das
+
+    var b : tuple<i:int; f:float> = (i = 1, f = 2.0)   // ok
+    // var b : tuple<i:int; f:float> = (1, 2.0)         // error: not the same type
+
+Mixing named and positional fields in the same literal is **not** supported —
+either every field is named or none are.
 
 Tuple elements can be accessed via nameless fields, i.e. _ followed by the 0 base field index:
 

@@ -1144,7 +1144,7 @@ def public midi_set_volume(name : string; volume : float; fade : float = 0.0) {
     if (!g_midi_running || g_midi_cmd_stream == null) {
         return
     }
-    g_midi_cmd_stream |> push_archive(MidiCommand(set_volume = (name, volume, fade)))
+    g_midi_cmd_stream |> push_archive(MidiCommand(set_volume = (name = name, volume = volume, fade = fade)))
 }
 
 def public midi_set_pause(paused : bool) {

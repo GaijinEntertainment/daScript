@@ -498,7 +498,9 @@ namespace das
             secondType->getLookupHash(hash);
         }
         if (baseType == Type::tBitfield || baseType == Type::tBitfield8 ||
-            baseType == Type::tBitfield16 || baseType == Type::tBitfield64) {
+            baseType == Type::tBitfield16 || baseType == Type::tBitfield64 ||
+            baseType == Type::tVariant || baseType == Type::tTuple
+        ) {
             for ( const auto & name : argNames ) {
                 hash = hashmix(hash, hash_block64(reinterpret_cast<const uint8_t *>(name.c_str()), name.size()));
             }
@@ -1733,7 +1735,7 @@ namespace das
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
                 }
-                if (baseType == Type::tVariant) {
+                if (baseType == Type::tVariant || baseType == Type::tTuple) {
                     if (argNames.size() != decl.argNames.size()) {
                         return false;
                     }

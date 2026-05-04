@@ -101,7 +101,7 @@ class StaticLetMacro : AstFunctionAnnotation {
                     let old_name = "{vclone.name}"
                     let new_name = "{prefix}{vclone.name}"
                     vclone.name := new_name
-                    renames |> push((old_name, new_name))
+                    renames |> push((old_name = old_name, new_name = new_name))
                     if (!(compiling_module() |> add_variable(vclone))) {
                         errors := "can't add global variable {new_name}"
                         return null

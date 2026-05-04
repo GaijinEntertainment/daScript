@@ -422,9 +422,9 @@ def private split_sptn(sptn : string) : tuple<p : int; t : int; n : int> {
     let ptn <- split(sptn, "/")
 
     if (length(ptn) == 1) {
-        return (s_to_int(ptn[0]), -1, -1)
+        return (p = s_to_int(ptn[0]), t = -1, n = -1)
     } else {
-        return (s_to_int(ptn[0]), s_to_int(ptn[1]), s_to_int(ptn[2]))
+        return (p = s_to_int(ptn[0]), t = s_to_int(ptn[1]), n = s_to_int(ptn[2]))
     }
 }
 

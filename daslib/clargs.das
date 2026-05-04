@@ -83,7 +83,7 @@ def public get_user_args() : array<string> {
 }
 
 def clargs_flag_name(field_name : string) : string {
-    return "--" + replace_multiple(field_name, [("_", "-")])
+    return "--" + replace_multiple(field_name, [(text="_", replacement="-")])
 }
 
 // Duplicate-flag policy: last occurrence wins.  Matches GNU getopt, Python

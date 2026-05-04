@@ -437,7 +437,7 @@ class RstComment : AstCommentReader {
             }
         } else {
             if (function_comment != "") {
-                field_comments |> push( ("function",function_label_file(fn),function_comment))
+                field_comments |> push( (kind = "function", name = function_label_file(fn), comment = function_comment))
             }
             state = ParserState.structure
         }
@@ -458,7 +458,7 @@ class RstComment : AstCommentReader {
         state = ParserState.field
         if (field_comment != "") {
             debug_rst("\t-> push {name} // {field_comment}")
-            field_comments |> push( ("field",clone_string(name),field_comment))
+            field_comments |> push( (kind = "field", name = clone_string(name), comment = field_comment))
         }
     }
     def override afterStructureFields ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void {

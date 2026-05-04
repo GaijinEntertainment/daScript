@@ -103,7 +103,7 @@ class TutorialHttpServer : HvWebServer {
         // and the body.  Combine with daslib/json_boost for structured data.
         // JV() accepts structs and named tuples — field names become JSON keys.
         GET("/api/status") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            let payload : tuple<status : string; version : int> = ("ok", 3)
+            let payload = (status = "ok", version = 3)
             return resp |> JSON(write_json(JV(payload)))
         }
         POST("/api/echo") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {

@@ -80,7 +80,7 @@ class CookieFormServer : HvWebServer {
             let prefs = get_cookie(req, "prefs")
             let s = !empty(session) ? string(session) : "not found"
             let p = !empty(prefs) ? string(prefs) : "not found"
-            let payload : tuple<session : string; prefs : string> = (s, p)
+            let payload = (session = s, prefs = p)
             return resp |> JSON(write_json(JV(payload)))
         }
 
@@ -118,7 +118,7 @@ class CookieFormServer : HvWebServer {
 
             let t = !empty(title) ? string(title) : ""
             let d = !empty(description) ? string(description) : ""
-            let payload : tuple<title : string; description : string; save_status : int; field_count : int> = (t, d, save_status, length(fields))
+            let payload = (title = t, description = d, save_status = save_status, field_count = length(fields))
             return resp |> JSON(write_json(JV(payload)))
         }
 

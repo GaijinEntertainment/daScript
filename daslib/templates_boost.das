@@ -40,7 +40,7 @@ struct Template {
 def kaboomVarField(var self : Template; name, prefix, suffix : string) {
     //! Adds a rule to to the template to replace a variable field access with a prefix and suffix.
     //! I.e. foo.bar into prefix + bar + suffix
-    self.kaboomVar |> emplace(name,  (prefix, suffix))
+    self.kaboomVar |> emplace(name,  (prefix = prefix, suffix = suffix))
 }
 
 def replaceVariable(var self : Template; name : string; var expr : ast::Expression?) {
@@ -984,7 +984,7 @@ def private apply_qrules(var expr : Expression?&) : ExprBlock? {
     if (astVisitor.failed) {
         eblk = null
     } else {
-        let annot_rules =  ("rules", RttiValue(tBool = true))
+        let annot_rules =  (argname = "rules", argvalue = RttiValue(tBool = true))
         eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
     unsafe { delete astVisitor; }
@@ -1008,7 +1008,7 @@ def private apply_function_qrules(var func : FunctionPtr) : ExprBlock? {
     if (astVisitor.failed) {
         eblk = null
     } else {
-        let annot_rules =  ("rules", RttiValue(tBool = true))
+        let annot_rules =  (argname = "rules", argvalue = RttiValue(tBool = true))
         eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
     unsafe { delete astVisitor; }
@@ -1045,7 +1045,7 @@ def private apply_template_qrules(prog : ProgramPtr; var template_structure : St
     if (astVisitor.failed) {
         eblk = null
     } else {
-        let annot_rules =  ("rules", RttiValue(tBool = true))
+        let annot_rules =  (argname = "rules", argvalue = RttiValue(tBool = true))
         eblk |> append_annotation("$", "unused_argument", [ annot_rules ])
     }
     unsafe { delete astVisitor; }

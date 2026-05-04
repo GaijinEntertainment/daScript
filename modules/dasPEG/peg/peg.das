@@ -138,10 +138,10 @@ def public match_decimal_literal(var parser) : tuple<success : bool; value : int
         parser |> move(1)
     }
 
-    return (true, result, parser.index)
+    return (success = true, value = result, endpos = parser.index)
 }
 
-def public match_string_literal(var parser) : tuple<success : bool; string> {
+def public match_string_literal(var parser) : tuple<success : bool; value : string> {
     //! Tries to match everything inside ""
 
     // Define buffer to store string literal characters
@@ -150,7 +150,7 @@ def public match_string_literal(var parser) : tuple<success : bool; string> {
     var current_char = parser |> get_current_char
 
     // If the current character is not a double quote, the rule is not a string
-    return (false, "") if (current_char != '"');
+    return (success = false, value = "") if (current_char != '"');
 
     parser |> move(1);
     current_char = parser |> get_current_char;
@@ -162,21 +162,21 @@ def public match_string_literal(var parser) : tuple<success : bool; string> {
     }
 
     // If we've reached EOF file without finding a closing quote
-    return (false, "") if (parser |> reached_EOF)
+    return (success = false, value = "") if (parser |> reached_EOF)
 
     parser |> move(1)
-    return (true, buffer |> string())
+    return (success = true, value = buffer |> string())
 }
 
 
-def public match_double_literal(var parser) : tuple<success : bool; double> {
+def public match_double_literal(var parser) : tuple<success : bool; value : double> {
     //! Matches doubles in the form of [-+]? [0-9]* .? [0-9]+ ([eE] [-+]? [0-9]+)?
     //! The number is not checked to be representable as defined in IEEE-754
 
     var current_char = parser |> get_current_char
 
     if (!current_char |> is_number && current_char != '+' && current_char != '-') {
-        return <-  (false, 0.0 |> double())
+        return <- (success = false, value = 0.0 |> double())
     }
 
     var inscope buffer : array<uint8>
@@ -216,5 +216,5 @@ def public match_double_literal(var parser) : tuple<success : bool; double> {
         }
     }
 
-    return (true, buffer |> string() |> double())
+    return (success = true, value = buffer |> string() |> double())
 }

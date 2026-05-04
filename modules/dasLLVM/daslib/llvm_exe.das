@@ -556,7 +556,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     extern_resolver.uid = null
     extern_resolver.types = null
     unsafe { delete extern_resolver; }
-    return (any_unimp, whole_lib)
+    return (any_unimplemented = any_unimp, needs_whole_lib = whole_lib)
 }
 
 // Creates main function that initializes a standalone JIT context, registers
@@ -596,7 +596,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
     if (strict && has_no_jit) {
         to_log(LOG_ERROR, "Cannot build standalone exe: some functions are no_jit in strict mode\n")
-        return (null, false)
+        return (fn = null, link_whole_lib = false)
     }
 
     var start_fn_name = ""
@@ -615,7 +615,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
     if (start_fn_name |> empty()) {
         to_log(LOG_ERROR, "entrypoint `{entry_point}()` not found in input file.\n")
-        return (null, false)
+        return (fn = null, link_whole_lib = false)
     }
 
     let main_fn_type = LLVMFunctionType(types.t_int32,
@@ -761,7 +761,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules)
     if (strict && any_unimplemented) {
         to_log(LOG_ERROR, "Some of the nodes above are unimplemented!\n")
-        return (null, false)
+        return (fn = null, link_whole_lib = false)
     }
     // Determine if exe needs the whole compiler lib (rtti, ast, debugger, jit, sort-with-cblock)
     var needs_whole_lib = sort_needs_whole_lib
@@ -842,5 +842,5 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         LLVMBuildRet(builder, main_ret)
     }
     to_log(LOG_INFO, "LLVM JIT: standalone exe entry point generated '{start_fn_name}', {length(funcs)} functions\n")
-    return (main_fn, needs_whole_lib)
+    return (fn = main_fn, link_whole_lib = needs_whole_lib)
 }
