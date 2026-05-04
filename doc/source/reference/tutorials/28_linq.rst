@@ -198,7 +198,7 @@ exception — 3-arg form, no ``on`` lambda.
      - every TA + every TB
    * - ``_cross_join``
      - ``(a : TA, b : TB)``
-     - Cartesian (|TA| × |TB|)
+     - Cartesian (TA × TB)
 
 The ``on`` lambda must be an equi-join: ``$(a, b) => a.K == b.K``. Theta
 joins and ``&&``-chained multi-key equality are rejected at macro time::

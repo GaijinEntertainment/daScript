@@ -151,6 +151,12 @@ struct private JoinSpec {
     rightCol    : string
     rightWhereSql     : string
     rightOnBindExprs  : array<ExpressionPtr>
+    // For RIGHT / FULL OUTER with a non-empty RHS WHERE, the RHS gets wrapped as
+    // `(SELECT * FROM "<table>" WHERE <pred>)` baked into tableName here. Outer-WHERE
+    // semantics on a preserved-side join would drop the wrong rows; subquery body
+    // filters before the join. Flag tells emission to write tableName as raw SQL
+    // (with parens) instead of as a quoted identifier.
+    tableSqlIsRaw     : bool
 }
 
 struct private SqlQuery {
@@ -856,21 +862,29 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
-    // 2. Multi-join: srca contained a _join. Snapshot q as an inner subquery and reset for
-    // outer wrap. After this, q has innerSql + fromRowType but no joins of its own.
-    if (q.seenJoin) {
-        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
-            return false
-        }
-    } else {
-        // V1 path: srca was a simple chain. Now check that srca didn't end in _select/_group_by
-        // — those would conflict with this join's `into` projection.
+    // V1 path: srca was a simple chain. Now check that srca didn't end in _select/_group_by
+    // — those would conflict with this join's `into` projection. Run BEFORE snapshot below
+    // (snapshot clears these flags so the check would silently pass).
+    if (!q.seenJoin) {
         if (q.seenSelect) {
             macro_error(prog, at, "_sql: _join must precede `_select` in source order — the join's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
             return false
         }
         if (q.seenGroupBy) {
             macro_error(prog, at, "_sql: _join cannot follow `_group_by` (joining grouped rows is not yet supported); group AFTER the join instead")
+            return false
+        }
+    }
+    // 2. Snapshot q as an inner subquery and reset for outer wrap when:
+    //    (a) srca contained a _join (multi-join chain); OR
+    //    (b) kind ∈ {Right, FullOuter} AND q.whereSql is non-empty — preserved-side
+    //        rows have NULL on the LHS columns, so an outer WHERE on those columns
+    //        would drop them. Wrapping LHS as `(SELECT * FROM Users WHERE …) AS t0`
+    //        applies the filter BEFORE the join, matching M2/M3 linq semantics.
+    let needsLhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
+                                        && !empty(q.whereSql))
+    if (q.seenJoin || needsLhsWrapForPreservedSide) {
+        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
             return false
         }
     }
@@ -915,16 +929,41 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     return false if (empty(leftCol))
     let rightCol = extract_key_selector_field(jCall.arguments[3], "__lb__", prog, at)
     return false if (empty(rightCol))
+    // For RIGHT / FULL OUTER with RHS WHERE, bake the WHERE into a derived-table subquery
+    // here so the row filter applies BEFORE the join — matches M2/M3 linq semantics. For
+    // LEFT/INNER the existing ON-AND attachment is correct (preserved-LHS sees NULL on
+    // unmatched RHS regardless), so leave those paths untouched.
+    let needsRhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
+                                        && !empty(subQ.whereSql))
+    var rhsTableName : string
+    var rhsRightWhereSql : string
+    var rhsTableSqlIsRaw = false
+    if (needsRhsWrapForPreservedSide) {
+        // SELECT * is fine here — derived table propagates the underlying column names
+        // verbatim, and the outer query references t1.<col> by those names.
+        // Inner AS "t1" is required because subQ.whereSql may contain alias-qualified
+        // refs like `"t1"."Total"` built when subQ.rootAlias was "t1". Outer-most "t1"
+        // shadows the inner; SQLite scopes them by parens.
+        rhsTableName := "(SELECT * FROM \"{subQ.tableName}\" AS \"t1\" WHERE {subQ.whereSql})"
+        rhsRightWhereSql := ""
+        rhsTableSqlIsRaw = true
+    } else {
+        rhsTableName := subQ.tableName
+        rhsRightWhereSql := subQ.whereSql
+    }
     var spec <- JoinSpec(
         kind = kind,
         rootType = subQ.rootType,
-        tableName = subQ.tableName,
+        tableName = rhsTableName,
         alias = "t1",
         leftCol = leftCol,
         leftAlias = "t0",
         rightCol = rightCol,
-        rightWhereSql = subQ.whereSql)
+        rightWhereSql = rhsRightWhereSql,
+        tableSqlIsRaw = rhsTableSqlIsRaw)
     // ON binds live on JoinSpec, not q.bindExprs — runtime concats per-join ON before outer WHERE so placeholder order matches SQL.
+    // For the wrapped-RHS path, the binds are still emitted at the t1 source position (subquery body),
+    // which is BEFORE the ON keys — same SQL position as the unwrapped case, so bind ordering is preserved.
     spec.rightOnBindExprs |> reserve(length(subQ.bindExprs))
     for (b in subQ.bindExprs) {
         spec.rightOnBindExprs |> push <| clone_expression(b)
@@ -1061,7 +1100,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         if (empty(q.whereSql)) {
             q.whereSql := subQ.whereSql
         } else {
-            q.whereSql := "{q.whereSql} AND ({subQ.whereSql})"
+            q.whereSql := "({q.whereSql}) AND ({subQ.whereSql})"
         }
         for (b in subQ.bindExprs) {
             q.bindExprs |> push <| clone_expression(b)
@@ -3412,18 +3451,25 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             for (j in q.joins) {
                 // SQLite ≥3.39 (2022) for RIGHT / FULL OUTER; bundled is 3.41.2.
                 if (j.kind == JoinKind.Inner) {
-                    w |> write(" INNER JOIN \"")
+                    w |> write(" INNER JOIN ")
                 } elif (j.kind == JoinKind.Left) {
-                    w |> write(" LEFT JOIN \"")
+                    w |> write(" LEFT JOIN ")
                 } elif (j.kind == JoinKind.Right) {
-                    w |> write(" RIGHT JOIN \"")
+                    w |> write(" RIGHT JOIN ")
                 } elif (j.kind == JoinKind.FullOuter) {
-                    w |> write(" FULL OUTER JOIN \"")
+                    w |> write(" FULL OUTER JOIN ")
                 } else {
-                    w |> write(" CROSS JOIN \"")
+                    w |> write(" CROSS JOIN ")
                 }
-                w |> write(j.tableName)
-                w |> write("\" AS \"")
+                if (j.tableSqlIsRaw) {
+                    // RHS pre-wrapped as `(SELECT * FROM … WHERE …)` for preserved-side joins.
+                    w |> write(j.tableName)
+                } else {
+                    w |> write("\"")
+                    w |> write(j.tableName)
+                    w |> write("\"")
+                }
+                w |> write(" AS \"")
                 w |> write(j.alias)
                 w |> write("\"")
                 if (j.kind != JoinKind.Cross) {
@@ -3457,6 +3503,14 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" FROM \"")
             w |> write(q.tableName)
             w |> write("\"")
+            // When emitting as an inner subquery (snapshot wrap path), q.whereSql can carry
+            // alias-qualified column refs like `"t0"."Id"` built when q.rootAlias was set.
+            // Without AS here, those refs reference an undefined alias inside the parens.
+            if (force_aliases && !empty(q.rootAlias)) {
+                w |> write(" AS \"")
+                w |> write(q.rootAlias)
+                w |> write("\"")
+            }
         }
         if (!empty(q.whereSql)) {
             w |> write(" WHERE ")

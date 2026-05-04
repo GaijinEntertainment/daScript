@@ -239,3 +239,201 @@ def parity_cross_join_basic(t : T?) {
         }
     }
 }
+
+// ===== Where-on-preserved-side parity =====
+//
+// RIGHT/FULL OUTER preserve a side that can have NULL on the other; naive SQL
+// emission (outer WHERE on LHS, RHS-WHERE-in-ON) drops/keeps the wrong rows.
+// Tests below pin the divergence: M3 (plain array) is the truth, M1 (`_sql`)
+// must match. Cross has no preserved side; only its WHERE-merge precedence
+// (parens around both sides) is exercised here.
+
+[test]
+def parity_right_join_with_lhs_where(t : T?) {
+    // LHS filter `u.Id < 3` removes Carol. Orphan Order#13 must STILL surface as (none, 13).
+    // Pre-fix: M1 emits outer `WHERE u.Id < 3`; orphan row has NULL u → NULL < 3 → dropped (3 rows).
+    // Post-fix: LHS wrapped as `(SELECT * FROM Users WHERE Id<3) AS t0` → 4 rows.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let users  <- fixture_users()
+        let orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>) |> _where(_.Id < 3)
+                         |> _right_join(db |> select_from(type<Order>),
+                                        $(u : User, o : Order)         => u.Id == o.UserId,
+                                        $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        var m2 <- (db |> select_from(type<User>) |> _where(_.Id < 3)
+                     |> _right_join(db |> select_from(type<Order>),
+                                    $(u : User, o : Order)         => u.Id == o.UserId,
+                                    $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        var m3 <- (users |> _where(_.Id < 3)
+                         |> _right_join(orders,
+                                        $(u : User, o : Order)         => u.Id == o.UserId,
+                                        $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+
+        m1 <- sort_right(m1)
+        m2 <- sort_right(m2)
+        m3 <- sort_right(m3)
+
+        t |> equal(length(m3), 4, "M3 row count: 4 (10/Alice, 11/Alice, 12/Bob, 13/orphan)")
+        t |> equal(length(m1), length(m3), "right + lhs where: M1 length ≡ M3 (linq truth)")
+        t |> equal(length(m2), length(m3), "right + lhs where: M2 length ≡ M3")
+        for (i in range(length(m3))) {
+            t |> equal(m1[i].HasUser, m3[i].HasUser, "row[{i}].HasUser: M1 ≡ M3")
+            t |> equal(m1[i].OrderId, m3[i].OrderId, "row[{i}].OrderId: M1 ≡ M3")
+            t |> equal(m2[i].HasUser, m3[i].HasUser, "row[{i}].HasUser: M2 ≡ M3")
+            t |> equal(m2[i].OrderId, m3[i].OrderId, "row[{i}].OrderId: M2 ≡ M3")
+        }
+    }
+}
+
+[test]
+def parity_right_join_with_rhs_where(t : T?) {
+    // RHS filter `o.Total < 500` removes Order#13 (Total=999). Filtered orders all match users → 3 rows.
+    // Pre-fix: M1 puts rightWhere in ON; Order#13 fails ON → emits (none, 13) instead of being dropped (4 rows).
+    // Post-fix: RHS wrapped as `(SELECT * FROM Orders WHERE Total<500) AS t1` → 3 rows.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let users  <- fixture_users()
+        let orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _right_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                        $(u : User, o : Order)         => u.Id == o.UserId,
+                                        $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _right_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                    $(u : User, o : Order)         => u.Id == o.UserId,
+                                    $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        var m3 <- (users |> _right_join(orders |> _where(_.Total < 500),
+                                        $(u : User, o : Order)         => u.Id == o.UserId,
+                                        $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+
+        m1 <- sort_right(m1)
+        m2 <- sort_right(m2)
+        m3 <- sort_right(m3)
+
+        t |> equal(length(m3), 3, "M3 row count: 3 (orders 10/11/12; orphan 13 filtered)")
+        t |> equal(length(m1), length(m3), "right + rhs where: M1 length ≡ M3")
+        t |> equal(length(m2), length(m3), "right + rhs where: M2 length ≡ M3")
+        for (i in range(length(m3))) {
+            t |> equal(m1[i].HasUser, m3[i].HasUser, "row[{i}].HasUser: M1 ≡ M3")
+            t |> equal(m1[i].OrderId, m3[i].OrderId, "row[{i}].OrderId: M1 ≡ M3")
+            t |> equal(m2[i].HasUser, m3[i].HasUser, "row[{i}].HasUser: M2 ≡ M3")
+            t |> equal(m2[i].OrderId, m3[i].OrderId, "row[{i}].OrderId: M2 ≡ M3")
+        }
+    }
+}
+
+[test]
+def parity_full_outer_with_lhs_where(t : T?) {
+    // LHS filter `u.Id < 3` removes Carol. M3: 4 rows (3 matched + orphan 13 as (none,some)).
+    // Pre-fix: M1 outer WHERE drops rows where u IS NULL → 3 rows. Post-fix: LHS-wrap → 4 rows.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let users  <- fixture_users()
+        let orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>) |> _where(_.Id < 3)
+                         |> _full_outer_join(db |> select_from(type<Order>),
+                                             $(u : User, o : Order)                 => u.Id == o.UserId,
+                                             $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        var m2 <- (db |> select_from(type<User>) |> _where(_.Id < 3)
+                     |> _full_outer_join(db |> select_from(type<Order>),
+                                         $(u : User, o : Order)                 => u.Id == o.UserId,
+                                         $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        var m3 <- (users |> _where(_.Id < 3)
+                         |> _full_outer_join(orders,
+                                             $(u : User, o : Order)                 => u.Id == o.UserId,
+                                             $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+
+        m1 <- sort_full(m1)
+        m2 <- sort_full(m2)
+        m3 <- sort_full(m3)
+
+        t |> equal(length(m3), 4, "M3 row count: 4 (3 matched + 1 RIGHT-only orphan)")
+        t |> equal(length(m1), length(m3), "full outer + lhs where: M1 length ≡ M3")
+        t |> equal(length(m2), length(m3), "full outer + lhs where: M2 length ≡ M3")
+        for (i in range(length(m3))) {
+            t |> equal(m1[i].HasUser,  m3[i].HasUser,  "row[{i}].HasUser:  M1 ≡ M3")
+            t |> equal(m1[i].HasOrder, m3[i].HasOrder, "row[{i}].HasOrder: M1 ≡ M3")
+            t |> equal(m2[i].HasUser,  m3[i].HasUser,  "row[{i}].HasUser:  M2 ≡ M3")
+            t |> equal(m2[i].HasOrder, m3[i].HasOrder, "row[{i}].HasOrder: M2 ≡ M3")
+        }
+    }
+}
+
+[test]
+def parity_full_outer_with_rhs_where(t : T?) {
+    // RHS filter `o.Total < 500` removes Order#13. M3: 4 rows (3 matched + Carol unmatched LHS).
+    // Pre-fix: M1 ON keeps Order#13 as (none,some) → 5 rows. Post-fix: RHS-wrap → 4 rows.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let users  <- fixture_users()
+        let orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>)
+                         |> _full_outer_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                             $(u : User, o : Order)                 => u.Id == o.UserId,
+                                             $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        var m2 <- (db |> select_from(type<User>)
+                     |> _full_outer_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                         $(u : User, o : Order)                 => u.Id == o.UserId,
+                                         $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        var m3 <- (users |> _full_outer_join(orders |> _where(_.Total < 500),
+                                             $(u : User, o : Order)                 => u.Id == o.UserId,
+                                             $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+
+        m1 <- sort_full(m1)
+        m2 <- sort_full(m2)
+        m3 <- sort_full(m3)
+
+        t |> equal(length(m3), 4, "M3 row count: 4 (3 matched + Carol LEFT-only)")
+        t |> equal(length(m1), length(m3), "full outer + rhs where: M1 length ≡ M3")
+        t |> equal(length(m2), length(m3), "full outer + rhs where: M2 length ≡ M3")
+        for (i in range(length(m3))) {
+            t |> equal(m1[i].HasUser,  m3[i].HasUser,  "row[{i}].HasUser:  M1 ≡ M3")
+            t |> equal(m1[i].HasOrder, m3[i].HasOrder, "row[{i}].HasOrder: M1 ≡ M3")
+            t |> equal(m2[i].HasUser,  m3[i].HasUser,  "row[{i}].HasUser:  M2 ≡ M3")
+            t |> equal(m2[i].HasOrder, m3[i].HasOrder, "row[{i}].HasOrder: M2 ≡ M3")
+        }
+    }
+}
+
+[test]
+def parity_cross_with_or_lhs_where(t : T?) {
+    // LHS `u.Id == 1 || u.Id == 3` keeps Alice + Carol. RHS `o.Total < 500` keeps 10/11/12.
+    // M3: 2 × 3 = 6 rows.
+    // Pre-fix: cross merge emits `(u.Id=1 OR u.Id=3) AND (Total<500)` ← MISSING outer parens → SQL parses as
+    //   `u.Id=1 OR (u.Id=3 AND Total<500)`: Alice pairs with all 4 orders + Carol with 3 = 7 rows.
+    // Post-fix: outer parens added → 6 rows.
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        let users  <- fixture_users()
+        let orders <- fixture_orders()
+
+        var m1 <- _sql(db |> select_from(type<User>) |> _where(_.Id == 1 || _.Id == 3)
+                         |> _cross_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                        $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
+        var m2 <- (db |> select_from(type<User>) |> _where(_.Id == 1 || _.Id == 3)
+                     |> _cross_join(db |> select_from(type<Order>) |> _where(_.Total < 500),
+                                    $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
+        var m3 <- (users |> _where(_.Id == 1 || _.Id == 3)
+                         |> _cross_join(orders |> _where(_.Total < 500),
+                                        $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
+
+        m1 <- sort_cross(m1)
+        m2 <- sort_cross(m2)
+        m3 <- sort_cross(m3)
+
+        t |> equal(length(m3), 6, "M3 row count: 6 (Alice + Carol × orders 10/11/12)")
+        t |> equal(length(m1), length(m3), "cross + or-lhs where: M1 length ≡ M3 (parens precedence)")
+        t |> equal(length(m2), length(m3), "cross + or-lhs where: M2 length ≡ M3")
+        for (i in range(length(m3))) {
+            t |> equal(m1[i].UserName, m3[i].UserName, "row[{i}].UserName: M1 ≡ M3")
+            t |> equal(m1[i].OrderId,  m3[i].OrderId,  "row[{i}].OrderId:  M1 ≡ M3")
+            t |> equal(m2[i].UserName, m3[i].UserName, "row[{i}].UserName: M2 ≡ M3")
+            t |> equal(m2[i].OrderId,  m3[i].OrderId,  "row[{i}].OrderId:  M2 ≡ M3")
+        }
+    }
+}

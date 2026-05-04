@@ -35,7 +35,7 @@ Operator                      ``into`` lambda signature                    Cardi
 ``_left_join``                ``(a : TA, b : Option<TB>)``                 Every TA, plus matched right
 ``_right_join``               ``(a : Option<TA>, b : TB)``                 Every TB, plus matched left
 ``_full_outer_join``          ``(a : Option<TA>, b : Option<TB>)``         Every TA + every TB
-``_cross_join``               ``(a : TA, b : TB)``                         Cartesian (|TA| × |TB|)
+``_cross_join``               ``(a : TA, b : TB)``                         Cartesian (TA × TB)
 ============================  ===========================================  ==================================
 
 Probing the Option arg
