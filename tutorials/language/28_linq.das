@@ -355,15 +355,23 @@ def main {
     print("group_by_to_array buckets: {arr_groups |> length}\n")
     // output: group_by_to_array buckets: 2
 
-    // === 12. Joining macros — _join, _left_join ===
+    // === 12. Joining macros — _join, _left_join, _right_join, _full_outer_join, _cross_join ===
     // _join takes the join condition as an `on` lambda — typically an
     // equality between key expressions on the two sides. Only equi-join
     // shapes (`a == b`) are accepted; theta inequalities and `&&`/`||`
     // chains are rejected with macro_error.
     //
-    // _left_join keeps every left row even when the right side has no
-    // match. The second argument of the result selector is `Option<TB>`
-    // — `none` for unmatched rows, `some(tb)` otherwise.
+    // The four equi-joins (_join, _left_join, _right_join, _full_outer_join)
+    // share the 4-arg shape (other, on, into); only the Option-ness of
+    // `into`'s args differs:
+    //
+    //   _join              (a : TA,         b : TB)         — matched pairs only
+    //   _left_join         (a : TA,         b : Option<TB>) — every TA, optional TB
+    //   _right_join        (a : Option<TA>, b : TB)         — every TB, optional TA
+    //   _full_outer_join   (a : Option<TA>, b : Option<TB>) — every TA + every TB
+    //
+    // _cross_join is the exception — 3-arg form (other, into), no `on`,
+    // every (TA, TB) pair surfaces.
 
     print("\n--- 12. Joining macros ---\n")
 
@@ -417,6 +425,54 @@ def main {
     // output:   fn-form: 1 matched=false
     // output:   fn-form: 2 matched=true
     // output:   fn-form: 3 matched=true
+
+    // _right_join — keep unmatched right rows; left side is Option<int>
+    var rj = _right_join(
+        ids,
+        matches,
+        $(la : int, lb : int) => la == lb,
+        $(la : Option<int>, lb : int) => (la |> unwrap_or(-1), lb)
+    )
+    for (row in rj) {
+        print("  right_join: {row._0} -> {row._1}\n")
+    }
+    // output:   right_join: 2 -> 2
+    // output:   right_join: 3 -> 3
+    // output:   right_join: 3 -> 3
+    // output:   right_join: 4 -> 4
+
+    // _full_outer_join — both sides surface; either may be none
+    var fj = _full_outer_join(
+        ids,
+        matches,
+        $(la : int, lb : int) => la == lb,
+        $(la : Option<int>, lb : Option<int>) => (la |> unwrap_or(-1), lb |> unwrap_or(-1))
+    )
+    for (row in fj) {
+        print("  full_outer: {row._0} <-> {row._1}\n")
+    }
+    // output:   full_outer: 1 <-> -1   (left-only)
+    // output:   full_outer: 2 <-> 2
+    // output:   full_outer: 3 <-> 3
+    // output:   full_outer: 3 <-> 3
+    // output:   full_outer: 4 <-> 4
+    // output:   full_outer: 5 <-> -1   (left-only)
+
+    // _cross_join — Cartesian product, no `on` lambda
+    var cj = _cross_join(
+        [1, 2],
+        ["a", "b", "c"],
+        $(la : int, lb : string) => (la, lb)
+    )
+    for (row in cj) {
+        print("  cross: {row._0} x {row._1}\n")
+    }
+    // output:   cross: 1 x a
+    // output:   cross: 1 x b
+    // output:   cross: 1 x c
+    // output:   cross: 2 x a
+    // output:   cross: 2 x b
+    // output:   cross: 2 x c
 
     // === 13. Subquery membership — _in, _not_in ===
     // _in(x, sub) is shorthand for contains(sub, x); _not_in is its

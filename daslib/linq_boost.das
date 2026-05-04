@@ -566,6 +566,64 @@ class private LinqLeftJoin : AstCallMacro_LinqJoinBase {
     override fnName = "left_join"
 }
 
+[call_macro(name="_right_join")]
+class private LinqRightJoin : AstCallMacro_LinqJoinBase {
+    //! implements _right_join(srca, srcb, on, result) shorthand notation
+    //! that expands into right_join(srca, srcb, keya, keyb, result).
+    //! Mirror of `_left_join` with the Option on the LEFT side — every
+    //! TB row surfaces; TA is `Option<TA>`, `none` when no left match.
+    //! for example::
+    //!
+    //!   each(persons)._right_join(each(pets),
+    //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
+    //!       $(p : Option<Person>, pet : Pet) => (pet.name, p |> is_some))
+    override fnName = "right_join"
+}
+
+[call_macro(name="_full_outer_join")]
+class private LinqFullOuterJoin : AstCallMacro_LinqJoinBase {
+    //! implements _full_outer_join(srca, srcb, on, result) shorthand notation
+    //! that expands into full_outer_join(srca, srcb, keya, keyb, result).
+    //! Both sides are `Option<T>` — every left row and every right row
+    //! surfaces, paired with `none` on the other side when unmatched.
+    //! for example::
+    //!
+    //!   each(persons)._full_outer_join(each(pets),
+    //!       $(p : Person, pet : Pet) => p.name == pet.owner.name,
+    //!       $(p : Option<Person>, pet : Option<Pet>) => (p |> is_some, pet |> is_some))
+    override fnName = "full_outer_join"
+}
+
+[call_macro(name="_cross_join")]
+class private LinqCrossJoin : AstCallMacro {
+    //! implements _cross_join(srca, srcb, result) shorthand notation
+    //! that expands into cross_join(srca, srcb, result). 3-arg form
+    //! with no `on` lambda — every (TA, TB) pair surfaces. Use `_where`
+    //! after the cross to filter; that's the explicit-shape inner join.
+    //! for example::
+    //!
+    //!   each(persons)._cross_join(each(pets),
+    //!       $(p : Person, pet : Pet) => (p.name, pet.name))
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _cross_join(srca, srcb, into) — 3 arguments")
+        assume srcaType = call.arguments[0]._type
+        assume srcbType = call.arguments[1]._type
+        macro_verify(srcaType != null, prog, call.at, "first argument is not inferred yet")
+        macro_verify(srcbType != null, prog, call.at, "second argument is not inferred yet")
+        macro_verify(srcaType.isIterator || srcaType.isGoodArrayType, prog, call.at, "first argument must be an iterator or array")
+        macro_verify(srcbType.isIterator || srcbType.isGoodArrayType, prog, call.at, "second argument must be an iterator or array")
+        macro_verify(!srcaType.firstType.isAutoOrAlias, prog, call.at, "first argument element type cannot be auto or alias")
+        macro_verify(!srcbType.firstType.isAutoOrAlias, prog, call.at, "second argument element type cannot be auto or alias")
+        var res = qmacro(cross_join(
+            $e(call.arguments[0]),
+            $e(call.arguments[1]),
+            $e(call.arguments[2])
+        ))
+        res.force_at(call.at)
+        return res
+    }
+}
+
 [call_macro(name="_group_by_lazy")]
 class private LinqGroupByLazy : AstCallMacro_LinqPred2 {
     //! implements _group_by_lazy(iterator, key) shorthand notation that

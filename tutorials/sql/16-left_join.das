@@ -4,27 +4,26 @@ require daslib/sql
 require sqlite/sqlite_boost
 require sqlite/sqlite_linq
 
-// Tutorial 16 — `_left_join`: left outer join with `Option<TB>` on the right.
+// Tutorial 16 — every join shape: INNER, LEFT, RIGHT, FULL OUTER, CROSS.
 //
-// Same 4-arg shape as `_join` (other, on, into) but the `into` lambda's
-// second parameter is `Option<TB>` — `none` when the left row had no
-// matching right row, `some(tb)` otherwise.
+// All five share the same surface: srca |> _<kind>_join(srcb, on, into).
+// (Cross is the exception — no `on`, 3-arg form: srca |> _cross_join(srcb, into).)
 //
-// Under `_sql(...)` the right-side columns become NULL on no-match
-// rows; `Option<TB>` is the daslang lift of that NULL semantics. The
-// `into` projection can probe the option:
+// `into` is the projection lambda. The args' Option-ness changes per kind:
 //
-//   - `o |> is_some`   →  `"t1"."<rightKey>" IS NOT NULL`
-//   - `o |> is_none`   →  `"t1"."<rightKey>" IS NULL`
+//   INNER       (a : TA,         b : TB)         — both present
+//   LEFT        (a : TA,         b : Option<TB>) — TB may be none
+//   RIGHT       (a : Option<TA>, b : TB)         — TA may be none
+//   FULL OUTER  (a : Option<TA>, b : Option<TB>) — either may be none
+//   CROSS       (a : TA,         b : TB)         — every pair
 //
-// (The probe column is the right-side ON-key; if THAT came back NULL
-// the row had no match. Per-column nullability inside `Option<TB>` is
-// not yet wired — for `o.Total` you'd need to drop to raw SQL.)
+// `is_some` / `is_none` on an Option arg lowers to SQL:
 //
-// `_left_join` ships INNER + LEFT only; `_right_join`, `_full_outer_join`,
-// and `_cross_join` are not shipped. RIGHT JOIN is `LEFT JOIN` with
-// swapped sources; CROSS JOIN reads as an accidental footgun in macro
-// form and belongs in raw SQL.
+//   <arg> |> is_some  →  "<arg-side>"."<arg-side join key>" IS NOT NULL
+//   <arg> |> is_none  →  ... IS NULL
+//
+// Per-column nullability inside `Option<T>` is not yet wired — for `o.Total`
+// when `o : Option<Order>` you'd need to drop to raw SQL.
 
 [sql_table(name = "Users")]
 struct User {
@@ -45,10 +44,11 @@ def fixture(db : SqlRunner) {
     db |> insert(User(Id = 1, Name = "Alice"))
     db |> insert(User(Id = 2, Name = "Bob"))
     db |> insert(User(Id = 3, Name = "Carol"))
-    db |> insert(Order(Id = 10, UserId = 1, Total = 100))
-    db |> insert(Order(Id = 11, UserId = 1, Total = 250))
-    db |> insert(Order(Id = 12, UserId = 2, Total =  50))
-    // Carol (id 3) has no orders.
+    db |> insert(Order(Id = 10, UserId = 1,  Total = 100))
+    db |> insert(Order(Id = 11, UserId = 1,  Total = 250))
+    db |> insert(Order(Id = 12, UserId = 2,  Total =  50))
+    db |> insert(Order(Id = 13, UserId = 99, Total = 999))   // orphan — no matching user
+    // Asymmetries: Carol has no orders (LEFT-only); Order#13 has no user (RIGHT-only).
 }
 
 [export]
@@ -56,26 +56,80 @@ def main {
     with_sqlite(":memory:") $(db) {
         fixture(db)
 
-        // LEFT JOIN — every User shows up, even Carol who has no orders.
-        // The `HasOrder` projection probes whether the right-side join
-        // key landed non-NULL.
-        let rows <- _sql(db |> select_from(type<User>)
-                           |> _left_join(db |> select_from(type<Order>),
-                                         $(u : User, o : Order) => u.Id == o.UserId,
-                                         $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
-        to_log(LOG_INFO, "left join — every user surfaces:")
-        for (r in rows) {
+        // ---- A. INNER JOIN — only matched pairs surface (3 rows). ----
+        let inner <- _sql(db |> select_from(type<User>)
+                            |> _join(db |> select_from(type<Order>),
+                                     $(u : User, o : Order) => u.Id == o.UserId,
+                                     $(u : User, o : Order) => (Name = u.Name, OrderId = o.Id)))
+        to_log(LOG_INFO, "INNER — matched pairs only:")
+        for (r in inner) {
+            to_log(LOG_INFO, "  {r.Name}: order #{r.OrderId}")
+        }
+        let sql_in = _sql_text(db |> select_from(type<User>)
+                                  |> _join(db |> select_from(type<Order>),
+                                           $(u : User, o : Order) => u.Id == o.UserId,
+                                           $(u : User, o : Order) => (Name = u.Name, OrderId = o.Id)))
+        to_log(LOG_INFO, "  SQL: {sql_in}")
+
+        // ---- B. LEFT JOIN — every User surfaces; Carol gets HasOrder=false (4 rows). ----
+        let lefts <- _sql(db |> select_from(type<User>)
+                            |> _left_join(db |> select_from(type<Order>),
+                                          $(u : User, o : Order) => u.Id == o.UserId,
+                                          $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
+        to_log(LOG_INFO, "LEFT — every user surfaces:")
+        for (r in lefts) {
             to_log(LOG_INFO, "  {r.Name}: HasOrder = {r.HasOrder}")
         }
-        // Expected — 4 rows: Alice/true × 2 (two orders), Bob/true (one
-        // order), Carol/false (no match).
+        let sql_lj = _sql_text(db |> select_from(type<User>)
+                                  |> _left_join(db |> select_from(type<Order>),
+                                                $(u : User, o : Order) => u.Id == o.UserId,
+                                                $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
+        to_log(LOG_INFO, "  SQL: {sql_lj}")
 
-        // Inspect the SQL — `LEFT JOIN ... ON ...` plus the IS NOT NULL
-        // probe on `t1.UserId` (the right-side join key).
-        let sql = _sql_text(db |> select_from(type<User>)
-                              |> _left_join(db |> select_from(type<Order>),
+        // ---- C. RIGHT JOIN — every Order surfaces; orphan Order#13 gets HasUser=false (4 rows). ----
+        let rights <- _sql(db |> select_from(type<User>)
+                             |> _right_join(db |> select_from(type<Order>),
                                             $(u : User, o : Order) => u.Id == o.UserId,
-                                            $(u : User, o : Option<Order>) => (Name = u.Name, HasOrder = o |> is_some)))
-        to_log(LOG_INFO, "SQL: {sql}")
+                                            $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        to_log(LOG_INFO, "RIGHT — every order surfaces:")
+        for (r in rights) {
+            to_log(LOG_INFO, "  order #{r.OrderId}: HasUser = {r.HasUser}")
+        }
+        let sql_rj = _sql_text(db |> select_from(type<User>)
+                                  |> _right_join(db |> select_from(type<Order>),
+                                                 $(u : User, o : Order) => u.Id == o.UserId,
+                                                 $(u : Option<User>, o : Order) => (HasUser = u |> is_some, OrderId = o.Id)))
+        to_log(LOG_INFO, "  SQL: {sql_rj}")
+
+        // ---- D. FULL OUTER JOIN — both sides surface; Carol AND Order#13 appear (5 rows). ----
+        // Probes both args: `u |> is_some` lowers to LEFT key IS NOT NULL,
+        // `o |> is_some` lowers to RIGHT key IS NOT NULL.
+        let fulls <- _sql(db |> select_from(type<User>)
+                            |> _full_outer_join(db |> select_from(type<Order>),
+                                                $(u : User, o : Order) => u.Id == o.UserId,
+                                                $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        to_log(LOG_INFO, "FULL OUTER — both sides surface:")
+        for (r in fulls) {
+            to_log(LOG_INFO, "  HasUser = {r.HasUser}, HasOrder = {r.HasOrder}")
+        }
+        let sql_fo = _sql_text(db |> select_from(type<User>)
+                                  |> _full_outer_join(db |> select_from(type<Order>),
+                                                      $(u : User, o : Order) => u.Id == o.UserId,
+                                                      $(u : Option<User>, o : Option<Order>) => (HasUser = u |> is_some, HasOrder = o |> is_some)))
+        to_log(LOG_INFO, "  SQL: {sql_fo}")
+
+        // ---- E. CROSS JOIN — Cartesian product, no ON clause (3 × 4 = 12 rows). ----
+        // Filter post-cross with `_where` to recover an inner-join shape.
+        let cross <- _sql(db |> select_from(type<User>)
+                            |> _cross_join(db |> select_from(type<Order>),
+                                           $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
+        to_log(LOG_INFO, "CROSS — every (user, order) pair:")
+        for (r in cross) {
+            to_log(LOG_INFO, "  {r.UserName} × order #{r.OrderId}")
+        }
+        let sql_cx = _sql_text(db |> select_from(type<User>)
+                                  |> _cross_join(db |> select_from(type<Order>),
+                                                 $(u : User, o : Order) => (UserName = u.Name, OrderId = o.Id)))
+        to_log(LOG_INFO, "  SQL: {sql_cx}")
     }
 }
