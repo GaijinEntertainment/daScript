@@ -167,7 +167,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
         stype := null
         fn.body <- blk
         append_annotation(fn, "templates", "template", [(
-            ("self", RttiValue(tBool=true))
+            (argname = "self", argvalue = RttiValue(tBool=true))
         )])
         if (!(compiling_module() |> add_function(fn))) {
             panic("can't setup")

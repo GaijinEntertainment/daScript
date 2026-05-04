@@ -147,7 +147,7 @@ def demo_tuples() {
     //     _1 = hello
 
     // Named tuple
-    let point : tuple<x : float; y : float> = (1.0, 2.0)
+    let point = (x = 1.0, y = 2.0)
     print("  Named tuple:\n")
     apply(point) $(name, field) {
         print("    {name} = {field}\n")

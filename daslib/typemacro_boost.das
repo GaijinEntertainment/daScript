@@ -99,9 +99,9 @@ class TypeMacroInfo : AstStructureAnnotation {
 
 [macro_function]
 def private append_arguments_annotation(var cls : StructurePtr; var func : FunctionPtr) {
-    var ann_args : array<tuple<string; RttiValue>>
+    var ann_args : array<tuple<argname : string; argvalue : RttiValue>>
     ann_args |> reserve(length(func.arguments) - 1)
-    var name = (string(func.name), RttiValue(tBool = true))
+    var name = (argname = string(func.name), argvalue = RttiValue(tBool = true))
     ann_args |> emplace(name)
     for (i in range(2, length(func.arguments))) {
         var value = RttiValue(tString = "```empty```type```")
@@ -117,7 +117,7 @@ def private append_arguments_annotation(var cls : StructurePtr; var func : Funct
                 value = RttiValue(tString = describe(argInit))
             }
         }
-        var blah = (string(func.arguments[i].name), value)
+        var blah = (argname = string(func.arguments[i].name), argvalue = value)
         ann_args |> emplace(blah)
     }
     cls |> append_annotation("typemacro_boost", "typemacro_documentation", ann_args)
@@ -152,7 +152,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
             return false
         }
         field.init = qmacro(cast<auto>(@@$i(visitName)))
-        let name =  ("name", RttiValue(tString = string(func.name)))
+        let name =  (argname = "name", argvalue = RttiValue(tString = string(func.name)))
         cls |> append_annotation("ast_boost", "type_macro", [
             name
         ])
@@ -243,11 +243,11 @@ class TypeMacroTemplate : AstStructureAnnotation {
 [macro_function]
 def public make_typemacro_template_instance(instance_type, template_type : Structure?; ex : array<tuple<string, string>> = array<tuple<string, string>>()) {
     //! Annotates a structure as a typemacro template instance of the given template type.
-    var extra : array<tuple<string, RttiValue>>
+    var extra : array<tuple<argname : string, argvalue : RttiValue>>
     extra |> reserve(1 + length(ex))
-    extra.emplace(("parent", RttiValue(tString = "{template_type._module.name}::{template_type.name}")), 0)
+    extra.emplace((argname = "parent", argvalue = RttiValue(tString = "{template_type._module.name}::{template_type.name}")), 0)
     for (e in ex) {
-        extra.emplace((e._0, RttiValue(tString = e._1)), 0)
+        extra.emplace((argname = e._0, argvalue = RttiValue(tString = e._1)), 0)
     }
     unsafe {
         var append_structure <- reinterpret<Structure?>(instance_type)
@@ -534,7 +534,7 @@ class TemplateStructure : AstStructureAnnotation {
             return <- default<TypeDeclPtr>
         }
         append_annotation(makeFunction, "typemacro_boost", "typemacro_template_function", [
-             (("{st.name}", RttiValue(tBool=true))
+             ((argname="{st.name}", argvalue=RttiValue(tBool=true))
         )])
         if (!(compiling_module() |> add_function(makeFunction))) {
             panic("can't add function {makeFuncName}")

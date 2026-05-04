@@ -626,7 +626,7 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
         }
 
         rule_code |> append_block_new <| (qmacro_block() {
-            return <-  (true, 0, parser.index);
+            return <- (success = true, value = 0, endpos = parser.index);
         })
 
         var t <- qmacro_block() {
@@ -654,7 +654,7 @@ def generate_maybe_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array
 
     rule_code |> append_block_new <| (qmacro_block() {
         $i(result_handle) |> emplace <| temp_name;
-        return <-  (true, 0, 0);
+        return <- (success = true, value = 0, endpos = 0);
     })
 
     var t <- qmacro_block() {
@@ -685,7 +685,7 @@ def generate_not(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     }
 
     rule_code |> append_block_new <| (qmacro_block() {
-        return <-  (true, 0, parser.index);
+        return <- (success = true, value = 0, endpos = parser.index);
     })
 
     var t <- qmacro_block() {
@@ -734,7 +734,7 @@ def generate_and(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expressi
     }
 
     rule_code |> append_block_new <| (qmacro_block() {
-        return <-  (true, 0, parser.index);
+        return <- (success = true, value = 0, endpos = parser.index);
     })
 
     var t <- qmacro_block() {
@@ -775,7 +775,7 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
         }
 
         rule_code |> append_block_new <| (qmacro_block() {
-            return <-  (true, 0, parser.index);
+            return <- (success = true, value = 0, endpos = parser.index);
         })
 
         var t <- qmacro_block() {
@@ -818,7 +818,7 @@ def generate_repeat(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
     rule_code |> append_block_new <| (qmacro_block() {
         $i(result_handle) |> emplace <| temp_name;
-        return <-  (true, 0, parser.index);
+        return <- (success = true, value = 0, endpos = parser.index);
     })
 
     var type_decl = gen |> get_rule_type(rule_.rule)
@@ -993,7 +993,7 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
             parser.suppress_errors |> push <| true
             invoke() {
                 $b(rule_code)
-                return <-  (false, 0, 0)
+                return <- (success = false, value = 0, endpos = 0)
             }
             parser.suppress_errors |> pop
         }
@@ -1013,7 +1013,7 @@ def generate_option(var gen : ParserGenerator; var rule_ : Rule_?) : array<Expre
 
     rule_code |> append_block_new <| (qmacro_block() {
         $i(result_handle) |> emplace <| temp_name;
-        return <-  (false, 0, 0);
+        return <- (success = false, value = 0, endpos = 0);
     })
 
     var t <- qmacro_block() {
@@ -1123,7 +1123,7 @@ def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen 
             parser |> log_plain <| "Returning result at index {parser.index}"
         }
 
-        var result : $t(return_type) <-  (true, val, parser.index) // nolint:PERF009 macro-generated tuple
+        var result : $t(return_type) <- (success = true, value <- val, endpos = parser.index) // nolint:PERF009 macro-generated tuple
         return <- result
     }
 
@@ -1220,8 +1220,8 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
         if (Terminal(number = $v(handle))) {
 
             return <- qmacro_block() {
-                let $i(name) : tuple<bool; int; int> = parser |> match_decimal_literal
-                if (!$i(name)._0) {
+                let $i(name) : tuple<success : bool; value : int; endpos : int> = parser |> match_decimal_literal
+                if (!$i(name).success) {
 
                     if ($v(gen.tracing)) {
                         parser |> log_fail <| "Could not match a decimal number"
@@ -1236,10 +1236,10 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 }
 
                 if ($v(gen.tracing)) {
-                    parser |> log_success <| "Matched a decimal number {$i(name)._1}"
+                    parser |> log_success <| "Matched a decimal number {$i(name).value}"
                 }
 
-                var $i(handle) = $i(name)._1 // nolint:LINT003
+                var $i(handle) = $i(name).value // nolint:LINT003
             }
         }
 
@@ -1343,9 +1343,9 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 }
 
                 if ($v(gen.tracing)) {
-                    parser |> log_success <| "Matched a string {$i(name)._1}"
+                    parser |> log_success <| "Matched a string {$i(name).value}"
                 }
-                var $i(handle) : string = $i(name)._1 // nolint:LINT003
+                var $i(handle) : string = $i(name).value // nolint:LINT003
             }
         }
 
@@ -1368,9 +1368,9 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                 }
 
                 if ($v(gen.tracing)) {
-                    parser |> log_success <| "Matched a double {$i(name)._1}"
+                    parser |> log_success <| "Matched a double {$i(name).value}"
                 }
-                var $i(handle) = $i(name)._1 // nolint:LINT003
+                var $i(handle) = $i(name).value // nolint:LINT003
             }
         }
     }

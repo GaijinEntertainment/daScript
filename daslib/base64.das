@@ -69,7 +69,7 @@ def public base64_decode(_in : string) : tuple<text : string; size : int> {
     peek_data(_in) $(inp) {
         outlen = base64_decode(inp, out)
     }
-    return (string(out), outlen)
+    return (text = string(out), size = outlen)
 }
 
 def public base64_decode(_in : string; var out : array<uint8>) : int {

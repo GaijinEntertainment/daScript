@@ -3035,10 +3035,10 @@ def private sql_function_info_from_func(func : FunctionPtr) : tuple<name : strin
             if (donArg is tBool) {
                 directonly = donArg as tBool
             }
-            return (name, directonly)
+            return (name = name, directonly = directonly)
         }
     }
-    return ("", false)
+    return (name = "", directonly = false)
 }
 
 [macro_function]

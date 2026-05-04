@@ -1251,21 +1251,21 @@ class GlslExport : AstVisitor {
 // op2
     def getReplaceOp2(expr : ExprOp2?) : tuple<fun : string; replOp : bool> {
         if (expr.op == "%" && !expr._type.isInteger) {
-            return ("mod", true)
+            return (fun = "mod", replOp = true)
         }
         if (caps.replace_hlsl_incompatible_operations) {
             if (expr.op == "*") {
                 if (is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)) {
-                    return ("MUL", true)
+                    return (fun = "MUL", replOp = true)
                 }
             }
             if (expr.op == "==" || expr.op == "!=") {
                 if (is_any_matrix(expr.left._type) || expr.left._type.isVectorType || is_any_matrix(expr.right._type) || expr.right._type.isVectorType) {
-                    return ("all", false)
+                    return (fun = "all", replOp = false)
                 }
             }
         }
-        return ("", false)
+        return (fun = "", replOp = false)
     }
     def override preVisitExprOp2(expr : ExprOp2?) {
         let repl = self->getReplaceOp2(expr)
@@ -1399,7 +1399,7 @@ class GlslExport : AstVisitor {
                 let sdim = source._type.dim[length(source._type.dim) - 1]
                 *writer |> write("{svar.name}!={sdim}")
                 let newsrc = "{self->describe_subexpression(source)}[{svar.name}]"
-                renames |> push(("{iter}", newsrc))
+                renames |> push((name = "{iter}", repl = newsrc))
             } elif (self->isRangeFor(source)) {
                 *writer |> write("{svar.name}!=_for_range_v{svar.name}.y")
             }
@@ -1908,7 +1908,7 @@ def generate_glsl(fnMain : FunctionPtr; var errors : array<string>; shaderType :
     if (DEBUG_SHADER_TEXT) {
         print("{st}\n\n")
     }
-    return (st, inout_stub, inout_decl)
+    return (body = st, inout_stub = inout_stub, inout_decl = inout_decl)
 }
 
 [macro_function]
@@ -1960,7 +1960,7 @@ def get_decl_type_from_name(name : string) {
 [macro_function]
 def get_decl_info(typ : TypeDeclPtr; arguments : AnnotationArgumentList) : tuple<ok : bool; info : FieldDeclInfo> {
     if (length(typ.dim) > 0 || !(typ.isNumeric || typ.isVectorType)) {
-        return (false, FieldDeclInfo())
+        return (ok = false, info = FieldDeclInfo())
     }
     var fdi = FieldDeclInfo(
         sizei = arguments |> find_arg("size") ?as tInt ?? -1,
@@ -1978,7 +1978,7 @@ def get_decl_info(typ : TypeDeclPtr; arguments : AnnotationArgumentList) : tuple
             fdi.typet = typ.baseType
         }
     }
-    return fdi.typet != Type.none ?  (true, fdi) :  (false, FieldDeclInfo())
+    return fdi.typet != Type.none ? (ok = true, info = fdi) : (ok = false, info = FieldDeclInfo())
 }
 
 var public glsl_supported_semantics <- {

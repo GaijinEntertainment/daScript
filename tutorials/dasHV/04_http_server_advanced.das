@@ -123,14 +123,14 @@ class AdvancedServer : HvWebServer {
         // JSON() and TEXT_PLAIN() accept an optional status parameter
         // (defaults to http_status.OK).
         GET("/not-found") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
-            let payload : tuple<error : string; code : int> = ("resource not found", 404)
+            let payload = (error = "resource not found", code = 404)
             return resp |> JSON(write_json(JV(payload)), http_status.NOT_FOUND)
         }
 
         // 201 Created with Location header
         POST("/items") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             set_header(resp, "Location", "/items/42")
-            let payload : tuple<id : int; body : string> = (42, string(req.body))
+            let payload = (id = 42, body = string(req.body))
             return resp |> JSON(write_json(JV(payload)), http_status.CREATED)
         }
 

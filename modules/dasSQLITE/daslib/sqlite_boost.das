@@ -2172,7 +2172,7 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
         }
     }
     if (found_st == null) {
-        return ("", "", false)
+        return (tab_name = "", pk_col = "", found = false)
     }
     var tab = string(found_st.name)
     for (ann in found_st.annotations) {
@@ -2188,10 +2188,10 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
             if (pk_anno is tString) {
                 pk_col = string(pk_anno as tString)
             }
-            return (tab, pk_col, true)
+            return (tab_name = tab, pk_col = pk_col, found = true)
         }
     }
-    return (tab, "", false)
+    return (tab_name = tab, pk_col = "", found = false)
 }
 
 [structure_macro(name=sql_table)]
@@ -3627,30 +3627,30 @@ enum SqlFnTag {
 [macro_function]
 def private sql_fn_tag_for_type(td : TypeDeclPtr) : tuple<tag : uint8; ok : bool> {
     if (td == null) {
-        return (uint8(0), false)
+        return (tag = uint8(0), ok = false)
     }
     if (td.dim |> length != 0) {
-        return (uint8(0), false)
+        return (tag = uint8(0), ok = false)
     }
     if (td.baseType == Type.tInt) {
-        return (uint8(SqlFnTag.Int), true)
+        return (tag = uint8(SqlFnTag.Int), ok = true)
     }
     if (td.baseType == Type.tInt64) {
-        return (uint8(SqlFnTag.Int64), true)
+        return (tag = uint8(SqlFnTag.Int64), ok = true)
     }
     if (td.baseType == Type.tFloat) {
-        return (uint8(SqlFnTag.Float), true)
+        return (tag = uint8(SqlFnTag.Float), ok = true)
     }
     if (td.baseType == Type.tDouble) {
-        return (uint8(SqlFnTag.Double), true)
+        return (tag = uint8(SqlFnTag.Double), ok = true)
     }
     if (td.baseType == Type.tBool) {
-        return (uint8(SqlFnTag.Bool), true)
+        return (tag = uint8(SqlFnTag.Bool), ok = true)
     }
     if (td.baseType == Type.tString) {
-        return (uint8(SqlFnTag.String), true)
+        return (tag = uint8(SqlFnTag.String), ok = true)
     }
-    return (uint8(0), false)
+    return (tag = uint8(0), ok = false)
 }
 
 [call_macro(name="register_function")]

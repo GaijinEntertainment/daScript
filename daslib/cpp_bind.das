@@ -81,7 +81,7 @@ def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPt
         if (!fld._type.isFunction || fld.name == "__finalize" || fld.init != null) {
             continue
         }
-        push(methods, ("{fld.name}", idx))
+        push(methods, (name = "{fld.name}", index = idx))
         push_clone(types, fld._type)
     }
     let nmet = length(methods)

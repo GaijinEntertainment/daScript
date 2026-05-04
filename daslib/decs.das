@@ -414,7 +414,7 @@ def private new_entity_id() {
         decsState.entityFreeList |> pop
     } else {
         eid.id = uint(length(decsState.entityLookup))
-        decsState.entityLookup |> push((0, 0ul, 0))
+        decsState.entityLookup |> push((generation = 0, archetype = ComponentHash(0ul), index = 0))
     }
     eid.generation ++
     return eid
@@ -618,14 +618,14 @@ def private can_process_request(var erq : EcsRequest; var arch : Archetype) {
 def public verify_request(var erq : EcsRequest) : tuple<ok : bool; error : string> {
     //! Verifies ECS request. Returns pair of boolean (true for OK) and error message.
     if (erq.hash == 0ul || (empty(erq.req) && empty(erq.reqn))) {
-        return (true, "")     // this queries just about everything
+        return (ok = true, error = "")     // this queries just about everything
     }
     for (N in erq.reqn) {// assuming require_not is typically shorter
         if (erq.req |> binary_search(N)) {
-            return (false, "duplicate req and neq {N}")
+            return (ok = false, error = "duplicate req and neq {N}")
         }
     }
-    return (true, "")
+    return (ok = true, error = "")
 }
 
 def public compile_request(var erq : EcsRequest) {
@@ -900,7 +900,7 @@ def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
                 narch |> create_archetype(cmp, idx)
             }
             let neidx = narch |> create_entity(eid, cmp)
-            decsState.entityLookup[eid.id] =  (eid.generation, new_ahash, neidx)
+            decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = new_ahash, index = neidx)
         }
     }
     delete cmp
@@ -917,7 +917,7 @@ def private create_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var 
             arch |> create_archetype(cmp, idx)
         }
         let eidx = arch |> create_entity(eid, cmp)
-        decsState.entityLookup[eid.id] =  (eid.generation, ahash, eidx)
+        decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
     }
     delete cmp
 }
@@ -992,7 +992,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
                 memcpy(addr(c.data[base * c.stride]), addr(comp.data), c.stride)
             }
         }
-        decsState.entityLookup[first_eid.id] = (first_eid.generation, ahash, base)
+        decsState.entityLookup[first_eid.id] = (generation = first_eid.generation, archetype = ahash, index = base)
         // Fill remaining entities (reuse cmp — set overwrites existing entries)
         for (i in range(1, count)) {
             var eid = new_entity_id()
@@ -1008,7 +1008,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
                     memcpy(addr(c.data[eidx * c.stride]), addr(comp.data), c.stride)
                 }
             }
-            decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
+            decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
         }
         arch.size += count
     }
@@ -1046,7 +1046,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
             let eid = EntityId(id = id_base + uint(i), generation = 1)
             let eidx = base + i
             invoke(fill_blk, arch, eidx, eid, i)
-            decsState.entityLookup[eid.id] = (eid.generation, ahash, eidx)
+            decsState.entityLookup[eid.id] = (generation = eid.generation, archetype = ahash, index = eidx)
         }
         arch.size += count
     }

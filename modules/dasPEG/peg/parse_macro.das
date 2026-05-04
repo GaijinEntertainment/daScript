@@ -67,12 +67,12 @@ def add_name(var rule : Rule; var name : string) {
 }
 
 
-def into_terminal(var expr : ExpressionPtr) : tuple<int; int> {
+def into_terminal(var expr : ExpressionPtr) : tuple<from : int; to : int> {
     if (expr is ExprConstInt) {
         // Single character '\n', '1', 'a'
 
         let v = (expr as ExprConstInt).value
-        return <-  (v, v)
+        return <- (from = v, to = v)
     } elif (expr is ExprCall && (expr as ExprCall).name == "interval") {
         // Range of charachters '1'..'9'
 
@@ -86,15 +86,15 @@ def into_terminal(var expr : ExpressionPtr) : tuple<int; int> {
         let left <- (left_exp as ExprConstInt).value
         let right <- (right_exp as ExprConstInt).value
 
-        return <-  (left, right)
+        return <- (from = left, to = right)
     }
 
     transfrom_error(expr.at, "Unknown rule passed to `rule` as argument {describe(expr)} into terminal")
-    return <-  (0, 0)
+    return <- (from = 0, to = 0)
 }
 
 [macro_function]
-def flatten_intervals(charset : array<tuple<from : int; to : int>>; invert : bool) {
+def flatten_intervals(charset : array<tuple<from : int; to : int>>; invert : bool) : tuple<chars : bool[256]; intervals : array<tuple<int; int>>> {
     var chars : bool[256]
 
     for (r in charset) {
@@ -128,7 +128,7 @@ def flatten_intervals(charset : array<tuple<from : int; to : int>>; invert : boo
         result |> push <|  (start, 256)
     }
 
-    return <-  (chars, result)
+    return <- (chars = chars, intervals <- result)
 }
 
 [macro_function]
@@ -228,7 +228,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         var set = expr as ExprCall
         let inverting = set.name == "not_set"
 
-        var terms : array<tuple<int; int>>
+        var terms : array<tuple<from : int; to : int>>
 
         for (arg in set.arguments) {
             terms |> push(arg |> into_terminal)

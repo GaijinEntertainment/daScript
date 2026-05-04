@@ -687,8 +687,10 @@ class FromDecsMacro : AstCallMacro {
         }
         // tuple to push
         var mkTuple = new ExprMakeTuple(at = expr.at)
-        for (arg in qblk.arguments) {
+        mkTuple.recordNames.resize(qblk.arguments.length())
+        for (arg, idx in qblk.arguments, count()) {
             mkTuple.values |> push(new ExprVar(at = arg.at, name := arg.name))
+            mkTuple.recordNames[idx] := arg.name
         }
         // block with arguments
         var qblock = qmacro(${

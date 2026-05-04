@@ -449,7 +449,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             }
         }
-        return <-  (noalias, nocapture)
+        return <- (noalias <- noalias, nocapture <- nocapture)
     }
 
     def append_basic_block(name : string) {
@@ -5276,7 +5276,7 @@ class public LlvmJitVisitor : AstVisitor {
         unsafe {
             delete astVisitor
         }
-        return (result, impl)
+        return (func = result, impl = impl)
     }
 
     def override canVisitMakeBlockBody(expr : ExprMakeBlock?) : bool {

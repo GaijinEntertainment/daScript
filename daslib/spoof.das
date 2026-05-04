@@ -19,23 +19,23 @@ require strings
 let SPOOF_SPEFICAL = '%'
 
 [macro_function]
-def spoof_args(invocation : string; blk : block<(var res : array<tuple<string; string>>; errors : array<ParsingError>) : void>) {
+def spoof_args(invocation : string; blk : block<(var res : array<tuple<argName : string; init : string>>; errors : array<ParsingError>) : void>) {
     parse(invocation) {
-        var element_list : array<tuple<string; string>>
+        var element_list : array<tuple<argName : string; init : string>>
         rule(WS, "(", WS, *comma_separated_elements as els, WS, element as last, WS, ")") {
             els |> push <| last
             return <- els
         }
-        var comma_separated_elements : tuple<string; string>
+        var comma_separated_elements : tuple<argName : string; init : string>
         rule(WS, element as e, WS, ",") {
             return e
         }
-        var element : tuple<string; string>
+        var element : tuple<argName : string; init : string>
         rule(ident_ as e, WS, "=", WS, element_value as v) {
-            return (e, v)
+            return (argName = e, init = v)
         }
         rule(ident_ as e) {
-            return (e, "")
+            return (argName = e, init = "")
         }
         var sub_element : string
         rule("\\", "{set(0..255)}" as Ch) {    // escape
@@ -92,7 +92,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         }
     }
     if (args |> length == 0) {
-        return (error, false)
+        return (result = error, ok = false)
     }
     // compare argument counts
     var instance_arguments : array<string>
@@ -102,7 +102,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         } elif (!empty(a.init)) {
             instance_arguments |> push <| a.init
         } else {
-            return ("invalid number of arguments", false)
+            return (result = "invalid number of arguments", ok = false)
         }
     }
     // skip to next line
@@ -117,7 +117,7 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
         Ch = -1
     }
     if (Ch == -1) {
-        return ("unexpected end of file", false)
+        return (result = "unexpected end of file", ok = false)
     }
     // now, lets apply the arguments
     var result : array<uint8>
@@ -149,13 +149,13 @@ def instance_spoof(temp : string; passed_arguments : array<string>) : tuple<resu
             } elif (Ch == -1) {
                 break   // eof
             } else {
-                return ("invalid sequence after %", false)
+                return (result = "invalid sequence after %", ok = false)
             }
         } else {
             result |> push(uint8(Ch))
         }
     }
-    return (string(result), true)
+    return (result = string(result), ok = true)
 }
 
 [reader_macro(name="spoof_template")]
