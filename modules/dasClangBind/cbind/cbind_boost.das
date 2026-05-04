@@ -156,7 +156,7 @@ def clang_getCursorLocationFullPath(var c : CXCursor) {
     var line, column, offset : uint
     clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
     // libclang returns backslashes on Windows; normalize to '/' so prefix matching is OS-independent
-    let fname = string(clang_getFileName(file)) |> replace_multiple([("\\", "/")])
+    let fname = string(clang_getFileName(file)) |> replace_multiple([(text = "\\", replacement = "/")])
     return "{fname}:{int(line)}:{int(column)}"
 }
 
@@ -1548,7 +1548,7 @@ class CppGenBind : AnyGenBind {
         if (clang_isForwardDeclaration(cursor)) {
             return
         }
-        enumDecl |> push((ns_en, enum_name))
+        enumDecl |> push((ns_en = ns_en, enum_name = enum_name))
         let dashing_name = namespace_name(enum_name, "_")
         fprint(enum_class_file, "// from {clang_getCursorLocationDescription(cursor)}\n")
         fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration \{\n")
