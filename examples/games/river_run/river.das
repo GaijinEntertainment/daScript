@@ -417,12 +417,12 @@ def render_river(game_time : float) {
     fs_river_bind_uniform(active_program)
     river_surface_geo |> draw_geometry_fragment()
 
-    // Banks (flat shader, terrain color)
-    glUseProgram(flat_program)
-    active_program = flat_program
+    // Banks (grass shader, terrain color + per-pixel noise tint)
+    glUseProgram(grass_program)
+    active_program = grass_program
     v_model = compose(float3(0.0), float4(0.0, 0.0, 0.0, 1.0), float3(1.0))
     f_Color = float4(get_bank_color(), 1.0)
-    vs_flat_bind_uniform(active_program)
-    fs_flat_bind_uniform(active_program)
+    vs_grass_bind_uniform(active_program)
+    fs_grass_bind_uniform(active_program)
     river_bank_geo |> draw_geometry_fragment()
 }

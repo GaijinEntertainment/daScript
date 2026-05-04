@@ -6,6 +6,7 @@ require rr_audio
 require river
 require gameplay
 require hud
+require hud3d
 
 // --- GL Setup ---
 
@@ -14,6 +15,7 @@ def create_gl_objects() {
     phong_program = cache_shader_program(vs_phong`shader_text, fs_phong`shader_text)
     river_program = cache_shader_program(vs_river`shader_text, fs_river`shader_text)
     rotor_program = cache_shader_program(vs_rotor`shader_text, fs_rotor`shader_text)
+    grass_program = cache_shader_program(vs_grass`shader_text, fs_grass`shader_text)
 
     geo_sphere <- create_geometry_fragment <| gen_sphere(10, 7, false)
     geo_cube <- create_geometry_fragment <| gen_cube()
@@ -32,7 +34,17 @@ def update_camera() {
     // Camera lags behind player X
     cam_x += (player_pos.x - cam_x) * CAM_X_LAG
 
-    let eye = float3(cam_x, player_pos.y - CAM_BACK, CAM_HEIGHT)
+    // Pitch lerps with current player speed: slow → CAM_PITCH_SLOW_DEG, fast → CAM_PITCH_FAST_DEG.
+    let speed_max = PLAYER_FWD_SPEED_MAX * section_speed_mult()
+    let speed_den = max(speed_max - PLAYER_FWD_SPEED_MIN, 0.001)
+    let speed_t = clamp((player_fwd_speed - PLAYER_FWD_SPEED_MIN) / speed_den, 0.0, 1.0)
+    let pitch_deg = CAM_PITCH_SLOW_DEG + (CAM_PITCH_FAST_DEG - CAM_PITCH_SLOW_DEG) * speed_t
+    let cam_height = (CAM_BACK + CAM_LOOK_AHEAD) * tan(pitch_deg * PI / 180.0)
+
+    let t = float(get_uptime())
+    let shake = float3(sin(t * 47.0), sin(t * 53.0), sin(t * 61.0)) * screen_shake_amount
+
+    let eye = float3(cam_x, player_pos.y - CAM_BACK, cam_height) + shake
     let center = float3(player_pos.x, player_pos.y + CAM_LOOK_AHEAD, 0.0)
     let up = float3(0.0, 0.0, 1.0)
     v_view = look_at_rh(eye, center, up)
@@ -50,7 +62,8 @@ def handle_menu_input() {
 
     if (game_state == GameState.menu && space_just) {
         reset_game()
-    } elif ((game_state == GameState.game_over_state || game_state == GameState.win_state) && space_just) {
+    } elif ((game_state == GameState.game_over_state || game_state == GameState.win_state)
+            && space_just && restart_input_lock <= 0.0) {
         reset_game()
     }
 }
@@ -118,8 +131,19 @@ def update() {
     v_projection = perspective_rh_opengl(50.0 * PI / 180.0, aspect, 0.1, 500.0)
     update_camera()
 
-    let dt = get_dt()
-    tick_dt = min(dt, 1.0 / 30.0)
+    let real_dt = get_dt()
+    tick_dt = min(real_dt, 1.0 / 30.0)
+
+    if (slow_mo_timer > 0.0) {
+        slow_mo_timer -= real_dt
+        tick_dt *= SLOW_MO_SCALE
+    }
+
+    screen_shake_amount = max(screen_shake_amount - SHAKE_DECAY * real_dt, 0.0)
+
+    if (restart_input_lock > 0.0) {
+        restart_input_lock -= tick_dt
+    }
 
     let game_time = float(get_uptime())
 
@@ -157,6 +181,7 @@ def update() {
     render_all(game_time)
 
     glDisable(GL_CULL_FACE)
+    draw_hud_3d(game_time)
     draw_hud()
     glEnable(GL_CULL_FACE)
 

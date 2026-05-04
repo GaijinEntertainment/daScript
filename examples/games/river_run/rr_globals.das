@@ -67,6 +67,7 @@ let BONUS_MULTISHOT_TIME = 12.0
 let BONUS_FASTSHOT_TIME = 7.0
 let BONUS_BOB_AMPLITUDE = 0.22
 let BONUS_BOB_SPEED = 2.6
+let BONUS_SPIN_SPEED = 2.4
 
 let ENEMY_BULLET_SPEED = 10.0
 let ENEMY_HELI_BULLET_SPEED = 18.0
@@ -103,9 +104,18 @@ let PARTICLE_LIFETIME = 0.7
 let TRAIL_LIFETIME = 0.12
 
 let CAM_BACK = 14.0
-let CAM_HEIGHT = 19.0
-let CAM_LOOK_AHEAD = 9.0
+let CAM_LOOK_AHEAD = 8.2
 let CAM_X_LAG = 0.08
+let CAM_PITCH_SLOW_DEG = 42.0   // pitch at PLAYER_FWD_SPEED_MIN
+let CAM_PITCH_FAST_DEG = 36.0   // pitch at top speed (PLAYER_FWD_SPEED_MAX * section_speed_mult)
+
+let SHAKE_SMALL = 0.20
+let SHAKE_MED   = 0.55
+let SHAKE_BIG   = 1.05
+let SHAKE_DECAY = 5.0
+
+let SLOW_MO_DURATION = 0.6
+let SLOW_MO_SCALE = 0.4
 
 let WAVE_BANNER_DURATION = 2.5
 
@@ -275,6 +285,9 @@ var @live current_section = 0
 var @live section_dist = 0.0
 var @live section_banner_timer = 0.0
 var @live section_score_bonus_pending = false
+var @live restart_input_lock = 0.0
+var @live screen_shake_amount = 0.0
+var @live slow_mo_timer = 0.0
 
 var @live river_segments : array<RiverSegment>
 var @live river_dirty = true
@@ -357,6 +370,7 @@ var @uniform v_projection : float4x4
 var @inout f_normal : float3
 var @inout f_tex_pos : float3
 var @inout f_fog_t : float
+var @inout f_grass_world : float2
 var @uniform f_Color : float4
 var @uniform f_RiverColor : float4
 var @uniform f_GameTime : float
@@ -378,6 +392,29 @@ def fs_flat {
     let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
     let fog_alpha = fog_t * fog_t * 0.5
     let col = f_Color.xyz * (1.0 - fog_alpha) + f_FogColor * fog_alpha
+    f_FragColor = float4(col, f_Color.w)
+}
+
+// grass shader — river banks with subtle world-space noise tint
+
+[vertex_program]
+def vs_grass {
+    let world_pos = v_model * float4(v_position, 1.0)
+    f_grass_world = world_pos.xy
+    f_fog_t = world_pos.y
+    gl_Position = v_projection * v_view * world_pos
+}
+
+[fragment_program]
+def fs_grass {
+    let p = f_grass_world * 0.35
+    let h = sin(dot(floor(p), float2(12.9898, 78.233))) * 43758.5
+    let n = h - floor(h)
+    let tint = 1.0 + (n - 0.5) * 0.18
+    let base = f_Color.xyz * tint
+    let fog_t = saturate((f_fog_t - f_FogParams.x) / (f_FogParams.y - f_FogParams.x))
+    let fog_alpha = fog_t * fog_t * 0.5
+    let col = base * (1.0 - fog_alpha) + f_FogColor * fog_alpha
     f_FragColor = float4(col, f_Color.w)
 }
 
@@ -455,6 +492,7 @@ var flat_program : uint
 var phong_program : uint
 var river_program : uint
 var rotor_program : uint
+var grass_program : uint
 var active_program : uint
 
 var geo_sphere : OpenGLGeometryFragment
@@ -508,6 +546,18 @@ def get_fog_color() : float3 {
 
 def section_speed_mult() : float {
     return 1.0 + float(current_section) * 0.15
+}
+
+def add_screen_shake(amount : float) {
+    screen_shake_amount = max(screen_shake_amount, amount)
+}
+
+def fuel_bar_color() : float3 {
+    let low = player_fuel < LOW_FUEL_THRESHOLD
+    let blink = low && int(get_uptime() * 6.0) % 2 == 0
+    return (
+        low ? (blink ? float3(1.0, 0.2, 0.2) : float3(1.0, 0.5, 0.1)) : float3(0.2, 0.9, 0.3)
+    )
 }
 
 def draw_with_flat(pos, scale, color : float3; rot_quat : float4 = float4(0.0, 0.0, 0.0, 1.0)) {

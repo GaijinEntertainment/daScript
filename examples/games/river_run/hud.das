@@ -24,27 +24,6 @@ def draw_text_centered(text : string; cx, y : int; tint : float3 = float3(1.0)) 
     delete quads
 }
 
-def draw_fuel_bar() {
-    // Draw fuel label
-    let low = player_fuel < LOW_FUEL_THRESHOLD
-    let blink = low && int(get_uptime() * 6.0) % 2 == 0
-    let bar_color = (
-        low ? (blink ? float3(1.0, 0.2, 0.2) : float3(1.0, 0.5, 0.1)) : float3(0.2, 0.9, 0.3)
-    )
-    draw_text("FUEL", 10, display_h - 28, bar_color)
-    // Represent fuel as bar of characters
-    let bar_chars = 20
-    let filled = int(player_fuel / PLAYER_FUEL_MAX * float(bar_chars))
-    let bar_str = build_string() $(var w) {
-        w |> write("[")
-        for (i in range(bar_chars)) {
-            w |> write(i < filled ? "#" : "-")
-        }
-        w |> write("]")
-    }
-    draw_text(bar_str, 52, display_h - 28, bar_color)
-}
-
 def draw_hud() {
     let cx = display_w / 2
     let cy = display_h / 2
@@ -58,39 +37,11 @@ def draw_hud() {
         return
     }
 
-    // In-game HUD
+    // In-game HUD: SCORE + SECTION number remain as text;
+    // lives / fuel / active powerups are drawn as 3D HUD geometry in hud3d.das.
     let display_section = min(current_section + 1, MAX_SECTIONS)
-    draw_text("SCORE: {score}", 10, 24, float3(1.0))
-    draw_text("LIVES: {player_lives}", 10, 52, float3(1.0, 0.9, 0.5))
-    draw_text("SECTION: {display_section}", 10, 80, float3(0.6, 1.0, 0.7))
-
-    let speed_max = PLAYER_FWD_SPEED_MAX * section_speed_mult()
-    let speed_den = max(speed_max - PLAYER_FWD_SPEED_MIN, 0.001)
-    let speed_t = clamp((player_fwd_speed - PLAYER_FWD_SPEED_MIN) / speed_den, 0.0, 1.0)
-    let speed_pct = int(speed_t * 100.0)
-    draw_text("SPD: {speed_pct}%", 10, 108, float3(0.7, 0.8, 1.0))
-
-    // Active timed bonuses
-    var bonus_y = 136
-    if (player_multishot_timer > 0.0 || player_fastshot_timer > 0.0) {
-        draw_text("ACTIVE BONUS", 10, bonus_y, float3(0.9, 1.0, 0.65))
-        bonus_y += 22
-    }
-    if (player_multishot_timer > 0.0) {
-        let secs = int(player_multishot_timer + 0.99)
-        draw_text("MULTISHOT: {secs}s", 10, bonus_y, float3(1.0, 0.55, 0.2))
-        bonus_y += 22
-    }
-    if (player_fastshot_timer > 0.0) {
-        let secs = int(player_fastshot_timer + 0.99)
-        draw_text("FAST SHOT: {secs}s", 10, bonus_y, float3(1.0, 0.78, 0.12))
-    }
-
-    draw_fuel_bar()
-
-    // Controls hint
-    draw_text("Arrows/A,D: steer  W/S: speed  SPC: fire  ESC: pause",
-        10, display_h - 54, float3(0.5, 0.5, 0.6))
+    draw_text_centered("SCORE: {score}", cx, 18, float3(1.0))
+    draw_text_centered("SECTION: {display_section}", cx, 44, float3(0.6, 1.0, 0.7))
 
     // Section banner
     if (section_banner_timer > 0.0) {
