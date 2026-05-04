@@ -1656,31 +1656,31 @@ namespace das
     }
 
     const char * get_module_file_name ( const char * name, Context * context ) {
+        // Copy into context string heap so daslang owns the returned pointer.
+        auto allocFromMod = [&](Module * mod) -> const char * {
+            if ( !mod || mod->fileName.empty() ) return nullptr;
+            return context ? context->allocateString(mod->fileName.data(), uint32_t(mod->fileName.size()), nullptr) : nullptr;
+        };
         if ( context && context->thisProgram ) {
             string modName = name ? name : "";
             if ( modName.empty() ) {
                 // return the main module's file name
-                auto mod = context->thisProgram->thisModule.get();
-                if ( mod && !mod->fileName.empty() ) return mod->fileName.c_str();
+                if ( const char * res = allocFromMod(context->thisProgram->thisModule.get()) ) return res;
             } else {
                 // search program's library for named module
-                const char * result = nullptr;
+                Module * found = nullptr;
                 context->thisProgram->library.foreach([&](Module * mod) {
                     if ( mod->name == modName && !mod->fileName.empty() ) {
-                        result = mod->fileName.c_str();
+                        found = mod;
                         return false;
                     }
                     return true;
                 }, modName);
-                if ( result ) return result;
+                if ( const char * res = allocFromMod(found) ) return res;
             }
         }
         // fallback to global module list
-        auto mod = Module::require(name ? name : "");
-        if ( mod && !mod->fileName.empty() ) {
-            return mod->fileName.c_str();
-        }
-        return nullptr;
+        return allocFromMod(Module::require(name ? name : ""));
     }
 
 // remove define to enable emscripten version
