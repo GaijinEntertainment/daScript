@@ -84,6 +84,8 @@ Multiple skill files may apply to a single task. For example, creating a new das
 
 When you discover something new about daslang syntax, semantics, or conventions — whether through compiler errors, user corrections, or experimentation — **update this file** with the new knowledge. If it relates to a specific skill area, update the relevant `skills/*.md` file instead.
 
+**Doc improvements at stopping points.** When a task wraps and you spot a typo or factual error in CLAUDE.md or `skills/*.md` — fix it in-place and flag the edit in the end-of-turn summary. Anything more — clarifications, additions, restructuring, removing existing guidance, **or proposing a new skill file when you see a recurring pattern that no existing skill covers** — propose first. Default toward propose-first; doc edits direct future Claude behavior and silent diffs are not OK.
+
 ## daslang Language — Gen2 Syntax (REQUIRED)
 
 All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key rules:

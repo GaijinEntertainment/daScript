@@ -119,12 +119,9 @@ def sqlite_version() : string {
 }
 
 def try_open_sqlite(path : string) : Result<SqlRunner, string> {
-    //! Opens a connection to ``path`` (``:memory:`` for an in-memory DB).
-    //! Returns ``ok(runner)`` on success, ``err(errmsg)`` on failure.
-    //! On failure, the partial libsqlite3 handle is closed per the SQLite contract.
-    //! On success, every ``[sql_function]``-tagged function in scope is registered
-    //! against the new connection (see ``_install_sql_function_registry``); a
-    //! registration error closes the handle and surfaces as ``err(...)``.
+    //! Opens a connection to ``path`` (``:memory:`` for an in-memory DB). Returns
+    //! ``err(...)`` on failure (handle closed); on success, registers every in-scope
+    //! ``[sql_function]`` against the connection.
     var db = SqlRunner()
     let rc = sqlite3_open(path, db.sqlite_handle)
     if (rc != SQLITE_OK) {
@@ -3745,9 +3742,7 @@ def _register_function_check_rc(db : SqlRunner; name : string; fn : auto(FN);
 }
 
 def private _is_valid_sql_function_name(s : string) : bool {
-    // Accept the standard SQLite unquoted identifier shape: [A-Za-z_][A-Za-z0-9_]*.
-    // SQLite is more permissive at the C API, but anything outside this set
-    // would need quoting in the chain analyzer's emitted SQL — reject early.
+    // SQLite unquoted identifier shape: [A-Za-z_][A-Za-z0-9_]* — anything else would need quoting in emitted SQL.
     if (empty(s)) {
         return false
     }
@@ -3777,13 +3772,8 @@ struct private SqlFunctionThunk {
     install : lambda<(db : SqlRunner) : SqlError>
 }
 
+// Populated by [init] thunks; replayed on every try_open_sqlite. (name, nArgs) pair detects cross-module collisions (SQLite would silently replace).
 var private sql_function_registry : array<SqlFunctionThunk>
-//! Compile-time-built registry of `[sql_function]` registration thunks. Populated by
-//! generated `[init]` functions via ``_add_sql_function_thunk``; iterated by
-//! ``_install_sql_function_registry`` on every ``try_open_sqlite``. Each entry carries
-//! its SQL ``name`` + ``nArgs`` so the install loop can detect cross-module collisions
-//! (SQLite dispatches by name+arity, with later registrations silently replacing earlier
-//! ones — surface that here as an explicit ``err(...)`` instead).
 
 def _add_sql_function_thunk(name : string; nArgs : int;
                             var install : lambda<(db : SqlRunner) : SqlError>) : void {
@@ -3794,10 +3784,6 @@ def _add_sql_function_thunk(name : string; nArgs : int;
 }
 
 def private _install_sql_function_registry(db : SqlRunner) : SqlError {
-    //! Walk the registry; bail on first failure so ``try_open_sqlite`` preserves
-    //! its ``Result`` contract (no panic, no leaked handle). Detects duplicate
-    //! ``(name, nArgs)`` registrations across modules — silent SQLite override is a
-    //! footgun, so surface it as an err.
     var seen : table<string; bool>
     for (thunk in sql_function_registry) {
         let key = "{thunk.name}/{thunk.nArgs}"
@@ -3815,11 +3801,9 @@ def private _install_sql_function_registry(db : SqlRunner) : SqlError {
 
 [function_macro(name="sql_function")]
 class SqlFunctionMacro : AstFunctionAnnotation {
-    //! Marks a daslang function as a SQLite scalar UDF.
-    //! At context init the function is registered against every opened SQL connection;
-    //! inside `_sql(...)` chains, calls to the function emit `<name>(args)` SQL instead
-    //! of binding the value at compile time. Optional args: `name`, `deterministic`,
-    //! `directonly`.
+    //! Marks a daslang function as a SQLite scalar UDF: registered against every opened
+    //! connection, and emitted as ``<name>(args)`` inside ``_sql(...)`` chains rather than
+    //! bound at compile time. Optional args: ``name``, ``deterministic``, ``directonly``.
     def override apply(var func : FunctionPtr; var group : ModuleGroup;
                        args : AnnotationArgumentList; var errors : das_string) : bool {
         if (func.fromGeneric != null) {

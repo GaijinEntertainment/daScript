@@ -94,6 +94,7 @@ def to_sql_literal(value : auto(TT)) : string {
 
 let private INT_MAX_PHASE : int = int(0x7fffffff)
 
+// nolint:STYLE014
 // Phase numbers match SQL eval order: lower = earlier in eval = innermost in SQL nesting.
 // Multiple ops at the SAME phase coexist in one Q (e.g. two `_where` AND-fold).
 // On peel: P > q.minPhaseSeen → push inner subQ (this op runs AFTER something already
@@ -151,11 +152,8 @@ struct private JoinSpec {
     rightCol    : string
     rightWhereSql     : string
     rightOnBindExprs  : array<ExpressionPtr>
-    // For RIGHT / FULL OUTER with a non-empty RHS WHERE, the RHS gets wrapped as
-    // `(SELECT * FROM "<table>" WHERE <pred>)` baked into tableName here. Outer-WHERE
-    // semantics on a preserved-side join would drop the wrong rows; subquery body
-    // filters before the join. Flag tells emission to write tableName as raw SQL
-    // (with parens) instead of as a quoted identifier.
+    // RIGHT/FULL OUTER w/ RHS WHERE: tableName is `(SELECT * FROM ... WHERE ...)` raw SQL,
+    // not a quoted identifier — filters BEFORE the join to preserve null-padded rows.
     tableSqlIsRaw     : bool
 }
 
@@ -207,10 +205,8 @@ struct private SqlQuery {
     inView      : bool     //! `_create_view` body context — rejects `[sql_function(directonly=true)]` UDF calls
     hadError    : bool
     lastError   : string   //! First `pred_fail` message, re-emitted by call_macros if their deeper macro_error gets eaten by AST cascade
-    // Multi-Q lowering: when a chain conflicts with canonical SQL phase order
-    // (e.g. `take(n) |> _where(p)`), the inner subtree is analyzed into a fresh
-    // SqlQuery, snapshotted to SQL string + binds here, and the outer SELECT's
-    // FROM clause renders as `(<innerSql>) AS t0` instead of a base-table name.
+    // Multi-Q lowering: phase-order conflict (e.g. `take(n) |> _where(p)`) snapshots
+    // the inner subtree's SQL+binds here; outer FROM renders as `(<innerSql>) AS t0`.
     innerSql       : string                 // null/empty = base-table FROM; else nested SELECT body
     innerBindExprs : array<ExpressionPtr>   // FROM-subquery placeholders, parsed first
     minPhaseSeen   : int = int(0x7fffffff)  // INT_MAX_PHASE sentinel; lowest phase added to this Q
@@ -641,14 +637,12 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
     return fieldName
 }
 
-// Multi-join LHS wrap: snapshot q (which contains an inner _join chain) into a SQL
-// subquery + bind list, then reset q so the outer join can install its own state.
-// Outer FROM clause renders as `(<innerSql>) AS "t0" INNER JOIN ...`. The outer's
-// `into` projection resolves `<lhsArg>.<alias>` against q.fromRowType (named tuple
-// from inner_projection_type), which now also feeds source_rootType_for_idx(0).
+// Multi-join LHS wrap: snapshot q's inner-join chain into a subquery (innerSql + binds),
+// then reset q so the outer join installs its own state. Outer's `into` resolves against q.fromRowType.
 [macro_function]
 def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;
                                         fillPassthrough : bool = false) : bool {
+    // nolint:STYLE015
     // NOTE: don't gate on q.seenTerminal / q.seenToArray here — analyze_chain peels
     // outermost-first, so by the time snapshot is called, those flags reflect the OUTER
     // chain's terminal (which is fine) and there's no way to distinguish that from an
@@ -663,6 +657,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
         macro_error(prog, at, "_sql: multi-join LHS must project a named row (use `into` to produce a tuple); got scalar projection — reshape so each LHS column is named")
         return false
     }
+    // nolint:STYLE015
     // Save outer-terminal state pre-set by outer-peeled ops (`_first` / `_count` / `_take` /
     // `_skip` / `_order_by` / `_distinct` etc.). Without this, `build_sql_string(q, true)` below
     // serializes those clauses into the INNER subquery (e.g. `LIMIT 1` lands BEFORE the outer
@@ -672,19 +667,15 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     var savedLimitBindExpr = q.limitBindExpr
     var savedOffsetBindExpr = q.offsetBindExpr
     let savedDistinctFlag = q.distinctFlag
-    var savedOrderByCols : array<string>
-    savedOrderByCols <- q.orderByCols
-    var savedOrderByInlineExprs : array<ExpressionPtr>
-    savedOrderByInlineExprs <- q.orderByInlineExprs
+    var savedOrderByCols <- q.orderByCols
+    var savedOrderByInlineExprs <- q.orderByInlineExprs
     let savedSeenTake = q.seenTake
     let savedSeenSkip = q.seenSkip
     let savedSeenOrderBy = q.seenOrderBy
     let savedSeenDistinct = q.seenDistinct
     let savedSeenTerminal = q.seenTerminal
     let savedSeenToArray = q.seenToArray
-    // Aggregate state set by outer-peeled `_count` / `_sum` / etc. The inner subquery must
-    // emit the projection columns (so the outer can wrap them); the OUTER SELECT renders
-    // `COUNT(*)` / `SUM(...)`. Save → clear → build inner → restore on outer post-wrap.
+    // Aggregate state save: inner subquery emits projection cols, outer renders COUNT/SUM.
     let savedAggExpr := q.aggregateExpr
     var savedAggType = q.aggregateType
     // Clear them on q so the inner SQL emits without outer-only clauses.
@@ -701,9 +692,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.aggregateExpr := ""
     q.aggregateType = null
     if (savedAggExpr != "") {
-        // selectCols were populated by analyze_projection (preserved by process_join_call's
-        // save/restore); inner build_sql_string must read them as a NamedTuple projection,
-        // not as an aggregate (which would emit the now-empty aggregateExpr).
+        // Force NamedTuple so inner emits selectCols (analyze_projection populated them); empty aggregateExpr would emit nothing.
         q.proj = ProjectionShape.NamedTuple
     }
     var savedDb = q.dbExpr
@@ -764,8 +753,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.dbExpr = savedDb
     q.inView = savedInView
     q.hadError = savedHadError
-    // Restore outer-terminal state so the outer SELECT renders WITH it (LIMIT 1 from
-    // `_first`, ORDER BY from `_order_by`, etc. all belong on outer post-wrap).
+    // Restore outer-terminal state — LIMIT/ORDER BY/DISTINCT belong on the outer SELECT post-wrap.
     q.matr = savedMatr
     q.limitBindExpr = savedLimitBindExpr
     q.offsetBindExpr = savedOffsetBindExpr
@@ -781,13 +769,10 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.aggregateExpr := savedAggExpr
     q.aggregateType = savedAggType
     if (savedAggExpr != "") {
-        // Outer renders `SELECT COUNT(*) FROM (...) AS t0 [WHERE ...]` — no row projection.
-        // Override the FullRow that the reset block installed; ignore fillPassthrough.
+        // Override FullRow installed by reset; aggregate outer ignores fillPassthrough.
         q.proj = ProjectionShape.Aggregate
     } elif (fillPassthrough) {
-        // Terminal wrap (e.g. WHERE peel on a JOIN'd named-tuple projection): no outer op
-        // will fill the projection. Emit `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS "t0"`
-        // via passthrough fragments — same shape divert_to_inner uses for NamedTuple inner.
+        // Terminal wrap: outer projects passthrough columns from inner's named-tuple aliases.
         if (!apply_passthrough_projection(q, projType, prog, at)) {
             return false
         }
@@ -795,10 +780,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     return true
 }
 
-// Replace q's projection state with passthrough column references against the
-// named-tuple `projType` (typically q.fromRowType after a divert/snapshot). Sets
-// q.proj = NamedTuple. Used both by divert_to_inner (NamedTuple inner case) and
-// snapshot_q_to_subquery_wrap with fillPassthrough = true.
+// Replace q's projection with passthrough column refs against named-tuple projType (= NamedTuple).
 [macro_function]
 def private apply_passthrough_projection(var q : SqlQuery&; projType : TypeDeclPtr;
                                          prog : ProgramPtr; at : LineInfo) : bool {
@@ -844,9 +826,9 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _join expected 5 args (srca, srcb, keya, keyb, into) post-expansion; got {length(jCall.arguments)}")
         return false
     }
-    // Pre-set rootAlias so srca's inner `_where` pred_to_sql qualifies columns as "t0"."col"
-    // (v1 single-join behavior). Multi-join wrap below resets and re-sets this.
+    // Pre-set rootAlias = "t0" so srca's inner `_where` qualifies cols as "t0"."col" (v1 path).
     q.rootAlias = "t0"
+    // nolint:STYLE015
     // 1. Recurse into srca FIRST. If srca itself is a `_join` chain (multi-join), the inner
     // process_join_call will set q.seenJoin / fill q.joins[]. Detect that on return below.
     // Capture seenTerminal/seenToArray pre-recursion: if srca itself peels a terminal, we
@@ -862,9 +844,9 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
-    // V1 path: srca was a simple chain. Now check that srca didn't end in _select/_group_by
-    // — those would conflict with this join's `into` projection. Run BEFORE snapshot below
-    // (snapshot clears these flags so the check would silently pass).
+    // nolint:STYLE015 — ordering invariant: must run BEFORE snapshot below, which clears these flags.
+    // V1 path: srca was a simple chain. Reject _select/_group_by which would conflict with this
+    // join's `into` projection.
     if (!q.seenJoin) {
         if (q.seenSelect) {
             macro_error(prog, at, "_sql: _join must precede `_select` in source order — the join's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
@@ -875,12 +857,13 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
             return false
         }
     }
+    // nolint:STYLE015 — table of cases where snapshot-and-wrap is required; the (b) branch
+    // documents non-obvious NULL-on-preserved-side semantics.
     // 2. Snapshot q as an inner subquery and reset for outer wrap when:
     //    (a) srca contained a _join (multi-join chain); OR
-    //    (b) kind ∈ {Right, FullOuter} AND q.whereSql is non-empty — preserved-side
-    //        rows have NULL on the LHS columns, so an outer WHERE on those columns
-    //        would drop them. Wrapping LHS as `(SELECT * FROM Users WHERE …) AS t0`
-    //        applies the filter BEFORE the join, matching M2/M3 linq semantics.
+    //    (b) kind ∈ {Right, FullOuter} AND q.whereSql is non-empty — preserved-side LHS
+    //        columns are NULL after the join, so outer WHERE on them would drop the row;
+    //        wrap as `(SELECT * FROM Users WHERE …) AS t0` to filter BEFORE the join.
     let needsLhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
                                         && !empty(q.whereSql))
     if (q.seenJoin || needsLhsWrapForPreservedSide) {
@@ -929,21 +912,20 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     return false if (empty(leftCol))
     let rightCol = extract_key_selector_field(jCall.arguments[3], "__lb__", prog, at)
     return false if (empty(rightCol))
-    // For RIGHT / FULL OUTER with RHS WHERE, bake the WHERE into a derived-table subquery
-    // here so the row filter applies BEFORE the join — matches M2/M3 linq semantics. For
-    // LEFT/INNER the existing ON-AND attachment is correct (preserved-LHS sees NULL on
-    // unmatched RHS regardless), so leave those paths untouched.
+    // nolint:STYLE015 — explains why RIGHT/FULL OUTER need RHS-WHERE wrapping while LEFT/INNER don't.
+    // For RIGHT/FULL OUTER with RHS WHERE: bake into a derived-table subquery so the filter
+    // applies BEFORE the join (preserved-side semantics). LEFT/INNER are fine via ON-AND
+    // attachment since unmatched RHS becomes NULL regardless.
     let needsRhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
                                         && !empty(subQ.whereSql))
     var rhsTableName : string
     var rhsRightWhereSql : string
     var rhsTableSqlIsRaw = false
     if (needsRhsWrapForPreservedSide) {
-        // SELECT * is fine here — derived table propagates the underlying column names
-        // verbatim, and the outer query references t1.<col> by those names.
-        // Inner AS "t1" is required because subQ.whereSql may contain alias-qualified
-        // refs like `"t1"."Total"` built when subQ.rootAlias was "t1". Outer-most "t1"
-        // shadows the inner; SQLite scopes them by parens.
+        // nolint:STYLE015 — explains why inner AS "t1" is required (alias-qualified refs in subQ.whereSql).
+        // SELECT * propagates underlying column names; outer references t1.<col> by name.
+        // Inner AS "t1" is required because subQ.whereSql may carry refs like `"t1"."Total"`
+        // built when subQ.rootAlias was "t1". Outer-most "t1" shadows inner via parens-scope.
         rhsTableName := "(SELECT * FROM \"{subQ.tableName}\" AS \"t1\" WHERE {subQ.whereSql})"
         rhsRightWhereSql := ""
         rhsTableSqlIsRaw = true
@@ -961,9 +943,9 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         rightCol = rightCol,
         rightWhereSql = rhsRightWhereSql,
         tableSqlIsRaw = rhsTableSqlIsRaw)
-    // ON binds live on JoinSpec, not q.bindExprs — runtime concats per-join ON before outer WHERE so placeholder order matches SQL.
-    // For the wrapped-RHS path, the binds are still emitted at the t1 source position (subquery body),
-    // which is BEFORE the ON keys — same SQL position as the unwrapped case, so bind ordering is preserved.
+    // nolint:STYLE015 — bind-order invariant across wrapped vs unwrapped RHS paths.
+    // ON binds live on JoinSpec (not q.bindExprs); runtime concats per-join ON before outer
+    // WHERE. Wrapped-RHS binds emit at the t1 subquery body — same SQL position as unwrapped.
     spec.rightOnBindExprs |> reserve(length(subQ.bindExprs))
     for (b in subQ.bindExprs) {
         spec.rightOnBindExprs |> push <| clone_expression(b)
@@ -989,12 +971,9 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     q.argSourceIdx |> push(0)
     q.argNames |> push(arg1Name)
     q.argSourceIdx |> push(1)
-    // Save aggregate state across analyze_projection: outer-peeled `_count`/`_sum`/etc. set
-    // q.aggregateExpr + q.proj=Aggregate before recursion; analyze_projection unconditionally
-    // writes q.proj=NamedTuple (and clears nothing else) which would clobber that intent.
-    // selectCols still need to be populated for the inner subquery in the multi-join /
-    // WHERE-peel snapshot paths, so we let analyze_projection run normally and restore the
-    // aggregate state afterwards. Invariant: aggregateExpr non-empty ⇒ proj=Aggregate.
+    // nolint:STYLE015 — save/restore explanation: analyze_projection clobbers proj=Aggregate
+    // set by outer-peeled `_count`/`_sum`/etc. We still need it to populate selectCols for
+    // the inner subquery, so run normally then restore. Invariant: aggregateExpr non-empty ⇒ proj=Aggregate.
     let savedAggExpr := q.aggregateExpr
     var savedAggType = q.aggregateType
     let savedAggProj = q.proj == ProjectionShape.Aggregate
@@ -1018,8 +997,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
 [macro_function]
 def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
                                     prog : ProgramPtr; at : LineInfo) : bool {
-    // 3-arg shape (srca, srcb, into) — no on-clause, no key extraction.
-    // Mirrors process_join_call's reject envelope and projection handling.
+    // 3-arg shape (srca, srcb, into); mirrors process_join_call's reject + projection handling.
     if (q.seenJoin) {
         macro_error(prog, at, "_sql: internal — process_cross_join_call entered with q.seenJoin already true (chain shape error)")
         return false
@@ -1102,6 +1080,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         } else {
             q.whereSql := "({q.whereSql}) AND ({subQ.whereSql})"
         }
+        q.bindExprs |> reserve(q.bindExprs |> length + length(subQ.bindExprs))
         for (b in subQ.bindExprs) {
             q.bindExprs |> push <| clone_expression(b)
         }
@@ -1150,6 +1129,7 @@ def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
 
 [macro_function]
 def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr>&) {
+    // nolint:STYLE015
     // Placeholder order matches SQL parse order, depth-first inner-first:
     //   1. Inner-Q (FROM subquery) binds — innermost SELECT parsed first
     //   2. Per-join ON binds — within outer FROM clause
@@ -1158,6 +1138,11 @@ def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr
     //   5. Set-op RHS binds (compound `<lhs> UNION <rhs>` — RHS parsed before any outer LIMIT)
     //   6. LIMIT bind (compound applies to combined result, parsed last)
     //   7. OFFSET bind
+    var total = length(q.innerBindExprs) + length(q.bindExprs) + length(q.havingBindExprs) + length(q.setOpRhsBinds) + 2
+    for (j in q.joins) {
+        total += length(j.rightOnBindExprs)
+    }
+    out |> reserve(out |> length + total)
     for (b in q.innerBindExprs) {
         out |> push(b)
     }
@@ -1224,6 +1209,7 @@ def private fromrow_alias_list(rowT : TypeDeclPtr) : string {
     }
 }
 
+// nolint:STYLE014
 // Inner Q's projection-output type, used by the outer Q's lambdas to resolve `_.Field`.
 //   FullRow              → rootType (struct); outer's `_.Col` resolves through the source struct's columns.
 //   NamedTuple           → synthesized tuple<col0type;col1type;…> with argNames = projRecordNames; outer resolves `_.alias` by argNames lookup.
@@ -1259,16 +1245,12 @@ def private inner_projection_type(var inner : SqlQuery&; at : LineInfo) : TypeDe
         }
         return tupT
     }
-    // SingleColumn / Aggregate aren't valid as a divert source for the v2 path (the outer
-    // would have nothing meaningful to filter on by name). Caller rejects via shape check.
+    // SingleColumn / Aggregate: not a valid divert source — caller rejects via shape check.
     return inner.rootType
 }
 
-// Phase-conflict diversion: the peeled op + the rest of the chain are analyzed into a
-// fresh sub-Q, snapshotted as SQL string + flat bind list, and attached to outer q's
-// FROM clause. Same node is re-passed: the divert handles the outer-Q decision; the
-// inner Q sees the op as a normal first peel (no conflict, since subQ.minPhaseSeen
-// starts at INT_MAX_PHASE).
+// Phase-conflict diversion: rest of chain → fresh sub-Q, snapshotted as SQL+binds and
+// attached to outer's FROM. Same node re-passed; sub-Q starts fresh (no phase conflict).
 [macro_function]
 def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
                             prog : ProgramPtr; at : LineInfo) : bool {
@@ -1281,14 +1263,12 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
         return false
     }
     if (subQ.proj == ProjectionShape.SingleColumn || subQ.proj == ProjectionShape.Aggregate) {
-        // SingleColumn / Aggregate inner has no row to filter — the outer would either re-project
-        // the same scalar (no-op) or filter on an unaliased anonymous column. Reject both shapes.
+        // SingleColumn / Aggregate inner has no row for the outer to filter — reject both shapes.
         macro_error(prog, at, "_sql: cannot lower a chain whose inner subquery projects a single value (`_select(_.X)` or an aggregate) into an outer query — there is no named row to filter on. Restructure the chain so the divergent op runs before the projection, or wrap the projection in a named tuple `(X=_.X)`.")
         return false
     }
-    // force_aliases: outer Q references inner projection columns by alias name. Without AS,
-    // SQLite reports the column name as the raw expression (e.g. `COUNT(*)`), and the outer
-    // can't bind `_.alias` → `"alias"` to that. Standalone snapshot SQL keeps the minimal form.
+    // nolint:STYLE015 force_aliases=true: outer references inner cols by alias. Without AS, SQLite
+    // names the column as the raw expr (e.g. `COUNT(*)`); outer can't bind `_.alias` → `"alias"`.
     let innerSql = build_sql_string(subQ, true)
     var innerBinds : array<ExpressionPtr>
     collect_query_binds(subQ, innerBinds)
@@ -1302,9 +1282,7 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
         q.dbExpr = subQ.dbExpr
     }
     if (subQ.proj == ProjectionShape.FullRow) {
-        // FullRow inner: outer treats the wrapped subquery as if it were the original table.
-        // rootType inherits, selectCols filled from struct fields, pred_to_sql `_.Col` resolves
-        // through q.rootType. v1 path — unchanged.
+        // FullRow inner: outer treats wrapped subquery as the original table; v1 path — unchanged.
         if (q.rootType == null) {
             q.rootType = subQ.rootType
         }
@@ -1312,10 +1290,7 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
             fill_default_columns(q, q.rootType, prog, at)
         }
     } else {
-        // NamedTuple / GroupedNamedTuple inner: outer's "row" is the inner's named tuple, not a
-        // struct. rootType stays null; passthrough-project all aliases via SQL fragments so the
-        // outer SELECT renders as `SELECT "alias1", "alias2", ... FROM (<innerSql>) AS t0`.
-        // pred_to_sql resolves `_.alias` against q.fromRowType (set above).
+        // NamedTuple/Grouped: passthrough aliases as SQL frags → `SELECT "a1", ... FROM (<innerSql>) AS t0`.
         if (!apply_passthrough_projection(q, q.fromRowType, prog, at)) {
             return false
         }
@@ -1323,6 +1298,7 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     return true
 }
 
+// nolint:STYLE014
 // Phase-divert dispatcher used by every peel that participates in multi-Q lowering.
 // Encodes the standard "this op runs in eval phase `my_phase` but appears later in the
 // chain than something at a lower phase — divert OR track" pattern.
@@ -1562,12 +1538,10 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
     {
         var sCall = match_linq_call(node, "select")
         if (sCall != null) {
-            // v2 divert: only when outer chain pinned a WHERE (phase 2) — SQL `WHERE` filters source
-            // rows, but linq positional `_select |> _where` filters PROJECTED rows; the wrap pushes
-            // _select into a subquery so the outer WHERE can reference projection aliases.
-            // DISTINCT / TAKE / SKIP / ORDER_BY / set-op apply to the projected output in both SQL
-            // (`SELECT DISTINCT proj`, `SELECT proj LIMIT`, `... ORDER BY proj`) and linq positional
-            // — same semantics, no wrap needed.
+            // nolint:STYLE015 v2 divert only behind outer WHERE (phase 2) — SQL `WHERE` filters source rows,
+            // but linq `_select |> _where` filters PROJECTED rows; wrap pushes _select into a subquery so the
+            // outer WHERE can reference projection aliases. DISTINCT / TAKE / SKIP / ORDER_BY / set-op apply
+            // to projected output in both SQL and linq positional — same semantics, no wrap needed.
             let dr = maybe_divert(q, PHASE_SELECT, node, prog, at, PHASE_WHERE)
             if (dr != 0) {
                 return dr > 0
@@ -1689,15 +1663,14 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             if (!analyze_chain(wCall.arguments[0], q, prog, at)) {
                 return false
             }
-            // v2.1: outer WHERE on a JOIN's named-tuple `into` projection filters PROJECTED rows;
-            // pred_to_sql against base-table scope emits `t0.alias` which doesn't exist. Snapshot
-            // the analyzed q in place so WHERE renders as `... FROM (joinSql) AS "t0" WHERE "alias" = ...`,
-            // resolved through q.fromRowType. The `_select |> _where` case is already handled by
-            // the SELECT peel's divert (q.seenJoin is false there). Use the in-place snapshot
-            // helper, NOT divert_to_inner — re-analyzing here re-instantiates the generic chain
+            // nolint:STYLE015 v2.1: outer WHERE on JOIN's named-tuple `into` filters PROJECTED rows;
+            // pred_to_sql against base scope emits `t0.alias` which doesn't exist. Snapshot in place so
+            // WHERE renders as `... FROM (joinSql) AS "t0" WHERE "alias" = ...`, resolved through
+            // q.fromRowType. The `_select |> _where` case is handled by SELECT peel's divert (no seenJoin).
+            // Use snapshot helper, NOT divert_to_inner — re-analyzing re-instantiates the generic chain
             // and tickles a typer cascade in linq Mode-2/3.
-            // Aggregate-with-WHERE (`_join | _where | _count`) needs the same wrap so the WHERE
-            // can reference the projected alias; snapshot preserves aggregate state on the outer.
+            // Aggregate-with-WHERE (`_join | _where | _count`) needs same wrap for alias reference;
+            // snapshot preserves aggregate state on the outer.
             if (q.seenJoin && (q.proj == ProjectionShape.NamedTuple || q.aggregateExpr != "")) {
                 if (!snapshot_q_to_subquery_wrap(q, prog, at, [fillPassthrough = true])) {
                     return false
@@ -1771,8 +1744,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
                 return false
             }
             let rhsSql = build_sql_string(subQ)
-            // Collect RHS binds (in their internal placeholder order) into a separate slot;
-            // collect_query_binds(q) splices them after LHS WHERE/HAVING, before any outer LIMIT/OFFSET.
+            // RHS binds spliced (by collect_query_binds) after LHS WHERE/HAVING, before outer LIMIT.
             var rhsBinds : array<ExpressionPtr>
             collect_query_binds(subQ, rhsBinds)
             var rhsClones : array<ExpressionPtr>
@@ -2745,10 +2717,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             } else {
                 // Single-source: only `_` is bound.
                 if (argName == "_") {
-                    // Multi-Q outer over a NamedTuple/GroupedNamedTuple inner: rootType is null,
-                    // fromRowType is the inner's projected named-tuple. Resolve `_.alias` against
-                    // the tuple's argNames; outer FROM is `(<innerSql>) AS t0`, so unqualified
-                    // "<alias>" suffices (single source, no need for t0. prefix).
+                    // nolint:STYLE015 Multi-Q outer over named-tuple inner: rootType is null, resolve `_.alias`
+                    // against fromRowType.argNames; FROM is `(<innerSql>) AS t0` so unqualified suffices.
                     if (q.rootType == null && q.fromRowType != null) {
                         if (!fromrow_alias_exists(q.fromRowType, fieldName)) {
                             return pred_fail(q, prog, at, "_sql: column `{fieldName}` is not a projection alias of the inner subquery; valid aliases are {fromrow_alias_list(q.fromRowType)}")
@@ -2862,8 +2832,8 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             return ""
         }
     }
-    // Detect post-typer `operator==(a, none())` (qmatch shape is gone) — fixit for is_none/is_some.
-    // Must run BEFORE the bind fallthrough, otherwise `none()` would silently bind an empty placeholder.
+    // nolint:STYLE015 Detect post-typer `operator==(a, none())` for is_none/is_some fixit. Must run
+    // BEFORE the bind fallthrough, otherwise `none()` would silently bind an empty placeholder.
     if (node is ExprCall) {
         let c = node as ExprCall
         let cname = string(c.name)
@@ -2879,10 +2849,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             }
         }
     }
-    // Bind fallthrough — anything not recognized as column/operator/subquery/SQL-fn is treated as
-    // a runtime value. Splice goes through `sql_bind_to_stmt(stmt, idx, $e(node))`; daslang's
-    // typer + the catch-all `sql_bind(auto(TT))` with `concept_assert` produce the user-facing
-    // error if the type isn't bindable.
+    // Bind fallthrough: unrecognized exprs become `?`; sql_bind catch-all + concept_assert error if not bindable.
     if (q.inHaving) {
         q.havingBindExprs |> push <| clone_expression(node)
     } else {
@@ -3388,10 +3355,8 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
         if (q.proj == ProjectionShape.Aggregate) {
             w |> write(q.aggregateExpr)
         } elif (q.proj == ProjectionShape.GroupedNamedTuple) {
-            // Pre-formatted SQL fragments — emit verbatim. AS "<alias>" emitted only when
-            // `force_aliases` (set by `divert_to_inner` so a multi-Q outer can resolve `_.alias`)
-            // OR when the alias doesn't match the fragment's natural identifier and we're
-            // ALWAYS-aliasing a renamed projection. Standalone snapshot SQL stays stable.
+            // nolint:STYLE015 Pre-formatted frags emit verbatim; AS "<alias>" only when force_aliases
+            // (multi-Q outer resolution) or when alias differs from natural identifier (renamed projection).
             for (i in range(length(q.groupedSelectExprs))) {
                 if (i > 0) {
                     w |> write(", ")
@@ -3431,8 +3396,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
                 }
             }
         }
-        // FROM clause: alias the root table only when joins are present (single-source keeps unaliased `FROM "Tbl"`).
-        // Multi-Q lowering: when innerSql is set, FROM renders as `(<innerSql>) AS t0` instead of base-table.
+        // FROM clause: alias root only with joins; with innerSql renders `(<innerSql>) AS t0` instead of base-table.
         if (q.seenJoin) {
             // Multi-join LHS subquery: outer `FROM (<innerSql>) AS "t0"` instead of base table.
             if (!empty(q.innerSql)) {
@@ -3494,8 +3458,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
                 // Cross joins have no ON / no rightWhereSql (process_cross_join_call hoists into outer WHERE).
             }
         } elif (!empty(q.innerSql)) {
-            // Outer Q wrapping a phase-conflict-pushed subquery. Inner emits default-row projection
-            // (column names visible to outer's `_.<field>` resolution against q.rootType).
+            // Outer wrapping phase-conflict-pushed subquery; inner's default-row projection feeds outer's `_.<field>`.
             w |> write(" FROM (")
             w |> write(q.innerSql)
             w |> write(") AS \"t0\"")
@@ -3503,9 +3466,8 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" FROM \"")
             w |> write(q.tableName)
             w |> write("\"")
-            // When emitting as an inner subquery (snapshot wrap path), q.whereSql can carry
-            // alias-qualified column refs like `"t0"."Id"` built when q.rootAlias was set.
-            // Without AS here, those refs reference an undefined alias inside the parens.
+            // nolint:STYLE015 Inner-subquery snapshot wrap: q.whereSql may carry `"t0"."Id"` refs built
+            // when rootAlias was set; without AS here they'd reference an undefined alias inside the parens.
             if (force_aliases && !empty(q.rootAlias)) {
                 w |> write(" AS \"")
                 w |> write(q.rootAlias)
@@ -3623,10 +3585,8 @@ class private SqlCreateViewMacro : AstCallMacro {
         var q = SqlQuery()
         q.inView = true
         if (!analyze_chain(call.arguments[2], q, prog, call.at)) {
-            // Deeper pred_fail macro_errors can be eaten by the AST cascade after the
-            // call_macro returns null (free `_` references in the un-replaced original
-            // expression confuse the typer). Re-emit the captured first error so the
-            // user sees the actual cause.
+            // nolint:STYLE015 Deeper pred_fail errors get eaten by the AST cascade after call_macro
+            // returns null (free `_` refs confuse the typer); re-emit captured first error.
             if (!empty(q.lastError)) {
                 macro_error(prog, call.at, q.lastError)
             }
@@ -3641,11 +3601,7 @@ class private SqlCreateViewMacro : AstCallMacro {
             macro_error(prog, call.at, "_create_view: `_order_by(<runtime string>)` not supported — the runtime column name would be baked in at CREATE VIEW time. Use a compile-time `_.Field` ordering inside the view, or build a chain with `_sql(...)` outside.")
             return null
         }
-        // Collect binds in placeholder order via collect_query_binds (handles inner-Q
-        // subqueries + set-op RHS; for views the chain is bounded but we use the same
-        // helper for consistency). Each bind expression goes through `_::to_sql_literal(...)`
-        // at runtime — value is evaluated once when CREATE VIEW DDL executes and inlined
-        // into the view body text stored in sqlite_schema.
+        // Each bind goes through `_::to_sql_literal(...)`: evaluated once at CREATE VIEW DDL time, inlined into view body.
         var ordered_binds : array<ExpressionPtr>
         collect_query_binds(q, ordered_binds)
         // Validate projection column count vs V's fields.
@@ -3705,10 +3661,8 @@ class private SqlCreateViewMacro : AstCallMacro {
                 w |> write("\"")
             }
         }
-        // Emit ExprStringBuilder = "CREATE VIEW … AS " + text frags interleaved with
-        // `_::to_sql_literal(<bind>)` runtime calls. `_::` resolves at the user's call
-        // site, so user-defined `to_sql_literal` overloads (for enums, structs, etc.)
-        // take precedence over the defaults shipped in this module.
+        // nolint:STYLE015 ExprStringBuilder of text frags + `_::to_sql_literal(<bind>)` calls; `_::` resolves
+        // at user call site so user-defined to_sql_literal overloads override module defaults.
         let select_sql_template = build_sql_string(q)
         var sb = new ExprStringBuilder(at = call.at)
         var pending = "CREATE VIEW \"{view_name}\"({col_list}) AS "
@@ -4002,8 +3956,7 @@ def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; is
         macro_error(prog, call.at, "_sql: distinct() before an aggregate is not translatable — `SELECT DISTINCT` over a single-row aggregate result is always a no-op; the meaningful form is `COUNT(DISTINCT col)` etc. (aggregate-distinct), which is not yet implemented")
         return null
     }
-    // Bind order: inner-Q (FROM subquery) → per-join ON → WHERE → HAVING → set-op-RHS → LIMIT → OFFSET.
-    // Centralized in collect_query_binds; recurses into inner subqueries for multi-Q lowering.
+    // Bind order (centralized in collect_query_binds): inner-Q FROM → per-join ON → WHERE → HAVING → set-op-RHS → LIMIT → OFFSET.
     var allBinds : array<ExpressionPtr>
     collect_query_binds(q, allBinds)
     let sql = build_sql_string(q)
