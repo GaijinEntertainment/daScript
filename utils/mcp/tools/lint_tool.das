@@ -6,6 +6,7 @@ require common public
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
+require daslib/ast_boost
 require strings
 
 def has_expect_directive(file : string) : bool {
@@ -43,7 +44,8 @@ def do_lint_single(file : string; project : string = "") : string {
             all_issues |> push(w)
         }
         var style_issues : array<string>
-        count += style_lint_collect(program, style_issues)
+        let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
+        count += style_lint_collect(program, style_issues, false, hygiene)
         for (w in style_issues) {
             all_issues |> push(w)
         }
@@ -89,7 +91,8 @@ def do_lint_file(file : string; project : string = "") : LintFileResult {
                         result.errors |> push(w)
                     }
                     var style_issues : array<string>
-                    result.count += style_lint_collect(program, style_issues)
+                    let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
+                    result.count += style_lint_collect(program, style_issues, false, hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
