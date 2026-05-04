@@ -22,6 +22,30 @@ def spawn_trail(origin, color : float3) {
     }
 }
 
+def bonus_color(t : BonusType) : float3 {
+    return (t == BonusType.fuel ? float3(0.15, 0.9, 0.95)
+        : (t == BonusType.multishot ? float3(1.0, 0.45, 0.12)
+        : (t == BonusType.fastshot ? float3(1.0, 0.7, 0.05)
+        : float3(0.95, 1.0, 0.3))))
+}
+
+def spawn_pickup_burst(origin, color : float3) {
+    create_entities`Particle(14) $(eid : EntityId; i : int; var p : Particle) {
+        let angle = random_f() * 2.0 * PI
+        let elev = random_range(-0.25, 0.85)
+        let dir = normalize(float3(cos(angle), sin(angle), elev))
+        let speed = random_range(4.5, 8.5)
+        p.pos = origin
+        p.vel = dir * speed
+        p.color = color
+        p.lifetime = random_range(0.18, 0.32)
+        p.max_life = p.lifetime
+        p.size = random_range(0.06, 0.14)
+        p.spin_speed = random_range(-15.0, 15.0)
+        p.spin_phase = random_f() * 2.0 * PI
+    }
+}
+
 def spawn_particles(origin, color : float3; object_radius : float; count : int) {
     create_entities`Particle(count) $(eid : EntityId; i : int; var p : Particle) {
         let angle = random_f() * 2.0 * PI
@@ -435,6 +459,9 @@ def reset_game() {
     current_section = 0
     section_dist = 0.0
     section_banner_timer = 0.0
+    restart_input_lock = 0.0
+    screen_shake_amount = 0.0
+    slow_mo_timer = 0.0
     low_fuel_beep_timer = 0.0
     refuel_sound_timer = 0.0
     river_color_from = section_colors[0]
@@ -555,6 +582,10 @@ def on_player_killed() {
     player_lives -= 1
     spawn_particles(player_pos, float3(1.0, 0.5, 0.2), PLAYER_SIZE * 2.6, 34)
     play_sfx(snd_player_hit)
+    add_screen_shake(SHAKE_MED)
+    if (player_lives > 0) {
+        slow_mo_timer = SLOW_MO_DURATION
+    }
     player_respawn_timer = PLAYER_RESPAWN_HIDE + PLAYER_RESPAWN_BLINK
     player_invuln_timer = player_respawn_timer + PLAYER_INVULN_TIME
     player_fuel = PLAYER_FUEL_MAX * 0.7
@@ -563,6 +594,7 @@ def on_player_killed() {
     if (player_lives <= 0) {
         play_sfx(snd_game_over)
         game_state = GameState.game_over_state
+        restart_input_lock = 1.5
     }
 }
 
@@ -624,6 +656,7 @@ def update_section() {
 
         if (current_section >= MAX_SECTIONS) {
             game_state = GameState.win_state
+            restart_input_lock = 1.5
         } else {
             spawn_section_objects()
         }
@@ -1026,6 +1059,13 @@ def process_collisions() {
                 spawn_particles(h.pos, float3(1.0, 0.65, 0.1), h.blast_radius, c)
             }
             play_sfx(is_bridge ? snd_bridge_destroy : snd_enemy_explode)
+            if (is_bridge) {
+                add_screen_shake(SHAKE_BIG)
+            } elif (is_depot) {
+                add_screen_shake(SHAKE_MED)
+            } else {
+                add_screen_shake(SHAKE_SMALL)
+            }
             score += h.score_value
 
             let drop_chance = (
@@ -1079,7 +1119,10 @@ def process_collisions() {
         }
     }
 
-    // Player vs bonuses
+    // Player vs bonuses — collect burst origins/colors and spawn AFTER the
+    // query (create_entities can't run inside a decs query).
+    var burst_origins : array<float3>
+    var burst_colors : array<float3>
     query() $(eid : EntityId; b : BonusPickup) {
         let r = PLAYER_SIZE + BONUS_PICKUP_RADIUS
         if (dist2d_sq(b.pos, player_pos) < r * r) {
@@ -1096,8 +1139,13 @@ def process_collisions() {
                 player_lives += 1
                 play_sfx(snd_bonus_life)
             }
+            burst_origins |> push(b.pos + float3(0.0, 0.0, 0.55))
+            burst_colors |> push(bonus_color(b.bonus_type))
             delete_entity(eid)
         }
+    }
+    for (i in range(length(burst_origins))) {
+        spawn_pickup_burst(burst_origins[i], burst_colors[i])
     }
     commit()
 
@@ -1152,6 +1200,10 @@ def quat_x_rot(angle : float) : float4 {
     return float4(sin(angle * 0.5), 0.0, 0.0, cos(angle * 0.5))
 }
 
+def quat_z_rot(angle : float) : float4 {
+    return float4(0.0, 0.0, sin(angle * 0.5), cos(angle * 0.5))
+}
+
 // Rotate unit Z to direction v (for aligning cylinders along a velocity vector)
 def quat_align_z(v : float3) : float4 {
     let from = float3(0.0, 0.0, 1.0)
@@ -1161,6 +1213,121 @@ def quat_align_z(v : float3) : float4 {
     let axis = normalize(cross(from, v))
     let half = acos(d) * 0.5
     return float4(axis * sin(half), cos(half))
+}
+
+// --- Shadows ---
+// Flat shadow projection along LIGHT_DIR (matches phong lighting direction).
+// LIGHT_DIR = (0.4, -0.6, -1.0) — only x/z and y/z ratios matter for projection.
+
+let SHADOW_Z = 0.02
+let SHADOW_OFFSET_X = 0.4
+let SHADOW_OFFSET_Y = -0.6
+
+def shadow_pos(p : float3) : float3 {
+    return float3(p.x + p.z * SHADOW_OFFSET_X, p.y + p.z * SHADOW_OFFSET_Y, SHADOW_Z)
+}
+
+def draw_shadow(pos : float3; sx, sy, alpha : float; round : bool) {
+    v_model = compose(shadow_pos(pos), float4(0.0, 0.0, 0.0, 1.0), float3(sx, sy, 0.001))
+    f_Color = float4(0.0, 0.0, 0.0, alpha)
+    vs_flat_bind_uniform(active_program)
+    fs_flat_bind_uniform(active_program)
+    if (round) {
+        geo_cylinder |> draw_geometry_fragment()
+    } else {
+        geo_cube |> draw_geometry_fragment()
+    }
+}
+
+// Shadow streak for a vertical pillar standing on the water (base at z=0).
+// Anchors at base XY and stretches along LIGHT_DIR projection so the shadow
+// visibly connects to the foot of the pillar.
+def draw_pillar_shadow(base_x, base_y : float; height, half_thickness, alpha : float) {
+    let dx = height * SHADOW_OFFSET_X
+    let dy = height * SHADOW_OFFSET_Y
+    let cx = base_x + dx * 0.5
+    let cy = base_y + dy * 0.5
+    let len = sqrt(dx * dx + dy * dy)
+    let angle = atan2(dy, dx)
+    v_model = compose(
+        float3(cx, cy, SHADOW_Z),
+        quat_z_rot(angle),
+        float3(len * 0.5, half_thickness, 0.001)
+    )
+    f_Color = float4(0.0, 0.0, 0.0, alpha)
+    vs_flat_bind_uniform(active_program)
+    fs_flat_bind_uniform(active_program)
+    geo_cube |> draw_geometry_fragment()
+}
+
+def render_shadows(game_time : float) {
+    glUseProgram(flat_program)
+    active_program = flat_program
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    glDepthMask(false)
+
+    if (player_respawn_timer < PLAYER_RESPAWN_BLINK) {
+        let blinking = player_respawn_timer > 0.0
+        if (!blinking || int(game_time * 16.0) % 2 != 0) {
+            draw_shadow(player_pos, PLAYER_SIZE * 0.95, PLAYER_SIZE * 0.95, 0.55, true)
+        }
+    }
+
+    query() $(b : EnemyBoat) {
+        draw_shadow(b.pos, BOAT_SIZE * 0.65, BOAT_SIZE * 1.65, 0.45, false)
+    }
+
+    query() $(p : EnemyPlane) {
+        draw_shadow(p.pos, PLANE_SIZE * 1.5, PLANE_SIZE * 0.65, 0.45, true)
+    }
+
+    query() $(h : EnemyHelicopter) {
+        draw_shadow(h.pos, ENEMY_HELI_SIZE * 1.25, ENEMY_HELI_SIZE * 1.25, 0.5, true)
+    }
+
+    query() $(b : BonusPickup) {
+        let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
+        draw_shadow(b.pos + float3(0.0, 0.0, 0.55 + bob), 0.32, 0.32, 0.5, true)
+    }
+
+    query() $(t : RiverTree) {
+        let r = t.size * 0.6
+        draw_shadow(t.pos + float3(0.0, 0.0, t.size * 0.7), r, r, 0.5, true)
+    }
+
+    query() $(h : RiverHouse) {
+        // Project from near top of body so shadow extends past the building
+        // footprint instead of being eaten by the body it's under.
+        draw_shadow(h.pos + float3(0.0, 0.0, h.size * 1.0),
+            h.size * 0.85, h.size * 1.05, 0.5, false)
+    }
+
+    query() $(d : FuelDepot) {
+        draw_shadow(d.pos + float3(0.0, 0.0, FUEL_DEPOT_SIZE * 0.4),
+            FUEL_DEPOT_SIZE * 1.0, FUEL_DEPOT_SIZE * 1.8, 0.5, false)
+    }
+
+    query() $(br : Bridge) {
+        let pylon_h = BRIDGE_SPAN_Z + 0.5
+        draw_pillar_shadow(br.left_x, br.pos.y, pylon_h, 0.22, 0.55)
+        draw_pillar_shadow(br.right_x, br.pos.y, pylon_h, 0.22, 0.55)
+        let gap_left = br.gap_center_x - BRIDGE_GAP_WIDTH * 0.5
+        let gap_right = br.gap_center_x + BRIDGE_GAP_WIDTH * 0.5
+        let lw = gap_left - br.left_x
+        if (lw > 0.1) {
+            let cx = (br.left_x + gap_left) * 0.5
+            draw_shadow(float3(cx, br.pos.y, BRIDGE_SPAN_Z), lw * 0.5, 0.35, 0.45, false)
+        }
+        let rw = br.right_x - gap_right
+        if (rw > 0.1) {
+            let cx = (gap_right + br.right_x) * 0.5
+            draw_shadow(float3(cx, br.pos.y, BRIDGE_SPAN_Z), rw * 0.5, 0.35, 0.45, false)
+        }
+    }
+
+    glDepthMask(true)
+    glDisable(GL_BLEND)
 }
 
 def render_player(game_time : float) {
@@ -1331,23 +1498,16 @@ def render_obstacles(game_time : float) {
         geo_prism |> draw_geometry_fragment()
     }
 
-    // Bonuses: distinct silhouettes + color (not color-only).
+    // Bonuses: spinning horizontal cylinders, color-coded by type.
+    let q_tilt = quat_y_rot(PI * 0.5)
     query() $(b : BonusPickup) {
         let bob = sin(game_time * BONUS_BOB_SPEED + b.bob_phase) * BONUS_BOB_AMPLITUDE
         let p = b.pos + float3(0.0, 0.0, 0.55 + bob)
-        if (b.bonus_type == BonusType.fuel) {
-            draw_with_phong(p, float3(0.28, 0.28, 0.28), float3(0.15, 0.9, 0.95))
-            geo_sphere |> draw_geometry_fragment()
-        } elif (b.bonus_type == BonusType.multishot) {
-            draw_with_phong(p, float3(0.26, 0.26, 0.36), float3(1.0, 0.45, 0.12))
-            geo_prism |> draw_geometry_fragment()
-        } elif (b.bonus_type == BonusType.fastshot) {
-            draw_with_phong(p, float3(0.23, 0.23, 0.42), float3(1.0, 0.7, 0.05))
-            geo_cone |> draw_geometry_fragment()
-        } else {
-            draw_with_phong(p, float3(0.2, 0.2, 0.36), float3(0.95, 1.0, 0.3))
-            geo_cylinder |> draw_geometry_fragment()
-        }
+        let color = bonus_color(b.bonus_type)
+        let spin = quat_z_rot(game_time * BONUS_SPIN_SPEED + b.bob_phase)
+        let rot = quat_mul(spin, q_tilt)
+        draw_with_phong(p, float3(0.22, 0.22, 0.55), color, rot)
+        geo_cylinder |> draw_geometry_fragment()
     }
     glEnable(GL_CULL_FACE)
 }
@@ -1464,6 +1624,7 @@ def render_rotors(game_time : float) {
 }
 
 def render_all(game_time : float) {
+    render_shadows(game_time)
     render_player(game_time)
     render_enemies(game_time)
     render_obstacles(game_time)

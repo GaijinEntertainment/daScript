@@ -165,13 +165,20 @@ def update_engine_sound(active : bool; speed, max_speed : float) {
         let hi = max(max_speed, PLAYER_FWD_SPEED_MIN + 0.01)
         let t = clamp((speed - PLAYER_FWD_SPEED_MIN) / (hi - PLAYER_FWD_SPEED_MIN), 0.0, 1.0)
         set_pitch(engine_sid, 0.75 + t * 0.80)
-        set_volume(engine_sid, 0.55, 0.05)
+        set_volume(engine_sid, 0.30, 0.05)
     } else {
         set_volume(engine_sid, 0.0, 0.1)
     }
 }
 
 // --- Music ---
+
+def replace_named_track(name : string; var pat : Pattern; gain : float) {
+    if (key_exists(g_music_tracks, name)) {
+        strudel_remove_track(g_music_tracks[name])
+    }
+    g_music_tracks[name] = strudel_add_track(pat, gain)
+}
 
 def music_cmd(cmd : string) {
     let parts <- split(cmd, ":")
@@ -197,6 +204,28 @@ def music_cmd(cmd : string) {
             let fade_time = (length(parts) >= 3 ? float(to_double(parts[2])) : 0.5)
             strudel_fade_track(g_music_tracks[name], 0.0, fade_time)
         }
+    } elif (action == "rich") {
+        // Rich tracks built directly here on the strudel thread so they can
+        // use the full Pattern API (chunk/sometimesby/jux/etc.).
+        if (name == "0") {
+            build_section0_rich()
+        } elif (name == "1") {
+            build_section1_rich()
+        } elif (name == "2") {
+            build_section2_rich()
+        } elif (name == "3") {
+            build_section3_rich()
+        } elif (name == "4") {
+            build_section4_rich()
+        } elif (name == "menu") {
+            build_menu_rich()
+        } elif (name == "tension") {
+            build_tension_rich()
+        } elif (name == "gameover") {
+            build_game_over_rich()
+        } elif (name == "win") {
+            build_win_rich()
+        }
     }
 }
 
@@ -209,76 +238,171 @@ def stop_all_tracks(fade : float) {
 
 def start_menu_music() {
     strudel_set_bpm(96.0lf)
-    strudel_command("play:drums:<bd ~ ~ ~> <~ ~ hh ~>:0.18")
-    strudel_command("note:bass:<e2 ~ ~ ~> <d2 ~ ~ ~> <c2 ~ ~ ~> <b1 ~ ~ ~>:sine:0.2")
-    strudel_command("note:lead:<e4 ~ g4 ~> <d4 ~ f4 ~> <c4 ~ e4 ~> <b3 ~ d4 ~>:triangle:0.1")
-}
-
-def start_play_music() {
-    strudel_set_bpm(128.0lf)
-    strudel_command("play:drums:<bd [~ hh] sd [hh ~]> <bd [~ hh] ~ [hh cp?0.3]> <bd [hh ~] sd [~ hh]> <bd [hh hh] sd [hh ~]>:0.48")
-    strudel_command("note:bass:<[e2 e2] ~ [b1 b1] ~> <[g2 g2] ~ [d2 d2] ~> <[c2 c2] ~ [g1 g1] ~> <[a1 a1] [b1 b1] [c2 c2] [d2 d2]>:square:0.24")
-    strudel_command("note:lead:<e4 g4 b4 e5> <d4 f4 a4 d5> <c4 e4 g4 c5> <b3 d4 f4 b4>:sawtooth:0.18")
-    strudel_command("note:arp:<[e5 b4 g4 e4]> <[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[b4 fs4 d4 b3]>:triangle:0.09")
+    strudel_command("rich:menu")
 }
 
 def start_tension_music() {
     strudel_set_bpm(110.0lf)
-    strudel_command("play:drums:<bd ~ ~ ~> <bd ~ hh ~> <bd ~ ~ hh> <bd ~ hh ~>:0.22")
-    strudel_command("note:bass:<e2 ~ d2 ~> <c2 ~ b1 ~> <a1 ~ g1 ~> <e2 ~ ~ ~>:sine:0.26")
-    strudel_command("note:lead:<e4 ~ d4 ~> <c4 ~ b3 ~> <a3 ~ g3 ~> <e4 ~ ~ ~>:triangle:0.14")
-    strudel_command("stop:arp:0.4")
+    strudel_command("rich:tension")
 }
 
 def start_game_over_music() {
     strudel_set_bpm(80.0lf)
-    strudel_command("play:drums:<bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~>:0.18")
-    strudel_command("note:bass:<e2 d2 c2 b1> <a1 ~ g1 ~> <e2 d2 c2 b1> <a1 ~ ~ ~>:sine:0.26")
-    strudel_command("note:lead:<g4 ~ e4 ~> <d4 ~ c4 ~> <b3 ~ a3 ~> <g3 ~ ~ ~>:triangle:0.16")
-    strudel_command("stop:arp:0.3")
+    strudel_command("rich:gameover")
 }
 
 def start_win_music() {
     strudel_set_bpm(148.0lf)
-    strudel_command("play:drums:<bd [hh hh] sd [hh cp]> <bd [hh hh] [sd sd] [hh hh]> <bd [hh cp] sd [hh hh]> <bd [hh hh] [sd cp] [hh hh]>:0.54")
-    strudel_command("note:bass:<[e2 e2] [g2 g2] [b2 b2] [e3 e3]> <[d3 d3] [b2 b2] [a2 a2] [g2 g2]> <[c3 c3] [a2 a2] [g2 g2] [b2 b2]> <[e2 e2] [g2 g2] [b2 b2] [e3 e3]>:square:0.28")
-    strudel_command("note:lead:<e5 g5 b5 e6> <g5 b5 d6 g6> <a5 c6 e6 a6> <b5 d6 fs6 b6>:sawtooth:0.22")
-    strudel_command("note:arp:<[e6 b5 g5 e5]> <[g6 d6 b5 g5]> <[a6 e6 c6 a5]> <[b6 fs6 d6 b5]>:triangle:0.12")
+    strudel_command("rich:win")
 }
 
-// 5 distinct gameplay music variants (cycles through sections 0..4)
+// ─── Per-voice rich builders ─────────────────────────────────────────
+// Same effect chain across every music mode:
+//   lead  — chunk(4, fast(2)) rotates a stuttered quarter per cycle so
+//           the 16-note loop never repeats identically; sometimesby
+//           sprinkles octave jumps; jux(rev) gives stereo motion;
+//           phaser adds slow phase shimmer; perlin gain breathes.
+//   bass  — sub-octave layer for low end; ply(2) double-taps occasionally.
+//   arp   — jux(rev) + occasional double-time bursts.
+//   drums — half-bar gain swell.
+// Run on the strudel thread (called from music_cmd "rich:..."). BPM is
+// set separately by the main-thread caller.
+
+def rich_drums(pattern : string; g : float) {
+    replace_named_track("drums",
+        s(pattern) |> gain(saw() |> range(0.7, 1.0) |> fast(2.0lf)),
+        g)
+}
+
+def rich_bass(pattern, osc : string; g : float) {
+    replace_named_track("bass",
+        note_pattern(pattern, osc)
+        |> superimpose(@(var x : Pattern) => x |> add(-12.0) |> gain(0.6))
+        |> sometimesby(0.15, @(var x : Pattern) => x |> ply(2))
+        |> attack(0.005)
+        |> release(0.18),
+        g)
+}
+
+def rich_lead(pattern, osc : string; g : float) {
+    replace_named_track("lead",
+        note_pattern(pattern, osc)
+        |> chunk(4, @(var x : Pattern) => x |> fast(2.0lf))
+        |> sometimesby(0.18, @(var x : Pattern) => x |> add(12.0))
+        |> jux(@(var x : Pattern) => rev(x))
+        |> phaser(0.25)
+        |> attack(0.006)
+        |> release(0.16)
+        |> gain(perlin() |> range(0.75, 1.0) |> slow(3.0lf)),
+        g)
+}
+
+def rich_arp(pattern : string; g : float) {
+    replace_named_track("arp",
+        note_pattern(pattern, "triangle")
+        |> jux(@(var x : Pattern) => rev(x))
+        |> sometimesby(0.20, @(var x : Pattern) => x |> fast(2.0lf))
+        |> attack(0.005)
+        |> release(0.12),
+        g)
+}
+
+def fade_arp(fade : float) {
+    if (key_exists(g_music_tracks, "arp")) {
+        strudel_fade_track(g_music_tracks["arp"], 0.0, fade)
+    }
+}
+
+// ─── Section builders (gameplay loop, square+saw+triangle stack) ─────
+
+def build_section0_rich() {
+    rich_drums("<bd [~ hh] sd [hh ~]> <bd [~ hh] ~ [hh cp?0.3]> <bd [hh ~] sd [~ hh]> <bd [hh hh] sd [hh ~]>", 0.48)
+    rich_bass("<[e2 e2] ~ [b1 b1] ~> <[g2 g2] ~ [d2 d2] ~> <[c2 c2] ~ [g1 g1] ~> <[a1 a1] [b1 b1] [c2 c2] [d2 d2]>", "square", 0.30)
+    rich_lead("<e4 g4 b4 e5> <d4 f4 a4 d5> <c4 e4 g4 c5> <b3 d4 f4 b4>", "sawtooth", 0.20)
+    rich_arp("<[e5 b4 g4 e4]> <[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[b4 fs4 d4 b3]>", 0.10)
+}
+
+def build_section1_rich() {
+    rich_drums("<bd [hh hh] sd hh> <bd [hh cp] sd [hh hh]> <bd [hh ~] [sd sd] hh> <bd hh sd [hh cp]>", 0.52)
+    rich_bass("<[a1 a1] ~ [e2 e2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] ~ [a1 a1] ~> <[f2 f2] [e2 e2] [d2 d2] [c2 c2]>", "square", 0.32)
+    rich_lead("<a4 c5 e5 a5> <g4 b4 d5 g5> <f4 a4 c5 f5> <e4 g4 b4 e5>", "sawtooth", 0.22)
+    rich_arp("<[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[f5 c5 a4 f4]> <[e5 b4 g4 e4]>", 0.10)
+}
+
+def build_section2_rich() {
+    rich_drums("<[bd bd] [hh hh] [sd sd] [hh hh]> <[bd bd] [hh cp] [sd sd] [cp hh]> <bd [hh hh] [sd cp] [hh hh]> <[bd bd] hh sd [hh hh]>", 0.56)
+    rich_bass("<[d2 d2] ~ [a1 a1] ~> <[f2 f2] ~ [c2 c2] ~> <[g2 g2] ~ [d2 d2] ~> <[a2 a2] [g2 g2] [f2 f2] [e2 e2]>", "square", 0.34)
+    rich_lead("<d4 f4 a4 d5> <c4 e4 g4 c5> <bf3 d4 f4 bf4> <a3 c4 e4 a4>", "sawtooth", 0.24)
+    rich_arp("<[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[bf4 f4 d4 bf3]> <[a4 e4 c4 a3]>", 0.11)
+}
+
+def build_section3_rich() {
+    rich_drums("<[bd bd] [hh hh] [sd cp] [hh hh]> <[bd bd] [hh hh] [sd sd] [cp cp]> <bd [hh cp] [sd sd] [hh cp]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.60)
+    rich_bass("<[b1 b1] ~ [fs2 fs2] ~> <[d2 d2] ~ [a1 a1] ~> <[e2 e2] ~ [b1 b1] ~> <[g2 g2] [fs2 fs2] [e2 e2] [d2 d2]>", "square", 0.36)
+    rich_lead("<b4 d5 fs5 b5> <a4 c5 e5 a5> <g4 b4 d5 g5> <fs4 a4 c5 fs5>", "sawtooth", 0.26)
+    rich_arp("<[b5 fs5 d5 b4]> <[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[fs5 c5 a4 fs4]>", 0.13)
+}
+
+def build_section4_rich() {
+    rich_drums("<[bd bd] [hh hh] [sd cp] [hh cp]> <[bd cp] [hh hh] [sd sd] [hh cp]> <[bd bd] [hh cp] [sd cp] [cp hh]> <[bd bd] [hh hh] [sd cp] [hh hh]>", 0.64)
+    rich_bass("<[g1 g1] ~ [d2 d2] ~> <[bf1 bf1] ~ [f2 f2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] [c2 c2] [bf1 bf1] [a1 a1]>", "square", 0.38)
+    rich_lead("<g4 bf4 d5 g5> <f4 a4 c5 f5> <ef4 g4 bf4 ef5> <d4 f4 a4 d5>", "sawtooth", 0.28)
+    rich_arp("<[g5 d5 bf4 g4]> <[f5 c5 a4 f4]> <[ef5 bf4 g4 ef4]> <[d5 a4 f4 d4]>", 0.14)
+}
+
+// ─── Transition builders (menu / tension / game-over / win) ──────────
+// Same effect chain, but oscillator/density per their original mood:
+//   menu/tension/game-over use sine bass + triangle lead (sparser),
+//   win uses square+saw+triangle like the gameplay sections.
+
+def build_menu_rich() {
+    rich_drums("<bd ~ ~ ~> <~ ~ hh ~>", 0.18)
+    rich_bass("<e2 ~ ~ ~> <d2 ~ ~ ~> <c2 ~ ~ ~> <b1 ~ ~ ~>", "sine", 0.20)
+    rich_lead("<e4 ~ g4 ~> <d4 ~ f4 ~> <c4 ~ e4 ~> <b3 ~ d4 ~>", "triangle", 0.10)
+    fade_arp(0.4)
+}
+
+def build_tension_rich() {
+    rich_drums("<bd ~ ~ ~> <bd ~ hh ~> <bd ~ ~ hh> <bd ~ hh ~>", 0.22)
+    rich_bass("<e2 ~ d2 ~> <c2 ~ b1 ~> <a1 ~ g1 ~> <e2 ~ ~ ~>", "sine", 0.26)
+    rich_lead("<e4 ~ d4 ~> <c4 ~ b3 ~> <a3 ~ g3 ~> <e4 ~ ~ ~>", "triangle", 0.14)
+    fade_arp(0.4)
+}
+
+def build_game_over_rich() {
+    rich_drums("<bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~> <bd ~ ~ ~>", 0.18)
+    rich_bass("<e2 d2 c2 b1> <a1 ~ g1 ~> <e2 d2 c2 b1> <a1 ~ ~ ~>", "sine", 0.26)
+    rich_lead("<g4 ~ e4 ~> <d4 ~ c4 ~> <b3 ~ a3 ~> <g3 ~ ~ ~>", "triangle", 0.16)
+    fade_arp(0.3)
+}
+
+def build_win_rich() {
+    rich_drums("<bd [hh hh] sd [hh cp]> <bd [hh hh] [sd sd] [hh hh]> <bd [hh cp] sd [hh hh]> <bd [hh hh] [sd cp] [hh hh]>", 0.54)
+    rich_bass("<[e2 e2] [g2 g2] [b2 b2] [e3 e3]> <[d3 d3] [b2 b2] [a2 a2] [g2 g2]> <[c3 c3] [a2 a2] [g2 g2] [b2 b2]> <[e2 e2] [g2 g2] [b2 b2] [e3 e3]>", "square", 0.28)
+    rich_lead("<e5 g5 b5 e6> <g5 b5 d6 g6> <a5 c6 e6 a6> <b5 d6 fs6 b6>", "sawtooth", 0.22)
+    rich_arp("<[e6 b5 g5 e5]> <[g6 d6 b5 g5]> <[a6 e6 c6 a5]> <[b6 fs6 d6 b5]>", 0.12)
+}
+
+// 5 distinct gameplay music variants (cycles through sections 0..4).
+// BPM is set on the main thread (matching menu/tension/win functions);
+// the rich track build runs on the strudel thread via music_cmd.
 def start_section_music(section : int) {
     let s = section % 5
     if (s == 0) {
         strudel_set_bpm(128.0lf)
-        strudel_command("play:drums:<bd [~ hh] sd [hh ~]> <bd [~ hh] ~ [hh cp?0.3]> <bd [hh ~] sd [~ hh]> <bd [hh hh] sd [hh ~]>:0.48")
-        strudel_command("note:bass:<[e2 e2] ~ [b1 b1] ~> <[g2 g2] ~ [d2 d2] ~> <[c2 c2] ~ [g1 g1] ~> <[a1 a1] [b1 b1] [c2 c2] [d2 d2]>:square:0.24")
-        strudel_command("note:lead:<e4 g4 b4 e5> <d4 f4 a4 d5> <c4 e4 g4 c5> <b3 d4 f4 b4>:sawtooth:0.18")
-        strudel_command("note:arp:<[e5 b4 g4 e4]> <[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[b4 fs4 d4 b3]>:triangle:0.09")
+        strudel_command("rich:0")
     } elif (s == 1) {
         strudel_set_bpm(136.0lf)
-        strudel_command("play:drums:<bd [hh hh] sd hh> <bd [hh cp] sd [hh hh]> <bd [hh ~] [sd sd] hh> <bd hh sd [hh cp]>:0.52")
-        strudel_command("note:bass:<[a1 a1] ~ [e2 e2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] ~ [a1 a1] ~> <[f2 f2] [e2 e2] [d2 d2] [c2 c2]>:square:0.26")
-        strudel_command("note:lead:<a4 c5 e5 a5> <g4 b4 d5 g5> <f4 a4 c5 f5> <e4 g4 b4 e5>:sawtooth:0.2")
-        strudel_command("note:arp:<[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[f5 c5 a4 f4]> <[e5 b4 g4 e4]>:triangle:0.1")
+        strudel_command("rich:1")
     } elif (s == 2) {
         strudel_set_bpm(140.0lf)
-        strudel_command("play:drums:<[bd bd] [hh hh] [sd sd] [hh hh]> <[bd bd] [hh cp] [sd sd] [cp hh]> <bd [hh hh] [sd cp] [hh hh]> <[bd bd] hh sd [hh hh]>:0.56")
-        strudel_command("note:bass:<[d2 d2] ~ [a1 a1] ~> <[f2 f2] ~ [c2 c2] ~> <[g2 g2] ~ [d2 d2] ~> <[a2 a2] [g2 g2] [f2 f2] [e2 e2]>:square:0.28")
-        strudel_command("note:lead:<d4 f4 a4 d5> <c4 e4 g4 c5> <bf3 d4 f4 bf4> <a3 c4 e4 a4>:sawtooth:0.22")
-        strudel_command("note:arp:<[d5 a4 f4 d4]> <[c5 g4 e4 c4]> <[bf4 f4 d4 bf3]> <[a4 e4 c4 a3]>:triangle:0.11")
+        strudel_command("rich:2")
     } elif (s == 3) {
         strudel_set_bpm(148.0lf)
-        strudel_command("play:drums:<[bd bd] [hh hh] [sd cp] [hh hh]> <[bd bd] [hh hh] [sd sd] [cp cp]> <bd [hh cp] [sd sd] [hh cp]> <[bd bd] [hh hh] [sd cp] [hh hh]>:0.6")
-        strudel_command("note:bass:<[b1 b1] ~ [fs2 fs2] ~> <[d2 d2] ~ [a1 a1] ~> <[e2 e2] ~ [b1 b1] ~> <[g2 g2] [fs2 fs2] [e2 e2] [d2 d2]>:square:0.3")
-        strudel_command("note:lead:<b4 d5 fs5 b5> <a4 c5 e5 a5> <g4 b4 d5 g5> <fs4 a4 c5 fs5>:sawtooth:0.24")
-        strudel_command("note:arp:<[b5 fs5 d5 b4]> <[a5 e5 c5 a4]> <[g5 d5 b4 g4]> <[fs5 c5 a4 fs4]>:triangle:0.13")
+        strudel_command("rich:3")
     } else {
         strudel_set_bpm(158.0lf)
-        strudel_command("play:drums:<[bd bd] [hh hh] [sd cp] [hh cp]> <[bd cp] [hh hh] [sd sd] [hh cp]> <[bd bd] [hh cp] [sd cp] [cp hh]> <[bd bd] [hh hh] [sd cp] [hh hh]>:0.64")
-        strudel_command("note:bass:<[g1 g1] ~ [d2 d2] ~> <[bf1 bf1] ~ [f2 f2] ~> <[c2 c2] ~ [g1 g1] ~> <[d2 d2] [c2 c2] [bf1 bf1] [a1 a1]>:square:0.32")
-        strudel_command("note:lead:<g4 bf4 d5 g5> <f4 a4 c5 f5> <ef4 g4 bf4 ef5> <d4 f4 a4 d5>:sawtooth:0.26")
-        strudel_command("note:arp:<[g5 d5 bf4 g4]> <[f5 c5 a4 f4]> <[ef5 bf4 g4 ef4]> <[d5 a4 f4 d4]>:triangle:0.14")
+        strudel_command("rich:4")
     }
 }
 
