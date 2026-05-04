@@ -327,8 +327,10 @@ Run any tutorial from the project root::
    tutorials/sql_36_attach.rst
    tutorials/sql_37_bulk_operations.rst
    tutorials/sql_38_concurrency.rst
+   tutorials/sql_39_schema_from.rst
    tutorials/sql_40_fts5.rst
    tutorials/sql_41_triggers.rst
+   tutorials/sql_42_schema_evolution.rst
 
 .. _tutorials_dasaudio:
 
