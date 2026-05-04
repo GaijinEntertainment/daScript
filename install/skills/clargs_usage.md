@@ -85,14 +85,14 @@ free `--help` renderer, and uniform behavior across every tool.
    ```das
    [export]
    def main() {
-       var cfg = Config()
-       let err = parse_args(cfg)
-       if (cfg.help) {
+       var r <- parse_args(type<Config>)
+       if (r |> is_err) {
+           print("error: {r |> unwrap_err}\n\n")
            print_help(get_command_info(type<Config>), "tool-name")
            return
        }
-       if (err != "") {
-           print("error: {err}\n\n")
+       let cfg <- r |> move_unwrap
+       if (cfg.help) {
            print_help(get_command_info(type<Config>), "tool-name")
            return
        }
@@ -101,10 +101,15 @@ free `--help` renderer, and uniform behavior across every tool.
    }
    ```
 
-   The single-arg `parse_args(cfg)` form pulls argv via the macro's
-   chosen accessor automatically. The two-arg `parse_args(cfg, args)`
-   form lets you pass an explicit `array<string>` — useful for tests
-   or scripts that already split argv.
+   `parse_args` returns `Result<Config, string>`. Use `is_err` /
+   `unwrap_err` to inspect failure and `move_unwrap` to take the
+   populated struct on success.
+
+   The single-arg `parse_args(type<Config>)` form pulls argv via the
+   macro's chosen accessor automatically. The two-arg
+   `parse_args(type<Config>, args)` form lets you pass an explicit
+   `array<string>` — useful for tests or scripts that already split
+   argv.
 
 ## Help-flag pitfall
 

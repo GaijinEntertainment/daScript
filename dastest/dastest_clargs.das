@@ -1,6 +1,6 @@
 module dastest_clargs shared
 
-require daslib/clargs
+require daslib/clargs public
 
 [CommandLineArgs]
 struct DastestArgs {

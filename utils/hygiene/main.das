@@ -36,16 +36,16 @@ def collect_files(args : array<string>) : array<string> {
 
 [export]
 def main() : int {
-    var cfg = Config()
-    let err = parse_args(cfg)
+    var args_r <- parse_args(type<Config>)
+    if (args_r |> is_err) {
+        to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<Config>), "hygiene")
+        return 1
+    }
+    var cfg <- args_r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "hygiene")
         return 0
-    }
-    if (err != "") {
-        to_log(LOG_ERROR, "error: {err}\n\n")
-        print_help(get_command_info(type<Config>), "hygiene")
-        return 1
     }
     let files <- collect_files(get_user_args())
     if (empty(files)) {

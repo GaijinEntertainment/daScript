@@ -393,14 +393,14 @@ def run_parallel_export(files : array<string>; cfg : Config) {
 
 [export]
 def main() {
-    var cfg = Config()
-    let err = parse_args(cfg)
-    if (cfg.help) {
+    var args_r <- parse_args(type<Config>)
+    if (args_r |> is_err) {
+        to_log(LOG_ERROR, "error: {args_r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Config>), "detect-dupe")
         return
     }
-    if (err != "") {
-        to_log(LOG_ERROR, "error: {err}\n\n")
+    var cfg <- args_r |> move_unwrap
+    if (cfg.help) {
         print_help(get_command_info(type<Config>), "detect-dupe")
         return
     }

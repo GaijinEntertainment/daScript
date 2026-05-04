@@ -55,14 +55,14 @@ struct Config {
 
 [export]
 def main() {
-    var cfg = Config()
-    let err = parse_args(cfg)
-    if (cfg.help) {
+    var r <- parse_args(type<Config>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
         print_help(get_command_info(type<Config>), "clargs-example")
         return
     }
-    if (err != "") {
-        print("error: {err}\n\n")
+    var cfg <- r |> move_unwrap
+    if (cfg.help) {
         print_help(get_command_info(type<Config>), "clargs-example")
         return
     }
