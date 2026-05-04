@@ -1128,12 +1128,21 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     if (length(want) != length(got)) {
         return some("check_schema: \"{table_name}\" column count mismatch — struct has {length(want)} field(s), DB has {length(got)} column(s).")
     }
+    // Name-keyed comparison — emitted SELECTs name columns explicitly so struct field order is
+    // independent of DB column order. Both directions of "column X exists, column Y exists" are
+    // covered: missing-from-DB surfaces in the want loop; with equal counts, missing-from-struct
+    // is implied by the absence of a name match.
+    var by_name : table<string; int>
+    for (j in range(length(got))) {
+        by_name |> insert(got[j].name, j)
+    }
     for (i in range(length(want))) {
         let w = want[i]
-        let g = got[i]
-        if (w.name != g.name) {
-            return some("check_schema: \"{table_name}\" column #{i} name mismatch — struct has \"{w.name}\", DB has \"{g.name}\".")
+        let g_idx = by_name?[w.name] ?? -1
+        if (g_idx < 0) {
+            return some("check_schema: \"{table_name}\" struct field \"{w.name}\" not found in DB columns.")
         }
+        let g = got[g_idx]
         let g_type = affinity_to_sql_type(g.decl_type)
         if (w.data_type != g_type) {
             return some("check_schema: \"{table_name}\".\"{w.name}\" SqlType mismatch — struct expects {sqlite_sql_type(w.data_type)}, DB has {sqlite_sql_type(g_type)} (declared \"{g.decl_type}\").")
@@ -2048,8 +2057,10 @@ def private try_open_sqlite_readonly(path : string) : Result<SqlRunner, string> 
 
 def private read_pragma_table_info(db : SqlRunner; tbl_name : string) : Result<array<SchemaFromCol>, string> {
     // PRAGMA table_info(tbl_name) → column metadata; shared by schema_from (compile-time) and check_schema (runtime).
+    // Honors db.schema_name so check_schema works on with_schema / ATTACH'd runners — would otherwise
+    // silently validate the default schema's table.
     var rows : array<SchemaFromCol>
-    let sql = "PRAGMA table_info({sql_quote_id(tbl_name)})"
+    let sql = empty(db.schema_name) ? "PRAGMA table_info({sql_quote_id(tbl_name)})" : "PRAGMA {sql_quote_id(db.schema_name)}.table_info({sql_quote_id(tbl_name)})"
     var stmt : sqlite3_stmt?
     let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
     if (prc != SQLITE_OK) {
@@ -2138,6 +2149,38 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
         && td.structType.name == "Option"
         && td.structType._module != null
         && td.structType._module.name == "option")
+}
+
+def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
+    // Unwrap Option<T> → T for use as a witness type. Returns td unchanged when it isn't Option.
+    // typeMacro form: dimExpr[1] is an ExprTypeDecl carrying T; structType form: the `_value` field type.
+    if (td == null) {
+        return td
+    }
+    if (td.baseType == Type.typeMacro) {
+        if (length(td.dimExpr) < 2 || td.dimExpr[0] == null || !(td.dimExpr[0] is ExprConstString)) {
+            return td
+        }
+        if ((td.dimExpr[0] as ExprConstString).value != "Option") {
+            return td
+        }
+        if (td.dimExpr[1] == null || !(td.dimExpr[1] is ExprTypeDecl)) {
+            return td
+        }
+        return clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
+    }
+    if (td.baseType == Type.tStructure
+            && td.structType != null
+            && td.structType.name == "Option"
+            && td.structType._module != null
+            && td.structType._module.name == "option") {
+        for (f in td.structType.fields) {
+            if ("{f.name}" == "_value") {
+                return clone_type(f._type)
+            }
+        }
+    }
+    return td
 }
 
 def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
@@ -2656,8 +2699,10 @@ class SqlTableMacro : AstStructureAnnotation {
                 }
                 return false
             }
-            // SqlType contract — typecheck-time static_if routes through `_::sql_bind`'s witness type,
-            // so custom types (chunk-8 adapter rail) and @sql_json / @sql_blob overrides all classify correctly.
+            // SqlType contract — typecheck-time static_if peeks at `_::sql_bind`'s return type via
+            // `default<typedecl(...)>` (foldable by the typer). For Option<T> partial-body fields we
+            // unwrap to T first; bare `sql_bind(Option<T>)` would hit the generic auto overload's
+            // concept_assert even when the affinity matches.
             let expected_sql_type = affinity_to_sql_type(col_decl_type)
             let storage_label = sqlite_sql_type(expected_sql_type)
             var expected_native = ""
@@ -2670,9 +2715,10 @@ class SqlTableMacro : AstStructureAnnotation {
             } else {
                 expected_native = "array<uint8>"
             }
+            let witness_type = unwrap_option_payload_type(st.fields[ufi]._type)
             let msg = "[sql_table] schema_from: field '{ufname}' SqlType does not match column \"{col_name_s}\" in \"{tbl_name}\" (expected {storage_label})."
             assert_exprs |> push(qmacro_expr(${
-                static_if (typeinfo stripped_typename(default<typedecl(_::sql_bind(default<$t(st.fields[ufi]._type)>))>) != $v(expected_native)) {
+                static_if (typeinfo stripped_typename(default<typedecl(_::sql_bind(default<$t(witness_type)>))>) != $v(expected_native)) {
                     concept_assert(false, $v(msg));
                 }
             }))

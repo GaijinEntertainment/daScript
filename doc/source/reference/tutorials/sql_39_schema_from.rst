@@ -1,8 +1,8 @@
 .. _tutorial_sql_schema_from:
 
-================================================
+==================================================
 SQL-39 --- ``schema_from``: struct mirrors the DB
-================================================
+==================================================
 
 .. index::
     single: Tutorial; SQL
@@ -58,8 +58,13 @@ NUMERIC            NUMERIC/DECIMAL/BOOLEAN/DATE/DATETIME        ``double``
 ``INTEGER PRIMARY KEY`` columns get ``@sql_primary_key`` synthesized.
 
 NUMERIC affinity is the rough edge --- BOOLEAN/DATE columns stored
-under NUMERIC end up as ``double`` by default. Override via the
-partial-body form below.
+under NUMERIC all bind as REAL/``double``. Partial-body fields can
+*refine* within the same storage SqlType (e.g. ``int`` instead of
+synthesized ``int64``, or ``float`` instead of ``double``), and
+``@sql_json`` / ``@sql_blob`` adapters are accepted because they
+still bind to the column's underlying SqlType. You CAN'T swap a
+NUMERIC column to ``bool`` or a date type at the field level ---
+that would need a custom adapter that binds back to REAL.
 
 Partial body --- hand-declared fields are CONTRACTS
 ====================================================

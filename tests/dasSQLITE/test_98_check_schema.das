@@ -43,6 +43,32 @@ struct ItemNonOpt {
     Score : Option<double>
 }
 
+// Same fields as LogHand but Message/Severity swapped — name-keyed comparison
+// must accept this since [sql_table] emits explicit-column SELECTs.
+[sql_table(name = "Logs")]
+struct LogReordered {
+    @sql_primary_key Id : int64
+    Message  : string
+    Severity : int64
+}
+
+// Hand-written struct with a column the DB doesn't have — exercises "not found in DB columns".
+[sql_table(name = "Logs")]
+struct LogStrayField {
+    @sql_primary_key Id : int64
+    Severity : int64
+    Message  : string
+    Stray    : string
+}
+
+// Same arity as v2 but Message renamed to Body — exercises the by-name miss with matching count.
+[sql_table(name = "Logs")]
+struct LogRenamedField {
+    @sql_primary_key Id : int64
+    Severity : int64
+    Body     : string
+}
+
 [test]
 def test_check_schema_match_via_schema_from(t : T?) {
     with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(db) {
@@ -95,6 +121,53 @@ def test_check_schema_table_not_found(t : T?) {
     with_sqlite("tests/dasSQLITE/test_data/schema_from_blob.db") $(db) {
         let r = db |> try_check_schema(type<LogV2>)
         t |> equal(r |> is_some, true, "Logs not in blob.db: should err")
+    }
+}
+
+[test]
+def test_check_schema_field_order_independent(t : T?) {
+    // Struct field order is independent of DB column order — [sql_table] emits SELECTs with
+    // explicit column names, so reordered structs round-trip correctly. check_schema agrees.
+    with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(db) {
+        let r = db |> try_check_schema(type<LogReordered>)
+        t |> equal(r |> is_some, false, "reordered struct must match — same names, types, nullability, pk")
+    }
+}
+
+[test]
+def test_check_schema_struct_field_missing_in_db(t : T?) {
+    // A struct field with no matching DB column — diagnostic names the offender.
+    with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(db) {
+        let r = db |> try_check_schema(type<LogStrayField>)
+        t |> equal(r |> is_some, true, "struct has Stray, DB doesn't")
+        let msg = r |> unwrap
+        // Triggers count-mismatch first (4 vs 3); the by-name path is exercised when counts agree.
+        t |> equal(find(msg, "column count mismatch") >= 0, true, "diagnostic mentions count")
+    }
+}
+
+[test]
+def test_check_schema_renamed_field(t : T?) {
+    // Same column count but a struct field that's not in the DB — by-name lookup misses.
+    with_sqlite("tests/dasSQLITE/test_data/schema_from_v2.db") $(db) {
+        let r = db |> try_check_schema(type<LogRenamedField>)
+        t |> equal(r |> is_some, true, "Body is not in DB")
+        let msg = r |> unwrap
+        t |> equal(find(msg, "\"Body\"") >= 0, true, "diagnostic names the offending struct field")
+        t |> equal(find(msg, "not found in DB") >= 0, true, "diagnostic mentions not found")
+    }
+}
+
+[test]
+def test_check_schema_attached_schema(t : T?) {
+    // Regression: try_check_schema must honor `db.schema_name` so it queries the
+    // attached schema's table_info, not main's. Without the schema-qualified PRAGMA,
+    // this would report "table not found" because the in-memory main schema is empty.
+    with_sqlite(":memory:") $(db) {
+        db |> with_attached("tests/dasSQLITE/test_data/schema_from_v2.db", "archive") $(arch) {
+            let r = arch |> try_check_schema(type<LogV2>)
+            t |> equal(r |> is_some, false, "schema-qualified PRAGMA must find Logs in attached schema")
+        }
     }
 }
 

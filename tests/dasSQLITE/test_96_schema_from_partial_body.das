@@ -23,6 +23,16 @@ struct LogPartialPkRedundant {
     Message : string
 }
 
+// 3) Option<T> in partial body against nullable columns — must compile.
+// Witness routes through `sql_storage_enum_for` (Option-aware); a bare `sql_bind` lookup
+// would hit the generic auto overload and trip its concept_assert here.
+[sql_table(name = "Items", schema_from = "tests/dasSQLITE/test_data/schema_from_nullable.db")]
+struct ItemPartialOption {
+    @sql_primary_key Id : int64
+    Note  : Option<string>
+    Score : Option<double>
+}
+
 [test]
 def test_narrow_int_against_integer_pk(t : T?) {
     let cols <- column_info(type<LogPartialNarrow>)
@@ -39,6 +49,18 @@ def test_pk_redundancy_accepted(t : T?) {
     t |> equal(cols[0].name, "Id", "Id first")
     t |> equal(cols[0].is_pk, true, "@sql_primary_key applied")
     t |> equal(cols[1].name, "Message", "Message second")
+}
+
+[test]
+def test_partial_body_option_against_nullable(t : T?) {
+    let cols <- column_info(type<ItemPartialOption>)
+    t |> equal(length(cols), 3, "3 columns")
+    t |> equal(cols[1].name, "Note", "Note column")
+    t |> equal(cols[1].is_nullable, true, "Note Option<string> mapped to nullable")
+    t |> equal(cols[1].data_type, SqlType.Text, "TEXT affinity preserved through Option<>")
+    t |> equal(cols[2].name, "Score", "Score column")
+    t |> equal(cols[2].is_nullable, true, "Score Option<double> mapped to nullable")
+    t |> equal(cols[2].data_type, SqlType.Real, "REAL affinity preserved through Option<>")
 }
 
 [test]

@@ -97,7 +97,8 @@ them surface as silent wrong-results later.
 
     with_sqlite("test.db") <| $(db) {
         db |> check_schema(type<Car>)            // panics with a column-named diagnostic on mismatch
-        // ... or use try_check_schema for the Result form:
+        // ... or use try_check_schema for the non-panicking Option form
+        // (SqlError = Option<string>: none on match, some(errmsg) on mismatch):
         // let r = db |> try_check_schema(type<Car>)
         // if (r |> is_some) { panic(r |> unwrap) }
     }

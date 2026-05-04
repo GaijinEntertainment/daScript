@@ -139,10 +139,19 @@ Use `timeout: 0` (no timeout) for the cmake build — it can take 2-25 minutes.
 - Public functions in `daslib/*.das` (added, removed, renamed, or signature changed)
 - `//!` doc-comments in `daslib/*.das` files
 - C++ bindings in `modules/*/src/*.cpp` or `src/builtin/*.cpp` that add new public functions, types, or struct fields
-- RST files in `doc/source/`
+- RST files in `doc/source/` (handwritten tutorials, reference pages, TOCs)
 - `doc/reflections/das2rst.das` or `doc/reflections/rst.das`
 
-**Steps (run ALL in order):**
+**Which substeps to run** — match what changed, not "all in order":
+
+| Changed | Run |
+|---|---|
+| Only handwritten RST under `doc/source/` (tutorials, TOCs, reference prose) | **4f, 4g** (skip 4a–4e — das2rst is for `daslib` regen, not handwritten pages) |
+| Only `//!` comments / new daslib public functions / C++ bindings | **4a, 4b, 4c, 4d, 4e, 4f, 4g** |
+| Both daslib and handwritten RST | **all of 4a–4g** |
+| `das2rst.das` / `rst.das` itself | **all of 4a–4g** |
+
+CI runs `sphinx-build -W` (warnings-as-errors) for both HTML and LaTeX. **Any** warning fails CI. Step 4f catches every warning class — title underline/overline length, duplicate labels, broken `:ref:`, malformed tables, missing TOC entries, etc. Skipping 4f because "I only added a tutorial page" misses exactly the warnings handwritten RST tends to produce.
 
 ### 4a. Add new functions to groups in `das2rst.das`
 
@@ -197,6 +206,8 @@ grep -iE "warning:|error:" /tmp/sphinx_out.txt
 Must say `build succeeded.` with **zero** warnings and errors. The `grep` must return empty.
 
 Common Sphinx issues:
+- **Title overline/underline too short**: Both `===` lines around a title MUST be at least as long as the title text (Sphinx counts source chars, including backticks and inline-code spans). Easy to miscount when titles include `` ``foo`` ``, em-dashes, or non-ASCII.
+- **Document not in any toctree**: Added a new RST page but forgot to wire it into `tutorials.rst` (or wherever the relevant `.. toctree::` lives). Find the matching TOC and add the page.
 - **Duplicate label**: Two RST files define the same `.. _label:` — rename one
 - **Unknown target**: `:ref:` points to nonexistent label — check spelling
 - **Malformed table**: Grid/simple table column widths don't align

@@ -8,9 +8,15 @@ options gen2
 //
 // SQLite affinity → daslang type:
 //   INTEGER → int64        REAL → double         TEXT → string
-//   BLOB    → array<uint8> NUMERIC → double      (NUMERIC: BOOLEAN/DATE land here too;
-//                                                 override via partial body if you need
-//                                                 different types)
+//   BLOB    → array<uint8> NUMERIC → double      (NUMERIC includes BOOLEAN/DATE;
+//                                                 they all bind as REAL/double)
+// Partial-body fields are CONTRACTS, not overrides — the daslang type's storage
+// SqlType (via `sql_bind`) must match the column's affinity-derived SqlType.
+// You can refine within the same SqlType (e.g. `int` instead of synthesized
+// `int64`) or attach `@sql_json` / `@sql_blob` adapters that still bind to the
+// same underlying SqlType. You CAN'T swap a NUMERIC column to `bool` or `Date`
+// at the field level — those would need a custom adapter that binds back to
+// REAL/double.
 // `NOT NULL` columns → `T`; otherwise → `Option<T>`.
 // `INTEGER PRIMARY KEY` columns get `@sql_primary_key` synthesized.
 //
