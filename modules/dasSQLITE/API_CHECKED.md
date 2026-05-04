@@ -340,7 +340,7 @@ predicate)` outside `_sql`. In plain linq the equivalent is
 `length(...) > 0` or the function-form `any(...)`; this is a
 different surface, not a parity divergence. Out of scope here.
 
-### F3 — `_having |> _order_by` after `_group_by` fails to compile in plain linq
+### F3 — `_having |> _order_by` after `_group_by` failed to compile in plain linq — RESOLVED
 
 Tutorial 14. Chains like:
 
@@ -348,8 +348,8 @@ Tutorial 14. Chains like:
 arr |> _group_by(_.City) |> _having(_._1 |> length >= 1) |> _order_by(_._0) |> _select(...)
 ```
 
-Mode 1 (`_sql`) emits `SELECT ... GROUP BY "City" HAVING ... ORDER BY "City"` and runs.
-Modes 2/3 fail to compile with a deep typer error:
+Mode 1 (`_sql`) emitted `SELECT ... GROUP BY "City" HAVING ... ORDER BY "City"` and ran.
+Modes 2/3 used to fail to compile with a deep typer error:
 
 ```
 error[30304]: no matching functions or generics:
@@ -359,59 +359,48 @@ error[30304]: no matching functions or generics:
   instanced from linq`order_by` ... at d:/Work/daScript/daslib/linq.das:413:8
 ```
 
-The trigger is the **combination** `_having |> _order_by`, not bare
-`_order_by` after `_group_by`. Without `_having`, the linq fusion of
-`_group_by + _order_by + _select(...)` apparently follows a path that
-doesn't materialize the grouped array for sorting; once `_having`
-is in the chain, post-aggregate filtering forces a real
+The trigger was the **combination** `_having |> _order_by`. Without
+`_having`, linq's fusion of `_group_by + _order_by + _select(...)`
+followed a path that didn't materialize the grouped array for sorting;
+once `_having` was in the chain, post-aggregate filtering forced a real
 `array<tuple<K, array<T>>>` to be produced, then sorted. linq's
-`order_by` calls `clone_to_move` on the input (`linq.das:413`), which
-needs a generic `_::clone` for the per-element type — and the nested
-`array<T>` (T = User, contains strings) has no synthesizable clone.
-The error fires deep inside `builtin.das`, far from the user's chain.
+`order_by` called `clone_to_move` on the input
+([daslib/linq.das:413](../../daslib/linq.das#L413)), which needed a
+generic `_::clone` for the per-element type — and the synthesized clone
+for `tuple<string, array<User>>` was emitted with the wrong constness,
+so resolution failed inside `builtin.das`, far from the user's chain.
 
-Two distinct issues stacked on top of each other:
-1. **Functional defect in linq:** `order_by` should be able to sort an
-   `array<tuple<...>>` whose elements contain non-cloneable nested
-   arrays. Sorting only needs move/swap, not deep clone — the
-   `clone_to_move` defensive copy is the part that should yield to
-   plain move semantics.
-2. **Diagnostic defect:** even if (1) is intentionally rejected, the
-   error must point at the user's `_order_by(_._0)` call and explain
-   "can't sort grouped results in linq because the grouping holds
-   owned arrays of T, and T isn't cloneable" — not at `builtin.das:999`.
+**Initial decision (Boris, 2026-05-02):** **(b)**. Add a `static_if`
+guard in linq's `order_by` to surface a clear error pointing at the
+user's `_order_by` call site rather than `builtin.das:999`.
 
-`parity_check_14_group_by.das` routes around F3 by **post-sorting**
-each mode's result manually with a `sort_by_city` helper, after
-removing inline `_order_by` from the chains. Negative-coverage test:
-[failed_parity_check_14_order_after_group.das](../../tests/dasSQLITE/failed_parity_check_14_order_after_group.das)
-pins the cryptic error so we'll notice when linq is fixed.
+**Actual resolution (2026-05-03):** **(a)** — fixed at the compiler
+level by [PR #2563](https://github.com/GaijinEntertainment/daScript/pull/2563)
+("synthesized tuple/variant clone constness"). `makeCloneTuple` /
+`makeCloneVariant` now keep `explicitConst=true`; the lowering site
+picks the flavor-per-constness, so `_::clone(tuple<K, array<T>>, ...)`
+resolves cleanly. linq's `clone_to_move` no longer hits the deep error;
+no `static_if` guard is needed.
 
-**Canonical form (today):** sort outside the chain, after materialization,
-when `_having` is involved.
-
-**Decision (Boris, 2026-05-02):** **(b)**. Add a `static_if` /
-`concept_assert` guard in linq's `order_by` (or its caller) that
-detects the case at compile-time and emits a clear error:
-"`order_by` cannot sort `array<tuple<K, array<T>>>` when T is not
-cloneable — sort outside the chain after materialization, or extend
-T with a `clone` overload." The error must point at the user's
-`_order_by` call site, not `builtin.das:999`. Plain linq stays
-unchanged for the cases that already work; `_sql` keeps full pushdown.
-Tutorials remain truthful — the error tells the user to either drop
-to post-sort or wrap in `_sql(...)`. This is the diagnostic-as-
-architecture path: the harness still surfaces the divergence, but the
-compiler now communicates it instead of the user discovering it via a
-deep typer trace. Implementation lives near `daslib/linq.das:411-413`.
+**Coverage** (`tests/dasSQLITE/`):
+- [parity_check_14_order_after_group.das](../../tests/dasSQLITE/parity_check_14_order_after_group.das) —
+  flipped from `expect 30304:1` divergence pin to a positive 3-mode
+  parity test on the exact `_having |> _order_by` chain.
+- [parity_check_14_group_by.das](../../tests/dasSQLITE/parity_check_14_group_by.das) —
+  `sort_by_city` post-sort workaround removed; 5 of 6 tests now use
+  inline `|> _order_by(_._0)`. The multi-key test stays on post-sort
+  (with a local `sort_by_city_age` helper) because the `_sql` analyzer's
+  tuple-key validator only accepts `_.Field` / string expressions, not
+  nested `_._0._N` walks — separate from F3.
 
 ## Walkthrough — complete (2026-05-02)
 
 Every tutorial under `tutorials/sql/01..41` has been audited. Tests live
-under `tests/dasSQLITE/parity_check_<NN>_*.das` (passing) and
-`tests/dasSQLITE/failed_parity_check_<NN>_*.das` (pinning known
-divergences for regression-detection).
+under `tests/dasSQLITE/parity_check_<NN>_*.das`. v2/v2.1 multi-Q parity
+coverage (`14b`, `15b`, `11b`/`c`/`d`) added 2026-05-03; F3 pin flipped
+to positive parity in the same sweep.
 
-### Tutorials with parity tests (23 files, ~70 [test] cases)
+### Tutorials with parity tests
 
 | Tutorial | File | Coverage |
 |----------|------|----------|
@@ -428,9 +417,12 @@ divergences for regression-detection).
 | 11 skip|where (multi-Q) | parity_check_11d_skip_then_where.das | inner-skip + outer-where, outer-where + outer-order |
 | 12 distinct | parity_check_12_distinct.das | full-row, single-col, where|select|distinct |
 | 12b set_ops | parity_check_12b_set_ops.das | union, intersect, except |
-| 13 aggregates | parity_check_13_aggregates.das | + F2 divergence pin |
-| 14 group_by | parity_check_14_group_by.das | post-sort to dodge F3 |
+| 13 aggregates | parity_check_13_aggregates.das | F2 RESOLVED — average promotes to double in all modes |
+| 14 group_by | parity_check_14_group_by.das | _group_by, _having, _order_by, multi-key, full reporting chain |
+| 14 having\|order_by | parity_check_14_order_after_group.das | F3 RESOLVED — inline `_order_by` after `_having` works in all modes |
+| 14 group_by (multi-Q) | parity_check_14b_aggregate_then_filter.das | aggregate-then-filter (v2 multi-Q lowering) |
 | 15 join | parity_check_15_join.das | inner join, left/right filter |
+| 15 multi-join (multi-Q) | parity_check_15b_multi_join.das | three-table multi-join with outer WHERE (v2.1) |
 | 16 left_join | parity_check_16_left_join.das | _left_join + Option<TB> projection |
 | 17 subqueries | parity_check_17_subqueries.das | `_in`/`_not_in`/`_any(pred)`/`_none(pred)` |
 | 18 null_handling | parity_check_18_null_handling.das | round-trip, is_some, is_none, unwrap_or |
@@ -471,17 +463,17 @@ divergences for regression-detection).
 |----|----------|----------|--------|
 | F1 | 11 take_skip | multi-Q lowering — `take \| skip` and latent siblings (`take \| where`, `take \| order`, `skip \| where`) all preserve linq positional semantics | resolved |
 | F2 | 13 aggregates | (a) fix `daslib/linq.das` `average` → always `double` | resolved |
-| F3 | 14 group_by | (b) `static_if` guard in `order_by` over `array<tuple<K, array<T>>>` | deferred fix |
+| F3 | 14 group_by | (a) compiler-side fix for synthesized tuple/variant clone constness | resolved (PR [#2563](https://github.com/GaijinEntertainment/daScript/pull/2563)) |
 | F4 | 17 subqueries | set `can_shadow` on synthesized `_` in `AstCallMacro_LinqPred2`/`LinqPredII2` | resolved (issue [#2559](https://github.com/GaijinEntertainment/daScript/issues/2559)) |
 | G1 | 16 left_join | add `_right_join` / `_full_outer_join` / `_cross_join` | issue [#2558](https://github.com/GaijinEntertainment/daScript/issues/2558) |
-| (lang) | 14 group_by | strongly-named tuple support (recordNames in cache key) | issue [#2557](https://github.com/GaijinEntertainment/daScript/issues/2557) |
+| (lang) | 14 group_by | strongly-named tuple support (recordNames in cache key) | resolved (PR [#2565](https://github.com/GaijinEntertainment/daScript/pull/2565), 2026-05-03) |
 
 ## Next steps
 
-- Land the four findings (F1–F4) as separate PRs, each with its parity
-  test flipping from `failed_parity_check_*.das` to `parity_check_*.das`
-  (or the workaround removed from the existing parity test).
-- G1 + #2557 are language-level — schedule independently of the
-  parity-test work.
-- After F1–F4 are resolved, re-run every `parity_check_*.das` and assert
-  zero divergences remain; promote the suite to a CI-required job.
+- F1, F2, F4 landed as separate PRs; F3 cleanup (this PR) flips the pin
+  test to a positive parity test and removes the post-sort workaround
+  in `parity_check_14_group_by.das`. The (lang) tuple-strict finding
+  was resolved in PR [#2565](https://github.com/GaijinEntertainment/daScript/pull/2565).
+- G1 ([#2558](https://github.com/GaijinEntertainment/daScript/issues/2558))
+  remains independent: `_right_join` / `_full_outer_join` / `_cross_join`
+  as first-class linq + `_sql` operators, plus tutorial 16 expansion.
