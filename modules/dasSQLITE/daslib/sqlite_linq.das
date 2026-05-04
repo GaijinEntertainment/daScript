@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 options strict_smart_pointers
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
-options _comment_hygiene
+options _comment_hygiene = true
 
 module sqlite_linq shared public
 
@@ -129,6 +129,9 @@ enum private ProjectionShape {
 enum private JoinKind {
     Inner
     Left
+    Right
+    FullOuter
+    Cross
 }
 
 enum private SetOpKind {
@@ -148,6 +151,12 @@ struct private JoinSpec {
     rightCol    : string
     rightWhereSql     : string
     rightOnBindExprs  : array<ExpressionPtr>
+    // For RIGHT / FULL OUTER with a non-empty RHS WHERE, the RHS gets wrapped as
+    // `(SELECT * FROM "<table>" WHERE <pred>)` baked into tableName here. Outer-WHERE
+    // semantics on a preserved-side join would drop the wrong rows; subquery body
+    // filters before the join. Flag tells emission to write tableName as raw SQL
+    // (with parens) instead of as a quoted identifier.
+    tableSqlIsRaw     : bool
 }
 
 struct private SqlQuery {
@@ -853,21 +862,29 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
         macro_error(prog, at, "_sql: _join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
         return false
     }
-    // 2. Multi-join: srca contained a _join. Snapshot q as an inner subquery and reset for
-    // outer wrap. After this, q has innerSql + fromRowType but no joins of its own.
-    if (q.seenJoin) {
-        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
-            return false
-        }
-    } else {
-        // V1 path: srca was a simple chain. Now check that srca didn't end in _select/_group_by
-        // — those would conflict with this join's `into` projection.
+    // V1 path: srca was a simple chain. Now check that srca didn't end in _select/_group_by
+    // — those would conflict with this join's `into` projection. Run BEFORE snapshot below
+    // (snapshot clears these flags so the check would silently pass).
+    if (!q.seenJoin) {
         if (q.seenSelect) {
             macro_error(prog, at, "_sql: _join must precede `_select` in source order — the join's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
             return false
         }
         if (q.seenGroupBy) {
             macro_error(prog, at, "_sql: _join cannot follow `_group_by` (joining grouped rows is not yet supported); group AFTER the join instead")
+            return false
+        }
+    }
+    // 2. Snapshot q as an inner subquery and reset for outer wrap when:
+    //    (a) srca contained a _join (multi-join chain); OR
+    //    (b) kind ∈ {Right, FullOuter} AND q.whereSql is non-empty — preserved-side
+    //        rows have NULL on the LHS columns, so an outer WHERE on those columns
+    //        would drop them. Wrapping LHS as `(SELECT * FROM Users WHERE …) AS t0`
+    //        applies the filter BEFORE the join, matching M2/M3 linq semantics.
+    let needsLhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
+                                        && !empty(q.whereSql))
+    if (q.seenJoin || needsLhsWrapForPreservedSide) {
+        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
             return false
         }
     }
@@ -912,16 +929,41 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     return false if (empty(leftCol))
     let rightCol = extract_key_selector_field(jCall.arguments[3], "__lb__", prog, at)
     return false if (empty(rightCol))
+    // For RIGHT / FULL OUTER with RHS WHERE, bake the WHERE into a derived-table subquery
+    // here so the row filter applies BEFORE the join — matches M2/M3 linq semantics. For
+    // LEFT/INNER the existing ON-AND attachment is correct (preserved-LHS sees NULL on
+    // unmatched RHS regardless), so leave those paths untouched.
+    let needsRhsWrapForPreservedSide = ((kind == JoinKind.Right || kind == JoinKind.FullOuter)
+                                        && !empty(subQ.whereSql))
+    var rhsTableName : string
+    var rhsRightWhereSql : string
+    var rhsTableSqlIsRaw = false
+    if (needsRhsWrapForPreservedSide) {
+        // SELECT * is fine here — derived table propagates the underlying column names
+        // verbatim, and the outer query references t1.<col> by those names.
+        // Inner AS "t1" is required because subQ.whereSql may contain alias-qualified
+        // refs like `"t1"."Total"` built when subQ.rootAlias was "t1". Outer-most "t1"
+        // shadows the inner; SQLite scopes them by parens.
+        rhsTableName := "(SELECT * FROM \"{subQ.tableName}\" AS \"t1\" WHERE {subQ.whereSql})"
+        rhsRightWhereSql := ""
+        rhsTableSqlIsRaw = true
+    } else {
+        rhsTableName := subQ.tableName
+        rhsRightWhereSql := subQ.whereSql
+    }
     var spec <- JoinSpec(
         kind = kind,
         rootType = subQ.rootType,
-        tableName = subQ.tableName,
+        tableName = rhsTableName,
         alias = "t1",
         leftCol = leftCol,
         leftAlias = "t0",
         rightCol = rightCol,
-        rightWhereSql = subQ.whereSql)
+        rightWhereSql = rhsRightWhereSql,
+        tableSqlIsRaw = rhsTableSqlIsRaw)
     // ON binds live on JoinSpec, not q.bindExprs — runtime concats per-join ON before outer WHERE so placeholder order matches SQL.
+    // For the wrapped-RHS path, the binds are still emitted at the t1 source position (subquery body),
+    // which is BEFORE the ON keys — same SQL position as the unwrapped case, so bind ordering is preserved.
     spec.rightOnBindExprs |> reserve(length(subQ.bindExprs))
     for (b in subQ.bindExprs) {
         spec.rightOnBindExprs |> push <| clone_expression(b)
@@ -953,6 +995,137 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;
     // selectCols still need to be populated for the inner subquery in the multi-join /
     // WHERE-peel snapshot paths, so we let analyze_projection run normally and restore the
     // aggregate state afterwards. Invariant: aggregateExpr non-empty ⇒ proj=Aggregate.
+    let savedAggExpr := q.aggregateExpr
+    var savedAggType = q.aggregateType
+    let savedAggProj = q.proj == ProjectionShape.Aggregate
+    let projOk = analyze_projection(iret.subexpr, q, prog, at)
+    q.argNames |> clear
+    q.argSourceIdx |> clear
+    if (!projOk) {
+        return false
+    }
+    if (savedAggExpr != "") {
+        q.aggregateExpr := savedAggExpr
+        q.aggregateType = savedAggType
+        if (savedAggProj) {
+            q.proj = ProjectionShape.Aggregate
+        }
+    }
+    q.seenSelect = true
+    return true
+}
+
+[macro_function]
+def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;
+                                    prog : ProgramPtr; at : LineInfo) : bool {
+    // 3-arg shape (srca, srcb, into) — no on-clause, no key extraction.
+    // Mirrors process_join_call's reject envelope and projection handling.
+    if (q.seenJoin) {
+        macro_error(prog, at, "_sql: internal — process_cross_join_call entered with q.seenJoin already true (chain shape error)")
+        return false
+    }
+    if (length(jCall.arguments) != 3) {
+        macro_error(prog, at, "_sql: _cross_join expected 3 args (srca, srcb, into); got {length(jCall.arguments)}")
+        return false
+    }
+    q.rootAlias = "t0"
+    let savedSeenTerminal = q.seenTerminal
+    let savedSeenToArray = q.seenToArray
+    if (!analyze_chain(jCall.arguments[0], q, prog, at)) {
+        return false
+    }
+    if ((q.seenTerminal && !savedSeenTerminal) || (q.seenToArray && !savedSeenToArray)) {
+        macro_error(prog, at, "_sql: _cross_join LHS chain cannot end in a terminal (`_first`, `_to_array`, `_count`, etc.); restructure so terminals are outermost")
+        return false
+    }
+    if (q.seenJoin) {
+        if (!snapshot_q_to_subquery_wrap(q, prog, at)) {
+            return false
+        }
+    } else {
+        if (q.seenSelect) {
+            macro_error(prog, at, "_sql: _cross_join must precede `_select` in source order — the cross's `into` lambda is the projection. Drop the trailing `_select(...)` or restructure the chain.")
+            return false
+        }
+        if (q.seenGroupBy) {
+            macro_error(prog, at, "_sql: _cross_join cannot follow `_group_by` (joining grouped rows is not yet supported); group AFTER the join instead")
+            return false
+        }
+    }
+    q.seenJoin = true
+    q.rootAlias = "t0"
+    var subQ = SqlQuery(rootAlias = "t1", inView = q.inView)
+    if (!analyze_chain(jCall.arguments[1], subQ, prog, at)) {
+        return false
+    }
+    if (subQ.seenGroupBy || !empty(subQ.havingSql)) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `_group_by` / `_having`")
+        return false
+    }
+    if (subQ.seenDistinct) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `distinct()` (apply to the joined result instead)")
+        return false
+    }
+    if (subQ.seenSelect) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `_select(...)` — the cross's `into` lambda projects from both sources")
+        return false
+    }
+    if (subQ.seenTerminal || subQ.seenToArray) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot have a terminal (`_first`, `_count`, `_to_array`, etc.)")
+        return false
+    }
+    if (subQ.limitBindExpr != null || subQ.offsetBindExpr != null) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `take(n)` / `skip(n)`")
+        return false
+    }
+    if (subQ.seenOrderBy) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot use `_order_by` (apply to the joined result instead)")
+        return false
+    }
+    if (subQ.seenJoin && length(subQ.joins) > 0) {
+        macro_error(prog, at, "_sql: _cross_join right side cannot itself contain a join (3+ table joins not yet supported)")
+        return false
+    }
+    var spec <- JoinSpec(
+        kind = JoinKind.Cross,
+        rootType = subQ.rootType,
+        tableName = subQ.tableName,
+        alias = "t1",
+        leftCol = "",
+        leftAlias = "t0",
+        rightCol = "",
+        rightWhereSql = "")
+    // Hoist any RHS WHERE into the outer q.whereSql — Cross has no ON clause to attach it to.
+    if (!empty(subQ.whereSql)) {
+        if (empty(q.whereSql)) {
+            q.whereSql := subQ.whereSql
+        } else {
+            q.whereSql := "({q.whereSql}) AND ({subQ.whereSql})"
+        }
+        for (b in subQ.bindExprs) {
+            q.bindExprs |> push <| clone_expression(b)
+        }
+    }
+    q.joins |> emplace(spec)
+    var intoLambda = jCall.arguments[2]
+    if (intoLambda == null || !(intoLambda is ExprMakeBlock)) {
+        macro_error(prog, at, "_sql: _cross_join `into` projection has unexpected shape (not a lambda)")
+        return false
+    }
+    var imblk = intoLambda as ExprMakeBlock
+    var iblk = imblk._block as ExprBlock
+    if (iblk == null || iblk.arguments |> length != 2 || iblk.list |> length != 1
+            || !(iblk.list[0] is ExprReturn)) {
+        macro_error(prog, at, "_sql: _cross_join `into` lambda must take 2 args with a single return")
+        return false
+    }
+    var iret = iblk.list[0] as ExprReturn
+    let arg0Name = string(iblk.arguments[0].name)
+    let arg1Name = string(iblk.arguments[1].name)
+    q.argNames |> push(arg0Name)
+    q.argSourceIdx |> push(0)
+    q.argNames |> push(arg1Name)
+    q.argSourceIdx |> push(1)
     let savedAggExpr := q.aggregateExpr
     var savedAggType = q.aggregateType
     let savedAggProj = q.proj == ProjectionShape.Aggregate
@@ -1628,6 +1801,27 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             return process_join_call(ljCall, q, JoinKind.Left, prog, at)
         }
     }
+    // Peel _right_join — mirror of left_join, left side becomes NULL on no-match. SQLite ≥3.39.
+    {
+        var rjCall = match_linq_call(node, "right_join")
+        if (rjCall != null) {
+            return process_join_call(rjCall, q, JoinKind.Right, prog, at)
+        }
+    }
+    // Peel _full_outer_join — both sides surface; unmatched pair with NULL. SQLite ≥3.39.
+    {
+        var foCall = match_linq_call(node, "full_outer_join")
+        if (foCall != null) {
+            return process_join_call(foCall, q, JoinKind.FullOuter, prog, at)
+        }
+    }
+    // Peel _cross_join — Cartesian; 3-arg shape (no on lambda).
+    {
+        var cxCall = match_linq_call(node, "cross_join")
+        if (cxCall != null) {
+            return process_cross_join_call(cxCall, q, prog, at)
+        }
+    }
     // Bottom: select_from(db, type<T>) — plain function in sqlite_boost.
     {
         var dbE : ExpressionPtr
@@ -1651,9 +1845,9 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
 // ===== Projection analysis (_select) =====
 
 [macro_function]
-def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
-                                     var argName : string&; positive : bool) : string {
-    if (!q.seenJoin) {
+def private try_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
+                                var argName : string&; positive : bool) : string {
+    if (!q.seenJoin || empty(q.joins)) {
         return ""
     }
     // Require a bare ExprVar — `$i` would over-match on ExprField/ExprCall receivers, capturing foreign names.
@@ -1666,19 +1860,35 @@ def private try_left_join_null_probe(var node : ExpressionPtr; q : SqlQuery;
     }
     argName = string((n as ExprVar).name)
     let srcIdx = lookup_arg_source(q, argName)
-    if (srcIdx <= 0) {
+    if (srcIdx < 0) {
         return ""
     }
     unsafe {
-        let spec & = q.joins[srcIdx - 1]
-        if (spec.kind != JoinKind.Left) {
+        let spec & = q.joins[length(q.joins) - 1]
+        var probeAlias : string
+        var sqlCol : string
+        if (spec.kind == JoinKind.Left && srcIdx == 1) {
+            probeAlias = string(spec.alias)
+            sqlCol = field_to_column_name(spec.rootType, spec.rightCol)
+        } elif (spec.kind == JoinKind.Right && srcIdx == 0) {
+            // LHS owner type: q.rootType pre-wrap, q.fromRowType post multi-join wrap.
+            let lhsOwner = q.rootType != null ? q.rootType : q.fromRowType
+            probeAlias = string(spec.leftAlias)
+            sqlCol = field_to_column_name(lhsOwner, spec.leftCol)
+        } elif (spec.kind == JoinKind.FullOuter && srcIdx == 0) {
+            let lhsOwner = q.rootType != null ? q.rootType : q.fromRowType
+            probeAlias = string(spec.leftAlias)
+            sqlCol = field_to_column_name(lhsOwner, spec.leftCol)
+        } elif (spec.kind == JoinKind.FullOuter && srcIdx == 1) {
+            probeAlias = string(spec.alias)
+            sqlCol = field_to_column_name(spec.rootType, spec.rightCol)
+        } else {
             return ""
         }
-        let sqlRightCol = field_to_column_name(spec.rootType, spec.rightCol)
         if (positive) {
-            return "\"{spec.alias}\".\"{sqlRightCol}\" IS NOT NULL"
+            return "\"{probeAlias}\".\"{sqlCol}\" IS NOT NULL"
         }
-        return "\"{spec.alias}\".\"{sqlRightCol}\" IS NULL"
+        return "\"{probeAlias}\".\"{sqlCol}\" IS NULL"
     }
 }
 
@@ -1953,7 +2163,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
                     let argc = user_arg_count(fcall)
                     if ((fname == "is_some" || fname == "is_none") && argc == 1) {
                         var probeArg : string
-                        let frag = try_left_join_null_probe(fcall.arguments[0], q, probeArg, fname == "is_some")
+                        let frag = try_join_null_probe(fcall.arguments[0], q, probeArg, fname == "is_some")
                         if (!empty(frag)) {
                             push_computed_proj_slot(q, frag,
                                 new TypeDecl(at = at, baseType = Type.tBool),
@@ -2881,10 +3091,10 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         return "" if (q.hadError)
         return "ABS({inner})"
     }
-    // ---- Option<T> nullability — _left_join special case: bare ExprVar of Option<TB> arg probes right-key NULL.
+    // ---- Option<T> nullability — left/right/full-outer join: bare ExprVar of Option<T> arg probes the join key NULL.
     if (fname == "is_some" && argc == 1) {
         var argName : string
-        let nullProbe = try_left_join_null_probe(call.arguments[0], q, argName, true)
+        let nullProbe = try_join_null_probe(call.arguments[0], q, argName, true)
         if (!empty(nullProbe)) {
             return nullProbe
         }
@@ -2894,7 +3104,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     }
     if (fname == "is_none" && argc == 1) {
         var argName : string
-        let nullProbe = try_left_join_null_probe(call.arguments[0], q, argName, false)
+        let nullProbe = try_join_null_probe(call.arguments[0], q, argName, false)
         if (!empty(nullProbe)) {
             return nullProbe
         }
@@ -3239,31 +3449,49 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
                 w |> write("\"")
             }
             for (j in q.joins) {
+                // SQLite ≥3.39 (2022) for RIGHT / FULL OUTER; bundled is 3.41.2.
                 if (j.kind == JoinKind.Inner) {
-                    w |> write(" INNER JOIN \"")
+                    w |> write(" INNER JOIN ")
+                } elif (j.kind == JoinKind.Left) {
+                    w |> write(" LEFT JOIN ")
+                } elif (j.kind == JoinKind.Right) {
+                    w |> write(" RIGHT JOIN ")
+                } elif (j.kind == JoinKind.FullOuter) {
+                    w |> write(" FULL OUTER JOIN ")
                 } else {
-                    w |> write(" LEFT JOIN \"")
+                    w |> write(" CROSS JOIN ")
                 }
-                w |> write(j.tableName)
-                w |> write("\" AS \"")
+                if (j.tableSqlIsRaw) {
+                    // RHS pre-wrapped as `(SELECT * FROM … WHERE …)` for preserved-side joins.
+                    w |> write(j.tableName)
+                } else {
+                    w |> write("\"")
+                    w |> write(j.tableName)
+                    w |> write("\"")
+                }
+                w |> write(" AS \"")
                 w |> write(j.alias)
-                w |> write("\" ON \"")
-                w |> write(j.leftAlias)
-                w |> write("\".\"")
-                // Translate daslang names via @sql_column on each side's owning struct.
-                let leftOwnerT = source_rootType_for_alias(q, j.leftAlias)
-                w |> write(field_to_column_name(leftOwnerT, j.leftCol))
-                w |> write("\" = \"")
-                w |> write(j.alias)
-                w |> write("\".\"")
-                w |> write(field_to_column_name(j.rootType, j.rightCol))
                 w |> write("\"")
-                // Right-side _where in ON clause (LEFT JOIN: row-level WHERE filter would drop unmatched rows).
-                if (!empty(j.rightWhereSql)) {
-                    w |> write(" AND (")
-                    w |> write(j.rightWhereSql)
-                    w |> write(")")
+                if (j.kind != JoinKind.Cross) {
+                    w |> write(" ON \"")
+                    w |> write(j.leftAlias)
+                    w |> write("\".\"")
+                    // Translate daslang names via @sql_column on each side's owning struct.
+                    let leftOwnerT = source_rootType_for_alias(q, j.leftAlias)
+                    w |> write(field_to_column_name(leftOwnerT, j.leftCol))
+                    w |> write("\" = \"")
+                    w |> write(j.alias)
+                    w |> write("\".\"")
+                    w |> write(field_to_column_name(j.rootType, j.rightCol))
+                    w |> write("\"")
+                    // Right-side _where in ON clause (LEFT/RIGHT/FULL OUTER JOIN: row-level WHERE filter would drop unmatched rows).
+                    if (!empty(j.rightWhereSql)) {
+                        w |> write(" AND (")
+                        w |> write(j.rightWhereSql)
+                        w |> write(")")
+                    }
                 }
+                // Cross joins have no ON / no rightWhereSql (process_cross_join_call hoists into outer WHERE).
             }
         } elif (!empty(q.innerSql)) {
             // Outer Q wrapping a phase-conflict-pushed subquery. Inner emits default-row projection
@@ -3275,6 +3503,14 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             w |> write(" FROM \"")
             w |> write(q.tableName)
             w |> write("\"")
+            // When emitting as an inner subquery (snapshot wrap path), q.whereSql can carry
+            // alias-qualified column refs like `"t0"."Id"` built when q.rootAlias was set.
+            // Without AS here, those refs reference an undefined alias inside the parens.
+            if (force_aliases && !empty(q.rootAlias)) {
+                w |> write(" AS \"")
+                w |> write(q.rootAlias)
+                w |> write("\"")
+            }
         }
         if (!empty(q.whereSql)) {
             w |> write(" WHERE ")

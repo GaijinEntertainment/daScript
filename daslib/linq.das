@@ -1611,6 +1611,140 @@ def left_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(T
     return <- left_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
+[unused_argument(ta, tb)]
+def private right_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&> {
+    // Hash-build on srca; iterate srcb. For huge LEFT + tiny RIGHT this wastes memory — future optimizer may pick the smaller side.
+    var inscope tablea : table<typedecl(_::unique_key(keya(type<TA>))); array<TA -const -&>>
+    for (ita in srca) {
+        let k = _::unique_key(keya(ita))
+        tablea[k].push_clone(ita) // nolint:PERF006 per-key bucket size unknown ahead of time
+    }
+    var buffer : array<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&>
+    for (itb in srcb) {
+        let k = _::unique_key(keyb(itb))
+        var matched = false
+        tablea.get(k, $(arr) {
+            for (ita in arr) {
+                buffer.push_clone(result(_::some(ita), itb))
+                matched = true
+            }
+        })
+        if (!matched) {
+            buffer.push_clone(result(_::none(type<TA>), itb))
+        }
+    }
+    return <- buffer
+}
+
+[unused_argument(ta, tb)]
+def private right_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&> {
+    return <- right_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+def right_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&> {
+    //! Right outer join — every TB emits at least one row; left side is Option<TA> (none when no left match)
+    return <- right_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
+}
+
+def right_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&> {
+    //! Right outer join — every TB emits at least one row; left side is Option<TA> (none when no left match)
+    return <- right_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+def right_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<TB>)) -const -&> {
+    //! Right outer join returning an array
+    return <- right_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[unused_argument(ta, tb)]
+def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&> {
+    // Two-pass with per-bucket seen-marking on srcb. Pass 1: srca → matched pairs + (some, none).
+    // Pass 2: re-iterate srcb (materialized into srcb_arr because srcb is single-pass) → (none, some) for unmarked buckets.
+    var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>
+    var inscope srcb_arr : array<TB -const -&>
+    for (itb in srcb) {
+        let k = _::unique_key(keyb(itb))
+        tableb[k].push_clone(itb) // nolint:PERF006 per-key bucket size unknown ahead of time
+        srcb_arr |> push_clone(itb) // nolint:PERF006 srcb cardinality unknown ahead of time
+    }
+    var inscope seen_b : table<typedecl(_::unique_key(keyb(type<TB>))); bool>
+    var buffer : array<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&>
+    for (ita in srca) {
+        let k = _::unique_key(keya(ita))
+        var matched = false
+        tableb.get(k, $(arr) {
+            for (itb in arr) {
+                buffer.push_clone(result(_::some(ita), _::some(itb))) // nolint:PERF006 per-bucket size unknown
+                matched = true
+            }
+            seen_b[k] = true
+        })
+        if (!matched) {
+            buffer.push_clone(result(_::some(ita), _::none(type<TB>))) // nolint:PERF006 unmatched left rows
+        }
+    }
+    for (itb in srcb_arr) {
+        let k = _::unique_key(keyb(itb))
+        if (!seen_b |> key_exists(k)) {
+            buffer.push_clone(result(_::none(type<TA>), _::some(itb))) // nolint:PERF006 unmatched right rows
+        }
+    }
+    return <- buffer
+}
+
+[unused_argument(ta, tb)]
+def private full_outer_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&> {
+    return <- full_outer_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<ARGTB -const>(srcb)), type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+def full_outer_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : iterator<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&> {
+    //! Full outer join — both sides surface; unmatched rows pair with `none` on the other side
+    return <- full_outer_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result).to_sequence_move()
+}
+
+def full_outer_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&> {
+    //! Full outer join — both sides surface; unmatched rows pair with `none` on the other side
+    return <- full_outer_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+def full_outer_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; keya, keyb; result) : array<typedecl(result(type<$Option<TA -const>>, type<$Option<TB -const>>)) -const -&> {
+    //! Full outer join returning an array
+    return <- full_outer_join_impl(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
+}
+
+[unused_argument(ta, tb)]
+def private cross_join_impl(var srca; srcb : array<auto(TB) -const -&>; ta : auto(TA); tb : auto(TB); result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    var buffer : array<typedecl(result(type<TA>, type<TB>)) -const -&>
+    for (ita in srca) {
+        for (itb in srcb) {
+            buffer.push_clone(result(ita, itb)) // nolint:PERF006 srca cardinality unknown ahead of time
+        }
+    }
+    return <- buffer
+}
+
+[unused_argument(ta, tb)]
+def private cross_join_impl_const(srca : auto(ARGTA); srcb : auto(ARGTB); ta : auto(TA); tb : auto(TB); result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    return <- cross_join_impl(unsafe(reinterpret<ARGTA -const>(srca)), unsafe(reinterpret<array<TB -const -&>>(srcb)), type<TA -const -&>, type<TB -const -&>, result)
+}
+
+def cross_join(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; result) : iterator<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Cross join — every (TA, TB) pair. srcb is materialized first since cross needs to re-iterate it per srca row.
+    var srcb_arr <- to_array(srcb)
+    return <- cross_join_impl(srca, srcb_arr, type<TA -const -&>, type<TB -const -&>, result).to_sequence_move()
+}
+
+def cross_join(srca : array<auto(TA)>; srcb : array<auto(TB)>; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Cross join — every (TA, TB) pair
+    return <- cross_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, result)
+}
+
+def cross_join_to_array(var srca : iterator<auto(TA)>; var srcb : iterator<auto(TB)>; result) : array<typedecl(result(type<TA>, type<TB>)) -const -&> {
+    //! Cross join returning an array. srcb is materialized first.
+    var srcb_arr <- to_array(srcb)
+    return <- cross_join_impl(srca, srcb_arr, type<TA -const -&>, type<TB -const -&>, result)
+}
+
 [unused_argument(tt)]
 def private group_by_impl(var source; tt : auto(TT); key; element_selector; result_selector)  {
     var tab : table<typedecl(_::unique_key(key(type<TT>))); tuple<typedecl(key(type<TT>)), array<typedecl(element_selector(type<TT>)) -const -&>>>

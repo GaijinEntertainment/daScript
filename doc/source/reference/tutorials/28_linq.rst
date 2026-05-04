@@ -170,6 +170,79 @@ Zip
   var zipped3 = zip(names, ages, scores)
   // zipped3: [(Alice,25,95), (Bob,35,87), (Charlie,30,91)]
 
+Joining
+=======
+
+Five join shapes share most of the surface; only the ``into`` lambda's
+argument Option-ness differs per kind. ``_cross_join`` is the one
+exception — 3-arg form, no ``on`` lambda.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 50 25
+
+   * - Operator
+     - ``into`` lambda signature
+     - Cardinality
+   * - ``_join``
+     - ``(a : TA, b : TB)``
+     - matched pairs only
+   * - ``_left_join``
+     - ``(a : TA, b : Option<TB>)``
+     - every TA, optional TB
+   * - ``_right_join``
+     - ``(a : Option<TA>, b : TB)``
+     - every TB, optional TA
+   * - ``_full_outer_join``
+     - ``(a : Option<TA>, b : Option<TB>)``
+     - every TA + every TB
+   * - ``_cross_join``
+     - ``(a : TA, b : TB)``
+     - Cartesian (TA × TB)
+
+The ``on`` lambda must be an equi-join: ``$(a, b) => a.K == b.K``. Theta
+joins and ``&&``-chained multi-key equality are rejected at macro time::
+
+  let ids     = [1, 2, 3, 4, 5]
+  let matches = [2, 3, 3, 4]   // 3 has two matches; 1 and 5 are unmatched
+
+  // Inner — matched pairs only.
+  var inner = _join(ids, matches,
+      $(la : int, lb : int) => la == lb,
+      $(la : int, lb : int) => (la, lb))
+  // [(2,2), (3,3), (3,3), (4,4)]
+
+  // Left — every left row; right is Option.
+  var lj = _left_join(ids, matches,
+      $(la : int, lb : int) => la == lb,
+      $(la : int, lb : Option<int>) => (la, lb |> unwrap_or(-1)))
+  // [(1,-1), (2,2), (3,3), (3,3), (4,4), (5,-1)]
+
+  // Right — every right row; left is Option.
+  var rj = _right_join(ids, matches,
+      $(la : int, lb : int) => la == lb,
+      $(la : Option<int>, lb : int) => (la |> unwrap_or(-1), lb))
+  // [(2,2), (3,3), (3,3), (4,4)]
+
+  // Full outer — both sides surface; either may be none.
+  var fj = _full_outer_join(ids, matches,
+      $(la : int, lb : int) => la == lb,
+      $(la : Option<int>, lb : Option<int>) => (la |> unwrap_or(-1), lb |> unwrap_or(-1)))
+  // [(1,-1), (2,2), (3,3), (3,3), (4,4), (5,-1)]
+
+  // Cross — Cartesian, no `on` lambda.
+  var cj = _cross_join([1, 2], ["a", "b", "c"],
+      $(la : int, lb : string) => (la, lb))
+  // [(1,a), (1,b), (1,c), (2,a), (2,b), (2,c)]
+
+The function form ``left_join_to_array`` (and matching ``join_to_array`` /
+``right_join_to_array`` / ``full_outer_join_to_array`` / ``cross_join_to_array``)
+takes explicit per-side key selectors and materializes into an array.
+
+Under ``_sql(...)`` from dasSQLITE, all five join shapes lower to native
+SQL — see :ref:`tutorial_sql_left_join` for the details and the
+``is_some`` / ``is_none`` projection idiom.
+
 The ``_fold`` pipeline macro
 ============================
 

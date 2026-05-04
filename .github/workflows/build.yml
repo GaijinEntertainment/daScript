@@ -298,6 +298,16 @@ jobs:
             # tracked separately, real fix is in the binding).
             printf 'leak:format_error\nleak:uriParseSingleUriA\nleak:uriMakeOwner\n' > suppressions.txt
             export LSAN_OPTIONS="suppressions=$(pwd)/suppressions.txt"
+            # TSan suppressions: fusion-engine SimNodes load function arguments via
+            # v_ldu (16-byte unaligned load) regardless of the actual arg size. For
+            # 4-byte / 8-byte args at the tail of an array struct, the upper bytes
+            # of the load fall just past the struct end. Functionally fine — the
+            # callee uses cast<T>::to which only reads the relevant bytes — but
+            # TSan flags the over-read whenever the adjacent memory was just freed
+            # (e.g., issues TextWriter buffer freed during error formatting). All
+            # the matched fusion-point classes share this v_ldu pattern.
+            printf 'race:das::FusionPoint_FastCall_StringPtr\nrace:das::FusionPoint_Call_StringPtr\nrace:das::FusionPoint_CallAndCopyOrMove_StringPtr\nrace:das::Op1FusionPoint_Return_vec4f\nrace:das::Op1FusionPoint_Call_vec4f\n' > tsan_suppressions.txt
+            export TSAN_OPTIONS="suppressions=$(pwd)/tsan_suppressions.txt"
             # Use more time to pass UBSAN and disable leaks in JIT mode because we exit using exit(), and do not call destructors.
             [ "${{ env.das_llvm_disabled }}" = "ON" ] || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --timeout 900 --test ../tests || ASAN_OPTIONS=detect_leaks=0 ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests

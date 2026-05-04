@@ -934,7 +934,7 @@ def document_module_linq(root : string) {
         group_by_regex("Aggregation operations", mod, %regex~(count.*|long_count.*|sum.*|min.*|max.*|average.*|aggregate.*)$%%),
         group_by_regex("Filtering data", mod, %regex~(where_.*)$%%),
         group_by_regex("Partitioning data", mod, %regex~(skip.*|take.*|chunk.*)$%%),
-        group_by_regex("Joining", mod, %regex~(join.*|left_join.*|group_join.*)$%%),
+        group_by_regex("Joining", mod, %regex~(join.*|left_join.*|right_join.*|full_outer_join.*|cross_join.*|group_join.*)$%%),
         group_by_regex("Grouping", mod, %regex~(group_by.*|having.*)$%%),
         group_by_regex("Querying data", mod, %regex~(all.*|any.*|contains.*|none.*)$%%),
         group_by_regex("Element operations", mod, %regex~(first.*|last.*|single.*|element_at.*)$%%),

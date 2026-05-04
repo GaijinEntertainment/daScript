@@ -150,7 +150,7 @@ Tutorials currently teaching a thin slice of what the API surface
 should support. Tracked separately from findings — these are
 not-yet-shipped capabilities, not divergences in shipped behavior.
 
-### G1 — Tutorial 16 covers only INNER + LEFT joins
+### G1 — Tutorial 16 covers only INNER + LEFT joins — RESOLVED
 
 Missing: `_right_join`, `_full_outer_join`, `_cross_join` — none
 implemented in `daslib/linq_boost` or `modules/dasSQLITE/daslib/sqlite_linq`.
@@ -159,6 +159,19 @@ Tutorial 16's note dismisses them as "not shipped" / "raw SQL". Issue
 tracks the work: add all three as first-class chain operators in linq,
 extend `_sql` emission, expand the tutorial (.das + .rst), extend the
 parity test. Surfaced 2026-05-02; Boris flagged as "huge gap."
+
+**Resolution (2026-05-03)**: `_right_join`, `_full_outer_join`,
+`_cross_join` shipped as first-class chain operators in
+`daslib/linq_boost` with corresponding runtime in `daslib/linq`. `_sql`
+translator extended to emit native `RIGHT JOIN` / `FULL OUTER JOIN` /
+`CROSS JOIN` (SQLite ≥3.39 required for FULL/RIGHT; bundled is 3.41.2).
+`is_some` / `is_none` projection probe extended to handle Right (LHS
+arg) and FullOuter (either arg). Tutorial 16 expanded to cover all
+five join shapes; tutorial 28's Section 12 mirrors. Parity test
+extended with three M1/M2/M3 blocks, each with structurally distinct
+named-tuple projections to dodge #2557. Cross runtime materializes
+RHS iterator before nested-loop. Branch:
+`dassqlite-2558-all-joins`.
 
 ## Findings
 

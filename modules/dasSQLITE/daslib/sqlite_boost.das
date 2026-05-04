@@ -5,7 +5,7 @@ options no_unused_function_arguments = false
 options strict_smart_pointers
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
-options _comment_hygiene
+options _comment_hygiene = true
 
 module sqlite_boost shared public
 
