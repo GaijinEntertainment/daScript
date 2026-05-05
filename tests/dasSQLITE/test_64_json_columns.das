@@ -352,3 +352,74 @@ def test_sql_json_malformed_panics_on_extract(t : T?) {
         t |> success(caught, "select_from on row with malformed JSON column panics")
     }
 }
+
+// ===== @sql_json + Option<UserStruct> =====
+// Regression for the runtime/contract bug pair on @sql_json over Option<>: the runtime
+// `sql_bind_to_stmt(Option<T>)` overload strips the Option BEFORE calling user adapters,
+// so `emit_json_blob_adapters_for_struct` must register `sql_bind` for the bare T,
+// not for `Option<T>`. Pairs with the generic `sql_bind($Option<auto(TT)>)` fallback so
+// the macro witness check classifies as TEXT.
+
+struct OptJsonProfile {
+    handle : string
+    score : int
+}
+
+[sql_table(name = "OptUsers")]
+struct OptJsonUser {
+    @sql_primary_key Id : int
+    @sql_json Profile : Option<OptJsonProfile>
+}
+
+[test]
+def test_sql_json_option_roundtrip(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<OptJsonUser>)
+        db |> insert(OptJsonUser(Id = 1, Profile = some(OptJsonProfile(handle = "alice", score = 11))))
+        db |> insert(OptJsonUser(Id = 2, Profile = none(type<OptJsonProfile>)))
+        let rows <- db |> select_from(type<OptJsonUser>) |> _sql() |> _order_by(_.Id)
+        t |> equal(length(rows), 2, "two rows")
+        t |> equal(rows[0].Profile |> is_some, true, "row 0 profile present")
+        t |> equal((rows[0].Profile |> unwrap).handle, "alice", "json handle round-trips")
+        t |> equal((rows[0].Profile |> unwrap).score, 11, "json score round-trips")
+        t |> equal(rows[1].Profile |> is_none, true, "row 1 NULL extracts as none")
+    }
+}
+
+[test]
+def test_sql_json_option_classifies_as_text(t : T?) {
+    let cols <- column_info(type<OptJsonUser>)
+    t |> equal(length(cols), 2, "Id + Profile")
+    t |> equal(cols[1].name, "Profile", "Profile column")
+    t |> equal(cols[1].is_nullable, true, "Option<UserStruct> ↔ nullable")
+    t |> equal(cols[1].data_type, SqlType.Text, "@sql_json on Option<T> classifies as TEXT")
+}
+
+// Adapter dedup edge case: two fields, one bare X and one Option<X>, both @sql_json.
+// After Option-unwrap, both key as X — second field hits the dedup-skip path (no
+// duplicate sql_bind(X) registration; no kind-collision error).
+
+[sql_table(name = "MixedJsonRows")]
+struct MixedJsonRow {
+    @sql_primary_key Id : int
+    @sql_json Required : OptJsonProfile
+    @sql_json Optional : Option<OptJsonProfile>
+}
+
+[test]
+def test_sql_json_dedup_bare_and_option_same_type(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<MixedJsonRow>)
+        db |> insert(MixedJsonRow(Id = 1,
+            Required = OptJsonProfile(handle = "r1", score = 1),
+            Optional = some(OptJsonProfile(handle = "o1", score = 2))))
+        db |> insert(MixedJsonRow(Id = 2,
+            Required = OptJsonProfile(handle = "r2", score = 3),
+            Optional = none(type<OptJsonProfile>)))
+        let rows <- db |> select_from(type<MixedJsonRow>) |> _sql() |> _order_by(_.Id)
+        t |> equal(length(rows), 2, "two rows")
+        t |> equal(rows[0].Required.handle, "r1", "bare X round-trips")
+        t |> equal((rows[0].Optional |> unwrap).handle, "o1", "Option<X> some round-trips")
+        t |> equal(rows[1].Optional |> is_none, true, "Option<X> none → NULL → none")
+    }
+}

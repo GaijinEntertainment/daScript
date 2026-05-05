@@ -12,6 +12,7 @@ module sqlite_boost shared public
 require sqlite public
 
 require strings public
+require daslib/fio                  // [sql_table(schema_from=...)] uses is_absolute / path_join at macro time
 require daslib/contracts
 require daslib/option public
 require daslib/sql public
@@ -125,7 +126,9 @@ def try_open_sqlite(path : string) : Result<SqlRunner, string> {
     var db = SqlRunner()
     let rc = sqlite3_open(path, db.sqlite_handle)
     if (rc != SQLITE_OK) {
-        let msg = "sqlite3_open(\"{path}\") failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        // SQLite leaves *ppDb non-null on most errors, but writes NULL on OOM allocation
+        // failure — sqlite3_errmsg(NULL) is undefined; sqlite3_close_v2(NULL) is a no-op.
+        let msg = db.sqlite_handle == null ? "sqlite3_open(\"{path}\") failed: out of memory" : "sqlite3_open(\"{path}\") failed: {sqlite3_errmsg(db.sqlite_handle)}"
         sqlite3_close_v2(db.sqlite_handle)
         db.sqlite_handle = null
         return err(msg, type<SqlRunner>)
@@ -468,6 +471,13 @@ def sql_bind(value : auto(TT)) : int64 {
         concept_assert(false, "sql_bind: unsupported field type. Define `def sql_bind(v : YourType) : int64 | double | string | array<uint8>` (and a matching sql_extract) in YourType's module.")
         return 0l
     }
+}
+
+// Option<T> fallback — `_::sql_bind` so caller-module adapters (incl. @sql_json/@sql_blob's `sql_bind(T)`) resolve.
+// Without it, `sql_bind(default<Option<int>>)` falls into the auto(TT) catch-all and trips its concept_assert.
+[unused_argument(value)]
+def sql_bind(value : $Option < auto(TT) >) {
+    return _::sql_bind(default<TT>)
 }
 
 [unused_argument(t)]
@@ -1108,6 +1118,70 @@ def column_info(t : type<auto(TT)>) : array<ColumnInfo> {
     //! Returns the column metadata for a `[sql_table]`-tagged struct ``T``.
     //! Render dialect-specific column types via `sqlite_sql_type(c.data_type)`.
     return <- _::_sql_column_info(default<TT>)
+}
+
+[unused_argument(t), template(t)]
+def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
+    //! Verifies the open ``db`` matches struct ``T`` on (name, SqlType, NOT NULL, PRIMARY KEY).
+    //! Returns ``some(errmsg)`` on first mismatch — startup-defense pattern for non-self-created DBs.
+    let want = _::_sql_column_info(default<TT>)
+    let table_name = _::_sql_table_name(default<TT>)
+    var got_result <- read_pragma_table_info(db, table_name)
+    if (got_result |> is_err) {
+        return some(got_result |> unwrap_err)
+    }
+    let got <- got_result._value
+    if (length(got) == 0) {
+        return some("check_schema: table \"{table_name}\" not found in DB.")
+    }
+    if (length(want) != length(got)) {
+        return some("check_schema: \"{table_name}\" column count mismatch — struct has {length(want)} field(s), DB has {length(got)} column(s).")
+    }
+    // Name-keyed: [sql_table] emits SELECTs with explicit columns, so struct/DB order can differ.
+    // With equal counts, missing-from-struct is implied by no name match in the want-loop.
+    var by_name : table<string; int>
+    for (j in range(length(got))) {
+        by_name |> insert(got[j].name, j)
+    }
+    for (i in range(length(want))) {
+        let w = want[i]
+        let g_idx = by_name?[w.name] ?? -1
+        if (g_idx < 0) {
+            return some("check_schema: \"{table_name}\" struct field \"{w.name}\" not found in DB columns.")
+        }
+        let g = got[g_idx]
+        let g_type = affinity_to_sql_type(g.decl_type)
+        if (w.data_type != g_type) {
+            return some("check_schema: \"{table_name}\".\"{w.name}\" SqlType mismatch — struct expects {sqlite_sql_type(w.data_type)}, DB has {sqlite_sql_type(g_type)} (declared \"{g.decl_type}\").")
+        }
+        // SQLite quirk: INTEGER PRIMARY KEY reports notnull=0 in pragma_table_info — treat PK as NOT NULL.
+        let g_nullable = !g.not_null && !g.pk
+        if (w.is_nullable != g_nullable) {
+            if (w.is_nullable) {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch — struct allows NULL (Option<T>), DB column is NOT NULL.")
+            } else {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" nullability mismatch — struct is non-optional, DB column allows NULL.")
+            }
+        }
+        if (w.is_pk != g.pk) {
+            if (w.is_pk) {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch — struct has @sql_primary_key, DB column is not PRIMARY KEY.")
+            } else {
+                return some("check_schema: \"{table_name}\".\"{w.name}\" PK mismatch — DB column is PRIMARY KEY but struct field is missing @sql_primary_key.")
+            }
+        }
+    }
+    return none(type<string>)
+}
+
+[unused_argument(t), template(t)]
+def check_schema(db : SqlRunner; t : type<auto(TT)>) {
+    //! Strict variant of ``try_check_schema``. Panics with the diagnostic message on mismatch.
+    //! Use at app startup to fail loud if the DB you opened doesn't match what your code expects.
+    let r = db |> try_check_schema(type<TT>)
+    if (r |> is_some) {
+        panic(r |> unwrap)
+    }
 }
 
 def try_insert(db : SqlRunner; row : auto(TT)) : Result<int64, string> {
@@ -1966,6 +2040,109 @@ struct private FieldInfo {
     references_clause : string
 }
 
+// ===== schema_from helpers — compile-time DB introspection + runtime check_schema =====
+
+struct private SchemaFromCol {
+    name : string
+    decl_type : string
+    not_null : bool
+    pk : bool
+}
+
+def private try_open_sqlite_readonly(path : string) : Result<SqlRunner, string> {
+    // READONLY open via C++ shim — sqlite3_open_v2 needs NULL vfs (daslang `string` can't carry it).
+    var db = SqlRunner()
+    let rc = sqlite3_open_v2_no_vfs(path, unsafe(addr(db.sqlite_handle)), int(SQLITE_OPEN_READONLY))
+    if (rc != SQLITE_OK) {
+        // OOM-on-open writes NULL into *ppDb; sqlite3_errmsg(NULL) is undefined, close_v2(NULL) is a no-op.
+        let msg = db.sqlite_handle == null ? "sqlite3_open_v2(\"{path}\", READONLY) failed: out of memory" : "sqlite3_open_v2(\"{path}\", READONLY) failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_close_v2(db.sqlite_handle)
+        db.sqlite_handle = null
+        return err(msg, type<SqlRunner>)
+    }
+    return move_ok(db, type<string>)
+}
+
+def private read_pragma_table_info(db : SqlRunner; tbl_name : string) : Result<array<SchemaFromCol>, string> {
+    // Honors db.schema_name so check_schema queries the right schema on ATTACH/with_schema runners.
+    var rows : array<SchemaFromCol>
+    let sql = empty(db.schema_name) ? "PRAGMA table_info({sql_quote_id(tbl_name)})" : "PRAGMA {sql_quote_id(db.schema_name)}.table_info({sql_quote_id(tbl_name)})"
+    var stmt : sqlite3_stmt?
+    let prc = sqlite3_prepare_v2(db.sqlite_handle, sql, stmt)
+    if (prc != SQLITE_OK) {
+        let msg = "PRAGMA table_info({tbl_name}) prepare failed: {sqlite3_errmsg(db.sqlite_handle)}"
+        sqlite3_finalize(stmt)
+        return err(msg, type<array<SchemaFromCol>>)
+    }
+    while (true) {
+        let src = sqlite3_step(stmt)
+        if (src == SQLITE_DONE) {
+            break
+        }
+        if (src != SQLITE_ROW) {
+            let msg = "PRAGMA table_info({tbl_name}) step failed: {sqlite3_errmsg(db.sqlite_handle)}"
+            sqlite3_finalize(stmt)
+            return err(msg, type<array<SchemaFromCol>>)
+        }
+        // Columns: 0=cid, 1=name, 2=type, 3=notnull, 4=dflt_value, 5=pk
+        rows |> emplace(SchemaFromCol(
+            name = sqlite3_column_text_(stmt, 1),
+            decl_type = sqlite3_column_text_(stmt, 2),
+            not_null = sqlite3_column_int(stmt, 3) != 0,
+            pk = sqlite3_column_int(stmt, 5) != 0
+        ))
+    }
+    sqlite3_finalize(stmt)
+    return <- move_ok(rows, type<string>)
+}
+
+def private affinity_to_sql_type(decl_type : string) : SqlType {
+    // SQLite affinity rules: INTEGER first, then TEXT, BLOB, REAL, NUMERIC last (https://www.sqlite.org/datatype3.html § 3.1).
+    let upper = decl_type |> to_upper
+    if (find(upper, "INT") >= 0) {
+        return SqlType.Integer
+    }
+    if (find(upper, "CHAR") >= 0 || find(upper, "CLOB") >= 0 || find(upper, "TEXT") >= 0) {
+        return SqlType.Text
+    }
+    if (find(upper, "BLOB") >= 0 || empty(decl_type)) {
+        return SqlType.Blob
+    }
+    if (find(upper, "REAL") >= 0 || find(upper, "FLOA") >= 0 || find(upper, "DOUB") >= 0) {
+        return SqlType.Real
+    }
+    // NUMERIC affinity (NUMERIC/DECIMAL/BOOLEAN/DATE/DATETIME) → double; user partial-body overrides for BOOL/DATE.
+    return SqlType.Real
+}
+
+def private affinity_to_typedecl(sql_type : SqlType; not_null : bool) : TypeDeclPtr {
+    // Build the daslang TypeDecl matching a SQLite affinity class; wrap in Option<T> if nullable.
+    var inner : TypeDeclPtr
+    if (sql_type == SqlType.Integer) {
+        inner = qmacro_type(type<int64>)
+    } elif (sql_type == SqlType.Real) {
+        inner = qmacro_type(type<double>)
+    } elif (sql_type == SqlType.Text) {
+        inner = qmacro_type(type<string>)
+    } elif (sql_type == SqlType.Blob) {
+        inner = qmacro_type(type<array<uint8>>)
+    } else {
+        return null
+    }
+    if (not_null) {
+        return inner
+    }
+    return qmacro_type(type<$Option<$t(inner)>>)
+}
+
+def private resolve_schema_from_path(p : string) : string {
+    // Absolute → as-is; relative → joined under get_das_root() via daslib/fio.
+    if (is_absolute(p)) {
+        return p
+    }
+    return path_join(get_das_root(), p)
+}
+
 def private is_option_field_type(td : TypeDeclPtr) : bool {
     if (td == null) {
         return false
@@ -1978,6 +2155,37 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
         && td.structType.name == "Option"
         && td.structType._module != null
         && td.structType._module.name == "option")
+}
+
+def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
+    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], structType in `_value`.
+    if (td == null) {
+        return td
+    }
+    if (td.baseType == Type.typeMacro) {
+        if (length(td.dimExpr) < 2 || td.dimExpr[0] == null || !(td.dimExpr[0] is ExprConstString)) {
+            return td
+        }
+        if ((td.dimExpr[0] as ExprConstString).value != "Option") {
+            return td
+        }
+        if (td.dimExpr[1] == null || !(td.dimExpr[1] is ExprTypeDecl)) {
+            return td
+        }
+        return clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
+    }
+    if (td.baseType == Type.tStructure
+            && td.structType != null
+            && td.structType.name == "Option"
+            && td.structType._module != null
+            && td.structType._module.name == "option") {
+        for (f in td.structType.fields) {
+            if ("{f.name}" == "_value") {
+                return clone_type(f._type)
+            }
+        }
+    }
+    return td
 }
 
 def private build_create_indexes_sql(st : StructurePtr; table_name : string; field_names : array<string>; var errors : das_string; var ok : bool&) : string {
@@ -2043,19 +2251,19 @@ def private extract_string_return(var fn : FunctionPtr) : string {
         return ""
     }
     let blk = fn.body as ExprBlock
-    if (length(blk.list) == 0) {
-        return ""
+    // Walk past pre-return concept_asserts emitted by schema_from contract checks.
+    for (stmt in blk.list) {
+        if (!(stmt is ExprReturn)) {
+            continue
+        }
+        let ret = stmt as ExprReturn
+        let val = ret.subexpr
+        if (val == null || !(val is ExprConstString)) {
+            return ""
+        }
+        return string((val as ExprConstString).value)
     }
-    let stmt = blk.list[0]
-    if (!(stmt is ExprReturn)) {
-        return ""
-    }
-    let ret = stmt as ExprReturn
-    let val = ret.subexpr
-    if (val == null || !(val is ExprConstString)) {
-        return ""
-    }
-    return string((val as ExprConstString).value)
+    return ""
 }
 
 def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPtr {
@@ -2195,6 +2403,19 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 class SqlTableMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let table_name = find_annotation(args, "name", string(st.name))
+
+        var schema_assert_exprs : array<ExpressionPtr>
+        let schema_from_arg = find_arg(args, "schema_from")
+        if (schema_from_arg is tString) {
+            let raw_path = string(schema_from_arg as tString)
+            if (empty(raw_path)) {
+                errors := "[sql_table]: schema_from=\"\" is invalid — provide a non-empty path to a SQLite database file."
+                return false
+            }
+            if (!apply_schema_from(st, raw_path, table_name, schema_assert_exprs, errors)) {
+                return false
+            }
+        }
 
         var fields : array<FieldInfo>
         fields |> reserve(length(st.fields))
@@ -2376,7 +2597,8 @@ class SqlTableMacro : AstStructureAnnotation {
         }
 
         // [sql_index] siblings rewrite the placeholder body in finish() (st.annotations not populated yet here).
-        var fn_table_name = make_table_name_fn(st, table_name)
+        // schema_assert_exprs ride along inside _sql_table_name's body as typecheck-time concept_asserts.
+        var fn_table_name = make_table_name_fn(st, table_name, schema_assert_exprs)
         compiling_module() |> add_function(fn_table_name)
         var fn_drop = make_drop_sql_fn(st, table_name)
         compiling_module() |> add_function(fn_drop)
@@ -2412,8 +2634,123 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
 
-    def make_table_name_fn(var st : StructurePtr; table_name : string) : FunctionPtr {
+    def apply_schema_from(var st : StructurePtr;
+                          raw_path : string;
+                          tbl_name : string;
+                          var assert_exprs : array<ExpressionPtr>&;
+                          var errors : das_string) : bool {
+        // Resolve + open the .db at compile time (read-only — won't create a stray empty file).
+        // Open-failure surfaces as the macro error.
+        let resolved = resolve_schema_from_path(raw_path)
+        var db_result <- try_open_sqlite_readonly(resolved)
+        if (db_result |> is_err) {
+            errors := "[sql_table]: schema_from=\"{raw_path}\" (resolved \"{resolved}\") — open failed: {db_result |> unwrap_err}"
+            return false
+        }
+        var inscope db <- db_result._value
+        // PRAGMA table_info → column metadata.
+        var cols_result <- read_pragma_table_info(db, tbl_name)
+        if (cols_result |> is_err) {
+            errors := "[sql_table]: schema_from=\"{raw_path}\" — {cols_result |> unwrap_err}"
+            return false
+        }
+        let cols <- cols_result._value
+        if (length(cols) == 0) {
+            errors := "[sql_table]: schema_from=\"{raw_path}\" — table \"{tbl_name}\" has no columns or doesn't exist in this database."
+            return false
+        }
+        // Track which schema cols are covered by hand-declared fields.
+        var covered : array<bool>
+        covered |> resize(length(cols))
+        assert_exprs |> reserve(length(st.fields))
+        // Validate hand-declared fields: name, PK, nullability, and emit SqlType concept_asserts.
+        for (ufi in range(length(st.fields))) {
+            let ufname = string(st.fields[ufi].name)
+            var matched_col_idx = -1
+            for (ci in range(length(cols))) {
+                if (cols[ci].name == ufname) {
+                    matched_col_idx = ci
+                    break
+                }
+            }
+            if (matched_col_idx < 0) {
+                errors := "[sql_table]: schema_from=\"{raw_path}\" — hand-declared field '{ufname}' not found in table \"{tbl_name}\". Either remove the field, rename it, or update the .db schema."
+                return false
+            }
+            covered[matched_col_idx] = true
+            let col_name_s = cols[matched_col_idx].name
+            let col_decl_type = cols[matched_col_idx].decl_type
+            let col_not_null = cols[matched_col_idx].not_null
+            let col_pk = cols[matched_col_idx].pk
+            // PK contract.
+            let user_is_pk = find_annotation(st.fields[ufi].annotation, "sql_primary_key", false)
+            if (user_is_pk != col_pk) {
+                if (user_is_pk) {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" — field '{ufname}' is @sql_primary_key but column \"{col_name_s}\" in \"{tbl_name}\" is not PRIMARY KEY."
+                } else {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col_name_s}\" in \"{tbl_name}\" is PRIMARY KEY but field '{ufname}' is missing @sql_primary_key."
+                }
+                return false
+            }
+            // Nullability contract — Option<T> ↔ NULL allowed.
+            // SQLite quirk: INTEGER PRIMARY KEY reports notnull=0 in pragma — treat PK as NOT NULL anyway.
+            let user_is_nullable = is_option_field_type(st.fields[ufi]._type)
+            let col_is_nullable = !col_not_null && !col_pk
+            if (user_is_nullable != col_is_nullable) {
+                if (user_is_nullable) {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" — field '{ufname}' is Option<T> but column \"{col_name_s}\" in \"{tbl_name}\" is NOT NULL. Drop the Option<> wrapper."
+                } else {
+                    errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col_name_s}\" in \"{tbl_name}\" allows NULL but field '{ufname}' is non-optional. Use Option<T>."
+                }
+                return false
+            }
+            // SqlType contract: static_if peeks at `_::sql_bind`'s return via `default<typedecl(...)>`.
+            // Generic `sql_bind(Option<T>)` fallback recurses to inner T's adapter via `_::`.
+            let expected_sql_type = affinity_to_sql_type(col_decl_type)
+            let storage_label = sqlite_sql_type(expected_sql_type)
+            var expected_native = ""
+            if (expected_sql_type == SqlType.Integer) {
+                expected_native = "int64"
+            } elif (expected_sql_type == SqlType.Real) {
+                expected_native = "double"
+            } elif (expected_sql_type == SqlType.Text) {
+                expected_native = "string"
+            } else {
+                expected_native = "array<uint8>"
+            }
+            let msg = "[sql_table] schema_from: field '{ufname}' SqlType does not match column \"{col_name_s}\" in \"{tbl_name}\" (expected {storage_label})."
+            assert_exprs |> push(qmacro_expr(${
+                static_if (typeinfo stripped_typename(default<typedecl(_::sql_bind(default<$t(st.fields[ufi]._type)>))>) != $v(expected_native)) {
+                    concept_assert(false, $v(msg));
+                }
+            }))
+        }
+        // Synthesize fields for uncovered schema columns.
+        for (ci in range(length(cols))) {
+            if (covered[ci]) {
+                continue
+            }
+            let col = cols[ci]
+            let sql_type = affinity_to_sql_type(col.decl_type)
+            // SQLite quirk: INTEGER PRIMARY KEY columns report notnull=0 in pragma_table_info because
+            // `INTEGER PRIMARY KEY` aliases rowid (which has its own NULL handling). Treat PK as NOT NULL.
+            let effective_not_null = col.not_null || col.pk
+            var td = affinity_to_typedecl(sql_type, effective_not_null)
+            if (td == null) {
+                errors := "[sql_table]: schema_from=\"{raw_path}\" — column \"{col.name}\" declared type \"{col.decl_type}\" couldn't be mapped to a daslang type."
+                return false
+            }
+            let fi = st |> add_structure_field(col.name, td, default<ExpressionPtr>)
+            if (col.pk) {
+                st.fields[fi].annotation |> add_annotation_argument("sql_primary_key", true)
+            }
+        }
+        return true
+    }
+
+    def make_table_name_fn(var st : StructurePtr; table_name : string; var assert_exprs : array<ExpressionPtr>) : FunctionPtr {
         var fn = qmacro_function("_sql_table_name") $(typ : $t(st)) : string {
+            $b(assert_exprs)
             return $v(table_name)
         }
         fn.flags |= FunctionFlags.generated
@@ -2950,7 +3287,8 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
         if (!info.is_json && !info.is_blob) {
             continue
         }
-        let ft = st.fields[i]._type
+        // Unwrap: runtime sql_bind_to_stmt(Option<T>) strips Option before calling sql_bind, so adapter must bind bare T.
+        let ft = unwrap_option_payload_type(st.fields[i]._type)
         if (ft == null) {
             continue
         }
@@ -3873,15 +4211,16 @@ class SqlFunctionMacro : AstFunctionAnnotation {
         let tag2 = tags[2]
         let tag3 = tags[3]
         let retTag = retR.tag
-        // Build an ExprAddr with explicit funcType so the typer resolves to OUR `func`
-        // even when an imported module exports a same-named function with a different
-        // signature (e.g. user `normalize(string)` colliding with `math::normalize(float2)`).
+        // ExprAddr with explicit funcType + `__::` target — funcType alone ties on same-signature imports.
         var fnType = new TypeDecl(at = func.at, baseType = Type.tFunction)
         for (a in func.arguments) {
             fnType.argTypes |> emplace_new <| clone_type(a._type)
         }
         fnType.firstType = clone_type(func.result)
-        var fnAddr = new ExprAddr(at = func.at, target := funcDasName, funcType <- fnType)
+        // `__::<name>` scopes ExprAddr resolution to *this* module (where `func` lives), so
+        // a same-signature import (e.g. fio_core::normalize) doesn't tie with user's `normalize`.
+        // funcType-only disambiguation isn't enough when the imported symbol shares the signature.
+        var fnAddr = new ExprAddr(at = func.at, target := "__::{funcDasName}", funcType <- fnType)
         reg.list |> emplace_new <| qmacro_block() {
             let thunk <- @(db : SqlRunner) : SqlError {
                 return _::_try_register_function_check_rc(db, $v(sqlName), $e(fnAddr),

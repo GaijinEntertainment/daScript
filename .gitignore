@@ -28,6 +28,7 @@ _aot_generated/
 modules/dasSFML/libsfml/
 site/
 doc/sphinx-build/
+doc/sphinx-build-latex/
 doc/source/stdlib/generated/
 doc/source/__pycache__/
 doc/source/_build/doctrees/environment.pickle
@@ -95,3 +96,4 @@ modules/dasStbImage/dasModuleStbImage_debug.pdb
 modules/dasStdDlg/dasModuleStdDlg_debug.pdb
 modules/dasUnitTest/dasModuleUnitTest_debug.pdb
 build-ubsan/.ninja_log
+doc/sphinx-build-latex/environment.pickle

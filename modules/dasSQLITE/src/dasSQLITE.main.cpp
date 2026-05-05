@@ -72,6 +72,14 @@ int sqlite3_prepare_v2_no_tail ( sqlite3 * db, const char * sql, sqlite3_stmt **
     return sqlite3_prepare_v2(db, sql, -1, stmt, nullptr);
 }
 
+// vfs-free open_v2 wrapper: daslang's `string` parameter cannot represent C `NULL`,
+// so an empty daslang string passed as zVfs hits sqlite as "" and fails ("no such vfs:").
+// The schema_from macro needs READONLY-no-create open semantics, so we expose this
+// shim that always passes nullptr for the default vfs.
+int sqlite3_open_v2_no_vfs ( const char * filename, sqlite3 ** ppDb, int flags ) {
+    return sqlite3_open_v2(filename, ppDb, flags, nullptr);
+}
+
 void Module_dasSQLITE::initMain() {
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
@@ -89,6 +97,9 @@ void Module_dasSQLITE::initMain() {
     addExtern<DAS_BIND_FUN(sqlite3_prepare_v2_no_tail)>(*this,lib,"sqlite3_prepare_v2_no_tail",
         SideEffects::worstDefault, "sqlite3_prepare_v2_no_tail")
             ->args({"db","sql","stmt"});
+    addExtern<DAS_BIND_FUN(sqlite3_open_v2_no_vfs)>(*this,lib,"sqlite3_open_v2_no_vfs",
+        SideEffects::worstDefault, "sqlite3_open_v2_no_vfs")
+            ->args({"filename","ppDb","flags"});
     addExtern<DAS_BIND_FUN(sqlite3_register_function)>(*this,lib,"sqlite3_register_function",
         SideEffects::worstDefault, "sqlite3_register_function")
             ->args({"db","name","fn","nArgs",

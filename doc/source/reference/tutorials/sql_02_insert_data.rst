@@ -84,6 +84,30 @@ Both panic on libsqlite3 error. The non-panicking siblings —
 ``try_create_table``, ``try_drop_table_if_exists`` — return
 ``SqlError`` (``= Option<string>``, ``none`` on success).
 
+``check_schema`` --- runtime startup defense
+=============================================
+
+After opening a DB you didn't just create, validate that the
+on-disk schema matches the ``[sql_table]`` struct on (name,
+SqlType, NOT NULL, PRIMARY KEY). Catches column renames, type
+changes, missing columns at the startup site instead of letting
+them surface as silent wrong-results later.
+
+.. code-block:: das
+
+    with_sqlite("test.db") <| $(db) {
+        db |> check_schema(type<Car>)            // panics with a column-named diagnostic on mismatch
+        // ... or use try_check_schema for the non-panicking Option form
+        // (SqlError = Option<string>: none on match, some(errmsg) on mismatch):
+        // let r = db |> try_check_schema(type<Car>)
+        // if (r |> is_some) { panic(r |> unwrap) }
+    }
+
+Works on any ``[sql_table]`` struct, not just ones derived via
+``schema_from`` (:ref:`tutorial_sql_schema_from`). For code where
+the struct is the source of truth and the DB might drift,
+``check_schema`` is the recommended startup-defense pattern.
+
 INSERT — single row
 ===================
 
