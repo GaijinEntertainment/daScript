@@ -9,7 +9,7 @@
 //   - Short flags with @clarg_short = "v"
 //   - Doc strings with @clarg_doc
 //   - Skipping fields with @clarg_skip
-//   - Error handling (parse_args returns "" on success, error message on failure)
+//   - Error handling (parse_args returns Result<T, string>)
 //   - Introspection with get_command_info
 //   - Help rendering with print_help / format_help
 //   - Reading process arguments: get_cli_arguments() (after "--") vs
@@ -25,8 +25,8 @@ require daslib/clargs
 // Section 1: Defining a CLI args struct
 // ============================================================
 // Annotate any struct with [CommandLineArgs] to auto-generate:
-//   parse_args(var dst; args : array<string>) : string
-//   parse_args(var dst) : string          (reads process CLI args)
+//   parse_args(type<T>; args : array<string>) : Result<T, string>
+//   parse_args(type<T>) : Result<T, string>     (reads process CLI args)
 //   get_command_info(type<T>) : CommandInfo
 //
 // Field names map to flag names with underscores replaced by dashes:
@@ -42,12 +42,12 @@ struct Config {
 
 def test_basic_parsing() {
     print("=== Basic flag parsing ===\n")
-    var cfg = Config()
-    let err = parse_args(cfg, ["--name", "Alice", "--count=42", "--verbose", "--timeout=1.5"])
-    if (err != "") {
-        print("  error: {err}\n")
+    var r <- parse_args(type<Config>, ["--name", "Alice", "--count=42", "--verbose", "--timeout=1.5"])
+    if (r |> is_err) {
+        print("  error: {r |> unwrap_err}\n")
         return
     }
+    let cfg <- r |> move_unwrap
     print("  name    = {cfg.name}\n")
     print("  count   = {cfg.count}\n")
     print("  verbose = {cfg.verbose}\n")
@@ -68,13 +68,12 @@ def test_basic_parsing() {
 
 def test_bool_flags() {
     print("\n=== Bool flags ===\n")
-    var cfg = Config()
 
-    parse_args(cfg, ["--verbose"])
-    print("  bare --verbose: {cfg.verbose}\n")
+    let cfg1 <- parse_args(type<Config>, ["--verbose"]) |> move_unwrap
+    print("  bare --verbose: {cfg1.verbose}\n")
 
-    parse_args(cfg, ["--verbose=false"])
-    print("  --verbose=false: {cfg.verbose}\n")
+    let cfg2 <- parse_args(type<Config>, ["--verbose=false"]) |> move_unwrap
+    print("  --verbose=false: {cfg2.verbose}\n")
     // output:
     //   bare --verbose: true
     //   --verbose=false: false
@@ -100,18 +99,17 @@ struct LogConfig {
 
 def test_enum_flags() {
     print("\n=== Enum flags ===\n")
-    var cfg = LogConfig()
-    let err = parse_args(cfg, ["--level", "Warning"])
-    if (err != "") {
-        print("  error: {err}\n")
+    var r <- parse_args(type<LogConfig>, ["--level", "Warning"])
+    if (r |> is_err) {
+        print("  error: {r |> unwrap_err}\n")
         return
     }
+    let cfg <- r |> move_unwrap
     print("  level is Warning: {cfg.level == LogLevel.Warning}\n")
 
     // Invalid enum value returns an error
-    var bad = LogConfig()
-    let err2 = parse_args(bad, ["--level", "Verbose"])
-    print("  unknown enum error: '{err2}'\n")
+    var r2 <- parse_args(type<LogConfig>, ["--level", "Verbose"])
+    print("  unknown enum error: '{r2 |> unwrap_err}'\n")
     // output:
     //   level is Warning: true
     //   unknown enum error: '--level: invalid enum value 'Verbose''
@@ -130,12 +128,12 @@ struct BuildConfig {
 
 def test_array_flags() {
     print("\n=== Array flags ===\n")
-    var cfg = BuildConfig()
-    let err = parse_args(cfg, ["--tags=debug", "--tags", "release", "--tags=profile"])
-    if (err != "") {
-        print("  error: {err}\n")
+    var r <- parse_args(type<BuildConfig>, ["--tags=debug", "--tags", "release", "--tags=profile"])
+    if (r |> is_err) {
+        print("  error: {r |> unwrap_err}\n")
         return
     }
+    let cfg <- r |> move_unwrap
     for (tag in cfg.tags) {
         print("  tag: {tag}\n")
     }
@@ -161,15 +159,19 @@ struct DeployConfig {
 
 def test_required_flags() {
     print("\n=== Required flags ===\n")
-    var cfg = DeployConfig()
 
     // Missing --token
-    let err1 = parse_args(cfg, ["--host=prod.example.com"])
-    print("  missing required: {err1 != "" ? "error (expected)" : "ok (unexpected)"}\n")
+    var r1 <- parse_args(type<DeployConfig>, ["--host=prod.example.com"])
+    print("  missing required: {r1 |> is_err ? "error (expected)" : "ok (unexpected)"}\n")
 
     // Both present
-    let err2 = parse_args(cfg, ["--host=prod.example.com", "--token=secret123"])
-    print("  both present: {err2 == "" ? "ok" : err2}\n")
+    var r2 <- parse_args(type<DeployConfig>, ["--host=prod.example.com", "--token=secret123"])
+    if (r2 |> is_err) {
+        print("  both present: {r2 |> unwrap_err}\n")
+        return
+    }
+    let cfg <- r2 |> move_unwrap
+    print("  both present: ok\n")
     print("  token = {cfg.token}\n")
     // output:
     //   missing required: error (expected)
@@ -199,13 +201,13 @@ struct AppConfig {
 
 def test_field_attributes() {
     print("\n=== Field attributes ===\n")
-    var cfg = AppConfig()
-    cfg.internal_id = 99  // direct assignment, not via CLI
-    let err = parse_args(cfg, ["--output-dir=/tmp/out", "--workers=4"])
-    if (err != "") {
-        print("  error: {err}\n")
+    var r <- parse_args(type<AppConfig>, ["--output-dir=/tmp/out", "--workers=4"])
+    if (r |> is_err) {
+        print("  error: {r |> unwrap_err}\n")
         return
     }
+    var cfg <- r |> move_unwrap
+    cfg.internal_id = 99  // direct assignment, not via CLI
     print("  out_path    = {cfg.out_path}\n")
     print("  workers     = {cfg.workers}\n")
     print("  internal_id = {cfg.internal_id}\n")
@@ -218,8 +220,9 @@ def test_field_attributes() {
 // ============================================================
 // Section 7: Error handling
 // ============================================================
-// parse_args returns "" on success.
-// On failure it returns a descriptive error string, e.g.:
+// parse_args returns Result<T, string>.
+// Use is_err / unwrap_err / move_unwrap to inspect the outcome.
+// Error messages are descriptive, e.g.:
 //   "--count: invalid int value 'abc'"
 //   "--token: missing required flag"
 //   "--level: invalid enum value 'Verbose'"
@@ -231,9 +234,8 @@ struct TypedConfig {
 
 def test_error_handling() {
     print("\n=== Error handling ===\n")
-    var cfg = TypedConfig()
-    let err = parse_args(cfg, ["--count", "not_a_number"])
-    print("  error: '{err}'\n")
+    var r <- parse_args(type<TypedConfig>, ["--count", "not_a_number"])
+    print("  error: '{r |> unwrap_err}'\n")
     // output:
     //   error: '--count: invalid int value 'not_a_number''
 }
@@ -265,14 +267,9 @@ def test_short_flags() {
     print("\n=== Short flags ===\n")
 
     // Long form, short form, and mixed form all parse identically.
-    var a = ServerConfig()
-    parse_args(a, ["--port", "8080", "--verbose", "--tags=alpha", "--tags=beta"])
-
-    var b = ServerConfig()
-    parse_args(b, ["-p", "8080", "-v", "-t=alpha", "-t=beta"])
-
-    var c = ServerConfig()
-    parse_args(c, ["-p=8080", "--verbose", "-t", "alpha", "--tags=beta"])
+    let a <- parse_args(type<ServerConfig>, ["--port", "8080", "--verbose", "--tags=alpha", "--tags=beta"]) |> move_unwrap
+    let b <- parse_args(type<ServerConfig>, ["-p", "8080", "-v", "-t=alpha", "-t=beta"]) |> move_unwrap
+    let c <- parse_args(type<ServerConfig>, ["-p=8080", "--verbose", "-t", "alpha", "--tags=beta"]) |> move_unwrap
 
     print("  long-only port    = {a.port}, verbose = {a.verbose}, tags = {a.tags}\n")
     print("  short-only port   = {b.port}, verbose = {b.verbose}, tags = {b.tags}\n")
@@ -357,7 +354,7 @@ def test_help_rendering() {
 //   get_cli_arguments()    — script-style, returns the slice AFTER "--"
 //                            in argv.  Used when daslang itself is the
 //                            host:  daslang script.das -- --name Alice
-//                            parse_args(cfg) (the no-argument overload)
+//                            parse_args(type<T>) (the no-args overload)
 //                            calls this internally.
 //
 //   get_program_args()     — standalone-tool style, returns argv[1..]

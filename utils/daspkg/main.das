@@ -51,13 +51,13 @@ def main() {
         return 0
     }
 
-    var parsed = DaspkgArgs()
-    let parse_err = parse_args(parsed, argv)
-    if (!empty(parse_err)) {
-        to_log(LOG_ERROR, "daspkg: {parse_err}\n\n")
+    var parse_r <- parse_args(type<DaspkgArgs>, argv)
+    if (parse_r |> is_err) {
+        to_log(LOG_ERROR, "daspkg: {parse_r |> unwrap_err}\n\n")
         print_usage()
         return 1
     }
+    var parsed <- parse_r |> move_unwrap
     apply_global_flags(parsed)
 
     let command = parsed.command ?? ""

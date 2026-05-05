@@ -511,16 +511,16 @@ def run_pipeline(cfg : Config) : int {
 
 [export]
 def main() : int {
-    var cfg = Config()
-    let err = parse_args(cfg)
+    var r <- parse_args(type<Config>)
+    if (r |> is_err) {
+        to_log(LOG_ERROR, "error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<Config>), "find-dupe")
+        return 1
+    }
+    var cfg <- r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "find-dupe")
         return 0
-    }
-    if (err != "") {
-        to_log(LOG_ERROR, "error: {err}\n\n")
-        print_help(get_command_info(type<Config>), "find-dupe")
-        return 1
     }
     if (cfg.smoke_test) {
         smoke_test()

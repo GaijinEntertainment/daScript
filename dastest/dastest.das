@@ -259,12 +259,12 @@ def main() : int {
     // else for this main() comes from the parsed test_args below.
     var raw_args <- get_command_line_arguments()
 
-    var test_args = DastestArgs()
-    let parse_err = parse_args(test_args)
-    if (parse_err != "") {
-        log::red("command-line args: {parse_err}")
+    var parse_result <- parse_args(type<DastestArgs>)
+    if (parse_result |> is_err) {
+        log::red("command-line args: {parse_result |> unwrap_err}")
         return 1
     }
+    var test_args <- parse_result |> move_unwrap
 
     if (!empty(test_args.run)) {
         // Isolated-mode single-file: --run=<file> covers both `--run X` and

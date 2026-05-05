@@ -91,60 +91,69 @@ def test_is_index_name(t : T?) {
 [test]
 def test_parse_args(t : T?) {
     t |> run("install command") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["install", "dasImgui"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["install", "dasImgui"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "install")
         t |> equal(parsed.command_arg ?? "", "dasImgui")
         t |> success(!parsed.force)
     }
     t |> run("install with force") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["install", "dasImgui", "--force"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["install", "dasImgui", "--force"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "install")
         t |> equal(parsed.command_arg ?? "", "dasImgui")
         t |> success(parsed.force)
     }
     t |> run("install with root") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["--root", "/tmp/proj", "install", "foo"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["--root", "/tmp/proj", "install", "foo"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "install")
         t |> equal(parsed.command_arg ?? "", "foo")
         t |> equal(parsed.root, "/tmp/proj")
     }
     t |> run("list command no arg") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["list"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["list"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.command_arg |> is_none)
     }
     t |> run("no command") @(t : T?) {
-        var parsed = DaspkgArgs()
         let empty_args : array<string>
-        t |> equal(parse_args(parsed, empty_args), "")
+        let r <- parse_args(type<DaspkgArgs>, empty_args)
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> success(parsed.command |> is_none)
     }
     t |> run("cleanup command") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["cleanup"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["cleanup"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "cleanup")
         t |> success(!parsed.force)
     }
     t |> run("cleanup with force") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["cleanup", "--force"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["cleanup", "--force"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "cleanup")
         t |> success(parsed.force)
     }
     t |> run("cleanup with global and force") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["cleanup", "--global", "--force"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["cleanup", "--global", "--force"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "cleanup")
         t |> success(parsed.force)
         t |> success(parsed.global_flag)
     }
     t |> run("default root is dot") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["list"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["list"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.root, ".")
     }
 }
@@ -1305,8 +1314,9 @@ def test_ansi_colors(t : T?) {
 def test_parse_args_color_flags(t : T?) {
     t |> run("--color sets use_tty_colors") @(t : T?) {
         use_tty_colors = false
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["list", "--color"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["list", "--color"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> success(parsed.color, "color flag parsed")
         apply_global_flags(parsed)
         t |> success(use_tty_colors)
@@ -1314,16 +1324,15 @@ def test_parse_args_color_flags(t : T?) {
     }
     t |> run("--no-color clears use_tty_colors") @(t : T?) {
         use_tty_colors = true
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["list", "--no-color"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["list", "--no-color"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> success(parsed.no_color, "no_color flag parsed")
         apply_global_flags(parsed)
         t |> success(!use_tty_colors)
     }
     t |> run("--color and --no-color together is mutex error") @(t : T?) {
-        var parsed = DaspkgArgs()
-        let err = parse_args(parsed, ["list", "--color", "--no-color"])
-        t |> success(!empty(err), "mutex group rejects both")
+        t |> success(parse_args(type<DaspkgArgs>, ["list", "--color", "--no-color"]) |> is_err, "mutex group rejects both")
     }
 }
 
@@ -1351,21 +1360,24 @@ def test_read_manifest_rich(t : T?) {
 [test]
 def test_parse_args_global_flag(t : T?) {
     t |> run("--global flag parsed") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["install", "foo", "--global"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["install", "foo", "--global"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "install")
         t |> equal(parsed.command_arg ?? "", "foo")
         t |> success(parsed.global_flag)
     }
     t |> run("-g shorthand") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["-g", "list"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["-g", "list"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> equal(parsed.command ?? "", "list")
         t |> success(parsed.global_flag)
     }
     t |> run("default global is false") @(t : T?) {
-        var parsed = DaspkgArgs()
-        t |> equal(parse_args(parsed, ["install", "foo"]), "")
+        let r <- parse_args(type<DaspkgArgs>, ["install", "foo"])
+        t |> success(r |> is_ok, "parse succeeds")
+        var parsed <- r |> move_unwrap
         t |> success(!parsed.global_flag)
     }
 }

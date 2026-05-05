@@ -157,8 +157,8 @@ class JIT_LLVM : AstSimulateMacro {
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
 
-        var cli_opts = JitCliOptions()
-        let _ = parse_args(cli_opts)
+        var r <- parse_args(type<JitCliOptions>)
+        var cli_opts = r |> unwrap_or_default
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         let debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info)
         let dump_ir = cli_opts.dump_ir |> unwrap_or(false)

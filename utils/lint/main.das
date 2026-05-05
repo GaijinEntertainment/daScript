@@ -177,19 +177,19 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditio
 
 [export]
 def main() : int {
-    var cfg = Config()
-    let err = parse_args(cfg)
+    var r <- parse_args(type<Config>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<Config>), "utils/lint/main.das")
+        return 1
+    }
+    let cfg <- r |> move_unwrap
     if (cfg.help) {
         print("Unified lint checker for daslang files.\n")
         print("Runs paranoid, performance, and style lint passes with recursive directory scanning.\n\n")
         print_help(get_command_info(type<Config>), "utils/lint/main.das")
         print("\nPositional arguments: one or more files or directories to lint.\n")
         return 0
-    }
-    if (err != "") {
-        print("error: {err}\n\n")
-        print_help(get_command_info(type<Config>), "utils/lint/main.das")
-        return 1
     }
     let cli_args <- get_user_args()
     var paths : array<string>
