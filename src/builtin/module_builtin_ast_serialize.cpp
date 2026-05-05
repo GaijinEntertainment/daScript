@@ -2414,7 +2414,9 @@ namespace das {
                     continue;
                 }
 
-                if ( writingReadyModules.count(m) == 0 ) {
+                bool isNew = writingReadyModules.count(m) == 0;
+                *this << isNew;
+                if ( isNew ) {
                     writingReadyModules.insert(m);
                     *this << *m;
                 }
@@ -2447,15 +2449,30 @@ namespace das {
                     continue;
                 }
 
-                if ( auto m = libGroup.findModule(name) ) {
-                    program->library.addModule(m);
-                    continue;
+                bool isNew = false;
+                *this << isNew;
+                Module * existing = libGroup.findModule(name);
+                if ( !isNew ) {
+                    if ( existing ) {
+                        program->library.addModule(existing);
+                        continue;
+                    }
+                    LOG(LogLevel::warning) << "das: serialize: module '" << name << "' not found";
+                    program->failToCompile = true;
+                    return;
                 }
 
                 Module* deser = nullptr;
                 try {
                     deser = new Module();
                     deser->setModuleName(name);
+                    if ( existing ) {
+                        program->library.addModule(existing);
+                        ser.serializeModule(*deser, /*already_exists*/true);
+                        deser->builtIn = false; // suppress dtor unlink assert
+                        delete deser;
+                        continue;
+                    }
                     program->library.addModule(deser);
                     ser << *deser;
                 } catch ( const dasException & r ) {
