@@ -24,14 +24,49 @@ struct LogPartialPkRedundant {
 }
 
 // 3) Option<T> in partial body against nullable columns — must compile.
-// Witness routes through `sql_storage_enum_for` (Option-aware); a bare `sql_bind` lookup
-// would hit the generic auto overload and trip its concept_assert here.
+// The generic `sql_bind($Option<auto(TT)>)` fallback in sqlite_boost routes the
+// witness through inner T's sql_bind; without it the contract check would hit
+// the auto-overload's concept_assert.
 [sql_table(name = "Items", schema_from = "tests/dasSQLITE/test_data/schema_from_nullable.db")]
 struct ItemPartialOption {
     @sql_primary_key Id : int64
     Note  : Option<string>
     Score : Option<double>
 }
+
+// 4) @sql_json + Option<UserStruct> on nullable TEXT column.
+// Three sub-bugs were fixed at once:
+//   - macro-side: emit_json_blob_adapters_for_struct now unwraps Option<T> before
+//     codegen so the generated `sql_bind(NoteData)` is reachable from the runtime
+//     `sql_bind_to_stmt(Option<T>)` Option-unwrap path.
+//   - typeclass-side: the new generic `sql_bind($Option<auto(TT)>)` delegates via
+//     `_::sql_bind(default<TT>)` so caller-module adapters resolve.
+//   - contract-side: schema_from witness is `_::sql_bind(default<field_type>)`
+//     directly; the generic Option fallback handles the unwrap.
+struct NoteData {
+    title : string
+    color : int
+}
+
+[sql_table(name = "Items", schema_from = "tests/dasSQLITE/test_data/schema_from_nullable.db")]
+struct ItemPartialJson {
+    @sql_primary_key Id : int64
+    @sql_json Note  : Option<NoteData>
+    Score : Option<double>
+}
+
+// 5) @sql_blob + Option<UserStruct> on nullable BLOB column. Same three rails as #4.
+struct HashPayload {
+    bytes : array<uint8>
+}
+
+[sql_table(name = "Files", schema_from = "tests/dasSQLITE/test_data/schema_from_blob.db")]
+struct FilePartialBlobOpt {
+    @sql_primary_key Id : int64
+    Hash : array<uint8>
+    @sql_blob Body : Option<HashPayload>
+}
+
 
 [test]
 def test_narrow_int_against_integer_pk(t : T?) {
@@ -61,6 +96,55 @@ def test_partial_body_option_against_nullable(t : T?) {
     t |> equal(cols[2].name, "Score", "Score column")
     t |> equal(cols[2].is_nullable, true, "Score Option<double> mapped to nullable")
     t |> equal(cols[2].data_type, SqlType.Real, "REAL affinity preserved through Option<>")
+}
+
+[test]
+def test_partial_body_json_option(t : T?) {
+    // Compile-pass + runtime coverage for @sql_json + Option<UserStruct>.
+    let cols <- column_info(type<ItemPartialJson>)
+    t |> equal(length(cols), 3, "Id + Note (json) + Score")
+    t |> equal(cols[1].name, "Note", "Note column")
+    t |> equal(cols[1].is_nullable, true, "Option<NoteData> ↔ nullable TEXT")
+    t |> equal(cols[1].data_type, SqlType.Text, "@sql_json binds to TEXT")
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<ItemPartialJson>)
+        let _r1 = db |> insert(ItemPartialJson(Id = 1l,
+            Note = some(NoteData(title = "first", color = 7)),
+            Score = some(1.5lf)))
+        let _r2 = db |> insert(ItemPartialJson(Id = 2l,
+            Note = none(type<NoteData>),
+            Score = none(type<double>)))
+        let rows <- _sql(db |> select_from(type<ItemPartialJson>) |> _order_by(_.Id))
+        t |> equal(length(rows), 2, "two rows")
+        t |> equal(rows[0].Note |> is_some, true, "row 0 Note carries payload")
+        t |> equal((rows[0].Note |> unwrap).title, "first", "json title round-trips")
+        t |> equal((rows[0].Note |> unwrap).color, 7, "json color round-trips")
+        t |> equal(rows[1].Note |> is_none, true, "row 1 Note is none (NULL TEXT)")
+    }
+}
+
+[test]
+def test_partial_body_blob_option(t : T?) {
+    let cols <- column_info(type<FilePartialBlobOpt>)
+    t |> equal(length(cols), 3, "Id + Hash + Body (blob, optional)")
+    t |> equal(cols[2].name, "Body", "Body column")
+    t |> equal(cols[2].is_nullable, true, "Body Option<HashPayload> ↔ nullable BLOB")
+    t |> equal(cols[2].data_type, SqlType.Blob, "@sql_blob binds to BLOB")
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<FilePartialBlobOpt>)
+        let _r1 = db |> insert(FilePartialBlobOpt(Id = 1l,
+            Hash <- [0xCAu8, 0xFEu8],
+            Body = some(HashPayload(bytes <- [0xDEu8, 0xADu8]))))
+        let _r2 = db |> insert(FilePartialBlobOpt(Id = 2l,
+            Hash <- [0u8, 1u8],
+            Body = none(type<HashPayload>)))
+        let rows <- _sql(db |> select_from(type<FilePartialBlobOpt>) |> _order_by(_.Id))
+        t |> equal(length(rows), 2, "two rows")
+        t |> equal(rows[0].Body |> is_some, true, "row 0 Body carries payload")
+        t |> equal(length((rows[0].Body |> unwrap).bytes), 2, "blob payload length preserved")
+        t |> equal((rows[0].Body |> unwrap).bytes[0], 0xDEu8, "first byte preserved")
+        t |> equal(rows[1].Body |> is_none, true, "row 1 Body is none (NULL BLOB)")
+    }
 }
 
 [test]

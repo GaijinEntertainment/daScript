@@ -473,6 +473,13 @@ def sql_bind(value : auto(TT)) : int64 {
     }
 }
 
+// Option<T> fallback — `_::sql_bind` so caller-module adapters (incl. @sql_json/@sql_blob's `sql_bind(T)`) resolve.
+// Without it, `sql_bind(default<Option<int>>)` falls into the auto(TT) catch-all and trips its concept_assert.
+[unused_argument(value)]
+def sql_bind(value : $Option < auto(TT) >) {
+    return _::sql_bind(default<TT>)
+}
+
 [unused_argument(t)]
 def sql_extract(value : int64; t : type<auto(TT)>) : TT {
     static_if (typeinfo is_enum(default<TT>)) {
@@ -1130,10 +1137,8 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     if (length(want) != length(got)) {
         return some("check_schema: \"{table_name}\" column count mismatch — struct has {length(want)} field(s), DB has {length(got)} column(s).")
     }
-    // Name-keyed comparison — emitted SELECTs name columns explicitly so struct field order is
-    // independent of DB column order. Both directions of "column X exists, column Y exists" are
-    // covered: missing-from-DB surfaces in the want loop; with equal counts, missing-from-struct
-    // is implied by the absence of a name match.
+    // Name-keyed: [sql_table] emits SELECTs with explicit columns, so struct/DB order can differ.
+    // With equal counts, missing-from-struct is implied by no name match in the want-loop.
     var by_name : table<string; int>
     for (j in range(length(got))) {
         by_name |> insert(got[j].name, j)
@@ -2059,9 +2064,7 @@ def private try_open_sqlite_readonly(path : string) : Result<SqlRunner, string> 
 }
 
 def private read_pragma_table_info(db : SqlRunner; tbl_name : string) : Result<array<SchemaFromCol>, string> {
-    // PRAGMA table_info(tbl_name) → column metadata; shared by schema_from (compile-time) and check_schema (runtime).
-    // Honors db.schema_name so check_schema works on with_schema / ATTACH'd runners — would otherwise
-    // silently validate the default schema's table.
+    // Honors db.schema_name so check_schema queries the right schema on ATTACH/with_schema runners.
     var rows : array<SchemaFromCol>
     let sql = empty(db.schema_name) ? "PRAGMA table_info({sql_quote_id(tbl_name)})" : "PRAGMA {sql_quote_id(db.schema_name)}.table_info({sql_quote_id(tbl_name)})"
     var stmt : sqlite3_stmt?
@@ -2155,8 +2158,7 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
 }
 
 def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
-    // Unwrap Option<T> → T for use as a witness type. Returns td unchanged when it isn't Option.
-    // typeMacro form: dimExpr[1] is an ExprTypeDecl carrying T; structType form: the `_value` field type.
+    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], structType in `_value`.
     if (td == null) {
         return td
     }
@@ -2702,10 +2704,8 @@ class SqlTableMacro : AstStructureAnnotation {
                 }
                 return false
             }
-            // SqlType contract — typecheck-time static_if peeks at `_::sql_bind`'s return type via
-            // `default<typedecl(...)>` (foldable by the typer). For Option<T> partial-body fields we
-            // unwrap to T first; bare `sql_bind(Option<T>)` would hit the generic auto overload's
-            // concept_assert even when the affinity matches.
+            // SqlType contract: static_if peeks at `_::sql_bind`'s return via `default<typedecl(...)>`.
+            // Generic `sql_bind(Option<T>)` fallback recurses to inner T's adapter via `_::`.
             let expected_sql_type = affinity_to_sql_type(col_decl_type)
             let storage_label = sqlite_sql_type(expected_sql_type)
             var expected_native = ""
@@ -2718,10 +2718,9 @@ class SqlTableMacro : AstStructureAnnotation {
             } else {
                 expected_native = "array<uint8>"
             }
-            let witness_type = unwrap_option_payload_type(st.fields[ufi]._type)
             let msg = "[sql_table] schema_from: field '{ufname}' SqlType does not match column \"{col_name_s}\" in \"{tbl_name}\" (expected {storage_label})."
             assert_exprs |> push(qmacro_expr(${
-                static_if (typeinfo stripped_typename(default<typedecl(_::sql_bind(default<$t(witness_type)>))>) != $v(expected_native)) {
+                static_if (typeinfo stripped_typename(default<typedecl(_::sql_bind(default<$t(st.fields[ufi]._type)>))>) != $v(expected_native)) {
                     concept_assert(false, $v(msg));
                 }
             }))
@@ -3288,7 +3287,8 @@ def private emit_json_blob_adapters_for_struct(var st : StructurePtr; fields : a
         if (!info.is_json && !info.is_blob) {
             continue
         }
-        let ft = st.fields[i]._type
+        // Unwrap: runtime sql_bind_to_stmt(Option<T>) strips Option before calling sql_bind, so adapter must bind bare T.
+        let ft = unwrap_option_payload_type(st.fields[i]._type)
         if (ft == null) {
             continue
         }

@@ -171,3 +171,44 @@ def test_blob_payloads_are_per_row(t : T?) {
         t |> equal(rows[1].State.seq[0], 100, "row 2 seq[0]")
     }
 }
+
+// ===== @sql_blob + Option<UserStruct> =====
+// Regression for the same Option-unwrap pair as test_64's @sql_json case: codegen must
+// register `sql_bind` for bare T (not Option<T>) so the runtime Option-strip in
+// sql_bind_to_stmt finds the user-module adapter.
+
+struct OptBlobPayload {
+    seq : array<int>
+}
+
+[sql_table(name = "OptBlobRows")]
+struct OptBlobRow {
+    @sql_primary_key Id : int
+    @sql_blob Payload : Option<OptBlobPayload>
+}
+
+[test]
+def test_sql_blob_option_roundtrip(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        db |> create_table(type<OptBlobRow>)
+        var p : OptBlobPayload
+        p.seq <- [10, 20, 30]
+        db |> insert(OptBlobRow(Id = 1, Payload = some(p)))
+        db |> insert(OptBlobRow(Id = 2, Payload = none(type<OptBlobPayload>)))
+        let rows <- db |> select_from(type<OptBlobRow>)
+        t |> equal(length(rows), 2, "two rows")
+        t |> equal(rows[0].Payload |> is_some, true, "row 0 payload present")
+        t |> equal(length((rows[0].Payload |> unwrap).seq), 3, "blob payload size preserved")
+        t |> equal((rows[0].Payload |> unwrap).seq[0], 10, "blob payload first elem")
+        t |> equal(rows[1].Payload |> is_none, true, "row 1 NULL extracts as none")
+    }
+}
+
+[test]
+def test_sql_blob_option_classifies_as_blob(t : T?) {
+    let cols <- column_info(type<OptBlobRow>)
+    t |> equal(length(cols), 2, "Id + Payload")
+    t |> equal(cols[1].name, "Payload", "Payload column")
+    t |> equal(cols[1].is_nullable, true, "Option<UserStruct> ↔ nullable")
+    t |> equal(cols[1].data_type, SqlType.Blob, "@sql_blob on Option<T> classifies as BLOB")
+}
