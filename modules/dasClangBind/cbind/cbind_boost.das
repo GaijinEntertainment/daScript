@@ -945,6 +945,9 @@ class CppGenBind : AnyGenBind {
     abstract_class : array<bool>
     wrapper_count : int
     local_type_names : table<string; bool>
+    // Affects // from <prefix>/<actual path>
+    prefix : string
+
     def CppGenBind(pfn, pfp : string; args : array<string>) {
         init_args(pfn, pfp, args)
         setDefaultFiles()
@@ -1221,6 +1224,10 @@ class CppGenBind : AnyGenBind {
     def functionWrapperSpelling(var c : CXCursor; self_type : string) {
         return functionHeaderSpelling(c, true, false, false, "(*)", self_type)
     }
+
+    def from_comment(var c : CXCursor) {
+        return "// from {prefix}{clang_getCursorLocationDescription(c)}\n"
+    }
     def methodName {
         method_name_index ++
         return "_method_{method_name_index}"
@@ -1346,7 +1353,7 @@ class CppGenBind : AnyGenBind {
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
         }
-        fprint(func_file, "// from {clang_getCursorLocationDescription(c)}\n")
+        fprint(func_file, from_comment(c))
         fprint(func_file, "\tmakeExtern<{bind_enchantation}{extra_enchantation}{get_module_temp_fn()}>(lib,\"{das_function_name}\",\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
         if (narg != 0 || isMethod) {
@@ -1550,7 +1557,7 @@ class CppGenBind : AnyGenBind {
         }
         enumDecl |> push((ns_en = ns_en, enum_name = enum_name))
         let dashing_name = namespace_name(enum_name, "_")
-        fprint(enum_class_file, "// from {clang_getCursorLocationDescription(cursor)}\n")
+        fprint(enum_class_file, from_comment(cursor))
         fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration \{\n")
         fprint(enum_class_file, "public:\n")
         fprint(enum_class_file, "\tEnumeration_{dashing_name}() : das::Enumeration(\"{das_enum_name}\") \{\n")
@@ -1575,7 +1582,7 @@ class CppGenBind : AnyGenBind {
         let tdn = string(clang_getCursorDisplayName(c))
         var tdt = clang_getCanonicalType(clang_getCursorType(c))
         let tdts = string(clang_getTypeSpelling(tdt))
-        fprint(alias_add_file, "// from {clang_getCursorLocationDescription(c)}\n")
+        fprint(alias_add_file, from_comment(c))
         fprint(alias_add_file, "auto alias_{tdn} = typeFactory<{tdts}>::make(lib);\n")
         fprint(alias_add_file, "alias_{tdn}->alias = \"{tdn}\";\n")
         fprint(alias_add_file, "addAlias(alias_{tdn});\n\n")
