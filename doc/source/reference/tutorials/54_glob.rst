@@ -125,6 +125,50 @@ A common convention used by build/release tools:
 - A **glob** pattern that matches no file is a *warning* (the pattern was
   conditional and simply did not apply on this run).
 
+Pattern to file list with ``expand_glob``
+==========================================
+
+``expand_glob(pattern, var result)`` is the higher-level helper for the common
+"single glob argument from the command line" case.  It splits the literal
+directory prefix from the glob remainder, picks recursive (``glob``) vs shallow
+(``dir``) walk based on whether the remainder contains ``**`` or ``/``,
+filters out directories so callers receive regular files only, sorts the
+matches **locally**, and *appends* them to ``result``.  Backslash patterns
+(``src\sub\*.das``) are normalized to ``/`` form internally.
+
+.. code-block:: das
+
+    var das_files : array<string>
+    expand_glob("src/**/*.das", das_files)
+    // das_files is sorted; only contains regular files; previously-existing
+    // entries in das_files keep their position because the sort is local.
+
+
+Comma/newline lists with ``parse_file_list``
+=============================================
+
+``parse_file_list(file, var result)`` is the canonical
+"user-supplied paths argument → expanded file list" expander used by every
+MCP tool with a ``paths`` / ``file`` argument.  Input is a comma- or
+newline-separated list; whitespace is stripped; empty entries are skipped.
+Literal entries pass through unchanged; glob entries (those containing
+``*``, ``?``, or ``[``) go through ``expand_glob``.  Order is preserved
+across plain entries — globs sort within their own slice.
+
+.. code-block:: das
+
+    var inputs : array<string>
+    parse_file_list("README.md,daslib/*.das,tests/fio/*.das", inputs)
+    // inputs:
+    //   README.md           (plain, position preserved)
+    //   daslib/<sorted>     (glob expansion, sorted within its slice)
+    //   tests/fio/<sorted>  (glob expansion, sorted within its slice)
+
+Reach for ``parse_file_list`` from any new CLI tool that accepts a
+``--files`` / ``--paths`` argument.  Reach for ``expand_glob`` when the
+caller already split its argument into individual glob patterns.
+
+
 Choosing between the two flavors
 =================================
 
@@ -161,15 +205,28 @@ Performance notes
 Summary
 ========
 
-==================================  =============================================
-Function                            Description
-==================================  =============================================
-``match_glob(pattern, path)``       Pathname-aware glob match (true/false).
-``glob(root, pattern, blk)``        Walk ``root`` recursively, yield matches.
-``glob_filtered(root, in, ex, b)``  Walk + filter via include/exclude lists.
-``is_glob_pattern(s)``              Detect whether a string is a glob or literal.
-``glob_match(pattern, text)``       Filename-style match (``*`` crosses ``/``).
-==================================  =============================================
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Function
+     - Description
+   * - ``match_glob(pattern, path)``
+     - Pathname-aware glob match (true/false).
+   * - ``glob(root, pattern, blk)``
+     - Walk ``root`` recursively, yield matches.
+   * - ``glob_filtered(root, in, ex, b)``
+     - Walk + filter via include/exclude lists.
+   * - ``is_glob_pattern(s)``
+     - Detect whether a string is a glob or literal.
+   * - ``to_generic_path(s)``
+     - Convert a path to forward slashes regardless of host.
+   * - ``expand_glob(pattern, var result)``
+     - Pattern → sorted file list, appends.
+   * - ``parse_file_list(file, var result)``
+     - Comma/newline list of files / dirs / globs → flat list.
+   * - ``glob_match(pattern, text)``
+     - Filename-style match (``*`` crosses ``/``).
 
 .. seealso::
 

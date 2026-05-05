@@ -1,4 +1,9 @@
 options gen2
+// This file is a FIXTURE for the migrate-tables rewriter — it intentionally
+// contains the pre-migration `tab[k].insert(k2, tab[k].get_value(k2) ± expr)`
+// patterns that the tool detects and rewrites. The table-collision lint
+// (40216) flags exactly those patterns, so disable lint here.
+options lint = false
 require daslib/safe_addr
 
 struct GameState {

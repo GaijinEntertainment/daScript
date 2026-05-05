@@ -10,7 +10,16 @@ Runnable examples: [tests/fio/fio_utils.das](tests/fio/fio_utils.das), [tutorial
 require daslib/fio
 ```
 
-`daslib/fio` does `require fio_core public` internally, so this single require pulls in both the C++ builtins and the daslang-side wrappers (RAII `fopen`, `_result` variants, `mkdir_rec`, `disk_space` struct return, whole-file `fread(path)`/`fwrite(path, text)`).
+Always require `daslib/fio` — never `fio_core` directly. `daslib/fio` does `require fio_core public` internally, so this single require pulls in both layers transitively.
+
+### `fio_core` vs `daslib/fio`
+
+Two layers, one require:
+
+- **`fio_core`** (C++ builtins) — the path primitives that are basically free function calls into `std::filesystem`: `path_join`, `is_absolute`, `normalize`, `relative` (3-arg with error out-param), `dir_name`, `base_name`, `parent`, `extension`, `stem`, `replace_extension`, `fexist`, `stat`, `dir`, `dir_rec` (builtin), `fopen` (2-arg returning `FILE?`), `mkdir`/`rmdir`, `remove`/`rename`, `copy_file`, temp files/dirs, env vars, `popen`/`system`. Listed via `mcp__daslang__list_module_api fio_core`.
+- **`daslib/fio`** (the daslang wrapper) — adds RAII `fopen` with block, `dir_rec` generic, `FStat` daslib overload (sets `is_valid`), `disk_space` struct return, whole-file `fread(path)`/`fwrite(path, text)`, `mkdir_rec`, the `_result` variants that wrap error out-params into a `fs_result_string`/`fs_result_bool` variant, and the **glob bundle**: `match_glob`, `glob`, `glob_filtered`, `is_glob_pattern`, `to_generic_path`, `expand_glob`, `parse_file_list`. Source: [daslib/fio.das](daslib/fio.das).
+
+The "Pick the right tool first" table below mixes both — it doesn't matter which layer a function lives in, only that you use the right one. Hand-rolling any of these (typically with `find`/`rfind`/`slice` on `/` or `\\`) is wrong on Windows or in edge cases.
 
 ## Pick the right tool first
 
@@ -24,9 +33,12 @@ Fixed order of preference. If the row on the left fits, the row on the right is 
 | Get the filename without extension | `stem(p)` | basename + slice-off-extension |
 | Replace the extension | `replace_extension(p, ".new")` | string concat with stem |
 | Join two path components | `path_join(a, b)` | `"{a}/{b}"` string interp |
-| Resolve `..`, `.`, fix separators | `normalize(p)` | hand-rolled normalizer |
+| Resolve `..`, `.`, fix separators | `normalize(p)` (uses platform-preferred separator) | hand-rolled normalizer |
+| Force forward slashes regardless of host | `to_generic_path(p)` | `replace(p, "\\", "/")` |
 | Is this path absolute? | `is_absolute(p)` | check leading `/` or drive letter |
-| Compute a relative path | `relative(p, base, error)` or `relative_result(p, base)` | manual prefix strip |
+| Compute a relative path | `relative(p, base, error)` or `relative_result(p, base)` | manual prefix strip with `find`/`slice` |
+| Expand a single glob into a sorted file list | `expand_glob(pattern, var result)` | manual `dir_rec` + `match_glob` walk |
+| Parse user `paths` arg (comma/newline list of files/dirs/globs) | `parse_file_list(file, var result)` | manual split + per-entry dispatch |
 | Check existence | `fexist(p)` | open-and-check |
 | Get file size / mtime / type | `stat(p) : FStat` (daslib overload) | platform `stat` syscall |
 | Walk a directory | `dir(p) $(name) { ... }` | platform `opendir` |
@@ -176,6 +188,8 @@ Fields: `capacity`, `free`, `available` (all `uint64`).
 
 - **Never split paths with `rfind("/")` and `rfind("\\")` followed by `slice`.** Always `base_name` / `dir_name` / `parent`. The manual form misses Windows backslashes, mishandles trailing separators, and returns the wrong slice when no separator is present.
 - **Never build paths with string interpolation.** `"{a}/{b}"` produces `"foo//bar"` if `a` has a trailing slash and breaks on Windows when one side uses backslashes. Use `path_join`.
+- **Never strip prefixes with `find(p, root) == 0` + `slice`.** Use `relative(p, root, err)` (or `relative_result`) — handles the trailing-separator case, refuses partial-component matches (`/foo/bar` vs `/foo/barx`), and produces correct `..`-relative paths when `p` is outside `root`. Pair with `to_generic_path` if the consumer needs forward slashes.
+- **`normalize` and `to_generic_path` are NOT the same.** `normalize` uses the platform-preferred separator (`\` on Windows). `to_generic_path` always emits `/`. Pick by what the consumer needs: shells/system calls want `normalize`, JSON/log output and stable test fixtures want `to_generic_path`.
 - `fread(file)` requires **binary mode** (`"rb"`). Text mode causes a partial-read error.
 - `fopen(path, mode, blk)` (3-arg block form) auto-closes on block exit; the 2-arg `FILE?` form needs explicit `fclose`. Prefer the 3-arg form unless you need the file handle to outlive the call.
 - `dir(path)` callback yields `.` and `..` on POSIX — skip them.
@@ -185,9 +199,11 @@ Fields: `capacity`, `free`, `available` (all `uint64`).
 
 ## Reference
 
-- [daslib/fio.das](daslib/fio.das) — daslang wrapper layer (RAII `fopen`, `_result` variants, `mkdir_rec`, `disk_space`, whole-file `fread`/`fwrite` by path)
-- [src/builtin/module_builtin_fio.cpp:1218-1457](src/builtin/module_builtin_fio.cpp#L1218-L1457) — C++ registrations
+- [daslib/fio.das](daslib/fio.das) — daslang wrapper layer (RAII `fopen`, `_result` variants, `mkdir_rec`, `disk_space`, whole-file `fread`/`fwrite` by path, glob bundle)
+- [src/builtin/module_builtin_fio.cpp:1218-1457](src/builtin/module_builtin_fio.cpp#L1218-L1457) — C++ registrations (the `fio_core` layer)
 - [include/daScript/simulate/aot_builtin_fio.h](include/daScript/simulate/aot_builtin_fio.h) — `FStat`, `DiskSpaceInfo` structs
 - [doc/source/stdlib/handmade/module-fio.rst](doc/source/stdlib/handmade/module-fio.rst) — auto-generated module reference
 - [tests/fio/fio_utils.das](tests/fio/fio_utils.das) — read/write by path, recursive `rmdir`, `_result` variants
+- [tests/fio/glob_test.das](tests/fio/glob_test.das) and [tests/fio/expand_glob_test.das](tests/fio/expand_glob_test.das) — glob primitives + expander/parser tests
 - [tutorials/dasAudio/02_playing_files.das](tutorials/dasAudio/02_playing_files.das) — `fopen` + `fmap` for binary data
+- [skills/glob.md](skills/glob.md) — pathname glob matching, when to use `match_glob` vs `glob_match`, full `expand_glob` / `parse_file_list` cookbook

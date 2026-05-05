@@ -113,7 +113,7 @@ Claude Code starts and stops the server automatically with each session.
 - **Exception:** `live_*` tools run on the main thread (they use `system()` and `sleep()` which don't work well from `new_thread`)
 - Protocol logic lives in `protocol.das`, the entry point is `main.das`
 - Heap is collected after each request when over threshold (1 MB)
-- Tool handlers are modular: each tool lives in `tools/*.das`, shared utilities in `tools/common.das`
+- Tool handlers are modular: each tool lives in `tools/*.das`, MCP-specific shared utilities in `tools/common.das`. The general "comma/newline list of files / globs → file array" expander (`expand_glob`, `parse_file_list`) lives in `daslib/fio`
 
 ## Configuring Claude Code
 
