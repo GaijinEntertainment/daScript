@@ -78,6 +78,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/pr_review_iteration.md` | Working an open PR through CI failures and Copilot/human review feedback after the PR is created |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/gc_use_after_sweep.md` | Debugging `bad_alloc` / `length_error` in TypeDecl/Expression copy-ctors (use-after-sweep) |
+| `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs` |
 | `skills/clargs_migration.md` | Editing any tool that still parses `get_command_line_arguments()` directly — migrate to `daslib/clargs` in the same PR |
 | `skills/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII parsing, builder, XPath, struct round-trip) |

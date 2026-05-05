@@ -1,0 +1,14 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("asteroids")
+    package_description("Asteroids example built on dasGlfw + dasOpenGL")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+}

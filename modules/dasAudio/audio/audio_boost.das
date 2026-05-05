@@ -739,6 +739,7 @@ def public audio_system_release_context {
     }
 }
 
+[pinvoke]
 def command_processor {
     return if (g_command_stream == null)
     g_command_stream |> gather_archive() $(var cmd : AudioCommand) {

@@ -126,11 +126,12 @@ convention.
 
 ## Daslang convention for long flags
 
-Daslang's own CLI treats `--long-flag` as the canonical long form.
-New flags added to daslang or its modules should follow this same
-`--long-flag` convention so they line up with clargs's auto-prepended
-`--` and existing flags like `--track-smart-ptr`,
-`--das-profiler-log-file`.
+Daslang's own CLI (handled in `utils/daScript/main.cpp`) treats
+`--long-flag` as the canonical long form — main.cpp strips one
+leading dash and matches `cmd=="-long-flag"`. New flags added to the
+daslang core or modules should follow this same `--long-flag`
+convention so they line up with clargs's auto-prepended `--` and
+existing flags like `--track-smart-ptr`, `--das-profiler-log-file`.
 
 ## Reference
 
@@ -138,3 +139,7 @@ New flags added to daslang or its modules should follow this same
   `print_help`, `get_program_args`, `get_cli_arguments`).
 - `examples/clargs/main.das` — minimal end-to-end example with
   required flag, short flags, enum, array, and help wiring.
+- `utils/daspkg/commands.das` — production use across multiple
+  subcommands.
+- `modules/dasLLVM/daslib/llvm_exe.das` (`ReleaseDepsArgs`) — sharing
+  argv with another consumer (daslang's own flag set).

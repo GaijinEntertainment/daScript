@@ -1430,11 +1430,20 @@ class public LlvmJitVisitor : AstVisitor {
     // immutable in runtime
     def load_local_const(val : LLVMOpaqueValue?; type_ : LLVMOpaqueType?) {
         let load_inst = LLVMBuildLoad2(g_builder, type_, val, "")
-        let msg = "invariant.load"
-        LLVMSetMetadata(
-            load_inst,
-            LLVMGetMDKindIDInContext(g_ctx, msg, uint(length(msg))),
-            LLVMMDNodeInContext(g_ctx, null, 0u))
+        // For -exe mode the global holds a JIT-process function pointer baked
+        // at codegen time; with `invariant.load`, LLVM constant-folds the load
+        // to the immediate at some call sites (notably top-level `let`
+        // initializers), and ASLR-shifted dylib loads in the standalone exe
+        // make those immediates point to garbage. Skip the annotation so the
+        // load actually happens at runtime against the global, which is
+        // populated correctly when the standalone exe runs.
+        if (!flags.gen_exe) {
+            let msg = "invariant.load"
+            LLVMSetMetadata(
+                load_inst,
+                LLVMGetMDKindIDInContext(g_ctx, msg, uint(length(msg))),
+                LLVMMDNodeInContext(g_ctx, null, 0u))
+        }
         return load_inst
     }
 
@@ -1453,11 +1462,21 @@ class public LlvmJitVisitor : AstVisitor {
         if (global_addr == null) {
             global_addr = LLVMAddGlobal(g_mod, nonnull_type, name.glob())
             if (flags.gen_exe) {
+                // For standalone exes the JIT-process address is meaningless
+                // (different ASLR slide in the new process). Leave the global
+                // null at link time; the runtime initialize_modules() walks
+                // every used builtin and overwrites this slot via
+                // jit_initialize_extern_function. Baking the codegen-time
+                // address as a constant initializer would let LLVM
+                // constant-fold loads — observed at top-level `let` initializers
+                // — to the JIT-process immediate, which the standalone exe then
+                // calls and crashes on (dyld loaded the dylib elsewhere).
                 set_private_linkage(global_addr)
+                LLVMSetInitializer(global_addr, LLVMConstPointerNull(nonnull_type))
             } else {
                 set_public_linkage(global_addr)
+                LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
             }
-            LLVMSetInitializer(global_addr, types.ConstPtr(address |> intptr, nonnull_type))
         } else {
             failed("Name duplicate {name.glob()}\n")
         }
