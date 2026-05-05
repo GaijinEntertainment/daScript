@@ -299,10 +299,23 @@ Everything a real app needs once it leaves the developer's machine.
 
 31. **Views** — `[sql_view]` struct + SQL string, read-only `[sql_table]`;
     DDL managed by migrations. Mockup: [31-views.das](tutorial-mockup/31-views.das.mockup).
-32. **Migrations** — `[sql_migration(version=N)]` + `migrate_to_latest(db)`;
-    up-only, versioned, tracked in `__schema_version`. Ships in
-    **optional** `daslib/sql_migrate` sub-module. Mockup:
-    [30-migrations.das](tutorial-mockup/30-migrations.das.mockup).
+32. **Migrations** — `[sql_migration(version=N, description=…,
+    vacuum=…, analyze=…)]` + `migrate_to_latest(db)` /
+    `with_latest_sqlite(path)`; up-only, versioned, tracked in
+    `__schema_version`. Inspection trio (`current_schema_version` /
+    `pending_migrations` / `migration_history`); adoption via
+    `baseline(db, version)` with proactive Layer-1 warning + Layer-2
+    enriched panic; typed ALTER (`add_column` / `create_index` /
+    `drop_index_if_exists`); 12-step rebuild via `struct_convert(type<S>,
+    type<T>)` + `[sql_table(legacy=true)]` + `name=` overloads on
+    `create_table` / `insert_to`. Concurrency via SQLite RESERVED lock
+    (one transaction per call, α-shape). Permanent NO on rollback /
+    migrate-to-version. Ships in **optional** `daslib/sql_migrate`
+    sub-module. **Walk locked 2026-05-04;** see
+    [API_MIGRATION.md](API_MIGRATION.md). Mockup refreshed:
+    [30-migrations.das.mockup](tutorial-mockup/30-migrations.das.mockup).
+    Implementation split into chunks 14a (core + adoption), 14b
+    (typed ALTER), 14c (rebuild).
 33. **PRAGMA tuning** — WAL mode, `busy_timeout`, `foreign_keys`,
     `synchronous`. Ad-hoc `db |> set_pragma(name, value)` /
     `try_set_pragma`, the batch shortcut
@@ -420,7 +433,7 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 29 | Column metadata | `29-column_names.das` | **Shipped** (chunk 9); Band 1 `column_info(type<T>) : array<ColumnInfo>` (compile-time walk) + abstract `SqlType` enum + `sqlite_sql_type` dialect renderer; Band 3 raw `PRAGMA table_info` via the typed `query` family |
 | 30 | Listing tables | `30-list_tables.das` | **Shipped** (chunk 9); raw `query` against `sqlite_master`; no abstract `list_tables` helper (catalog spelling diverges per backend) |
 | 31 | Views | `31-views.das` | **Shipped** (chunk 10); `[sql_view(name=...)]` annotation + `_create_view` macro + `drop_view_if_exists`; mutation-path rejection at compile time (predicate form) and runtime (row form) |
-| 32 | Migrations | `30-migrations.das` | Has mockup — deferred to last chunk |
+| 32 | Migrations | `30-migrations.das` (refreshed 2026-05-04) | Walk locked 2026-05-04 — see [API_MIGRATION.md](API_MIGRATION.md); chunks 14a/14b/14c queued |
 | 33 | PRAGMA tuning | `33-pragma.das` | **Shipped** (chunk 10); `set_pragma` / `try_set_pragma` (string/int64/bool overloads) + `apply_recommended_pragmas` (WAL + busy_timeout + foreign_keys + synchronous=NORMAL) |
 | 34 | Backup + VACUUM | `34-backup_vacuum.das` | **Shipped** (chunk 10); `vacuum` / `vacuum_into` / `optimize` / `integrity_check` / `quick_check` + `backup_to(dest)` / `backup_to(path)` (online Backup API with SQLITE_BUSY/LOCKED retry) |
 | 35 | Streaming results | `35-streaming.das` | **Shipped** (chunk 10); `_each_sql(chain)` returning `iterator<T>`, generator-based; rejects materializing terminals (`_to_array`, `_first`, aggregates); `sqlite3_finalize` runs in `finally` so stmt is released on break/exhaustion/panic |

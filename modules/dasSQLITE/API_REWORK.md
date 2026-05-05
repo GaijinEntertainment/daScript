@@ -3627,7 +3627,23 @@ stdlib-type passthrough overloads plus the enum generic.
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
 | **Total** | **2 fns** | **9 macros** | (emitter complexity accumulates) |
 
-### 30-migrations — "up-only versioned migrations; MVP in a separate module" (decided 2026-04-24)
+### 30-migrations — "up-only versioned migrations; MVP in a separate module" (decided 2026-04-24, walk completed 2026-05-04)
+
+> **STATUS — 2026-05-04: 12-scenario walk completed.** The full,
+> current locks live in [API_MIGRATION.md](API_MIGRATION.md). This
+> §30 below is the original-design snapshot from 2026-04-24, kept as
+> historical record; many details have evolved (audit table is now
+> 3 columns, `success` field dropped; `pending_migrations` returns
+> `array<PendingMigration>` not `array<int>`; α-shape concurrency
+> wraps the whole call in one transaction; `baseline()` ships;
+> typed `add_column`/`create_index`/`drop_index_if_exists` ship;
+> `struct_convert` + `[sql_table(legacy=true)]` + `name=` overloads
+> ship for the 12-step rebuild path; rollback / migrate-to-version
+> permanently closed; 12-step ALTER helper withdrawn since bundled
+> SQLite is 3.41.2). **API_MIGRATION is authoritative; refer to it
+> for chunk planning.** The "Public surface" and "audit-table
+> schema" blocks below have been updated in-place to match; the
+> rest of §30 stays as the original design rationale.
 
 **Verdict:** sixth consecutive tut with **zero linq prereqs.**
 Ships as a **separate, optional module** — `daslib/sql_migrate`
@@ -3678,28 +3694,65 @@ def migration_003(db : SqlRunner) {
 }
 ```
 
-**Public surface (exhaustive):**
+**Public surface (exhaustive, updated 2026-05-04 per API_MIGRATION walk):**
+
+Core runtime:
 
 | Name | Shape | Role |
 |---|---|---|
-| `[sql_migration(version=N, description="…")]` | function-level annotation | registers the function as a migration at compile time |
+| `[sql_migration(version=N, description="…", vacuum=…, analyze=…)]` | function-level annotation | registers the function as a migration at compile time; `vacuum`/`analyze` are opt-in flags that run `VACUUM` / `ANALYZE` after the call commits |
 | `migrate_to_latest(db)` | `(db : SqlRunner) : int` | runs pending migrations in version order, returns count applied; **panics on failure** |
 | `try_migrate_to_latest(db)` | `(db : SqlRunner) : Result<int, string>` | same, Result form for tools/CI |
-| `current_schema_version(db)` | `(db : SqlRunner) : int` | highest applied version (0 if none) |
-| `pending_migrations(db)` | `(db : SqlRunner) : array<int>` | versions that would run if `migrate_to_latest` were called now |
-| `migration_history(db)` | `(db : SqlRunner) : array<MigrationRecord>` | full audit trail from `__schema_version` |
-| `MigrationRecord` | `struct { version : int; description : string; applied_at : int64; success : bool }` | one row from the audit table |
+| `with_latest_sqlite(path)` | RAII block macro | `with_sqlite` + `apply_recommended_pragmas` + `migrate_to_latest` in one call |
 
-**`__schema_version` table (fixed schema, auto-created on first run):**
+Inspection (pure read; no side effects):
+
+| Name | Shape | Role |
+|---|---|---|
+| `current_schema_version(db)` | `(db : SqlRunner) : int` | highest applied version (0 if `__schema_version` doesn't exist) |
+| `pending_migrations(db)` | `(db : SqlRunner) : array<PendingMigration>` | versions that would run if `migrate_to_latest` were called now; description from current annotation |
+| `migration_history(db)` | `(db : SqlRunner) : array<MigrationRecord>` | full audit trail from `__schema_version`; description frozen at apply time |
+| `MigrationRecord` | `struct { version : int; description : string; applied_at : int64 }` | one row from the audit table (3 columns; `success` dropped per Q1=A lock) |
+| `PendingMigration` | `struct { version : int; description : string }` | not-yet-applied registered migration |
+
+Adoption:
+
+| Name | Shape | Role |
+|---|---|---|
+| `baseline(db, version)` | `(db : SqlRunner, version : int) : void` | stamp v1..N rows in `__schema_version` without running their bodies (Flyway-style adoption) |
+| `try_baseline(db, version)` | `(db : SqlRunner, version : int) : Result<int, string>` | Result form |
+
+Typed ALTER (additive cases that align with the current struct):
+
+| Name | Shape | Role |
+|---|---|---|
+| `add_column(db, type<T>, .Field [, default = expr])` | call macro | `ALTER TABLE … ADD COLUMN`; SQL type from `_::sql_bind` adapter; NOT NULL from absence of `Option<>` wrapping |
+| `create_index(db, type<T>, fields = (…), [unique=true,] [name="…"])` | call macro | `CREATE [UNIQUE] INDEX`; auto-name `idx_<table>_<col1>_<col2>` |
+| `drop_index_if_exists(db, name)` | function | `DROP INDEX IF EXISTS …` |
+
+Schema rebuild (the 12-step pattern as building blocks):
+
+| Name | Shape | Role |
+|---|---|---|
+| `struct_convert(type<S>, type<T>) [$(s, var t) {…}]` | call macro | generates a `(S, var T) : void` converter; auto-derives trivial mappings; optional override block for non-trivial fields |
+| `[sql_table(name="…", legacy=true)]` | structure annotation flag | marks a struct as historical; allows duplicate `name=`; readable for SELECT, excluded from DDL/INSERT/UPDATE/DELETE |
+| `create_table(type<T>, name? : string)` | overload on existing | optional table-name override (existing primitive gains `name=`) |
+| `insert_to(type<T>, row, name? : string)` | overload on existing | optional table-name override |
+
+**`__schema_version` table (auto-created on first run):**
 
 ```sql
 CREATE TABLE __schema_version (
     version     INTEGER PRIMARY KEY,
     description TEXT    NOT NULL DEFAULT '',
-    applied_at  INTEGER NOT NULL,          -- unix seconds
-    success     INTEGER NOT NULL DEFAULT 1
+    applied_at  INTEGER NOT NULL          -- unix epoch seconds
 )
 ```
+
+Three columns. One row per applied migration; all rows are successes
+by construction (failures roll back atomically with the body, so no
+audit row is written). `success` column from the original 2026-04-24
+design dropped per Q1=A lock in API_MIGRATION Scenario 1.
 
 One row per successfully-applied migration. Multi-row (not
 single-row-with-current-version) so the audit trail survives —
