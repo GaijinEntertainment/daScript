@@ -312,6 +312,12 @@ def resolve_path(path : string) : string {
     if (is_absolute(path)) {
         return path
     }
+    // Preserve Windows drive-relative paths (`C:foo`). std::filesystem
+    // doesn't classify them as absolute (no trailing separator), so they'd
+    // otherwise be joined under das_root and produce an invalid path.
+    if (find(path, ":") == 1) {
+        return path
+    }
     return path_join(get_das_root(), path)
 }
 
