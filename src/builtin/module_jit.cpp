@@ -33,11 +33,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <filesystem>
 
 namespace das {
     // forward declarations from module_builtin_fio.cpp
     void * register_dynamic_module(const char *, const char *, int, Context *, LineInfoArg *);
     void register_native_path(const char *, const char *, const char *, Context *, LineInfoArg *);
+    bool builtin_fexist ( const char * path );
 
     typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
 
@@ -1041,6 +1043,105 @@ DAS_API void jit_initialize_modules_done () {
 
 DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
     return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
+}
+
+// Test seam: unit tests override the exe-path source so resolution can be
+// exercised with synthetic layouts. nullptr = use real getExecutableFileName.
+// Returned char* must remain valid for the duration of one resolve call.
+static const char * (*g_jit_exe_file_for_test)() = nullptr;
+DAS_API void jit_set_exe_file_for_test_( const char * (*fn)() ) {
+    g_jit_exe_file_for_test = fn;
+}
+
+// Test predicate "does this path exist?" (default: real filesystem). Tests
+// can swap in a mock predicate to exercise resolution without touching disk.
+static bool (*g_jit_path_exists_for_test)(const char *) = nullptr;
+DAS_API void jit_set_path_exists_for_test_( bool (*fn)(const char *) ) {
+    g_jit_path_exists_for_test = fn;
+}
+
+static bool jit_path_exists ( const char * p ) {
+    return g_jit_path_exists_for_test ? g_jit_path_exists_for_test(p) : das::builtin_fexist(p);
+}
+
+// Try a candidate dir / rel_path; if it (or its _debug variant in debug
+// builds, gated on DAS_NO_ASSERTIONS to match register_dynamic_module's
+// rewrite at module_builtin_fio.cpp:1099) exists, return the path to load.
+// Empty string = miss.
+//
+// Returns the non-_debug name even when the _debug variant is what exists —
+// register_dynamic_module applies the _debug rewrite itself in debug builds,
+// so we mustn't double-rewrite. std::filesystem::path::operator/ handles
+// trailing-separator and root cases correctly (POSIX `/` + `modules/X` →
+// `/modules/X`, not `//modules/X`).
+static das::string pick_at_dir ( const std::filesystem::path & dir, const char * rel_path ) {
+    namespace fs = std::filesystem;
+    if ( dir.empty() || !rel_path || !*rel_path ) return "";
+    fs::path candidate = dir / rel_path;
+    das::string candidate_str = candidate.string().c_str();
+    if ( jit_path_exists(candidate_str.c_str()) ) return candidate_str;
+#ifndef DAS_NO_ASSERTIONS
+    if ( candidate.extension() == ".shared_module" ) {
+        fs::path dbg = candidate.parent_path() / (candidate.stem().string() + "_debug" + candidate.extension().string());
+        if ( jit_path_exists(dbg.string().c_str()) ) return candidate_str;
+    }
+#endif
+    return "";
+}
+
+// Pure resolution: pick the path to load, in priority order:
+//   1. <exe_dir>/<rel_path>   — daspkg release bundle layout (modules sit next to the exe)
+//   2. <das_root>/<rel_path>  — SDK install layout AND local dev build
+//   3. <fallback_abs_path>    — baked-at-codegen absolute path (legacy / paths without /modules/ segment)
+//
+// Tiers 1+2 are skipped when rel_path is empty/null. Returns the chosen path;
+// tier 3 is unconditional, so the result is never empty when fallback is set.
+static das::string resolve_dynamic_module_path ( const char * rel_path, const char * fallback_abs_path ) {
+    namespace fs = std::filesystem;
+    // tier 1 — exe_dir (parent_path correctly preserves filesystem root: "/myapp" → "/", "C:\myapp.exe" → "C:\")
+    das::string exeFile;
+    if ( g_jit_exe_file_for_test ) {
+        const char * s = g_jit_exe_file_for_test();
+        if ( s ) exeFile = s;
+    } else {
+        exeFile = das::getExecutableFileName();
+    }
+    if ( !exeFile.empty() ) {
+        fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
+        if ( exeDir.empty() ) exeDir = ".";  // exe is a bare filename relative to cwd
+        das::string p = pick_at_dir(exeDir, rel_path);
+        if ( !p.empty() ) return p;
+    }
+    // tier 2 — das_root
+    {
+        das::string p = pick_at_dir(fs::path(das::getDasRoot().c_str()), rel_path);
+        if ( !p.empty() ) return p;
+    }
+    // tier 3 — baked absolute (legacy fallback)
+    return fallback_abs_path ? fallback_abs_path : "";
+}
+
+// Test entry point: invoke pure resolution and return the chosen path via
+// caller-owned buffer. Returns true on success (buf populated, NUL-terminated),
+// false if buffer is too small. Unit tests use this to assert resolution order
+// without dlopening anything.
+DAS_API bool jit_resolve_dynamic_module_path_for_test_ ( const char * rel_path,
+                                                         const char * fallback_abs_path,
+                                                         char * out_buf,
+                                                         size_t buf_size ) {
+    das::string r = resolve_dynamic_module_path(rel_path, fallback_abs_path);
+    if ( r.size() + 1 > buf_size ) return false;
+    memcpy(out_buf, r.c_str(), r.size() + 1);
+    return true;
+}
+
+// Resolve and load a dynamic module. Used by standalone exes (emitted by
+// inject_main in llvm_exe.das).
+DAS_API void * jit_register_dynamic_module_resolve ( const char * rel_path,
+                                                     const char * fallback_abs_path,
+                                                     const char * mod_name ) {
+    das::string chosen = resolve_dynamic_module_path(rel_path, fallback_abs_path);
+    return das::register_dynamic_module(chosen.c_str(), mod_name, 0/*Quiet*/, nullptr, nullptr);
 }
 
 DAS_API void jit_register_native_path ( const char * mod_name, const char * src_path, const char * dst_path ) {

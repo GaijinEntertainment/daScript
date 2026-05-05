@@ -515,22 +515,27 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     for (mod_name in keys(extern_resolver.extern_modules)) {
         used_modules[mod_name] = true
     }
-    // Finalize initialize_modules(): emit dynamic modules, native paths, Module::Initialize, ret
+    // Finalize initialize_modules(): emit dynamic modules, native paths, Module::Initialize, ret.
+    // Use the same 3-tier resolve helper as inject_main so a standalone exe doesn't
+    // double-register the same module from two different filesystem paths (the
+    // resolved bundle path here AND a baked absolute somewhere else).
     let ib = extern_resolver.init_builder
     let t = extern_resolver.types
     let reg_dyn_mod_type = LLVMFunctionType(t.LLVMVoidPtrType(),
-        fixed_array<LLVMTypeRef>(t.LLVMVoidPtrType(), t.LLVMVoidPtrType())
+        fixed_array<LLVMTypeRef>(t.LLVMVoidPtrType(), t.LLVMVoidPtrType(), t.LLVMVoidPtrType())
     )
-    var jit_reg_dyn_mod = LLVMGetNamedFunction(g_mod, "jit_register_dynamic_module")
+    var jit_reg_dyn_mod = LLVMGetNamedFunction(g_mod, "jit_register_dynamic_module_resolve")
     if (jit_reg_dyn_mod == null) {
-        jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module", reg_dyn_mod_type)
+        jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     }
     for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name)) {
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
-            let path_str = get_string_constant_ptr(ib, path)
+            let rel = compute_modules_relative_suffix(path)
+            let rel_str = get_string_constant_ptr(ib, rel)
+            let abs_str = get_string_constant_ptr(ib, path)
             let name_str = get_string_constant_ptr(ib, mod_name)
-            LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(path_str, name_str), "")
+            LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
     let reg_native_path_type = LLVMFunctionType(t.t_void,
@@ -557,6 +562,14 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     extern_resolver.types = null
     unsafe { delete extern_resolver; }
     return (any_unimplemented = any_unimp, needs_whole_lib = whole_lib)
+}
+
+// Suffix from the last "modules/" segment onwards; "" → caller falls back to abs path.
+// to_generic_path normalizes Windows backslashes so the search needs only one form.
+def private compute_modules_relative_suffix(p : string) : string {
+    let pn = to_generic_path(p)
+    let idx = rfind(pn, "/modules/")
+    return idx < 0 ? "" : slice(pn, idx + 1)
 }
 
 // Creates main function that initializes a standalone JIT context, registers
@@ -658,21 +671,27 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         }
     }
 
-    // Register dynamic modules that were loaded during compilation
+    // Register dynamic modules that were loaded during compilation. The runtime
+    // helper tries <exe_dir>/<rel_path> (daspkg release bundles), then
+    // <das_root>/<rel_path> (SDK install / local dev), then the baked absolute
+    // path (legacy fallback).
     let reg_dyn_mod_type = LLVMFunctionType(types.LLVMVoidPtrType(),
         fixed_array<LLVMTypeRef>(
-            types.LLVMVoidPtrType(), // const char * path
+            types.LLVMVoidPtrType(), // const char * rel_path
+            types.LLVMVoidPtrType(), // const char * fallback_abs_path
             types.LLVMVoidPtrType()  // const char * mod_name
         )
     )
-    var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module", reg_dyn_mod_type)
+    var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name)) {
             has_cpp_modules = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
-            let path_str = get_string_constant_ptr(builder, path)
+            let rel = compute_modules_relative_suffix(path)
+            let rel_str = get_string_constant_ptr(builder, rel)
+            let abs_str = get_string_constant_ptr(builder, path)
             let name_str = get_string_constant_ptr(builder, mod_name)
-            LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(path_str, name_str), "")
+            LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
 

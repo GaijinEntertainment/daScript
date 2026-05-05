@@ -1227,6 +1227,10 @@ get_target_property(DAS_FMT_LIBS das-fmt LINK_LIBRARIES)
     # Owns ALL C++-test-related CMake. enable_testing() lives at the top of this file.
     add_subdirectory(tests-cpp)
 
+    # Standalone-exe module-resolution integration test (uses daslang -exe at
+    # test time + dasModuleSQLITE; both must already be defined as targets).
+    add_subdirectory(tests/exe-paths)
+
     # Build daslang utilities as standalone executables (-exe mode)
     add_subdirectory(utils)
 
