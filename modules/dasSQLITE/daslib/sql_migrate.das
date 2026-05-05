@@ -151,7 +151,7 @@ def private _audit_insert(db : SqlRunner; version : int; description : string) :
 }
 
 
-def private _format_versions_csv(pending : array<MigrationEntry>; applied_count : int; failed_version : int) : string {
+def private _format_versions_csv(pending : array<MigrationEntry>; applied_count : int) : string {
     // "v4, v5" — every applied migration (inside the txn) plus the failing one — all rolled back.
     var parts : array<string>
     let limit = applied_count + 1
@@ -225,6 +225,23 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
     if (begin_err |> is_some) {
         return err(begin_err |> unwrap, type<int>)
     }
+    // Concurrent-runner guard (Scenario 8): re-read MAX(version) under the write lock and drop pending entries another runner already applied between our optimistic read and BEGIN IMMEDIATE.
+    let current_locked = _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
+    if (current_locked != current) {
+        pending_idx = 0
+        while (pending_idx < pending |> length) {
+            if (pending[pending_idx].version <= current_locked) {
+                pending |> erase(pending_idx)
+            } else {
+                pending_idx += 1
+            }
+        }
+        if (pending |> empty) {
+            // Another runner did our work. COMMIT releases the lock cleanly (no DDL was issued).
+            db |> try_exec("COMMIT") |> _log_warn_on_some
+            return ok(0, type<string>)
+        }
+    }
     // Mutables shared between try and recover.
     var applied_count = 0
     var any_vacuum = false
@@ -254,7 +271,7 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
         }
     } recover {
         let underlying = string(this_context().last_exception) |> rtrim
-        let rolled_back_str = _format_versions_csv(pending, applied_count, failed_version)
+        let rolled_back_str = _format_versions_csv(pending, applied_count)
         to_log(LOG_ERROR, "migration v{failed_version} '{failed_desc}' FAILED — rolled back call\n  underlying error: {underlying}\n  rolled back: {rolled_back_str}\n")
         db |> try_exec("ROLLBACK") |> _log_warn_on_some
         let layer2_hint = audit_was_empty_before && (failed_version == pending[0].version)
@@ -300,8 +317,8 @@ def private _audit_table_exists(db : SqlRunner) : bool {
 
 
 def current_schema_version(db : SqlRunner) : int {
-    //! Highest applied migration version, or 0 if no migrations have ever been applied
-    //! to this DB (or the audit table doesn't exist yet).
+    //! Highest applied migration version, or 0 if no migrations were applied, the audit table is absent, or a transient SQLite error (e.g. ``SQLITE_BUSY``) blocks the read.
+    //! Use ``try_current_schema_version`` to distinguish "nothing applied" from "couldn't tell".
     if (!_audit_table_exists(db)) {
         return 0
     }

@@ -31,10 +31,10 @@ def test_rename_column_preserves_data(t : T?) {
 }
 
 [test]
-def test_sqlite_version_at_least_3_35(t : T?) {
-    // 3.35.0+ supports DROP COLUMN. 3.25.0+ supports RENAME COLUMN.
-    // sqlite3_libversion_number() encodes 3.35.0 as 3*1000000 + 35*1000 + 0 = 3035000.
+def test_sqlite_version_at_least_3_25(t : T?) {
+    // 3.25.0+ supports RENAME COLUMN (the feature this file tests).
+    // sqlite3_libversion_number() encodes 3.25.0 as 3*1000000 + 25*1000 + 0 = 3025000.
     let n = sqlite3_libversion_number()
-    t |> success(n >= 3035000,
-        "bundled SQLite must be >= 3.35.0 (got '{sqlite_version()}', code {n})")
+    t |> success(n >= 3025000,
+        "bundled SQLite must be >= 3.25.0 for RENAME COLUMN (got '{sqlite_version()}', code {n})")
 }

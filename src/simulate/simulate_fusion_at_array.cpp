@@ -85,7 +85,9 @@ namespace das {
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             auto rr = uint32_t(r.subexpr->evalInt(context)); \
             if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", rr, pl->size); \
-            return v_ldu((const float *)(pl->data + rr*stride + offset)); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl->data + rr*stride + offset, CTYPE); \
+            return __r; \
         } \
     };
 
@@ -97,7 +99,9 @@ namespace das {
             auto pl = (Array *) l.compute##COMPUTEL(context); \
             auto rr = *((uint32_t *)r.compute##COMPUTER(context)); \
             if ( rr >= pl->size ) context.throw_error_at(debugInfo,"array index out of range, %u of %u", rr, pl->size); \
-            return v_ldu((const float *)(pl->data + rr*stride + offset)); \
+            vec4f __r; \
+            DAS_LDU_WORKHORSE(__r, pl->data + rr*stride + offset, CTYPE); \
+            return __r; \
         } \
     };
 

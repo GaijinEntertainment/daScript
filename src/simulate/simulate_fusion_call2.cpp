@@ -44,6 +44,9 @@ namespace das {
         }
         SimFunction * fnPtr = nullptr;
         SimNode * cmresEval = nullptr;
+        // Per-side operand byte size; stamped at fuse-time. Default 16 mirrors legacy v_ldu over-read.
+        uint8_t leftLoadSize = 16;
+        uint8_t rightLoadSize = 16;
     };
 
 
@@ -72,7 +75,8 @@ namespace das {
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
@@ -88,7 +92,8 @@ namespace das {
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
@@ -105,8 +110,10 @@ namespace das {
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \
@@ -121,7 +128,9 @@ namespace das {
     auto sn = (SimNode_CallBase *)node; \
     rn->fnPtr = sn->fnPtr; \
     rn->cmresEval = sn->cmresEval; \
-    rn->baseType = Type::none;
+    rn->baseType = Type::none; \
+    rn->leftLoadSize  = (sn->types && sn->types[0] && sn->types[0]->size <= 16) ? (uint8_t)sn->types[0]->size : 16; \
+    rn->rightLoadSize = (sn->types && sn->types[1] && sn->types[1]->size <= 16) ? (uint8_t)sn->types[1]->size : 16;
 
 __forceinline SimNode * safeArg2 ( SimNode * node, int index ) {
     auto cb = static_cast<SimNode_CallBase *>(node);
@@ -146,7 +155,8 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
@@ -160,7 +170,8 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
@@ -175,8 +186,10 @@ IMPLEMENT_ANY_OP2(__forceinline, Call, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             auto cmres = cmresEval->evalPtr(context); \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             return cast<char *>::to(context.callWithCopyOnReturn(fnPtr, argValues, cmres, &debugInfo)); \
         } \
         DAS_PTR_NODE; \
@@ -196,7 +209,8 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
             argValues[0] = l.subexpr->eval(context); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTEL(context)); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTEL(context), rightLoadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \
@@ -217,7 +231,8 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTER(context), leftLoadSize); \
             argValues[1] = r.subexpr->eval(context); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
@@ -239,8 +254,10 @@ IMPLEMENT_ANY_OP2(__forceinline, CallAndCopyOrMove, Ptr, StringPtr)
         NO_ASAN_INLINE auto compute ( Context & context ) { \
             DAS_PROFILE_NODE \
             vec4f argValues[2]; \
-            argValues[0] = v_ldu((const float *)l.compute##COMPUTEL(context)); \
-            argValues[1] = v_ldu((const float *)r.compute##COMPUTER(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], l.compute##COMPUTEL(context), leftLoadSize); \
+            argValues[1] = v_zero(); \
+            memcpy(&argValues[1], r.compute##COMPUTER(context), rightLoadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \

@@ -47,6 +47,8 @@ namespace das {
         }
         SimFunction * fnPtr = nullptr;
         SimNode * cmresEval = nullptr;
+        // Operand byte size; stamped at fuse-time. Default 16 mirrors legacy v_ldu over-read.
+        uint8_t loadSize = 16;
     };
 
 #define EVAL_NODE(TYPE,CTYPE)\
@@ -72,7 +74,8 @@ namespace das {
     auto sn = (SimNode_CallBase *)node; \
     rn->fnPtr = sn->fnPtr; \
     rn->cmresEval = sn->cmresEval; \
-    rn->baseType = Type::none;
+    rn->baseType = Type::none; \
+    rn->loadSize = (sn->types && sn->types[0] && sn->types[0]->size <= 16) ? (uint8_t)sn->types[0]->size : 16;
 
 __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
     auto cb = static_cast<SimNode_CallBase *>(node);
@@ -90,7 +93,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         NO_ASAN_INLINE vec4f compute(Context & context) { \
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
-            argValues[0] = v_ldu((const float *)subexpr.compute##COMPUTE(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
             auto aa = context.abiArg; \
             context.abiArg = argValues; \
             auto res = fnPtr->code->eval(context); \
@@ -117,7 +121,8 @@ __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
         NO_ASAN_INLINE vec4f compute(Context & context) { \
             DAS_PROFILE_NODE \
             vec4f argValues[1]; \
-            argValues[0] = v_ldu((const float *)subexpr.compute##COMPUTE(context)); \
+            argValues[0] = v_zero(); \
+            memcpy(&argValues[0], subexpr.compute##COMPUTE(context), loadSize); \
             return context.call(fnPtr, argValues, &debugInfo); \
         } \
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override { \

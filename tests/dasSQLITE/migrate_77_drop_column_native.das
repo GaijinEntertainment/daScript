@@ -25,3 +25,13 @@ def test_drop_column_works_natively(t : T?) {
         "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='Legacy'", type<int>)
     t |> equal(has_legacy, 0, "Legacy column must be gone")
 }
+
+
+[test]
+def test_sqlite_version_at_least_3_35(t : T?) {
+    // 3.35.0+ supports DROP COLUMN (the feature this file tests).
+    // sqlite3_libversion_number() encodes 3.35.0 as 3*1000000 + 35*1000 + 0 = 3035000.
+    let n = sqlite3_libversion_number()
+    t |> success(n >= 3035000,
+        "bundled SQLite must be >= 3.35.0 for DROP COLUMN (got '{sqlite_version()}', code {n})")
+}
