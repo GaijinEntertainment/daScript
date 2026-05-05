@@ -323,25 +323,50 @@ def make_relative_path(path, root : string) : string {
     return replace(result, "\\", "/")
 }
 
-// Expand a glob pattern (e.g. "utils/mcp/tools/*.das") into a list of file paths
+// Expand a glob pattern (e.g. "utils/mcp/tools/*.das") into a list of file paths.
+// The literal directory prefix (everything before the first glob metacharacter)
+// becomes the walk root; the rest stays as a pathname-glob pattern matched
+// against entries via `fio.match_glob` / `fio.glob`. So `**/*.das` walks from
+// `.`, `src/**/test*.das` walks from `src`, `utils/mcp/*.das` walks one level
+// under `utils/mcp`. Single-segment patterns (no `/`, `\`, or `**`) take a
+// shallow non-recursive walk; multi-segment or `**` patterns recurse.
+//
+// The input pattern is normalized to forward slashes via `to_generic_path`,
+// so Windows-style backslash patterns (`src\sub\*.das`) work the same as
+// the POSIX form. `glob`/`match_glob` see only `/`-form paths.
 def expand_glob(pattern : string; var result : array<string>) {
-    let last_slash = max(rfind(pattern, "/"), rfind(pattern, "\\"))
-    var dir_part = "."
-    var file_pattern = pattern
-    if (last_slash >= 0) {
-        dir_part = slice(pattern, 0, last_slash)
-        file_pattern = slice(pattern, last_slash + 1)
-    }
+    let normalized_pattern = to_generic_path(pattern)
+    let split = _split_literal_prefix(normalized_pattern)
+    let dir_part = split._0
+    let file_pattern = split._1
+    // Pattern is already `/`-normalized (see normalize above), so no
+    // need to also check for `\` here.
+    let recursive = (find(file_pattern, "**") >= 0
+                     || find(file_pattern, "/") >= 0)
     var matches : array<string>
-    dir(dir_part) $(fname) {
-        if (fname == "." || fname == "..") {
-            return
+    if (recursive) {
+        glob(dir_part, file_pattern) $(fname, is_dir) {
+            if (is_dir) {
+                return
+            }
+            matches |> push(_join_path(dir_part, fname))
         }
-        if (glob_match(file_pattern, fname)) {
-            if (dir_part == ".") {
-                matches |> push(fname)
-            } else {
-                matches |> push("{dir_part}/{fname}")
+    } else {
+        // Single-segment shallow pattern: walk only the immediate directory.
+        // `dir(...)` yields names without an `is_dir` flag, so stat each match
+        // and skip directories — caller tools (format/lint/compile_check) take
+        // file paths only and produce confusing errors on a directory entry.
+        dir(dir_part) $(fname) {
+            if (fname == "." || fname == "..") {
+                return
+            }
+            if (match_glob(file_pattern, fname)) {
+                let full = _join_path(dir_part, fname)
+                let st = stat(full)
+                if (st.is_valid && st.is_dir) {
+                    return
+                }
+                matches |> push(full)
             }
         }
     }
@@ -352,15 +377,74 @@ def expand_glob(pattern : string; var result : array<string>) {
     }
 }
 
+// Join `dir_part` and `fname` with `/`, but skip the inserted separator
+// when `dir_part` is `.` (just yield `fname`) or already ends with `/` or
+// `\` (filesystem root, drive root) so callers don't end up with paths
+// like `//etc/x` or `C://x`.
+def private _join_path(dir_part : string; fname : string) : string {
+    if (dir_part == ".") {
+        return fname
+    }
+    if (dir_part |> ends_with("/") || dir_part |> ends_with("\\")) {
+        return "{dir_part}{fname}"
+    }
+    return "{dir_part}/{fname}"
+}
+
+// Split a pattern into (literal_dir, glob_remainder) at the last separator
+// before the first glob metacharacter. A pattern with no metacharacters is
+// split at its last separator (legacy behavior used by literal-pass-through
+// callers). The returned dir_part is "." when no separator precedes the meta.
+def private _split_literal_prefix(pattern : string) : tuple<string; string> {
+    var first_meta = -1
+    peek_data(pattern) $(arr) {
+        for (i in range(length(arr))) {
+            let c = arr[i]
+            if (c == uint8('*') || c == uint8('?') || c == uint8('[')) {
+                first_meta = i
+                break
+            }
+        }
+    }
+    let scan_end = first_meta < 0 ? length(pattern) : first_meta
+    var sep = -1
+    peek_data(pattern) $(arr) {
+        for (i in range(scan_end)) {
+            if (arr[i] == uint8('/') || arr[i] == uint8('\\')) {
+                sep = i
+            }
+        }
+    }
+    if (sep < 0) {
+        return "." => pattern
+    }
+    let raw_dir = slice(pattern, 0, sep)
+    let raw_sep = slice(pattern, sep, sep + 1)
+    let remainder = slice(pattern, sep + 1)
+    // POSIX absolute root: pattern starts with `/` (or `\`). Empty prefix
+    // would tell `glob`/`dir` to walk an empty path; keep the separator.
+    if (empty(raw_dir)) {
+        return raw_sep => remainder
+    }
+    // Windows drive root like `C:` (or `C:/foo` after normalization with
+    // sep at index 2). Without the trailing separator `dir_rec` interprets
+    // `C:` as "current directory on drive C", not the drive root.
+    if (length(raw_dir) == 2 && raw_dir |> ends_with(":")) {
+        return "{raw_dir}{raw_sep}" => remainder
+    }
+    return raw_dir => remainder
+}
+
 // Parse file argument: comma- or newline-separated list of files, dirs, and
-// globs (any part may contain `*` / `?` wildcards, expanded via expand_glob).
+// globs. Any part containing glob metacharacters (`*` / `?` / `[`) is expanded
+// via expand_glob; otherwise it's pushed as a literal path.
 def parse_file_list(file : string; var result : array<string>) {
     if (find(file, ",") < 0 && find(file, "\n") < 0) {
         let part = strip(file)
         if (empty(part)) {
             return
         }
-        if (find(part, "*") >= 0 || find(part, "?") >= 0) {
+        if (is_glob_pattern(part)) {
             expand_glob(part, result)
         } else {
             result |> push(part)
@@ -372,7 +456,7 @@ def parse_file_list(file : string; var result : array<string>) {
         if (empty(part)) {
             continue
         }
-        if (find(part, "*") >= 0 || find(part, "?") >= 0) {
+        if (is_glob_pattern(part)) {
             expand_glob(part, result)
         } else {
             result |> push(part)

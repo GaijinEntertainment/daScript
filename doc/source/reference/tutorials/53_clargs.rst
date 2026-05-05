@@ -430,4 +430,6 @@ touching the live process state:
 
     Previous tutorial: :ref:`tutorial_option_and_result`
 
+    Next tutorial: :ref:`tutorial_glob`
+
     :ref:`tutorial_structs`, :ref:`tutorial_enumerations`, :ref:`tutorial_arrays`, :ref:`tutorial_annotations`
