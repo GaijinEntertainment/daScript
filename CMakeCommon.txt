@@ -274,14 +274,14 @@ MACRO(CMAKE_TEXT_XXD project_name file_name)
 		VERBATIM
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
-			-P CMakeXxdImpl.txt
+			-P ${CMAKE_SOURCE_DIR}/CMakeXxdImpl.txt
 	)
 
 	list(APPEND XXD_DEPENDS_LIST_${project_name} ${file_name}.inc)
  	execute_process(
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
-			-P CMakeXxdImpl.txt
+			-P ${CMAKE_SOURCE_DIR}/CMakeXxdImpl.txt
 	)
 ENDMACRO()
 

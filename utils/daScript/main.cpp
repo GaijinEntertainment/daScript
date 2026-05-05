@@ -302,11 +302,11 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
             }
             if ( !pctx ) {
                 exitCode = 1;
-            } else if ( program->thisModule->isModule ) {
-                tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else if ( dryRun ) {
                 exitCode = 0;
                 tout << "dry run: " << fn << "\n";
+            } else if ( program->thisModule->isModule ) {
+                tout<< "WARNING: program is setup as both module, and endpoint.\n";
             } else {
                 auto fnVec = pctx->findFunctions(mainFnName.c_str());
                 das::vector<SimFunction *> fnMVec;

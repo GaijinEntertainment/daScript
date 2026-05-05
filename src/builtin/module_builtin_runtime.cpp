@@ -1532,7 +1532,7 @@ namespace das
     }
 
     char * builtin_shared_module_extension ( Context * context, LineInfoArg * at ) {
-#ifdef DAS_NO_ASSERTIONS
+#ifdef NDEBUG
         return context->allocateString(".shared_module", at);
 #else
         return context->allocateString("_debug.shared_module", at);
