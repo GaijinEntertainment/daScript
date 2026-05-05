@@ -400,6 +400,13 @@ the same scanner ``-p`` uses.  ``--paths-stdin`` is mutually
 exclusive with ``--against-from-stdin`` (one stdin reader per
 run).
 
+For tools that take a comma- or newline-separated list of files,
+directories, and globs in a single argument (the format used by
+all MCP file/glob tools), the canonical expander lives in
+``daslib/fio.parse_file_list`` --- it strips whitespace, dispatches
+literals through and globs through ``expand_glob``, and preserves
+the order of plain entries across glob expansions.
+
 The on-disk schema is a small envelope:
 
 .. code-block:: json

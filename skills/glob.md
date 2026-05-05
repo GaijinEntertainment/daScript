@@ -23,6 +23,8 @@ def glob_filtered(root : string; includes, excludes : array<string>;
                   blk : block<(filename : string; is_dir : bool) : void>)
 def is_glob_pattern(pattern : string) : bool
 def to_generic_path(s : string) : string
+def expand_glob(pattern : string; var result : array<string>)
+def parse_file_list(file : string; var result : array<string>)
 ```
 
 - `match_glob` — pure path-string match, no filesystem access. Both pattern and path use `/`.
@@ -30,6 +32,8 @@ def to_generic_path(s : string) : string
 - `glob_filtered` — multi-pattern walk. An entry is yielded if it matches ≥1 include and 0 excludes. **Excludes win** on conflict. Callback receives `/`-normalized paths.
 - `is_glob_pattern` — true if the string contains `*`, `?`, or `[`. Detects character classes that the inline `find(s, "*") >= 0 || find(s, "?") >= 0` check misses.
 - `to_generic_path` — convert a path to use forward slashes regardless of host. Use when feeding `dir_rec` output (native separator) into `match_glob` directly, or anywhere else you need stable `/`-separated paths. **Not** the same as `fio.normalize`, which uses the platform-preferred separator (`\` on Windows).
+- `expand_glob` — turn a single glob pattern (e.g. `src/**/*.das`) into a sorted list of matching file paths. Splits the literal directory prefix from the glob remainder, picks recursive (`glob`) vs shallow (`dir`) walk based on whether the remainder contains `**` or `/`, normalizes input via `to_generic_path` (so backslash patterns work), filters out directories, sorts the matches locally, and **appends** to `result`. The local sort + append is deliberate: it preserves the order of any plain entries pushed to `result` before the glob.
+- `parse_file_list` — parse a comma- or newline-separated list of files / dirs / globs into a flat list of paths. Strips whitespace, skips empty entries, dispatches each entry through `is_glob_pattern`: literal entries pass through, glob entries go through `expand_glob`. Also **appends** to `result`. The canonical "user-supplied paths argument → expanded file list" expander used by every MCP tool with a `paths` / `file` argument; reach for it from any new CLI tool that takes file/glob input.
 
 ## Idioms
 
@@ -78,25 +82,19 @@ Excludes win — a file matching both an include and an exclude is dropped.
 
 ### Order preservation across plain + glob mixed input
 
-When expanding a comma- or newline-separated list of paths-or-patterns, sort each glob expansion **locally** and append to the result, instead of sorting the whole result at the end. This preserves the user's intended order across plain entries:
+`parse_file_list` and `expand_glob` already implement the right pattern: each glob expansion sorts **locally** and appends, so plain entries the user listed in a specific order stay where they were. Don't reach for a global `sort(result)` at the end of a mixed-input parse — it would scramble the user's intended order.
 
 ```das
-def expand_one(part : string; var result : array<string>) {
-    if (is_glob_pattern(part)) {
-        var matches : array<string>
-        glob(".", part) $(filename, is_dir) {
-            if (!is_dir) { matches |> push_clone(filename) }
-        }
-        sort(matches)                                  // local sort only
-        result |> reserve(length(result) + length(matches))
-        for (m in matches) { result |> push_clone(m) }
-    } else {
-        result |> push_clone(part)
-    }
-}
+require daslib/fio
+
+var files : array<string>
+parse_file_list("zzz.das,assets/**/*.png,aaa.das", files)
+// files[0] == "zzz.das" — first plain stays first
+// files[length(files) - 1] == "aaa.das" — last plain stays last
+// the glob's matches sit between them, sorted within their slice
 ```
 
-Globally re-sorting `result` at the end would scramble plain entries the user listed in a specific order. See the regression test in `utils/mcp/test_tools.das` ("expand_glob preserves prior entries").
+If you're rolling your own expansion (don't, unless `parse_file_list` doesn't fit), the same pattern: per-glob `sort()` + `append`, never a final global sort. See the regression test in [tests/fio/expand_glob_test.das](tests/fio/expand_glob_test.das) (`test_parse_file_list_order_preserved`).
 
 ## Performance and correctness gotchas
 

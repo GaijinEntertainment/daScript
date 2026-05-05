@@ -152,7 +152,13 @@ def test_compile_check_glob_no_match(t : T?) {
     }
 }
 
-// ── parse_file_list ──────────────────────────────────────────────────
+// ── parse_file_list (smoke) ──────────────────────────────────────────
+// Canonical unit tests for `parse_file_list` and `expand_glob` live in
+// `tests/fio/expand_glob_test.das` (the helpers moved to `daslib/fio`).
+// Tools-side coverage of comma-list / glob / mixed inputs continues
+// further down via `do_format_file` / `do_compile_check` / `do_lint`
+// integration tests. This single subtest only confirms that the helper
+// is reachable through the MCP `require` chain after the move.
 
 def has_path(files : array<string>; suffix : string) : bool {
     for (f in files) {
@@ -164,184 +170,12 @@ def has_path(files : array<string>; suffix : string) : bool {
 }
 
 [test]
-def test_parse_file_list(t : T?) {
-    t |> run("single plain file") <| @(t : T?) {
+def test_parse_file_list_smoke(t : T?) {
+    t |> run("parse_file_list reachable through MCP require chain") <| @(t : T?) {
         var files : array<string>
-        parse_file_list("utils/mcp/tests/_fixture_valid.das", files)
-        t |> equal(length(files), 1, "1 file")
-        t |> equal(files[0], "utils/mcp/tests/_fixture_valid.das", "passes through")
-    }
-    t |> run("single glob expands") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("utils/mcp/tests/_fixture_v*.das", files)
-        t |> success(length(files) >= 1, "at least one match")
-        t |> success(has_path(files, "_fixture_valid.das"), "valid fixture matched")
-    }
-    t |> run("comma list of plain files") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("a.das,b.das,c.das", files)
-        t |> equal(length(files), 3, "3 files")
-        t |> equal(files[0], "a.das", "first")
-        t |> equal(files[1], "b.das", "second")
-        t |> equal(files[2], "c.das", "third")
-    }
-    t |> run("comma list of globs (issue #2498 repro)") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("utils/detect-dupe/*.das,utils/mcp/tests/*.das", files)
-        t |> success(has_path(files, "utils/detect-dupe/"), "detect-dupe glob expanded")
-        t |> success(has_path(files, "utils/mcp/tests/"), "mcp/tests glob expanded")
-    }
-    t |> run("mixed plain + glob") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("utils/mcp/tests/_fixture_valid.das,utils/mcp/tests/_fixture_e*.das", files)
-        t |> success(has_path(files, "_fixture_valid.das"), "plain file present")
+        parse_file_list("{fixture_path("_fixture_valid.das")},utils/mcp/tests/_fixture_e*.das", files)
+        t |> success(has_path(files, "_fixture_valid.das"), "plain entry preserved")
         t |> success(has_path(files, "_fixture_error.das"), "glob expanded")
-    }
-    t |> run("newline-delimited") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("a.das\nb.das\nc.das", files)
-        t |> equal(length(files), 3, "3 files")
-        t |> equal(files[0], "a.das", "first")
-        t |> equal(files[1], "b.das", "second")
-        t |> equal(files[2], "c.das", "third")
-    }
-    t |> run("mixed comma + newline + whitespace") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("  a.das , b.das \n c.das ", files)
-        t |> equal(length(files), 3, "3 files (whitespace stripped)")
-        t |> equal(files[0], "a.das", "first stripped")
-        t |> equal(files[2], "c.das", "third stripped")
-    }
-    t |> run("empty parts skipped") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("a.das,,\n,b.das", files)
-        t |> equal(length(files), 2, "2 non-empty files")
-    }
-    t |> run("single fast-path strips whitespace") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("  a.das  ", files)
-        t |> equal(length(files), 1, "1 file")
-        t |> equal(files[0], "a.das", "stripped")
-    }
-    t |> run("single fast-path skips empty/whitespace-only") <| @(t : T?) {
-        var files : array<string>
-        parse_file_list("   ", files)
-        t |> equal(length(files), 0, "no files for whitespace-only input")
-    }
-    t |> run("expand_glob preserves prior entries (no global re-sort)") <| @(t : T?) {
-        // Repro for the regression Copilot caught: expand_glob's sort()
-        // used to scramble entries pushed before it. Order must be
-        // preserved across (plain, glob, plain) sequences.
-        var files : array<string>
-        parse_file_list("zzz.das,utils/mcp/tests/_fixture_v*.das,aaa.das", files)
-        t |> equal(files[0], "zzz.das", "first plain stays first")
-        t |> equal(files[length(files) - 1], "aaa.das", "last plain stays last")
-    }
-    t |> run("recursive ** in middle of pattern") <| @(t : T?) {
-        // PR #2576 follow-up: split at the last `/` before the first glob meta
-        // so `utils/mcp/**/test_tools.das` walks from `utils/mcp/`, not from
-        // a literal `**` directory that does not exist.
-        var files : array<string>
-        parse_file_list("utils/mcp/**/test_tools.das", files)
-        t |> success(has_path(files, "test_tools.das"), "** matched test_tools.das somewhere under utils/mcp/")
-    }
-    t |> run("shallow pattern does not descend into subdirectories") <| @(t : T?) {
-        // PR #2576 follow-up: patterns without `**` use the non-recursive
-        // walker. `utils/mcp/*.das` must NOT pick up files under
-        // `utils/mcp/tools/` or `utils/mcp/tests/`.
-        var files : array<string>
-        parse_file_list("utils/mcp/*.das", files)
-        for (f in files) {
-            t |> success(find(f, "utils/mcp/tools/") < 0, "shallow * did not descend into tools/")
-            t |> success(find(f, "utils/mcp/tests/") < 0, "shallow * did not descend into tests/")
-        }
-    }
-    t |> run("multi-segment pattern without ** still recurses") <| @(t : T?) {
-        // PR #2576 round-2: a pattern like `utils/mcp/*/common.das` has no
-        // `**` but it crosses a `/`, so the recursive walk must be used —
-        // otherwise it can never match `utils/mcp/tools/common.das`.
-        var files : array<string>
-        parse_file_list("utils/mcp/*/common.das", files)
-        t |> success(has_path(files, "tools/common.das"), "multi-segment pattern matched tools/common.das")
-    }
-    t |> run("backslash-style pattern matches the same as forward-slash") <| @(t : T?) {
-        // PR #2576 round-3: the pattern is normalized to `/` at the top of
-        // expand_glob, so Windows-style `\` patterns produce the same
-        // result as POSIX `/` patterns.
-        var slash : array<string>
-        var back : array<string>
-        parse_file_list("utils/mcp/*/common.das", slash)
-        parse_file_list("utils\\mcp\\*\\common.das", back)
-        sort(slash)
-        sort(back)
-        t |> equal(length(slash), length(back), "same number of matches")
-        for (i in range(length(slash))) {
-            t |> equal(slash[i], back[i], "entry {i} matches")
-        }
-    }
-    t |> run("absolute path patterns walk the root, not cwd") <| @(t : T?) {
-        // PR #2576 round-3: `_split_literal_prefix` keeps the separator in
-        // `dir_part` when the pattern starts at the filesystem root, so
-        // `glob` walks the right place rather than an empty path.
-        let abs = "{get_das_root()}/utils/mcp/tools/*.das"
-        var files : array<string>
-        parse_file_list(abs, files)
-        t |> success(length(files) > 0, "absolute pattern matched at least one file")
-        t |> success(has_path(files, "common.das"), "common.das present")
-    }
-    t |> run("absolute root prefix produces clean paths (no double slash)") <| @(t : T?) {
-        // PR #2576 round-4: when `_split_literal_prefix` returns a dir_part
-        // that ends with `/` (POSIX root or Windows drive root), expand_glob
-        // must not insert another `/` when concatenating with the matched
-        // entry. Use a real temp dir — fully portable across hosts.
-        let tmp = create_temp_directory_result("expand_glob_doubleslash_")
-        if (!(tmp is value)) {
-            t |> failure("could not create temp directory: {tmp as error}")
-            return
-        }
-        let abs_root = tmp as value
-        fwrite("{abs_root}/marker.das", "")
-        var files : array<string>
-        parse_file_list("{abs_root}/*.das", files)
-        for (f in files) {
-            t |> success(find(f, "//") < 0, "no double slashes in '{f}'")
-        }
-        var rm_err : string
-        rmdir_rec(abs_root, rm_err)
-    }
-    t |> run("character class triggers glob expansion") <| @(t : T?) {
-        // Round-5 regression: parse_file_list previously detected globs by
-        // looking for `*` / `?` only. A pattern like `_fixture_[ev]*.das`
-        // would be treated as a literal path and dropped. Now dispatch goes
-        // through fio.is_glob_pattern, which also recognizes `[`.
-        var files : array<string>
-        parse_file_list("utils/mcp/tests/_fixture_[ev]*.das", files)
-        var saw_valid = false
-        var saw_error = false
-        for (f in files) {
-            if (find(f, "_fixture_valid.das") >= 0) {
-                saw_valid = true
-            }
-            if (find(f, "_fixture_error.das") >= 0) {
-                saw_error = true
-            }
-        }
-        t |> success(saw_valid, "char class glob picks _fixture_valid.das")
-        t |> success(saw_error, "char class glob picks _fixture_error.das")
-    }
-    t |> run("shallow expand_glob filters out directories") <| @(t : T?) {
-        // Round-6 regression: the shallow `dir(...)` branch did not filter
-        // directories, so `parse_file_list("utils/mcp/*")` emitted entries
-        // like `utils/mcp/tools` (a subdirectory) alongside actual files.
-        // Downstream tools (format/lint/compile_check) take regular files
-        // only. After the fix, expand_glob stats each match and skips dirs.
-        var files : array<string>
-        parse_file_list("utils/mcp/*", files)
-        for (f in files) {
-            let st = stat(f)
-            t |> success(!(st.is_valid && st.is_dir),
-                "expand_glob must not emit directory '{f}'")
-        }
     }
 }
 

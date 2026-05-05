@@ -5,6 +5,8 @@
 //   - glob: walk a directory tree and yield matching paths
 //   - glob_filtered: include + exclude patterns, excludes win
 //   - is_glob_pattern: detect literal vs glob to dispatch correctly
+//   - expand_glob: pattern -> sorted file list (the higher-level helper)
+//   - parse_file_list: comma/newline-separated list of files / dirs / globs
 //   - When to use fio.match_glob vs strings_boost.glob_match (the two flavors)
 //
 // Prerequisites: Tutorial 07 (Strings), Tutorial 13 (Blocks)
@@ -173,6 +175,42 @@ def main() {
     let generic = to_generic_path(mixed)
     print("  input  : {mixed}\n")
     print("  output : {generic}\n")
+
+    // ============================================================
+    // Section 7: expand_glob — pattern to sorted file list
+    // ============================================================
+    // `expand_glob(pattern, var result)` is the higher-level helper:
+    // it splits the literal directory prefix from the glob remainder,
+    // picks recursive vs shallow walk based on the pattern, filters out
+    // directories, sorts locally, and APPENDS to `result`. Reach for it
+    // whenever a CLI tool takes a single glob argument.
+
+    print("\n=== expand_glob ===\n")
+    var by_pattern : array<string>
+    expand_glob("{tmpdir}/**/*.das", by_pattern)
+    print("  expand_glob {tmpdir}/**/*.das (count={length(by_pattern)}):\n")
+    for (f in by_pattern) {
+        print("    {f}\n")
+    }
+
+    // ============================================================
+    // Section 8: parse_file_list — comma/newline list of files/dirs/globs
+    // ============================================================
+    // `parse_file_list(file, var result)` is the canonical
+    // "user-supplied paths argument -> expanded file list" expander.
+    // Comma- or newline-separated; whitespace stripped; literal entries
+    // pass through; glob entries go through `expand_glob`. Order is
+    // preserved across plain entries — globs sort within their slice.
+
+    print("\n=== parse_file_list ===\n")
+    var inputs : array<string>
+    let raw = "zzz_literal.das,{tmpdir}/src/*.das\n{tmpdir}/assets/**/*.png ,aaa_literal.das"
+    parse_file_list(raw, inputs)
+    print("  input: {raw}\n")
+    print("  parsed (count={length(inputs)}; plain entries keep position):\n")
+    for (f in inputs) {
+        print("    {f}\n")
+    }
 
     cleanup(tmpdir)
     print("\nDone.\n")
