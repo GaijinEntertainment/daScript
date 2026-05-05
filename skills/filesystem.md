@@ -37,6 +37,7 @@ Fixed order of preference. If the row on the left fits, the row on the right is 
 | Force forward slashes regardless of host | `to_generic_path(p)` | `replace(p, "\\", "/")` |
 | Is this path absolute? | `is_absolute(p)` | check leading `/` or drive letter |
 | Compute a relative path | `relative(p, base, error)` or `relative_result(p, base)` | manual prefix strip with `find`/`slice` |
+| Find a known component anywhere in a path (e.g. `/modules/...`) | `to_generic_path(p)` then `find`/`rfind("/<name>/")` on the result | scanning for both `/<name>/` AND `\<name>\` |
 | Expand a single glob into a sorted file list | `expand_glob(pattern, var result)` | manual `dir_rec` + `match_glob` walk |
 | Parse user `paths` arg (comma/newline list of files/dirs/globs) | `parse_file_list(file, var result)` | manual split + per-entry dispatch |
 | Check existence | `fexist(p)` | open-and-check |
@@ -186,7 +187,7 @@ Fields: `capacity`, `free`, `available` (all `uint64`).
 
 ## Common gotchas
 
-- **Never split paths with `rfind("/")` and `rfind("\\")` followed by `slice`.** Always `base_name` / `dir_name` / `parent`. The manual form misses Windows backslashes, mishandles trailing separators, and returns the wrong slice when no separator is present.
+- **Never split paths with `rfind("/")` and `rfind("\\")` followed by `slice`.** Always `base_name` / `dir_name` / `parent`. The manual form misses Windows backslashes, mishandles trailing separators, and returns the wrong slice when no separator is present. Exception: when the substring you're searching for is a **named component** (e.g. `/modules/`, `/.git/`), normalize once via `to_generic_path(p)` and search for forward slashes only: `rfind(to_generic_path(p), "/modules/")`. The normalize step is what makes the rule "search for `/` only" safe; never search for both `/X/` and `\X\` separately.
 - **Never build paths with string interpolation.** `"{a}/{b}"` produces `"foo//bar"` if `a` has a trailing slash and breaks on Windows when one side uses backslashes. Use `path_join`.
 - **Never strip prefixes with `find(p, root) == 0` + `slice`.** Use `relative(p, root, err)` (or `relative_result`) — handles the trailing-separator case, refuses partial-component matches (`/foo/bar` vs `/foo/barx`), and produces correct `..`-relative paths when `p` is outside `root`. Pair with `to_generic_path` if the consumer needs forward slashes.
 - **`normalize` and `to_generic_path` are NOT the same.** `normalize` uses the platform-preferred separator (`\` on Windows). `to_generic_path` always emits `/`. Pick by what the consumer needs: shells/system calls want `normalize`, JSON/log output and stable test fixtures want `to_generic_path`.
