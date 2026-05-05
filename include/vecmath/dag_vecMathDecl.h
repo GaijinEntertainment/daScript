@@ -39,6 +39,14 @@ typedef const struct bsph3f& bsph3f_cref;
 # endif
 #endif
 
+#if defined(__SANITIZE_THREAD__)
+# define DAGOR_TSAN_ENABLED
+#elif defined(__has_feature)
+# if __has_feature(thread_sanitizer)
+#   define DAGOR_TSAN_ENABLED
+# endif
+#endif
+
 #ifndef VECMATH_FINLINE
   #define VECMATH_FINLINE __forceinline
 #endif
@@ -58,9 +66,15 @@ typedef const struct bsph3f& bsph3f_cref;
   #endif
 #endif
 
-#if defined(DAGOR_ASAN_ENABLED) && (defined(__clang__) || __GNUC__ >= 7)
-# define NO_ASAN_INLINE inline __attribute__((no_sanitize_address))
-//loads have to switch off address sanitize. It is common (and ok) to load data from stack, even if data partially is not allocated (i.e. .xyzU).
+// Suppresses ASan AND TSan on intentional 16-byte unaligned loads. v_ldu may legitimately
+// read past a 4/8-byte struct end (caller uses cast<T>::to which only consumes the relevant
+// bytes). ASan flags this on stack-near-allocation; TSan flags it when the adjacent memory
+// was just freed in the racy way (e.g., compile-error TextWriter buffer freed during
+// rtti_builtin_compile_file). The unused upper bytes never escape the v_ldu callee.
+// Use the split-attribute form for compatibility with older GCC (no_sanitize_address /
+// no_sanitize_thread are GCC-4.8+; the multi-arg no_sanitize("a","b") string form is GCC-8+).
+#if (defined(DAGOR_ASAN_ENABLED) || defined(DAGOR_TSAN_ENABLED)) && (defined(__clang__) || __GNUC__ >= 7)
+# define NO_ASAN_INLINE inline __attribute__((no_sanitize_address)) __attribute__((no_sanitize_thread))
 #elif defined(DAGOR_ASAN_ENABLED) && defined(_MSC_VER)
 # define NO_ASAN_INLINE __declspec(no_sanitize_address) __forceinline
 #else
