@@ -195,6 +195,238 @@ def dir_rec(path : string; blk : block<(filename : string; is_dir : bool) : void
     builtin_dir_rec(path, blk, error)
 }
 
+// ===== glob =====
+
+// Byte-level pathname-glob matcher. `/` is a hard segment boundary that single
+// `*` and `?` may not cross; `**` matches across `/`.
+def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<uint8> const#; var si : int) : bool {
+    let plen = length(p)
+    let slen = length(s)
+    while (pi < plen) {
+        let pc = p[pi]
+        if (pc == uint8('*')) {
+            let is_double = (pi + 1 < plen && p[pi + 1] == uint8('*'))
+            if (is_double) {
+                // `**/` semantics: the `/` is optional only when `**` matches
+                // empty. Otherwise `**` must consume one or more segments
+                // ending in `/`, so the source must have a `/` boundary.
+                if (pi + 2 < plen && p[pi + 2] == uint8('/')) {
+                    if (_match_glob_bytes(p, pi + 3, s, si)) {
+                        return true
+                    }
+                    var k = si
+                    while (k < slen) {
+                        if (s[k] == uint8('/') && _match_glob_bytes(p, pi + 3, s, k + 1)) {
+                            return true
+                        }
+                        k += 1
+                    }
+                    return false
+                }
+                pi += 2
+                var k = si
+                while (k <= slen) {
+                    if (_match_glob_bytes(p, pi, s, k)) {
+                        return true
+                    }
+                    k += 1
+                }
+                return false
+            } else {
+                pi += 1
+                var k = si
+                while (k <= slen) {
+                    if (_match_glob_bytes(p, pi, s, k)) {
+                        return true
+                    }
+                    return false if (k < slen && s[k] == uint8('/'))
+                    k += 1
+                }
+                return false
+            }
+        } elif (pc == uint8('?')) {
+            return false if (si >= slen)
+            return false if (s[si] == uint8('/'))
+            pi += 1
+            si += 1
+        } elif (pc == uint8('[')) {
+            // POSIX fnmatch: `[` without a closing `]` matches the literal `[`.
+            // Probe ahead before committing to class processing.
+            var scan = pi + 1
+            if (scan < plen && (p[scan] == uint8('!') || p[scan] == uint8('^'))) {
+                scan += 1
+            }
+            // A `]` immediately after `[` or `[!`/`[^` is a literal class member,
+            // not the terminator (POSIX rule for closing brackets in classes).
+            if (scan < plen && p[scan] == uint8(']')) {
+                scan += 1
+            }
+            while (scan < plen && p[scan] != uint8(']')) {
+                scan += 1
+            }
+            if (scan >= plen) {
+                // No closing `]` — treat the `[` as a literal character.
+                return false if (si >= slen)
+                return false if (s[si] != pc)
+                pi += 1
+                si += 1
+            } else {
+                return false if (si >= slen)
+                let sc = s[si]
+                return false if (sc == uint8('/'))
+                pi += 1
+                var negate = false
+                if (pi < plen && (p[pi] == uint8('!') || p[pi] == uint8('^'))) {
+                    negate = true
+                    pi += 1
+                }
+                var matched = false
+                // POSIX: `]` right after `[` (or `[!`/`[^`) is a literal class
+                // member, not the terminator.
+                if (pi < plen && p[pi] == uint8(']')) {
+                    if (sc == uint8(']')) {
+                        matched = true
+                    }
+                    pi += 1
+                }
+                while (pi < plen && p[pi] != uint8(']')) {
+                    if (pi + 2 < plen && p[pi + 1] == uint8('-') && p[pi + 2] != uint8(']')) {
+                        let lo = uint(p[pi])
+                        let hi = uint(p[pi + 2])
+                        let scv = uint(sc)
+                        if (scv >= lo && scv <= hi) {
+                            matched = true
+                        }
+                        pi += 3
+                    } else {
+                        if (sc == p[pi]) {
+                            matched = true
+                        }
+                        pi += 1
+                    }
+                }
+                if (pi < plen) {
+                    pi += 1
+                }
+                return false if (matched == negate)
+                si += 1
+            }
+        } else {
+            return false if (si >= slen)
+            return false if (s[si] != pc)
+            pi += 1
+            si += 1
+        }
+    }
+    return si == slen
+}
+
+//! Match a pathname against a shell-style glob.
+//! Supports `*` (any chars except `/`), `**` (any chars incl. `/`), `?` (one non-`/` char),
+//! `[abc]` / `[a-z]` character classes, `[!abc]` / `[^abc]` negated classes.
+//! Pure path-string match — does not touch the filesystem. Both pattern and path use `/`.
+def match_glob(pattern : string; path : string) : bool {
+    let plen = length(pattern)
+    let slen = length(path)
+    return true if (plen == 0 && slen == 0)
+    return false if (plen == 0)
+    if (slen == 0) {
+        // Empty path matches a pattern only when every char is `*` (any number of stars or **).
+        var ok = true
+        peek_data(pattern) $(arr) {
+            for (i in range(length(arr))) {
+                if (arr[i] != uint8('*')) {
+                    ok = false
+                    break
+                }
+            }
+        }
+        return ok
+    }
+    var result = false
+    peek_data(pattern) $(parr) {
+        peek_data(path) $(sarr) {
+            result = _match_glob_bytes(parr, 0, sarr, 0)
+        }
+    }
+    return result
+}
+
+//! Convert a path to use forward slashes regardless of host OS.
+//! Useful for paths that flow into `/`-based matchers (`match_glob`,
+//! `glob`, RST `:ref:` targets, comma-separated path manifests, etc.).
+//! Note: `fio.normalize` is the *opposite* — it uses the platform-preferred
+//! separator (`\` on Windows). Use `to_generic_path` when you want stable
+//! `/`-separated output independent of host.
+def to_generic_path(s : string) : string {
+    return modify_data(s) $(var arr) {
+        for (i in range(length(arr))) {
+            if (arr[i] == uint8('\\')) {
+                arr[i] = uint8('/')
+            }
+        }
+    }
+}
+
+//! Walk `root` recursively and invoke `blk` for every entry whose path (relative to `root`)
+//! matches `pattern`. Both the matched path and the path passed to `blk` are normalized
+//! via `to_generic_path` so callbacks receive stable `/`-separated paths regardless of host.
+//! Order matches `dir_rec`.
+[generic]
+def glob(root : string; pattern : string; blk : block<(filename : string; is_dir : bool) : void>) {
+    dir_rec(root) $(filename, is_dir) {
+        let normalized = to_generic_path(filename)
+        if (match_glob(pattern, normalized)) {
+            invoke(blk, normalized, is_dir)
+        }
+    }
+}
+
+//! Walk `root` and invoke `blk` for entries that match at least one of `includes`
+//! and none of `excludes`. Excludes win on conflict. Paths passed to `blk` are
+//! normalized via `to_generic_path` (forward slashes regardless of host OS).
+[generic]
+def glob_filtered(root : string; includes : array<string>; excludes : array<string>;
+                  blk : block<(filename : string; is_dir : bool) : void>) {
+    dir_rec(root) $(filename, is_dir) {
+        let normalized = to_generic_path(filename)
+        var included = false
+        for (pat in includes) {
+            if (match_glob(pat, normalized)) {
+                included = true
+                break
+            }
+        }
+        if (included) {
+            for (pat in excludes) {
+                if (match_glob(pat, normalized)) {
+                    included = false
+                    break
+                }
+            }
+        }
+        if (included) {
+            invoke(blk, normalized, is_dir)
+        }
+    }
+}
+
+//! Returns true if `pattern` contains any glob metacharacter (`*`, `?`, `[`).
+//! Used by callers that treat literal patterns differently from glob patterns.
+def is_glob_pattern(pattern : string) : bool {
+    var has_meta = false
+    peek_data(pattern) $(arr) {
+        for (i in range(length(arr))) {
+            let c = arr[i]
+            if (c == uint8('*') || c == uint8('?') || c == uint8('[')) {
+                has_meta = true
+                break
+            }
+        }
+    }
+    return has_meta
+}
+
 // convenience: disk_space returning struct
 [generic]
 def disk_space(path : string) : DiskSpaceInfo {

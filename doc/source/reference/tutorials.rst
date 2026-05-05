@@ -82,6 +82,7 @@ introduced in earlier tutorials.
    tutorials/51_delegate.rst
    tutorials/52_option_and_result.rst
    tutorials/53_clargs.rst
+   tutorials/54_glob.rst
 
 .. _tutorials_building_from_sdk:
 

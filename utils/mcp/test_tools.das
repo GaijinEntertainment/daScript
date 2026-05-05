@@ -237,6 +237,112 @@ def test_parse_file_list(t : T?) {
         t |> equal(files[0], "zzz.das", "first plain stays first")
         t |> equal(files[length(files) - 1], "aaa.das", "last plain stays last")
     }
+    t |> run("recursive ** in middle of pattern") <| @(t : T?) {
+        // PR #2576 follow-up: split at the last `/` before the first glob meta
+        // so `utils/mcp/**/test_tools.das` walks from `utils/mcp/`, not from
+        // a literal `**` directory that does not exist.
+        var files : array<string>
+        parse_file_list("utils/mcp/**/test_tools.das", files)
+        t |> success(has_path(files, "test_tools.das"), "** matched test_tools.das somewhere under utils/mcp/")
+    }
+    t |> run("shallow pattern does not descend into subdirectories") <| @(t : T?) {
+        // PR #2576 follow-up: patterns without `**` use the non-recursive
+        // walker. `utils/mcp/*.das` must NOT pick up files under
+        // `utils/mcp/tools/` or `utils/mcp/tests/`.
+        var files : array<string>
+        parse_file_list("utils/mcp/*.das", files)
+        for (f in files) {
+            t |> success(find(f, "utils/mcp/tools/") < 0, "shallow * did not descend into tools/")
+            t |> success(find(f, "utils/mcp/tests/") < 0, "shallow * did not descend into tests/")
+        }
+    }
+    t |> run("multi-segment pattern without ** still recurses") <| @(t : T?) {
+        // PR #2576 round-2: a pattern like `utils/mcp/*/common.das` has no
+        // `**` but it crosses a `/`, so the recursive walk must be used —
+        // otherwise it can never match `utils/mcp/tools/common.das`.
+        var files : array<string>
+        parse_file_list("utils/mcp/*/common.das", files)
+        t |> success(has_path(files, "tools/common.das"), "multi-segment pattern matched tools/common.das")
+    }
+    t |> run("backslash-style pattern matches the same as forward-slash") <| @(t : T?) {
+        // PR #2576 round-3: the pattern is normalized to `/` at the top of
+        // expand_glob, so Windows-style `\` patterns produce the same
+        // result as POSIX `/` patterns.
+        var slash : array<string>
+        var back : array<string>
+        parse_file_list("utils/mcp/*/common.das", slash)
+        parse_file_list("utils\\mcp\\*\\common.das", back)
+        sort(slash)
+        sort(back)
+        t |> equal(length(slash), length(back), "same number of matches")
+        for (i in range(length(slash))) {
+            t |> equal(slash[i], back[i], "entry {i} matches")
+        }
+    }
+    t |> run("absolute path patterns walk the root, not cwd") <| @(t : T?) {
+        // PR #2576 round-3: `_split_literal_prefix` keeps the separator in
+        // `dir_part` when the pattern starts at the filesystem root, so
+        // `glob` walks the right place rather than an empty path.
+        let abs = "{get_das_root()}/utils/mcp/tools/*.das"
+        var files : array<string>
+        parse_file_list(abs, files)
+        t |> success(length(files) > 0, "absolute pattern matched at least one file")
+        t |> success(has_path(files, "common.das"), "common.das present")
+    }
+    t |> run("absolute root prefix produces clean paths (no double slash)") <| @(t : T?) {
+        // PR #2576 round-4: when `_split_literal_prefix` returns a dir_part
+        // that ends with `/` (POSIX root or Windows drive root), expand_glob
+        // must not insert another `/` when concatenating with the matched
+        // entry. Use a real temp dir — fully portable across hosts.
+        let tmp = create_temp_directory_result("expand_glob_doubleslash_")
+        if (!(tmp is value)) {
+            t |> failure("could not create temp directory: {tmp as error}")
+            return
+        }
+        let abs_root = tmp as value
+        fwrite("{abs_root}/marker.das", "")
+        var files : array<string>
+        parse_file_list("{abs_root}/*.das", files)
+        for (f in files) {
+            t |> success(find(f, "//") < 0, "no double slashes in '{f}'")
+        }
+        var rm_err : string
+        rmdir_rec(abs_root, rm_err)
+    }
+    t |> run("character class triggers glob expansion") <| @(t : T?) {
+        // Round-5 regression: parse_file_list previously detected globs by
+        // looking for `*` / `?` only. A pattern like `_fixture_[ev]*.das`
+        // would be treated as a literal path and dropped. Now dispatch goes
+        // through fio.is_glob_pattern, which also recognizes `[`.
+        var files : array<string>
+        parse_file_list("utils/mcp/tests/_fixture_[ev]*.das", files)
+        var saw_valid = false
+        var saw_error = false
+        for (f in files) {
+            if (find(f, "_fixture_valid.das") >= 0) {
+                saw_valid = true
+            }
+            if (find(f, "_fixture_error.das") >= 0) {
+                saw_error = true
+            }
+        }
+        t |> success(saw_valid, "char class glob picks _fixture_valid.das")
+        t |> success(saw_error, "char class glob picks _fixture_error.das")
+    }
+    t |> run("shallow expand_glob filters out directories") <| @(t : T?) {
+        // Round-6 regression: the shallow `dir(...)` branch did not filter
+        // directories, so `parse_file_list("utils/mcp/*")` emitted entries
+        // like `utils/mcp/tools` (a subdirectory) alongside actual files.
+        // Downstream tools (format/lint/compile_check) take regular files
+        // only. After the fix, expand_glob stats each match and skips dirs.
+        var files : array<string>
+        parse_file_list("utils/mcp/*", files)
+        for (f in files) {
+            let st = stat(f)
+            t |> success(!(st.is_valid && st.is_dir),
+                "expand_glob must not emit directory '{f}'")
+        }
+    }
 }
 
 // ── list_functions ───────────────────────────────────────────────────
