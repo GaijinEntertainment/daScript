@@ -13,3 +13,8 @@ def dependencies(version : string) {
     require_package("das-claude")
     require_package("dasTelegram")
 }
+
+[export]
+def release() {
+    release_main("daslang_helper_bot.das")
+}

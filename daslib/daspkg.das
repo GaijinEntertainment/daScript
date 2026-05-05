@@ -131,3 +131,35 @@ def custom_build(command : string) {
     _build_command = command
 }
 
+// --- Release info (set by `release()`) ---
+
+struct ReleaseSpec {
+    name : string                       //!< bundle name; defaults to package_name
+    main_script : string                //!< path to project's main .das (relative to root)
+    include_globs : array<string>       //!< asset globs to ship
+    exclude_globs : array<string>       //!< asset globs to skip
+    forced_modules : array<string>      //!< force-include shared module by das_name (auto-detection misses media-only or runtime-loaded packages)
+}
+
+var _release_spec : ReleaseSpec
+
+def release_name(name : string) {
+    _release_spec.name = name
+}
+
+def release_main(script : string) {
+    _release_spec.main_script = script
+}
+
+def release_include(pattern : string) {
+    _release_spec.include_globs |> push(pattern)
+}
+
+def release_exclude(pattern : string) {
+    _release_spec.exclude_globs |> push(pattern)
+}
+
+def release_shared_module(name : string) {
+    _release_spec.forced_modules |> push(name)
+}
+

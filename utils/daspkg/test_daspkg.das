@@ -772,6 +772,7 @@ let PKG_BRANCH_FIXTURE = "utils/daspkg/fixtures/test_branch.das_package"
 let PKG_REDIRECT_FIXTURE = "utils/daspkg/fixtures/test_redirect.das_package"
 let PKG_SDK_AWARE_FIXTURE = "utils/daspkg/fixtures/test_sdk_aware.das_package"
 let PKG_RICH_FIXTURE = "utils/daspkg/fixtures/test_rich.das_package"
+let PKG_RELEASE_FIXTURE = "utils/daspkg/fixtures/test_release.das_package"
 
 [test]
 def test_run_das_package_meta(t : T?) {
@@ -1606,5 +1607,265 @@ def test_gitignore_remove(t : T?) {
     remove(gitignore)
     force_rmdir("{tmp_root}/.git")
     rmdir(tmp_root)
+}
+
+// --- release tests ---
+
+[test]
+def test_run_das_package_release(t : T?) {
+    t |> run("reads release info from .das_package") @(tt : T?) {
+        var info : PackageReleaseInfo
+        let ok = run_das_package_release(PKG_RELEASE_FIXTURE, info)
+        tt |> success(ok)
+        tt |> equal("custom-bundle-name", info.name)
+        tt |> equal("main.das", info.main_script)
+        tt |> equal(2, length(info.include_globs))
+        tt |> equal("*.png", info.include_globs[0])
+        tt |> equal("data/**/*.json", info.include_globs[1])
+        tt |> equal(1, length(info.exclude_globs))
+        tt |> equal("data/internal/**", info.exclude_globs[0])
+        tt |> equal(2, length(info.forced_modules))
+        tt |> equal("dasSQLITE", info.forced_modules[0])
+        tt |> equal("dasGlfw", info.forced_modules[1])
+    }
+    t |> run("returns true with empty spec when release() is missing") @(tt : T?) {
+        var info : PackageReleaseInfo
+        let ok = run_das_package_release(PKG_FIXTURE, info)
+        tt |> success(ok)
+        tt |> equal("", info.main_script)
+        tt |> equal(0, length(info.include_globs))
+    }
+}
+
+[test]
+def test_cmd_release_pure_daslang(t : T?) {
+    t |> run("bundles a pure-daslang project end-to-end") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_pure"
+        let out_dir = "{get_das_root()}/_test_release_pure_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n    print(\"hello\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"smoke\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_include(\"*.txt\")\n\}\n")
+        }
+        fopen("{tmp_root}/data.txt", "wb") $(f) {
+            fwrite(f, "asset")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(fexist("{out_dir}/smoke/smoke.exe"), "exe shipped")
+        tt |> success(fexist("{out_dir}/smoke/data.txt"), "asset shipped")
+        tt |> success(!fexist("{out_dir}/smoke/smoke.o"), ".o build artifact dropped")
+
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+[test]
+def test_cmd_release_native_dep(t : T?) {
+    var dasSQLITE_present = false
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+        if (string(das_name) == "sqlite") {
+            dasSQLITE_present = true
+        }
+    }
+    if (!dasSQLITE_present) {
+        t |> run("skipped — dasSQLITE not available") @(tt : T?) {
+            to_log(LOG_INFO, "test_cmd_release_native_dep: dasSQLITE not loaded; skipping native-dep test\n")
+            tt |> success(true)
+        }
+        return
+    }
+    t |> run("bundles a native-dep project, runnable from a moved location") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_native"
+        let out_dir = "{get_das_root()}/_test_release_native_out"
+        let moved_dir = "{get_das_root()}/_test_release_native_moved"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        force_rmdir(moved_dir)
+        mkdir(tmp_root)
+
+        // Tiny project: open in-memory sqlite, run a query, print row count.
+        // Using stderr-free output so we can match it exactly against the run.
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire sqlite/sqlite_boost\n[export]\ndef main() \{\n    let db = open_sqlite(\":memory:\")\n    db |> exec(\"CREATE TABLE t(x INT)\")\n    db |> exec(\"INSERT INTO t VALUES(42)\")\n    print(\"rows: \{db |> changes()\}\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"sqs\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(fexist("{out_dir}/sqs/sqs.exe"), "exe shipped")
+        tt |> success(fexist("{out_dir}/sqs/modules/dasSQLITE/dasModuleSQLITE.shared_module"), "dylib shipped at expected relative path")
+
+        // Move the whole bundle to a new location and run it. PR #2579's
+        // exe-relative resolution is what makes this work — the dylib needs
+        // to be found via <exe_dir>/modules/dasSQLITE/... at the new path.
+        // Use `rename` (cross-platform via libc rename(2)/Win CRT) rather
+        // than shell `cp -r` so the test runs on Windows CI; rename also
+        // preserves the exe permission bit by definition.
+        let moved = rename("{out_dir}/sqs", moved_dir)
+        tt |> success(moved, "bundle moved to new location")
+        var output : string
+        let run_rc = run_cmd("\"{moved_dir}/sqs.exe\"", output)
+        tt |> equal(0, run_rc, "moved bundle runs cleanly")
+        tt |> success(find(output, "rows: 1") >= 0, "moved bundle prints expected sqlite output (got: {output})")
+
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        force_rmdir(moved_dir)
+    }
+}
+
+// False-positive test: every registered dynamic module that the program does NOT
+// require must NOT show up in the bundle. Skips when the registry has only
+// dasSQLITE (no other module to verify isn't shipped).
+[test]
+def test_cmd_release_no_false_positive_shared(t : T?) {
+    var dasSQLITE_present = false
+    var other_pkg_dir = ""
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+        if (string(das_name) == "sqlite") {
+            dasSQLITE_present = true
+        } elif (empty(other_pkg_dir)) {
+            // First non-sqlite registered module: extract package dir name.
+            let g = to_generic_path(string(path))
+            let idx = rfind(g, "/modules/")
+            if (idx >= 0) {
+                let after = slice(g, idx + length("/modules/"))
+                let next_slash = find(after, "/")
+                other_pkg_dir = next_slash > 0 ? slice(after, 0, next_slash) : after
+            }
+        }
+    }
+    if (!dasSQLITE_present || empty(other_pkg_dir)) {
+        t |> run("skipped — needs dasSQLITE plus at least one other registered module") @(tt : T?) {
+            to_log(LOG_INFO, "test_cmd_release_no_false_positive_shared: insufficient registered modules; skipping\n")
+            tt |> success(true)
+        }
+        return
+    }
+    let other_for_capture = other_pkg_dir
+    t |> run("ships only modules the program requires; not registered-but-unused dylibs") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_fp_shared"
+        let out_dir = "{get_das_root()}/_test_release_fp_shared_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+
+        // Project requires only sqlite — no other registered modules.
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire sqlite/sqlite_boost\n[export]\ndef main() \{\n    let db = open_sqlite(\":memory:\")\n    print(\"db opened\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fpshared\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(fexist("{out_dir}/fpshared/modules/dasSQLITE/dasModuleSQLITE.shared_module"),
+            "dasSQLITE dylib shipped (program required it)")
+        // Pick one registered-but-unused package and confirm it's NOT shipped.
+        let other_dir = "{out_dir}/fpshared/modules/{other_for_capture}"
+        tt |> equal(false, fexist(other_dir),
+            "registered-but-unused package must NOT be shipped (false positive)")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+// False-positive test: a project with no daspkg deps must NOT pull anything from
+// daslib stdlib (`require strings`, `require fio`) or from the project's own
+// non-main .das files into the bundle's modules/ tree. Only the exe + the
+// project's own assets (release_include) should be shipped.
+[test]
+def test_cmd_release_no_false_positive_das(t : T?) {
+    t |> run("daslib stdlib + project-local .das do NOT create modules/ entries") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_fp_das"
+        let out_dir = "{get_das_root()}/_test_release_fp_das_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+
+        // Project: main.das requires fio (stdlib) + a project-local module.
+        fopen("{tmp_root}/helper.das", "wb") $(f) {
+            fwrite(f, "options gen2\nmodule helper shared public\n\ndef public greet(name : string) : string \{\n    return \"hello, \{name\}\"\n\}\n")
+        }
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire fio\nrequire helper\n\n[export]\ndef main() \{\n    print(\"\{greet(\"world\")\}\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fpdas\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(fexist("{out_dir}/fpdas/fpdas.exe"), "exe shipped")
+        // No modules/ tree at all — project has no shared modules and no daspkg deps.
+        tt |> equal(false, fexist("{out_dir}/fpdas/modules"),
+            "no modules/ tree (no shared deps, no daspkg deps; daslib stdlib + project-local .das must NOT show up)")
+
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+// Transitive release: project requires a synthetic dep at <root>/modules/<DepName>/
+// whose own .das_package has release_include for asset files. Bundle must place
+// dep assets under <bundle>/modules/<DepName>/<rel>.
+[test]
+def test_cmd_release_transitive_dep(t : T?) {
+    t |> run("dep release_include files are shipped under modules/<DepName>/") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_transitive"
+        let out_dir = "{get_das_root()}/_test_release_transitive_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+        mkdir("{tmp_root}/modules")
+        mkdir("{tmp_root}/modules/fakedep")
+        mkdir("{tmp_root}/modules/fakedep/daslib")
+        mkdir("{tmp_root}/modules/fakedep/data")
+
+        // Synthetic dep: package + module + asset.
+        fopen("{tmp_root}/modules/fakedep/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"fakedep\")\n\}\n[export]\ndef release() \{\n    release_include(\"data/**\")\n\}\n")
+        }
+        fopen("{tmp_root}/modules/fakedep/.das_module", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef initialize(project_path : string) \{\n    register_native_path(\"fakedep\", \"fakedep_lib\", \"\{project_path\}/daslib/fakedep_lib.das\")\n\}\n")
+        }
+        fopen("{tmp_root}/modules/fakedep/daslib/fakedep_lib.das", "wb") $(f) {
+            fwrite(f, "options gen2\nmodule fakedep_lib shared public\n\ndef public hello() : string \{\n    return \"hello from fakedep\"\n\}\n")
+        }
+        fopen("{tmp_root}/modules/fakedep/data/asset.bin", "wb") $(f) {
+            fwrite(f, "asset-content")
+        }
+        // Excluded file — must NOT ship.
+        fopen("{tmp_root}/modules/fakedep/data/internal.bin", "wb") $(f) {
+            fwrite(f, "secret")
+        }
+
+        // Parent project pulls fakedep in.
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire fakedep/fakedep_lib\n\n[export]\ndef main() \{\n    print(\"\{hello()\}\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"transit\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(fexist("{out_dir}/transit/transit.exe"), "parent exe shipped")
+        tt |> success(fexist("{out_dir}/transit/modules/fakedep/data/asset.bin"),
+            "dep asset shipped via transitive release()")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
 }
 

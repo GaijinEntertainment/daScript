@@ -31,6 +31,14 @@ struct PackageBuildInfo {
     is_custom : bool
 }
 
+struct PackageReleaseInfo {
+    name : string
+    main_script : string
+    include_globs : array<string>
+    exclude_globs : array<string>
+    forced_modules : array<string>
+}
+
 
 // Run the `package()` function of a .das_package and extract metadata
 def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bool {
@@ -88,6 +96,29 @@ def run_das_package_deps(das_package_path : string; version : string; var deps :
             let arr = unsafe(reinterpret<array<Dependency>?>(p))
             for (d in *arr) {
                 deps |> emplace(PackageDependency(source = clone_string(d.source), version_constraint = clone_string(d.version_constraint)))
+            }
+        }
+    }
+    return ok
+}
+
+// Run the `release()` function of a .das_package and extract release info
+def run_das_package_release(das_package_path : string; var info : PackageReleaseInfo) : bool {
+    var args : array<string>
+    var ok = run_das_package(das_package_path, "release", args) $(ctx) {
+        var p = unsafe(get_context_global_variable(ctx, "_release_spec"))
+        if (p != null) {
+            let src = unsafe(reinterpret<ReleaseSpec?>(p))
+            info.name = clone_string(src.name)
+            info.main_script = clone_string(src.main_script)
+            for (g in src.include_globs) {
+                info.include_globs |> push_clone(clone_string(g))
+            }
+            for (g in src.exclude_globs) {
+                info.exclude_globs |> push_clone(clone_string(g))
+            }
+            for (m in src.forced_modules) {
+                info.forced_modules |> push_clone(clone_string(m))
             }
         }
     }

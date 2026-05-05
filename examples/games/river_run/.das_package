@@ -1,0 +1,14 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("river-run")
+    package_description("River Run example with audio + HUD; ships on dasGlfw + dasOpenGL + dasAudio")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+}

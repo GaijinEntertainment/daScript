@@ -415,6 +415,8 @@ void print_help() {
         << "    -jit        enable Just-In-Time compilation\n"
         << "    -exe        JIT compile to standalone executable (implies -dry-run)\n"
         << "    -output <path> set JIT output path\n"
+        << "    --list-shared-modules <path> with -exe: write JSON describing the program's shared modules and daspkg-package .das module sources to <path>\n"
+        << "    --force-shared-module <name> with -exe: force-include a shared module by daslang or package name (repeatable)\n"
         << "    -use-aot    enable AOT linking (requires AOT stubs linked into the binary)\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -project_root <path> root directory of the project (used for dyn modules)\n"
@@ -551,6 +553,23 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
             } else if ( cmd=="exe") {
                 jitEnabled = JitMode::Executable;
                 dryRun = true;
+            } else if ( cmd=="-list-shared-modules" ) {
+                // script will pick up next argument by itself (read from llvm_exe.das via get_command_line_arguments())
+                if ( i+1 >= argc ) {
+                    printf("expecting --list-shared-modules path\n");
+                    print_help();
+                    return -1;
+                }
+                i += 1;
+            } else if ( cmd=="-force-shared-module" ) {
+                // script will pick up next argument by itself (force-include a shared module
+                // in the release-deps list even when the program doesn't `require` it)
+                if ( i+1 >= argc ) {
+                    printf("expecting --force-shared-module name\n");
+                    print_help();
+                    return -1;
+                }
+                i += 1;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {

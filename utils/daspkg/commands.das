@@ -9,6 +9,7 @@ module commands shared public
 
 require daslib/fio
 require strings
+require daslib/strings_boost
 require daslib/json
 require daslib/json_boost
 
@@ -61,6 +62,9 @@ struct DaspkgArgs {
     @clarg_mutex_group = "color"
     @clarg_doc = "Disable colored output"
     no_color : bool
+
+    @clarg_doc = "Output directory for `release` (default: current directory)"
+    out : string = "."
 }
 
 // Apply parsed flags that flip module-level globals.  Called by main after
@@ -1297,5 +1301,258 @@ def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int {
         }
     }
     log("Cleaned: {removed_dirs} directories, {removed_files} files\n")
+    return 0
+}
+
+// ── release ────────────────────────────────────────────────────────────
+
+// JSON shape produced by `daslang -exe --list-shared-modules <path>` — see
+// `modules/dasLLVM/daslib/llvm_exe.das write_release_deps()`. Field names +
+// types must stay in sync with the writer's structs.
+
+struct private SharedModuleEntry {
+    rel : string                    //!< relative bundle path (modules/<X>/<X>.shared_module); "" if path lacks /modules/
+    abs : string                    //!< absolute path on the build machine
+    das_name : string               //!< daslang-side module name
+}
+
+struct private DasModuleEntry {
+    name : string                   //!< daslang module name
+    file : string                   //!< absolute path to the .das source file
+    package_dir : string            //!< absolute path to the enclosing daspkg package
+}
+
+struct private ReleaseDeps {
+    shared_modules : array<SharedModuleEntry>
+    das_modules : array<DasModuleEntry>
+}
+
+def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
+    if (!fexist(path)) {
+        return false
+    }
+    var content : string
+    fopen(path, "rb") $(f) {
+        if (f != null) {
+            content = fread(f)
+        }
+    }
+    var error : string
+    var parsed = read_json(content, error)
+    if (parsed == null) {
+        to_log(LOG_ERROR, "release: cannot parse deps JSON: {error}\n")
+        return false
+    }
+    deps = from_JV(parsed, type<ReleaseDeps>)
+    return true
+}
+
+// Bundle path for the standalone exe (daslang -exe appends `.exe` itself).
+def private bundle_exe_path(bundle_dir, bundle_name : string) : string {
+    return path_join(bundle_dir, bundle_name)
+}
+
+// Run release() on a dep package and copy its release_include files into the
+// bundle at `<bundle>/modules/<DepName>/<rel>`. Returns 0 on success, non-zero
+// on copy failure (missing release() is NOT an error — dep just contributes nothing).
+def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
+    let dep_pkg_file = "{pkg_dir}/.das_package"
+    if (!fexist(dep_pkg_file)) {
+        return 0
+    }
+    var dep_spec : PackageReleaseInfo
+    if (!run_das_package_release(dep_pkg_file, dep_spec)) {
+        return 0
+    }
+    if (empty(dep_spec.include_globs)) {
+        return 0
+    }
+    let dep_name = base_name(pkg_dir)
+    var dep_files : array<string>
+    glob_filtered(pkg_dir, dep_spec.include_globs, dep_spec.exclude_globs) $(rel_path, is_dir) {
+        if (!is_dir) {
+            dep_files |> push_clone(rel_path)
+        }
+    }
+    for (rel in dep_files) {
+        let src = path_join(pkg_dir, rel)
+        let dst = path_join("{bundle_modules_dir}/{dep_name}", rel)
+        mkdir_rec(dir_name(dst))
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
+            return 1
+        }
+    }
+    if (!empty(dep_files)) {
+        log("  ship dep `{dep_name}`: {length(dep_files)} file(s)\n")
+    }
+    return 0
+}
+
+// Copy of `daslib/command_line.get_das_exe()`. We can't require command_line
+// here because `commands` is a shared module and command_line is not.
+// Returns the absolute path to the daslang interpreter, derived from argv[0]
+// (works whether daspkg runs interpreted or as a future standalone exe).
+def private get_daslang_path() : string {
+    let args <- get_command_line_arguments()
+    if (empty(args)) {
+        return ""
+    }
+    var exe = replace(args[0], "\\", "/")
+    if (find(exe, ":") < 0 && first_character(exe) != '/') {
+        exe = "{get_das_root()}/{exe}"
+    }
+    let last_slash = rfind(exe, "/")
+    let dir = last_slash >= 0 ? slice(exe, 0, last_slash + 1) : ""
+    let interpreter = get_platform_name() == "windows" ? "daslang.exe" : "daslang"
+    let joined = "{dir}{interpreter}"
+    return get_platform_name() == "windows" ? replace(joined, "/", "\\") : joined
+}
+
+def cmd_release(root : string; out_dir : string) : int {
+    let das_package = "{root}/.das_package"
+    if (!fexist(das_package)) {
+        to_log(LOG_ERROR, "release: no .das_package in {root}\n")
+        return 1
+    }
+    var spec : PackageReleaseInfo
+    if (!run_das_package_release(das_package, spec)) {
+        to_log(LOG_ERROR, "release: cannot run release() in {das_package}\n")
+        return 1
+    }
+    if (empty(spec.main_script)) {
+        // run_das_package_release returns true with an empty spec both when
+        // release() is missing entirely and when it's present but never calls
+        // release_main(). Phrase the error to cover both.
+        to_log(LOG_ERROR, "release: {das_package} has no release() hook, or release() didn't call release_main(<script.das>)\n")
+        return 1
+    }
+
+    // Pick bundle name: explicit release_name() > package_name() > root dir name.
+    var bundle_name = spec.name
+    if (empty(bundle_name)) {
+        var pkg : PackageMeta
+        if (run_das_package_meta(das_package, pkg) && !empty(pkg.pkg_name)) {
+            bundle_name = pkg.pkg_name
+        } else {
+            bundle_name = base_name(get_full_file_name(root))
+        }
+    }
+    // bundle_name flows from .das_package metadata (release_name() /
+    // package_name()) — possibly authored by a downloaded dep. Reject path
+    // separators / `..` so a hostile or typo'd name can't escape out_dir
+    // when path_join + force_rmdir run below.
+    if (!is_safe_pkg_name(bundle_name)) {
+        to_log(LOG_ERROR, "Error: unsafe bundle name `{bundle_name}` (must not contain path separators or be `.` / `..`)\n")
+        return 1
+    }
+    let bundle_dir = path_join(out_dir, bundle_name)
+    if (fexist(bundle_dir)) {
+        force_rmdir(bundle_dir)
+    }
+    mkdir(bundle_dir)
+
+    // 1. Build the standalone exe; `--list-shared-modules` writes the deps JSON
+    //    (auto-detected dylibs + transitive .das_package list) as a side effect.
+    //    `--force-shared-module <name>` passes each release_shared_module(name)
+    //    to daslang; lookup happens there so the full registry is available
+    //    (when daspkg itself is compiled standalone, its registry would only
+    //    contain dylibs daspkg's own code references — too narrow).
+    let exe_path = bundle_exe_path(bundle_dir, bundle_name)
+    run_cmd_counter ++
+    let deps_file = "{get_das_root()}/_daspkg_release_deps_{run_cmd_counter}.json"
+    let main_path = path_join(root, spec.main_script)
+    var output : string
+    let daslang = get_daslang_path()
+    let force_args = build_string() $(var writer) {
+        for (name in spec.forced_modules) {
+            writer |> write(" --force-shared-module \"")
+            writer |> write(name)
+            writer |> write("\"")
+        }
+    }
+    let cmd = "\"{daslang}\" -exe -output \"{exe_path}\" --list-shared-modules \"{deps_file}\"{force_args} \"{main_path}\""
+    let rc = run_cmd(cmd, output)
+    if (rc != 0) {
+        to_log(LOG_ERROR, "release: daslang -exe failed (rc={rc}):\n{output}\n")
+        if (fexist(deps_file)) {
+            remove(deps_file)
+        }
+        return 1
+    }
+    // daslang -exe writes <exe_path>.exe (the runnable binary) and <exe_path>.o
+    // (a build-time object file). Drop the .o — it's not needed at runtime.
+    let obj_path = "{exe_path}.o"
+    if (fexist(obj_path)) {
+        remove(obj_path)
+    }
+
+    // 2. Parse deps JSON, ship dylibs at the relative path the exe expects.
+    //    The writer has already merged force-included modules into shared_modules,
+    //    so we just iterate.
+    var deps : ReleaseDeps
+    if (!read_release_deps(deps_file, deps)) {
+        to_log(LOG_ERROR, "release: cannot read deps file at {deps_file}\n")
+        remove(deps_file)
+        return 1
+    }
+    remove(deps_file)
+    for (e in deps.shared_modules) {
+        if (empty(e.rel)) {
+            to_log(LOG_WARNING, "release: skipping module `{e.das_name}` (no /modules/ in `{e.abs}`)\n")
+            continue
+        }
+        let dst = path_join(bundle_dir, e.rel)
+        mkdir_rec(dir_name(dst))
+        var err : string
+        if (!copy_file(e.abs, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({e.abs} -> {dst}) failed: {err}\n")
+            return 1
+        }
+        log("  ship: {e.rel}\n")
+    }
+
+    // 3. Transitive dep traversal — for each unique dep .das_package (excluding
+    //    the project's own root), run release() and copy its release_include
+    //    files to <bundle>/modules/<DepName>/<rel>.
+    let project_root_abs = get_full_file_name(root)
+    var seen_pkg_dirs : table<string; bool>
+    seen_pkg_dirs[project_root_abs] = true
+    let bundle_modules_dir = path_join(bundle_dir, "modules")
+    for (dm in deps.das_modules) {
+        let pkg_abs = get_full_file_name(dm.package_dir)
+        if (key_exists(seen_pkg_dirs, pkg_abs)) {
+            continue
+        }
+        seen_pkg_dirs[pkg_abs] = true
+        let rc2 = ship_dep_assets(pkg_abs, bundle_modules_dir)
+        if (rc2 != 0) {
+            return rc2
+        }
+    }
+
+    // 4. Glob the project's own assets per spec, copy preserving relative paths.
+    var asset_files : array<string>
+    glob_filtered(root, spec.include_globs, spec.exclude_globs) $(rel_path, is_dir) {
+        if (!is_dir) {
+            asset_files |> push_clone(rel_path)
+        }
+    }
+    for (rel_path in asset_files) {
+        let src = path_join(root, rel_path)
+        let dst = path_join(bundle_dir, rel_path)
+        mkdir_rec(dir_name(dst))
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
+            return 1
+        }
+    }
+    if (!empty(asset_files)) {
+        log("  shipped {length(asset_files)} project asset file(s)\n")
+    }
+
+    log("Released to: {bundle_dir}\n")
     return 0
 }

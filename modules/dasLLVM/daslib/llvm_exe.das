@@ -23,6 +23,9 @@ require daslib/strings_boost
 require daslib/defer
 require daslib/lpipe
 require daslib/debugger
+require daslib/clargs
+require daslib/json
+require daslib/json_boost
 require math
 require jit
 require daslib/fio
@@ -572,6 +575,172 @@ def private compute_modules_relative_suffix(p : string) : string {
     return idx < 0 ? "" : slice(pn, idx + 1)
 }
 
+// Walk up `start_dir` looking for a `.das_package` file. Returns the absolute
+// path to the package (the dir containing `.das_package`) or "" if no ancestor
+// has one within MAX_LEVELS. Bounded so a stray .das at filesystem root doesn't
+// scan the whole tree. Used to identify daspkg-package boundaries among the
+// program's .das modules.
+let private MAX_DAS_PACKAGE_WALKUP_LEVELS = 8
+
+def private find_enclosing_das_package(start_dir : string) : string {
+    var dir = to_generic_path(start_dir)
+    for (i in range(MAX_DAS_PACKAGE_WALKUP_LEVELS)) {
+        if (empty(dir) || dir == "/" || dir == ".") {
+            return ""
+        }
+        if (fexist("{dir}/.das_package")) {
+            return dir
+        }
+        let last_slash = rfind(dir, "/")
+        if (last_slash <= 0) {
+            return ""
+        }
+        dir = slice(dir, 0, last_slash)
+    }
+    return ""
+}
+
+// JSON record types written by `daslang -exe -list-shared-modules <path>`.
+// `commands.das` (in daspkg) defines structurally-identical types and parses
+// the JSON via `from_JV`. Keep field names + types in sync if either side moves.
+struct private SharedModuleEntry {
+    rel : string                    //!< relative bundle path (modules/<X>/<X>.shared_module); "" if path lacks /modules/
+    abs : string                    //!< absolute path on the build machine
+    das_name : string               //!< daslang-side module name registered by the dylib
+}
+
+struct private DasModuleEntry {
+    name : string                   //!< daslang module name
+    file : string                   //!< absolute path to the .das source file
+    package_dir : string            //!< absolute path to the enclosing daspkg package (dir holding .das_package)
+}
+
+struct private ReleaseDeps {
+    shared_modules : array<SharedModuleEntry>
+    das_modules : array<DasModuleEntry>
+}
+
+// If `-list-shared-modules <path>` was passed on the daslang command line,
+// write a JSON `ReleaseDeps` describing what `daspkg release` should ship.
+//
+// Detection walks `program_for_each_module(prog)` and, for each program module:
+//   1) Looks the daslang module name up in `for_each_registered_dynamic_module()`
+//      to find an associated .shared_module dylib. Found → emit a SharedModuleEntry,
+//      deduped by absolute dylib path (one .shared_module can host several
+//      daslang modules, e.g. dasStbImage hosts `stbimage`, `raster`, `stbtruetype`).
+//   2) If `m.fileName` is non-empty AND its directory walks up to a `.das_package`
+//      file (via `find_enclosing_das_package`), emits a DasModuleEntry tagged with
+//      `package_dir`. This filter drops daslib stdlib (no .das_package above) and
+//      SDK-shipped modules under `<das_root>/modules/<X>/` (no .das_package either),
+//      keeping only daspkg-installed deps. The reader (`cmd_release`) further skips
+//      entries whose `package_dir` equals the project root being released.
+// Extract the package directory name from a "modules/<X>/.../foo.shared_module"
+// suffix — used to let `-force-shared-module dasGlfw` match by package name as
+// well as by the daslang-side module name.
+def private dylib_package_name(rel : string) : string {
+    if (empty(rel)) {
+        return ""
+    }
+    let after_modules = slice(rel, length("modules/"))
+    let next_slash = find(after_modules, "/")
+    return next_slash > 0 ? slice(after_modules, 0, next_slash) : after_modules
+}
+
+// Helper: append `entry` to deps.shared_modules unless its absolute path was
+// already recorded. Deduping by absolute dylib path is necessary because one
+// .shared_module file can host several daslang modules (dasStbImage hosts
+// stbimage, raster, stbtruetype) and each would otherwise produce a duplicate.
+def private push_shared_unique(entry : SharedModuleEntry; var seen : table<string; bool>; var deps : ReleaseDeps) {
+    if (key_exists(seen, entry.abs)) {
+        return
+    }
+    seen[entry.abs] = true
+    deps.shared_modules |> push(entry)
+}
+
+// Declarative parsing of daslang's release-deps flags. The fields here are
+// matched against argv directly (clargs auto-derives `--field-name` long
+// flags); unknown flags in argv (every other daslang option) are silently
+// ignored by parse_args.
+[CommandLineArgs]
+struct private ReleaseDepsArgs {
+    @clarg_doc = "Path to write the JSON release-deps file"
+    list_shared_modules : string
+
+    @clarg_doc = "Force-include a shared module by daslang or package name (repeatable)"
+    force_shared_module : array<string>
+}
+
+def private write_release_deps(prog : Program?) {
+    let argv <- get_program_args()
+    var r <- parse_args(type<ReleaseDepsArgs>, argv)
+    if (r |> is_err) {
+        to_log(LOG_ERROR, "LLVM EXE: bad release-deps args: {r |> unwrap_err}\n")
+        return
+    }
+    let cfg <- r |> move_unwrap
+    if (empty(cfg.list_shared_modules)) {
+        return
+    }
+    // Snapshot the dynamic-module registry once; key by daslang-side name, with
+    // a parallel by-package-name lookup so `--force-shared-module dasGlfw` works
+    // alongside `--force-shared-module dasglfw` (the daslang-side name).
+    var by_das : table<string; SharedModuleEntry>
+    var by_pkg : table<string; SharedModuleEntry>
+    for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
+        let abs = string(path)
+        let rel = compute_modules_relative_suffix(abs)
+        let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = string(das_name))
+        by_das[entry.das_name] = entry
+        let pkg = dylib_package_name(rel)
+        if (!empty(pkg)) {
+            by_pkg[pkg] = entry
+        }
+    }
+    var deps : ReleaseDeps
+    var shared_seen : table<string; bool>
+    // Auto-detected: every program module that has a registered dylib.
+    prog |> for_each_module <| $(m) {
+        let mod_name = string(m.name)
+        if (key_exists(by_das, mod_name)) {
+            push_shared_unique(by_das[mod_name], shared_seen, deps)
+        }
+        let file = string(m.fileName)
+        if (!empty(file)) {
+            let pkg_dir = find_enclosing_das_package(dir_name(file))
+            if (!empty(pkg_dir)) {
+                deps.das_modules |> push(DasModuleEntry(
+                    name = mod_name,
+                    file = file,
+                    package_dir = pkg_dir))
+            }
+        }
+    }
+    // User-forced (release_shared_module(name) → --force-shared-module <name>).
+    // Match by daslang-side name OR package directory name. Lookup happens here
+    // (in the daslang process compiling the user program) so the registry has
+    // every dylib daslang scanned, not just the ones daspkg itself uses.
+    for (name in cfg.force_shared_module) {
+        if (key_exists(by_das, name)) {
+            push_shared_unique(by_das[name], shared_seen, deps)
+        } elif (key_exists(by_pkg, name)) {
+            push_shared_unique(by_pkg[name], shared_seen, deps)
+        } else {
+            to_log(LOG_WARNING, "LLVM EXE: --force-shared-module `{name}` not registered (typo? not loaded by daslang)\n")
+        }
+    }
+    let dst_path = cfg.list_shared_modules
+    fopen(dst_path, "wb") $(f) {
+        if (f == null) {
+            to_log(LOG_ERROR, "LLVM EXE: cannot write release deps to {dst_path}\n")
+            return
+        }
+        fwrite(f, sprint_json(deps, true))
+        fwrite(f, "\n")
+    }
+    to_log(LOG_INFO, "LLVM EXE: wrote release deps to {dst_path} (shared={length(deps.shared_modules)}, das={length(deps.das_modules)})\n")
+}
+
 // Creates main function that initializes a standalone JIT context, registers
 // all compiled functions, runs init scripts, then calls the program entry point.
 def public inject_main(program_context : Context?; ctx : LLVMContextRef;
@@ -694,6 +863,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             LLVMBuildCall2(builder, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
     }
+
+    // -list-shared-modules <path> side-effect: dump the release-deps JSON
+    // for `daspkg release` to ship dylibs + traverse dep packages.
+    write_release_deps(prog)
 
     // Register native paths (das include paths) that were loaded during compilation
     let reg_native_path_type = LLVMFunctionType(types.t_void,
