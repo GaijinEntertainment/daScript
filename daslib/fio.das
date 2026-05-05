@@ -332,16 +332,7 @@ def match_glob(pattern : string; path : string) : bool {
     return false if (plen == 0)
     if (slen == 0) {
         // Empty path matches a pattern only when every char is `*` (any number of stars or **).
-        var ok = true
-        peek_data(pattern) $(arr) {
-            for (i in range(length(arr))) {
-                if (arr[i] != uint8('*')) {
-                    ok = false
-                    break
-                }
-            }
-        }
-        return ok
+        return empty(replace(pattern, "*", ""))
     }
     var result = false
     peek_data(pattern) $(parr) {
@@ -359,13 +350,7 @@ def match_glob(pattern : string; path : string) : bool {
 //! separator (`\` on Windows). Use `to_generic_path` when you want stable
 //! `/`-separated output independent of host.
 def to_generic_path(s : string) : string {
-    return modify_data(s) $(var arr) {
-        for (i in range(length(arr))) {
-            if (arr[i] == uint8('\\')) {
-                arr[i] = uint8('/')
-            }
-        }
-    }
+    return replace(s, "\\", "/")
 }
 
 //! Walk `root` recursively and invoke `blk` for every entry whose path (relative to `root`)
@@ -414,17 +399,7 @@ def glob_filtered(root : string; includes : array<string>; excludes : array<stri
 //! Returns true if `pattern` contains any glob metacharacter (`*`, `?`, `[`).
 //! Used by callers that treat literal patterns differently from glob patterns.
 def is_glob_pattern(pattern : string) : bool {
-    var has_meta = false
-    peek_data(pattern) $(arr) {
-        for (i in range(length(arr))) {
-            let c = arr[i]
-            if (c == uint8('*') || c == uint8('?') || c == uint8('[')) {
-                has_meta = true
-                break
-            }
-        }
-    }
-    return has_meta
+    return find(pattern, '*') >= 0 || find(pattern, '?') >= 0 || find(pattern, '[') >= 0
 }
 
 // convenience: disk_space returning struct

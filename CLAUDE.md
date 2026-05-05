@@ -68,6 +68,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/daslang_live.md` | `daslang-live`, live-reload lifecycle, `[live_command]`, `[before_reload]`/`[after_reload]` |
 | `skills/perf_lint.md` | Adding rules to `daslib/perf_lint.das` |
 | `skills/style_lint.md` | Adding rules to `daslib/style_lint.das` |
+| `skills/strings.md` | Any `.das` string operation — `find`/`replace`/`split`/parsing/`build_string`/`peek_data` (covers `strings`, `daslib/strings_boost`, `daslib/strings_convert`) |
 | `skills/regex.md` | Writing regular expressions in `.das` code |
 | `skills/glob.md` | Writing or reviewing any glob/wildcard pattern handling — file selection, include/exclude masks, pattern-match-on-paths (`*` / `?` / `**` / `[abc]`) |
 | `skills/gc_migration.md` | Migrating external/archived code from `smart_ptr<T>` AST patterns to gc_node (in-tree migration is complete) |
