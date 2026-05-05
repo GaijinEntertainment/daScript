@@ -1096,7 +1096,7 @@ namespace das {
     // Returns DLL handle.
     void *register_dynamic_module(const char *path, const char *mod_name, int on_error, Context * context, LineInfoArg * at ) {
         string actualPath(path);
-#ifndef DAS_NO_ASSERTIONS
+#ifndef NDEBUG
         // Debug builds produce _debug.shared_module; rewrite the path so that
         // .das_module files don't need per-config conditional logic.
         auto pos = actualPath.rfind(".shared_module");

@@ -8,7 +8,7 @@
 #endif
 
 #ifndef DAS_BUILD_ID
-#ifdef DAS_NO_ASSERTIONS
+#ifdef NDEBUG
 #define DAS_BUILD_ID (DAS_VERSION * 100 + sizeof(void*))
 #else
 #define DAS_BUILD_ID (DAS_VERSION * 100 + 10 + sizeof(void*))
