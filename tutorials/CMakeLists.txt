@@ -27,6 +27,10 @@ file(GLOB PUGIXML_TUTORIAL_SOURCES
     ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.das
     ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.xml
 )
+file(GLOB PUGIXML_TUTORIAL_DAS_SOURCES
+    ${PROJECT_SOURCE_DIR}/tutorials/dasPUGIXML/*.das
+)
+
 install(FILES ${PUGIXML_TUTORIAL_SOURCES}
     DESTINATION ${DAS_INSTALL_TUTORIALSDIR}/dasPUGIXML
 )
@@ -75,3 +79,36 @@ if (NOT ${DAS_TUTORIAL_DISABLED})
     include(integration/c/CMakeLists.txt)
     include(integration/cpp/CMakeLists.txt)
 endif()
+
+SET(ALL_TUTORIAL_SOURCES
+    ${LANGUAGE_TUTORIAL_SOURCES}
+    ${MACRO_TUTORIAL_SOURCES}
+    ${DASPEG_TUTORIAL_SOURCES}
+    ${DASTRUDEL_TUTORIAL_SOURCES}
+)
+
+# Modules tutorials.
+IF ((NOT ${DAS_PUGIXML_DISABLED}) OR (NOT DEFINED DAS_PUGIXML_DISABLED))
+    list(APPEND ALL_TUTORIAL_SOURCES ${PUGIXML_TUTORIAL_DAS_SOURCES})
+ENDIF()
+IF ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED DAS_SQLITE_DISABLED))
+    list(APPEND ALL_TUTORIAL_SOURCES ${SQL_TUTORIAL_SOURCES})
+ENDIF()
+IF ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED DAS_STBIMAGE_DISABLED))
+    list(APPEND ALL_TUTORIAL_SOURCES ${STBIMAGE_TUTORIAL_SOURCES})
+ENDIF()
+IF ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DAS_AUDIO_DISABLED))
+    list(APPEND ALL_TUTORIAL_SOURCES ${AUDIO_TUTORIAL_SOURCES})
+ENDIF()
+
+add_custom_target(dry_run_tutorials)
+
+foreach(tutor ${ALL_TUTORIAL_SOURCES})
+    get_filename_component(input_name ${tutor} NAME)
+    add_custom_target(${input_name}_dry
+        COMMAND daslang -dry-run ${tutor}
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        COMMENT "Testing tutorial ${tutor}"
+    )
+    add_dependencies(dry_run_tutorials ${input_name}_dry)
+endforeach()

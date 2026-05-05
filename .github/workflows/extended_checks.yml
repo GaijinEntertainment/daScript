@@ -162,6 +162,9 @@ jobs:
     - name: "Run utils tests"
       run: cmake --build ./build --config Release --target run_utils_tests
 
+    - name: "Run tutorial dry-runs"
+      run: cmake --build ./build --config Release --target dry_run_tutorials
+
     - name: "Build standalone executables"
       run: |
         set -eux

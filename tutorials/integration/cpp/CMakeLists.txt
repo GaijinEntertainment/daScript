@@ -159,7 +159,7 @@ DAS_CPP_INTEGRATION_TUTORIAL(integration_cpp_19
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/class_adapters_module.das
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/class_adapters_module.das.inc
 )
-target_include_directories(integration_cpp_19 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/builtin)
+target_include_directories(integration_cpp_19 PUBLIC ${CMAKE_SOURCE_DIR}/src/builtin)
 CMAKE_TEXT_XXD(integration_cpp_19 ${CMAKE_CURRENT_SOURCE_DIR}/integration/cpp/class_adapters_module.das)
 ADD_PROJECT_XXD_DEPENDS(integration_cpp_19)
 
