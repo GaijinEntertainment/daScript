@@ -4,7 +4,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers
 
-module sql_migrate shared public
+module sqlite_migrate shared public
 
 // Intentionally opt in for user-facing docs: keep comments concise and actionable.
 options _comment_hygiene = true
@@ -631,10 +631,10 @@ class SqlMigrationMacro : AstFunctionAnnotation {
         }
         fnType.firstType = clone_type(func.result)
         var fnAddr = new ExprAddr(at = func.at, target := "__::{funcDasName}", funcType <- fnType)
-        // Append registration into per-module init function `register`sql`migrations`
-        var reg <- setup_call_list("register`sql`migrations", func.at, true/*isInit*/, true/*isPrivate*/)
+        // Append registration into per-module init function `register`sqlite`migrations`
+        var reg <- setup_call_list("register`sqlite`migrations", func.at, true/*isInit*/, true/*isPrivate*/)
         reg.list |> emplace_new <| qmacro_block() {
-            sql_migrate::_add_migration_entry($v(version), $v(description), $v(vacuum), $v(analyze),
+            sqlite_migrate::_add_migration_entry($v(version), $v(description), $v(vacuum), $v(analyze),
                 $e(fnAddr), $v(funcDasName), $v(modName))
         }
         return true

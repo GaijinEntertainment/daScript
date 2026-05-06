@@ -74,7 +74,7 @@ with_sqlite("app.db") <| $(db) {
 ```
 
 **Convenience wrapper (decided 2026-05-04):** ship `with_latest_sqlite(path)`
-in `daslib/sql_migrate` that combines `with_sqlite` + `migrate_to_latest`
+in `daslib/sqlite_migrate` that combines `with_sqlite` + `migrate_to_latest`
 into one call. Less ceremony, harder to ship a binary that opens the DB
 without bringing it up to date. Preferred form for app code; the explicit
 two-step form remains for tools/CI that may want to inspect before
@@ -351,7 +351,7 @@ when (if) a concrete use case shows up.
 
 `detect_duplicates` from chunk 13 is fuzzy — produces false positives.
 Wrong shape for a compile-time hard error. Right shape for a PR-review
-helper: a `daslib/sql_migrate_lint` (or similar) tool that scans the
+helper: a `daslib/sqlite_migrate_lint` (or similar) tool that scans the
 migration registry and flags suspiciously-similar bodies for human
 review. Useful for catching copy-paste mistakes during merges, but
 the dev keeps the final call. Out of scope for v1; revisit when the
@@ -510,7 +510,7 @@ body, possibly with intermediate `with_transaction { … }` savepoints
 
 **Future polish (not blocking v1) — `chunked_update` helper.**
 
-A `daslib/sql_migrate_chunk` follow-up could ship `db |>
+A `daslib/sqlite_migrate_chunk` follow-up could ship `db |>
 chunked_update(type<T>, where, set, chunk_size = 10000)` for large data
 backfills with controlled lock contention. Logged for if real demand
 surfaces.
@@ -664,8 +664,8 @@ attempted-write boundary (`migrate_to_latest`).
 Closes Q4 from the open-questions list.
 
 **Setup.** User has been shipping the app for a year *without*
-`daslib/sql_migrate`. Their `app.db` already has `users`, `orders`, etc.
-Dev pulls in `daslib/sql_migrate`, writes `[sql_migration(version=1)]`
+`daslib/sqlite_migrate`. Their `app.db` already has `users`, `orders`, etc.
+Dev pulls in `daslib/sqlite_migrate`, writes `[sql_migration(version=1)]`
 that does `db |> exec("CREATE TABLE users (…)")` representing the v1
 shape, swaps `with_sqlite` → `with_latest_sqlite`. Boom — runtime crashes
 with "table users already exists."
@@ -829,7 +829,7 @@ runs once per call.
 Catching two distinct version numbers with semantically-similar bodies
 (copy-paste merge mistakes) is fuzzy — `detect_duplicates` produces
 false positives. Wrong shape for a build gate. Right shape for a
-`daslib/sql_migrate_lint` (or similar) PR-review helper that flags
+`daslib/sqlite_migrate_lint` (or similar) PR-review helper that flags
 suspect bodies for human review. Out of scope for v1; revisit when the
 ecosystem matures.
 
@@ -1066,7 +1066,7 @@ answer they get when they ask.
 API_REWORK §30 deferred-list item #1 originally left the door slightly
 ajar ("Future: if shipped, live as a separate function macro"). The
 discussion in this scenario closes it. Down-migrations are a *design
-anti-pattern*, not a missing feature. Future versions / `daslib/sql_migrate_*`
+anti-pattern*, not a missing feature. Future versions / `daslib/sqlite_migrate_*`
 follow-ups should not ship them either. If a real use case forces our
 hand, revisit then; default posture is permanent "no."
 
@@ -1474,9 +1474,9 @@ union of:
 - **Typed ALTER:** `add_column(type<T>, .Field, default=…)`;
   `create_index(type<T>, fields=…, unique=…, name=…)`;
   `drop_index_if_exists(name)`.
-- **Module:** all of the above lives in `daslib/sql_migrate`
+- **Module:** all of the above lives in `daslib/sqlite_migrate`
   (separate from core `daslib/sql`); `[sql_migration]` annotation
-  is the only thing that registers without `require daslib/sql_migrate`
+  is the only thing that registers without `require daslib/sqlite_migrate`
   if convenient (TBD during impl).
 - **Audit table:** `__schema_version` 3-column shape (`version`,
   `description`, `applied_at`).

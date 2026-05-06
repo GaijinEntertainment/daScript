@@ -29,7 +29,7 @@ options gen2
 // the existing `_sql` translator.
 
 require daslib/sql
-require daslib/sql_migrate
+require daslib/sqlite_migrate
 require sqlite/sqlite_boost
 
 // --- base tables (for the view to project over) -----------------------

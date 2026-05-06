@@ -310,7 +310,7 @@ Everything a real app needs once it leaves the developer's machine.
     type<T>)` + `[sql_table(legacy=true)]` + `name=` overloads on
     `create_table` / `insert_to`. Concurrency via SQLite RESERVED lock
     (one transaction per call, α-shape). Permanent NO on rollback /
-    migrate-to-version. Ships in **optional** `daslib/sql_migrate`
+    migrate-to-version. Ships in **optional** `daslib/sqlite_migrate`
     sub-module. **Walk locked 2026-05-04;** see
     [API_MIGRATION.md](API_MIGRATION.md). Mockup refreshed:
     [30-migrations.das.mockup](tutorial-mockup/30-migrations.das.mockup).

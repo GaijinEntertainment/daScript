@@ -22,12 +22,12 @@ options gen2
 //   The DEFERRED list at the bottom names what we explicitly
 //   don't ship and what to do instead.
 //
-// SEPARATE MODULE: `daslib/sql_migrate`. Users who don't need
+// SEPARATE MODULE: `daslib/sqlite_migrate`. Users who don't need
 // migrations don't `require` it. The migration symbols never
 // appear in their namespace.
 
 require daslib/sql
-require daslib/sql_migrate
+require daslib/sqlite_migrate
 require sqlite/sqlite_boost
 require daslib/result
 require daslib/option
@@ -176,7 +176,7 @@ def cli_upgrade() {
 // PART 4 — Adopting migrations on an existing DB ("baseline")
 // ======================================================================
 //
-// You've been shipping the app without `daslib/sql_migrate`. Your DB
+// You've been shipping the app without `daslib/sqlite_migrate`. Your DB
 // already has tables. Now you want to start tracking migrations. You
 // can either:
 //
@@ -461,7 +461,7 @@ def migration_005(db : SqlRunner) {
 //   add`). Requires a model-snapshot system. The struct_convert
 //   approach in Part 5 is the daslang-native answer for the rebuild
 //   half; full autogen of ALTERs would be a separate
-//   `daslib/sql_migrate_gen` follow-up.
+//   `daslib/sqlite_migrate_gen` follow-up.
 //
 // • `daspkg sql-migrate snapshot` / `daspkg sql-migrate squash`. CLI
 //   tools for snapshot-rotation and hand-squash automation. Overlap
@@ -470,7 +470,7 @@ def migration_005(db : SqlRunner) {
 // • SEMANTIC-DUPE LINT. Fuzzy detection of "two migrations with
 //   suspiciously-similar bodies" via the chunk-13 detect_duplicates
 //   machinery — wrong shape for a build gate, right shape for a
-//   PR-review helper. Future `daslib/sql_migrate_lint` (or similar).
+//   PR-review helper. Future `daslib/sqlite_migrate_lint` (or similar).
 //
 // Documented limitations (escape hatches inline in tut 32):
 //
@@ -501,4 +501,4 @@ def migration_005(db : SqlRunner) {
 // chunks (14a/14b/14c). Anything in this deferred list is its own
 // project. If you hit one of these and it's blocking, open an issue
 // with a concrete use case — that's the signal we use to prioritize
-// the next `daslib/sql_migrate_*` module.
+// the next `daslib/sqlite_migrate_*` module.

@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // Strict-forward pending detection (Scenario 2 lock): pending = registered with version > MAX(applied),
 // NOT set-difference. If audit has {1,3}, v2 is silently skipped because MAX > 2.

@@ -24,7 +24,7 @@ options gen2
 // See: API_MIGRATION.md (design notes), tut 39 (schema_from), tut 42
 // (multi-version ETL with schema_from for the *read* side).
 
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // =====================================================================
 // PART 1 — Define a schema and write a few migrations

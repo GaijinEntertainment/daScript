@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // Versions can be gappy (1, 5, 10) — strict-forward pending detection works on gaps.
 

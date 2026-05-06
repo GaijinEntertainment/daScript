@@ -55,7 +55,7 @@ Define a schema and write migrations
 
 .. code-block:: das
 
-    require sqlite/sql_migrate
+    require sqlite/sqlite_migrate
 
     [sql_table(name = "users")]
     struct User {

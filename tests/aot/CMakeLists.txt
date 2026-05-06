@@ -114,7 +114,7 @@ IF(NOT DAS_SQLITE_DISABLED)
     SET(AOT_DASSQLITE_MODULE_FILES
         modules/dasSQLITE/daslib/sqlite_boost.das
         modules/dasSQLITE/daslib/sqlite_linq.das
-        modules/dasSQLITE/daslib/sql_migrate.das
+        modules/dasSQLITE/daslib/sqlite_migrate.das
     )
 ENDIF()
 

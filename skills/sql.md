@@ -1,6 +1,6 @@
 # SQL — dasSQLITE
 
-Read this skill before writing or editing any `.das` code that talks to a SQL database. The companion tutorials live under [tutorials/sql/](../tutorials/sql/) (43 files, numbered by teaching order — `01-version.das` through `43-migrations.das`); read the relevant ones for runnable examples of every pattern below. Implementation is in [modules/dasSQLITE/daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das) (runtime + `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]` macros), [modules/dasSQLITE/daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das) (the `_sql(...)` family of call macros), and [modules/dasSQLITE/daslib/sql_migrate.das](../modules/dasSQLITE/daslib/sql_migrate.das) (`[sql_migration]` + `migrate_to_latest` runner). Design notes, decision logs, and the deferred-feature list live next to the implementation in [modules/dasSQLITE/API_REWORK.md](../modules/dasSQLITE/API_REWORK.md), [TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md), and [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md).
+Read this skill before writing or editing any `.das` code that talks to a SQL database. The companion tutorials live under [tutorials/sql/](../tutorials/sql/) (43 files, numbered by teaching order — `01-version.das` through `43-migrations.das`); read the relevant ones for runnable examples of every pattern below. Implementation is in [modules/dasSQLITE/daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das) (runtime + `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]` macros), [modules/dasSQLITE/daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das) (the `_sql(...)` family of call macros), and [modules/dasSQLITE/daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das) (`[sql_migration]` + `migrate_to_latest` runner). Design notes, decision logs, and the deferred-feature list live next to the implementation in [modules/dasSQLITE/API_REWORK.md](../modules/dasSQLITE/API_REWORK.md), [TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md), and [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md).
 
 The shipped backend is **SQLite only**. The split between `daslib/sql` (provider-neutral types — `SqlRunner`, `SqlError`, `SqlType`, `ColumnInfo`, `Option`/`Result`) and `sqlite/sqlite_boost` (provider-specific runtime + macros) keeps user code portable for the day a second backend lands. Until then the names "SQL" and "SQLite" are interchangeable in this skill.
 
@@ -10,12 +10,12 @@ The shipped backend is **SQLite only**. The split between `daslib/sql` (provider
 require daslib/sql                  // abstract layer — SqlRunner, SqlType, ColumnInfo
 require sqlite/sqlite_boost         // runtime, [sql_table], [sql_view], [sql_fts5], [sql_function]
 require sqlite/sqlite_linq          // _sql / _try_sql / _each_sql / _sql_update / _sql_delete / _sql_upsert / _create_view / _sql_text
-require sqlite/sql_migrate          // OPTIONAL — [sql_migration], migrate_to_latest, with_latest_sqlite, baseline
+require sqlite/sqlite_migrate          // OPTIONAL — [sql_migration], migrate_to_latest, with_latest_sqlite, baseline
 ```
 
 `sqlite_boost` re-exports the raw `sqlite` C-binding module publicly. **Never `require sqlite` directly** — it's the auto-generated thin C binding (`sqlite3_open`, `sqlite3_prepare_v2`, `sqlite3_step`, …). Going through `sqlite_boost` gets you `SqlRunner` + the typed surface; the raw functions are still reachable when you genuinely need them, but reaching for them is almost always wrong.
 
-`sqlite/sql_migrate` is the only optional sub-module — only require it when the app uses versioned migrations. It transitively brings in `sqlite_boost`, so don't double-require.
+`sqlite/sqlite_migrate` is the only optional sub-module — only require it when the app uses versioned migrations. It transitively brings in `sqlite_boost`, so don't double-require.
 
 The path uses **forward slash** (`require sqlite/sqlite_boost` — not backslash). All four `sqlite/*` paths are wired through the [.das_module](../modules/dasSQLITE/.das_module) descriptor.
 
@@ -77,7 +77,7 @@ db |> create_table(type<Car>)            // ... use freely; closes when `db` goe
 
 `SqlRunner` is a `smart_ptr`-style scoped resource (one of the residual types still using refcount semantics — see `skills/gc_migration.md`). Variables holding it need `var inscope` and move-binding (`<-`), not plain `=`. Inside an existing transaction or a `with_sqlite` block, the runner is just passed by value to helpers — no extra ceremony.
 
-`open_sqlite(path)` is the strict form and panics on failure. The third form `with_latest_sqlite(path)` (from `sqlite/sql_migrate`) combines `with_sqlite` + `apply_recommended_pragmas` + `migrate_to_latest` into one call — the preferred app-startup form when migrations are in play.
+`open_sqlite(path)` is the strict form and panics on failure. The third form `with_latest_sqlite(path)` (from `sqlite/sqlite_migrate`) combines `with_sqlite` + `apply_recommended_pragmas` + `migrate_to_latest` into one call — the preferred app-startup form when migrations are in play.
 
 ## `[sql_table]` — declare a row shape
 
@@ -499,12 +499,12 @@ let strong <- _sql(db |> select_from(type<Enemy>)
 
 `[sql_function]` is the right shape for ambient SQL helpers that should be visible to chain analysis everywhere; `register_function` is for one-off / per-connection registrations.
 
-## Migrations — `daslib/sql_migrate`
+## Migrations — `daslib/sqlite_migrate`
 
-Versioned, append-only schema evolution. Optional sub-module — `require sqlite/sql_migrate` only when needed.
+Versioned, append-only schema evolution. Optional sub-module — `require sqlite/sqlite_migrate` only when needed.
 
 ```das
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 [sql_table(name = "users")]
 struct User {
@@ -698,7 +698,7 @@ Strings produced by `query` / `_sql` are allocated on the calling context's heap
 ## Reference
 
 - Tutorials — every shipped feature has a runnable file under [tutorials/sql/](../tutorials/sql/) (43 files). Teaching order is documented in [modules/dasSQLITE/TUTORIALS.md](../modules/dasSQLITE/TUTORIALS.md).
-- Implementation — [daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das), [daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das), [daslib/sql_migrate.das](../modules/dasSQLITE/daslib/sql_migrate.das).
+- Implementation — [daslib/sqlite_boost.das](../modules/dasSQLITE/daslib/sqlite_boost.das), [daslib/sqlite_linq.das](../modules/dasSQLITE/daslib/sqlite_linq.das), [daslib/sqlite_migrate.das](../modules/dasSQLITE/daslib/sqlite_migrate.das).
 - Design notes — [API_REWORK.md](../modules/dasSQLITE/API_REWORK.md) (the master plan; per-chunk decision log), [API_MIGRATION.md](../modules/dasSQLITE/API_MIGRATION.md) (migrations design walk), [API_CHECKED.md](../modules/dasSQLITE/API_CHECKED.md) (parity audit), [API_MISSING.md](../modules/dasSQLITE/API_MISSING.md) (deferred-feature list).
 - Tests — `tests/dasSQLITE/` — every operator + macro has a focused test, plus `failed_*.das` files for compile-error cases.
 - Related skills — `skills/json.md` (`@sql_json` columns), `skills/linq.md` (`_sql` is LINQ-shaped), `skills/das_macros.md` (`[sql_table]` / `_sql` are macros), `skills/gc_migration.md` (`SqlRunner` is one of the residual smart_ptr types).
