@@ -60,7 +60,7 @@ def test_nullable_schema_wraps_in_option(t : T?) {
 def test_round_trip_select(t : T?) {
     let cols <- column_info(type<AllAffinities>)
     t |> equal(length(cols), 5, "selectable shape")
-    with_sqlite("tests/dasSQLITE/test_data/schema_from_all_affinities.db") $(db) {
+    with_sqlite("{get_das_root()}/tests/dasSQLITE/test_data/schema_from_all_affinities.db") $(db) {
         let rows <- _sql(db |> select_from(type<AllAffinities>))
         t |> equal(length(rows), 0, "fresh fixture has no rows")
     }
