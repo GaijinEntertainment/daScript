@@ -20,6 +20,42 @@ require commands
 require daslib/result
 require package_runner public
 
+// On Darwin daspkg release emits a clickable `.app`; everything else is the
+// flat `<out_dir>/<name>/...` layout. These helpers let release tests assert
+// against the right paths without per-platform branches at every check site.
+
+def bundle_root_dir(out_dir, name : string) : string {
+    if (get_platform_name() == "darwin") {
+        return path_join(out_dir, "{name}.app")
+    }
+    return path_join(out_dir, name)
+}
+
+def bundle_artifacts_dir(out_dir, name : string) : string {
+    if (get_platform_name() == "darwin") {
+        return path_join(path_join(out_dir, "{name}.app"), "Contents/MacOS")
+    }
+    return path_join(out_dir, name)
+}
+
+def bundle_exe_path(out_dir, name : string) : string {
+    let dir = bundle_artifacts_dir(out_dir, name)
+    if (get_platform_name() == "darwin") {
+        return path_join(dir, name)
+    }
+    return path_join(dir, "{name}.exe")
+}
+
+// Path of the exe AFTER the bundle root has been moved/renamed to `moved_root`.
+// On Darwin the moved directory IS the .app — the exe still lives at
+// Contents/MacOS/<name>. On Linux/Windows it's just <moved_root>/<name>.exe.
+def moved_bundle_exe_path(moved_root, name : string) : string {
+    if (get_platform_name() == "darwin") {
+        return path_join(moved_root, "Contents/MacOS/{name}")
+    }
+    return path_join(moved_root, "{name}.exe")
+}
+
 [test]
 def test_package_name_from_source(t : T?) {
     t |> run("github URL") @(t : T?) {
@@ -1658,9 +1694,11 @@ def test_cmd_release_pure_daslang(t : T?) {
 
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
-        tt |> success(fexist("{out_dir}/smoke/smoke.exe"), "exe shipped")
-        tt |> success(fexist("{out_dir}/smoke/data.txt"), "asset shipped")
-        tt |> success(!fexist("{out_dir}/smoke/smoke.o"), ".o build artifact dropped")
+        let exe_path = bundle_exe_path(out_dir, "smoke")
+        let artifacts = bundle_artifacts_dir(out_dir, "smoke")
+        tt |> success(fexist(exe_path), "exe shipped at {exe_path}")
+        tt |> success(fexist(path_join(artifacts, "data.txt")), "asset shipped")
+        tt |> success(!fexist(path_join(artifacts, "smoke.o")), ".o build artifact dropped")
 
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
@@ -1702,8 +1740,12 @@ def test_cmd_release_native_dep(t : T?) {
 
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
-        tt |> success(fexist("{out_dir}/sqs/sqs.exe"), "exe shipped")
-        tt |> success(fexist("{out_dir}/sqs/modules/dasSQLITE/dasModuleSQLITE.shared_module"), "dylib shipped at expected relative path")
+        let exe_path = bundle_exe_path(out_dir, "sqs")
+        let artifacts = bundle_artifacts_dir(out_dir, "sqs")
+        let bundle_root = bundle_root_dir(out_dir, "sqs")
+        tt |> success(fexist(exe_path), "exe shipped at {exe_path}")
+        tt |> success(fexist(path_join(artifacts, "modules/dasSQLITE/dasModuleSQLITE.shared_module")),
+            "dylib shipped at expected relative path")
 
         // Move the whole bundle to a new location and run it. PR #2579's
         // exe-relative resolution is what makes this work — the dylib needs
@@ -1711,10 +1753,11 @@ def test_cmd_release_native_dep(t : T?) {
         // Use `rename` (cross-platform via libc rename(2)/Win CRT) rather
         // than shell `cp -r` so the test runs on Windows CI; rename also
         // preserves the exe permission bit by definition.
-        let moved = rename("{out_dir}/sqs", moved_dir)
+        let moved = rename(bundle_root, moved_dir)
         tt |> success(moved, "bundle moved to new location")
+        let moved_exe = moved_bundle_exe_path(moved_dir, "sqs")
         var output : string
-        let run_rc = run_cmd("\"{moved_dir}/sqs.exe\"", output)
+        let run_rc = run_cmd("\"{moved_exe}\"", output)
         tt |> equal(0, run_rc, "moved bundle runs cleanly")
         tt |> success(find(output, "rows: 1") >= 0, "moved bundle prints expected sqlite output (got: {output})")
 
@@ -1770,10 +1813,11 @@ def test_cmd_release_no_false_positive_shared(t : T?) {
 
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
-        tt |> success(fexist("{out_dir}/fpshared/modules/dasSQLITE/dasModuleSQLITE.shared_module"),
+        let artifacts = bundle_artifacts_dir(out_dir, "fpshared")
+        tt |> success(fexist(path_join(artifacts, "modules/dasSQLITE/dasModuleSQLITE.shared_module")),
             "dasSQLITE dylib shipped (program required it)")
         // Pick one registered-but-unused package and confirm it's NOT shipped.
-        let other_dir = "{out_dir}/fpshared/modules/{other_for_capture}"
+        let other_dir = path_join(artifacts, "modules/{other_for_capture}")
         tt |> equal(false, fexist(other_dir),
             "registered-but-unused package must NOT be shipped (false positive)")
         force_rmdir(tmp_root)
@@ -1807,9 +1851,11 @@ def test_cmd_release_no_false_positive_das(t : T?) {
 
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
-        tt |> success(fexist("{out_dir}/fpdas/fpdas.exe"), "exe shipped")
+        let exe_path = bundle_exe_path(out_dir, "fpdas")
+        let artifacts = bundle_artifacts_dir(out_dir, "fpdas")
+        tt |> success(fexist(exe_path), "exe shipped at {exe_path}")
         // No modules/ tree at all — project has no shared modules and no daspkg deps.
-        tt |> equal(false, fexist("{out_dir}/fpdas/modules"),
+        tt |> equal(false, fexist(path_join(artifacts, "modules")),
             "no modules/ tree (no shared deps, no daspkg deps; daslib stdlib + project-local .das must NOT show up)")
 
         force_rmdir(tmp_root)
@@ -1861,8 +1907,10 @@ def test_cmd_release_transitive_dep(t : T?) {
 
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
-        tt |> success(fexist("{out_dir}/transit/transit.exe"), "parent exe shipped")
-        tt |> success(fexist("{out_dir}/transit/modules/fakedep/data/asset.bin"),
+        let exe_path = bundle_exe_path(out_dir, "transit")
+        let artifacts = bundle_artifacts_dir(out_dir, "transit")
+        tt |> success(fexist(exe_path), "parent exe shipped at {exe_path}")
+        tt |> success(fexist(path_join(artifacts, "modules/fakedep/data/asset.bin")),
             "dep asset shipped via transitive release()")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)

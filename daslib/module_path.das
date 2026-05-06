@@ -32,8 +32,9 @@ module module_path shared public
 //! ``<rel>`` is the substring of the call-site directory starting at
 //! the last ``/modules/`` segment (e.g. ``modules/dasCards/cards``).
 //! Tiers 1+2 are skipped when the call site has no ``/modules/`` segment
-//! (project-local code outside the package layout); tier 3 is always
-//! returned, so the result is never empty.
+//! (project-local code outside the package layout); tier 3 then returns
+//! the baked dir if it still exists on disk (dev) or ``<exe_dir>`` if it
+//! doesn't (relocated bundle). The result is never empty.
 //!
 //! Usage::
 //!

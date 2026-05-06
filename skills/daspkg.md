@@ -243,7 +243,7 @@ The macro captures the call-site source file path at expansion, then walks the s
 
 `<rel>` is the suffix starting at the last `/modules/` segment.
 
-**Project-local code (no `/modules/` in path) currently falls straight to tier 3** — `get_this_module_dir()` from user code like `main.das` returns the dev-time baked dir, which doesn't exist in a relocated bundle. Symptom: silent asset-load failures (e.g. fonts) when running the released bundle on a fresh machine, even though library code under `/modules/` works fine. Workaround: expose the asset dir via a `def public` getter from a library module under `/modules/`, then call it from user code. See [skills/filesystem.md](skills/filesystem.md) ("Finding bundled asset files at runtime") for the details.
+**Project-local code (no `/modules/` in path)** skips tiers 1+2 and goes straight to tier 3, which returns the baked dir if it still exists (dev) or `<exe_dir>` if it doesn't (relocated bundle). So `path_join(get_this_module_dir(), "asset.png")` from a project-local `main.das` works in both dev and shipped bundles, as long as the asset is shipped sitting next to the exe.
 
 **Call from inside a function — not a top-level `let` initializer.** daslang's `-exe` JIT path has a known limitation: top-level `let`s that call Context-allocating builtins (like `get_this_module_dir()`, `get_das_root()`, `dir_name(get_module_file_name(...))`) emit JIT-process-baked function pointers that are wrong under ASLR in the standalone exe. The same call works fine inside any function body. Tracked separately; once the daslang fix lands, the top-level form will Just Work.
 

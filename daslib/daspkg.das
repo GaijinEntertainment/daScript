@@ -139,6 +139,7 @@ struct ReleaseSpec {
     include_globs : array<string>       //!< asset globs to ship
     exclude_globs : array<string>       //!< asset globs to skip
     forced_modules : array<string>      //!< force-include shared module by das_name (auto-detection misses media-only or runtime-loaded packages)
+    bundle_id : string                  //!< macOS .app CFBundleIdentifier (reverse-DNS); defaults to com.<author>.<name>
 }
 
 var _release_spec : ReleaseSpec
@@ -161,5 +162,9 @@ def release_exclude(pattern : string) {
 
 def release_shared_module(name : string) {
     _release_spec.forced_modules |> push(name)
+}
+
+def release_bundle_id(id : string) {
+    _release_spec.bundle_id = id
 }
 

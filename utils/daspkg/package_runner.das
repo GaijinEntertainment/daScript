@@ -37,6 +37,7 @@ struct PackageReleaseInfo {
     include_globs : array<string>
     exclude_globs : array<string>
     forced_modules : array<string>
+    bundle_id : string
 }
 
 
@@ -120,6 +121,7 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
             for (m in src.forced_modules) {
                 info.forced_modules |> push_clone(clone_string(m))
             }
+            info.bundle_id = clone_string(src.bundle_id)
         }
     }
     return ok

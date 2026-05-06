@@ -22,7 +22,7 @@ option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 
-option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
+option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" OFF)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
 option(DAS_TREE_SITTER_DISABLED "Disable tree-sitter-daslang grammar (no dependencies)" OFF)
