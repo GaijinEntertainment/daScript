@@ -1548,9 +1548,14 @@ namespace das
     char * builtin_resolve_this_module_dir ( const char * baked_path, Context * context ) {
         namespace fs = std::filesystem;
         if ( !baked_path || !*baked_path ) return context->allocateString("", nullptr);
+        // generic_string() (here and at every other path-to-string conversion
+        // in this function) emits forward-slash separators on every platform,
+        // matching getDasRoot() and the rest of daslang's path conventions.
+        // Without it Windows would return native backslashes that break string
+        // compares against `/`-formed paths from script-side daslang code.
         fs::path baked(baked_path);
         fs::path baked_dir = baked.parent_path();
-        std::string baked_dir_str = baked_dir.string();
+        std::string baked_dir_str = baked_dir.generic_string();
         // Find the last "/modules/" boundary; everything from that segment
         // onward is the bundle/SDK-relative suffix (e.g.
         // "modules/das-cards/cards"). rfind, not find — for nested layouts
@@ -1574,14 +1579,14 @@ namespace das
                 fs::path candidate = exeDir / rel;
                 std::error_code ec;
                 if ( fs::is_directory(candidate, ec) ) {
-                    return context->allocateString(candidate.string().c_str(), nullptr);
+                    return context->allocateString(candidate.generic_string().c_str(), nullptr);
                 }
             }
             // Tier 2 — das_root
             fs::path candidate = fs::path(das::getDasRoot().c_str()) / rel;
             std::error_code ec;
             if ( fs::is_directory(candidate, ec) ) {
-                return context->allocateString(candidate.string().c_str(), nullptr);
+                return context->allocateString(candidate.generic_string().c_str(), nullptr);
             }
         }
         // Tier 3 — baked dir as fallback. Special case: project-local code
@@ -1595,7 +1600,7 @@ namespace das
                 if ( !exeFile.empty() ) {
                     fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
                     if ( exeDir.empty() ) exeDir = ".";
-                    return context->allocateString(exeDir.string().c_str(), nullptr);
+                    return context->allocateString(exeDir.generic_string().c_str(), nullptr);
                 }
             }
         }

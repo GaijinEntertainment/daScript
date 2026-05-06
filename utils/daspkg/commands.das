@@ -1622,9 +1622,13 @@ def cmd_release(root : string; out_dir : string) : int {
     let runtime_lib_dir = (platform == "windows"
         ? "{get_das_root()}/bin"
         : "{get_das_root()}/lib")
-    let runtime_glob = (platform == "windows" ? "libDaScriptDyn*.dll"
-        : platform == "darwin" ? "*libDaScriptDyn*.dylib"
-        : "*libDaScriptDyn*.so")
+    // Patterns are `**/...` so the recursive walk crosses config subdirs
+    // (Visual Studio / Xcode put the artifact in `bin/Release/`, not `bin/`).
+    let runtime_glob = (platform == "windows" ? "**/libDaScriptDyn*.dll"
+        : platform == "darwin" ? "**/*libDaScriptDyn*.dylib"
+        : "**/*libDaScriptDyn*.so")
+    var runtime_copy_failed = false
+    var runtime_copies = 0
     glob(runtime_lib_dir, runtime_glob) $(rel_path, is_dir) {
         if (is_dir) {
             return
@@ -1634,9 +1638,18 @@ def cmd_release(root : string; out_dir : string) : int {
         var err : string
         if (!copy_file(src, dst, true, err)) {
             to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
+            runtime_copy_failed = true
             return
         }
+        runtime_copies += 1
         log("  ship runtime: {base_name(rel_path)}\n")
+    }
+    if (runtime_copy_failed) {
+        return 1
+    }
+    if (runtime_copies == 0) {
+        to_log(LOG_ERROR, "release: no daslang runtime libs matched `{runtime_glob}` under `{runtime_lib_dir}`; bundle would not load on a relocated machine\n")
+        return 1
     }
 
     // 3. Transitive dep traversal — for each unique dep .das_package (excluding
