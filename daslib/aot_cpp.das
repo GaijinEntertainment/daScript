@@ -3990,11 +3990,12 @@ def public compile_and_simulate(input : string, var access; var mg : ModuleGroup
     set_aot();
     compile_file(input, access, mg, cop) $(ok; var program : smart_ptr<Program>; issues) {
         if (!ok) {
-            print("failed to compile {input}\n{issues}\n")
+            to_log(LOG_ERROR, "failed to compile {input}\n{issues}\n")
             return
         }
         simulate(program) $(sok; var pctx : smart_ptr<Context>; serrors) {
             if (!sok) {
+                to_log(LOG_ERROR, "failed to simulate {input}\n{serrors}\n")
                 panic("Failed to simulate {serrors}")
             }
             blk(program, pctx)

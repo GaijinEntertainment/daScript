@@ -25,6 +25,7 @@
 namespace das
 {
     struct AstSerializer;
+    class Visitor;
 
     class Function;
     typedef Function * FunctionPtr;
@@ -691,7 +692,7 @@ namespace das
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
-        virtual void serialize ( AstSerializer & ser );
+        virtual void dispatch ( Visitor & vis );
         virtual void gc_collect ( gc_root * target, gc_root * from );
         LineInfo    at;
         TypeDeclPtr type = nullptr;
@@ -745,7 +746,7 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
-        virtual void serialize ( AstSerializer & ser ) override;
+        virtual void dispatch ( Visitor & vis ) override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
         bool    foldedNonConst = false;

@@ -214,6 +214,10 @@ jobs:
       run: |
         set -eux
         $BIN/daslang_static _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests
+    - name: "Test ser/deser"
+      run: |
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --ser serialized.bin
+        $BIN/daslang _dasroot_/dastest/dastest.das -- --color --failures-only --test ./tests --deser serialized.bin
 
     - name: "Run self-binder (bind_clangbind.das)"
       if: matrix.target == 'linux'
