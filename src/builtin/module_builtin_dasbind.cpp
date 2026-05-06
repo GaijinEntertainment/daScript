@@ -444,9 +444,6 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
         }
 
         virtual bool apply ( const FunctionPtr & fun, ModuleGroup &, const AnnotationArgumentList & args, string & err )  override {
-            if (is_in_completion()) {
-                return false;
-            }
             if (!verifyCallCorrect(fun, args, err)) {
                 return false;
             }
