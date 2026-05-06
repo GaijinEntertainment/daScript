@@ -2807,15 +2807,27 @@ namespace das {
             }
             */
         }
+        // Module::serialize leaves g_Program pointing to a temporary program with a
+        // released thisModule. Restore it so compiling_module() sees the correct module
+        // during simulate() and while tests run inside the block.
+        auto & bound = *daScriptEnvironment::getBound();
+        auto savedProg = bound.g_Program;
+        bound.g_Program = prog.get();
         if ( prog->failToCompile ) {
             string err = "deserialization failed";
             das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
                 context, at, block, false, ProgramPtr(), err);
+            (void)prog->thisModule.release();
+            prog->library.reset();
+            bound.g_Program = savedProg;
             return;
         }
         string okStr;
         das_invoke<void>::invoke<bool,smart_ptr<Program>,const string &>(
             context, at, block, true, prog, okStr);
+        (void)prog->thisModule.release();
+        prog->library.reset();
+        bound.g_Program = savedProg;
     }
 
     void rtti_ast_serializer_get_data (
