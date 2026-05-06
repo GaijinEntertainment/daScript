@@ -120,7 +120,28 @@
             return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
         }
         void * loadDynamicLibrary ( const char * fileName ) {
-            return LoadLibraryA(fileName);
+            // Bare names (e.g. "msvcrt") need to flow through unchanged so
+            // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS resolves them via system32.
+            // GetFullPathNameA on a bare name produces <CWD>/<name>, an absolute
+            // non-existent path that LoadLibraryEx then refuses to load.
+            const char * loadPath = fileName;
+            char fullPath[MAX_PATH];
+            const bool hasPath = fileName && (strchr(fileName, '/') || strchr(fileName, '\\'));
+            if ( hasPath ) {
+                DWORD got = GetFullPathNameA(fileName, MAX_PATH, fullPath, nullptr);
+                if ( got > 0 && got < MAX_PATH ) loadPath = fullPath;
+            }
+            // LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR  — also search the loaded DLL's own dir
+            //                                     for its imports (lets bundles ship a
+            //                                     module's native deps colocated under
+            //                                     <bundle>/modules/<X>/).
+            // LOAD_LIBRARY_SEARCH_APPLICATION_DIR — preserves the legacy behavior
+            //                                       (deps next to the .exe still resolve).
+            // LOAD_LIBRARY_SEARCH_DEFAULT_DIRS — system32 / safe defaults.
+            return LoadLibraryExA(loadPath, NULL,
+                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+                LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
         }
         void * getFunctionAddress ( void * module, const char * func ) {
             return (void*)GetProcAddress(HMODULE(module),func);

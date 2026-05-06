@@ -345,6 +345,26 @@ MACRO(ADD_DAS_SHARED_MODULE_LIB module_name)
     )
     # Debug builds use _debug suffix so Debug and Release .shared_module can coexist
     SET_PROPERTY(TARGET ${module_name} PROPERTY OUTPUT_NAME_DEBUG "${module_name}_debug")
+    # Make the .shared_module's own directory the first place its native deps are
+    # searched at load time (e.g. modules/dasGlfw/libglfw.so.3 next to
+    # modules/dasGlfw/dasModuleGlfw.shared_module). On Windows the equivalent is
+    # done at runtime via LoadLibraryEx flags in src/misc/sysos.cpp. Use APPEND
+    # so per-module CMakeLists.txt that adds extra rpaths doesn't clobber this.
+    if(APPLE)
+        SET_PROPERTY(TARGET ${module_name} APPEND PROPERTY
+            BUILD_RPATH "@loader_path"
+        )
+        SET_PROPERTY(TARGET ${module_name} APPEND PROPERTY
+            INSTALL_RPATH "@loader_path"
+        )
+    elseif(UNIX)
+        SET_PROPERTY(TARGET ${module_name} APPEND PROPERTY
+            BUILD_RPATH "\$ORIGIN"
+        )
+        SET_PROPERTY(TARGET ${module_name} APPEND PROPERTY
+            INSTALL_RPATH "\$ORIGIN"
+        )
+    endif()
     # Ignore tutorial, profile, test.
     if(NOT "${FOLDER_NAME}" STREQUAL "tutorial" AND
        NOT "${FOLDER_NAME}" STREQUAL "profile" AND
