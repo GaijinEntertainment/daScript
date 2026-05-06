@@ -15,6 +15,7 @@ require daslib/json_boost
 
 require daslib/ansi_colors
 require daslib/clargs public
+require pugixml/PUGIXML_boost
 
 require lockfile
 require utils
@@ -1352,25 +1353,73 @@ def private bundle_exe_path(bundle_dir, bundle_name : string) : string {
     return path_join(bundle_dir, bundle_name)
 }
 
-// Minimal macOS .app Info.plist. Inputs are trusted: bundle_name passes
-// is_safe_pkg_name (no XML metacharacters), exe_name == bundle_name on Mac,
-// bundle_id is reverse-DNS or user-supplied (out of scope to validate).
+// Sanitize one component of a derived CFBundleIdentifier so it satisfies
+// Apple's [A-Za-z0-9.-] rule. Lowercases, replaces every other byte with
+// `-`, collapses runs of `-`, strips leading/trailing `-`. Returns "x"
+// for inputs that yield nothing salvageable so the final id stays valid.
+// Only used for the derived `com.<author>.<name>` default — user-supplied
+// `release_bundle_id()` passes through untouched.
+def private sanitize_bundle_id_part(s : string) : string {
+    let lower = to_lower(s)
+    let raw = build_string() $(var writer) {
+        var prev_dash = false
+        peek_data(lower) $(arr) {
+            for (i in range(length(arr))) {
+                let b = int(arr[i])
+                let is_alnum = (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z')
+                if (is_alnum) {
+                    write_char(writer, b)
+                    prev_dash = false
+                } elif (!prev_dash) {
+                    write_char(writer, '-')
+                    prev_dash = true
+                }
+            }
+        }
+    }
+    var result = raw
+    if (!empty(result) && result |> ends_with("-")) {
+        result = slice(result, 0, length(result) - 1)
+    }
+    if (!empty(result) && result |> starts_with("-")) {
+        result = slice(result, 1)
+    }
+    return empty(result) ? "x" : result
+}
+
+// Minimal macOS .app Info.plist. Built with dasPUGIXML so values are
+// XML-escaped automatically — inputs (bundle_name, exe, bundle_id) are
+// otherwise unrestricted on the XML side. CFPropertyList accepts plist
+// without a DOCTYPE, so we omit it.
 def private build_info_plist(name, exe, bundle_id : string) : string {
-    return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" +
-        "<plist version=\"1.0\">\n" +
-        "<dict>\n" +
-        "    <key>CFBundleName</key><string>{name}</string>\n" +
-        "    <key>CFBundleExecutable</key><string>{exe}</string>\n" +
-        "    <key>CFBundleIdentifier</key><string>{bundle_id}</string>\n" +
-        "    <key>CFBundlePackageType</key><string>APPL</string>\n" +
-        "    <key>CFBundleVersion</key><string>1.0</string>\n" +
-        "    <key>CFBundleShortVersionString</key><string>1.0</string>\n" +
-        "    <key>NSPrincipalClass</key><string>NSApplication</string>\n" +
-        "    <key>NSHighResolutionCapable</key><true/>\n" +
-        "    <key>NSSupportsAutomaticGraphicsSwitching</key><true/>\n" +
-        "</dict>\n" +
-        "</plist>\n")
+    var out = ""
+    with_doc() $(doc) {
+        doc |> tag("plist") $(var pl) {
+            pl |> attr("version", "1.0")
+            pl |> tag("dict") $(var d) {
+                d |> tag("key", "CFBundleName")
+                d |> tag("string", name)
+                d |> tag("key", "CFBundleExecutable")
+                d |> tag("string", exe)
+                d |> tag("key", "CFBundleIdentifier")
+                d |> tag("string", bundle_id)
+                d |> tag("key", "CFBundlePackageType")
+                d |> tag("string", "APPL")
+                d |> tag("key", "CFBundleVersion")
+                d |> tag("string", "1.0")
+                d |> tag("key", "CFBundleShortVersionString")
+                d |> tag("string", "1.0")
+                d |> tag("key", "NSPrincipalClass")
+                d |> tag("string", "NSApplication")
+                d |> tag("key", "NSHighResolutionCapable")
+                d |> tag("true")
+                d |> tag("key", "NSSupportsAutomaticGraphicsSwitching")
+                d |> tag("true")
+            }
+        }
+        out = to_string(doc)
+    }
+    return out
 }
 
 // Run release() on a dep package and copy its release_include files into the
@@ -1565,15 +1614,17 @@ def cmd_release(root : string; out_dir : string) : int {
     // 2.5 Ship daslang runtime dylibs next to the exe. Without these the bundle
     //     dyld-loads via the build-machine fallback rpath and crashes on relocation.
     //     The exe's primary rpath is @executable_path / $ORIGIN, so any .{dylib,so,dll}
-    //     in <das_root>/lib named libDaScriptDyn* (or its libliblib... cmake variant)
-    //     resolves once shipped here.
-    let runtime_lib_dir = "{get_das_root()}/lib"
-    var runtime_glob = "*libDaScriptDyn*.so"
-    if (get_platform_name() == "windows") {
-        runtime_glob = "libDaScriptDyn*.dll"
-    } elif (get_platform_name() == "darwin") {
-        runtime_glob = "*libDaScriptDyn*.dylib"
-    }
+    //     named libDaScriptDyn* (or its libliblib... cmake variant) shipped here
+    //     resolves at runtime. CMake puts the RUNTIME artifact (Windows .dll) in
+    //     `<das_root>/bin`, while LIBRARY artifacts (.dylib / .so) go in
+    //     `<das_root>/lib` — search the correct dir per platform.
+    let platform = get_platform_name()
+    let runtime_lib_dir = (platform == "windows"
+        ? "{get_das_root()}/bin"
+        : "{get_das_root()}/lib")
+    let runtime_glob = (platform == "windows" ? "libDaScriptDyn*.dll"
+        : platform == "darwin" ? "*libDaScriptDyn*.dylib"
+        : "*libDaScriptDyn*.so")
     glob(runtime_lib_dir, runtime_glob) $(rel_path, is_dir) {
         if (is_dir) {
             return
@@ -1629,12 +1680,15 @@ def cmd_release(root : string; out_dir : string) : int {
     }
 
     // 5. macOS .app: write Contents/Info.plist. Bundle ID source priority:
-    //    explicit release_bundle_id() > derived com.<author>.<name> > com.daspkg.<name>.
+    //    explicit release_bundle_id() > derived com.<sanitized-author>.<sanitized-name>
+    //    > com.daspkg.<sanitized-name>. Apple requires CFBundleIdentifier to use
+    //    only [A-Za-z0-9.-], so the derived default sanitizes both pieces;
+    //    user-supplied release_bundle_id() passes through untouched.
     if (is_mac_app) {
         var bundle_id = spec.bundle_id
         if (empty(bundle_id)) {
-            let author = (have_pkg && !empty(pkg.author)) ? pkg.author : "daspkg"
-            bundle_id = "com.{author}.{bundle_name}"
+            let author_raw = (have_pkg && !empty(pkg.author)) ? pkg.author : "daspkg"
+            bundle_id = "com.{sanitize_bundle_id_part(author_raw)}.{sanitize_bundle_id_part(bundle_name)}"
         }
         let plist_path = path_join(app_root, "Contents/Info.plist")
         if (!fwrite(plist_path, build_info_plist(bundle_name, bundle_name, bundle_id))) {
