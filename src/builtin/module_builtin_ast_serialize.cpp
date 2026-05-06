@@ -531,7 +531,7 @@ namespace das {
             } else {
                 string name; *this << name;
                 string expect = func->name;
-                SERIALIZER_VERIFYF(name == expect, "expected different function");
+                SERIALIZER_VERIFYF(name == expect, "expected different function %s %s", name.c_str(), expect.c_str());
             }
         }
         return *this;
@@ -2050,7 +2050,7 @@ namespace das {
             }
         } else {
             string fname; ser << fname;
-            SERIALIZER_VERIFYF(fname == f->name, "expected to serialize in the same order");
+            SERIALIZER_VERIFYF(fname == f->name, "expected to serialize in the same order: %s != %s", fname.c_str(), f->name.c_str());
             uint64_t size = 0; ser << size;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
@@ -2096,7 +2096,7 @@ namespace das {
             }
         } else {
             string name; ser << name;
-            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order");
+            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order: %s != %s", name.c_str(), f->name.c_str());
             uint64_t size = 0; ser << size;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
@@ -2141,7 +2141,7 @@ namespace das {
             }
         } else {
             string name; ser << name;
-            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order");
+            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order: %s %s", name.c_str(), f->name.c_str());
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
@@ -2186,7 +2186,7 @@ namespace das {
             }
         } else {
             string name; ser << name;
-            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order");
+            SERIALIZER_VERIFYF(name == f->name, "expected to serialize in the same order: %s != %s", name.c_str(), f->name.c_str());
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
@@ -2348,7 +2348,7 @@ namespace das {
                 ser << f->name;
             } else {
                 string fname; ser << fname;
-                SERIALIZER_VERIFYF(fname == f->name, "expected to walk in the same order");
+                SERIALIZER_VERIFYF(fname == f->name, "expected to walk in the same order: %s != %s", fname.c_str(), f->name.c_str());
             }
             serializeUseVariables(ser, f);
             serializeUseFunctions(ser, f);
@@ -2359,18 +2359,20 @@ namespace das {
                 ser << f->name;
             } else {
                 string fname; ser << fname;
-                SERIALIZER_VERIFYF(fname == f->name, "expected to walk in the same order");
+                SERIALIZER_VERIFYF(fname == f->name, "expected to walk in the same order: %s != %s", fname.c_str(), f->name.c_str());
             }
             serializeUseVariables(ser, f);
             serializeUseFunctions(ser, f);
         });
 
-        globals.foreach_with_hash ([&](VariablePtr g, uint64_t hash) {
+        globals.foreach ([&]( VariablePtr g ) {
+            uint64_t hash = hash64z(g->name.c_str());
             if ( ser.writing ) {
                 ser << hash;
             } else {
                 uint64_t h = 0; ser << h;
-                SERIALIZER_VERIFYF(h == hash, "expected to walk in the same order");
+                SERIALIZER_VERIFYF(h == hash, "expected to walk in the same order: %llu != %llu",
+                    (unsigned long long) h, (unsigned long long) hash);
             }
             serializeUseVariables(ser, g);
             serializeUseFunctions(ser, g);
