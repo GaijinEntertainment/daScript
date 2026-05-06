@@ -1028,6 +1028,15 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     }
 
     let main_ret = LLVMBuildCall2(builder, g_fn_types[start_fn_name], LLVMGetNamedFunction(g_mod, start_fn_name), main_params, "")
+    // Drain debug agents, modules, AOT library, env — mirrors what the interpreter
+    // driver does at shutdown. Without this the static g_DebugAgents map dtor
+    // races ref_count_mutex during __cxa_finalize_ranges (issue #2583).
+    let shutdown_fn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
+    var shutdown_fn = LLVMGetNamedFunction(g_mod, "jit_shutdown")
+    if (shutdown_fn == null) {
+        shutdown_fn = LLVMAddFunctionWithType(g_mod, "jit_shutdown", shutdown_fn_type)
+    }
+    LLVMBuildCall2(builder, shutdown_fn_type, shutdown_fn, array<LLVMValueRef>(), "")
     if (no_return) {
         LLVMBuildRet(builder, types.ConstI32(uint64(0)))
     } else {

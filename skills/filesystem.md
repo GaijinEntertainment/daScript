@@ -185,6 +185,31 @@ let free_gb = info.free / (1ul << 30ul)
 
 Fields: `capacity`, `free`, `available` (all `uint64`).
 
+## Finding bundled asset files at runtime
+
+For loading data files (fonts, SVGs, configs) that ship next to your `.das` source, use `get_this_module_dir()` from `daslib/module_path` — **never** `dir_name(get_module_file_name(name))`. The latter returns the path baked at compile time, which is wrong in a relocated daspkg-release standalone bundle (`get_module_file_name` returns empty for some standalone exe lookups).
+
+```das
+require daslib/module_path
+
+def load_assets() {
+    let dir = get_this_module_dir()
+    let svg = path_join(dir, "cards.svg")
+    // ...
+}
+```
+
+The macro captures the call-site source-file path at expansion, then a 3-tier resolver walks `<exe_dir>/<rel>` → `<das_root>/<rel>` → `dir_name(baked)`. `<rel>` is the suffix starting at the last `/modules/` segment.
+
+**Caveat for project-local code (no `/modules/` in source path):** `get_this_module_dir()` from a user's `main.das` (or anywhere outside `/modules/...`) currently falls straight to tier 3 — i.e. returns the dev-time baked dir, which doesn't exist on a relocated bundle's machine. This makes `"{get_this_module_dir()}/<asset>"` from `main.das` resolve to a non-existent path post-release. Two workarounds until the resolver learns to fall back to `<exe_dir>` when baked is gone:
+
+1. Have a sibling module under `/modules/` expose its dir as a public function (`def public my_module_dir() : string { return get_this_module_dir() }`) and call that from user code.
+2. If the user app needs only the exe-relative root, plumb it via a builtin (none exists yet — `getExecutableFileName` is C++-only).
+
+See [skills/daspkg.md](skills/daspkg.md#L224) for the bundle-shipping side of the same topic.
+
+**Don't call from a top-level `let` initializer** — `-exe` JIT-bakes function pointers in module-init code and ASLR breaks them in standalone exes (issue #2582). Inside any `def` body it's fine.
+
 ## Common gotchas
 
 - **Never split paths with `rfind("/")` and `rfind("\\")` followed by `slice`.** Always `base_name` / `dir_name` / `parent`. The manual form misses Windows backslashes, mishandles trailing separators, and returns the wrong slice when no separator is present. Exception: when the substring you're searching for is a **named component** (e.g. `/modules/`, `/.git/`), normalize once via `to_generic_path(p)` and search for forward slashes only: `rfind(to_generic_path(p), "/modules/")`. The normalize step is what makes the rule "search for `/` only" safe; never search for both `/X/` and `\X\` separately.

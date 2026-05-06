@@ -11,6 +11,7 @@ require live_host
 require opengl/opengl_boost
 require glfw/glfw_boost
 require cards/opengl_cards
+require cards/card_mesh
 require daslib/json_boost
 require daslib/safe_addr
 require daslib/math_boost
@@ -565,9 +566,25 @@ def screen_to_cell(mx, my : float) : int2 {
     return int2(col, row)
 }
 
-def handle_mouse() {
+// glfwGetCursorPos returns window points; layout/draw use framebuffer pixels
+// (live_get_framebuffer_size). On macOS Retina the two differ by the content
+// scale (~2x). All hit-testing is in pixel space (matches draw_*), so this
+// helper returns the cursor in pixel coordinates.
+def mouse_pos_pixels() : float2 {
+    var win_w_pts = 0
+    var win_h_pts = 0
+    glfwGetWindowSize(live_window, unsafe(addr(win_w_pts)), unsafe(addr(win_h_pts)))
+    let scale_x = win_w_pts > 0 ? float(screen_w) / float(win_w_pts) : 1.0
+    let scale_y = win_h_pts > 0 ? float(screen_h) / float(win_h_pts) : 1.0
     let mpos = glfwGetCursorPos(live_window)
-    let cell = screen_to_cell(mpos.x, mpos.y)
+    return float2(float(mpos.x) * scale_x, float(mpos.y) * scale_y)
+}
+
+def handle_mouse() {
+    let mp = mouse_pos_pixels()
+    let mx = mp.x
+    let my = mp.y
+    let cell = screen_to_cell(mx, my)
     hover_col = cell.x
     hover_row = cell.y
     let pressed = glfwGetMouseButton(live_window, int(GLFW_MOUSE_BUTTON_1)) == int(GLFW_PRESS)
@@ -677,7 +694,7 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
     }
     // Handle click on human hand cards
     if (is_human && game.phase == GamePhase.playing && game.current_player == 0 && mouse_clicked) {
-        let mpos = glfwGetCursorPos(live_window)
+        let mp = mouse_pos_pixels()
         var clicked = -1
         for (row in range(num_suits)) {
             let row_start = suit_starts[row]
@@ -688,7 +705,7 @@ def draw_hand_by_suit(player_idx : int; anchor_x, anchor_y : float; scale : floa
                 let rx = grow_right ? float(ci) : -float(ci) - 1.0
                 let card_x = anchor_x + rx * step_x + (grow_right ? 0.0 : (step_x - cs_w))
                 let card_y = anchor_y + ry * row_step
-                if (mpos.x >= card_x && mpos.x <= card_x + cs_w && mpos.y >= card_y && mpos.y <= card_y + cs_h) {
+                if (mp.x >= card_x && mp.x <= card_x + cs_w && mp.y >= card_y && mp.y <= card_y + cs_h) {
                     clicked = c
                 }
             }
@@ -1004,17 +1021,16 @@ def init() {
     compute_board_card_indices()
     if (!ui_font_loaded) {
         create_ttf_objects()
-        let font_dir = dir_name(get_module_file_name("card_mesh"))
-        ui_font <- load_ttf("{font_dir}/DejaVuSerif.ttf", [pixel_height = 24.0, oversampling = 2])
+        let primary_ttf = card_mesh_ttf_path()
+        ui_font <- load_ttf(primary_ttf, [pixel_height = 24.0, oversampling = 2])
         if (empty(ui_font.bitmap.bytes)) {
-            ui_font <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf",
-                [pixel_height = 24.0, oversampling = 2])
+            let fallback_ttf = "{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf"
+            ui_font <- load_ttf(fallback_ttf, [pixel_height = 24.0, oversampling = 2])
         }
         if (!empty(ui_font.bitmap.bytes)) {
             upload_font_texture(ui_font)
             // Small font for hints
-            let font_dir2 = dir_name(get_module_file_name("card_mesh"))
-            ui_font_small <- load_ttf("{font_dir2}/DejaVuSerif.ttf", [pixel_height = 14.0, oversampling = 2])
+            ui_font_small <- load_ttf(primary_ttf, [pixel_height = 14.0, oversampling = 2])
             if (empty(ui_font_small.bitmap.bytes)) {
                 ui_font_small <- load_ttf("{get_das_root()}/modules/dasOpenGL/examples/droidsansmono.ttf",
                     [pixel_height = 14.0, oversampling = 2])
@@ -1023,6 +1039,8 @@ def init() {
                 upload_font_texture(ui_font_small)
             }
             ui_font_loaded = true
+        } else {
+            to_log(LOG_ERROR, "ui_font: failed to load '{primary_ttf}' — text will not render\n")
         }
     }
     if (game.phase == GamePhase.not_started) {
