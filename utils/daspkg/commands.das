@@ -1352,6 +1352,27 @@ def private bundle_exe_path(bundle_dir, bundle_name : string) : string {
     return path_join(bundle_dir, bundle_name)
 }
 
+// Minimal macOS .app Info.plist. Inputs are trusted: bundle_name passes
+// is_safe_pkg_name (no XML metacharacters), exe_name == bundle_name on Mac,
+// bundle_id is reverse-DNS or user-supplied (out of scope to validate).
+def private build_info_plist(name, exe, bundle_id : string) : string {
+    return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" +
+        "<plist version=\"1.0\">\n" +
+        "<dict>\n" +
+        "    <key>CFBundleName</key><string>{name}</string>\n" +
+        "    <key>CFBundleExecutable</key><string>{exe}</string>\n" +
+        "    <key>CFBundleIdentifier</key><string>{bundle_id}</string>\n" +
+        "    <key>CFBundlePackageType</key><string>APPL</string>\n" +
+        "    <key>CFBundleVersion</key><string>1.0</string>\n" +
+        "    <key>CFBundleShortVersionString</key><string>1.0</string>\n" +
+        "    <key>NSPrincipalClass</key><string>NSApplication</string>\n" +
+        "    <key>NSHighResolutionCapable</key><true/>\n" +
+        "    <key>NSSupportsAutomaticGraphicsSwitching</key><true/>\n" +
+        "</dict>\n" +
+        "</plist>\n")
+}
+
 // Run release() on a dep package and copy its release_include files into the
 // bundle at `<bundle>/modules/<DepName>/<rel>`. Returns 0 on success, non-zero
 // on copy failure (missing release() is NOT an error — dep just contributes nothing).
@@ -1430,10 +1451,11 @@ def cmd_release(root : string; out_dir : string) : int {
     }
 
     // Pick bundle name: explicit release_name() > package_name() > root dir name.
+    var pkg : PackageMeta
+    let have_pkg = run_das_package_meta(das_package, pkg)
     var bundle_name = spec.name
     if (empty(bundle_name)) {
-        var pkg : PackageMeta
-        if (run_das_package_meta(das_package, pkg) && !empty(pkg.pkg_name)) {
+        if (have_pkg && !empty(pkg.pkg_name)) {
             bundle_name = pkg.pkg_name
         } else {
             bundle_name = base_name(get_full_file_name(root))
@@ -1447,11 +1469,28 @@ def cmd_release(root : string; out_dir : string) : int {
         to_log(LOG_ERROR, "Error: unsafe bundle name `{bundle_name}` (must not contain path separators or be `.` / `..`)\n")
         return 1
     }
-    let bundle_dir = path_join(out_dir, bundle_name)
-    if (fexist(bundle_dir)) {
-        force_rmdir(bundle_dir)
+    // macOS: emit a clickable .app bundle. The exe + dylibs + modules go into
+    // Contents/MacOS/, so all subsequent ship logic uses bundle_dir unchanged
+    // and the rpath / module resolver still see the same <exe_dir> layout.
+    let is_mac_app = get_platform_name() == "darwin"
+    var app_root = ""
+    if (is_mac_app) {
+        app_root = path_join(out_dir, "{bundle_name}.app")
     }
-    mkdir(bundle_dir)
+    var bundle_dir = ""
+    if (is_mac_app) {
+        bundle_dir = path_join(app_root, "Contents/MacOS")
+    } else {
+        bundle_dir = path_join(out_dir, bundle_name)
+    }
+    var cleanup_target = bundle_dir
+    if (is_mac_app) {
+        cleanup_target = app_root
+    }
+    if (fexist(cleanup_target)) {
+        force_rmdir(cleanup_target)
+    }
+    mkdir_rec(bundle_dir)
 
     // 1. Build the standalone exe; `--list-shared-modules` writes the deps JSON
     //    (auto-detected dylibs + transitive .das_package list) as a side effect.
@@ -1487,6 +1526,16 @@ def cmd_release(root : string; out_dir : string) : int {
     if (fexist(obj_path)) {
         remove(obj_path)
     }
+    // macOS .app: drop the .exe extension (Mac convention). Info.plist's
+    // CFBundleExecutable matches the renamed binary.
+    if (is_mac_app) {
+        let actual_exe = "{exe_path}.exe"
+        var rerr : string
+        if (!rename(actual_exe, exe_path, rerr)) {
+            to_log(LOG_ERROR, "release: cannot rename {actual_exe} -> {exe_path}: {rerr}\n")
+            return 1
+        }
+    }
 
     // 2. Parse deps JSON, ship dylibs at the relative path the exe expects.
     //    The writer has already merged force-included modules into shared_modules,
@@ -1511,6 +1560,32 @@ def cmd_release(root : string; out_dir : string) : int {
             return 1
         }
         log("  ship: {e.rel}\n")
+    }
+
+    // 2.5 Ship daslang runtime dylibs next to the exe. Without these the bundle
+    //     dyld-loads via the build-machine fallback rpath and crashes on relocation.
+    //     The exe's primary rpath is @executable_path / $ORIGIN, so any .{dylib,so,dll}
+    //     in <das_root>/lib named libDaScriptDyn* (or its libliblib... cmake variant)
+    //     resolves once shipped here.
+    let runtime_lib_dir = "{get_das_root()}/lib"
+    var runtime_glob = "*libDaScriptDyn*.so"
+    if (get_platform_name() == "windows") {
+        runtime_glob = "libDaScriptDyn*.dll"
+    } elif (get_platform_name() == "darwin") {
+        runtime_glob = "*libDaScriptDyn*.dylib"
+    }
+    glob(runtime_lib_dir, runtime_glob) $(rel_path, is_dir) {
+        if (is_dir) {
+            return
+        }
+        let src = path_join(runtime_lib_dir, rel_path)
+        let dst = path_join(bundle_dir, base_name(rel_path))
+        var err : string
+        if (!copy_file(src, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({src} -> {dst}) failed: {err}\n")
+            return
+        }
+        log("  ship runtime: {base_name(rel_path)}\n")
     }
 
     // 3. Transitive dep traversal — for each unique dep .das_package (excluding
@@ -1553,6 +1628,23 @@ def cmd_release(root : string; out_dir : string) : int {
         log("  shipped {length(asset_files)} project asset file(s)\n")
     }
 
-    log("Released to: {bundle_dir}\n")
+    // 5. macOS .app: write Contents/Info.plist. Bundle ID source priority:
+    //    explicit release_bundle_id() > derived com.<author>.<name> > com.daspkg.<name>.
+    if (is_mac_app) {
+        var bundle_id = spec.bundle_id
+        if (empty(bundle_id)) {
+            let author = (have_pkg && !empty(pkg.author)) ? pkg.author : "daspkg"
+            bundle_id = "com.{author}.{bundle_name}"
+        }
+        let plist_path = path_join(app_root, "Contents/Info.plist")
+        if (!fwrite(plist_path, build_info_plist(bundle_name, bundle_name, bundle_id))) {
+            to_log(LOG_ERROR, "release: cannot write {plist_path}\n")
+            return 1
+        }
+        log("  wrote: Contents/Info.plist (CFBundleIdentifier={bundle_id})\n")
+        log("Released to: {app_root}\n")
+    } else {
+        log("Released to: {bundle_dir}\n")
+    }
     return 0
 }

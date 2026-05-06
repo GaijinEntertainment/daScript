@@ -201,10 +201,7 @@ def load_assets() {
 
 The macro captures the call-site source-file path at expansion, then a 3-tier resolver walks `<exe_dir>/<rel>` → `<das_root>/<rel>` → `dir_name(baked)`. `<rel>` is the suffix starting at the last `/modules/` segment.
 
-**Caveat for project-local code (no `/modules/` in source path):** `get_this_module_dir()` from a user's `main.das` (or anywhere outside `/modules/...`) currently falls straight to tier 3 — i.e. returns the dev-time baked dir, which doesn't exist on a relocated bundle's machine. This makes `"{get_this_module_dir()}/<asset>"` from `main.das` resolve to a non-existent path post-release. Two workarounds until the resolver learns to fall back to `<exe_dir>` when baked is gone:
-
-1. Have a sibling module under `/modules/` expose its dir as a public function (`def public my_module_dir() : string { return get_this_module_dir() }`) and call that from user code.
-2. If the user app needs only the exe-relative root, plumb it via a builtin (none exists yet — `getExecutableFileName` is C++-only).
+**Project-local code (no `/modules/` in source path)** — e.g. `get_this_module_dir()` called from a user's `main.das` — skips tiers 1+2 (no `<rel>`) and goes to tier 3, which returns `dir_name(baked)` if it still exists on disk (dev) or `<exe_dir>` if it doesn't (relocated bundle). Either way you get an existing directory. Ship project-local assets next to the exe and `path_join(get_this_module_dir(), "asset.png")` works in both dev and shipped bundles.
 
 See [skills/daspkg.md](skills/daspkg.md#L224) for the bundle-shipping side of the same topic.
 

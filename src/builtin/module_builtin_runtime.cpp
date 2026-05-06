@@ -1542,7 +1542,9 @@ namespace das
     //   3. dir_name(baked_path)       — dev (interpreted from source tree)
     // <rel> is the substring of dir_name(baked) starting at the last
     // "/modules/" segment.  Tiers 1+2 are skipped when baked has no /modules/
-    // segment (e.g. project-local code outside the package layout).
+    // segment (e.g. project-local code outside the package layout); when the
+    // baked dir has also gone missing on the target machine (relocated bundle),
+    // tier 3's fallback is <exe_dir> rather than the dead dev path.
     char * builtin_resolve_this_module_dir ( const char * baked_path, Context * context ) {
         namespace fs = std::filesystem;
         if ( !baked_path || !*baked_path ) return context->allocateString("", nullptr);
@@ -1582,7 +1584,21 @@ namespace das
                 return context->allocateString(candidate.string().c_str(), nullptr);
             }
         }
-        // Tier 3 — baked dir as fallback
+        // Tier 3 — baked dir as fallback. Special case: project-local code
+        // (rel empty so tiers 1+2 were skipped) running from a relocated
+        // bundle where the dev-time baked dir no longer exists — fall back
+        // to <exe_dir> so assets shipped next to the exe are findable.
+        if ( rel.empty() ) {
+            std::error_code ec;
+            if ( !fs::is_directory(baked_dir, ec) ) {
+                das::string exeFile = das::getExecutableFileName();
+                if ( !exeFile.empty() ) {
+                    fs::path exeDir = fs::path(exeFile.c_str()).parent_path();
+                    if ( exeDir.empty() ) exeDir = ".";
+                    return context->allocateString(exeDir.string().c_str(), nullptr);
+                }
+            }
+        }
         return context->allocateString(baked_dir_str.c_str(), nullptr);
     }
 
