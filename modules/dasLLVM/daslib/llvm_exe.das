@@ -494,13 +494,25 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
                                mod : LLVMOpaqueModule?; var types : PrimitiveTypes?;
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
                                var used_modules : table<string; bool>&;
-                               dynamic_modules : table<string; bool>) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
+                               dynamic_modules : table<string; bool>;
+                               prog : Program?) : tuple<any_unimplemented : bool; needs_whole_lib : bool> {
     var extern_resolver = new CollectExternVisitor(standalone_context, ctx, builder, mod, types, uids)
     extern_resolver.dynamic_modules := dynamic_modules
     make_visitor(*extern_resolver) $(adapter_resolve) {
         ast_gc_guard() {
             for (fn in funcs) {
                 visit(fn, adapter_resolve)
+            }
+            // Register builtins reachable only from top-level `let X = builtin()`
+            // (issue #2582). init_globals must be JIT-compiled first so the
+            // function-pointer globals exist — make_call bails on missing globals.
+            prog |> for_each_module() $(m) {
+                if (m.moduleFlags.builtIn) { return ; }
+                m |> for_each_global() $(var glob) {
+                    if (glob.init != null && glob.flags.used) {
+                        visit_expression(glob.init, adapter_resolve)
+                    }
+                }
             }
         }
         // Register [pinvoke] and [export] functions in tabMnLookup so they can be
@@ -950,7 +962,22 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     )
     let global_context = LLVMBuildCall2(builder, create_ctx_type, jit_create_context, params, "")
 
-    let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules)
+    // Pre-build init_globals so its function-pointer globals exist before
+    // collect_external_functions walks them (issue #2582). Actual init_globals(ctx)
+    // call is emitted further down at its runtime position in main_fn.
+    var init_glob : LLVMOpaqueValue?
+    var init_glob_type : LLVMOpaqueType?
+    {
+        var jit_flags : LlvmJitFlags
+        jit_flags.emit_prologue = true
+        jit_flags.gen_exe = true
+        jit_flags.need_di = false
+        let pair = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
+        init_glob = pair._0
+        init_glob_type = pair._1
+    }
+
+    let (any_unimplemented, sort_needs_whole_lib) = collect_external_functions(global_context, ctx, builder, mod, types, funcs, uids, used_modules, dynamic_modules, prog)
     if (strict && any_unimplemented) {
         to_log(LOG_ERROR, "Some of the nodes above are unimplemented!\n")
         return (fn = null, link_whole_lib = false)
@@ -997,12 +1024,6 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     )
 
     {
-        // Init globals
-        var jit_flags : LlvmJitFlags
-        jit_flags.emit_prologue = true
-        jit_flags.gen_exe = true
-        jit_flags.need_di = false
-        let (init_glob, init_glob_type) = generate_globals_initialization_fn(program_context, prog, types, uids, jit_flags)
         let init_globals = LLVMBuildCall2(builder, init_glob_type, init_glob, main_params, "")
         // Register init_globals as jitInitScript so cloned contexts (jobque) can re-run it
         let set_init_script_type = LLVMFunctionType(types.t_void,
