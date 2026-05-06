@@ -13,6 +13,7 @@ build-track/
 build-rwdi/
 build-asan/
 build-ubsan/
+build-linux-asan/
 # All build binaries stored here
 bin/
 # JIT stores dll's here

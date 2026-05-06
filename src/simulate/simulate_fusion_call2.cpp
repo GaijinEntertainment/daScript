@@ -44,9 +44,9 @@ namespace das {
         }
         SimFunction * fnPtr = nullptr;
         SimNode * cmresEval = nullptr;
-        // Per-side operand byte size; stamped at fuse-time. Default 16 mirrors legacy v_ldu over-read.
-        uint8_t leftLoadSize = 16;
-        uint8_t rightLoadSize = 16;
+        // Per-side operand byte size; always overwritten by IMPLEMENT_OP2_SETUP_NODE.
+        uint8_t leftLoadSize = 0;
+        uint8_t rightLoadSize = 0;
     };
 
 
@@ -129,8 +129,20 @@ namespace das {
     rn->fnPtr = sn->fnPtr; \
     rn->cmresEval = sn->cmresEval; \
     rn->baseType = Type::none; \
-    rn->leftLoadSize  = (sn->types && sn->types[0] && sn->types[0]->size <= 16) ? (uint8_t)sn->types[0]->size : 16; \
-    rn->rightLoadSize = (sn->types && sn->types[1] && sn->types[1]->size <= 16) ? (uint8_t)sn->types[1]->size : 16;
+    DAS_VERIFYF(sn->fnPtr && sn->fnPtr->debugInfo && sn->fnPtr->debugInfo->count >= 2 \
+        && sn->fnPtr->debugInfo->fields && sn->fnPtr->debugInfo->fields[0] && sn->fnPtr->debugInfo->fields[1], \
+        "fusion call2: fnPtr/debugInfo/fields missing\n"); \
+    { \
+        auto t0 = sn->fnPtr->debugInfo->fields[0]; \
+        auto t1 = sn->fnPtr->debugInfo->fields[1]; \
+        uint32_t s0 = (t0->isRef() || t0->isRefType()) ? (uint32_t)sizeof(void*) : t0->size; \
+        uint32_t s1 = (t1->isRef() || t1->isRefType()) ? (uint32_t)sizeof(void*) : t1->size; \
+        DAS_VERIFYF(s0 <= 16 && s1 <= 16, \
+            "fusion call2: load size oversized L=%u R=%u fn=%s\n", \
+            (unsigned)s0, (unsigned)s1, sn->fnPtr->name ? sn->fnPtr->name : "?"); \
+        rn->leftLoadSize  = (uint8_t)s0; \
+        rn->rightLoadSize = (uint8_t)s1; \
+    }
 
 __forceinline SimNode * safeArg2 ( SimNode * node, int index ) {
     auto cb = static_cast<SimNode_CallBase *>(node);

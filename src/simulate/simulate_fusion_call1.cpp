@@ -47,8 +47,8 @@ namespace das {
         }
         SimFunction * fnPtr = nullptr;
         SimNode * cmresEval = nullptr;
-        // Operand byte size; stamped at fuse-time. Default 16 mirrors legacy v_ldu over-read.
-        uint8_t loadSize = 16;
+        // Operand byte size; always overwritten by IMPLEMENT_OP1_SETUP_NODE.
+        uint8_t loadSize = 0;
     };
 
 #define EVAL_NODE(TYPE,CTYPE)\
@@ -75,7 +75,16 @@ namespace das {
     rn->fnPtr = sn->fnPtr; \
     rn->cmresEval = sn->cmresEval; \
     rn->baseType = Type::none; \
-    rn->loadSize = (sn->types && sn->types[0] && sn->types[0]->size <= 16) ? (uint8_t)sn->types[0]->size : 16;
+    DAS_VERIFYF(sn->fnPtr && sn->fnPtr->debugInfo && sn->fnPtr->debugInfo->count >= 1 \
+        && sn->fnPtr->debugInfo->fields && sn->fnPtr->debugInfo->fields[0], \
+        "fusion call1: fnPtr/debugInfo/fields missing\n"); \
+    { \
+        auto t0 = sn->fnPtr->debugInfo->fields[0]; \
+        uint32_t s0 = (t0->isRef() || t0->isRefType()) ? (uint32_t)sizeof(void*) : t0->size; \
+        DAS_VERIFYF(s0 <= 16, "fusion call1: load size %u oversized fn=%s\n", \
+            (unsigned)s0, sn->fnPtr->name ? sn->fnPtr->name : "?"); \
+        rn->loadSize = (uint8_t)s0; \
+    }
 
 __forceinline SimNode * safeArg1 ( SimNode * node, int index ) {
     auto cb = static_cast<SimNode_CallBase *>(node);
