@@ -3722,13 +3722,14 @@ Adoption:
 | `baseline(db, version)` | `(db : SqlRunner, version : int) : void` | stamp v1..N rows in `__schema_version` without running their bodies (Flyway-style adoption) |
 | `try_baseline(db, version)` | `(db : SqlRunner, version : int) : Result<int, string>` | Result form |
 
-Typed ALTER (additive cases that align with the current struct):
+Typed ALTER (additive cases that align with the current struct, shipped 14b):
 
 | Name | Shape | Role |
 |---|---|---|
-| `add_column(db, type<T>, .Field [, default = expr])` | call macro | `ALTER TABLE … ADD COLUMN`; SQL type from `_::sql_bind` adapter; NOT NULL from absence of `Option<>` wrapping |
-| `create_index(db, type<T>, fields = (…), [unique=true,] [name="…"])` | call macro | `CREATE [UNIQUE] INDEX`; auto-name `idx_<table>_<col1>_<col2>` |
-| `drop_index_if_exists(db, name)` | function | `DROP INDEX IF EXISTS …` |
+| `add_column(db, type<T>, "Field" [, defaultLit])` | call macro | `ALTER TABLE … ADD COLUMN`; SQL type from `_::sql_storage_type_for` (the `_::sql_bind` adapter rail); NOT NULL from absence of `Option<>` wrapping; honors `@sql_column` rename + `@sql_json` / `@sql_blob`. Field selectors are string literals (gen2's `.Field` syntax only parses inside `_sql {…}` blocks). |
+| `create_index(db, type<T>, "Field" \| ("A","B") [, "ix_…"])` | call macro | `CREATE INDEX`; auto-name `idx_<table>_<col1>_<col2>` on the post-`@sql_column` SQL identifiers |
+| `create_unique_index(db, type<T>, … same shape …)` | call macro | `CREATE UNIQUE INDEX`. Separate macro (gen2 named-args use `[name=val]` brackets which call_macros don't intercept; positional separation is cleaner) |
+| `drop_index_if_exists(db, name)` | function | `DROP INDEX IF EXISTS "name"` (idempotent via SQLite's IF EXISTS) |
 
 Schema rebuild (the 12-step pattern as building blocks):
 

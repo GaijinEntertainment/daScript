@@ -2147,14 +2147,20 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
     if (td == null) {
         return false
     }
+    // Pre-instantiation form: typeMacro `$Option<T>` — what [sql_table] sees during structure_macro apply().
     if (td.baseType == Type.typeMacro && length(td.dimExpr) > 0 && (td.dimExpr[0] is ExprConstString)) {
         return (td.dimExpr[0] as ExprConstString).value == "Option"
     }
-    return (td.baseType == Type.tStructure
-        && td.structType != null
-        && td.structType.name == "Option"
-        && td.structType._module != null
-        && td.structType._module.name == "option")
+    // Post-instantiation form: tStructure named `Option<T>` (the [template_structure] machinery stamps
+    // the type-arg into the struct name). Templates instantiated downstream show _module=<callee>, not
+    // the original "option" module — match on the name shape instead.
+    if (td.baseType == Type.tStructure && td.structType != null) {
+        let sname = string(td.structType.name)
+        if (sname == "Option" || sname |> starts_with("Option<")) {
+            return true
+        }
+    }
+    return false
 }
 
 def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
@@ -2278,6 +2284,18 @@ def private find_struct_helper_fn(name : string; st : StructurePtr) : FunctionPt
     return found
 }
 
+def private derive_index_name(table_name : string; sql_cols : array<string>) : string {
+    // Shared between [sql_index] structure annotation and create_index call macro: idx_<table>_<col1>_<col2>… on the post-@sql_column SQL identifiers.
+    return build_string() $(var w) {
+        w |> write("idx_")
+        w |> write(table_name)
+        for (col in sql_cols) {
+            w |> write("_")
+            w |> write(col)
+        }
+    }
+}
+
 [structure_macro(name=sql_index)]
 class SqlIndexMacro : AstStructureAnnotation {
     //! Stackable struct-level annotation: ``[sql_index(fields="A"|("A","B"), unique=?, name=?)]``.
@@ -2331,14 +2349,7 @@ class SqlIndexMacro : AstStructureAnnotation {
         }
 
         // Auto-name uses SQL (post-rename) column names so distinct schemas don't collide.
-        let auto_name = build_string() $(var w) {
-            w |> write("idx_")
-            w |> write(table_name)
-            for (col in sql_cols) {
-                w |> write("_")
-                w |> write(col)
-            }
-        }
+        let auto_name = derive_index_name(table_name, sql_cols)
         let idx_name = empty(idx_name_arg) ? auto_name : idx_name_arg
         let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
         let this_stmt = build_string() $(var w) {
@@ -4231,4 +4242,310 @@ class SqlFunctionMacro : AstFunctionAnnotation {
         }
         return true
     }
+}
+
+// ===== Typed ALTER macros — migration-context ergonomics =====
+// Used inside [sql_migration] bodies. Emit SQLite-dialect ALTER TABLE / CREATE INDEX
+// from struct + field-name strings. Per the design lock in API_MIGRATION.md §2:
+// typed when daslang has enough info to validate, raw when it doesn't (PK / UNIQUE
+// post-hoc / RENAME / DROP COLUMN stay on `db |> exec(…)`).
+
+[macro_function]
+def private resolve_sql_table(prog : ProgramPtr; at : LineInfo; var typeArg : ExpressionPtr;
+                              macroName : string; var st : StructurePtr&; var table_name : string&) : bool {
+    // Decode `type<T>` arg: T must be a struct carrying the [sql_table]-generated
+    // `_sql_table_name` helper, otherwise we have no table identifier to ALTER.
+    if (typeArg._type == null) {
+        macro_error(prog, at, "{macroName}: `type<T>` argument has no inferred type yet")
+        return false
+    }
+    if (typeArg._type.baseType != Type.tStructure || typeArg._type.structType == null) {
+        macro_error(prog, at, "{macroName}: second argument must be `type<SomeStruct>` — got '{describe(typeArg._type)}'")
+        return false
+    }
+    st = typeArg._type.structType
+    var tname_fn = find_struct_helper_fn("_sql_table_name", st)
+    if (tname_fn == null) {
+        macro_error(prog, at, "{macroName}: type '{st.name}' has no [sql_table] declaration; only [sql_table]-decorated structs can drive typed ALTER")
+        return false
+    }
+    table_name = extract_string_return(tname_fn)
+    if (empty(table_name)) {
+        macro_error(prog, at, "{macroName}: internal — _sql_table_name body did not match expected shape on '{st.name}'")
+        return false
+    }
+    return true
+}
+
+[macro_function]
+def private resolve_field_index(var st : StructurePtr; field_name : string) : int {
+    // -1 if missing. Caller emits the macro_error with full context (macro name + struct name).
+    for (i in range(length(st.fields))) {
+        if (st.fields[i].name == field_name) {
+            return i
+        }
+    }
+    return -1
+}
+
+[macro_function]
+def private field_sql_name_at(var st : StructurePtr; idx : int) : string {
+    // @sql_column("X") rename → X; otherwise daslang field name. idx must be in range.
+    let ca = find_arg(st.fields[idx].annotation, "sql_column")
+    if (ca is tString) {
+        return string(ca as tString)
+    }
+    return string(st.fields[idx].name)
+}
+
+[macro_function]
+def private decode_string_const(e : ExpressionPtr) : tuple<ok : bool; value : string> {
+    // Strict literal-only: peel ExprRef2Value, accept ExprConstString.
+    var inner = e
+    if (inner != null && inner is ExprRef2Value) {
+        inner = (inner as ExprRef2Value).subexpr
+    }
+    if (inner == null || !(inner is ExprConstString)) {
+        return (ok = false, value = "")
+    }
+    return (ok = true, value = string((inner as ExprConstString).value))
+}
+
+[call_macro(name="add_column")]
+class private AddColumnMacro : AstCallMacro {
+    //! Migration-context typed ADD COLUMN macro. Form:
+    //!   ``db |> add_column(type<T>, "FieldName" [, defaultLiteral])``.
+    //! Emits ``ALTER TABLE "<t>" ADD COLUMN "<col>" <SQL_TYPE>[ NOT NULL][ DEFAULT …]``.
+    //! Honors @sql_column rename, @sql_json / @sql_blob storage. Rejects PK / UNIQUE /
+    //! computed / @sql_default_fn at macro time (those need a table rebuild).
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        // call.arguments = [db, type<T>, "FieldName"] (3) or [..., defaultLit] (4) after the `db |>` desugar.
+        let nArgs = call.arguments |> length
+        macro_verify(nArgs == 3 || nArgs == 4, prog, call.at,
+            "add_column expects (db, type<T>, \"Field\" [, defaultLit]) — got {nArgs} args")
+        var st : StructurePtr
+        var table_name : string
+        if (!resolve_sql_table(prog, call.at, call.arguments[1], "add_column", st, table_name)) {
+            return null
+        }
+        // Field-name string literal.
+        let nameRes = decode_string_const(call.arguments[2])
+        if (!nameRes.ok) {
+            macro_error(prog, call.at, "add_column: third argument must be a string literal naming the field — got '{describe(call.arguments[2])}'")
+            return null
+        }
+        let field_name = nameRes.value
+        let idx = resolve_field_index(st, field_name)
+        if (idx < 0) {
+            macro_error(prog, call.at, "add_column: field '{field_name}' is not a column of struct '{st.name}'")
+            return null
+        }
+        // Reject shapes that need a table rebuild.
+        let pk_arg = find_arg(st.fields[idx].annotation, "sql_primary_key")
+        if (pk_arg is tBool && (pk_arg as tBool)) {
+            macro_error(prog, call.at,
+                "add_column cannot add a PRIMARY KEY column to an existing table; recreate the table — see chunk 14c struct_convert")
+            return null
+        }
+        let uniq_arg = find_arg(st.fields[idx].annotation, "sql_unique")
+        if (uniq_arg is tBool && (uniq_arg as tBool)) {
+            macro_error(prog, call.at,
+                "add_column cannot add a UNIQUE column to an existing table; create_unique_index(type<T>, \"{field_name}\") instead")
+            return null
+        }
+        let computed_arg = find_arg(st.fields[idx].annotation, "sql_computed")
+        if (computed_arg is tString || (computed_arg is tBool && (computed_arg as tBool))) {
+            macro_error(prog, call.at,
+                "add_column cannot add a generated/computed column to an existing table; recreate the table — see chunk 14c struct_convert")
+            return null
+        }
+        let default_fn_arg = find_arg(st.fields[idx].annotation, "sql_default_fn")
+        if (default_fn_arg is tString) {
+            macro_error(prog, call.at,
+                "add_column does not support @sql_default_fn fields yet; use a literal default or `db |> exec(…)`")
+            return null
+        }
+        // Read storage hints + nullability.
+        let json_arg = find_arg(st.fields[idx].annotation, "sql_json")
+        let is_json = json_arg is tBool && (json_arg as tBool)
+        let blob_arg = find_arg(st.fields[idx].annotation, "sql_blob")
+        let is_blob = blob_arg is tBool && (blob_arg as tBool)
+        let is_optional = is_option_field_type(st.fields[idx]._type)
+        let col_name = field_sql_name_at(st, idx)
+        // DEFAULT clause from optional 4th arg (compile-time literal only).
+        var default_clause = ""
+        if (nArgs == 4) {
+            if (is_json || is_blob) {
+                macro_error(prog, call.at,
+                    "add_column: explicit default not supported for @sql_json / @sql_blob columns; the column accepts NULL by default — wrap the field in Option<T> if nullability is desired")
+                return null
+            }
+            var defArg = call.arguments[3]
+            if (defArg != null && defArg is ExprRef2Value) {
+                defArg = (defArg as ExprRef2Value).subexpr
+            }
+            default_clause = literal_init_to_default_clause(defArg)
+            if (empty(default_clause)) {
+                macro_error(prog, call.at,
+                    "add_column: DEFAULT must be a compile-time literal (int / int64 / float / double / bool / string); got '{describe(call.arguments[3])}'. Inline the value, or use `db |> exec(…)` for runtime expressions.")
+                return null
+            }
+        } elif (!is_optional && !is_json && !is_blob) {
+            // SQLite ADD COLUMN against existing rows: NOT NULL without DEFAULT panics for any pre-existing row.
+            macro_error(prog, call.at,
+                "add_column: field '{field_name}' on '{st.name}' is non-nullable; provide a literal default (e.g. `add_column(type<T>, \"{field_name}\", 0)`) or wrap the field in Option<T>")
+            return null
+        }
+        // Build prefix + suffix at macro time; SQL type comes from the runtime adapter rail
+        // (sql_storage_type_for) unless the field is explicitly @sql_json / @sql_blob.
+        let null_clause = is_optional ? "" : " NOT NULL"
+        let prefix = "ALTER TABLE \"{table_name}\" ADD COLUMN \"{col_name}\" "
+        let suffix = "{null_clause}{default_clause}"
+        var dbExpr = clone_expression(call.arguments[0])
+        var res : ExpressionPtr
+        if (is_json) {
+            let full = "{prefix}TEXT{suffix}"
+            res = qmacro(_::exec($e(dbExpr), $v(full)))
+        } elif (is_blob) {
+            let full = "{prefix}BLOB{suffix}"
+            res = qmacro(_::exec($e(dbExpr), $v(full)))
+        } else {
+            var fieldType <- clone_type(st.fields[idx]._type)
+            res = qmacro(_::exec($e(dbExpr), build_string() $(var w) {
+                w |> write($v(prefix))
+                w |> write(_::sql_storage_type_for(type<$t(fieldType)>))
+                w |> write($v(suffix))
+            }))
+        }
+        res.force_at(call.at)
+        return res
+    }
+}
+
+[macro_function]
+def private resolve_field_columns(prog : ProgramPtr; at : LineInfo; var st : StructurePtr;
+                                  fieldsArg : ExpressionPtr; macroName : string;
+                                  var sql_cols : array<string>&) : bool {
+    // Accept a single string literal ("Email") or a tuple literal of string literals ("A", "B").
+    // Array literals like ["A", "B"] parse as `to_array_move(fixed_array(…))` — too hairy to AST-match.
+    if (fieldsArg == null) {
+        macro_error(prog, at, "{macroName}: missing fields argument")
+        return false
+    }
+    var inner = fieldsArg
+    if (inner is ExprRef2Value) {
+        inner = (inner as ExprRef2Value).subexpr
+    }
+    var col_names : array<string>
+    if (inner is ExprConstString) {
+        col_names |> push(string((inner as ExprConstString).value))
+    } elif (inner is ExprMakeTuple) {
+        let mkt = inner as ExprMakeTuple
+        for (v in mkt.values) {
+            var item = v
+            if (item is ExprRef2Value) {
+                item = (item as ExprRef2Value).subexpr
+            }
+            if (item == null || !(item is ExprConstString)) {
+                macro_error(prog, at, "{macroName}: tuple fields entries must be string literals — got '{describe(v)}'")
+                return false
+            }
+            col_names |> push(string((item as ExprConstString).value))
+        }
+    } else {
+        macro_error(prog, at, "{macroName}: fields argument must be a string literal (\"Field\") or a tuple of string literals (\"A\", \"B\") — got '{describe(fieldsArg)}'")
+        return false
+    }
+    if (length(col_names) == 0) {
+        macro_error(prog, at, "{macroName}: empty fields list. Provide \"Field\" for a single-column index or (\"A\", \"B\") for a composite.")
+        return false
+    }
+    sql_cols |> reserve(length(col_names))
+    for (cn in col_names) {
+        let idx = resolve_field_index(st, cn)
+        if (idx < 0) {
+            macro_error(prog, at, "{macroName}: field '{cn}' is not a column of struct '{st.name}'")
+            return false
+        }
+        sql_cols |> push(field_sql_name_at(st, idx))
+    }
+    return true
+}
+
+[macro_function]
+def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_unique : bool) : ExpressionPtr {
+    let macroName = is_unique ? "create_unique_index" : "create_index"
+    let nArgs = call.arguments |> length
+    if (nArgs < 3 || nArgs > 4) {
+        macro_error(prog, call.at,
+            "{macroName} expects (db, type<T>, fields [, \"name\"]) — got {nArgs} args")
+        return null
+    }
+    var st : StructurePtr
+    var table_name : string
+    if (!resolve_sql_table(prog, call.at, call.arguments[1], macroName, st, table_name)) {
+        return null
+    }
+    var sql_cols : array<string>
+    if (!resolve_field_columns(prog, call.at, st, call.arguments[2], macroName, sql_cols)) {
+        return null
+    }
+    var idx_name = derive_index_name(table_name, sql_cols)
+    if (nArgs == 4) {
+        let nameRes = decode_string_const(call.arguments[3])
+        if (!nameRes.ok) {
+            macro_error(prog, call.at,
+                "{macroName}: optional `name` argument must be a string literal — got '{describe(call.arguments[3])}'")
+            return null
+        }
+        if (empty(nameRes.value)) {
+            macro_error(prog, call.at, "{macroName}: index name string is empty")
+            return null
+        }
+        idx_name = nameRes.value
+    }
+    let kind = is_unique ? "UNIQUE INDEX" : "INDEX"
+    let ddl = build_string() $(var w) {
+        w |> write("CREATE {kind} \"{idx_name}\" ON \"{table_name}\" (")
+        for (j in range(length(sql_cols))) {
+            if (j > 0) {
+                w |> write(", ")
+            }
+            w |> write("\"")
+            w |> write(sql_cols[j])
+            w |> write("\"")
+        }
+        w |> write(")")
+    }
+    var dbExpr = clone_expression(call.arguments[0])
+    var res = qmacro(_::exec($e(dbExpr), $v(ddl)))
+    res.force_at(call.at)
+    return res
+}
+
+[call_macro(name="create_index")]
+class private CreateIndexMacro : AstCallMacro {
+    //! Migration-context typed CREATE INDEX. Form:
+    //!   ``db |> create_index(type<T>, "Field" | ["A", "B"] [, "idx_name"])``.
+    //! Auto-name follows the [sql_index] convention: ``idx_<table>_<col1>_<col2>``.
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        return emit_create_index(prog, call, false)
+    }
+}
+
+[call_macro(name="create_unique_index")]
+class private CreateUniqueIndexMacro : AstCallMacro {
+    //! Migration-context typed CREATE UNIQUE INDEX. Same shape as ``create_index`` plus
+    //! the UNIQUE constraint. SQLite emits a duplicate-violation panic at INSERT time
+    //! if existing rows already conflict; wrap in a migration body for atomic rollback.
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        return emit_create_index(prog, call, true)
+    }
+}
+
+def drop_index_if_exists(db : SqlRunner; name : string) {
+    //! Idempotent DROP INDEX. SQLite supports IF EXISTS natively; safe to call on a
+    //! missing index. Pair with ``create_unique_index`` for migration patterns that
+    //! rebuild an index under a new name.
+    db |> exec("DROP INDEX IF EXISTS \"{name}\"")
 }

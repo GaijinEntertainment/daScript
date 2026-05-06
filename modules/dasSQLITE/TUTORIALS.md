@@ -314,8 +314,9 @@ Everything a real app needs once it leaves the developer's machine.
     sub-module. **Walk locked 2026-05-04;** see
     [API_MIGRATION.md](API_MIGRATION.md). Mockup refreshed:
     [30-migrations.das.mockup](tutorial-mockup/30-migrations.das.mockup).
-    Implementation split into chunks 14a (core + adoption), 14b
-    (typed ALTER), 14c (rebuild).
+    Implementation split into chunks 14a (core + adoption — shipped
+    2026-05-06), 14b (typed ALTER — shipped 2026-05-06), 14c (rebuild
+    — pending).
 33. **PRAGMA tuning** — WAL mode, `busy_timeout`, `foreign_keys`,
     `synchronous`. Ad-hoc `db |> set_pragma(name, value)` /
     `try_set_pragma`, the batch shortcut
@@ -433,7 +434,7 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 29 | Column metadata | `29-column_names.das` | **Shipped** (chunk 9); Band 1 `column_info(type<T>) : array<ColumnInfo>` (compile-time walk) + abstract `SqlType` enum + `sqlite_sql_type` dialect renderer; Band 3 raw `PRAGMA table_info` via the typed `query` family |
 | 30 | Listing tables | `30-list_tables.das` | **Shipped** (chunk 9); raw `query` against `sqlite_master`; no abstract `list_tables` helper (catalog spelling diverges per backend) |
 | 31 | Views | `31-views.das` | **Shipped** (chunk 10); `[sql_view(name=...)]` annotation + `_create_view` macro + `drop_view_if_exists`; mutation-path rejection at compile time (predicate form) and runtime (row form) |
-| 32 | Migrations | `30-migrations.das` (refreshed 2026-05-04) | Walk locked 2026-05-04 — see [API_MIGRATION.md](API_MIGRATION.md); chunks 14a/14b/14c queued |
+| 32 | Migrations | `tutorials/sql/43-migrations.das` | **Shipped 14a + 14b** (2026-05-06); spine + typed ALTER (`add_column` / `create_index` / `create_unique_index` / `drop_index_if_exists`). See [API_MIGRATION.md](API_MIGRATION.md). Chunk 14c (struct rebuild) pending. |
 | 33 | PRAGMA tuning | `33-pragma.das` | **Shipped** (chunk 10); `set_pragma` / `try_set_pragma` (string/int64/bool overloads) + `apply_recommended_pragmas` (WAL + busy_timeout + foreign_keys + synchronous=NORMAL) |
 | 34 | Backup + VACUUM | `34-backup_vacuum.das` | **Shipped** (chunk 10); `vacuum` / `vacuum_into` / `optimize` / `integrity_check` / `quick_check` + `backup_to(dest)` / `backup_to(path)` (online Backup API with SQLITE_BUSY/LOCKED retry) |
 | 35 | Streaming results | `35-streaming.das` | **Shipped** (chunk 10); `_each_sql(chain)` returning `iterator<T>`, generator-based; rejects materializing terminals (`_to_array`, `_first`, aggregates); `sqlite3_finalize` runs in `finally` so stmt is released on break/exhaustion/panic |

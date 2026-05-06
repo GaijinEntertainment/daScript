@@ -357,18 +357,24 @@ review. Useful for catching copy-paste mistakes during merges, but
 the dev keeps the final call. Out of scope for v1; revisit when the
 ecosystem matures.
 
-**Decision (locked 2026-05-04) — ship typed ALTER surface for the
-additive cases.**
+**Decision (locked 2026-05-04, shipped 14b chunk) — typed ALTER surface
+for the additive cases.**
 
 Migration bodies don't have to stay raw-SQL-only. The cases where
 daslang has enough information to validate against the current struct
 ship as typed macros; everything else stays raw `db |> exec(…)`.
 
+Field selectors use **string literals**, not `.Field` syntax: gen2's
+parser only parses `.Field` inside `_sql {…}` blocks where `_` is a
+synthetic placeholder. Plain call sites need explicit string field
+names — same convention `[sql_index(fields="A")]` already uses.
+
 | Form | Shipped surface | Emits |
 |---|---|---|
-| ADD COLUMN | `db \|> add_column(type<T>, .Field [, default = expr])` | `ALTER TABLE t ADD COLUMN Field <SQL_TYPE> [NOT NULL] [DEFAULT …]`. SQL type from `_::sql_bind` adapter rail; NOT NULL derived from absence of `Option<>` wrapping; default from the expression via `to_sql_literal`. |
-| CREATE INDEX | `db \|> create_index(type<T>, fields = (.A, .B), unique = true [, name = "ix_…"])` | `CREATE [UNIQUE] INDEX <name> ON t(A, B)`. Name auto-derived as `idx_<table>_<col1>_<col2>` to match the `[sql_index]` annotation convention from tut 24. |
-| DROP INDEX | `db \|> drop_index_if_exists("ix_users_email")` | `DROP INDEX IF EXISTS ix_users_email`. Just a name string — no struct typing. |
+| ADD COLUMN | `db \|> add_column(type<T>, "Field" [, defaultLit])` | `ALTER TABLE t ADD COLUMN Field <SQL_TYPE> [NOT NULL] [DEFAULT …]`. SQL type from `_::sql_storage_type_for` (the `_::sql_bind` adapter rail); NOT NULL derived from absence of `Option<>` wrapping; DEFAULT from the literal via `literal_init_to_default_clause`. `@sql_column` rename + `@sql_json` / `@sql_blob` storage are honored. |
+| CREATE INDEX | `db \|> create_index(type<T>, "Field" \| ("A","B") [, "ix_…"])` | `CREATE INDEX <name> ON t(A, B)`. Name auto-derived as `idx_<table>_<col1>_<col2>` to match the `[sql_index]` annotation convention from tut 24. |
+| CREATE UNIQUE INDEX | `db \|> create_unique_index(type<T>, … same shape …)` | `CREATE UNIQUE INDEX <name> ON t(A, B)`. Separate macro (no boolean named arg, since gen2 named-args use `[name=val]` bracket form which call_macros don't intercept). |
+| DROP INDEX | `db \|> drop_index_if_exists("ix_users_email")` | Plain runtime function. `DROP INDEX IF EXISTS "ix_users_email"`. |
 
 **Reasoning:**
 
@@ -397,16 +403,26 @@ escape is `db |> exec(…)`):
 The reader's mental model is consistent: *typed when daslang has enough
 info to validate, raw when it doesn't.*
 
-**Test cases (typed ALTER):**
+**Test cases (typed ALTER) — shipped 14b:**
 
 | File | What it asserts |
 |---|---|
-| `15_add_column_simple.das` | `add_column(type<User>, .Email, default = "")` emits the expected DDL; column appears in `pragma_table_info` with TEXT NOT NULL DEFAULT ''. |
-| `16_add_column_optional.das` | `add_column(type<User>, .LastLoginAt)` for `Option<int64>` field emits INTEGER (no NOT NULL, no default). |
-| `17_create_index_default_name.das` | `create_index(type<User>, fields = (.Email,))` emits `idx_users_email`; visible in `sqlite_master`. |
-| `18_create_index_unique_composite.das` | `create_index(type<User>, fields = (.Email, .LastLoginAt), unique = true, name = "ix_lookup")` emits `CREATE UNIQUE INDEX ix_lookup ON users(Email, LastLoginAt)`. |
-| `19_drop_index_if_exists.das` | Drop nonexistent index → no error; create + drop → second pragma shows it gone. |
-| `20_typed_and_raw_mix.das` | Migration body using both `add_column` (typed) and `db \|> exec("DROP COLUMN OldField")` (raw) compiles and applies cleanly. Locks the "mix freely" claim. |
+| `migrate_14_add_column_optional.das` | `Option<string>` field emits nullable TEXT (no NOT NULL, no DEFAULT); `pragma_table_info` confirms. |
+| `migrate_15_add_column_default.das` | `add_column(type<T>, "Score", 0)` emits NOT NULL INTEGER DEFAULT 0; pre-existing rows backfill via SQLite's ALTER. |
+| `migrate_16_add_column_string_quoting.das` | Embedded single-quote (`"O'Reilly"`) escapes correctly via `sql_quote_string_literal`; round-trips. |
+| `migrate_17_add_column_renamed.das` | `@sql_column("email_addr")` propagates: emitted DDL uses the renamed identifier, not the daslang field name. |
+| `migrate_18_add_column_json.das` | `@sql_json` field of struct type emits TEXT storage. |
+| `migrate_19_add_column_blob.das` | `@sql_blob` field of struct type emits BLOB storage; `Option<T>` keeps it nullable. |
+| `migrate_20_create_index_basic.das` | Auto-name `idx_<table>_<col>`, non-unique by default. |
+| `migrate_21_create_index_unique_composite.das` | Composite UNIQUE with explicit name; `drop_index_if_exists` is idempotent across missing/existing/missing names. |
+| `migrate_22_add_column_dup_runtime.das` | Re-adding the same column at runtime panics inside the migration; α-shape transaction rolls back the whole call (audit table empty, table doesn't exist). |
+| `failed_add_column_unknown_field.das` | macro_error: field not on struct. |
+| `failed_add_column_no_sql_table.das` | macro_error: type<T> lacks `[sql_table]`. |
+| `failed_add_column_pk_rejected.das` | macro_error: cannot ADD a PK column (recreate table). |
+| `failed_add_column_unique_rejected.das` | macro_error: cannot ADD UNIQUE inline (use `create_unique_index`). |
+| `failed_add_column_nonliteral_default.das` | macro_error: DEFAULT must be a compile-time literal. |
+| `failed_create_index_unknown_field.das` | macro_error: field not on struct. |
+| `failed_create_index_empty_fields.das` | macro_error: empty fields list. |
 
 ---
 

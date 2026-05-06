@@ -58,24 +58,57 @@ def migration_001(db : SqlRunner) {
     db |> exec("CREATE TABLE users (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL)")
 }
 
-// Migration 2 — add a column.
+// Migration 2 — add a column, typed form.
+//
+// `add_column(type<T>, "FieldName" [, defaultLit])` reads the field on the
+// current `[sql_table]` struct: SQL type comes from the daslang type via the
+// `_::sql_bind` adapter rail, NOT NULL is derived from the absence of
+// `Option<>` wrapping, DEFAULT from the literal you pass. The macro honors
+// `@sql_column` rename, `@sql_json`, `@sql_blob`. PK / UNIQUE / generated
+// columns can't be ADDed post-hoc — those need a table rebuild
+// (chunk 14c, struct_convert).
+//
+// Raw equivalent (typed form errors at compile time if the field name or
+// daslang shape changes; raw form silently drifts):
+//
+//     db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
 
 [sql_migration(version = 2, description = "add email column")]
 def migration_002(db : SqlRunner) {
-    db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
+    db |> add_column(type<User>, "Email", "")
 }
 
-// Migration 3 — multiple statements. All run inside the call's single
-// transaction; failure of any one rolls back the whole call. DDL and DML
-// mix freely.
+// Migration 3 — typed ADD COLUMN + raw DML. All run inside the call's
+// single transaction; failure of any one rolls back the whole call.
+// `analyze=true` on the annotation runs `ANALYZE` once after the call
+// commits — refreshes stats after the column add. VACUUM works the same
+// way (cheap-then-expensive ordering: ANALYZE, then VACUUM).
 
 [sql_migration(version = 3, description = "add score; backfill", analyze = true)]
 def migration_003(db : SqlRunner) {
-    db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
+    db |> add_column(type<User>, "Score", 0)
     db |> exec("UPDATE users SET Score = 100 WHERE Email != ''")
-    // analyze=true on the annotation runs `ANALYZE` once after the call
-    // commits — refreshes stats after the column add. VACUUM works the
-    // same way (cheap-then-expensive ordering: ANALYZE, then VACUUM).
+}
+
+// Migration 4 — typed CREATE INDEX. Auto-name follows [sql_index]:
+// `idx_<table>_<col1>_<col2>`, on the post-`@sql_column` SQL identifiers.
+// Pass a custom name as the third positional arg if you want one. For
+// composite indexes, pass a tuple: ("Email", "Name").
+
+[sql_migration(version = 4, description = "index Email")]
+def migration_004(db : SqlRunner) {
+    db |> create_index(type<User>, "Email")
+}
+
+// Migration 5 — UNIQUE composite + idempotent rebuild via
+// `drop_index_if_exists` (SQLite supports IF EXISTS natively, so a missing
+// name is a clean no-op). Pattern: drop → create — safe if a previous
+// version already had the index, safe if it didn't.
+
+[sql_migration(version = 5, description = "unique (Email, Name)")]
+def migration_005(db : SqlRunner) {
+    db |> drop_index_if_exists("ux_email_name")
+    db |> create_unique_index(type<User>, ("Email", "Name"), "ux_email_name")
 }
 
 [export]
@@ -115,6 +148,44 @@ def main() : int {
         for (h in history) {
             print("  v{h.version}: '{h.description}'\n")
         }
+
+        // ================================================================
+        // PART 3.5 — Typed ALTER: when daslang has enough info to validate
+        // ================================================================
+        //
+        // Migrations 2-5 above use the typed surface in `daslib/sqlite_boost`:
+        //
+        //   db |> add_column(type<T>, "Field" [, defaultLit])
+        //   db |> create_index(type<T>, "Field" | ("A","B") [, "name"])
+        //   db |> create_unique_index(type<T>, … same shape …)
+        //   db |> drop_index_if_exists("name")
+        //
+        // What the typed forms buy you:
+        //
+        //  1. Compile-time field-name checks. `add_column(type<T>, "Emial")`
+        //     fails at compile time, not on the user's DB at startup.
+        //  2. Type-derived NOT NULL: forgetting NOT NULL+DEFAULT used to
+        //     mean existing rows panic on the next read. The macro derives
+        //     nullability from `Option<>` and refuses to ADD a non-nullable
+        //     column without a literal default.
+        //  3. `@sql_column` rename + `@sql_json` / `@sql_blob` storage are
+        //     honored automatically — same conventions as `[sql_table]` /
+        //     `[sql_index]`, no double-bookkeeping.
+        //
+        // What stays on `db |> exec(…)` (raw SQL):
+        //
+        //   - DROP COLUMN / RENAME COLUMN — old names aren't in the current
+        //     struct, so daslang has nothing to validate against.
+        //   - PK / UNIQUE inline / generated columns added post-hoc — SQLite
+        //     can't ALTER these in place; needs a table rebuild
+        //     (chunk 14c, struct_convert).
+        //   - CHECK constraints, FK ADD/DROP, column type changes.
+        //   - Anything ad-hoc that doesn't map to a struct field.
+
+        let n_idx = db |> query_scalar(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND tbl_name='users' AND name NOT LIKE 'sqlite_%'",
+            type<int>)
+        print("user indexes after migration 5: {n_idx}\n")
     }
 
     // =================================================================

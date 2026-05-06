@@ -72,12 +72,12 @@ Define a schema and write migrations
 
     [sql_migration(version = 2, description = "add email column")]
     def migration_002(db : SqlRunner) {
-        db |> exec("ALTER TABLE users ADD COLUMN Email TEXT NOT NULL DEFAULT ''")
+        db |> add_column(type<User>, "Email", "")
     }
 
     [sql_migration(version = 3, description = "add score; backfill", analyze = true)]
     def migration_003(db : SqlRunner) {
-        db |> exec("ALTER TABLE users ADD COLUMN Score INTEGER NOT NULL DEFAULT 0")
+        db |> add_column(type<User>, "Score", 0)
         db |> exec("UPDATE users SET Score = 100 WHERE Email != ''")
     }
 
@@ -154,6 +154,68 @@ no-op for any DB that's already past it --- the audit row keeps
 the old text. Fresh installs pick up the new text on first
 apply.
 
+Typed ALTER: when daslang has enough info to validate
+======================================================
+
+Migrations 2 and 3 above use the typed surface in
+``daslib/sqlite_boost``:
+
+.. code-block:: das
+
+    db |> add_column(type<T>, "Field" [, defaultLit])
+    db |> create_index(type<T>, "Field" | ("A","B") [, "name"])
+    db |> create_unique_index(type<T>, ... same shape ...)
+    db |> drop_index_if_exists("name")
+
+Field selectors are **string literals**, not ``.Field`` syntax:
+gen2's parser only accepts ``.Field`` inside an ``_sql {...}``
+block. Plain call sites pass explicit string field names ---
+the same convention ``[sql_index(fields="A")]`` already uses.
+
+What the typed forms buy you:
+
+1. **Compile-time field-name checks.**
+   ``add_column(type<T>, "Emial")`` fails at compile time, not
+   on the user's DB at startup.
+
+2. **Type-derived NOT NULL.** Forgetting ``NOT NULL + DEFAULT``
+   used to mean existing rows panic on the next read after the
+   migration. The macro derives nullability from
+   ``Option<>`` wrapping and refuses to ADD a non-nullable
+   column without a literal default.
+
+3. **Annotation reuse.** ``@sql_column`` rename + ``@sql_json``
+   / ``@sql_blob`` storage are honored automatically --- same
+   conventions as ``[sql_table]`` / ``[sql_index]``, no
+   double-bookkeeping.
+
+A second migration that adds an index and a unique composite,
+with an idempotent rebuild pattern via
+``drop_index_if_exists``:
+
+.. code-block:: das
+
+    [sql_migration(version = 4, description = "index Email")]
+    def migration_004(db : SqlRunner) {
+        db |> create_index(type<User>, "Email")
+    }
+
+    [sql_migration(version = 5, description = "unique (Email, Name)")]
+    def migration_005(db : SqlRunner) {
+        db |> drop_index_if_exists("ux_email_name")
+        db |> create_unique_index(type<User>, ("Email", "Name"), "ux_email_name")
+    }
+
+What stays on raw ``db |> exec(...)``:
+
+- DROP COLUMN / RENAME COLUMN --- old names aren't in the
+  current struct, so daslang has nothing to validate against.
+- PK / UNIQUE inline / generated columns added post-hoc ---
+  SQLite can't ALTER these in place; needs a table rebuild
+  (chunk 14c, ``struct_convert``).
+- ``CHECK`` constraints, FK ADD/DROP, column type changes.
+- Anything ad-hoc that doesn't map to a struct field.
+
 Adopting migrations on an existing DB
 ======================================
 
@@ -228,17 +290,14 @@ What does NOT ship
   Future work, also dovetails with the eventual ``dasSQL``
   abstraction layer.
 
-- **Typed ``ALTER`` macros** (``add_column``, ``create_index``,
-  ``drop_index_if_exists``). Coming in chunk 14b. For now,
-  every ALTER is raw SQL --- which works for every form on the
-  bundled SQLite 3.41.2, including ``DROP COLUMN`` and
-  ``RENAME COLUMN``.
-
 - **Struct-to-struct rebuild support** (``struct_convert``,
   ``[sql_table(legacy=true)]``, ``name=`` overrides). Coming
   in chunk 14c. For now, schema rebuilds are hand-written
   ``CREATE TABLE T_new`` + ``INSERT ... SELECT`` --- works,
-  just verbose.
+  just verbose. The typed ALTER surface above covers the
+  additive cases (ADD COLUMN, CREATE INDEX); ``DROP COLUMN`` /
+  ``RENAME COLUMN`` stay on raw ``db |> exec(...)`` until that
+  chunk lands.
 
 .. seealso::
 
