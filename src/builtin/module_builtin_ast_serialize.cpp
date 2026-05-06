@@ -65,7 +65,7 @@ namespace das {
     }
 
     template <typename TT>
-    void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t, smart_ptr<TT>> & objects) {
+    void patchRefs ( vector<pair<TT**,SerializeNodeId>> & refs, const das_hash_map<SerializeNodeId, smart_ptr<TT>> & objects) {
         for ( auto & p : refs ) {
             auto it = objects.find(p.second);
             if ( it == objects.end() ) {
@@ -78,7 +78,7 @@ namespace das {
     }
 
     template <typename TT>
-    void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t, TT*> & objects) {
+    void patchRefs ( vector<pair<TT**,SerializeNodeId>> & refs, const das_hash_map<SerializeNodeId, TT*> & objects) {
         for ( auto & p : refs ) {
             auto it = objects.find(p.second);
             if ( it == objects.end() ) {
@@ -225,6 +225,64 @@ namespace das {
         }
     }
 
+    AstSerializer & AstSerializer::operator << ( SerializeNodeId & value ) {
+        dtag(HASH_TAG("SerializeNodeId"));
+        // 64-bit user-space pointers fit in 48 bits (canonical form on x86-64
+        // and AArch64 Linux/macOS — top 16 bits are sign-extended copies of
+        // bit 47, and we only ever see user-space addresses here, so they are
+        // zero). Pack a small epoch into those unused top 16 bits so the
+        // common case is a single 8-byte word. Reserve sentinel 0xFFFF for
+        // "epoch overflow" — fall back to a separate adaptive-size write.
+        // 32-bit hosts have no headroom; always emit ptr + adaptive epoch.
+        if constexpr ( sizeof(void *) == 8 ) {
+            constexpr uint64_t kPtrMask  = (uint64_t(1) << 48) - 1;
+            constexpr uint64_t kEpochOverflowTag = 0xFFFFull << 48;
+            if ( writing ) {
+                uintptr_t pbits = reinterpret_cast<uintptr_t>(value.ptr);
+                DAS_ASSERTF((uint64_t(pbits) & ~kPtrMask) == 0,
+                    "SerializeNodeId: pointer %p has non-zero top 16 bits — "
+                    "non-canonical address violates packing assumption", value.ptr);
+                if ( value.epoch < 0xFFFFull ) {
+                    uint64_t packed = (uint64_t(value.epoch) << 48) | uint64_t(pbits);
+                    *this << packed;
+                } else {
+                    uint64_t packed = kEpochOverflowTag | uint64_t(pbits);
+                    *this << packed;
+                    uint32_t epoch32 = uint32_t(value.epoch);
+                    serializeAdaptiveSize32(epoch32);
+                }
+            } else {
+                uint64_t packed = 0;
+                *this << packed;
+                uint64_t topBits = packed & ~kPtrMask;
+                value.ptr = reinterpret_cast<void *>(uintptr_t(packed & kPtrMask));
+                if ( topBits == kEpochOverflowTag ) {
+                    uint32_t epoch32 = 0;
+                    serializeAdaptiveSize32(epoch32);
+                    value.epoch = size_t(epoch32);
+                } else {
+                    value.epoch = size_t(topBits >> 48);
+                }
+            }
+        } else {
+            // 32-bit: pointer fills the word; epoch goes in its own adaptive int.
+            if ( writing ) {
+                uint32_t pbits = uint32_t(reinterpret_cast<uintptr_t>(value.ptr));
+                uint32_t epoch32 = uint32_t(value.epoch);
+                *this << pbits;
+                serializeAdaptiveSize32(epoch32);
+            } else {
+                uint32_t pbits = 0;
+                *this << pbits;
+                uint32_t epoch32 = 0;
+                serializeAdaptiveSize32(epoch32);
+                value.ptr = reinterpret_cast<void *>(uintptr_t(pbits));
+                value.epoch = size_t(epoch32);
+            }
+        }
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( string & str ) {
         dtag(HASH_TAG("string"));
         if ( writing ) {
@@ -368,7 +426,7 @@ namespace das {
         *this << ptr->module->nameHash << ptr->name;
     }
 
-    void AstSerializer::fillOrPatchLater ( Function * & func, uint64_t id ) {
+    void AstSerializer::fillOrPatchLater ( Function * & func, SerializeNodeId id ) {
         auto it = smartFunctionMap.find(id);
         if ( it == smartFunctionMap.end() ) {
             func = ( Function * ) 1;
@@ -378,7 +436,7 @@ namespace das {
         }
     }
 
-    void AstSerializer::fillOrPatchLater ( Enumeration * & ptr, uint64_t id ) {
+    void AstSerializer::fillOrPatchLater ( Enumeration * & ptr, SerializeNodeId id ) {
         auto it = smartEnumerationMap.find(id);
         if ( it == smartEnumerationMap.end() ) {
             ptr = ( Enumeration * ) 1;
@@ -388,7 +446,7 @@ namespace das {
         }
     }
 
-    void AstSerializer::fillOrPatchLater ( Structure * & ptr, uint64_t id ) {
+    void AstSerializer::fillOrPatchLater ( Structure * & ptr, SerializeNodeId id ) {
         auto it = smartStructureMap.find(id);
         if ( it == smartStructureMap.end() ) {
             ptr = ( Structure * ) 1;
@@ -398,7 +456,7 @@ namespace das {
         }
     }
 
-    void AstSerializer::fillOrPatchLater ( Variable * & ptr, uint64_t id ) {
+    void AstSerializer::fillOrPatchLater ( Variable * & ptr, SerializeNodeId id ) {
         auto it = smartVariableMap.find(id);
         if ( it == smartVariableMap.end() ) {
             ptr = ( Variable * ) 1;
@@ -475,9 +533,9 @@ namespace das {
 
     template<typename TT>
     AstSerializer & AstSerializer::serializePointer ( TT * & ptr ) {
-        uint64_t fid = uintptr_t(ptr);
+        auto fid = getSerializeId(ptr);
         *this << fid;
-        if ( !fid ) {
+        if ( !fid.ptr ) {
             if ( !writing ) ptr = nullptr;
             return *this;
         }
@@ -503,9 +561,9 @@ namespace das {
         if ( writing && func ) {
             SERIALIZER_VERIFYF(!func->builtIn, "cannot serialize built-in function");
         }
-        uint64_t id = uint64_t(uintptr_t(func));
+        auto id = getSerializeId(func);
         *this << id;
-        if ( id == 0 ) {
+        if ( id.ptr == 0 ) {
             if ( !writing ) func = nullptr;
             return *this;
         }
@@ -539,9 +597,12 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( TypeInfoMacro * & ptr ) {
         dtag(HASH_TAG("TypeInfoMacroPtr"));
-        uint64_t id = uintptr_t(ptr);
-        *this << id;
-        if ( !id ) {
+        // TypeInfoMacro is not gc_node and is always external (lives in another
+        // module). It is identified by name+module hash, so the wire form only
+        // needs a presence bit — no pointer/id leaks into the stream.
+        bool is_null = ptr == nullptr;
+        *this << is_null;
+        if ( is_null ) {
             if ( !writing ) ptr = nullptr;
             return *this;
         }
@@ -567,7 +628,7 @@ namespace das {
             if ( !writing ) type = nullptr;
             return *this;
         }
-        uint64_t id = intptr_t(type);
+        auto id = getSerializeId(type);
         *this << id;
         if ( writing ) {
             if ( smartTypeDeclMap[id] == nullptr ) {
@@ -753,9 +814,9 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
-        uint64_t id = uint64_t(uintptr_t(struct_));
+        auto id = getSerializeId(struct_);
         *this << id;
-        if ( id == 0 ) {
+        if ( id.ptr == 0 ) {
             if ( !writing ) struct_ = nullptr;
             return *this;
         }
@@ -802,14 +863,14 @@ namespace das {
             return *this;
         }
         if ( writing ) {
-            uint64_t p = (uint64_t) ptr.get();
+            auto p = getSerializeId(ptr.get());
             *this << p;
             if ( fileAccessMap[p] == nullptr ) {
                 fileAccessMap[p] = ptr.get();
                 ptr->serialize(*this);
             }
         } else {
-            uint64_t p = 0; *this << p;
+            SerializeNodeId p; *this << p;
             if ( fileAccessMap[p] == nullptr ) {
                 uint8_t tag = 0; *this << tag;
                 switch ( tag ) {
@@ -828,32 +889,6 @@ namespace das {
         return *this;
     }
 
-    // This method creates concrete (i.e. non-polymorphic types without duplications)
-    template<typename T>
-    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
-        uint64_t id = uint64_t(uintptr_t(obj.get()));
-        *this << id;
-        if ( id == 0 ) {
-            if ( !writing ) obj = nullptr;
-            return;
-        }
-        if ( writing ) {
-            if ( objMap.find(id) == objMap.end() ) {
-                objMap[id] = obj;
-                obj->serialize(*this);
-            }
-        } else {
-            auto it = objMap.find(id);
-            if ( it == objMap.end() ) {
-                obj = make_smart<T>();
-                objMap[id] = obj;
-                obj->serialize(*this);
-            } else {
-                obj = it->second;
-            }
-        }
-    }
-
     AstSerializer & AstSerializer::operator << ( EnumerationPtr & enum_type ) {
         if ( writing ) {
             bool builtin = enum_type->module->builtIn && !enum_type->module->promoted;
@@ -863,7 +898,7 @@ namespace das {
                 string name = enum_type->name;
                 *this << module << name;
             } else {
-                uint64_t id = uint64_t(uintptr_t(enum_type));
+                auto id = getSerializeId(enum_type);
                 *this << id;
                 if ( smartEnumerationMap.find(id) == smartEnumerationMap.end() ) {
                     smartEnumerationMap[id] = enum_type;
@@ -882,9 +917,9 @@ namespace das {
                 enum_type = pModule->findEnum(name);
                 SERIALIZER_VERIFYF(enum_type, "expected to find enumeration '%llu'::'%s'", module, name.c_str());
             } else {
-                uint64_t id = 0;
+                SerializeNodeId id;
                 *this << id;
-                SERIALIZER_VERIFYF(id != 0, "expected non-null enumeration id");
+                SERIALIZER_VERIFYF(id.ptr != 0, "expected non-null enumeration id");
                 auto it = smartEnumerationMap.find(id);
                 if ( it == smartEnumerationMap.end() ) {
                     enum_type = new Enumeration();
@@ -914,9 +949,9 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( VariablePtr & var ) {
-        uint64_t id = uint64_t(uintptr_t(var));
+        auto id = getSerializeId(var);
         *this << id;
-        if ( id == 0 ) {
+        if ( id.ptr == 0 ) {
             if ( !writing ) var = nullptr;
             return *this;
         }
@@ -985,11 +1020,11 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
         dtag(HASH_TAG("ExprBlock*"));
-        void * addr = block;
-        *this << addr;
-        if ( !writing && addr ) {
+        auto id = getSerializeId(block);
+        *this << id;
+        if ( !writing && id.ptr ) {
             block = ( ExprBlock * ) 1;
-            blockRefs.emplace_back(&block, (uint64_t) addr);
+            blockRefs.emplace_back(&block, id);
         }
         return *this;
     }
@@ -1570,11 +1605,11 @@ namespace das {
         serializeBase(expr);
 
         if ( ser.writing ) {
-            void * thisBlock = expr;
-            ser << thisBlock;
+            auto thisBlockId = ser.getSerializeId(expr);
+            ser << thisBlockId;
         } else {
-            void * thisBlock = nullptr; ser << thisBlock;
-            ser.exprBlockMap.emplace((uint64_t) thisBlock, expr);
+            SerializeNodeId thisBlockId; ser << thisBlockId;
+            ser.exprBlockMap.emplace(thisBlockId, expr);
         }
 
         ser << expr->list << expr->finalList << expr->returnType << expr->arguments << expr->stackTop
@@ -2044,8 +2079,8 @@ namespace das {
                     uint64_t mnh = usedFun->getMangledNameHash();
                     ser << module << mnh;
                 } else {
-                    void * addr = usedFun;
-                    ser << addr;
+                    auto fid = ser.getSerializeId(usedFun);
+                    ser << fid;
                 }
             }
         } else {
@@ -2066,8 +2101,8 @@ namespace das {
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun);
                 } else {
-                    void * addr = nullptr; ser << addr;
-                    auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
+                    SerializeNodeId fid; ser << fid;
+                    auto fun = ser.smartFunctionMap[fid];
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun);
                 }
@@ -2089,9 +2124,8 @@ namespace das {
                     uint64_t mnh = usedFun->getMangledNameHash();
                     ser << module << mnh;
                 } else {
-                    // we serialize the address of the function (not the function itself
-                    void * addr = usedFun;
-                    ser << addr;
+                    auto fid = ser.getSerializeId(usedFun);
+                    ser << fid;
                 }
             }
         } else {
@@ -2112,8 +2146,8 @@ namespace das {
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun);
                 } else {
-                    void * addr = nullptr; ser << addr;
-                    auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
+                    SerializeNodeId fid; ser << fid;
+                    auto fun = ser.smartFunctionMap[fid];
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun);
                 }
@@ -2135,8 +2169,8 @@ namespace das {
                     string varname = use->name;
                     ser << module << varname;
                 } else {
-                    void * addr = use;
-                    ser << addr;
+                    auto vid = ser.getSerializeId(use);
+                    ser << vid;
                 }
             }
         } else {
@@ -2157,8 +2191,8 @@ namespace das {
                     SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", pModule->name.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var);
                 } else {
-                    void * addr = nullptr; ser << addr;
-                    auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
+                    SerializeNodeId vid; ser << vid;
+                    auto var = ser.smartVariableMap[vid];
                     SERIALIZER_VERIFYF(var, "expected to find variable");
                     f->useGlobalVariables.emplace(var);
                 }
@@ -2180,8 +2214,8 @@ namespace das {
                     string varname = use->name;
                     ser << module << varname;
                 } else {
-                    void * addr = use;
-                    ser << addr;
+                    auto vid = ser.getSerializeId(use);
+                    ser << vid;
                 }
             }
         } else {
@@ -2202,8 +2236,8 @@ namespace das {
                     SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", pModule->name.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var);
                 } else {
-                    void * addr = nullptr; ser << addr;
-                    auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
+                    SerializeNodeId vid; ser << vid;
+                    auto var = ser.smartVariableMap[vid];
                     SERIALIZER_VERIFYF(var, "expected to find variable");
                     f->useGlobalVariables.emplace(var);
                 }
@@ -2522,6 +2556,9 @@ namespace das {
     // Used in eden
     void AstSerializer::serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept {
         auto & ser = *this;
+        // Bump epoch so reused pointer addresses across program boundaries
+        // get distinct SerializeNodeIds on this persistent serializer.
+        ser.epoch++;
 
         ser << program->thisNamespace << program->thisModuleName;
 
@@ -2620,7 +2657,13 @@ namespace das {
         }
 
         // drop ref_counts
+        smartEnumerationMap.clear();
+        smartStructureMap.clear();
+        smartVariableMap.clear();
+        smartFunctionMap.clear();
+        smartMakeStructMap.clear();
         smartTypeDeclMap.clear();
+        exprBlockMap.clear();
     }
 
     uint32_t AstSerializer::getVersion () {
@@ -2644,6 +2687,10 @@ namespace das {
 
     // Used in daNetGame currently
     void Program::serialize ( AstSerializer & ser ) {
+        // Bump epoch so reused pointer addresses across program boundaries
+        // get distinct SerializeNodeIds on this persistent serializer.
+        ser.epoch++;
+
         ser << thisNamespace << thisModuleName;
 
         ser << totalFunctions      << totalVariables << newLambdaIndex;
@@ -2761,7 +2808,7 @@ namespace das {
     AstSerializerState * rtti_create_ast_serializer () {
         auto state = new AstSerializerState();
         state->storage = make_unique<SerializationStorageVector>();
-        // state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
+        state->serializer = make_unique<AstSerializer>(state->storage.get(), true);
         return state;
     }
 
@@ -2769,13 +2816,13 @@ namespace das {
         auto state = new AstSerializerState();
         state->storage = make_unique<SerializationStorageVector>();
         state->storage->buffer.assign(data.data, data.data + data.size);
-        // state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
+        state->serializer = make_unique<AstSerializer>(state->storage.get(), false);
         return state;
     }
 
     void rtti_delete_ast_serializer ( AstSerializerState * state ) {
         if ( state ) {
-            //state->serializer->moduleLibrary = nullptr;
+            state->serializer->moduleLibrary = nullptr;
             delete state;
         }
     }
@@ -2784,9 +2831,7 @@ namespace das {
             AstSerializerState * state,
             const smart_ptr<Program> & program ) {
         auto & prog = const_cast<smart_ptr<Program> &>(program);
-        auto serializer = make_unique<AstSerializer>(state->storage.get(), true);
-        prog->serialize(*serializer);
-        serializer->moduleLibrary = nullptr;
+        prog->serialize(*state->serializer);
         return !prog->failToCompile;
     }
 
@@ -2797,9 +2842,7 @@ namespace das {
         auto prog = make_smart<Program>();
         {
             gc_guard deserialize_gc_scope;
-            auto serializer = make_unique<AstSerializer>(state->storage.get(), false);
-            prog->serialize(*serializer);
-            serializer->moduleLibrary = nullptr;
+            prog->serialize(*state->serializer);
             /*
             // THIS ONES ARE FROM THE "already exist" MODULES
             auto leftover = deserialize_gc_scope.guard_root.gc_count;

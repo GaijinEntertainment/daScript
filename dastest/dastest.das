@@ -156,6 +156,13 @@ def serialize_path(ctx : SuiteCtx, files : array<string>, out_file : string) {
         var inscope access <- make_file_access(ctx.projectPath)
         access |> add_file_access_root("dastest", ctx.dastestRoot)
         for (file in files) {
+            // Tests whose basename starts with cant_, failed_, or invalid_
+            // are expected-failure compile tests anywhere in the tests tree;
+            // they have nothing to serialize.
+            let base = base_name(file)
+            if (base |> starts_with("cant_") || base |> starts_with("failed_") || base |> starts_with("invalid_")) {
+                continue
+            }
             using() $(var mg : ModuleGroup) {
                 using() $(var cop : CodeOfPolicies) {
                     cop.aot_module = true
