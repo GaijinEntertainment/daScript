@@ -1,0 +1,20 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasGlfw")
+}
+
+[export]
+def release() {
+    let p = get_platform_name()
+    if (p == "windows") {
+        release_include_dll("glfw3.dll")
+    } elif (p == "darwin") {
+        release_include_dll("libglfw.3.4.dylib")
+    } else {
+        release_include_dll("libglfw.so.3.4")
+    }
+}

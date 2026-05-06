@@ -171,6 +171,39 @@ jobs:
         cmake --build ./build --config Release --target all_utils_exe
         $BIN/daslang -exe -output ./bin/das-fmt ./utils/das-fmt/dasfmt.das
 
+    - name: "Sequence release smoke test"
+      # Full daspkg install -> release -> launch cycle on the in-tree sequence
+      # game. Exercises release_include_dll + the loader fixes (Windows
+      # LoadLibraryEx, POSIX rpath $ORIGIN / @loader_path) end-to-end.
+      # Lives in extended_checks (not build.yml) because sequence transitively
+      # requires dasHV, which is DAS_HV_DISABLED=ON by default and only flipped
+      # ON via ci/release_modules.txt in this workflow.
+      run: |
+        set -eux
+        # The main extended_checks build only targets daslang/das-fmt/daslang_static.
+        # Sequence loads dasGlfw + dasLiveHost + dasHV + dasAudio + dasPUGIXML +
+        # dasStbImage at runtime; build their dynamic-module targets first.
+        # No `cmake --install` -- the source tree already IS a usable daslang
+        # root after build (bin/daslang via EXECUTABLE_OUTPUT_PATH; modules/<X>/
+        # .shared_module via ADD_DAS_SHARED_MODULE_LIB output dirs; utils/daspkg
+        # lives in the source tree). cmake --install would also try to install
+        # daslang-live which extended_checks doesn't build.
+        cmake --build ./build --config Release --target \
+          dasModuleGlfw dasModuleLiveHost dasModuleHV dasModuleAudio \
+          dasModulePUGIXML dasModuleStbImage --parallel
+        case "${{ matrix.target }}" in
+          windows)
+            pwsh examples/games/sequence/ci_smoke_test.ps1 "$(pwd)"
+            ;;
+          linux)
+            sudo apt-get install -y xvfb
+            xvfb-run -a bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"
+            ;;
+          *)
+            bash examples/games/sequence/ci_smoke_test.sh "$(pwd)"
+            ;;
+        esac
+
     - name: "Run formatter"
       run: |
         set -eux

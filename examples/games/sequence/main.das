@@ -1522,11 +1522,20 @@ def shutdown() {
 }
 
 var max_frame_limit = 0
+var smoke_only = false
 
 def parse_args() {
     let args <- get_command_line_arguments()
-    for (i in range(length(args) - 1)) {
-        if (args[i] == "--max-frames") {
+    for (i in range(length(args))) {
+        // --smoke: exit cleanly after module load + arg parse, before init().
+        // Used by ci_smoke_test.* on headless runners (e.g. macOS arm64-xlarge
+        // has no WindowServer session, so glfwCreateWindow() returns NULL).
+        // Reaching this point still exercises the full loader chain: every
+        // `require` resolved its .shared_module + dlopened its native deps.
+        if (args[i] == "--smoke") {
+            smoke_only = true
+        }
+        if (args[i] == "--max-frames" && i + 1 < length(args)) {
             max_frame_limit = to_int(args[i + 1])
         }
     }
@@ -1536,6 +1545,10 @@ def parse_args() {
 [export]
 def main() {
     parse_args()
+    if (smoke_only) {
+        print("smoke: modules loaded, exiting before init()\n")
+        return
+    }
     init()
     var frame_count = 0
     while (!exit_requested()) {

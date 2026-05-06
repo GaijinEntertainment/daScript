@@ -1767,6 +1767,36 @@ def test_cmd_release_native_dep(t : T?) {
     }
 }
 
+// release_include_dll() declares a native shared library to ship next to the
+// owning .shared_module. Verify the negative path: a project that declares a
+// nonexistent DLL must fail loudly, not silently produce an incomplete bundle.
+[test]
+def test_cmd_release_include_dll_missing_fails(t : T?) {
+    t |> run("cmd_release returns non-zero when release_include_dll names a missing file") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_include_dll_missing"
+        let out_dir = "{get_das_root()}/_test_release_include_dll_missing_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+
+        // Empty main, but the project declares a native dep that can't be
+        // resolved under <das_root>/{bin,lib}/. ship_native_dlls runs after
+        // the deps copy and must abort the release.
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\n[export]\ndef main() \{\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"missdll\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n    release_include_dll(\"this_file_does_not_exist_anywhere_4f8c.dll\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> success(rc != 0, "cmd_release rejects nonexistent native dep (got rc={rc})")
+
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
 // False-positive test: every registered dynamic module that the program does NOT
 // require must NOT show up in the bundle. Skips when the registry has only
 // dasSQLITE (no other module to verify isn't shipped).

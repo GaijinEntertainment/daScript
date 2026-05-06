@@ -53,24 +53,57 @@ def log_debug(msg : string) {
 }
 
 def run_cmd(cmd : string; var output : string&) : int {
+    // Clear caller's buffer at entry so a no-output run doesn't leak stale
+    // text from a prior call (and so the empty(output) gate below is reliable).
+    output = ""
     log_debug("$ {cmd}")
     run_cmd_counter ++
     let tmp_out = "{get_das_root()}/_daspkg_cmd_output_{run_cmd_counter}.txt"
-    let full_cmd = "{cmd} > \"{tmp_out}\" 2>&1"
+    // Windows _popen invokes cmd.exe /c <our-cmd>. When <our-cmd> starts with a
+    // quoted exe path AND contains `>`, cmd.exe's old-behavior rule strips the
+    // first AND last `"`, mangling the inner quoting. Wrapping the whole thing
+    // in an extra outer pair of `"` gives cmd.exe sacrificial quotes to strip,
+    // leaving the inner command intact. POSIX shells don't have this quirk and
+    // would treat the outer `"` literally — only do this on Windows.
+    var full_cmd = "{cmd} > \"{tmp_out}\" 2>&1"
+    if (get_platform_name() == "windows") {
+        full_cmd = "\"{full_cmd}\""
+    }
     var exit_code = -1
+    var pipe_output : string
     unsafe {
         exit_code = popen(full_cmd) $(f) {
             if (f != null) {
-                fread(f)
+                pipe_output = fread(f)
             }
         }
     }
-    fopen(tmp_out, "rb") $(f) {
-        if (f != null) {
-            output = fread(f)
+    let tmp_existed = fexist(tmp_out)
+    if (tmp_existed) {
+        fopen(tmp_out, "rb") $(f) {
+            if (f != null) {
+                output = fread(f)
+            }
+        }
+        remove(tmp_out)
+    }
+    // Merge pipe output (cmd.exe / shell-level errors that bypass our redirect)
+    // into the returned output. The redirect captures the child's stdout+stderr;
+    // the pipe captures anything the shell itself produced before/around it.
+    if (!empty(pipe_output)) {
+        if (empty(output)) {
+            output = pipe_output
+        } else {
+            output = "{output}\n--- shell pipe ---\n{pipe_output}"
         }
     }
-    remove(tmp_out)
+    // Synthesize a diagnostic when nothing was captured but the command failed —
+    // otherwise callers print "(rc=N):\n\n" with no signal. Includes the exact
+    // cmd line, the wrapped form sent to popen, and whether the redirect file
+    // was even created (false => redirect/popen failure, not a silent child).
+    if (exit_code != 0 && empty(output)) {
+        output = "<no output captured>\n  cmd:      {cmd}\n  full_cmd: {full_cmd}\n  tmp_file_existed: {tmp_existed}"
+    }
     if (exit_code != 0) {
         log_debug("exit={exit_code}")
     }
