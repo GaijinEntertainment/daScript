@@ -251,7 +251,7 @@ FILE(GLOB AOT_LINQ_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests
 # Exclude module files (they are compiled via DAS_AOT_LIB below) and
 # expect-error tests (use `expect` to assert intentional macro_failed
 # diagnostics; AOT cannot compile them)
-list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_|_errors\\.das$")
+list(FILTER AOT_LINQ_FILES EXCLUDE REGEX "/_|failed_")
 
 # Linq test module files (libraries required by linq tests)
 SET(AOT_LINQ_MODULE_FILES
@@ -295,7 +295,7 @@ FILE(GLOB AOT_SPOOF_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "test
 # AOT for strings test files
 FILE(GLOB AOT_STRINGS_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/strings/*.das")
 # Exclude expect-error tests
-list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "_failed")
+list(FILTER AOT_STRINGS_FILES EXCLUDE REGEX "failed_")
 
 # AOT for template test files
 FILE(GLOB AOT_TEMPLATE_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/template/*.das")
