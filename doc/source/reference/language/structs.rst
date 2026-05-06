@@ -238,9 +238,14 @@ whose first argument is ``self``. Inside such a finalizer for a derived struct,
         // additional cleanup
     }
 
-The compiler rewrites ``delete super.self`` into ``delete cast<Foo>(self)``. See
-:ref:`Classes <classes>` for the full description of the ``super`` sugar — it applies
-identically to structs with inheritance.
+The compiler rewrites ``delete super.self`` into ``delete cast<T>(self)``, where ``T`` is
+the closest ancestor struct whose ``finalize`` lookup resolves to a user-defined finalizer.
+Because struct ``finalize`` resolution honors inheritance substitution (a derived struct
+can be passed where its base is expected), ``T`` is typically the immediate parent — even
+when only a more distant ancestor defines ``operator delete``. See :ref:`Classes <classes>`
+for the full description of the ``super`` sugar; the behavior is the same except that
+classes lack this substitution and instead skip past empty intermediate classes that
+don't define their own ``operator delete``.
 
 .. _structs_alignment:
 
