@@ -14,6 +14,7 @@ build-rwdi/
 build-asan/
 build-ubsan/
 build-linux-asan/
+build-linux/
 # All build binaries stored here
 bin/
 # JIT stores dll's here
@@ -98,3 +99,4 @@ modules/dasStdDlg/dasModuleStdDlg_debug.pdb
 modules/dasUnitTest/dasModuleUnitTest_debug.pdb
 build-ubsan/.ninja_log
 doc/sphinx-build-latex/environment.pickle
+opencode.json
