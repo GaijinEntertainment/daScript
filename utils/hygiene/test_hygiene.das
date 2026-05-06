@@ -4,6 +4,8 @@ require dastest/testing_boost public
 require strings
 
 require rule_private_docs
+require rule_collapse_blank_lines
+require rules
 require process
 
 
@@ -185,4 +187,70 @@ def test_process_path_directory(t : T?) {
     // a clean file).
     let r = process_path(".", false)
     t |> equal(r.kind, ProcessResultKind.not_a_file)
+}
+
+
+[test]
+def test_collapse_double_blank(t : T?) {
+    let input = "a\n\n\nb\n"
+    let want = "a\n\nb\n"
+    t |> equal(collapse_blank_lines(input), want)
+}
+
+
+[test]
+def test_collapse_many_blank(t : T?) {
+    let input = "a\n\n\n\n\nb\n"
+    let want = "a\n\nb\n"
+    t |> equal(collapse_blank_lines(input), want)
+}
+
+
+[test]
+def test_preserve_single_blank(t : T?) {
+    let input = "a\n\nb\n"
+    t |> equal(collapse_blank_lines(input), input)
+}
+
+
+[test]
+def test_no_blanks_unchanged(t : T?) {
+    let input = "a\nb\nc\n"
+    t |> equal(collapse_blank_lines(input), input)
+}
+
+
+[test]
+def test_collapse_whitespace_only_blank(t : T?) {
+    // Lines containing only spaces/tabs count as blank for collapsing.
+    let input = "a\n   \n\t\nb\n"
+    let want = "a\n   \nb\n"
+    t |> equal(collapse_blank_lines(input), want)
+}
+
+
+[test]
+def test_collapse_idempotent(t : T?) {
+    let input = "a\n\n\n\nb\n\n\nc\n"
+    let once = collapse_blank_lines(input)
+    let twice = collapse_blank_lines(once)
+    t |> equal(once, twice)
+}
+
+
+[test]
+def test_collapse_preserves_crlf(t : T?) {
+    let input = "a\r\n\r\n\r\nb\r\n"
+    let want = "a\r\n\r\nb\r\n"
+    t |> equal(collapse_blank_lines(input), want)
+}
+
+
+[test]
+def test_apply_all_rules_chains_collapse(t : T?) {
+    // Top-level double-blank between two public defs must be collapsed by
+    // the rule chain (collapse_blank_lines runs after trim_private_docstrings).
+    let input = "def a() \{\n    return 1\n\}\n\n\n\ndef b() \{\n    return 2\n\}\n"
+    let want = "def a() \{\n    return 1\n\}\n\ndef b() \{\n    return 2\n\}\n"
+    t |> equal(apply_all_rules(input), want)
 }

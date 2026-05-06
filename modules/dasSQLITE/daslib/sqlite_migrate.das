@@ -20,7 +20,6 @@ require daslib/macro_boost
 require daslib/templates
 require daslib/templates_boost
 
-
 // ===== Public types =====
 
 struct PendingMigration {
@@ -40,7 +39,6 @@ struct MigrationRecord {
     applied_at : int64
 }
 
-
 // ===== Private registry types =====
 
 struct private MigrationEntry {
@@ -53,11 +51,9 @@ struct private MigrationEntry {
     module_name : string
 }
 
-
 // ===== Audit table constants =====
 
 let private AUDIT_CREATE_DDL = "CREATE TABLE IF NOT EXISTS __schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL DEFAULT '', applied_at INTEGER NOT NULL)"
-
 
 // ===== Process-global registry =====
 
@@ -65,7 +61,6 @@ let private AUDIT_CREATE_DDL = "CREATE TABLE IF NOT EXISTS __schema_version (ver
 // Loaded once at program startup, before main(). Never mutated thereafter except
 // by additional module loads.
 var private _registry : array<MigrationEntry>
-
 
 def _add_migration_entry(version : int; description : string; vacuum : bool; analyze : bool;
                          body : function<(db : SqlRunner) : void>;
@@ -83,7 +78,6 @@ def _add_migration_entry(version : int; description : string; vacuum : bool; ana
     _registry |> emplace(entry)
 }
 
-
 def private _registry_max_version() : int {
     var m = 0
     for (e in _registry) {
@@ -94,13 +88,11 @@ def private _registry_max_version() : int {
     return m
 }
 
-
 def private _registry_sorted() : array<MigrationEntry> {
     var out := _registry
     sort(out, $(a, b) => a.version < b.version)
     return <- out
 }
-
 
 def private _registry_find_description(version : int) : string {
     for (e in _registry) {
@@ -110,7 +102,6 @@ def private _registry_find_description(version : int) : string {
     }
     return ""
 }
-
 
 def private _verify_no_duplicate_versions() : void {
     // Belt-and-suspenders runtime defense for dynamic plugin loading past compile-time visibility.
@@ -124,11 +115,9 @@ def private _verify_no_duplicate_versions() : void {
     }
 }
 
-
 // ===== Internal helpers — audit table I/O and diagnostics =====
 
 let private ADOPTION_HINT = "this DB has existing tables/views/indexes but __schema_version is empty (no migration history yet). If your first migration creates tables that already exist, it will fail. To adopt migrations on an existing DB, call `db |> baseline(version = N)` before `migrate_to_latest()` to mark v1..vN as already applied. See tut 43 § \"Adopting migrations on an existing DB\"."
-
 
 def private _scalar_int_or_zero(db : SqlRunner; sql : string) : int {
     // Treats query failure (e.g. "no such table") as 0 — natural default for COUNT/MAX probes.
@@ -136,20 +125,17 @@ def private _scalar_int_or_zero(db : SqlRunner; sql : string) : int {
     return (r |> is_ok) ? (r |> unwrap) : 0
 }
 
-
 def private _has_user_objects(db : SqlRunner) : bool {
     // sqlite_* names are reserved for internals (sqlite_sequence, sqlite_autoindex_*).
     return _scalar_int_or_zero(db,
         "SELECT COUNT(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != '__schema_version'") > 0
 }
 
-
 def private _audit_insert(db : SqlRunner; version : int; description : string) : SqlError {
     return db |> try_exec(
         "INSERT INTO __schema_version (version, description, applied_at) VALUES (?, ?, unixepoch())",
         version, description)
 }
-
 
 def private _format_versions_csv(pending : array<MigrationEntry>; applied_count : int) : string {
     // "v4, v5" — every applied migration (inside the txn) plus the failing one — all rolled back.
@@ -166,7 +152,6 @@ def private _format_versions_csv(pending : array<MigrationEntry>; applied_count 
     return parts |> join(", ")
 }
 
-
 def private _build_enriched_err(failed_version : int; failed_desc : string; underlying : string;
                                 rolled_back : string; layer2_hint : bool) : string {
     var msg = "migration v{failed_version} '{failed_desc}' failed:\n  {underlying}\n\nnote: this migrate_to_latest call's transaction was rolled back — {rolled_back} are NOT applied. Fix the migration body and re-run; the corrected migration set will replay on the next call. The DB does not need to be reset."
@@ -176,13 +161,11 @@ def private _build_enriched_err(failed_version : int; failed_desc : string; unde
     return msg
 }
 
-
 def private _log_warn_on_some(err : SqlError) : void {
     if (err |> is_some) {
         to_log(LOG_WARNING, "{err |> unwrap}\n")
     }
 }
-
 
 // ===== Internal runner — _migrate_inner =====
 
@@ -294,7 +277,6 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
     return ok(applied_count, type<string>)
 }
 
-
 // ===== Inspection — pure reads, no side effects =====
 // Never create the audit table or write a row; absent __schema_version → 0 / all-pending / [].
 
@@ -308,13 +290,11 @@ def private _try_audit_table_exists(db : SqlRunner) : Result<bool, string> {
     return ok((r |> unwrap) > 0, type<string>)
 }
 
-
 def private _audit_table_exists(db : SqlRunner) : bool {
     // Strict-form callers swallow transient errors (treat as "absent" → return 0/empty).
     let r <- _try_audit_table_exists(db)
     return (r |> is_ok) && (r |> unwrap)
 }
-
 
 def current_schema_version(db : SqlRunner) : int {
     //! Highest applied migration version, or 0 if no migrations were applied, the audit table is absent, or a transient SQLite error (e.g. ``SQLITE_BUSY``) blocks the read.
@@ -324,7 +304,6 @@ def current_schema_version(db : SqlRunner) : int {
     }
     return _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
 }
-
 
 def try_current_schema_version(db : SqlRunner) : Result<int, string> {
     //! ``ok(0)`` when the audit table is absent or empty; ``err`` on transient SQLite errors
@@ -338,7 +317,6 @@ def try_current_schema_version(db : SqlRunner) : Result<int, string> {
     }
     return <- db |> try_query_scalar("SELECT COALESCE(MAX(version), 0) FROM __schema_version", type<int>)
 }
-
 
 def try_pending_migrations(db : SqlRunner) : Result<array<PendingMigration>, string> {
     //! Registered migrations whose ``version > current_schema_version(db)``, in ascending order.
@@ -358,7 +336,6 @@ def try_pending_migrations(db : SqlRunner) : Result<array<PendingMigration>, str
     return move_ok(out, type<string>)
 }
 
-
 def pending_migrations(db : SqlRunner) : array<PendingMigration> {
     //! Strict variant. Panics on transient errors; ``empty`` when no pending migrations.
     var r <- db |> try_pending_migrations()
@@ -367,7 +344,6 @@ def pending_migrations(db : SqlRunner) : array<PendingMigration> {
     }
     return <- r._value
 }
-
 
 def try_migration_history(db : SqlRunner) : Result<array<MigrationRecord>, string> {
     //! Every row in ``__schema_version``, in ascending version order. Description here is the
@@ -391,7 +367,6 @@ def try_migration_history(db : SqlRunner) : Result<array<MigrationRecord>, strin
         })
 }
 
-
 def migration_history(db : SqlRunner) : array<MigrationRecord> {
     //! Strict variant of ``try_migration_history``.
     var r <- db |> try_migration_history()
@@ -400,7 +375,6 @@ def migration_history(db : SqlRunner) : array<MigrationRecord> {
     }
     return <- r._value
 }
-
 
 // ===== Public runner surfaces =====
 
@@ -414,7 +388,6 @@ def migrate_to_latest(db : SqlRunner) : int {
     return r |> unwrap
 }
 
-
 def try_migrate_to_latest(db : SqlRunner) : Result<int, string> {
     //! Non-panic variant of ``migrate_to_latest``. Returns ``ok(count)`` on success or
     //! ``err(enriched_message)`` for both soft failures and body panics. ROLLBACK is
@@ -422,14 +395,12 @@ def try_migrate_to_latest(db : SqlRunner) : Result<int, string> {
     return <- _migrate_inner(db)
 }
 
-
 // ===== Adoption — baseline =====
 
 def private _audit_has_version(db : SqlRunner; version : int) : bool {
     // Version is an int we control (registered-migration number, not user input) — string format is safe.
     return _scalar_int_or_zero(db, "SELECT COUNT(*) FROM __schema_version WHERE version = {version}") > 0
 }
-
 
 def try_baseline(db : SqlRunner; version : int) : Result<int, string> {
     //! Stamps v1..``version`` as already-applied without running their bodies. Idempotent
@@ -485,7 +456,6 @@ def try_baseline(db : SqlRunner; version : int) : Result<int, string> {
     return ok(stamped, type<string>)
 }
 
-
 def baseline(db : SqlRunner; version : int) : void {
     //! Strict variant of ``try_baseline``. Panics on error.
     let r <- db |> try_baseline(version)
@@ -493,7 +463,6 @@ def baseline(db : SqlRunner; version : int) : void {
         panic(r |> unwrap_err)
     }
 }
-
 
 // ===== with_latest_sqlite — convenience wrapper =====
 
@@ -508,7 +477,6 @@ def with_latest_sqlite(path : string; blk : block<(db : SqlRunner) : void>) : vo
     }
 }
 
-
 // ===== Compile-time migration registry helpers (used by [sql_migration] dup detection) =====
 
 struct private RegisteredMigration {
@@ -516,7 +484,6 @@ struct private RegisteredMigration {
     fn_name : string
     mod_name : string
 }
-
 
 def private _collect_registered_migrations(var out : array<RegisteredMigration>) : void {
     // Single pass over compiling_program() — collects (version, fn, mod) for every [sql_migration].
@@ -543,7 +510,6 @@ def private _collect_registered_migrations(var out : array<RegisteredMigration>)
         })
     })
 }
-
 
 // ===== [sql_migration] annotation =====
 
@@ -638,5 +604,333 @@ class SqlMigrationMacro : AstFunctionAnnotation {
                 $e(fnAddr), $v(funcDasName), $v(modName))
         }
         return true
+    }
+}
+
+// ===== struct_convert_field — overloaded conversion dispatch =====
+// User extension: declare ``def struct_convert_field(var dst : MyEnum&; src : int) { ... }`` in your module.
+
+def struct_convert_field(var dst : auto(SCF_T)&; src : SCF_T) : void {
+    //! Identity — same source and target type.
+    dst = src
+}
+
+def struct_convert_field(var dst : Option<auto(SCF_T)>&; src : auto(SCF_S)) : void {
+    //! ``S → Option<T>`` auto-wrap; inner S→T dispatches recursively so any S→T overload fires.
+    var inner : SCF_T
+    _::struct_convert_field(inner, src)
+    dst = some(inner)
+}
+
+def struct_convert_field(var dst : auto(SCF_T)&; src : Option<auto(SCF_S)>) : void {
+    //! ``Option<S> → T``. NULL collapses to ``default<S>``; inner S→T dispatches recursively.
+    //! Override in your module for different NULL-handling semantics.
+    _::struct_convert_field(dst, src ?? default<SCF_S>)
+}
+
+def struct_convert_field(var dst : Option<auto(SCF_T)>&; src : Option<auto(SCF_S)>) : void {
+    //! ``Option<S> → Option<T>`` cross-payload — unwraps src, dispatches S→T inner, re-wraps.
+    if (src |> is_some) {
+        var inner : SCF_T
+        _::struct_convert_field(inner, src |> unwrap)
+        dst = some(inner)
+    } else {
+        dst = none(type<SCF_T>)
+    }
+}
+
+// Target-typed conversion via the type's constructor. ``int(string)``, ``int(double)``, etc. dispatch
+// through daslang's existing primitive constructors. Identity above wins for same-source-target.
+def struct_convert_field(var dst : int&; src : auto(SCF_S)) : void {
+    dst = int(src)
+}
+def struct_convert_field(var dst : int64&; src : auto(SCF_S)) : void {
+    dst = int64(src)
+}
+def struct_convert_field(var dst : float&; src : auto(SCF_S)) : void {
+    dst = float(src)
+}
+def struct_convert_field(var dst : double&; src : auto(SCF_S)) : void {
+    dst = double(src)
+}
+def struct_convert_field(var dst : string&; src : auto(SCF_S)) : void {
+    dst = "{src}"
+}
+
+// Disambiguators — primitive target from Option source. Beats both auto(T)←Option<T> and primitive←auto(S)
+// at the typer's specificity check, so ``Option<int> → int`` (etc.) routes here cleanly with NULL→default<T>.
+def struct_convert_field(var dst : int&; src : Option<auto(SCF_T)>) : void {
+    dst = int(src ?? default<SCF_T>)
+}
+def struct_convert_field(var dst : int64&; src : Option<auto(SCF_T)>) : void {
+    dst = int64(src ?? default<SCF_T>)
+}
+def struct_convert_field(var dst : float&; src : Option<auto(SCF_T)>) : void {
+    dst = float(src ?? default<SCF_T>)
+}
+def struct_convert_field(var dst : double&; src : Option<auto(SCF_T)>) : void {
+    dst = double(src ?? default<SCF_T>)
+}
+def struct_convert_field(var dst : string&; src : Option<auto(SCF_T)>) : void {
+    dst = "{src ?? default<SCF_T>}"
+}
+
+
+// ===== [struct_convert] annotation =====
+
+class private OverrideCollector : AstVisitor {
+    // Records `dst.X` ONLY when it appears on the LHS of `=`/`<-`/`:=`.
+    // Read-only mentions don't count (would silently leave dst.X at default).
+    target_var_name : string
+    overrides : table<string; bool>
+    def OverrideCollector(name : string) {
+        target_var_name = name
+    }
+    def record_lhs(lhs : ExpressionPtr) : void {
+        if (lhs == null || !(lhs is ExprField)) {
+            return
+        }
+        let f = lhs as ExprField
+        if (f.value == null || !(f.value is ExprVar)) {
+            return
+        }
+        let v = f.value as ExprVar
+        if (v.name == target_var_name) {
+            overrides |> insert(string(f.name), true)
+        }
+    }
+    def override preVisitExprCopy(expr : ExprCopy?) : void {
+        record_lhs(expr.left)
+    }
+    def override preVisitExprMove(expr : ExprMove?) : void {
+        record_lhs(expr.left)
+    }
+    def override preVisitExprClone(expr : ExprClone?) : void {
+        record_lhs(expr.left)
+    }
+}
+
+def private collect_overrides(var body : ExpressionPtr; target_var_name : string) : table<string; bool> {
+    var v = new OverrideCollector(target_var_name)
+    make_visitor(*v) $(adapter) {
+        visit(body, adapter)
+    }
+    var result <- v.overrides
+    unsafe {
+        delete v
+    }
+    return <- result
+}
+
+def private make_struct_convert_helper(var src_st : StructurePtr; var tgt_st : StructurePtr;
+                                       fn_name : string; var auto_exprs : array<ExpressionPtr>;
+                                       at : LineInfo) : FunctionPtr {
+    // ``src`` / ``tgt`` literals — ``new`` is a daslang keyword.
+    var fn = qmacro_function(fn_name) $(src : $t(src_st); var tgt : $t(tgt_st)) : void {
+        $b(auto_exprs)
+    }
+    fn.flags |= FunctionFlags.generated
+    fn.flags |= FunctionFlags.privateFunction
+    fn.body |> force_at(at)
+    return <- fn
+}
+
+def private make_sct_dispatch(var src_st : StructurePtr; var tgt_st : StructurePtr;
+                              user_fn_name : string; at : LineInfo) : FunctionPtr {
+    var fn = qmacro_function("_sct") $(src : $t(src_st); var tgt : $t(tgt_st)) : void {
+        $c(user_fn_name)(src, tgt)
+    }
+    fn.flags |= FunctionFlags.generated
+    fn.body |> force_at(at)
+    return <- fn
+}
+
+[function_macro(name="struct_convert")]
+class SqlStructConvertMacro : AstFunctionAnnotation {
+    //! Marks ``def fn(old : S; var dst : T) : void`` for auto-derived field-by-field translation.
+    //! Same-name-same-type / ``T → Option<T>`` / ``INT↔STRING↔FLOAT`` cast / ``@sql_renamed_from`` are
+    //! filled in; an explicit ``dst.X = …`` (or ``<-``/``:=``) on the LHS suppresses the auto-fill for X.
+    def override apply(var func : FunctionPtr; var group : ModuleGroup;
+                       args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (func.fromGeneric != null) {
+            errors := "[struct_convert]: not supported on generic functions"
+            return false
+        }
+        // Signature: def fn(old : S; var new : T) : void
+        let nArgs = func.arguments |> length
+        if (nArgs != 2) {
+            errors := "[struct_convert] '{func.name}': must take exactly two arguments — `old : S` and `var new : T`. Got {nArgs}."
+            return false
+        }
+        let arg0_type = func.arguments[0]._type
+        let arg1_type = func.arguments[1]._type
+        if (arg0_type.structType == null) {
+            errors := "[struct_convert] '{func.name}': first argument '{func.arguments[0].name}' must be a struct type. Got '{describe(arg0_type)}'."
+            return false
+        }
+        if (arg1_type.structType == null) {
+            errors := "[struct_convert] '{func.name}': second argument '{func.arguments[1].name}' must be a struct type. Got '{describe(arg1_type)}'."
+            return false
+        }
+        if (arg1_type.flags.constant) {
+            errors := "[struct_convert] '{func.name}': second argument '{func.arguments[1].name}' must be a `var` parameter so the body can assign to its fields. Write `var {func.arguments[1].name} : {describe(arg1_type)}`."
+            return false
+        }
+        if (func.result.baseType != Type.tVoid && func.result.baseType != Type.autoinfer) {
+            errors := "[struct_convert] '{func.name}': must return void. Got '{describe(func.result)}'."
+            return false
+        }
+        if (func.body == null || !(func.body is ExprBlock)) {
+            errors := "[struct_convert] '{func.name}': body must be a brace-block (the macro prepends auto-fill statements). Use `def {func.name}(...) \{ ... \}`, not the `=> expr` short form."
+            return false
+        }
+        // Strip const off the field-accessed StructurePtrs so `$t($t(...))` reification accepts them.
+        // The parsing pipeline gives us const Structure? from a TypeDeclPtr field walk; the gc_node
+        // representation is the same pointer either way — reinterpret is safe.
+        var src_st : StructurePtr = unsafe(reinterpret<StructurePtr>(arg0_type.structType))
+        var tgt_st : StructurePtr = unsafe(reinterpret<StructurePtr>(arg1_type.structType))
+        let new_param_name = string(func.arguments[1].name)
+
+        // Collect the user-overrides set by walking the existing body.
+        let overrides <- collect_overrides(func.body, new_param_name)
+
+        // Build auto-derived assignments for fields in T order, skipping user-overrides.
+        // Nested for-loops because handled-type FieldDeclaration doesn't support indexed-let access —
+        // for (f in fields) is the supported iteration form.
+        var auto_exprs : array<ExpressionPtr>
+        auto_exprs |> reserve(length(tgt_st.fields))
+        var failed = false
+        for (t_field in tgt_st.fields) {
+            if (failed) {
+                break
+            }
+            let tname = string(t_field.name)
+            if (key_exists(overrides, tname)) {
+                continue
+            }
+            // Honor @sql_renamed_from on T's field — read from old's <OldName> instead of <tname>.
+            let renamed_arg = find_arg(t_field.annotation, "sql_renamed_from")
+            let renamed_from = renamed_arg is tString ? string(renamed_arg as tString) : ""
+            let lookup_name = empty(renamed_from) ? tname : renamed_from
+            let t_type = t_field._type
+            let t_is_option = is_option_field_type(t_type)
+            // Find matching field in S by lookup_name; nested loop because indexed access on handled FieldDeclaration arrays needs unsafe.
+            var s_found = false
+            for (s_field in src_st.fields) {
+                if (s_field.name != lookup_name) {
+                    continue
+                }
+                s_found = true
+                // Emit a dispatch call. ``_::`` resolves at the user's module so they can extend the
+                // overload set with their own (S_type, T_type) pairs (custom enums, value-types, etc.).
+                auto_exprs |> push(qmacro_expr(${
+                    _::struct_convert_field(tgt.$f(tname), src.$f(lookup_name));
+                }))
+                break
+            }
+            if (failed) {
+                break
+            }
+            if (!s_found) {
+                // Field absent from S — use T's default initializer or none() for Option<T>.
+                if (t_field.init != null) {
+                    let init_expr = t_field.init
+                    auto_exprs |> push(qmacro_expr(${
+                        tgt.$f(tname) = $e(clone_expression(init_expr));
+                    }))
+                } elif (t_is_option) {
+                    let t_payload = unwrap_option_payload_type(unsafe(reinterpret<TypeDeclPtr>(t_type)))
+                    auto_exprs |> push(qmacro_expr(${
+                        tgt.$f(tname) = none(type<$t(t_payload)>);
+                    }))
+                } else {
+                    errors := "[struct_convert] '{func.name}': new field '{tname}' has no default initializer and is not Option<T>. Provide a default like `{tname} : {describe(t_type)} = …` on the struct, or write `{new_param_name}.{tname} = …` in the body."
+                    failed = true
+                }
+            }
+        }
+        if (failed) {
+            return false
+        }
+
+        // Emit the per-(S,T) helper carrying the auto-derived assignments.
+        let helper_name = "_struct_convert_helper`{func.name}"
+        var helper_fn = make_struct_convert_helper(src_st, tgt_st, helper_name, auto_exprs, func.at)
+        compiling_module() |> add_function(helper_fn)
+
+        // Prepend a call to the helper at the top of the user's body. Build a fresh ExprBlock
+        // that contains [helper_call, ...user_body.list] and replace func.body. ExprVar lookups
+        // by name resolve to the user's actual params at typecheck time.
+        let call_args <- array<ExpressionPtr>(
+            new ExprVar(at = func.at, name := func.arguments[0].name),
+            new ExprVar(at = func.at, name := func.arguments[1].name)
+        )
+        var user_body_stmts : array<ExpressionPtr>
+        let user_body_block = func.body as ExprBlock
+        for (s in user_body_block.list) {
+            user_body_stmts |> push(clone_expression(s))
+        }
+        var combined <- qmacro_block() {
+            $c(helper_name)($a(call_args));
+            $b(user_body_stmts);
+        }
+        func.body = combined
+        func.body |> force_at(func.at)
+
+        // Emit `_sct(S, T)` dispatch overload.
+        var sct_fn = make_sct_dispatch(src_st, tgt_st, string(func.name), func.at)
+        compiling_module() |> add_function(sct_fn)
+
+        return true
+    }
+}
+
+// =====================================================================
+// `convert` and `convert_and_rename` — db-driving primitives
+// =====================================================================
+
+[unused_argument(t1, t2), template(t1, t2)]
+def convert(db : SqlRunner; t1 : type<auto(SS)>; t2 : type<auto(TT)>) : void {
+    //! Streams every row of S through the [struct_convert] converter into T's own table.
+    //! For the same-name legacy/current convention, use ``convert_and_rename`` instead.
+    for (old in db |> select_from(type<SS>)) {
+        var new_row : TT = default<TT>
+        _::_sct(old, new_row)
+        db |> insert(new_row)
+    }
+}
+
+[unused_argument(t1, t2), template(t1, t2)]
+def convert(db : SqlRunner; t1 : type<auto(SS)>; t2 : type<auto(TT)>; name : string) : void {
+    //! Like ``convert(type<S>, type<T>)`` but inserts rows into table identifier ``name`` instead
+    //! of T's own ``[sql_table(name=…)]``. Used during ``convert_and_rename`` to land rows in the
+    //! staging table before the swap.
+    for (old in db |> select_from(type<SS>)) {
+        var new_row : TT = default<TT>
+        _::_sct(old, new_row)
+        db |> insert(new_row, name)
+    }
+}
+
+[unused_argument(t1, t2), template(t1, t2)]
+def convert_and_rename(db : SqlRunner; t1 : type<auto(SS)>; t2 : type<auto(TT)>) : void {
+    //! Full schema rebuild: CREATE staging, copy via [struct_convert], DROP original, RENAME.
+    //! S and T must share the same ``[sql_table(name=…)]`` (legacy/current convention).
+    let source = _::_sql_table_name(default<SS>)
+    let target = _::_sql_table_name(default<TT>)
+    if (source != target) {
+        panic("convert_and_rename: source '{source}' and target '{target}' must share the same [sql_table(name=...)]. Use `db |> convert(type<S>, type<T>, name=...)` for cross-table conversions.")
+    }
+    let staging = "{target}_new"
+    // Staging table is created WITHOUT indexes — explicit `[sql_index(name=...)]` would
+    // collide with the original's still-existing index of the same name (SQLite index
+    // names are schema-global). Indexes are recreated on the renamed target below.
+    db |> exec(_::_sql_create_table_sql(default<TT>, staging))
+    db |> convert(type<SS>, type<TT>, staging)
+    db |> exec("DROP TABLE {sql_quote_id(target)}")
+    db |> exec("ALTER TABLE {sql_quote_id(staging)} RENAME TO {sql_quote_id(target)}")
+    let idx_sql = _::_sql_create_indexes_sql(default<TT>)
+    if (!empty(idx_sql)) {
+        db |> exec(idx_sql)
     }
 }

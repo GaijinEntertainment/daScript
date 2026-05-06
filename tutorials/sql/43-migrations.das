@@ -30,7 +30,8 @@ require sqlite/sqlite_migrate
 // PART 1 — Define a schema and write a few migrations
 // =====================================================================
 
-// Current shape. Migrations 1-3 below describe the path from empty to here.
+// Current shape. Migrations 1-3 below describe the path from empty to here;
+// migration 6 (PART 5) shows the rebuild path that adds LastLoginAt.
 
 [sql_table(name = "users")]
 struct User {
@@ -38,6 +39,27 @@ struct User {
     Name : string
     Email : string                    // added in migration 2
     Score : int = 0                   // added in migration 3 with default
+    LastLoginAt : Option<int64>       // added in migration 6 via convert_and_rename
+}
+
+// Pre-rebuild shape, kept around as a [sql_table(legacy=true)] historical
+// reference. Read-only — usable with select_from inside the rebuild migration,
+// but the compiler refuses create_table / insert / update / delete on it.
+[sql_table(name = "users", legacy = true)]
+struct UserV5 {
+    @sql_primary_key Id : int
+    Name : string
+    Email : string
+    Score : int = 0
+}
+
+// [struct_convert] walks T's fields and emits `_::struct_convert_field(tgt.X, src.X)`
+// per field. Identity / Option-wrap / numeric / string conversions ship out of the box;
+// drop your own overload in your module to extend (e.g. `int → MyEnum`).
+// Body is empty because every field auto-derives — no per-field overrides needed.
+[struct_convert]
+def m_v5_to_v6(old : UserV5; var dst : User) {
+    pass
 }
 
 // Migration 1 — bootstrap.
@@ -111,6 +133,28 @@ def migration_005(db : SqlRunner) {
     db |> create_unique_index(type<User>, ("Email", "Name"), "ux_email_name")
 }
 
+// Migration 6 — schema REBUILD via convert_and_rename.
+//
+// Adds LastLoginAt to User. Strictly speaking, `add_column(type<User>,
+// "LastLoginAt")` would also work for this case (SQLite handles ADD COLUMN
+// on nullable types fine). Migration 6 uses convert_and_rename anyway to
+// demonstrate the rebuild shape, which IS the only path for the cases ALTER
+// can't reach: PK changes, type narrowing, FK alterations, CHECK changes.
+//
+// The dance:
+//   1. CREATE TABLE users_new with the new shape.
+//   2. SELECT every row of `users` (read via UserV5 — the legacy struct),
+//      run it through m_v5_to_v6 (auto-derived field copy + LastLoginAt
+//      defaults to none()), INSERT into users_new.
+//   3. DROP TABLE users.
+//   4. ALTER TABLE users_new RENAME TO users.
+// Runs inside migrate_to_latest's α-shape transaction; failure rolls back.
+
+[sql_migration(version = 6, description = "rebuild: add LastLoginAt")]
+def migration_006(db : SqlRunner) {
+    db |> convert_and_rename(type<UserV5>, type<User>)
+}
+
 [export]
 def main() : int {
     // =================================================================
@@ -177,15 +221,40 @@ def main() : int {
         //   - DROP COLUMN / RENAME COLUMN — old names aren't in the current
         //     struct, so daslang has nothing to validate against.
         //   - PK / UNIQUE inline / generated columns added post-hoc — SQLite
-        //     can't ALTER these in place; needs a table rebuild
-        //     (chunk 14c, struct_convert).
+        //     can't ALTER these in place; needs a table rebuild — see
+        //     PART 5 below for the struct_convert + convert_and_rename path.
         //   - CHECK constraints, FK ADD/DROP, column type changes.
         //   - Anything ad-hoc that doesn't map to a struct field.
 
+        // ================================================================
+        // PART 5 — Schema rebuild: verify migration 6 landed
+        // ================================================================
+        //
+        // Migration 6 ran inside migrate_to_latest. Two checks:
+        //   - The new column is on the table.
+        //   - alice survived the rebuild (Email preserved).
+
+        let last_login_count = db |> query_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='LastLoginAt'", type<int>)
+        print("post-rebuild LastLoginAt column present: {last_login_count == 1}\n")
+        let alice_post_rebuild = db |> query_scalar(
+            "SELECT Email FROM users WHERE Name='alice'", type<string>)
+        print("alice survived rebuild: Email={alice_post_rebuild}\n")
+
+        // GOTCHA: indexes created at runtime (migrations 4 and 5 used
+        // `create_index` / `create_unique_index`) are NOT reflected in
+        // [sql_index] annotations on the User struct, so convert_and_rename's
+        // `create_table(type<User>, "users_new")` doesn't recreate them.
+        // After the rebuild, the indexes are gone:
         let n_idx = db |> query_scalar(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND tbl_name='users' AND name NOT LIKE 'sqlite_%'",
             type<int>)
-        print("user indexes after migration 5: {n_idx}\n")
+        print("user indexes after rebuild: {n_idx} (gone — see note above)\n")
+        // Two ways to avoid this:
+        //   - Declare indexes via [sql_index(...)] siblings on the struct so
+        //     create_table emits them during convert_and_rename.
+        //   - Recreate indexes inside migration_006 after convert_and_rename
+        //     via create_index / create_unique_index calls.
     }
 
     // =================================================================
