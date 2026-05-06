@@ -4,3 +4,6 @@ src/das/**/*.h binary
 utils/dasFormatter/ds_parser.cpp binary
 utils/dasFormatter/ds_parser.output binary
 daslib/_aot_generated/*.cpp binary
+
+# Shell scripts must keep LF endings even when checked out under autocrlf=true.
+*.sh text eol=lf

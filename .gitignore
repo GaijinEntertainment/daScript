@@ -27,6 +27,8 @@ _aot_generated/
 .vscode/
 .cache/
 
+opencoede.json
+
 modules/dasSFML/libsfml/
 site/
 doc/sphinx-build/

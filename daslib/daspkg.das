@@ -139,6 +139,7 @@ struct ReleaseSpec {
     include_globs : array<string>       //!< asset globs to ship
     exclude_globs : array<string>       //!< asset globs to skip
     forced_modules : array<string>      //!< force-include shared module by das_name (auto-detection misses media-only or runtime-loaded packages)
+    native_dlls : array<string>         //!< native shared libraries to ship next to this package's .shared_module (e.g. "glfw3.dll" / "libglfw.so.3.4"); resolved against <das_root>/bin/ (Windows) or <das_root>/lib/ (POSIX)
     bundle_id : string                  //!< macOS .app CFBundleIdentifier (reverse-DNS); defaults to com.<author>.<name>
 }
 
@@ -162,6 +163,17 @@ def release_exclude(pattern : string) {
 
 def release_shared_module(name : string) {
     _release_spec.forced_modules |> push(name)
+}
+
+//! Declare a native shared library that must be shipped next to this package's
+//! `.shared_module` in a release bundle. `name` is the platform-specific filename
+//! (e.g. `"glfw3.dll"` on Windows, `"libglfw.so.3.4"` on Linux,
+//! `"libglfw.3.4.dylib"` on macOS). daspkg searches `<das_root>/bin/` on Windows
+//! and `<das_root>/lib/` on POSIX, then copies the file into
+//! `<bundle>/modules/<package>/`. Errors loudly if the file is not found —
+//! authors should guard per-platform with `if (get_platform_name() == "windows")`.
+def release_include_dll(name : string) {
+    _release_spec.native_dlls |> push(name)
 }
 
 def release_bundle_id(id : string) {

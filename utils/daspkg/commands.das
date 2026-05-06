@@ -1434,10 +1434,11 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     if (!run_das_package_release(dep_pkg_file, dep_spec)) {
         return 0
     }
-    if (empty(dep_spec.include_globs)) {
+    if (empty(dep_spec.include_globs) && empty(dep_spec.native_dlls)) {
         return 0
     }
     let dep_name = base_name(pkg_dir)
+    let dep_dst_dir = "{bundle_modules_dir}/{dep_name}"
     var dep_files : array<string>
     glob_filtered(pkg_dir, dep_spec.include_globs, dep_spec.exclude_globs) $(rel_path, is_dir) {
         if (!is_dir) {
@@ -1446,7 +1447,7 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     }
     for (rel in dep_files) {
         let src = path_join(pkg_dir, rel)
-        let dst = path_join("{bundle_modules_dir}/{dep_name}", rel)
+        let dst = path_join(dep_dst_dir, rel)
         mkdir_rec(dir_name(dst))
         var err : string
         if (!copy_file(src, dst, true, err)) {
@@ -1456,6 +1457,72 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     }
     if (!empty(dep_files)) {
         log("  ship dep `{dep_name}`: {length(dep_files)} file(s)\n")
+    }
+    if (!empty(dep_spec.native_dlls)) {
+        let rc = ship_native_dlls(dep_name, dep_dst_dir, dep_spec.native_dlls)
+        if (rc != 0) {
+            return rc
+        }
+    }
+    return 0
+}
+
+// Copy each declared native shared library from the daslang install tree
+// (`<das_root>/bin/` on Windows, `<das_root>/lib/` on POSIX) into `dst_dir`.
+// Authors declared these via `release_include_dll(...)`; missing files are an
+// error — usually a typo or an out-of-sync install.
+//
+// Resolution order (deterministic so multi-config build trees can't ship the
+// wrong binary nondeterministically):
+//   1. Exact match at `<search_root>/<name>` (an installed layout has this).
+//   2. Build-tree config dirs in fixed preference: Release > RelWithDebInfo >
+//      MinSizeRel > Debug, e.g. `<search_root>/Release/<name>`.
+//   3. Fall through to `**/<name>` and pick the first match.
+def private ship_native_dlls(dep_name, dst_dir : string; native_dlls : array<string>) : int {
+    let platform = get_platform_name()
+    let search_root = (platform == "windows"
+        ? "{get_das_root()}/bin"
+        : "{get_das_root()}/lib")
+    mkdir_rec(dst_dir)
+    for (name in native_dlls) {
+        var found_src = ""
+        // 1. exact path under search_root
+        let exact = path_join(search_root, name)
+        if (fexist(exact)) {
+            found_src = exact
+        }
+        // 2. preferred config dirs
+        if (empty(found_src)) {
+            for (cfg in ["Release", "RelWithDebInfo", "MinSizeRel", "Debug"]) {
+                let candidate = "{search_root}/{cfg}/{name}"
+                if (fexist(candidate)) {
+                    found_src = candidate
+                    break
+                }
+            }
+        }
+        // 3. fall through to a recursive glob (handles nested layouts)
+        if (empty(found_src)) {
+            glob(search_root, "**/{name}") <| $(rel_path, is_dir) {
+                if (!is_dir && empty(found_src)) {
+                    found_src = path_join(search_root, rel_path)
+                }
+            }
+        }
+        if (empty(found_src)) {
+            to_log(LOG_ERROR, "release: dep `{dep_name}` declared release_include_dll(\"{name}\") but no match under `{search_root}` (tried {search_root}/{name}, {search_root}/<config>/{name}, and **/{name})\n")
+            return 1
+        }
+        // dir_name(dst) so a `name` like `subdir/lib.so` still works -- defensive,
+        // not endorsed by the API docs which imply a leaf filename.
+        let dst = path_join(dst_dir, name)
+        mkdir_rec(dir_name(dst))
+        var err : string
+        if (!copy_file(found_src, dst, true, err)) {
+            to_log(LOG_ERROR, "release: copy_file({found_src} -> {dst}) failed: {err}\n")
+            return 1
+        }
+        log("  ship dep `{dep_name}` native: {name}\n")
     }
     return 0
 }
@@ -1690,6 +1757,14 @@ def cmd_release(root : string; out_dir : string) : int {
     }
     if (!empty(asset_files)) {
         log("  shipped {length(asset_files)} project asset file(s)\n")
+    }
+    // Project-declared native deps land next to the exe (the project has no
+    // .shared_module to colocate with — its deps are loaded directly by the exe).
+    if (!empty(spec.native_dlls)) {
+        let rc3 = ship_native_dlls(bundle_name, bundle_dir, spec.native_dlls)
+        if (rc3 != 0) {
+            return rc3
+        }
     }
 
     // 5. macOS .app: write Contents/Info.plist. Bundle ID source priority:

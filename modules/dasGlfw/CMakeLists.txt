@@ -159,24 +159,49 @@ IF((NOT DAS_GLFW_INCLUDED) AND ((NOT ${DAS_GLFW_DISABLED}) OR (NOT DEFINED DAS_G
 		TARGET_LINK_LIBRARIES(libDasModuleGlfw PUBLIC ${APPLE_GLFW_LIBRARIES})
 	ENDIF()
 
-	# Copy glfw3.dll next to daslang.exe so the dynamic module can find it at runtime.
+	# Stage GLFW's native shared library into the build tree's bin/lib dirs so
+	# the build tree mirrors the install layout. daspkg's release_include_dll
+	# resolution then finds it under <das_root>/{bin,lib}/ regardless of whether
+	# the user is shipping from an installed daslang or directly from the build
+	# tree (CI extended_checks does the latter).
 	IF(WIN32)
 		ADD_CUSTOM_COMMAND(TARGET dasModuleGlfw POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different
 				"${GLFW_DYNAMIC_LIB_PATH}/bin/glfw3.dll"
 				"${EXECUTABLE_OUTPUT_PATH}/$<CONFIG>/glfw3.dll"
 		)
+	ELSEIF(APPLE)
+		ADD_CUSTOM_COMMAND(TARGET dasModuleGlfw POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/lib"
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.${GLFW_VERSION}.dylib"
+				"${PROJECT_SOURCE_DIR}/lib/libglfw.${GLFW_VERSION}.dylib"
+		)
+	ELSEIF(UNIX)
+		ADD_CUSTOM_COMMAND(TARGET dasModuleGlfw POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/lib"
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				"${GLFW_DYNAMIC_LIB_PATH}/lib/libglfw.so.${GLFW_VERSION}"
+				"${PROJECT_SOURCE_DIR}/lib/libglfw.so.${GLFW_VERSION}"
+		)
 	ENDIF()
 
+	# Use APPEND so we don't clobber the @loader_path / $ORIGIN added by
+	# ADD_DAS_SHARED_MODULE_LIB — that's what makes bundled native deps next to
+	# the .shared_module resolve at load time.
 	IF(APPLE)
-		set_target_properties(dasModuleGlfw PROPERTIES
+		set_property(TARGET dasModuleGlfw APPEND PROPERTY
 			BUILD_RPATH "${GLFW_DYNAMIC_LIB_PATH}/lib"
+		)
+		set_property(TARGET dasModuleGlfw APPEND PROPERTY
 			INSTALL_RPATH "@loader_path/glfw_dyn/Release/lib"
 		)
 	ELSEIF(UNIX)
-		set_target_properties(dasModuleGlfw PROPERTIES
+		set_property(TARGET dasModuleGlfw APPEND PROPERTY
 			BUILD_RPATH "${GLFW_DYNAMIC_LIB_PATH}/lib"
-			INSTALL_RPATH "$ORIGIN/glfw_dyn/Release/lib"
+		)
+		set_property(TARGET dasModuleGlfw APPEND PROPERTY
+			INSTALL_RPATH "\$ORIGIN/glfw_dyn/Release/lib"
 		)
 	ENDIF()
 	IF(WIN32)
