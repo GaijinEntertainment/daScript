@@ -215,7 +215,7 @@ namespace das {
         return handleRegistry_countAll();
     }
 
-    void Module::Shutdown( bool dumpHandleLeaks ) {
+    void Module::shutdownInternal ( bool dumpHandleLeaks, bool resetFusion ) {
         DAS_ASSERT(daScriptEnvironment::getOwned()!=nullptr);
         DAS_ASSERT(daScriptEnvironment::getBound()!=nullptr);
         g_envTotal --;
@@ -237,13 +237,28 @@ namespace das {
         delete daScriptEnvironment::getBound()->g_dyn_modules_resolve;
 
         clearGlobalAotLibrary();
-        DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
-        g_resetFusionEngineFn();
+        if ( resetFusion ) {
+            DAS_ASSERTF(g_resetFusionEngineFn, "fusion library not loaded");
+            g_resetFusionEngineFn();
+        }
         daScriptEnvironment::setBound(nullptr);
         if ( daScriptEnvironment::getOwned() ) {
             delete daScriptEnvironment::getOwned();
             daScriptEnvironment::setOwned(nullptr);
         }
+    }
+
+    void Module::Shutdown( bool dumpHandleLeaks ) {
+        shutdownInternal(dumpHandleLeaks, /*resetFusion=*/true);
+    }
+
+    // Standalone exes built with `daslang -exe` link only libDaScript*_runtime
+    // (no fusion). They call this from the LLVM-generated main right before
+    // returning, so the static g_DebugAgents map and module list drain while
+    // the runtime is still alive — avoids the __cxa_finalize_ranges race on
+    // ref_count_mutex documented in issue #2583.
+    void Module::ShutdownStandalone( bool dumpHandleLeaks ) {
+        shutdownInternal(dumpHandleLeaks, /*resetFusion=*/false);
     }
 
     void Module::Reset(bool debAg) {

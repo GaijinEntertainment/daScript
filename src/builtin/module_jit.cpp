@@ -1041,6 +1041,14 @@ DAS_API void jit_initialize_modules_done () {
     das::Module::Initialize();
 }
 
+// Standalone-exe teardown. Emitted by inject_main right before main returns,
+// so debug agents and modules drain while the runtime is alive. Without this,
+// the static g_DebugAgents map dtor races ref_count_mutex during
+// __cxa_finalize_ranges and terminate() fires (issue #2583).
+DAS_API void jit_shutdown () {
+    das::Module::ShutdownStandalone();
+}
+
 DAS_API void * jit_register_dynamic_module ( const char * path, const char * mod_name ) {
     return das::register_dynamic_module(path, mod_name, 0/*Quiet*/, nullptr, nullptr);
 }

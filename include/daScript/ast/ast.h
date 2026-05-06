@@ -1158,6 +1158,9 @@ namespace das
         static void Initialize();
         static void CollectFileInfo(das::vector<FileInfoPtr> &accesses);
         static void Shutdown( bool dumpHandleLeaks = true );
+        // Runtime-only shutdown — for standalone exes built with `daslang -exe`,
+        // which link libDaScript*_runtime without the fusion engine. See issue #2583.
+        static void ShutdownStandalone( bool dumpHandleLeaks = false );
         static uint64_t CountHandleLeaks();
         static void Reset(bool debAg);
         static void ClearSharedModules();
@@ -1254,6 +1257,7 @@ namespace das
         Module * next = nullptr;
         unique_ptr<FileInfo>    ownFileInfo;
         FileAccessPtr           promotedAccess;
+        static void shutdownInternal ( bool dumpHandleLeaks, bool resetFusion );
     };
 
     #define REGISTER_MODULE(ClassName) \
