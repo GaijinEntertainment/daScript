@@ -51,3 +51,9 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | File | Description |
 |---|---|
 | `test01.das` | emplace, emplace_grow, move, and reserve on arrays of locked vs `[skip_field_lock_check]` struct elements — measures array lock overhead |
+
+## fusion/
+
+| File | Description |
+|---|---|
+| `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T) ∈ {4,8,12,16} — int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |

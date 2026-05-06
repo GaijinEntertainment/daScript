@@ -332,6 +332,7 @@ Run any tutorial from the project root::
    tutorials/sql_40_fts5.rst
    tutorials/sql_41_triggers.rst
    tutorials/sql_42_schema_evolution.rst
+   tutorials/sql_43_migrations.rst
 
 .. _tutorials_dasaudio:
 
