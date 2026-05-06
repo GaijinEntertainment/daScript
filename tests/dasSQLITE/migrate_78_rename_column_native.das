@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // SQLite 3.41.2 supports RENAME COLUMN natively (since 3.25.0).
 

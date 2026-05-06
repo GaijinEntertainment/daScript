@@ -146,10 +146,10 @@ today is what the script reads/writes. ETL between two DBs,
 archival readers, admin tooling --- all good fits.
 
 For "the DB grows over time, run versioned schema migrations at
-startup", a future ``daslib/sql_migrate`` module ships
+startup", a future ``daslib/sqlite_migrate`` module ships
 ``[sql_migration(version=N)]`` + a runtime runner. The two are
 orthogonal: ``schema_from`` gives compile-time contract checks
-against a known schema; ``sql_migrate`` evolves the schema over
+against a known schema; ``sqlite_migrate`` evolves the schema over
 time. See :ref:`tutorial_sql_schema_evolution` for the
 multi-version ETL pattern.
 

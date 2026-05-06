@@ -21,7 +21,7 @@ require sqlite/sqlite_linq
 //     pseudo-tables). A portable abstraction would lose the parts
 //     people actually use triggers for.
 //   - Schema migrations are the right home for trigger DDL — see
-//     tutorial 32 (`[sql_migration]` + `daslib/sql_migrate`). Each
+//     tutorial 32 (`[sql_migration]` + `daslib/sqlite_migrate`). Each
 //     migration can `exec` a `CREATE TRIGGER` so the trigger
 //     ships with the schema version that needs it.
 

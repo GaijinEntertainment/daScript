@@ -1074,7 +1074,7 @@ with_sqlite("app.db") <| $(db) {
 - **Where does `__schema_version` live?** Reserved table name? User-
   configurable via a setting? Single integer or migration-name-set?
 - **Out of scope for the dasSQLITE rework itself.** Probably ships as
-  `daslib/sql_migrate` (separate module) once the core API stabilizes.
+  `daslib/sqlite_migrate` (separate module) once the core API stabilizes.
   Design constraint: the `[sql_table]` machinery must not preclude a
   future struct-diff implementation — keep field metadata
   introspectable.
@@ -1697,7 +1697,7 @@ layer" or "this lives in the provider." Quick sweep:
 | 27 indexes | abstract |
 | 28 defaults_computed | abstract surface; raw-SQL defaults inherently provider-specific |
 | 29 custom_types | abstract registration API; per-provider type table |
-| 30 migrations | separate module (`daslib/sql_migrate`) |
+| 30 migrations | separate module (`daslib/sqlite_migrate`) |
 | 31 views | abstract |
 | 32 sql_functions | abstract registration; per-provider built-in baseline |
 | 33 PRAGMA | provider-only (`sqlite/sqlite_boost`) |

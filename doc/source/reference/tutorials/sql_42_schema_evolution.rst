@@ -113,11 +113,11 @@ surfaces, you add a third struct + a third loop and the type
 system tells you exactly where to wire it up.
 
 For "my app's schema evolves at runtime; I run migrations at
-startup", a future ``daslib/sql_migrate`` module ships a
+startup", a future ``daslib/sqlite_migrate`` module ships a
 different shape: versioned ``[sql_migration(version=N)]``
 functions applied in order, tracked in ``__schema_version``,
 transactional per migration. The two patterns coexist:
-``schema_from`` for *code-on-current-schema*, ``sql_migrate``
+``schema_from`` for *code-on-current-schema*, ``sqlite_migrate``
 for the *schema-grows-over-time* runner.
 
 .. seealso::

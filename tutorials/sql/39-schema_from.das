@@ -90,7 +90,7 @@ def main() {
 // admin tooling — all good fits.
 //
 // For "the DB grows over time, run versioned schema migrations at startup",
-// `daslib/sql_migrate` (separate, optional module — coming soon) ships a
+// `daslib/sqlite_migrate` (separate, optional module — coming soon) ships a
 // `[sql_migration(version=N)]` annotation + `migrate_to_latest(db)` runner.
 // The two are orthogonal — schema_from gives compile-time contract checks
-// against a known schema; sql_migrate evolves the schema over time.
+// against a known schema; sqlite_migrate evolves the schema over time.

@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // Bundled SQLite 3.41.2 supports DROP COLUMN natively (since 3.35.0). No 12-step recipe.
 

@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 // DB ahead of binary: audit has v=9 but the running binary's registered max is v=2.
 // migrate_to_latest must return 0 + leave the audit unchanged + log a warning (warning

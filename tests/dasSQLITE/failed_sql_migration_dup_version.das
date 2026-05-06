@@ -4,7 +4,7 @@ options gen2
 // with the [sql_migration] dup-version error (error 30111).
 expect 30111:1
 
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 [sql_migration(version=2, description="first")]
 def migration_a(db : SqlRunner) {

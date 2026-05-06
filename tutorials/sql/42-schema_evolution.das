@@ -86,8 +86,8 @@ def main() {
 // a third loop and the type system tells you exactly where to wire it up.
 //
 // For "my app's schema evolves at runtime; I run migrations at startup",
-// see `daslib/sql_migrate` (coming soon) — that's a different problem with
+// see `daslib/sqlite_migrate` (coming soon) — that's a different problem with
 // a different shape: versioned `[sql_migration(version=N)]` functions
 // applied in order, tracked in `__schema_version`, transactional per
 // migration. The two patterns coexist: schema_from for code-on-current-
-// schema, sql_migrate for the schema-grows-over-time runner.
+// schema, sqlite_migrate for the schema-grows-over-time runner.

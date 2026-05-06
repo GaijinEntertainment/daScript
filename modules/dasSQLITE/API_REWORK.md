@@ -935,7 +935,7 @@ bind).
   picks the compile-time `_.Field` or runtime-string path. `_create_view`
   rejects runtime ORDER BY (DDL is run-once; runtime column would bake at
   view-creation time).
-- **Migrations (last chunk)** — `daslib/sql_migrate` module,
+- **Migrations (last chunk)** — `daslib/sqlite_migrate` module,
   `[sql_migration]` annotation collected across translation units,
   `migrate_to_latest` runner, `__schema_version` table, multi-row
   audit semantics.
@@ -3646,7 +3646,7 @@ stdlib-type passthrough overloads plus the enum generic.
 > rest of §30 stays as the original design rationale.
 
 **Verdict:** sixth consecutive tut with **zero linq prereqs.**
-Ships as a **separate, optional module** — `daslib/sql_migrate`
+Ships as a **separate, optional module** — `daslib/sqlite_migrate`
 — so users who don't need migrations don't pay for them, and
 the migration story evolves on its own schedule without
 destabilizing core dasSQLITE. Tutorial opens with an explicit
@@ -3665,7 +3665,7 @@ transactional) and explicitly defers everything else.
 
 ```das
 require daslib/sql
-require daslib/sql_migrate
+require daslib/sqlite_migrate
 require sqlite/sqlite_boost
 
 [sql_migration(version=1)]
@@ -3722,13 +3722,14 @@ Adoption:
 | `baseline(db, version)` | `(db : SqlRunner, version : int) : void` | stamp v1..N rows in `__schema_version` without running their bodies (Flyway-style adoption) |
 | `try_baseline(db, version)` | `(db : SqlRunner, version : int) : Result<int, string>` | Result form |
 
-Typed ALTER (additive cases that align with the current struct):
+Typed ALTER (additive cases that align with the current struct, shipped 14b):
 
 | Name | Shape | Role |
 |---|---|---|
-| `add_column(db, type<T>, .Field [, default = expr])` | call macro | `ALTER TABLE … ADD COLUMN`; SQL type from `_::sql_bind` adapter; NOT NULL from absence of `Option<>` wrapping |
-| `create_index(db, type<T>, fields = (…), [unique=true,] [name="…"])` | call macro | `CREATE [UNIQUE] INDEX`; auto-name `idx_<table>_<col1>_<col2>` |
-| `drop_index_if_exists(db, name)` | function | `DROP INDEX IF EXISTS …` |
+| `add_column(db, type<T>, "Field" [, defaultLit])` | call macro | `ALTER TABLE … ADD COLUMN`; SQL type from `_::sql_storage_type_for` (the `_::sql_bind` adapter rail); NOT NULL from absence of `Option<>` wrapping; honors `@sql_column` rename + `@sql_json` / `@sql_blob`. Field selectors are string literals (gen2's `.Field` syntax only parses inside `_sql {…}` blocks). |
+| `create_index(db, type<T>, "Field" \| ("A","B") [, "ix_…"])` | call macro | `CREATE INDEX`; auto-name `idx_<table>_<col1>_<col2>` on the post-`@sql_column` SQL identifiers |
+| `create_unique_index(db, type<T>, … same shape …)` | call macro | `CREATE UNIQUE INDEX`. Separate macro (gen2 named-args use `[name=val]` brackets which call_macros don't intercept; positional separation is cleaner) |
+| `drop_index_if_exists(db, name)` | function | `DROP INDEX IF EXISTS "name"` (idempotent via SQLite's IF EXISTS) |
 
 Schema rebuild (the 12-step pattern as building blocks):
 
@@ -3760,7 +3761,7 @@ matches Flyway's ergonomics at zero extra cost.
 
 **Ten locks:**
 
-1. **Separate module `daslib/sql_migrate`.** Sibling of
+1. **Separate module `daslib/sqlite_migrate`.** Sibling of
    `daslib/sql`, not merged into it. Users who don't need
    migrations don't `require` it; the migration API never
    appears in their symbol table.
@@ -3813,7 +3814,7 @@ This is the meat of the tutorial — what users need to know
 *isn't* shipping:
 
 - **Down migrations / rollback.** A user writing `migrate_down(db, target_version)` is on their own. Future: if shipped, live as a separate function macro `[sql_migration_down(version=N)]` pairing with the up one.
-- **Autogenerate from struct diff.** EF's `dotnet ef migrations add Foo` diffs the current model against a saved snapshot and emits the migration body automatically. Requires a model-snapshot system daslang doesn't have. Future: a separate `daslib/sql_migrate_gen` module (name TBD) with its own design discussion.
+- **Autogenerate from struct diff.** EF's `dotnet ef migrations add Foo` diffs the current model against a saved snapshot and emits the migration body automatically. Requires a model-snapshot system daslang doesn't have. Future: a separate `daslib/sqlite_migrate_gen` module (name TBD) with its own design discussion.
 - **Model snapshots** (v1's `User` shape preserved after v4 rewrites it). EF saves snapshot C# files per migration; daslang would need frozen-struct tooling. Not attempting.
 - **SQLite 12-step `ALTER TABLE` helper** (`recreate_table(db, type<T>, copy_from=...)` for drop/rename column on pre-3.25 SQLite). Highest-value migration helper and the single biggest pain point that distinguishes SQLite migrations from Postgres. Deliberately *not* shipped in v1 because getting it right is a mini-framework. Users writing `ALTER TABLE ... DROP COLUMN` on old SQLite versions write the 12-step by hand or bump the SQLite version requirement.
 - **Zero-downtime / expand-contract pattern.** The multi-deploy pattern where schema changes stay compatible with both old and new app versions running simultaneously. Needs migration-pairing, dry-run validation, and a deploy contract. Out of scope; users who need this are running live services and can wire it up externally.
@@ -3827,7 +3828,7 @@ This is the meat of the tutorial — what users need to know
 
 The tutorial's tone is "here's the 100-line MVP that makes
 dasSQLITE honest for production; the real migration framework
-is a future effort — likely a separate `daslib/sql_migrate_*`
+is a future effort — likely a separate `daslib/sqlite_migrate_*`
 module or at the future `dasSQL` abstraction layer." Users
 who need more than MVP know that on page one.
 
@@ -3839,7 +3840,7 @@ per-item "if you need this in v1, here's your escape."
 
 **Phase-0.3 impact:** zero. Zero linq additions. Advances
 dasSQLITE-phase scope: a **new module file**
-(`daslib/sql_migrate.das` — physical location TBD per the
+(`daslib/sqlite_migrate.das` — physical location TBD per the
 locked module-layout table), a function-level annotation macro
 (`[sql_migration]`), six public functions, one struct, one
 auto-created table.
@@ -3856,7 +3857,7 @@ auto-created table.
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | **Total** | **2 fns** | **9 macros** | (emitter complexity accumulates) |
 
 ### 31-views — "`[sql_view]` as read-only `[sql_table]`; DDL in migrations" (decided 2026-04-24)
@@ -4036,7 +4037,7 @@ struct); one new function `drop_view_if_exists(type<V>)`
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | **Total** | **2 fns** | **9 macros** | (emitter complexity accumulates) |
 
@@ -4268,7 +4269,7 @@ one new function (`register_function`), one new C++ binding
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | **Total** | **2 fns** | **9 macros** | (emitter complexity accumulates) |
@@ -4454,7 +4455,7 @@ All thin wrappers over `exec` / `sqlite3_exec`.
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | 33 pragma | 0 | 0 | `sqlite/sqlite_boost::set_pragma` × 3 + `apply_recommended_pragmas` (SQLite-only) |
@@ -4616,7 +4617,7 @@ over `query<string>`.
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | 33 pragma | 0 | 0 | `sqlite/sqlite_boost::set_pragma` × 3 + `apply_recommended_pragmas` (SQLite-only) |
@@ -4810,7 +4811,7 @@ schema, 5-item deferred list.
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | 33 pragma | 0 | 0 | `sqlite/sqlite_boost::set_pragma` × 3 + `apply_recommended_pragmas` (SQLite-only) |
@@ -4972,7 +4973,7 @@ walker JSON-path rule, per-provider `json_extract` emission in
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | 33 pragma | 0 | 0 | `sqlite/sqlite_boost::set_pragma` × 3 + `apply_recommended_pragmas` (SQLite-only) |
@@ -5188,7 +5189,7 @@ rules for `starts_with`/`ends_with`/`contains`/`text_match`
 | 27 indexes | 0 | 0 | `[sql_index]` stackable DDL |
 | 28 defaults_computed | 0 | 0 | `@sql_default` / `@sql_computed` DDL + bind-exclusion |
 | 29 custom_types | 0 | 0 | `_::sql_bind`/`_::sql_extract` emission + stdlib overloads |
-| 30 migrations | 0 | 0 | new `daslib/sql_migrate` module; `[sql_migration]` + runner |
+| 30 migrations | 0 | 0 | new `daslib/sqlite_migrate` module; `[sql_migration]` + runner |
 | 31 views | 0 | 0 | `[sql_view]` + `_create_view` (linq-based DDL, raw-SQL escape) + `drop_view_if_exists` |
 | 32 sql_functions | 0 | 0 | `sqlite/sqlite_boost::register_function` (SQLite-only, scalar-only) |
 | 33 pragma | 0 | 0 | `sqlite/sqlite_boost::set_pragma` × 3 + `apply_recommended_pragmas` (SQLite-only) |
@@ -5359,7 +5360,7 @@ Three namespaces:
 | require path | Contents | Future physical location |
 |---|---|---|
 | `daslib/sql` (or similar — TBD) | Abstract layer: `SqlRunner` handle type, `_sql` call macro, `[sql_table]` structure macro, `select_from` / `_where` / `_order_by` / `_select`, typed query helpers (`query_one` / `query_scalar` / `insert` / `exec` + their `_opt` / `try_` variants), `Option`/`Result` integration, provider registration API. | `modules/dasSQL/` |
-| `daslib/sql_migrate` | **Optional** migration MVP (tut 30): `[sql_migration(version=N)]` annotation, `migrate_to_latest(db)` / `try_migrate_to_latest(db)` runners, `current_schema_version` / `pending_migrations` / `migration_history` inspectors, `__schema_version` tracking table. Up-only, raw-SQL-inside. Not required unless the user wants migrations. | `modules/dasSQL/migrate/` |
+| `daslib/sqlite_migrate` | **Optional** migration MVP (tut 30): `[sql_migration(version=N)]` annotation, `migrate_to_latest(db)` / `try_migrate_to_latest(db)` runners, `current_schema_version` / `pending_migrations` / `migration_history` inspectors, `__schema_version` tracking table. Up-only, raw-SQL-inside. Not required unless the user wants migrations. | `modules/dasSQL/migrate/` |
 | `sqlite/sqlite_boost` | SQLite-specific provider: `open_sqlite(path) : SqlRunner`, `with_sqlite(path) <| $(runner) { … }` (tbd — see naming Q below), SQLite dialect table, runner interface impl, `sqlite_version()`. Plus unchanged: `sqlite/sqlite` raw C binding. | `modules/dasSQLITE/` (stays) |
 
 A tutorial's typical top:

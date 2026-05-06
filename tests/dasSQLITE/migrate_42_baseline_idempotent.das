@@ -1,7 +1,7 @@
 options gen2
 
 require dastest/testing_boost public
-require sqlite/sql_migrate
+require sqlite/sqlite_migrate
 
 [sql_migration(version = 1, description = "v1")]
 def m1(db : SqlRunner) {
