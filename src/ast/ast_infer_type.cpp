@@ -1400,15 +1400,46 @@ namespace das {
                     auto eVar = static_cast<ExprVar*>(eField->value);
                     if (eVar->name == "super") {
                         if (auto baseClass = func->classParent->parent) {
-                            reportAstChanged();
-                            auto callName = "_::" + baseClass->name + "`" + eField->name;
-                            auto newCall = new ExprCall(expr->at, callName);
-                            newCall->atEnclosure = expr->atEnclosure;
-                            newCall->arguments.push_back(new ExprVar(expr->at, "self"));
+                            // We're in argumentsFailedToInfer because `super` itself doesn't resolve.
+                            // The actual call args (i >= 2) may also still be uninferred — either
+                            // null type, or alias/expr placeholder waiting on a later pass. Defer
+                            // in either case (mirrors the allOtherInferred check below at line 1480
+                            // and the ExprLooksLikeCall contract that flags both as "not ready").
                             for (size_t i = 2; i != expr->arguments.size(); ++i) {
-                                newCall->arguments.push_back(expr->arguments[i]);
+                                if (!expr->arguments[i]->type || expr->arguments[i]->type->isAliasOrExpr()) {
+                                    return Visitor::visit(expr);
+                                }
                             }
-                            return newCall;
+                            vector<TypeDeclPtr> argTypes;
+                            auto selfType = new TypeDecl(Type::tStructure);
+                            selfType->structType = func->classParent;
+                            argTypes.push_back(selfType);
+                            for (size_t i = 2; i != expr->arguments.size(); ++i) {
+                                argTypes.push_back(expr->arguments[i]->type);
+                            }
+                            while (baseClass) {
+                                auto callName = "_::" + baseClass->name + "`" + eField->name;
+                                auto fnCandidates = findMatchingFunctions(callName, argTypes, false);
+                                if (fnCandidates.size() == 1) {
+                                    reportAstChanged();
+                                    auto newCall = new ExprCall(expr->at, callName);
+                                    newCall->atEnclosure = expr->atEnclosure;
+                                    newCall->arguments.push_back(new ExprVar(expr->at, "self"));
+                                    for (size_t i = 2; i != expr->arguments.size(); ++i) {
+                                        newCall->arguments.push_back(expr->arguments[i]);
+                                    }
+                                    return newCall;
+                                } else if ( fnCandidates.size() > 1 ) {
+                                    error("too many candidates for super call " + callName,
+                                        verbose ? program->describeCandidates(fnCandidates) : "", "",
+                                            expr->at, CompilationError::function_not_found);
+                                    return Visitor::visit(expr);
+                                }
+                                baseClass = baseClass->parent;
+                            }
+                            error("call to super in " + func->name + " is not allowed, no matching super method " + eField->name, "", "",
+                                    expr->at, CompilationError::function_not_found);
+                            return Visitor::visit(expr);
                         } else {
                             error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
                                     expr->at, CompilationError::function_not_found);
@@ -2510,16 +2541,41 @@ namespace das {
                               "", "", expr->at, CompilationError::bad_delete);
                         return Visitor::visit(expr);
                     }
-                    reportAstChanged();
-                    auto selfVar = new ExprVar(expr->at, "self");
-                    auto castT = new TypeDecl(baseStruct);
-                    auto castExpr = new ExprCast(expr->at, selfVar, castT);
-                    auto newDel = new ExprDelete(expr->at, castExpr);
-                    newDel->alwaysSafe = true;
-                    newDel->native = expr->native;
-                    if (expr->sizeexpr)
-                        newDel->sizeexpr = expr->sizeexpr->clone();
-                    return newDel;
+                    // Walk up the inheritance chain to the nearest ancestor with a user-defined
+                    // finalizer (mirrors the super() / super.method() walk-ups). For structs, finalize
+                    // substitution via base type matches at the immediate parent even when only an
+                    // ancestor defines `def operator delete`. For classes there's no such substitution,
+                    // so we must skip empty intermediates and cast to the actual finalizer's class.
+                    while (baseStruct) {
+                        auto baseType = new TypeDecl(Type::tStructure);
+                        baseType->structType = baseStruct;
+                        vector<TypeDeclPtr> argTypes;
+                        argTypes.push_back(baseType);
+                        auto fnList = findMatchingFunctions("finalize", argTypes, false);
+                        // Skip auto-generated finalizers (generateStructureFinalizer / makeClassFinalize):
+                        // they don't chain to ancestors. Only stop at a user-defined finalizer (or one
+                        // that an ancestor's user finalizer matches via inheritance substitution).
+                        bool hasUserFinalize = false;
+                        for (auto &f : fnList) {
+                            if (!f->generated) { hasUserFinalize = true; break; }
+                        }
+                        if (hasUserFinalize) {
+                            reportAstChanged();
+                            auto selfVar = new ExprVar(expr->at, "self");
+                            auto castT = new TypeDecl(baseStruct);
+                            auto castExpr = new ExprCast(expr->at, selfVar, castT);
+                            auto newDel = new ExprDelete(expr->at, castExpr);
+                            newDel->alwaysSafe = true;
+                            newDel->native = expr->native;
+                            if (expr->sizeexpr)
+                                newDel->sizeexpr = expr->sizeexpr->clone();
+                            return newDel;
+                        }
+                        baseStruct = baseStruct->parent;
+                    }
+                    error("delete super.self in " + func->name + ": no ancestor of " + selfStruct->name + " defines a finalizer",
+                          "", "", expr->at, CompilationError::bad_delete);
+                    return Visitor::visit(expr);
                 }
             }
         }
@@ -5323,16 +5379,7 @@ namespace das {
                   "use let _ = " + call->name + "(...)", "",
                   call->at, CompilationError::result_discarded);
         }
-        if (func && func->isClassMethod && func->classParent && call->name == "super") {
-            if (auto baseClass = func->classParent->parent) {
-                call->name = baseClass->name + "`" + baseClass->name;
-                call->arguments.insert(call->arguments.begin(), new ExprVar(call->at, "self"));
-                reportAstChanged();
-            } else {
-                error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
-                      call->at, CompilationError::function_not_found);
-            }
-        }
+        // super() constructor rewrite is done in visit(ExprCall*), once argument types are inferred
     }
     void InferTypes::preVisitCallArg(ExprCall *call, Expression *arg, bool last) {
         Visitor::preVisitCallArg(call, arg, last);
@@ -5360,6 +5407,45 @@ namespace das {
             if (func)
                 func->notInferred();
             return Visitor::visit(expr);
+        }
+        // super(args) constructor rewrite — runs in post-visit so argument types are inferred.
+        // Walks up the inheritance chain looking for a parent class constructor that matches the
+        // argument types; this lets `super(...)` call the closest ancestor's constructor when an
+        // intermediate class doesn't define its own (mirrors super.method() / delete super.self).
+        if (func && func->isClassMethod && func->classParent && expr->name == "super") {
+            if (auto baseClass = func->classParent->parent) {
+                vector<TypeDeclPtr> argumentTypes;
+                auto selfType = new TypeDecl(Type::tStructure);
+                selfType->structType = func->classParent;
+                argumentTypes.reserve(1 + expr->arguments.size());
+                argumentTypes.push_back(selfType);
+                for (auto &arg : expr->arguments) {
+                    argumentTypes.push_back(arg->type);
+                }
+                while (baseClass) {
+                    auto candidateName = baseClass->name + "`" + baseClass->name;
+                    auto matching = findMatchingFunctions(candidateName, argumentTypes, false);
+                    if (matching.size() == 1) {
+                        expr->name = candidateName;
+                        expr->arguments.insert(expr->arguments.begin(), new ExprVar(expr->at, "self"));
+                        reportAstChanged();
+                        return Visitor::visit(expr);
+                    } else if (matching.size() > 1) {
+                        error("too many candidates for super constructor " + candidateName,
+                              verbose ? program->describeCandidates(matching) : "", "",
+                              expr->at, CompilationError::function_not_found);
+                        return Visitor::visit(expr);
+                    }
+                    baseClass = baseClass->parent;
+                }
+                error("call to super in " + func->name + ": no matching super constructor for " + func->classParent->name, "", "",
+                      expr->at, CompilationError::function_not_found);
+                return Visitor::visit(expr);
+            } else {
+                error("call to super in " + func->name + " is not allowed, no base class for " + func->classParent->name, "", "",
+                      expr->at, CompilationError::function_not_found);
+                return Visitor::visit(expr);
+            }
         }
         if (forceInscopePod) {
             bool resolvedBefore = expr->genericFunction && expr->func;

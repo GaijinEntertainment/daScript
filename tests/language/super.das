@@ -59,6 +59,32 @@ class Derived2 : Derived {
     }
 }
 
+// Skip-level inheritance: SkipMid is empty (inherits Base's constructor and methods).
+// SkipLeaf calls super() / super.method() — both must walk past SkipMid up to Base.
+class SkipMid : Base {
+}
+
+class SkipLeaf : SkipMid {
+    z : int = 0
+    def SkipLeaf {
+        super()
+        z = 100
+    }
+    def SkipLeaf(val : int) {
+        super(val)
+        z = val + 100
+    }
+    def override get_value() : int {
+        return x + z
+    }
+    def get_super_value() : int {
+        return super.get_value()
+    }
+    def override add(a, b : int) : int {
+        return super.add(a, b) + z
+    }
+}
+
 [test]
 def test_super(t : T?) {
     t |> run("super() calls parent default constructor") @(t : T?) {
@@ -128,6 +154,36 @@ def test_super(t : T?) {
         t |> equal(b->add(3, 4), 14)
         unsafe {
             delete d
+        }
+    }
+    t |> run("super() walks past empty intermediate class") @(t : T?) {
+        unsafe {
+            // SkipMid has no constructor of its own; super() in SkipLeaf must reach Base.
+            var s = SkipLeaf()
+            t |> equal(s.x, 10)   // Base default ctor ran
+            t |> equal(s.z, 100)
+        }
+    }
+    t |> run("super(args) walks past empty intermediate class") @(t : T?) {
+        unsafe {
+            var s = SkipLeaf(7)
+            t |> equal(s.x, 7)
+            t |> equal(s.z, 107)
+        }
+    }
+    t |> run("super.method() walks past empty intermediate class") @(t : T?) {
+        unsafe {
+            var s = SkipLeaf()
+            // SkipLeaf.get_super_value calls super.get_value; SkipMid has no own override,
+            // so the call must resolve to Base.get_value (returns x).
+            t |> equal(s->get_super_value(), 10)
+        }
+    }
+    t |> run("super.method(args) walks past empty intermediate class") @(t : T?) {
+        unsafe {
+            var s = SkipLeaf()
+            // SkipLeaf.add calls super.add(a,b) + z; SkipMid has no add, walks to Base: a+b
+            t |> equal(s->add(3, 4), 107)
         }
     }
 }

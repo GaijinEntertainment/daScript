@@ -146,6 +146,31 @@ Inside a derived class, ``super()`` calls the parent class constructor:
 Both forms are rewritten by the compiler into explicit calls to the parent class function:
 ``super()`` becomes ``Base`Base(self)`` and ``super.process(x)`` becomes ``Base`process(self, x)``.
 
+If the immediate parent does not define a matching constructor or method, ``super`` walks
+up the inheritance chain to the nearest ancestor that does:
+
+.. code-block:: das
+
+    class Base {
+        def process(x : int) { /* ... */ }
+    }
+
+    class Mid : Base {              // empty intermediate
+    }
+
+    class Leaf : Mid {
+        def Leaf {
+            super()                 // resolves to Base`Base(self) — Mid is skipped
+        }
+        def override process(x : int) {
+            super.process(x)        // resolves to Base`process(self, x) — Mid is skipped
+        }
+    }
+
+Walk-up matches by argument types, so overloaded ``super(args)`` calls pick the closest
+ancestor whose constructor or method accepts those arguments. If no ancestor matches, the
+call is rejected at compile time.
+
 Inside a derived class's finalizer (``operator delete``), ``delete super.self`` runs the
 parent's finalizer on the current object:
 
@@ -158,13 +183,19 @@ parent's finalizer on the current object:
         }
     }
 
-The compiler rewrites ``delete super.self`` into ``delete cast<Base>(self)``. It is only
-valid inside an ``operator delete`` (or equivalently ``def finalize``) of a class that has
-a base class; other uses are rejected at compile time. The same form also works for struct
-finalizers declared as free functions — see :ref:`Structs <structs>`.
+The compiler rewrites ``delete super.self`` into ``delete cast<T>(self)``, where ``T``
+is the closest ancestor whose ``finalize`` lookup resolves to a user-defined finalizer.
+For class hierarchies that means walking past intermediate classes that do not define
+their own ``def operator delete``. For struct hierarchies, ``finalize`` resolution honors
+inheritance substitution (a derived struct can be passed where its base is expected), so
+``T`` may be the immediate parent even when only an ancestor defines ``operator delete``.
+``delete super.self`` is only valid inside an ``operator delete`` (or equivalently
+``def finalize``) of a class that has a base with a finalizer; other uses are rejected
+at compile time. The same form also works for struct finalizers declared as free
+functions — see :ref:`Structs <structs>`.
 
 Base-class finalization is explicit, not automatic: a derived finalizer that omits
-``delete super.self`` will not run the base finalizer.
+``delete super.self`` will not run any ancestor finalizer.
 
 The option ``always_call_super`` can be enabled to require ``super()`` in every constructor
 (see :ref:`Options <options>`).
