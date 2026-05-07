@@ -207,6 +207,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - `table[key]` (read or assign) is **safe** — do NOT wrap in `unsafe(...)`. Some legacy daslib code has `unsafe(tab[k])`; do not propagate that pattern
 - **Move-assign table literal:** `tab <- { "k" => v }` works for both `var tab <- { ... }` declarations and `tab <- { ... }` reassignment to existing variables
 - **Table comprehension move-assign:** `tab <- { for(x in range(5)); x => x*x }` — same move-assign rules apply
+- **`table<T>` (one type param) is the set type** — value type elided. `var s : table<int>; s |> insert(5); key_exists(s, 5)`. Distinct from `table<K; V>` (the map form); both shapes coexist.
 
 ### Iterators and `each`
 
