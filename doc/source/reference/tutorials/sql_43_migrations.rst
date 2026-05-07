@@ -211,10 +211,117 @@ What stays on raw ``db |> exec(...)``:
 - DROP COLUMN / RENAME COLUMN --- old names aren't in the
   current struct, so daslang has nothing to validate against.
 - PK / UNIQUE inline / generated columns added post-hoc ---
-  SQLite can't ALTER these in place; needs a table rebuild
-  (chunk 14c, ``struct_convert``).
+  SQLite can't ALTER these in place; the rebuild path below
+  handles them.
 - ``CHECK`` constraints, FK ADD/DROP, column type changes.
 - Anything ad-hoc that doesn't map to a struct field.
+
+Schema rebuild via ``struct_convert``
+======================================
+
+SQLite's ``ALTER`` vocabulary handles ADD COLUMN, RENAME COLUMN,
+RENAME TABLE, and DROP COLUMN cleanly. Everything else --- PK
+changes, type narrowing, FK alterations, ``CHECK`` changes ---
+needs a *rebuild*: build a new table with the desired shape, copy
+the rows through a converter, drop the old, rename. SQLite docs
+call this the "12-step recipe"; daslang collapses it to three
+lines of user code.
+
+Three pieces work together:
+
+1. ``[sql_table(name=..., legacy=true)]`` keeps the OLD shape as
+   a *historical* struct. Read-only --- usable with
+   ``select_from`` and ``drop_table_if_exists``, but the compiler
+   refuses ``create_table`` / ``insert`` / ``update`` / ``delete``
+   on it (the write-side helpers are not emitted; the natural
+   unresolved-overload error fires at the call site).
+
+2. ``[struct_convert] def my_v1_to_v2(old : S; var dst : T) {...}``
+   is a function annotation that walks T's fields. For each one
+   it emits a single dispatch call:
+   ``_::struct_convert_field(tgt.X, src.X_or_renamed)``.
+
+   The conversion itself lives in an overloaded
+   ``struct_convert_field`` set. dasSQLITE ships:
+
+   - **Identity** (``T -> T``) --- ``dst = src``.
+   - **``S -> Option<T>`` wrap** --- recurses on the inner
+     ``S -> T``, then wraps with ``some()``. So ``int -> Option<string>``
+     works because the inner ``int -> string`` overload fires.
+   - **``Option<S> -> T`` unwrap** --- NULL collapses to
+     ``default<S>``, then recurses on the inner ``S -> T``.
+   - **``Option<S> -> Option<T>`` cross-payload** --- unwraps,
+     dispatches the inner conversion, re-wraps (NULL stays NULL).
+   - **Primitive targets** --- ``int`` / ``int64`` / ``float`` /
+     ``double`` / ``string`` from any source via the type's
+     constructor (``int(src)``, ``int64(src)``, ...) or string
+     interp.
+
+   To extend, drop your own overload in your module --- the
+   macro emits ``_::struct_convert_field(...)`` so the call
+   resolves at the user-side overload set::
+
+       def struct_convert_field(var dst : MyEnum&; src : int) : void {
+           dst = MyEnum(src)
+       }
+
+   Now ``int -> MyEnum`` auto-derives. The ``Option<MyEnum> -> int``
+   path also picks up your overload via the recursive dispatch.
+
+   The macro itself still handles: ``@sql_renamed_from = "OldName"``
+   lookup (read from old's renamed field), default-init for fields
+   absent from S (uses ``T``'s field initializer or ``none()`` for
+   ``Option<T>``), body validation (must be a brace block), and
+   user-override detection. An explicit ``dst.X = ...`` (or ``<-``,
+   ``:=``) on the LHS in the body suppresses the auto-fill for X.
+
+3. ``db |> convert_and_rename(type<S>, type<T>)`` runs the
+   whole rebuild: CREATE staging table, copy rows through the
+   converter, DROP original, ALTER ... RENAME staging -> target.
+   Lower-level ``db |> convert(type<S>, type<T>, name=...)`` is
+   available if you only need the staging step (and want to
+   manage the swap separately).
+
+The rebuild runs inside ``migrate_to_latest``'s big transaction
+--- a later migration failing rolls the rebuild back too.
+
+.. code-block:: das
+
+    [sql_table(name = "users", legacy = true)]
+    struct UserV6 {
+        @sql_primary_key Id : int
+        Name : string
+        LegacyEmail : string
+    }
+
+    [sql_table(name = "users")]
+    struct User {
+        @sql_primary_key Id : int
+        Name : string
+        Email : string
+    }
+
+    [struct_convert]
+    def my_v6_to_v7(old : UserV6; var dst : User) {
+        dst.Email = (old.LegacyEmail != "")
+            ? old.LegacyEmail
+            : "unknown@example.com"
+    }
+
+    [sql_migration(version = 7, description = "restructure users")]
+    def migration_007(db : SqlRunner) {
+        db |> convert_and_rename(type<UserV6>, type<User>)
+    }
+
+The auto-rules pick up ``Id`` and ``Name`` (same-name same-type);
+the user body's one line handles ``Email`` (the new field).
+``LegacyEmail`` is in S but not in T --- it gets dropped on
+conversion. After the rebuild, the table named ``users`` has the
+new shape with rows preserved.
+
+Path 2 (no legacy struct): hand-written
+``db |> exec("INSERT INTO users_new (...) SELECT (...) FROM users")``
+also works. The legacy struct is convenience, not a requirement.
 
 Adopting migrations on an existing DB
 ======================================
@@ -289,15 +396,6 @@ What does NOT ship
 - **A separate CLI** for running migrations outside the app.
   Future work, also dovetails with the eventual ``dasSQL``
   abstraction layer.
-
-- **Struct-to-struct rebuild support** (``struct_convert``,
-  ``[sql_table(legacy=true)]``, ``name=`` overrides). Coming
-  in chunk 14c. For now, schema rebuilds are hand-written
-  ``CREATE TABLE T_new`` + ``INSERT ... SELECT`` --- works,
-  just verbose. The typed ALTER surface above covers the
-  additive cases (ADD COLUMN, CREATE INDEX); ``DROP COLUMN`` /
-  ``RENAME COLUMN`` stay on raw ``db |> exec(...)`` until that
-  chunk lands.
 
 .. seealso::
 

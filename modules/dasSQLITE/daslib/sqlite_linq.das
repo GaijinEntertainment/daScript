@@ -42,27 +42,14 @@ def _first_opt(arr : array<auto(TT)>) : Option<TT -const -#> {
 }
 
 def _first(arr : array<auto(TT)>) : TT -const -& {
-    //! Compat-mode fallback: delegates to ``daslib/linq.das`` ``first``,
-    //! which panics with "sequence contains no elements" on empty and
-    //! handles non-copyable ``TT`` via ``clone_to_move``. Inside `_sql(...)`
-    //! the macro intercepts this call before evaluation and emits ` LIMIT 1`
-    //! with the One materializer.
+    //! Compat-mode fallback to ``linq.first`` (panics on empty). Inside ``_sql(...)``
+    //! the macro intercepts and emits ``LIMIT 1`` with the One materializer.
     return first(arr)
 }
 
-
 // ===== to_sql_literal — runtime stringifier for `_create_view` body inlining =====
-//
-// SQLite stores view bodies as text in `sqlite_schema` and rejects `?` placeholders
-// inside `CREATE VIEW`, so any value referenced by a view body must be inlined as a
-// SQL literal at view-creation time. `_create_view` emits `_::to_sql_literal(<expr>)`
-// per bound expression; `_::` resolves at the user's call site, so a user can extend
-// the set with their own one-liner overload (`def to_sql_literal(s : Status) : string => "{int(s)}"`).
-//
-// Defaults cover all numeric primitives, bool, and string. Enums are handled by
-// the `to_sql_literal(auto(TT))` catch-all below (emitted as their underlying
-// integer); other types hit the catch-all's `concept_assert` with a "define a
-// one-line overload in YourType's module" pointer.
+// `_::` resolution lets users extend with a one-line overload in their own module
+// (`def to_sql_literal(s : Status) : string => "{int(s)}"`).
 
 def to_sql_literal(v : int)    : string => "{v}"
 def to_sql_literal(v : int8)   : string => "{v}"
@@ -88,7 +75,6 @@ def to_sql_literal(value : auto(TT)) : string {
         return ""
     }
 }
-
 
 // ===== SqlQuery — accumulator for chain analysis =====
 
@@ -202,9 +188,9 @@ struct private SqlQuery {
     argSourceIdx : array<int>
     dbExpr      : ExpressionPtr
     upsertMode  : bool
-    inView      : bool     //! `_create_view` body context — rejects `[sql_function(directonly=true)]` UDF calls
+    inView      : bool
     hadError    : bool
-    lastError   : string   //! First `pred_fail` message, re-emitted by call_macros if their deeper macro_error gets eaten by AST cascade
+    lastError   : string
     // Multi-Q lowering: phase-order conflict (e.g. `take(n) |> _where(p)`) snapshots
     // the inner subtree's SQL+binds here; outer FROM renders as `(<innerSql>) AS t0`.
     innerSql       : string                 // null/empty = base-table FROM; else nested SELECT body

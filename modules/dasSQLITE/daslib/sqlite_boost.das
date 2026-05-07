@@ -87,6 +87,7 @@ def private _qualify_schema(sql : string; schema_name : string) : string {
     out = out |> replace("DROP VIEW IF EXISTS \"", "DROP VIEW IF EXISTS {q}\"")
     out = out |> replace("DROP VIEW \"", "DROP VIEW {q}\"")
     out = out |> replace("DROP INDEX IF EXISTS \"", "DROP INDEX IF EXISTS {q}\"")
+    out = out |> replace("ALTER TABLE \"", "ALTER TABLE {q}\"")
     return out
 }
 
@@ -1081,6 +1082,31 @@ def create_table(db : SqlRunner; t : auto(TT)) : void {
     }
 }
 
+[unused_argument(t), template(t)]
+def try_create_table(db : SqlRunner; t : type<auto(TT)>; name : string) : SqlError {
+    //! Like ``try_create_table(type<T>)`` but emits the DDL with table identifier ``name`` instead of T's
+    //! own ``[sql_table(name=...)]``. Use during a struct_convert rebuild to land the new schema in
+    //! ``users_new`` before the swap. Indexes auto-derive against the runtime name.
+    let err = db |> try_exec(_::_sql_create_table_sql(default<TT>, name))
+    if (err |> is_some) {
+        return err
+    }
+    let idx = _::_sql_create_indexes_sql(default<TT>, name)
+    if (empty(idx)) {
+        return none(type<string>)
+    }
+    return db |> try_exec(idx)
+}
+
+[unused_argument(t), template(t)]
+def create_table(db : SqlRunner; t : type<auto(TT)>; name : string) : void {
+    //! Strict variant of ``try_create_table(type<T>, name)``. Panics with the libsqlite3 errmsg on failure.
+    let err = db |> try_create_table(type<TT>, name)
+    if (err |> is_some) {
+        panic(err |> unwrap)
+    }
+}
+
 [template(t)]
 def try_drop_table_if_exists(db : SqlRunner; t : auto(TT)) : SqlError {
     //! Emits DROP TABLE IF EXISTS for the type ``T``.
@@ -1201,6 +1227,32 @@ def try_insert(db : SqlRunner; row : auto(TT)) : Result<int64, string> {
 def insert(db : SqlRunner; row : auto(TT)) : int64 {
     //! Strict variant of ``try_insert(row)``. Panics with the libsqlite3 errmsg on failure.
     let r = db |> try_insert(row)
+    if (r |> is_err) {
+        panic(r |> unwrap_err)
+    }
+    return r |> unwrap
+}
+
+def try_insert(db : SqlRunner; row : auto(TT); name : string) : Result<int64, string> {
+    //! Inserts a single row into table identifier ``name`` instead of T's own ``[sql_table(name=...)]``.
+    //! Used during a struct_convert rebuild to write into the staging table before the rename swap.
+    //! Same PK semantics as ``try_insert(row)`` — zero PK triggers the no-PK INSERT for autoincrement.
+    let pk_unset = _::_sql_pk_is_unset(row)
+    let sql = (pk_unset
+        ? _::_sql_insert_no_pk_sql(default<TT>, name)
+        : _::_sql_insert_with_pk_sql(default<TT>, name))
+    let r = db |> try_step_dml(sql, $(var stmt : sqlite3_stmt?) {
+        _::_sql_bind_row(stmt, row, !pk_unset)
+    }, "insert")
+    if (r |> is_err) {
+        return err(r |> unwrap_err, type<int64>)
+    }
+    return ok(sqlite3_last_insert_rowid(db.sqlite_handle), type<string>)
+}
+
+def insert(db : SqlRunner; row : auto(TT); name : string) : int64 {
+    //! Strict variant of ``try_insert(row, name)``. Panics with the libsqlite3 errmsg on failure.
+    let r = db |> try_insert(row, name)
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
@@ -2143,7 +2195,7 @@ def private resolve_schema_from_path(p : string) : string {
     return path_join(get_das_root(), p)
 }
 
-def private is_option_field_type(td : TypeDeclPtr) : bool {
+def is_option_field_type(td : TypeDeclPtr) : bool {
     if (td == null) {
         return false
     }
@@ -2163,7 +2215,7 @@ def private is_option_field_type(td : TypeDeclPtr) : bool {
     return false
 }
 
-def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
+def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
     // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], structType in `_value`.
     if (td == null) {
         return td
@@ -2180,14 +2232,16 @@ def private unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
         }
         return clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
     }
-    if (td.baseType == Type.tStructure
-            && td.structType != null
-            && td.structType.name == "Option"
-            && td.structType._module != null
-            && td.structType._module.name == "option") {
-        for (f in td.structType.fields) {
-            if ("{f.name}" == "_value") {
-                return clone_type(f._type)
+    // Post-instantiation form: tStructure named `Option` or `Option<T>`. Mirrors is_option_field_type's
+    // shape detection — module identity doesn't load-bear once we're inside an Option-shaped struct;
+    // template instantiation downstream of "option" stamps the callee's _module, not "option".
+    if (td.baseType == Type.tStructure && td.structType != null) {
+        let sname = string(td.structType.name)
+        if (sname == "Option" || sname |> starts_with("Option<")) {
+            for (f in td.structType.fields) {
+                if ("{f.name}" == "_value") {
+                    return clone_type(f._type)
+                }
             }
         }
     }
@@ -2301,6 +2355,12 @@ class SqlIndexMacro : AstStructureAnnotation {
     //! Stackable struct-level annotation: ``[sql_index(fields="A"|("A","B"), unique=?, name=?)]``.
     //! Must appear after ``[sql_table]`` in the annotation list (it rewrites that helper's body).
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        // Reject on legacy=true structs — the [sql_table] emits no CREATE TABLE, so the index would
+        // have no statement to attach to and would collide with the current struct's index on rebuild.
+        if (find_struct_helper_fn("_sql_legacy_table_marker", st) != null) {
+            errors := "[sql_index] on '{st.name}': not supported on [sql_table(legacy=true)] structs (they don't define schema). Drop the [sql_index] annotation; the current (non-legacy) struct's indexes are reapplied automatically by ``convert_and_rename``."
+            return false
+        }
         let cols = find_string_array_annotation(args, "fields")
         if (length(cols) == 0) {
             errors := "[sql_index]: missing or empty `fields=` argument. Use `fields=\"ColName\"` for a single-column index or `fields=(\"A\", \"B\")` for a composite."
@@ -2414,6 +2474,8 @@ def private find_parent_table_and_pk(var st : StructurePtr; parent_name : string
 class SqlTableMacro : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         let table_name = find_annotation(args, "name", string(st.name))
+        // legacy=true: emit read-side helpers only. Writes fail as unresolved-overload.
+        let is_legacy = find_annotation(args, "legacy", false)
 
         var schema_assert_exprs : array<ExpressionPtr>
         let schema_from_arg = find_arg(args, "schema_from")
@@ -2607,43 +2669,77 @@ class SqlTableMacro : AstStructureAnnotation {
             return false
         }
 
-        // [sql_index] siblings rewrite the placeholder body in finish() (st.annotations not populated yet here).
+        // Read-side helpers are always emitted; write-side helpers are skipped for legacy=true structs
+        // so the natural overload-resolution error fires when a caller tries to write to one.
         // schema_assert_exprs ride along inside _sql_table_name's body as typecheck-time concept_asserts.
+        if (is_legacy) {
+            // Marker so [sql_index] can reject legacy structs with a precise error.
+            var fn_legacy_marker = qmacro_function("_sql_legacy_table_marker") $(typ : $t(st)) : bool {
+                return true
+            }
+            fn_legacy_marker.flags |= FunctionFlags.generated
+            fn_legacy_marker.body |> force_at(st.at)
+            compiling_module() |> add_function(fn_legacy_marker)
+        }
         var fn_table_name = make_table_name_fn(st, table_name, schema_assert_exprs)
         compiling_module() |> add_function(fn_table_name)
+        // DROP is read-side enough — devs may legitimately drop a legacy table during migration cleanup.
+        // 2-arg form must be added BEFORE the 1-arg form so find_struct_helper_fn returns the 1-arg form.
+        var fn_drop_named = make_drop_sql_named_fn(st)
+        compiling_module() |> add_function(fn_drop_named)
         var fn_drop = make_drop_sql_fn(st, table_name)
         compiling_module() |> add_function(fn_drop)
-        var fn_create = make_create_table_sql_fn(st, table_name, fields)
-        compiling_module() |> add_function(fn_create)
-        // Empty `_sql_create_indexes_sql` placeholder; [sql_index] siblings accumulate into it.
-        var fn_indexes = make_create_indexes_sql_fn(st, "")
-        compiling_module() |> add_function(fn_indexes)
-        var fn_ins_pk = make_insert_sql_fn(st, table_name, fields, true)
-        compiling_module() |> add_function(fn_ins_pk)
-        var fn_ins_nopk = make_insert_sql_fn(st, table_name, fields, false)
-        compiling_module() |> add_function(fn_ins_nopk)
-        var fn_pk_unset = make_pk_is_unset_fn(st, fields)
-        compiling_module() |> add_function(fn_pk_unset)
-        var fn_bind = make_bind_row_fn(st, fields)
-        compiling_module() |> add_function(fn_bind)
+        // SELECT and read-row stay so select_from(type<S>) works on legacy structs.
+        var fn_select_all_named = make_select_all_sql_named_fn(st, fields)
+        compiling_module() |> add_function(fn_select_all_named)
         var fn_select_all = make_select_all_sql_fn(st, table_name, fields)
         compiling_module() |> add_function(fn_select_all)
         var fn_read = make_read_row_fn(st, fields)
         compiling_module() |> add_function(fn_read)
-        var fn_upd_pk = make_update_by_pk_sql_fn(st, table_name, fields)
-        compiling_module() |> add_function(fn_upd_pk)
-        var fn_del_pk = make_delete_by_pk_sql_fn(st, table_name, fields)
-        compiling_module() |> add_function(fn_del_pk)
-        var fn_bind_upd = make_bind_row_for_update_fn(st, fields)
-        compiling_module() |> add_function(fn_bind_upd)
-        var fn_bind_pk = make_bind_row_pk_only_fn(st, fields)
-        compiling_module() |> add_function(fn_bind_pk)
         var fn_col_info = make_column_info_fn(st, fields)
         compiling_module() |> add_function(fn_col_info)
 
+        // ---- Write-side helpers (skipped for [sql_table(legacy=true)]) ----
+        if (!is_legacy) {
+            var fn_create_named = make_create_table_sql_named_fn(st, fields)
+            compiling_module() |> add_function(fn_create_named)
+            var fn_create = make_create_table_sql_fn(st, table_name, fields)
+            compiling_module() |> add_function(fn_create)
+            // 2-arg form must be added BEFORE the 1-arg form so find_struct_helper_fn (used by [sql_index]
+            // finish-pass) returns the 1-arg form whose body owns the burned-in SQL.
+            var fn_indexes_named = make_create_indexes_sql_named_fn(st, table_name)
+            compiling_module() |> add_function(fn_indexes_named)
+            // Empty `_sql_create_indexes_sql` placeholder; [sql_index] siblings accumulate into it.
+            var fn_indexes = make_create_indexes_sql_fn(st, "")
+            compiling_module() |> add_function(fn_indexes)
+            var fn_ins_pk_named = make_insert_sql_named_fn(st, fields, true)
+            compiling_module() |> add_function(fn_ins_pk_named)
+            var fn_ins_pk = make_insert_sql_fn(st, table_name, fields, true)
+            compiling_module() |> add_function(fn_ins_pk)
+            var fn_ins_nopk_named = make_insert_sql_named_fn(st, fields, false)
+            compiling_module() |> add_function(fn_ins_nopk_named)
+            var fn_ins_nopk = make_insert_sql_fn(st, table_name, fields, false)
+            compiling_module() |> add_function(fn_ins_nopk)
+            var fn_pk_unset = make_pk_is_unset_fn(st, fields)
+            compiling_module() |> add_function(fn_pk_unset)
+            var fn_bind = make_bind_row_fn(st, fields)
+            compiling_module() |> add_function(fn_bind)
+            var fn_upd_pk_named = make_update_by_pk_sql_named_fn(st, fields)
+            compiling_module() |> add_function(fn_upd_pk_named)
+            var fn_upd_pk = make_update_by_pk_sql_fn(st, table_name, fields)
+            compiling_module() |> add_function(fn_upd_pk)
+            var fn_del_pk_named = make_delete_by_pk_sql_named_fn(st, fields)
+            compiling_module() |> add_function(fn_del_pk_named)
+            var fn_del_pk = make_delete_by_pk_sql_fn(st, table_name, fields)
+            compiling_module() |> add_function(fn_del_pk)
+            var fn_bind_upd = make_bind_row_for_update_fn(st, fields)
+            compiling_module() |> add_function(fn_bind_upd)
+            var fn_bind_pk = make_bind_row_pk_only_fn(st, fields)
+            compiling_module() |> add_function(fn_bind_pk)
+        }
+
         return true
     }
-
 
     def apply_schema_from(var st : StructurePtr;
                           raw_path : string;
@@ -2770,9 +2866,21 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_drop_sql_fn(var st : StructurePtr; table_name : string) : FunctionPtr {
-        let sql = "DROP TABLE IF EXISTS \"{table_name}\""
+        // 1-arg wrapper forwards via `default<T>` so `typ` stays unread (avoids "type expression result is used").
         var fn = qmacro_function("_sql_drop_table_if_exists_sql") $(typ : $t(st)) : string {
-            return $v(sql)
+            return _sql_drop_table_if_exists_sql(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_drop_sql_named_fn(var st : StructurePtr) : FunctionPtr {
+        // 2-arg form: runtime ``name`` lets a caller drop a staging/aliased table identifier
+        // (used by struct_convert rebuild). [unused_argument(typ)] because daslang dispatches on T,
+        // but the body needs only ``name``.
+        var fn = qmacro_function("_sql_drop_table_if_exists_sql") $(typ : $t(st); name : string) : string {
+            return "DROP TABLE IF EXISTS " + sql_quote_id(name)
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -2790,12 +2898,44 @@ class SqlTableMacro : AstStructureAnnotation {
         return <- fn
     }
 
-    def make_create_table_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
-        var write_exprs : array<ExpressionPtr>
-        write_exprs |> reserve(3 * length(fields) + 2)
+    def make_create_indexes_sql_named_fn(var st : StructurePtr; table_name : string) : FunctionPtr {
+        //! 2-arg form: rewrites the 1-arg SQL onto ``name``. Auto-named ``idx_<table>_<col>`` follows; user-explicit
+        //! ``[sql_index(name=...)]`` is preserved.
+        let orig_quoted = "\"{table_name}\""
+        let orig_idx_prefix = "\"idx_{table_name}_"
+        var fn = qmacro_function("_sql_create_indexes_sql") $(typ : $t(st); name : string) : string {
+            let escaped_name = name |> replace("\"", "\"\"")
+            return (_sql_create_indexes_sql(default<$t(st)>)
+                |> replace($v(orig_quoted), "\"" + escaped_name + "\"")
+                |> replace($v(orig_idx_prefix), "\"idx_" + escaped_name + "_"))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
 
-        let header = "CREATE TABLE \"{table_name}\"("
-        write_exprs |> push(qmacro_expr(${ writer |> write($v(header)); }))
+    def make_create_table_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // 1-arg form: delegates to the 2-arg form with the struct's own [sql_table(name=...)] identifier.
+        // See make_drop_sql_fn for why we construct default<$t(st)> rather than forwarding typ.
+        var fn = qmacro_function("_sql_create_table_sql") $(typ : $t(st)) : string {
+            return _sql_create_table_sql(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_create_table_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // 2-arg form: composes CREATE TABLE DDL against runtime ``name``. Per-field SQL is baked at macro time
+        // (column name, type, constraints), but the table identifier comes from the runtime parameter so a
+        // struct_convert rebuild can land the new schema in a staging table.
+        var write_exprs : array<ExpressionPtr>
+        write_exprs |> reserve(3 * length(fields) + 4)
+
+        // CREATE TABLE "<runtime name>" ( — name routed through sql_quote_id for `"` escaping.
+        write_exprs |> push(qmacro_expr(${ writer |> write("CREATE TABLE "); }))
+        write_exprs |> push(qmacro_expr(${ writer |> write(sql_quote_id(name)); }))
+        write_exprs |> push(qmacro_expr(${ writer |> write("("); }))
 
         for (i in range(length(fields))) {
             let info = fields[i]
@@ -2830,7 +2970,7 @@ class SqlTableMacro : AstStructureAnnotation {
         }
         write_exprs |> push(qmacro_expr(${ writer |> write(")"); }))
 
-        var fn = qmacro_function("_sql_create_table_sql") $(typ : $t(st)) : string {
+        var fn = qmacro_function("_sql_create_table_sql") $(typ : $t(st); name : string) : string {
             return build_string() $(var writer) {
                 $b(write_exprs)
             }
@@ -2889,7 +3029,21 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_insert_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>; include_pk : bool) : FunctionPtr {
-        // Explicit column list skips GENERATED columns; falls back to `DEFAULT VALUES` when no bindable cols remain.
+        // 1-arg form: delegates to the same-named 2-arg form. The 1-arg call site historically takes
+        // either an instance OR `type<T>`; the wrapper must not READ typ or the type-witness path errors.
+        let helper_name = include_pk ? "_sql_insert_with_pk_sql" : "_sql_insert_no_pk_sql"
+        var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
+            return $c(helper_name)(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_insert_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>; include_pk : bool) : FunctionPtr {
+        // 2-arg form: composes the INSERT with runtime ``name``. The cols-list / placeholders chunk is
+        // burned at macro time; the table identifier is the runtime parameter so a struct_convert rebuild
+        // can target a staging table.
         let helper_name = include_pk ? "_sql_insert_with_pk_sql" : "_sql_insert_no_pk_sql"
         let cols = build_string() $(var w) {
             var first = true
@@ -2919,11 +3073,13 @@ class SqlTableMacro : AstStructureAnnotation {
                 first = false
             }
         }
-        let sql = (empty(cols)
-            ? "INSERT INTO \"{table_name}\" DEFAULT VALUES"
-            : "INSERT INTO \"{table_name}\" ({cols}) VALUES ({placeholders})")
-        var fn = qmacro_function(helper_name) $(typ : $t(st)) : string {
-            return $v(sql)
+        // Two-tail SQL: with explicit column list, or DEFAULT VALUES if every column is computed/excluded.
+        // name routed through sql_quote_id for `"` escaping; suffix carries the post-identifier tail only.
+        let suffix = (empty(cols)
+            ? " DEFAULT VALUES"
+            : " ({cols}) VALUES ({placeholders})")
+        var fn = qmacro_function(helper_name) $(typ : $t(st); name : string) : string {
+            return "INSERT INTO " + sql_quote_id(name) + $v(suffix)
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -3001,6 +3157,17 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_select_all_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // 1-arg form: delegates to the 2-arg form. See make_drop_sql_fn for the default<$t(st)> rationale.
+        var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st)) : string {
+            return _sql_select_all_sql(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_select_all_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // 2-arg form: column list is baked at macro time; table identifier is the runtime parameter.
         let col_list = build_string() $(var w) {
             for (i in range(length(fields))) {
                 if (i > 0) {
@@ -3011,9 +3178,9 @@ class SqlTableMacro : AstStructureAnnotation {
                 w |> write("\"")
             }
         }
-        let sql = "SELECT {col_list} FROM \"{table_name}\""
-        var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st)) : string {
-            return $v(sql)
+        let prefix = "SELECT {col_list} FROM "
+        var fn = qmacro_function("_sql_select_all_sql") $(typ : $t(st); name : string) : string {
+            return $v(prefix) + sql_quote_id(name)
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -3059,12 +3226,24 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_update_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // 1-arg form: delegates to the 2-arg form. See make_drop_sql_fn for the default<$t(st)> rationale.
+        // The PK-less / no-SET-columns runtime-panic stubs ride inside the 2-arg form.
+        var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+            return _sql_update_by_pk_sql(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_update_by_pk_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // 2-arg form: composes the UPDATE with runtime ``name``. SET-clause is baked at macro time.
         // PK-less structs get a runtime-panic stub (concept_assert would fire on every [sql_table] decl).
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: update(row) / delete_(row) / delete_by_id are unavailable — no @sql_primary_key field. Use the macro forms `_sql_update(type<{st_name}>, where, set)` / `_sql_delete(type<{st_name}>, where)` instead."
-            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
                 return ""
             }
@@ -3092,7 +3271,7 @@ class SqlTableMacro : AstStructureAnnotation {
         if (empty(set_clause)) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: update(row) has nothing to SET — every non-PK column is missing or @sql_computed. Add at least one writable non-PK column, or use raw `exec`."
-            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
+            var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
                 return ""
             }
@@ -3100,9 +3279,10 @@ class SqlTableMacro : AstStructureAnnotation {
             fn.body |> force_at(st.at)
             return <- fn
         }
-        let sql = "UPDATE \"{table_name}\" SET {set_clause} WHERE \"{pk_col}\" = ?"
-        var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st)) : string {
-            return $v(sql)
+        let prefix = "UPDATE "
+        let suffix = " SET {set_clause} WHERE \"{pk_col}\" = ?"
+        var fn = qmacro_function("_sql_update_by_pk_sql") $(typ : $t(st); name : string) : string {
+            return $v(prefix) + sql_quote_id(name) + $v(suffix)
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -3110,11 +3290,22 @@ class SqlTableMacro : AstStructureAnnotation {
     }
 
     def make_delete_by_pk_sql_fn(var st : StructurePtr; table_name : string; fields : array<FieldInfo>) : FunctionPtr {
+        // 1-arg form: delegates to the 2-arg form. See make_drop_sql_fn for the default<$t(st)> rationale.
+        var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st)) : string {
+            return _sql_delete_by_pk_sql(default<$t(st)>, $v(table_name))
+        }
+        fn.flags |= FunctionFlags.generated
+        fn.body |> force_at(st.at)
+        return <- fn
+    }
+
+    def make_delete_by_pk_sql_named_fn(var st : StructurePtr; fields : array<FieldInfo>) : FunctionPtr {
+        // 2-arg form: composes the DELETE with runtime ``name``. WHERE-clause + PK column baked at macro time.
         let pk_idx = find_pk_field(fields)
         if (pk_idx < 0) {
             let st_name = string(st.name)
             let msg = "[sql_table] {st_name}: delete_(row) / delete_by_id require a @sql_primary_key field. Use `_sql_delete(type<{st_name}>, where)` instead."
-            var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st)) : string {
+            var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st); name : string) : string {
                 panic($v(msg))
                 return ""
             }
@@ -3123,9 +3314,10 @@ class SqlTableMacro : AstStructureAnnotation {
             return <- fn
         }
         let pk_col = fields[pk_idx].col_name
-        let sql = "DELETE FROM \"{table_name}\" WHERE \"{pk_col}\" = ?"
-        var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st)) : string {
-            return $v(sql)
+        let prefix = "DELETE FROM "
+        let suffix = " WHERE \"{pk_col}\" = ?"
+        var fn = qmacro_function("_sql_delete_by_pk_sql") $(typ : $t(st); name : string) : string {
+            return $v(prefix) + sql_quote_id(name) + $v(suffix)
         }
         fn.flags |= FunctionFlags.generated
         fn.body |> force_at(st.at)
@@ -3685,7 +3877,6 @@ class private SqlFts5Macro : AstStructureAnnotation {
             let fname = string(field.name)
             let is_optional = is_option_field_type(field._type)
             let is_fts_rank = find_annotation(field.annotation, "sql_fts_rank", false)
-
             // Reject every annotation that doesn't apply to a virtual table.
             for (rej in FTS5_REJECTED_ANNOTATIONS) {
                 var present = false
@@ -3955,7 +4146,6 @@ def private make_fts5_column_info_fn(var st : StructurePtr; fields : array<Field
     fn.body |> force_at(st.at)
     return <- fn
 }
-
 
 // ===== register_function — bind a daslang function as a SQL scalar UDF =====
 
@@ -4245,16 +4435,11 @@ class SqlFunctionMacro : AstFunctionAnnotation {
 }
 
 // ===== Typed ALTER macros — migration-context ergonomics =====
-// Used inside [sql_migration] bodies. Emit SQLite-dialect ALTER TABLE / CREATE INDEX
-// from struct + field-name strings. Per the design lock in API_MIGRATION.md §2:
-// typed when daslang has enough info to validate, raw when it doesn't (PK / UNIQUE
-// post-hoc / RENAME / DROP COLUMN stay on `db |> exec(…)`).
 
 [macro_function]
 def private resolve_sql_table(prog : ProgramPtr; at : LineInfo; var typeArg : ExpressionPtr;
                               macroName : string; var st : StructurePtr&; var table_name : string&) : bool {
-    // Decode `type<T>` arg: T must be a struct carrying the [sql_table]-generated
-    // `_sql_table_name` helper, otherwise we have no table identifier to ALTER.
+    // T must carry [sql_table]'s _sql_table_name helper.
     if (typeArg._type == null) {
         macro_error(prog, at, "{macroName}: `type<T>` argument has no inferred type yet")
         return false
@@ -4313,11 +4498,6 @@ def private decode_string_const(e : ExpressionPtr) : tuple<ok : bool; value : st
 
 [call_macro(name="add_column")]
 class private AddColumnMacro : AstCallMacro {
-    //! Migration-context typed ADD COLUMN macro. Form:
-    //!   ``db |> add_column(type<T>, "FieldName" [, defaultLiteral])``.
-    //! Emits ``ALTER TABLE "<t>" ADD COLUMN "<col>" <SQL_TYPE>[ NOT NULL][ DEFAULT …]``.
-    //! Honors @sql_column rename, @sql_json / @sql_blob storage. Rejects PK / UNIQUE /
-    //! computed / @sql_default_fn at macro time (those need a table rebuild).
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         // call.arguments = [db, type<T>, "FieldName"] (3) or [..., defaultLit] (4) after the `db |>` desugar.
         let nArgs = call.arguments |> length
@@ -4426,8 +4606,7 @@ class private AddColumnMacro : AstCallMacro {
 def private resolve_field_columns(prog : ProgramPtr; at : LineInfo; var st : StructurePtr;
                                   fieldsArg : ExpressionPtr; macroName : string;
                                   var sql_cols : array<string>&) : bool {
-    // Accept a single string literal ("Email") or a tuple literal of string literals ("A", "B").
-    // Array literals like ["A", "B"] parse as `to_array_move(fixed_array(…))` — too hairy to AST-match.
+    // Single string literal or a tuple of string literals. Array literals are AST-hairy and rejected.
     if (fieldsArg == null) {
         macro_error(prog, at, "{macroName}: missing fields argument")
         return false
@@ -4525,9 +4704,6 @@ def private emit_create_index(prog : ProgramPtr; var call : ExprCallMacro?; is_u
 
 [call_macro(name="create_index")]
 class private CreateIndexMacro : AstCallMacro {
-    //! Migration-context typed CREATE INDEX. Form:
-    //!   ``db |> create_index(type<T>, "Field" | ["A", "B"] [, "idx_name"])``.
-    //! Auto-name follows the [sql_index] convention: ``idx_<table>_<col1>_<col2>``.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         return emit_create_index(prog, call, false)
     }
@@ -4535,9 +4711,6 @@ class private CreateIndexMacro : AstCallMacro {
 
 [call_macro(name="create_unique_index")]
 class private CreateUniqueIndexMacro : AstCallMacro {
-    //! Migration-context typed CREATE UNIQUE INDEX. Same shape as ``create_index`` plus
-    //! the UNIQUE constraint. SQLite emits a duplicate-violation panic at INSERT time
-    //! if existing rows already conflict; wrap in a migration body for atomic rollback.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         return emit_create_index(prog, call, true)
     }
