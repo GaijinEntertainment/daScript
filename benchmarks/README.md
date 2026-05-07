@@ -60,20 +60,17 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 
 ## sql/
 
-6-mode comparison: `_sql` macro vs `select_from` without macro, across `:memory:` and on-disk SQLite, plus pure in-memory `array<T>` LINQ in materializing and `_fold`-fused forms. Mirrors the `tests/dasSQLITE/parity_check_*.das` pattern but oriented to throughput. Disk DBs are populated and deleted outside the timed block.
+3-mode comparison: `_sql` macro over `:memory:` SQLite vs pure in-memory `array<T>` LINQ, with the array form measured both in its naive (intermediate-materializing) and `_fold`-fused shapes. Mirrors the `tests/dasSQLITE/parity_check_*.das` pattern but oriented to throughput.
 
-| Mode | Source | Macro |
+| Mode | Source | Form |
 |---|---|---|
-| `m1m` | `:memory:` SQLite | `_sql` — compile-time SQL emission |
-| `m1d` | on-disk `.db` file | `_sql` — compile-time SQL emission |
-| `m2m` | `:memory:` SQLite | none — `select_from` materializes the full table, then in-memory LINQ |
-| `m2d` | on-disk `.db` file | none — same as `m2m` over disk |
-| `m3` | pre-populated `array<Car>` | none — chain materializes intermediate filter/sort arrays |
+| `m1` | `:memory:` SQLite | `_sql` — compile-time SQL emission, work pushed to the engine |
+| `m3` | pre-populated `array<Car>` | plain LINQ chain — materializes intermediate filter/sort arrays |
 | `m3f` | pre-populated `array<Car>` | `_fold` from `daslib/linq_boost` — fuses the chain into a single pass, in-place where possible |
 
 | File | Description |
 |---|---|
-| `_common.das` | Shared `Car` `[sql_table]` + `fixture_db` / `fixture_array` / `disk_db_setup` / `disk_db_cleanup` (not a benchmark) |
-| `select_where.das` | Filter chain — `_where(_.price > 500)` over 10K rows. Modest asymmetry; M2/M3 must walk every row. |
-| `select_where_order_take.das` | Filter + sort + limit — `_where \|> _order_by(_.price) \|> take(10)`. SQL ORDER BY + LIMIT bounds work; M2/M3 sort the full filtered set. |
-| `count_aggregate.das` | Aggregate — `count()` after `_where`. SQL pushes `COUNT(*)` to the engine returning one row; M2/M3 materialize the full filtered array then count it. Highest-asymmetry chain. |
+| `_common.das` | Shared `Car` `[sql_table]` + `fixture_db` / `fixture_array` (not a benchmark) |
+| `select_where.das` | Filter chain — `_where(_.price > 500)` over 10K rows. Modest asymmetry; m3 walks every row. |
+| `select_where_order_take.das` | Filter + sort + limit — `_where \|> _order_by(_.price) \|> take(10)`. SQL ORDER BY + LIMIT bounds work; m3 sorts the full filtered set. |
+| `count_aggregate.das` | Aggregate — `count()` after `_where` over 100K rows. SQL pushes `COUNT(*)` to the engine returning one row; m3 materializes the full filtered array then counts it; m3f fuses where+count into one pass. Highest-asymmetry chain. |

@@ -67,7 +67,7 @@ Options:
 |------|-------------|
 | `--db <path>` | Database file path (default: `benchdata.db`) |
 | `--commit <hash>` | Git commit hash to tag results with (default: `git rev-parse HEAD`) |
-| `--tag <name>` | Tag label to attach to results - can be repeated |
+| `--tag <name>` | Tag label to attach to results - can be repeated (must not contain `[` or `]`) |
 
 Input files must contain newline-delimited JSON records as produced by the dastest benchmark runner. Non-JSON lines are silently skipped.
 
@@ -109,7 +109,7 @@ Options:
 |------|-------------|
 | `--db <path>` | Database file path |
 | `--commit <hash>` | Filter to records with this exact commit hash |
-| `--tag <name>` | Filter to records carrying this tag (uses LIKE under the hood — empty `--tag` means no filter) |
+| `--tag <name>` | Filter to records carrying this tag (single-value; uses LIKE under the hood — empty `--tag` means no filter) |
 
 This is mostly needed to debug the selection filters before using a more useful `compare` command.
 

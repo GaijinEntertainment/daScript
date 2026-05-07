@@ -33,14 +33,3 @@ def public fixture_array(n : int) : array<Car> {
     }
     return <- arr
 }
-
-def public disk_db_setup(path : string; n : int) {
-    remove(path)
-    with_sqlite(path) $(db) {
-        fixture_db(db, n)
-    }
-}
-
-def public disk_db_cleanup(path : string) {
-    remove(path)
-}

@@ -80,12 +80,14 @@ def run_subcommand(parsed : ParsedArgs) : string {
     var inscope db <- open_r._value
 
     if (need_init) {
-        run_reset_cmd(db)
+        let init_err = run_reset_cmd(db)
+        if (init_err != "") {
+            return init_err
+        }
     }
 
     if (cmd == "reset") {
-        run_reset_cmd(db)
-        return ""
+        return run_reset_cmd(db)
     } elif (cmd == "insert") {
         return run_insert_cmd(db, parsed)
     } elif (cmd == "query") {
@@ -96,9 +98,16 @@ def run_subcommand(parsed : ParsedArgs) : string {
     return "unknown subcommand: {cmd}"
 }
 
-def run_reset_cmd(db : SqlRunner) {
-    db |> drop_table_if_exists(type<Benchmark>)
-    db |> create_table(type<Benchmark>)
+def run_reset_cmd(db : SqlRunner) : string {
+    let drop_err = db |> try_drop_table_if_exists(type<Benchmark>)
+    if (drop_err |> is_some) {
+        return "drop table: {drop_err |> unwrap}"
+    }
+    let create_err = db |> try_create_table(type<Benchmark>)
+    if (create_err |> is_some) {
+        return "create table: {create_err |> unwrap}"
+    }
+    return ""
 }
 
 def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
@@ -113,6 +122,12 @@ def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
 
     var tag_string = ""
     for (t in parsed.tags) {
+        if (t == "") {
+            continue
+        }
+        if (find(t, "[") != -1 || find(t, "]") != -1) {
+            return "tag '{t}' contains illegal character '[' or ']'"
+        }
         tag_string += "[{t}]"  // nolint:PERF001 — typically 0-2 tags, not a hot path
     }
 
@@ -162,6 +177,9 @@ def query_benchmarks(db : SqlRunner; commit_filter : string; tag_filter : string
 }
 
 def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
+    if (length(parsed.tags) > 1) {
+        return "--tag may only be specified once for query"
+    }
     let tag_filter = length(parsed.tags) > 0 ? parsed.tags[0] : ""
     let entries <- query_benchmarks(db, parsed.commit, tag_filter)
     if (length(entries) == 0) {
