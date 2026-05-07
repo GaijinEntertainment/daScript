@@ -2,6 +2,7 @@ name: wasm_build
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -122,3 +123,8 @@ jobs:
         cd cmake_temp
         cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
         ninja
+
+    - name: "Test: hello world via Node.js"
+      run: |
+        cd web
+        node test/dastest_wasm.js ../ ./output

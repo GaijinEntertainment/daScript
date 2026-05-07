@@ -11,6 +11,7 @@ require daslib/ast_boost
 require daslib/json_boost
 require daslib/jobque_boost
 require daslib/rtti
+require daslib/strings_boost
 
 require fs
 require suite
@@ -327,6 +328,12 @@ def main() : int {
     var files : array<string>
     if (!collect_files(inputPaths, files)) {
         return 1
+    }
+    if (!empty(test_args.exclude_files)) {
+        files |> erase_if() $(f) {
+            let base = base_name(f)
+            return (find_index_if(test_args.exclude_files) $(pat) => base |> contains(pat)) >= 0
+        }
     }
 
     timingOutliers = test_args.timing_outliers

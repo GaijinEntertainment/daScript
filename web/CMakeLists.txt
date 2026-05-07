@@ -29,10 +29,15 @@ add_compile_definitions(_EMSCRIPTEN_VER)
 add_link_options(
     # Default STACK_SIZE is 64KB, not enough for daslang.
     -sSTACK_SIZE=4MB
-    -sEXPORTED_RUNTIME_METHODS=callMain
+    -sEXPORTED_RUNTIME_METHODS=callMain,FS
     # INVOKE_RUN needed to disable running daslang on initialization
     # (it will print help message and exit).
     -sINVOKE_RUN=0
+    # NODEFS required for mounting the host filesystem in Node.js tests.
+    -sFORCE_FILESYSTEM=1
+    -lnodefs.js
+    # Allow heap to grow beyond the default 16MB cap.
+    -sALLOW_MEMORY_GROWTH=1
 )
 # embed daslang standard library into wasm binary.
 add_link_options(--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/../daslib@daslib)
