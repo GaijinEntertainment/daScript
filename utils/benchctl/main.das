@@ -1,191 +1,212 @@
 options gen2
 
-require sqlite/sqlite_boost
-
 require daslib/fio
-require math
 require daslib/defer
 require daslib/regex_boost
 require daslib/strings_boost
+require math
+require strings
 
-require bench_sql
-require utils
-require flags
+require sqlite/sqlite_boost
+require sqlite/sqlite_linq
+require bench_table
+require bench_args
 require benchstat
+require utils
 require table_fmt
 
-[export]
-def main() {
-    let err := run_main()
-    var exit_code = 0
-    if (err != "") {
-        print("[{red_str("error")}] {err}\n")
-        exit_code = 1
-    }
-    return exit_code
+def print_usage() {
+    print("benchctl - benchmark database management tool\n\n")
+    print("Usage:\n")
+    print("  daslang utils/benchctl/main.das -- <command> [options]\n\n")
+    print("Commands:\n")
+    print("  reset    Initialize or reinitialize the benchmark database (drops all data)\n")
+    print("  insert   Insert benchmark JSON output files into the database\n")
+    print("  query    Display benchmark records (filter by --commit / --tag)\n")
+    print("  compare  Compare two sets of results statistically\n")
+    print("  help     Show this help message\n\n")
+    print_benchctl_help()
 }
 
-def run_main() : string {
-    var args <- get_command_line_arguments()
-    let arg_index = find_index(args, "--")
-    if (arg_index == -1) {
-        return "-- separator not found"
-    }
-    var script_args <- subarray(args, (arg_index + 1)..length(args))
-    if (length(script_args) == 0) {
-        return "expected a subcommand name"
+[export]
+def main : int {
+    var argv <- get_command_line_arguments()
+    let dash_idx = find_index(argv, "--")
+    if (dash_idx != -1) {
+        argv <- subarray(argv, (dash_idx + 1)..length(argv))
     }
 
-    let subcmd_name = script_args[0]
-    let subcmd_args <- subarray(script_args, 1..length(script_args))
-    let flags = parse_flags(subcmd_args)
+    if (empty(argv) || find_index(argv, "--help") != -1 || find_index(argv, "-h") != -1) {
+        print_usage()
+        return 0
+    }
 
-    if (get_string_arg(flags, "colors", "true") == "false") {
+    let parsed <- parse_benchctl_args(argv)
+    if (!parsed.ok) {
+        print("[{red_str("error")}] {parsed.err}\n\n")
+        print_usage()
+        return 1
+    }
+
+    if (parsed.no_color) {
         colored_output = false
     }
 
-    if (subcmd_name == "help") {
-        return run_help_cmd()
+    if (parsed.help) {
+        print_usage()
+        return 0
     }
 
-    let db_filename = get_string_arg(flags, "db", "benchdata.db")
-    var need_db_init = !file_exists(db_filename) && find_index([
-        "insert",
-        "query",
-        "compare",
-    ], subcmd_name) != -1
-
-    var db : sqlite3?
-    defer() {
-        sqlite3_close(db)
-    }
-    var rc = sqlite3_open(db_filename, unsafe(addr(db)))
-    if (rc != SQLITE_OK) {
-        return "open database: {sqlite3_errmsg(db)}"
+    if (parsed.command == "" || parsed.command == "help") {
+        print_usage()
+        return 0
     }
 
-    if (need_db_init) {
-        let err = run_reset_cmd(db, flags)
-        if (err != "") {
-            return "implicit db creation: {err}"
+    let err = run_subcommand(parsed)
+    if (err != "") {
+        print("[{red_str("error")}] {err}\n")
+        return 1
+    }
+    return 0
+}
+
+def run_subcommand(parsed : ParsedArgs) : string {
+    let cmd = parsed.command
+    let need_init = !file_exists(parsed.db) && (cmd == "insert" || cmd == "query" || cmd == "compare")
+    var open_r <- try_open_sqlite(parsed.db)
+    if (open_r |> is_err) {
+        return "open database: {open_r |> unwrap_err}"
+    }
+    var inscope db <- open_r._value
+
+    if (need_init) {
+        run_reset_cmd(db)
+    }
+
+    if (cmd == "reset") {
+        run_reset_cmd(db)
+        return ""
+    } elif (cmd == "insert") {
+        return run_insert_cmd(db, parsed)
+    } elif (cmd == "query") {
+        return run_query_cmd(db, parsed)
+    } elif (cmd == "compare") {
+        return run_compare_cmd(db, parsed)
+    }
+    return "unknown subcommand: {cmd}"
+}
+
+def run_reset_cmd(db : SqlRunner) {
+    db |> drop_table_if_exists(type<Benchmark>)
+    db |> create_table(type<Benchmark>)
+}
+
+def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
+    if (length(parsed.files) == 0) {
+        return "missing targets to insert"
+    }
+
+    var commit_hash = parsed.commit
+    if (commit_hash == "") {
+        commit_hash = cmd_exec("git rev-parse HEAD")
+    }
+
+    var tag_string = ""
+    for (t in parsed.tags) {
+        tag_string += "[{t}]"  // nolint:PERF001 — typically 0-2 tags, not a hot path
+    }
+
+    let now = int64(get_clock())
+
+    for (filename in parsed.files) {
+        let data = read_file(filename)
+        if (data == "") {
+            print("{filename}: ignored\n")
+            continue
         }
+        let stats_entries = parse_bench_output(data)
+        var rows : array<Benchmark>
+        rows |> reserve(length(stats_entries))
+        for (e in stats_entries) {
+            rows |> push(Benchmark(
+                id = 0,
+                commit_hash = commit_hash,
+                tags = tag_string,
+                insert_date = now,
+                full_name = "{e.name}/{e.sub_name}",
+                name = e.name,
+                sub_name = e.sub_name,
+                mode = e.func_type,
+                n = int64(e.n),
+                time_ns = e.time_ns,
+                allocs = int64(e.allocs),
+                heap_bytes = int64(e.heap_bytes),
+                string_allocs = int64(e.string_allocs),
+                string_heap_bytes = int64(e.string_heap_bytes),
+            ))
+        }
+        let txn_err = db |> try_insert(rows)
+        if (txn_err |> is_err) {
+            return "insert {filename}: {txn_err |> unwrap_err}"
+        }
+        print("{filename}: added {length(rows)} samples\n")
     }
-
-    if (subcmd_name == "reset") {
-        return run_reset_cmd(db, flags)
-    } elif (subcmd_name == "insert") {
-        return run_insert_cmd(db, flags)
-    } elif (subcmd_name == "query") {
-        return run_query_cmd(db, flags)
-    } elif (subcmd_name == "compare") {
-        return run_compare_cmd(db, flags)
-    } else {
-        return "unknown subcommand name: {subcmd_name}"
-    }
-
     return ""
 }
 
-def run_help_cmd() : string {
-    // TODO: it would be better if we could get this help command for free
-    // using a command line library (e.g. like "flag" package in Go)
+def query_benchmarks(db : SqlRunner; commit_filter : string; tag_filter : string) : array<Benchmark> {
+    let want_tag = (tag_filter == "" ? "" : "[{tag_filter}]")
+    return <- _sql(db |> select_from(type<Benchmark>)
+        |> _where(commit_filter == "" || _.commit_hash == commit_filter)
+        |> _where(want_tag == "" || _.tags |> contains(want_tag)))
+}
 
-    print("benchctl - benchmark database management tool\n\n")
-    print("Usage:\n")
-    print("  daslang benchctl/main.das -- <command> [options]\n\n")
-    print("Commands:\n")
-    print("  reset    Initialize or reinitialize the benchmark database (drops all data)\n")
-    print("  insert   Insert benchmark results from JSON output files\n")
-    print("  query    Query and display stored benchmark records\n")
-    print("  compare  Compare two sets of benchmark results statistically\n")
-    print("  help     Show this help message\n\n")
-    print("Common options:\n")
-    print("  --db <path>      SQLite3 database file path (default: benchdata.db)\n")
-    print("  --colors false   Disable colored terminal output\n\n")
-    print("insert options:\n")
-    print("  --commit <hash>  Git commit hash to tag results with (default: git rev-parse HEAD)\n")
-    print("  --tag <name>     Tag label to attach to results (can be repeated)\n")
-    print("  <file>...        Benchmark JSON output files to insert\n\n")
-    print("query options:\n")
-    print("  --select <cond>  SQL WHERE clause to filter records\n\n")
-    print("compare options:\n")
-    print("  --select_old <cond>  SQL WHERE clause for baseline (old) results\n")
-    print("  --select_new <cond>  SQL WHERE clause for new results\n")
-    print("  --s <from=>to>       Regex rename: map old benchmark names to new names\n")
-    print("  --old <cond>         --select_old alias\n")
-    print("  --new <cond>         --select_new alias\n")
+def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
+    let tag_filter = length(parsed.tags) > 0 ? parsed.tags[0] : ""
+    let entries <- query_benchmarks(db, parsed.commit, tag_filter)
+    if (length(entries) == 0) {
+        print("no results\n")
+        return ""
+    }
+    var table_rows : array<TableRow?>
+    table_rows |> reserve(length(entries))
+    for (e in entries) {
+        let commit_short = length(e.commit_hash) > 8 ? slice(e.commit_hash, 0, 8) : e.commit_hash
+        let ns_per_op = e.n > 0l ? double(e.time_ns) / double(e.n) : 0.0lf
+        table_rows |> push(new TableRow(columns <- [
+            e.full_name,
+            commit_short,
+            e.tags,
+            "{e.n}",
+            "{ns_per_op:.1f} ns/op",
+        ]))
+    }
+    print("  {yellow_str("benchmark")}  {yellow_str("commit")}  {yellow_str("tags")}  {yellow_str("n")}  {yellow_str("ns/op")}\n\n")
+    var tabspec = new TableData(
+        rows <- table_rows,
+        col_gap = 2,
+        indent = "  ",
+    )
+    print(format_table(tabspec))
     return ""
 }
 
-def query_benchmarks(db : sqlite3?; cond : string; exclude : table<int64> = default<table<int64>>) : tuple<array<BenchmarkEntry>, string> {
-    var result : array<BenchmarkEntry>
+def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
+    let old_entries <- query_benchmarks(db, parsed.old_commit, parsed.old_tag)
+    let new_entries <- query_benchmarks(db, parsed.new_commit, parsed.new_tag)
 
-    var sql_text = "SELECT * FROM benchmarks"
-    if (cond != "") {
-        sql_text += " WHERE {cond}"
+    if (length(old_entries) == 0) {
+        return "no rows match --old-commit / --old-tag"
     }
-
-    var err_msg : string
-    defer() {
-        sqlite3_free(err_msg)
+    if (length(new_entries) == 0) {
+        return "no rows match --new-commit / --new-tag"
     }
-    let rc = sqlite3_exec(db, sql_text, unsafe(addr(err_msg))) $(values, columns) {
-        var entry : BenchmarkEntry
-        for (v, c in values, columns) {
-            if (c == "id") {
-                entry.id = to_int64(v)
-            } elif (c == "commit_hash") {
-                entry.commit_hash := v
-            } elif (c == "tags") {
-                entry.tags := v
-            } elif (c == "insert_date") {
-                entry.insert_date = to_int64(v)
-            } elif (c == "full_name") {
-                entry.full_name := v
-            } elif (c == "name") {
-                entry.name := v
-            } elif (c == "sub_name") {
-                entry.sub_name := v
-            } elif (c == "mode") {
-                entry.mode := v
-            } elif (c == "n") {
-                entry.n = to_int64(v)
-            } elif (c == "time_ns") {
-                entry.time_ns = to_int64(v)
-            } elif (c == "allocs") {
-                entry.allocs = to_int64(v)
-            } elif (c == "heap_bytes") {
-                entry.heap_bytes = to_int64(v)
-            } elif (c == "string_allocs") {
-                entry.string_allocs = to_int64(v)
-            } elif (c == "string_heap_bytes") {
-                entry.string_heap_bytes = to_int64(v)
-            }
-        }
-        if (!key_exists(exclude, entry.id)) {
-            result |> push(entry)
-        }
-        return SQLITE_OK
-    }
-
-    var err = ""
-    if (rc != SQLITE_OK) {
-        err = clone_string(sqlite3_errmsg(db))
-    }
-
-    return (<- result, err)
-}
-
-def run_compare_cmd(db : sqlite3?; flags : Flags) : string {
-    var cond_old = get_string_aliased_arg(flags, "select_old", "old", "")
-    var cond_new = get_string_aliased_arg(flags, "select_new", "new", "")
 
     var key_map = @(x : string) : string {
         return x
     }
-    var key_mapper = get_string_arg(flags, "s", "")
-    if (key_mapper != "") {
-        let parts <- split(key_mapper, "=>")
+    if (parsed.s != "") {
+        let parts <- split(parsed.s, "=>")
         if (length(parts) != 2) {
             return "invalid -s argument, expected 'from=>to' format"
         }
@@ -193,20 +214,6 @@ def run_compare_cmd(db : sqlite3?; flags : Flags) : string {
         key_map = @capture(:= re, := parts) (x : string) : string {
             return regex_replace(re, x, parts[1])
         }
-    }
-
-    let (old_entries, err) = query_benchmarks(db, cond_old)
-    if (err != "") {
-        return "query --old: {err}"
-    }
-    var old_ids : table<int64>
-    for (e in old_entries) {
-        old_ids |> insert(e.id)
-    }
-
-    let (new_entries, err) = query_benchmarks(db, cond_new, old_ids)
-    if (err != "") {
-        return "query --new: {err}"
     }
 
     var old_samples = make_sample_sets(old_entries)
@@ -378,105 +385,6 @@ def run_compare_cmd(db : sqlite3?; flags : Flags) : string {
             indent = "    ",
         )
         print(format_table(tabspec))
-    }
-
-    return ""
-}
-
-def run_query_cmd(db : sqlite3?; flags : Flags) : string {
-    var cond = get_string_arg(flags, "select", "")
-    let (entries, err) = query_benchmarks(db, cond)
-    if (err != "") {
-        return "run query: {err}"
-    }
-    if (length(entries) == 0) {
-        print("no results\n")
-        return ""
-    }
-    var table_rows : array<TableRow?>
-    for (e in entries) {
-        let commit_short = length(e.commit_hash) > 8 ? slice(e.commit_hash, 0, 8) : e.commit_hash
-        let ns_per_op = e.n > 0l ? double(e.time_ns) / double(e.n) : 0.0lf
-        table_rows |> push(new TableRow(columns <- [
-            e.full_name,
-            commit_short,
-            e.tags,
-            "{e.n}",
-            "{ns_per_op:.1f} ns/op",
-        ]))
-    }
-    print("  {yellow_str("benchmark")}  {yellow_str("commit")}  {yellow_str("tags")}  {yellow_str("n")}  {yellow_str("ns/op")}\n\n")
-    var tabspec = new TableData(
-        rows <- table_rows,
-        col_gap = 2,
-        indent = "  ",
-    )
-    print(format_table(tabspec))
-    return ""
-}
-
-def run_reset_cmd(db : sqlite3?; flags : Flags) : string {
-    var err = db_exec(db, sql_db_init)
-    if (err != "") {
-        return "run init query: {err}"
-    }
-
-    return ""
-}
-
-def run_insert_cmd(db : sqlite3?; flags : Flags) : string {
-    if (length(flags.values) == 0) {
-        return "missing targets to insert"
-    }
-
-    var commit_hash = get_string_arg(flags, "commit", "")
-    if (commit_hash == "") {
-        commit_hash = cmd_exec("git rev-parse HEAD")
-    }
-
-    var tag_string = ""
-    for (t in flags.tags) {
-        tag_string += "[{t}]"
-    }
-
-    var stmt : sqlite3_stmt?
-    let rc = sqlite3_prepare_v2(db, sql_bench_insert, -1, unsafe(addr(stmt)), null)
-    if (rc != SQLITE_OK) {
-        return "prepare insertion statement: {sqlite3_errmsg(db)}"
-    }
-    defer() {
-        sqlite3_finalize(stmt)
-    }
-
-    for (filename in flags.values) {
-        let data = read_file(filename)
-        if (data == "") {
-            print("{filename}: ignored\n")
-            continue
-        }
-        let entries = parse_bench_output(data)
-        var added = 0
-        for (e in entries) {
-            db_bind_text_param(stmt, "@commit_hash", commit_hash)
-            db_bind_text_param(stmt, "@tags", tag_string)
-            db_bind_text_param(stmt, "@name", e.name)
-            db_bind_text_param(stmt, "@sub_name", e.sub_name)
-            db_bind_text_param(stmt, "@mode", e.func_type)
-            db_bind_int64_param(stmt, "@n", int64(e.n))
-            db_bind_int64_param(stmt, "@time_ns", e.time_ns)
-            db_bind_int64_param(stmt, "@allocs", int64(e.allocs))
-            db_bind_int64_param(stmt, "@heap_bytes", int64(e.heap_bytes))
-            db_bind_int64_param(stmt, "@string_allocs", int64(e.string_allocs))
-            db_bind_int64_param(stmt, "@string_heap_bytes", int64(e.string_heap_bytes))
-            let step_rc = sqlite3_step(stmt)
-            if (step_rc != SQLITE_DONE) {
-                return "insert failed: {sqlite3_errmsg(db)}"
-            }
-            added++
-            sqlite3_reset(stmt);
-            sqlite3_clear_bindings(stmt);
-        }
-        print("{filename}: added {added} samples\n")
     }
 
     return ""

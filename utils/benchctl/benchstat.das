@@ -1,33 +1,15 @@
+options gen2
+
 require dastest/testing_boost
 require daslib/strings_boost
 require daslib/json_boost
 require math
 
-struct BenchmarkEntry {
-    id : int64
-
-    commit_hash : string
-    tags : string
-    insert_date : int64
-
-    full_name : string
-    name : string
-    sub_name : string
-
-    mode : string
-
-    n : int64
-    time_ns : int64
-
-    allocs : int64
-    heap_bytes : int64
-    string_allocs : int64
-    string_heap_bytes : int64
-}
+require bench_table public
 
 struct BenchmarkSampleSet {
     key : string
-    list : array<BenchmarkEntry>
+    list : array<Benchmark>
 
     // Assigned later, when stats are computed.
     stats : BenchmarkStats? = null
@@ -85,7 +67,7 @@ def parse_bench_output(data : string) : array<BenchmarkRunStats> {
     return <- entries
 }
 
-def make_sample_sets(entries : array<BenchmarkEntry>) : table<string, BenchmarkSampleSet?> {
+def make_sample_sets(entries : array<Benchmark>) : table<string, BenchmarkSampleSet?> {
     var result : table<string, BenchmarkSampleSet?>
     for (e in entries) {
         let key := e.name + "/" + e.sub_name
