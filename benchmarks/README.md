@@ -73,4 +73,5 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | `_common.das` | Shared `Car` `[sql_table]` + `fixture_db` / `fixture_array` (not a benchmark) |
 | `select_where.das` | Filter chain — `_where(_.price > 500)` over 10K rows. Modest asymmetry; m3 walks every row. |
 | `select_where_order_take.das` | Filter + sort + limit — `_where \|> _order_by(_.price) \|> take(10)`. SQL ORDER BY + LIMIT bounds work; m3 sorts the full filtered set. |
-| `count_aggregate.das` | Aggregate — `count()` after `_where` over 100K rows. SQL pushes `COUNT(*)` to the engine returning one row; m3 materializes the full filtered array then counts it; m3f fuses where+count into one pass. Highest-asymmetry chain. |
+| `count_aggregate.das` | Aggregate — `count()` after `_where` over 1M rows. SQL pushes `COUNT(*)` to the engine returning one row; m3 materializes the full filtered array then counts it; m3f fuses where+count into one pass. Highest-asymmetry chain in daslang's favor. |
+| `indexed_lookup.das` | Indexed point lookup — `_where(_.id == K)` against the PRIMARY KEY over 1M rows. SQLite uses the PK b-tree (O(log n)); m3/m3f have no index (O(n) linear scan). Inverse-asymmetry: SQLite wins by ~1000×, illustrating where indexed storage earns its keep. |

@@ -72,6 +72,9 @@ def main : int {
 
 def run_subcommand(parsed : ParsedArgs) : string {
     let cmd = parsed.command
+    if (cmd != "reset" && cmd != "insert" && cmd != "query" && cmd != "compare") {
+        return "unknown subcommand: {cmd}"
+    }
     let need_init = !file_exists(parsed.db) && (cmd == "insert" || cmd == "query" || cmd == "compare")
     var open_r <- try_open_sqlite(parsed.db)
     if (open_r |> is_err) {
@@ -92,10 +95,15 @@ def run_subcommand(parsed : ParsedArgs) : string {
         return run_insert_cmd(db, parsed)
     } elif (cmd == "query") {
         return run_query_cmd(db, parsed)
-    } elif (cmd == "compare") {
-        return run_compare_cmd(db, parsed)
     }
-    return "unknown subcommand: {cmd}"
+    return run_compare_cmd(db, parsed)
+}
+
+def validate_tag_chars(t : string) : string {
+    if (find(t, "[") != -1 || find(t, "]") != -1) {
+        return "tag '{t}' contains illegal character '[' or ']'"
+    }
+    return ""
 }
 
 def run_reset_cmd(db : SqlRunner) : string {
@@ -125,8 +133,9 @@ def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         if (t == "") {
             continue
         }
-        if (find(t, "[") != -1 || find(t, "]") != -1) {
-            return "tag '{t}' contains illegal character '[' or ']'"
+        let tag_err = validate_tag_chars(t)
+        if (tag_err != "") {
+            return tag_err
         }
         tag_string += "[{t}]"  // nolint:PERF001 — typically 0-2 tags, not a hot path
     }
@@ -181,6 +190,10 @@ def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         return "--tag may only be specified once for query"
     }
     let tag_filter = length(parsed.tags) > 0 ? parsed.tags[0] : ""
+    let tag_err = validate_tag_chars(tag_filter)
+    if (tag_err != "") {
+        return tag_err
+    }
     let entries <- query_benchmarks(db, parsed.commit, tag_filter)
     if (length(entries) == 0) {
         print("no results\n")
@@ -210,14 +223,37 @@ def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
 }
 
 def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
+    let old_tag_err = validate_tag_chars(parsed.old_tag)
+    if (old_tag_err != "") {
+        return old_tag_err
+    }
+    let new_tag_err = validate_tag_chars(parsed.new_tag)
+    if (new_tag_err != "") {
+        return new_tag_err
+    }
+
     let old_entries <- query_benchmarks(db, parsed.old_commit, parsed.old_tag)
-    let new_entries <- query_benchmarks(db, parsed.new_commit, parsed.new_tag)
+    let raw_new_entries <- query_benchmarks(db, parsed.new_commit, parsed.new_tag)
+
+    // Exclude rows already in --old from --new so identical / overlapping filters
+    // (e.g. both empty) cannot compare a result set against itself.
+    var old_id_set : table<int; bool>
+    for (e in old_entries) {
+        old_id_set |> insert(e.id, true)
+    }
+    var new_entries : array<Benchmark>
+    new_entries |> reserve(length(raw_new_entries))
+    for (e in raw_new_entries) {
+        if (!key_exists(old_id_set, e.id)) {
+            new_entries |> push_clone(e)
+        }
+    }
 
     if (length(old_entries) == 0) {
         return "no rows match --old-commit / --old-tag"
     }
     if (length(new_entries) == 0) {
-        return "no rows match --new-commit / --new-tag"
+        return "no rows match --new-commit / --new-tag (after excluding rows already in --old)"
     }
 
     var key_map = @(x : string) : string {

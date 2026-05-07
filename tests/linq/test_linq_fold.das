@@ -724,3 +724,33 @@ def test_order_distinct(t : T?) {
     }
 }
 
+[test]
+def test_where_count_fold(t : T?) {
+    // Guards the where + count fold rule in linq_boost (fold_where_count).
+    // The fused loop emits a single counter pass with no intermediate filter array.
+    t |> run("where + count: half match") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        let c = _fold(each(arr)._where(_ > 5).count())
+        t |> equal(typeinfo typename(c), "int const")
+        t |> equal(5, c)
+    }
+
+    t |> run("where + count: zero matches") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let c = _fold(each(arr)._where(_ > 999).count())
+        t |> equal(0, c)
+    }
+
+    t |> run("where + count: all match") @(t : T?) {
+        let arr <- [1, 2, 3, 4, 5]
+        let c = _fold(each(arr)._where(_ > 0).count())
+        t |> equal(5, c)
+    }
+
+    t |> run("where + count: empty source") @(t : T?) {
+        let arr : array<int>
+        let c = _fold(each(arr)._where(_ > 0).count())
+        t |> equal(0, c)
+    }
+}
+
