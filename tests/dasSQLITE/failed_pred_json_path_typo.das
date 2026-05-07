@@ -13,7 +13,7 @@ options gen2
 // macro's failure path properly propagates (without the SqlQuery.hadError
 // fix, the macro_error was queued but operator handlers like `==` wrapped
 // the empty fragment as `" = ?"` and analyze_predicate treated it as success).
-expect 40104:3, 30503:3
+expect 30928:2, 30831, 50503:3
 
 require daslib/sql
 require sqlite/sqlite_boost

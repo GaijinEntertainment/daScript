@@ -5,7 +5,7 @@ options gen2
 // hits the catch-all `to_sql_literal(auto(TT))` at sqlite_linq.das, which
 // concept_asserts (40103). Confirms the user gets a pointed "define
 // to_sql_literal for your type" message instead of an opaque overload error.
-expect 40103:1
+expect 31400
 
 require daslib/sql
 require sqlite/sqlite_boost

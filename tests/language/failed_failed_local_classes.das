@@ -1,5 +1,5 @@
 options gen2
-expect 31300:1
+expect 31030
 options no_local_class_members
 
 class A {

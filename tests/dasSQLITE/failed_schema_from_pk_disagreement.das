@@ -1,7 +1,7 @@
 options gen2
 
 // User attaches @sql_primary_key to a column the schema does NOT report as PK.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

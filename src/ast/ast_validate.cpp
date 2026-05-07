@@ -68,7 +68,7 @@ namespace das {
             if ( it != seen.end() && it->second.at.fileInfo ) {
                 extra += " at " + it->second.at.fileInfo->name + ":" + to_string(it->second.at.line);
             }
-            program->error(err, extra, "", td->at, CompilationError::unspecified);
+            program->error(err, extra, "", td->at, CompilationError::internal_type);
         }
         void reportDuplicateExpression ( Expression * expr ) {
             auto it = seen.find(expr);
@@ -79,7 +79,7 @@ namespace das {
             if ( it != seen.end() && it->second.at.fileInfo ) {
                 extra += " at " + it->second.at.fileInfo->name + ":" + to_string(it->second.at.line);
             }
-            program->error(err, extra, "", expr->at, CompilationError::unspecified);
+            program->error(err, extra, "", expr->at, CompilationError::internal_expression);
         }
         void trackTypeDeclTree ( TypeDecl * td, const char * field ) {
             if ( !td ) return;
@@ -291,7 +291,7 @@ namespace das {
                         auto td = static_cast<TypeDecl *>(node);
                         string err = "validate_ast: TypeDecl (gc_id=" + to_string(td->gc_id) + ") not reached by visitor: " + td->describe();
                         string extra = "module '" + mod->name + "'";
-                        error(err, extra, "", td->at, CompilationError::unspecified);
+                        error(err, extra, "", td->at, CompilationError::internal_type);
                     }
                 } else if ( tag == GC_TAG_EXPRESSION ) {
                     if ( vis.getSeen().find((void *)node) == vis.getSeen().end() ) {
@@ -299,7 +299,7 @@ namespace das {
                         string err = "validate_ast: Expression (gc_id=" + to_string(expr->gc_id) + ") not reached by visitor: ";
                         if ( expr->__rtti ) err += expr->__rtti;
                         string extra = "module '" + mod->name + "'";
-                        error(err, extra, "", expr->at, CompilationError::unspecified);
+                        error(err, extra, "", expr->at, CompilationError::internal_expression);
                     }
                 }
             }

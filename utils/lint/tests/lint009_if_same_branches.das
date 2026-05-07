@@ -21,7 +21,7 @@ options gen2
 //       x = 2
 //   }
 
-expect 40104:3
+expect 50503:3
 
 require daslib/lint
 

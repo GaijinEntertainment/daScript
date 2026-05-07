@@ -2,7 +2,7 @@ options gen2
 
 // _create_view shape errors. Each block triggers exactly one macro_error
 // (40104) from `SqlCreateViewMacro`.
-expect 40104:6
+expect 50503:6
 
 require daslib/sql
 require sqlite/sqlite_boost

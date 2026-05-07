@@ -19,7 +19,7 @@ options gen2
 //       result |> push(i)          // no reallocs
 //   }
 
-expect 40217:9
+expect 31208:9
 
 require daslib/perf_lint
 

@@ -88,7 +88,7 @@ namespace das {
                 "this typically means the AST was modified after type inference "
                 "without signalling that infer needs to run again - check the "
                 "annotation patch() / pass apply() / substitution macro that produced this node",
-                "", expr->at, CompilationError::missing_node);
+                "", expr->at, CompilationError::internal_function_not_resolved_yet);
         }
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
@@ -848,7 +848,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprStaticAssert * expr) override {
             auto cond = expr->arguments[0];
             if (!cond->constexpression && !cond->rtti_isConstant()) {
-                program->error("static assert condition is not constexpr or const", "","",expr->at);
+                program->error("static assert condition is not constexpr or const", "","",expr->at, CompilationError::invalid_expression);
                 return nullptr;
             }
             bool result = false;
@@ -856,7 +856,7 @@ namespace das {
                 bool failed;
                 vec4f resB = eval(cond, failed);
                 if ( failed ) {
-                    program->error("exception while computing static assert condition", "","",expr->at);
+                    program->error("exception while computing static assert condition", "","",expr->at, CompilationError::runtime_expression);
                 }
                 result = cast<bool>::to(resB);
             } else {
@@ -869,7 +869,7 @@ namespace das {
                     bool failed;
                     vec4f resM = eval(expr->arguments[1], failed);
                     if ( failed ) {
-                        program->error("exception while computing static assert message","","", expr->at);
+                        program->error("exception while computing static assert message","","", expr->at, CompilationError::runtime_expression);
                         message = "";
                     } else {
                         message = cast<char *>::to(resM);
@@ -902,10 +902,10 @@ namespace das {
             if ( expr->func && expr->func->hasToRunAtCompileTime ) {
                 if ( expr->func->sideEffectFlags ) {
                     program->error("function did not run at compilation time because it has side-effects","","",
-                                   expr->at, CompilationError::run_failed);
+                                   expr->at, CompilationError::runtime_function);
                 } else {
                     program->error("function did not run at compilation time","","",
-                                   expr->at, CompilationError::run_failed);
+                                   expr->at, CompilationError::runtime_function);
                 }
             }
         }
@@ -960,7 +960,7 @@ namespace das {
                     }
                     if ( expr->func->index==-1 ) {
                         runProgram->error("internal compilation error, folding symbol was not marked as used","","",
-                            expr->at, CompilationError::run_failed);
+                            expr->at, CompilationError::internal_function);
                         return Visitor::visit(expr);
                     }
                     return evalAndFold(expr);

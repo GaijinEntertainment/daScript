@@ -1,0 +1,62 @@
+file	line	old_cerr	new_name	note
+src/ast/ast_infer_type.cpp	570	cant_infer_generic	already_declared_function	recategorize: cant_infer_generic - actually a name collision; should be already_declared_function
+src/ast/ast_infer_type.cpp	936	invalid_type	cant_dereference	recategorize: invalid_type - actually a deref fault; should be cant_dereference
+src/ast/ast_infer_type.cpp	940	invalid_type	cant_dereference	recategorize: invalid_type - should be cant_dereference
+src/ast/ast_infer_type.cpp	977	type_not_found	invalid_function_type	recategorize: type_not_found - actually wrong-type fault; should be invalid_function_type
+src/ast/ast_infer_type.cpp	997	function_not_found	cant_address_template_function	recategorize: function_not_found - actually a forbidden-op; should be cant_address_template_function
+src/ast/ast_infer_type.cpp	1036	type_not_found	cant_address_function	recategorize: type_not_found - actually forbidden; should be cant_address_builtin_function
+src/ast/ast_infer_type.cpp	1165	cant_dereference	invalid_null_coalescing_type	recategorize: cant_dereference - actually type-mismatch; should be invalid_null_coalescing_type
+src/ast/ast_infer_type.cpp	1168	cant_dereference	invalid_null_coalescing_type	recategorize: cant_dereference - actually type-mismatch
+src/ast/ast_infer_type.cpp	2050	type_not_found	invalid_typeinfo_dim_table_type	recategorize: type_not_found - actually wrong-type fault
+src/ast/ast_infer_type.cpp	2055	type_not_found	invalid_typeinfo_dim_table_type	recategorize: type_not_found - actually wrong-type fault
+src/ast/ast_infer_type.cpp	2777	type_not_found	invalid_cast_type	recategorize: type_not_found - actually a cast-mismatch
+src/ast/ast_infer_type.cpp	3003	invalid_table_type	cant_index_table	recategorize: invalid_table_type - cant operation; should be cant_index_const_table
+src/ast/ast_infer_type.cpp	3298	variable_not_found	already_declared_block_argument	recategorize: variable_not_found - shadowing not lookup miss; should be already_declared_block_argument
+src/ast/ast_infer_type.cpp	3308	variable_not_found	already_declared_block_argument	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3315	variable_not_found	already_declared_block_argument	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3321	variable_not_found	already_declared_block_argument	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3515	invalid_type	invalid_as	recategorize: invalid_type - actually wrong-construct; should be invalid_as_non_variant
+src/ast/ast_infer_type.cpp	3570	invalid_type	invalid_safe_as	recategorize: invalid_type - actually wrong-construct
+src/ast/ast_infer_type.cpp	3625	invalid_type	invalid_is	recategorize: invalid_type - actually wrong-construct
+src/ast/ast_infer_type.cpp	4220	invalid_return_type	unsafe_return_reference	recategorize: invalid_return_type - actually unsafe; should be unsafe_return_reference
+src/ast/ast_infer_type.cpp	4224	invalid_return_type	unsafe_return_block	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4260	invalid_return_type	unsafe_return_reference	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4264	invalid_return_type	unsafe_return_function	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4583	variable_not_found	already_declared_with_shadow	recategorize: variable_not_found - shadowing not lookup miss
+src/ast/ast_infer_type.cpp	4697	variable_not_found	already_declared_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4705	variable_not_found	already_declared_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4713	variable_not_found	already_declared_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4720	variable_not_found	already_declared_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4726	variable_not_found	already_declared_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4872	variable_not_found	already_declared_local_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4880	variable_not_found	already_declared_local_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4888	variable_not_found	already_declared_local_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4895	variable_not_found	already_declared_local_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4901	variable_not_found	already_declared_local_variable	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4935	invalid_variable_type	unsafe_local_type	recategorize: invalid_variable_type - actually unsafe
+src/ast/ast_infer_type.cpp	5018	invalid_variable_type	unsafe_local_in_scope_required	recategorize: invalid_variable_type - actually unsafe
+src/ast/ast_infer_type.cpp	5202	too_many_infer_passes	exceeds_call_depth	recategorize: too_many_infer_passes - actually call depth not infer passes
+src/ast/ast_infer_type.cpp	5231	too_many_infer_passes	exceeds_call_depth	recategorize: too_many_infer_passes - actually call depth
+src/ast/ast_infer_type.cpp	5363	too_many_infer_passes	exceeds_call_depth	recategorize: too_many_infer_passes - actually call depth
+src/ast/ast_infer_type.cpp	5663	expecting_return_value	invalid_string_builder_argument	recategorize: expecting_return_value - misnamed; actual fault is void argument
+src/ast/ast_infer_type_function.cpp	1064		invalid_argument_type	missing cerr; assign invalid_argument_type
+src/ast/ast_infer_type_function.cpp	1109		recursion_argument	missing cerr; assign recursion-related code
+src/ast/ast_infer_type_function.cpp	1119		recursion_function	missing cerr; assign recursion-related code
+src/ast/ast_infer_type_function.cpp	1391	function_not_found	cant_access_private_structure	recategorize from function_not_found to invalid_private/cant_access_private
+src/ast/ast_infer_type_helper.cpp	892	cant_get_field	cant_access_private_field	recategorize from cant_get_field to invalid_private/cant_access_private
+src/ast/ast_infer_type_make.cpp	42	type_not_found	invalid_generator	recategorize: not a lookup miss; cerr should be invalid_type
+src/ast/ast_infer_type_make.cpp	389	invalid_type	cant_variant_field	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_make.cpp	427	type_not_found	invalid_variant	recategorize: not a lookup miss; cerr should be invalid_type
+src/ast/ast_infer_type_make.cpp	611	invalid_type	cant_structure_field	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_make.cpp	622	cant_get_field	cant_initialize_private_field	recategorize: cerr is cant_get_field; should be invalid_private
+src/ast/ast_infer_type_make.cpp	685	invalid_type	cant_annotation_field	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_op.cpp	710	operator_not_found	mismatching_clone_type	recategorize: cerror operator_not_found wrong; this is type-mismatch on clone (use mismatching_type)
+src/ast/ast_infer_type_report.cpp	607	function_already_declared	missing_finalizer	recategorize: function_already_declared wrong cerr for missing finalizer (verbose path uses reportMissing which keeps it; non-verbose path emits as-is)
+src/ast/ast.cpp	3076	structure_not_found	ambiguous_structure	recategorize: structure_not_found when multiple found is wrong; should be ambiguous_structure
+src/ast/ast.cpp	3088	handle_not_found	invalid_annotation	recategorize: handle_not_found is misleading; this is a type-mismatch on the resolved annotation
+src/ast/ast.cpp	3094	handle_not_found	ambiguous_annotation	recategorize: handle_not_found should be ambiguous_annotation when multiple found
+src/ast/ast.cpp	3106	enumeration_not_found	ambiguous_enumeration	recategorize: enumeration_not_found should be ambiguous_enumeration when multiple found
+src/ast/ast.cpp	3117	type_alias_not_found	ambiguous_type_alias	recategorize: type_alias_not_found should be ambiguous_type_alias when multiple found
+src/ast/ast.cpp	3146	function_not_found	ambiguous_function	recategorize: function_not_found should be ambiguous_function when multiple found
+src/ast/ast_lint.cpp	417	variable_not_found	recursion_global	recategorize: variable_not_found is wrong; this is initialization-recursion
+src/ast/ast_lint.cpp	437	variable_not_found	invalid_global	recategorize: variable_not_found is wrong; this is initialization-order

@@ -618,7 +618,7 @@ namespace das
                 if ( !node ) {
                     if ( !err.empty() ) {
                         context.thisProgram->error("integration error, function failed to simulate", err, "",
-                            at, CompilationError::missing_node );
+                            at, CompilationError::internal_function_annotation );
                         return nullptr;
                     }
                 } else {
@@ -913,7 +913,7 @@ namespace das
                         }
                     }
                     if ( !cpy ) {
-                        context.thisProgram->error("internal compilation error, can't generate structure initialization", "", "", mks->at);
+                        context.thisProgram->error("internal compilation error, can't generate structure initialization", "", "", mks->at, CompilationError::internal_structure);
                     }
                     simlist.push_back(cpy);
                 }
@@ -1121,7 +1121,7 @@ namespace das
                 }
             }
             if ( !cpy ) {
-                context.thisProgram->error("internal compilation error, can't generate array initialization", "", "", mka->at);
+                context.thisProgram->error("internal compilation error, can't generate array initialization", "", "", mka->at, CompilationError::internal_array);
             }
             simlist.push_back(cpy);
         }
@@ -1222,7 +1222,7 @@ namespace das
                 }
             }
             if ( !cpy ) {
-                context.thisProgram->error("internal compilation error, can't generate array initialization", "", "", mkt->at);
+                context.thisProgram->error("internal compilation error, can't generate array initialization", "", "", mkt->at, CompilationError::internal_tuple);
             }
             simlist.push_back(cpy);
         }
@@ -1249,7 +1249,7 @@ namespace das
     // reader
 
     ExpressionPtr SimulateVisitor::visit(ExprReader * expr) {
-        context.thisProgram->error("internal compilation error, calling 'simulate' on reader", "", "", expr->at);
+        context.thisProgram->error("internal compilation error, calling 'simulate' on reader", "", "", expr->at, CompilationError::internal_macro);
         setE(expr, nullptr);
         return expr;
     }
@@ -1257,7 +1257,7 @@ namespace das
     // label
 
     ExpressionPtr SimulateVisitor::visit(ExprLabel * expr) {
-        context.thisProgram->error("internal compilation error, calling 'simulate' on label", "", "", expr->at);
+        context.thisProgram->error("internal compilation error, calling 'simulate' on label", "", "", expr->at, CompilationError::internal_label);
         setE(expr, nullptr);
         return expr;
     }
@@ -1300,11 +1300,11 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprAddr * expr) {
         const auto &at = expr->at;
         if ( !expr->func ) {
-            context.thisProgram->error("internal compilation error, ExprAddr func is null", "", "", at);
+            context.thisProgram->error("internal compilation error, ExprAddr func is null", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
             return expr;
         } else if ( expr->func->index<0 ) {
-            context.thisProgram->error("internal compilation error, ExprAddr func->index is unused", "", "", at);
+            context.thisProgram->error("internal compilation error, ExprAddr func->index is unused", "", "", at, CompilationError::internal_function);
             setE(expr, nullptr);
             return expr;
 
@@ -1349,7 +1349,7 @@ namespace das
             if ( auto resN = expr->type->annotation->simulateNullCoalescing(context, at, getE(expr->subexpr), getE(expr->defaultValue)) ) {
                 setE(expr, resN);
             } else {
-                context.thisProgram->error("internal compilation error, simluateNullCoalescing returned null", "", "", at);
+                context.thisProgram->error("internal compilation error, simulateNullCoalescing returned null", "", "", at, CompilationError::internal_expression);
             }
         } else {
             setE(expr, context.code->makeValueNode<SimNode_NullCoalescing>(expr->type->getR2VType(), at, getE(expr->subexpr), getE(expr->defaultValue)));
@@ -1442,7 +1442,7 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprMakeGenerator * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprMakeGenerator should completly fold during type inference.");
-        context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", "", "", at);
+        context.thisProgram->error("internal compilation error, generating node for ExprMakeGenerator", "", "", at, CompilationError::internal_generator);
         setE(expr, nullptr);
         return expr;
     }
@@ -1450,7 +1450,7 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprYield * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprYield should completly fold during type inference.");
-        context.thisProgram->error("internal compilation error, generating node for ExprYield", "", "", at);
+        context.thisProgram->error("internal compilation error, generating node for ExprYield", "", "", at, CompilationError::internal_generator);
         setE(expr, nullptr);
         return expr;
     }
@@ -1458,7 +1458,7 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprArrayComprehension * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not be here ever, ExprArrayComprehension should completly fold during type inference.");
-        context.thisProgram->error("internal compilation error, generating node for ExprArrayComprehension", "", "", at);
+        context.thisProgram->error("internal compilation error, generating node for ExprArrayComprehension", "", "", at, CompilationError::internal_array);
         setE(expr, nullptr);
         return expr;
     }
@@ -1502,7 +1502,7 @@ namespace das
                 }
             }
             if (!foundOffset) {
-                context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at);
+                context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at, CompilationError::internal_field);
                 setE(expr, nullptr);
                 return expr;
             }
@@ -1587,7 +1587,7 @@ namespace das
             setE(expr, context.code->makeValueNode<SimNode_TableErase>(valueType, at, cont, val, valueTypeSize));
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
-            context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
+            context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
         return expr;
@@ -1610,7 +1610,7 @@ namespace das
             setE(expr, context.code->makeValueNode<SimNode_TableSetInsert>(valueType, at, cont, val));
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
-            context.thisProgram->error("internal compilation error, generating set insert for non-table type", "", "", at);
+            context.thisProgram->error("internal compilation error, generating set insert for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
         return expr;
@@ -1633,7 +1633,7 @@ namespace das
             setE(expr, context.code->makeValueNode<SimNode_TableFind>(valueType, at, cont, val, valueTypeSize));
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
-            context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at);
+            context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
         return expr;
@@ -1656,7 +1656,7 @@ namespace das
             setE(expr, context.code->makeValueNode<SimNode_KeyExists>(valueType, at, cont, val, valueTypeSize));
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
-            context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at);
+            context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at, CompilationError::internal_table);
             setE(expr, nullptr);
         }
         return expr;
@@ -1665,7 +1665,7 @@ namespace das
     ExpressionPtr SimulateVisitor::visit(ExprIs * expr) {
         const auto &at = expr->at;
         DAS_ASSERTF(0, "we should not even be here. 'is' should resolve to const during infer pass.");
-        context.thisProgram->error("internal compilation error, generating 'is'", "", "", at);
+        context.thisProgram->error("internal compilation error, generating 'is'", "", "", at, CompilationError::internal_expression);
         setE(expr, nullptr);
         return expr;
     }
@@ -1680,14 +1680,14 @@ namespace das
         const auto &at = expr->at;
         if ( !expr->macro ) {
             DAS_ASSERTF(0, "we should not even be here. typeinfo should resolve to const during infer pass.");
-            context.thisProgram->error("internal compilation error, generating typeinfo(...)", "", "", at);
+            context.thisProgram->error("internal compilation error, generating typeinfo(...)", "", "", at, CompilationError::internal_macro);
             setE(expr, nullptr);
         } else {
             string errors;
             auto node = expr->macro->simluate(&context, (Expression*)expr, errors);
             if ( !node || !errors.empty() ) {
                 context.thisProgram->error("typeinfo(" + expr->trait + "...) macro generated no node; " + errors,
-                    "", "", at, CompilationError::typeinfo_macro_error);
+                    "", "", at, CompilationError::runtime_macro);
             }
             setE(expr, node);
         }
@@ -1717,7 +1717,7 @@ namespace das
                         setE(expr, context.code->makeNode<SimNode_DeleteClassPtr>(at, sube, total, sze, persistent));
                     } else {
                         context.thisProgram->error("internal compiler error: SimNode_DeleteClassPtr needs size expression", "", "",
-                                                at, CompilationError::missing_node );
+                                                at, CompilationError::internal_expression );
                         setE(expr, nullptr);
                     }
                 } else {
@@ -1737,7 +1737,7 @@ namespace das
                 auto resN = ann->simulateDeletePtr(context, at, sube, total);
                 if ( !resN ) {
                     context.thisProgram->error("integration error, simulateDelete returned null", "", "",
-                                               at, CompilationError::missing_node );
+                                               at, CompilationError::internal_expression );
                 }
                 setE(expr, resN);
             }
@@ -1747,7 +1747,7 @@ namespace das
             auto resN = ann->simulateDelete(context, at, sube, total);
             if ( !resN ) {
                 context.thisProgram->error("integration error, simulateDelete returned null", "", "",
-                                           at, CompilationError::missing_node );
+                                           at, CompilationError::internal_expression );
             }
             setE(expr, resN);
         } else if ( expr->subexpr->type->baseType==Type::tLambda ) {
@@ -1755,7 +1755,7 @@ namespace das
             setE(expr, context.code->makeNode<SimNode_DeleteLambda>(at, sube, total, errorMessage));
         } else {
             DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
-            context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at);
+            context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at, CompilationError::internal_expression);
             setE(expr, nullptr);
         }
         return expr;
@@ -1809,7 +1809,7 @@ namespace das
                 pCall->cmresEval = expr->typeexpr->annotation->simulateGetNew(context, at);
                 if ( !pCall->cmresEval ) {
                     context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
-                                            at, CompilationError::missing_node );
+                                            at, CompilationError::internal_expression );
                 }
                 setE(expr, pCall);
                 return expr;
@@ -1817,7 +1817,7 @@ namespace das
                 newNode = expr->typeexpr->annotation->simulateGetNew(context, at);
                 if ( !newNode ) {
                     context.thisProgram->error("integration error, simulateGetNew returned null", "", "",
-                                            at, CompilationError::missing_node );
+                                            at, CompilationError::internal_expression );
                 }
             }
         } else {
@@ -1857,13 +1857,13 @@ namespace das
                 result = expr->subexpr->type->annotation->simulateGetAtR2V(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAtR2V returned null", "", "",
-                                               at, CompilationError::missing_node );
+                                               at, CompilationError::internal_expression );
                 }
             } else {
                 result = expr->subexpr->type->annotation->simulateGetAt(context, at, r2vType, expr->subexpr, expr->index, extraOffset);
                 if ( !result ) {
                     context.thisProgram->error("integration error, simulateGetAt returned null", "", "",
-                                               at, CompilationError::missing_node );
+                                               at, CompilationError::internal_expression );
                 }
             }
             return result;
@@ -1887,7 +1887,7 @@ namespace das
                 case Type::tInt64:  return context.code->makeValueNode<SimNode_PtrAtR2V_Int64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
                 case Type::tUInt64: return context.code->makeValueNode<SimNode_PtrAtR2V_UInt64>(r2vType->getR2VType(), at, prv, pidx, stride, extraOffset);
                 default:
-                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + expr->index->type->describe(), "", "", at);
+                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + expr->index->type->describe(), "", "", at, CompilationError::internal_expression);
                     return nullptr;
                 };
             } else {
@@ -1897,7 +1897,7 @@ namespace das
                 case Type::tInt64:  return context.code->makeNode<SimNode_PtrAt<int64_t>>(at, prv, pidx, stride, extraOffset);
                 case Type::tUInt64: return context.code->makeNode<SimNode_PtrAt<uint64_t>>(at, prv, pidx, stride, extraOffset);
                 default:
-                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + expr->index->type->describe(), "", "", at);
+                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + expr->index->type->describe(), "", "", at, CompilationError::internal_expression);
                     return nullptr;
                 };
             }
@@ -1910,7 +1910,7 @@ namespace das
                 uint32_t idxC = cast<uint32_t>::to(idxCE->value);
                 if ( idxC >= range ) {
                     context.thisProgram->error("index out of range " + to_string(idxC) + " of " + to_string(range) + ", " + expr->describe(), "", "",
-                        at, CompilationError::index_out_of_range);
+                        at, CompilationError::exceeds_array);
                     return nullptr;
                 }
                 auto tnode = sv_trySimulate(expr->subexpr, extraOffset + idxC*stride, r2vType);
@@ -1958,7 +1958,7 @@ namespace das
                     case tFloat:    setE(expr, (SimNode *) context.code->makeNode<SimNode_AtVector<float>>(at, prv, pidx, range, errorMessage)); break;
                     default:
                         DAS_ASSERTF(0, "we should not even be here. infer type should have failed on unsupported_vector[blah]");
-                        context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", "", "", at);
+                        context.thisProgram->error("internal compilation error, generating vector at for unsupported vector type.", "", "", at, CompilationError::internal_expression);
                         setE(expr, nullptr);
                 }
             }
@@ -2234,7 +2234,7 @@ namespace das
         const auto &at = expr->at;
         int offset = expr->value->type->getVectorFieldOffset(expr->fields[0]);
         if  (offset==-1 ) {
-            context.thisProgram->error("internal compilation error, swizzle field offset of unsupported type", "", "", at);
+            context.thisProgram->error("internal compilation error, swizzle field offset of unsupported type", "", "", at, CompilationError::internal_expression);
             return nullptr;
         }
         if ( auto chain = sv_trySimulate(expr->value, uint32_t(offset) + extraOffset, r2vType) ) {
@@ -2666,7 +2666,7 @@ namespace das
 
     ExpressionPtr SimulateVisitor::visit(ExprTag * expr) {
         const auto &at = expr->at;
-        context.thisProgram->error("internal compilation error, trying to simulate a tag", "", "", at);
+        context.thisProgram->error("internal compilation error, trying to simulate a tag", "", "", at, CompilationError::internal_macro);
         setE(expr, nullptr);
         return expr;
     }
@@ -2680,7 +2680,7 @@ namespace das
         } else {
             auto retN = sv_makeMove(at, expr->left, expr->right);
             if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate move", "", "", at);
+                context.thisProgram->error("internal compilation error, can't generate move", "", "", at, CompilationError::internal_expression);
             }
             setE(expr, retN);
         }
@@ -2702,7 +2702,7 @@ namespace das
             retN = sv_makeCopy(at, expr->left, expr->right);
         }
         if ( !retN ) {
-            context.thisProgram->error("internal compilation error, can't generate clone", "", "", at);
+            context.thisProgram->error("internal compilation error, can't generate clone", "", "", at, CompilationError::internal_expression);
         }
         setE(expr, retN);
         return expr;
@@ -2717,7 +2717,7 @@ namespace das
         } else {
             auto retN = sv_makeCopy(at, expr->left, expr->right);
             if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate copy", "", "", at);
+                context.thisProgram->error("internal compilation error, can't generate copy", "", "", at, CompilationError::internal_expression);
             }
             setE(expr, retN);
         }
@@ -2940,7 +2940,7 @@ namespace das
             sv_simulateBlock(pBlock, blk);
             sv_simulateFinal(pBlock, blk);
         } else {
-            context.thisProgram->error("internal error, expecting block", "", "", bod->at);
+            context.thisProgram->error("internal error, expecting block", "", "", bod->at, CompilationError::internal_block);
         }
     }
 
@@ -3050,7 +3050,7 @@ namespace das
                 } else if ( expr->sources[t]->type->isHandle() ) {
                     if ( !result ) {
                         context.thisProgram->error("integration error, simulateGetIterator returned null", "", "",
-                                                   at, CompilationError::missing_node );
+                                                   at, CompilationError::internal_expression );
                         setE(expr, nullptr);
                         return expr;
                     } else {
@@ -3068,7 +3068,7 @@ namespace das
                         expr->sources[t]->type->getStride());
                 } else {
                     DAS_ASSERTF(0, "we should not be here. we are doing iterator for on an unsupported type.");
-                    context.thisProgram->error("internal compilation error, generating for-with-iterator", "", "", at);
+                    context.thisProgram->error("internal compilation error, generating for-with-iterator", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
                     return expr;
                 }
@@ -3114,7 +3114,7 @@ namespace das
                     }
                 } else {
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
-                    context.thisProgram->error("internal compilation error, generating for", "", "", at);
+                    context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
                     return expr;
                 }
@@ -3151,7 +3151,7 @@ namespace das
                     }
                 } else {
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
-                    context.thisProgram->error("internal compilation error, generating for", "", "", at);
+                    context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
                     return expr;
                 }
@@ -3187,7 +3187,7 @@ namespace das
                     }
                 } else {
                     DAS_ASSERTF(0, "we should not be here yet. logic above assumes optimized for path of some kind.");
-                    context.thisProgram->error("internal compilation error, generating for", "", "", at);
+                    context.thisProgram->error("internal compilation error, generating for", "", "", at, CompilationError::internal_expression);
                     setE(expr, nullptr);
                     return expr;
                 }
@@ -3272,7 +3272,7 @@ namespace das
             simulateExpression(varExpr);
             auto retN = sv_makeMove(var->init->at, varExpr, var->init);
             if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at);
+                context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at, CompilationError::internal_expression);
             }
             return retN;
         } else if ( !var->init_via_move && (var->type->canCopy() || var->type->isGoodBlockType()) ) {
@@ -3283,7 +3283,7 @@ namespace das
             simulateExpression(varExpr);
             auto retN = sv_makeCopy(var->init->at, varExpr, var->init);
             if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate copy", "", "", var->at);
+                context.thisProgram->error("internal compilation error, can't generate copy", "", "", var->at, CompilationError::internal_expression);
             }
             return retN;
         } else if ( var->isCtorInitialized() ) {
@@ -3302,11 +3302,11 @@ namespace das
                 }
             }
             if ( !retN ) {
-                context.thisProgram->error("internal compilation error, can't generate class constructor", "", "", var->at);
+                context.thisProgram->error("internal compilation error, can't generate class constructor", "", "", var->at, CompilationError::internal_class);
             }
             return retN;
         } else {
-            context.thisProgram->error("internal compilation error, initializing variable which can't be copied or moved", "", "", var->at);
+            context.thisProgram->error("internal compilation error, initializing variable which can't be copied or moved", "", "", var->at, CompilationError::internal_variable);
             return nullptr;
         }
     }
@@ -3462,7 +3462,7 @@ namespace das
                 } else if ( collision && collision->init ) {
                     errorAt = &collision->init->debugInfo;
                 }
-                error(message.str(), "", "", errorAt ? *errorAt : LineInfo());
+                error(message.str(), "", "", errorAt ? *errorAt : LineInfo(), CompilationError::internal_global);
                 return;
             }
             context.tabGMnLookup->insert({mnh, context.globalVariables[i].offset});
@@ -3482,7 +3482,7 @@ namespace das
             auto it = context.tabMnLookup->find(mnh);
             if ( it != context.tabMnLookup->end() ) {
                 error("internal compiler error: function mangled name hash collision '" + fn->name + "'",
-                    "", "", LineInfo());
+                    "", "", LineInfo(), CompilationError::internal_function);
                 return;
             }
             context.tabMnLookup->insert({mnh, context.functions + fn->index});
@@ -3501,7 +3501,7 @@ namespace das
                 auto it = context.tabAdLookup->find(s2d.first);
                 if ( it != context.tabAdLookup->end() ) {
                     error("internal compiler error: annotation data hash collision " + to_string(s2d.second),
-                        "", "", LineInfo());
+                        "", "", LineInfo(), CompilationError::internal_annotation);
                     return;
                 }
                 context.tabAdLookup->insert(s2d);
@@ -3569,7 +3569,7 @@ namespace das
         auto time0 = ref_time_ticks();
     #if !(DAS_ENABLE_KEEPALIVE)
         if ( policies.keep_alive ) {
-            error("keep_alive is not enabled in this build. Modify DAS_ENABLE_KEEPALIVE first", "", "", LineInfo());
+            error("keep_alive is not enabled in this build. Modify DAS_ENABLE_KEEPALIVE first", "", "", LineInfo(), CompilationError::invalid_options);
             return false;
         }
     #endif
@@ -3617,7 +3617,7 @@ namespace das
                         return;
                     if ( pvar->index<0 ) {
                         error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
-                            "", "", LineInfo());
+                            "", "", LineInfo(), CompilationError::internal_variable);
                         return;
                     }
                     auto & gvar = context.globalVariables[pvar->index];
@@ -3640,21 +3640,21 @@ namespace das
         }
         bool canAllocateVariables = true;
         if ( context.globalsSize >= policies.max_static_variables_size || context.globalsSize >= 0x100000000ul ) {
-            error("Global variables size exceeds " + to_string(policies.max_static_variables_size), "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo());
+            error("Global variables size exceeds " + to_string(policies.max_static_variables_size), "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo(), CompilationError::exceeds_global);
             canAllocateVariables = false;
         }
         if ( context.sharedSize >= policies.max_static_variables_size || context.sharedSize >= 0x100000000ul ) {
-            error("Shared variables size exceeds " + to_string(policies.max_static_variables_size), "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
+            error("Shared variables size exceeds " + to_string(policies.max_static_variables_size), "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo(), CompilationError::exceeds_global);
             canAllocateVariables = false;
         }
         if ( canAllocateVariables ) {
             context.allocateGlobalsAndShared();
             if ( context.globalsSize && !context.globals ) {
-                error("Failed to allocate memory for global variables", "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo());
+                error("Failed to allocate memory for global variables", "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo(), CompilationError::runtime_global);
                 canAllocateVariables = false;
             }
             if ( context.sharedSize && !context.shared ) {
-                error("Failed to allocate memory for shared variables", "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
+                error("Failed to allocate memory for shared variables", "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo(), CompilationError::runtime_global);
                 canAllocateVariables = false;
             }
             context.totalVariables = totalVariables;
@@ -3679,7 +3679,7 @@ namespace das
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
                             "internal compiler error: [init] function made it all the way to simulate somehow", "",
-                                pfun->at, CompilationError::no_init);
+                                pfun->at, CompilationError::internal_function);
                     }
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
@@ -3726,7 +3726,7 @@ namespace das
                         if ( disableInit && !pvar->init->rtti_isConstant() ) {
                             error("[init] is disabled in the options or CodeOfPolicies",
                                 "internal compiler error: [init] function made it all the way to simulate somehow", "",
-                                    pvar->at, CompilationError::no_init);
+                                    pvar->at, CompilationError::internal_global);
                         }
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
@@ -3794,7 +3794,7 @@ namespace das
                     auto fna = static_cast<FunctionAnnotation*>(an->annotation);
                     if (!fna->simulate(&context, &gfun)) {
                         error("function " + pfun->describe() + " annotation " + fna->name + " simulation failed", "", "",
-                            LineInfo(), CompilationError::cant_initialize);
+                            LineInfo(), CompilationError::runtime_function_annotation);
                     }
                 }
                 indexToFunction[pfun->index] = pfun;
@@ -3911,7 +3911,7 @@ namespace das
             }
             if (!initScriptSuccess) {
                 error("exception during init script", context.getException(), "",
-                    context.exceptionAt, CompilationError::cant_initialize);
+                    context.exceptionAt, CompilationError::runtime_function);
                 context.clearException();
             }
             if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
@@ -3934,7 +3934,7 @@ namespace das
         library.foreach_in_order([&](Module * pm) -> bool {
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->preSimulate(this, &context) ) {
-                    error("simulate macro " + pm->name + "::" + sm->name + " failed to preSimulate", "", "", LineInfo());
+                    error("simulate macro " + pm->name + "::" + sm->name + " failed to preSimulate", "", "", LineInfo(), CompilationError::runtime_macro);
                     bound_env->g_Program = boundProgram;
                     return false;
                 }
@@ -3968,7 +3968,7 @@ namespace das
         library.foreach_in_order([&](Module * pm) -> bool {
             for ( auto & sm : pm->simulateMacros ) {
                 if ( !sm->simulate(this, &context) ) {
-                    error("simulate macro " + pm->name + "::" + sm->name + " failed to simulate", "", "", LineInfo());
+                    error("simulate macro " + pm->name + "::" + sm->name + " failed to simulate", "", "", LineInfo(), CompilationError::runtime_macro);
                     bound_env->g_Program = boundProgram;
                     return false;
                 }

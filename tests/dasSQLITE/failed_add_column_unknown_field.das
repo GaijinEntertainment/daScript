@@ -2,7 +2,7 @@ options gen2
 
 // AddColumnMacro must reject a field name that doesn't exist on the struct,
 // with the same wording the [sql_index] structure annotation uses.
-expect 40104:1
+expect 50503
 
 require sqlite/sqlite_migrate
 

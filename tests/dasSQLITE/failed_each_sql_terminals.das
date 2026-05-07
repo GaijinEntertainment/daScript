@@ -3,7 +3,7 @@ options gen2
 // _each_sql rejects materializing terminals — _to_array, _first, _first_opt,
 // and aggregates each fire a macro_error pointing at `_sql(...)` for the
 // scalar / single-row form.
-expect 40104:4
+expect 50503:4
 
 require daslib/sql
 require sqlite/sqlite_boost

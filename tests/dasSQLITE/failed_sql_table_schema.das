@@ -5,7 +5,7 @@ options gen2
 // failure produces error 30111 = "macro [sql_table] failed to apply to the
 // structure". Validation is fail-fast (first error aborts that struct's
 // apply()) so each struct contributes exactly one error.
-expect 30111:12
+expect 20800:12
 
 require daslib/sql
 require sqlite/sqlite_boost

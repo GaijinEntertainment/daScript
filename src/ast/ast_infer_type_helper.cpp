@@ -92,7 +92,7 @@ namespace das {
             size *= di;
             if (size > 0x7fffffff) {
                 error("array is too big: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_array_dimension);
+                      decl->at, CompilationError::exceeds_array);
                 break;
             }
         }
@@ -110,7 +110,7 @@ namespace das {
         if (decl->baseType == Type::tVoid) {
             if (decl->dim.size()) {
                 error("can't declare an array of void: '" + describeType(decl) + "'", "", "",
-                      decl->at, CompilationError::invalid_type);
+                      decl->at, CompilationError::invalid_array);
             }
             if (decl->ref) {
                 error("can't declare a void reference: '" + describeType(decl) + "'", "", "",
@@ -128,7 +128,7 @@ namespace das {
                               ptrType->at, CompilationError::invalid_type);
                     } else if (!ptrType->annotation->isSmart()) {
                         error("this annotation does not support smart pointers: '" + describeType(decl) + "'", "", "",
-                              ptrType->at, CompilationError::invalid_type);
+                              ptrType->at, CompilationError::invalid_annotation_type);
                     }
                 }
                 verifyType(ptrType);
@@ -146,19 +146,19 @@ namespace das {
             if (auto arrayType = decl->firstType) {
                 if (arrayType->isAutoOrAlias()) {
                     error("array type is not fully resolved: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array_type);
+                      arrayType->at, CompilationError::not_resolved_yet_array_type);
                 }
                 if (arrayType->ref) {
                     error("can't declare an array of references: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array_type);
+                          arrayType->at, CompilationError::invalid_array);
                 }
                 if (arrayType->baseType == Type::tVoid) {
                     error("can't declare a void array: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_array_type);
+                          arrayType->at, CompilationError::invalid_array);
                 }
                 if (!arrayType->canBePlacedInContainer()) {
                     error("can't have array of non-trivial type: '" + describeType(arrayType) + "'", "", "",
-                          arrayType->at, CompilationError::invalid_type);
+                          arrayType->at, CompilationError::invalid_array_type);
                 }
                 verifyType(arrayType);
             }
@@ -166,14 +166,14 @@ namespace das {
             if (auto keyType = decl->firstType) {
                 if (keyType->isAutoOrAlias()) {
                     error("table key is not fully resolved: '" + describeType(keyType) + "'", "", "",
-                          keyType->at, CompilationError::invalid_array_type);
+                      keyType->at, CompilationError::not_resolved_yet_table_type);
                 }
                 if (keyType->ref) {
                     error("table key can't be declared as a reference: '" + describeType(keyType) + "'", "", "",
-                          keyType->at, CompilationError::invalid_table_type);
+                          keyType->at, CompilationError::invalid_table);
                 }
                 if (!(keyType->isWorkhorseType() || (keyType->baseType == Type::tHandle && !keyType->annotation->isRefType()))) {
-                    error("table key has to be declare as a basic 'hashable' type: '" + describeType(keyType) + "'", "", "",
+                    error("table key has to be declared as a basic 'hashable' type: '" + describeType(keyType) + "'", "", "",
                           keyType->at, CompilationError::invalid_table_type);
                 }
                 verifyType(keyType);
@@ -181,15 +181,15 @@ namespace das {
             if (auto valueType = decl->secondType) {
                 if (valueType->isAutoOrAlias()) {
                     error("table value is not fully resolved: '" + describeType(valueType) + "'", "", "",
-                          valueType->at, CompilationError::invalid_array_type);
+                      valueType->at, CompilationError::not_resolved_yet_table_type);
                 }
                 if (valueType->ref) {
                     error("table value can't be declared as a reference: '" + describeType(valueType) + "'", "", "",
-                          valueType->at, CompilationError::invalid_table_type);
+                          valueType->at, CompilationError::invalid_table);
                 }
                 if (!valueType->canBePlacedInContainer()) {
                     error("can't have table value of non-trivial type: '" + describeType(valueType) + "'", "", "",
-                          valueType->at, CompilationError::invalid_type);
+                          valueType->at, CompilationError::invalid_table_type);
                 }
                 verifyType(valueType);
             }
@@ -197,7 +197,7 @@ namespace das {
             if (auto resultType = decl->firstType) {
                 if (!resultType->isReturnType()) {
                     error("not a valid return type: '" + describeType(resultType) + "'", "", "",
-                          resultType->at, CompilationError::invalid_return_type);
+                          resultType->at, CompilationError::invalid_result_type);
                 }
                 verifyType(resultType);
             }
@@ -212,15 +212,15 @@ namespace das {
             for (auto &argType : decl->argTypes) {
                 if (argType->ref) {
                     error("tuple element can't be a reference: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_tuple);
                 }
                 if (argType->isVoid()) {
                     error("tuple element can't be void", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_tuple);
                 }
                 if (!argType->canBePlacedInContainer()) {
                     error("invalid tuple element type: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_tuple_type);
                 }
                 verifyType(argType);
             }
@@ -228,15 +228,15 @@ namespace das {
             for (auto &argType : decl->argTypes) {
                 if (argType->ref) {
                     error("variant element can't be a reference: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_variant);
                 }
                 if (argType->isVoid()) {
                     error("variant element can't be void", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_variant);
                 }
                 if (!argType->canBePlacedInContainer()) {
                     error("invalid variant element type: '" + describeType(argType) + "'", "", "",
-                          argType->at, CompilationError::invalid_type);
+                          argType->at, CompilationError::invalid_variant_type);
                 }
                 verifyType(argType);
             }
@@ -651,7 +651,7 @@ namespace das {
                                 }
                             } else {
                                 error("array dimension must be int32 or uint32", "", "",
-                                      type->at, CompilationError::invalid_array_dimension);
+                                      type->at, CompilationError::invalid_array_dimension_type);
                             }
                         } else {
                             error("array dimension must be constant", "", "",
@@ -666,7 +666,7 @@ namespace das {
         } else if (type->baseType == Type::typeDecl) {
             if (type->dimExpr.size() != 1) {
                 error("typeDecl must have exactly one dimension", "", "",
-                      type->at, CompilationError::invalid_type);
+                      type->at, CompilationError::invalid_type_dimension);
             } else if (type->dimExpr[0]->type) {
                 if (!type->dimExpr[0]->type->isAutoOrAlias()) {
                     auto resType = new TypeDecl(*type->dimExpr[0]->type);
@@ -676,26 +676,26 @@ namespace das {
                     return true;
                 } else {
                     error("can't deduce typeDecl type", "", "",
-                          type->at, CompilationError::invalid_type);
+                      type->at, CompilationError::not_resolved_yet_type);
                 }
             } else {
                 error("can't deduce type", "", "",
-                      type->at, CompilationError::invalid_type);
+                  type->at, CompilationError::not_resolved_yet_type);
             }
         } else if (type->baseType == Type::typeMacro) {
             auto tmn = type->typeMacroName();
             auto tms = findTypeMacro(tmn);
             if (tms.size() == 0) {
                 error("can't find typeMacro " + tmn, "", "",
-                      type->at, CompilationError::invalid_type);
+                      type->at, CompilationError::lookup_macro);
             } else if (tms.size() > 1) {
                 error("too many typeMacro " + tmn + " found", "", "",
-                      type->at, CompilationError::invalid_type);
+                      type->at, CompilationError::ambiguous_macro);
             } else {
                 auto resType = tms[0]->visit(program, thisModule, type, nullptr);
                 if (!resType) {
                     error("can't deduce typeMacro " + tmn, "", "",
-                          type->at, CompilationError::invalid_type);
+                          type->at, CompilationError::invalid_macro_type);
                 } else {
                     TypeDecl::applyAutoContracts(resType, type);
                     type = resType;
@@ -768,11 +768,11 @@ namespace das {
                     return exprType;
                 } else {
                     error("incompatible cast, can't cast " + seT->structType->name + " to " + cT->structType->name, "", "",
-                          at, CompilationError::invalid_cast);
+                          at, CompilationError::invalid_cast_structure);
                 }
             } else {
                 error("invalid cast, expecting structure", "", "",
-                      at, CompilationError::invalid_cast);
+                      at, CompilationError::invalid_cast_structure);
             }
         } else if (seT->isPointer() && seT->firstType && seT->firstType->isStructure()) {
             if (cT->isPointer() && cT->firstType->isStructure()) {
@@ -789,11 +789,11 @@ namespace das {
                     return exprType;
                 } else {
                     error("incompatible cast, can't cast '" + seT->firstType->structType->name + "?' to '" + cT->firstType->structType->name + "?'", "", "",
-                          at, CompilationError::invalid_cast);
+                          at, CompilationError::invalid_cast_structure_pointer);
                 }
             } else {
                 error("invalid cast, expecting structure pointer", "", "",
-                      at, CompilationError::invalid_cast);
+                      at, CompilationError::invalid_cast_structure_pointer);
             }
         }
         return nullptr;
@@ -803,7 +803,7 @@ namespace das {
         auto cTF = castType;
         if (seTF->argTypes.size() != cTF->argTypes.size()) {
             error("invalid cast, number of arguments does not match", "", "",
-                  at, CompilationError::invalid_cast);
+                  at, CompilationError::mismatching_function_argument_count);
             return nullptr;
         }
         // result
@@ -840,7 +840,7 @@ namespace das {
             return funT;
         } else {
             error("incompatible cast, can't cast " + describeType(funT) + " to " + describeType(castType), "", "",
-                  at, CompilationError::invalid_cast);
+                  at, CompilationError::invalid_cast_function);
             return nullptr;
         }
     }
@@ -870,7 +870,7 @@ namespace das {
                 block->moveOnReturn = true;
             } else {
                 error("this type can't be returned at all: '" + describeType(block->returnType) + "'", "", "",
-                      block->at, CompilationError::invalid_return_type);
+                      block->at, CompilationError::invalid_result_type);
             }
         } else {
             block->copyOnReturn = false;
@@ -890,7 +890,7 @@ namespace das {
             }
             if (!canLookup) {
                 error("can't access private field '" + expr->name + "' of " + describeType(expr->value->type) + " outside of member functions.", "", "",
-                      expr->at, CompilationError::cant_get_field);
+                      expr->at, CompilationError::cant_access_private_field);
                 return false;
             }
         }
@@ -957,22 +957,22 @@ namespace das {
     bool InferTypes::inferReturnType(TypeDeclPtr &resType, ExprReturn *expr) {
         if (expr->subexpr && expr->subexpr->type && expr->subexpr->type->isVoid()) {
             error("returning void value", "", "",
-                  expr->at, CompilationError::invalid_return_type);
+                  expr->at, CompilationError::invalid_result);
             return false;
         }
         if (resType->isAuto()) {
             if (expr->subexpr) {
                 if (!expr->subexpr->type) {
-                    error("subexpresion type is not resolved yet", "", "", expr->at);
+                    error("subexpression type is not resolved yet", "", "", expr->at, CompilationError::not_resolved_yet_expression_type);
                     return false;
                 } else if (expr->subexpr->type->isAutoOrAlias()) {
-                    error("subexpresion type is not fully resolved yet", "", "", expr->at);
+                    error("subexpression type is not fully resolved yet", "", "", expr->at, CompilationError::not_resolved_yet_expression_type);
                     return true;
                 }
                 auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type, false, false, nullptr);
                 if (!resT) {
                     error("type can't be inferred, " + describeType(resType) + ", returns " + describeType(expr->subexpr->type), "", "",
-                          expr->at, CompilationError::cant_infer_mismatching_restrictions);
+                          expr->at, CompilationError::mismatching_result_type);
                 } else {
                     resT->ref = false;
                     TypeDecl::applyAutoContracts(resT, resType);
@@ -993,35 +993,35 @@ namespace das {
         if (resType->isVoid()) {
             if (expr->subexpr) {
                 error("not expecting a return value", "", "",
-                      expr->at, CompilationError::not_expecting_return_value);
+                      expr->at, CompilationError::not_expecting_result);
             }
         } else {
             if (!expr->subexpr) {
                 error("expecting a return value", "", "",
-                      expr->at, CompilationError::expecting_return_value);
+                      expr->at, CompilationError::missing_result);
             } else {
                 if (!canCopyOrMoveType(resType, expr->subexpr->type, TemporaryMatters::yes, expr->subexpr,
                                        "incompatible return type", CompilationError::invalid_return_type, expr->at)) {
                 }
                 if (resType->ref && !expr->subexpr->type->isRef()) {
                     error("incompatible return type, reference matters. expecting " + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
-                          expr->at, CompilationError::invalid_return_type);
+                          expr->at, CompilationError::invalid_result_type);
                 }
                 if (resType->isRef() && !resType->isConst() && expr->subexpr->type->isConst() && expr->moveSemantics) {
                     error("incompatible return type, constant matters. expecting " + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
-                          expr->at, CompilationError::invalid_return_type);
+                          expr->at, CompilationError::invalid_result_type);
                 }
             }
         }
         if (resType->isRefType()) {
             if (!resType->canCopy() && !resType->canMove()) {
                 error("this type can't be returned at all " + describeType(resType), "", "",
-                      expr->at, CompilationError::invalid_return_type);
+                      expr->at, CompilationError::invalid_result_type);
             }
         }
         if (expr->moveSemantics && expr->subexpr->type->isConst()) {
             error("can't return via move from a constant value", "", "",
-                  expr->at, CompilationError::cant_move);
+                  expr->at, CompilationError::cant_result);
         }
         return false;
     }

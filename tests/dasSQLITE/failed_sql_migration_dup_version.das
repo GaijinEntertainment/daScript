@@ -2,7 +2,7 @@ options gen2
 
 // Two migrations with version=2 in the same module — must fail at compile time
 // with the [sql_migration] dup-version error (error 30111).
-expect 30111:1
+expect 20800
 
 require sqlite/sqlite_migrate
 

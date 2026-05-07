@@ -1586,7 +1586,7 @@ YY_RULE_SETUP
         string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,lFile);
         auto info = yyextra->g_Access->getFileInfo(incFileName);
         if ( !info ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
+            das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName, CompilationError::lookup_file);
         } else {
             yyextra->g_FileAccessStack.pop_back();
             yyextra->g_FileAccessStack.push_back(info);
@@ -1595,14 +1595,14 @@ YY_RULE_SETUP
         }
     } else {
         das2_yyfatalerror(yylloc_param,yyscanner,"can't process line directive " + string(yytext),
-            CompilationError::invalid_line_directive); return LEXER_ERROR;
+            CompilationError::invalid_line); return LEXER_ERROR;
     }
 }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
 #line 101 "ds2_lexer.lpp"
-das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
+das2_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::invalid_line); return LEXER_ERROR;
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
@@ -1699,14 +1699,14 @@ YY_RULE_SETUP
 case YY_STATE_EOF(c_comment):
 #line 157 "ds2_lexer.lpp"
 {
-    das2_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
+    das2_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::exceeds_file);
     BEGIN(normal);
 }
 	YY_BREAK
 case YY_STATE_EOF(reader):
 #line 161 "ds2_lexer.lpp"
 {
-    das2_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das2_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::exceeds_file);
     BEGIN(normal);
     return END_OF_READ;
 }
@@ -1743,7 +1743,7 @@ YY_RULE_SETUP
 #line 180 "ds2_lexer.lpp"
 {
     if ( yyextra->das_nested_sb ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"nested string constants are not allowed", CompilationError::nested_string_constant);
+        das2_yyfatalerror(yylloc_param,yyscanner,"nested string constants are not allowed", CompilationError::invalid_string);
         BEGIN(normal);
         return END_STRING;
     }
@@ -1755,7 +1755,7 @@ YY_RULE_SETUP
 case YY_STATE_EOF(strb):
 #line 190 "ds2_lexer.lpp"
 {
-    das2_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
+    das2_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -1809,7 +1809,7 @@ YY_RULE_SETUP
 case YY_STATE_EOF(strfmt):
 #line 216 "ds2_lexer.lpp"
 {
-    das2_yyfatalerror(yylloc_param,yyscanner,"string format exceeds file", CompilationError::string_constant_exceeds_file);
+    das2_yyfatalerror(yylloc_param,yyscanner,"string format exceeds file", CompilationError::exceeds_file);
     BEGIN(normal);
     return END_STRING;
 }
@@ -1861,7 +1861,7 @@ YY_RULE_SETUP
     string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,yytext);
     auto info = yyextra->g_Access->getFileInfo(incFileName);
     if ( !info ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName);
+        das2_yyfatalerror(yylloc_param,yyscanner,"can't open "+incFileName, CompilationError::lookup_file);
     } else {
         if ( yyextra->das_already_include.find(incFileName) == yyextra->das_already_include.end() ) {
             yyextra->das_already_include.insert(incFileName);
@@ -2571,7 +2571,7 @@ YY_RULE_SETUP
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui64);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -2586,7 +2586,7 @@ YY_RULE_SETUP
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i64);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;
         }
@@ -2602,7 +2602,7 @@ YY_RULE_SETUP
         uint8_t u8_const;
         auto res = fast_float::from_chars(temptext, temptext+templength, u8_const);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -2618,7 +2618,7 @@ YY_RULE_SETUP
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;
         }
@@ -2633,7 +2633,7 @@ YY_RULE_SETUP
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
         }
@@ -2652,7 +2652,7 @@ YY_RULE_SETUP
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+templength ) {
             return LEXER_ERROR;
         }
@@ -2667,7 +2667,7 @@ YY_RULE_SETUP
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
             return LEXER_ERROR;
         }
@@ -2682,7 +2682,7 @@ YY_RULE_SETUP
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
             return LEXER_ERROR;
         }
@@ -2699,7 +2699,7 @@ YY_RULE_SETUP
             uint8_t u8_const;
             auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext)-2, u8_const, 16);
             if ( res.ec == std::errc::result_out_of_range ) {
-                das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+                das2_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::exceeds_constant);
             } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
                 return LEXER_ERROR;
             }
@@ -2708,7 +2708,7 @@ YY_RULE_SETUP
         } else {
             auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
             if ( res.ec == std::errc::result_out_of_range ) {
-                das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+                das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::exceeds_constant);
             } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
                 return LEXER_ERROR;
             }
@@ -2724,7 +2724,7 @@ YY_RULE_SETUP
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
         if ( res.ec == std::errc::result_out_of_range ) {
-            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+            das2_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::exceeds_constant);
         } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext) ) {
             return LEXER_ERROR;
         }
@@ -2737,7 +2737,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2750,7 +2750,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2764,7 +2764,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2777,7 +2777,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2790,7 +2790,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2803,7 +2803,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2816,7 +2816,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2829,7 +2829,7 @@ YY_RULE_SETUP
 {
     auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
     if ( res.ec == std::errc::result_out_of_range ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+        das2_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::exceeds_constant);
     } else if ( res.ec != std::errc() ) {
         return LEXER_ERROR;
     }
@@ -2841,7 +2841,7 @@ YY_RULE_SETUP
 #line 616 "ds2_lexer.lpp"
 {
     if ( !yyextra->das_nested_parentheses ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parens);
         return LEXER_ERROR;
     }
     yyextra->das_nested_parentheses --;
@@ -2861,7 +2861,7 @@ YY_RULE_SETUP
 #line 628 "ds2_lexer.lpp"
 {
     if ( !yyextra->das_nested_square_braces ) {
-        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        das2_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parens);
         return LEXER_ERROR;
     }
     yyextra->das_nested_square_braces --;
@@ -4477,7 +4477,7 @@ void das2_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
         auto it = yyextra->das_keywords.find(kwd.first);
         if ( it != yyextra->das_keywords.end() && it->second.keyword!=kwd.first ) {
             yyextra->g_Program->error("mismatching keyword " + kwd.first + " in module " + mod->name,
-                it->second.keyword + " is already defined","",LineInfo());
+                it->second.keyword + " is already defined","",LineInfo(), CompilationError::mismatching_module_name);
             return;
         }
         yyextra->das_keywords[kwd.first] = DasKeyword{kwd.second,false,kwd.first};
@@ -4487,7 +4487,7 @@ void das2_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
         auto it = yyextra->das_keywords.find(tfun);
         if ( it != yyextra->das_keywords.end() && it->second.keyword!=keyword ) {
             yyextra->g_Program->error("mismatching type function " + tfun + " in module " + mod->name,
-                it->second.keyword + " is already defined","",LineInfo());
+                it->second.keyword + " is already defined","",LineInfo(), CompilationError::mismatching_module_name);
             return;
         }
         yyextra->das_keywords[tfun] = DasKeyword{false,true,keyword};

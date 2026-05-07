@@ -230,7 +230,7 @@ namespace das {
             for ( auto expr : usedTypeExprs ) {
                 program->error("type expression result is used, and not just passed",
                     "consider default<" + expr->type->describe() + ">", "",
-                        expr->at, CompilationError::invalid_type);
+                        expr->at, CompilationError::invalid_type_expression);
             }
         }
     protected:
@@ -245,7 +245,7 @@ namespace das {
                 auto bif = (BuiltInFunction *) _func;
                 if ( bif->cppName.empty() ) {
                     program->error(_func->describe() + " has no cppName while onlyFastAot option is set", "", "", at,
-                                   CompilationError::only_fast_aot_no_cpp_name );
+                                   CompilationError::missing_function_name );
                 }
             }
         }
@@ -256,7 +256,7 @@ namespace das {
             Visitor::preVisitModule(mod);
             if ( !mod->name.empty() && !isValidModuleName(mod->name) ) {
                 program->error("invalid module name '" + mod->name + "'", "", "",
-                    LineInfo(), CompilationError::invalid_name );
+                    LineInfo(), CompilationError::invalid_module_name );
             }
         }
         bool isValidEnumName(const string & str) const {
@@ -269,7 +269,7 @@ namespace das {
             for ( auto & name : td->argNames ) {
                 if (!isValidVarName(name)) {
                     program->error("invalid type argument name '" + name + "'", "", "",
-                        td->at, CompilationError::invalid_name );
+                        td->at, CompilationError::invalid_argument_name );
                 }
             }
             if ( td->firstType ) lintType(td->firstType);
@@ -285,7 +285,7 @@ namespace das {
             if ( !td->isAuto() ) {
                 if ( td->getSizeOf64()>0x7fffffff ) {
                     program->error("alias '" + name + "' is too big", "", "",
-                        td->at, CompilationError::invalid_type );
+                        td->at, CompilationError::exceeds_type_alias );
                 }
             }
         }
@@ -293,14 +293,14 @@ namespace das {
             Visitor::preVisit(enu);
             if (!isValidEnumName(enu->name)) {
                 program->error("invalid enumeration name '" + enu->name + "'", "", "",
-                    enu->at, CompilationError::invalid_name );
+                    enu->at, CompilationError::invalid_enumeration_name );
             }
         }
         virtual void preVisitEnumerationValue ( Enumeration * enu, const string & name, Expression * value, bool last ) override {
             Visitor::preVisitEnumerationValue(enu,name,value,last);
             if (!isValidEnumValueName(name)) {
                 program->error("invalid enumeration value name '" + name + "'", "", "",
-                    enu->at, CompilationError::invalid_name );
+                    enu->at, CompilationError::invalid_enumerator_name );
             }
         }
         bool isValidStructureName(const string & str) const {
@@ -313,11 +313,11 @@ namespace das {
             Visitor::preVisit(var);
             if (!isValidStructureName(var->name)) {
                 program->error("invalid structure name '" + var->name + "'", "", "",
-                    var->at, CompilationError::invalid_name );
+                    var->at, CompilationError::invalid_structure_name );
             }
             if ( var->getSizeOf64()>0x7fffffff ) {
                 program->error("structure '" + var->name + "' is too big", "", "",
-                    var->at, CompilationError::invalid_type );
+                    var->at, CompilationError::exceeds_structure );
             }
         }
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -327,7 +327,7 @@ namespace das {
                     anyUnsafe = true;
                     if ( checkUnsafe ) {
                         program->error("unsafe in global initializer.", "unsafe are prohibited by CodeOfPolicies", "",
-                            expr->at, CompilationError::unsafe_function);
+                            expr->at, CompilationError::unsafe_global);
                     }
                     return;
                 }
@@ -352,12 +352,12 @@ namespace das {
             Visitor::preVisitStructureField(var, decl, last);
             if (!isValidVarName(decl.name)) {
                 program->error("invalid structure field name " + decl.name, "", "",
-                    decl.at, CompilationError::invalid_name );
+                    decl.at, CompilationError::invalid_field_name );
             }
             if ( noLocalClassMembers ) {
                 if ( !decl.type->ref && decl.type->hasClasses() ) {
                     program->error("class can't contain local class declarations", decl.name + ": " + decl.type->describe(), "",
-                        decl.at, CompilationError::invalid_structure_field_type);
+                        decl.at, CompilationError::cant_field_class);
                 }
             }
         }
@@ -365,37 +365,37 @@ namespace das {
             Visitor::preVisitGlobalLet(var);
             if (!isValidVarName(var->name)) {
                 program->error("invalid variable name '" + var->name + "'", "", "",
-                    var->at, CompilationError::invalid_name );
+                    var->at, CompilationError::invalid_variable_name );
             }
             if ( checkNoGlobalVariables && !var->generated ) {
                 if ( checkNoGlobalVariablesAtAll ) {
                     program->error("variable '" + var->name + "' is disabled via option no_global_variables_at_all", "", "",
-                        var->at, CompilationError::no_global_variables );
+                        var->at, CompilationError::cant_global );
                 } else if ( !var->type->isConst() ) {
                     program->error("variable '" + var->name + "' is not a constant, which is disabled via option no_global_variables", "", "",
-                        var->at, CompilationError::no_global_variables );
+                        var->at, CompilationError::cant_global );
                 }
             }
             if ( checkNoGlobalHeap ) {
                 if ( !var->type->isNoHeapType() ) { // note: this is too dangerous to allow even with generated
                     program->error("variable '" + var->name + "' uses heap, which is disabled via option no_global_heap", "", "",
-                        var->at, CompilationError::no_global_heap );
+                        var->at, CompilationError::cant_global );
                 }
             }
             if ( !var->init ) {
                 if ( needAvoidNullPtr(var->type,true) ) {
                     program->error("global variable of type '" + var->type->describe() + "' needs to be initialized to avoid null pointer", "", "",
-                        var->at, CompilationError::cant_be_null);
+                        var->at, CompilationError::missing_global);
                 }
             } else {
                 if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
                     program->error("global variable of type '" + var->type->describe() + "' can't be initialized with null", "", "",
-                        var->init->at, CompilationError::cant_be_null);
+                        var->init->at, CompilationError::cant_global);
                 }
             }
             if ( var->type->getSizeOf64()>0x7fffffff ) {
                 program->error("global variable '" + var->name + "' is too big", "", "",
-                    var->at,CompilationError::invalid_variable_type);
+                    var->at,CompilationError::exceeds_global);
             }
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
@@ -415,7 +415,7 @@ namespace das {
                     }
                 }
                 program->error("global variable initialization loop", ss.str(), "",
-                    var->at, CompilationError::variable_not_found);
+                    var->at, CompilationError::recursion_global);
             }
             tableLookupCollision.push_back(das_hash_set<uint64_t>());
         }
@@ -423,7 +423,7 @@ namespace das {
             tableLookupCollision.pop_back();
             if ( disableInit && !var->init->rtti_isConstant() ) {   // we double check here, if it made it past infer
                 program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
-                        var->at, CompilationError::no_init);
+                        var->at, CompilationError::cant_global);
             }
             globalVar->index = -3; // initialized. -1 by default
             globalVar = nullptr;
@@ -435,7 +435,7 @@ namespace das {
                 if ( expr->variable->index!=-3 ) {
                     if ( expr->variable->module==globalVar->module ) {
                         program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
-                            "", "", expr->at, CompilationError::variable_not_found);
+                            "", "", expr->at, CompilationError::invalid_global);
                     }
                 }
             }
@@ -449,7 +449,7 @@ namespace das {
                 auto & var = expr->iteratorVariables[i];
                 if (!isValidVarName(var->name)) {
                     program->error("invalid variable name '" + var->name + "'", "", "",
-                        var->at, CompilationError::invalid_name );
+                        var->at, CompilationError::invalid_variable_name );
                 }
             }
         }
@@ -457,7 +457,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( needAvoidNullPtr(expr->subexpr->type,true) ) {
                 program->error("can't delete " + expr->subexpr->type->describe() + ", it will create null pointer", "", "",
-                    expr->subexpr->at, CompilationError::cant_be_null);
+                    expr->subexpr->at, CompilationError::cant_expression);
             }
 
         }
@@ -468,22 +468,22 @@ namespace das {
             for (const auto & var : expr->variables) {
                 if (!isValidVarName(var->name)) {
                     program->error("invalid variable name " + var->name, "", "",
-                        var->at, CompilationError::invalid_name );
+                        var->at, CompilationError::invalid_variable_name );
                 }
                 if ( !var->init ) {
                     if ( needAvoidNullPtr(var->type,true) ) {
                         program->error("local variable of type " + var->type->describe() + " needs to be initialized to avoid null pointer", "", "",
-                            var->at, CompilationError::cant_be_null);
+                            var->at, CompilationError::missing_local);
                     }
                 } else {
                     if ( needAvoidNullPtr(var->type,false) && var->init->rtti_isNullPtr() ) {
                         program->error("local variable of type " + var->type->describe() + " can't be initialized with null", "", "",
-                            var->init->at, CompilationError::cant_be_null);
+                            var->init->at, CompilationError::cant_local);
                     }
                 }
                 if ( var->type->getSizeOf64()>0x7fffffff ) {
                     program->error("local variable " + var->name + " is too big", "", "",
-                        var->at,CompilationError::invalid_variable_type);
+                        var->at,CompilationError::exceeds_local);
                 }
             }
         }
@@ -491,7 +491,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->returnType && needAvoidNullPtr(expr->returnType,false) && expr->subexpr->rtti_isNullPtr() ) {
                 program->error("can't return null", "", "",
-                    expr->subexpr->at, CompilationError::cant_be_null);
+                    expr->subexpr->at, CompilationError::cant_result);
             }
         }
         void verifyToTableMove ( ExprCall * expr ) {
@@ -512,7 +512,7 @@ namespace das {
                                             seen.insert(mc->text.c_str());
                                         } else {
                                             program->error("duplicate key in string=> table initialization", "", "",
-                                                mt->values[0]->at, CompilationError::duplicate_key);
+                                                mt->values[0]->at, CompilationError::already_declared_table);
                                         }
                                     }
                                 }
@@ -530,7 +530,7 @@ namespace das {
                                             seen.insert(mc->value);
                                         } else {
                                             program->error("duplicate key in table initialization", "", "",
-                                                mt->values[0]->at, CompilationError::duplicate_key);
+                                                mt->values[0]->at, CompilationError::already_declared_table);
                                         }
                                     }
                                 }
@@ -547,7 +547,7 @@ namespace das {
                                     seen.insert(mc->text.c_str());
                                 } else {
                                     program->error("duplicate key in string=> set initialization", "", "",
-                                        arg->at, CompilationError::duplicate_key);
+                                        arg->at, CompilationError::already_declared_table);
                                 }
                             }
                         }
@@ -560,7 +560,7 @@ namespace das {
                                     seen.insert(mc->value);
                                 } else {
                                     program->error("duplicate key in set initialization", "", "",
-                                        arg->at, CompilationError::duplicate_key);
+                                        arg->at, CompilationError::already_declared_table);
                                 }
                             }
                         }
@@ -573,7 +573,7 @@ namespace das {
             if ( noWritingToNameless ) {
                 if ( expr->write && !(expr->type->ref || expr->type->isPointer()) ) {
                     program->error("dead write is prohibited by CodeOfPolicies", "\tin " + expr->describe(), "",
-                        expr->at, CompilationError::no_writing_to_nameless);
+                        expr->at, CompilationError::cant_expression);
                 }
             }
         }
@@ -595,7 +595,7 @@ namespace das {
                     "this typically means the AST was modified after type inference "
                     "without signalling that infer needs to run again - check the "
                     "annotation patch() / pass apply() / substitution macro that produced this node",
-                    "", expr->at, CompilationError::missing_node);
+                    "", expr->at, CompilationError::internal_function_not_resolved_yet);
                 return;
             }
             verifyOnlyFastAot(expr->func, expr->at);
@@ -616,7 +616,7 @@ namespace das {
                     }
                 }
                 program->error("function " + expr->func->getMangledName() + " is deprecated.","deprecated functions are prohibited by CodeOfPolicies", message,
-                    expr->at, CompilationError::deprecated_function);
+                    expr->at, CompilationError::cant_function);
             }
             for ( const auto & annDecl : expr->func->annotations ) {
                 auto ann = annDecl->annotation;
@@ -625,7 +625,7 @@ namespace das {
                     string err;
                     if ( !fnAnn->verifyCall(expr, annDecl->arguments, program->options, err) ) {
                         program->error("call annotated by " + fnAnn->name + " failed", err, "",
-                                       expr->at, CompilationError::annotation_failed);
+                                       expr->at, CompilationError::runtime_function_annotation);
                     }
                 }
             }
@@ -634,7 +634,7 @@ namespace das {
                     for ( auto & arg : expr->arguments ) {
                         if ( !arg->noNativeSideEffects ) {
                             program->error("side effects may affect function " + expr->func->name + " evaluation order", "", "",
-                                expr->at, CompilationError::aot_side_effects );
+                                expr->at, CompilationError::invalid_function_argument );
                             break;
                         }
                     }
@@ -648,11 +648,11 @@ namespace das {
                     !expr->arguments.at(1)->rtti_isMakeBlock()) {
                     program->error("builtin_try_recover shouldn't be called directly.",
                         "", "Use `try { ... } recover { ... }` instead.",
-                        expr->at, CompilationError::invalid_argument_type );
+                        expr->at, CompilationError::invalid_function_argument );
                 } else if (exprReturns(static_cast<ExprMakeBlock*>(expr->arguments.front())->block)) {
                     program->error("try { ... } recover { ... } can't have return inside in jit mode",
                         "This feature is not implemented yet.", "",
-                        expr->at, CompilationError::not_expecting_return_value );
+                        expr->at, CompilationError::cant_result );
                 }
             }
             for ( size_t i=0, is=expr->arguments.size(); i!=is; ++i ) {
@@ -661,7 +661,7 @@ namespace das {
                 const auto & argType = funArg->type;
                 if ( needAvoidNullPtr(argType,false) && arg->rtti_isNullPtr() ) {
                     program->error("can't pass null to function " + expr->func->describeName() + " argument " + funArg->name , "", "",
-                        arg->at, CompilationError::cant_be_null);
+                        arg->at, CompilationError::cant_argument);
                 }
             }
             if ( expr->func->fromGeneric && expr->func->fromGeneric->module->name=="builtin" ) {
@@ -720,7 +720,7 @@ namespace das {
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
-                                   CompilationError::aot_side_effects );
+                                   CompilationError::invalid_expression );
                 }
             }
         }
@@ -730,7 +730,7 @@ namespace das {
             if ( checkAotSideEffects ) {
                 if ( !expr->subexpr->noNativeSideEffects || !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect evaluation order", "", "", expr->at,
-                                   CompilationError::aot_side_effects );
+                                   CompilationError::invalid_expression );
                 }
             }
         }
@@ -781,12 +781,12 @@ namespace das {
             */
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
-                    expr->right->at, CompilationError::cant_be_null);
+                    expr->right->at, CompilationError::cant_expression);
             }
             if ( noWritingToNameless && expr->left->rtti_isMakeLocal() ) {
                 program->error("dead assignment to a temporary value, which is prohibited by CodeOfPolicies",
                     getNamelessHint(expr->left, expr->right, "="), "",
-                    expr->left->at, CompilationError::no_writing_to_nameless);
+                    expr->left->at, CompilationError::cant_expression);
             }
         }
         virtual void preVisit ( ExprMove * expr ) override {
@@ -795,17 +795,17 @@ namespace das {
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect move evaluation order", "", "",
-                        expr->at, CompilationError::aot_side_effects );
+                        expr->at, CompilationError::invalid_expression );
                 }
             }
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
-                    expr->right->at, CompilationError::cant_be_null);
+                    expr->right->at, CompilationError::cant_expression);
             }
             if ( noWritingToNameless && expr->left->rtti_isMakeLocal() ) {
                 program->error("dead move to a temporary value, which is prohibited by CodeOfPolicies",
                     getNamelessHint(expr->left, expr->right, "<-"), "",
-                        expr->left->at, CompilationError::no_writing_to_nameless);
+                        expr->left->at, CompilationError::cant_expression);
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {
@@ -814,7 +814,7 @@ namespace das {
             if ( checkAotSideEffects ) {
                 if ( !expr->left->noNativeSideEffects || !expr->right->noNativeSideEffects ) {
                     program->error("side effects may affect clone evaluation order", "", "",
-                        expr->at, CompilationError::aot_side_effects );
+                        expr->at, CompilationError::invalid_expression );
                 }
             }
         }
@@ -822,29 +822,29 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->subexpr->type->getSizeOf64()>0x7fffffff ) {
                 program->error("can't ascend type which is too big", "", "",
-                    expr->at, CompilationError::invalid_new_type);
+                    expr->at, CompilationError::exceeds_type);
             }
             if ( !expr->subexpr->type->getSizeOf64() ) {
                 program->error("can't ascend (to heap) type of size 0",  "", "",
-                    expr->at, CompilationError::invalid_new_type);
+                    expr->at, CompilationError::invalid_type);
             }
         }
         virtual void preVisit ( ExprNew * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->typeexpr->getSizeOf64()>0x7fffffff ) {
                 program->error("can't new to a type that is too big", "", "",
-                    expr->at, CompilationError::invalid_new_type);
+                    expr->at, CompilationError::exceeds_type);
             }
             if ( !expr->typeexpr->getSizeOf64() ) {
                 program->error("can't new (to heap) type of size 0",  "", "",
-                    expr->at, CompilationError::invalid_new_type);
+                    expr->at, CompilationError::invalid_type);
             }
         }
         virtual void preVisit ( ExprAssert * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
                 program->error("assert expressions can't have side-effects (use verify instead)", "", "",
-                    expr->at, CompilationError::assert_with_side_effects);
+                    expr->at, CompilationError::invalid_expression);
             }
         }
         virtual void preVisit ( ExprUnsafe * expr ) override {
@@ -880,12 +880,12 @@ namespace das {
             func = fn;
             if (!isValidFunctionName(fn->name)) {
                 program->error("invalid function name " + fn->name, "", "",
-                    fn->at, CompilationError::invalid_name );
+                    fn->at, CompilationError::invalid_function_name );
             }
             if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
                 if ( !exprReturns(fn->body) ) {
                     program->error("not all control paths return value",  "", "",
-                        fn->at, CompilationError::not_all_paths_return_value);
+                        fn->at, CompilationError::missing_function_result);
                 }
             }
             if ( !fn->safeImplicit ) {
@@ -897,7 +897,7 @@ namespace das {
                             anyUnsafe = true;
                             if ( checkUnsafe ) {
                                 program->error("implicit argument " + arg->name,  "implicit is unsafe and is prohibited by the CodeOfPolicies", "",
-                                    fn->at, CompilationError::unsafe_function);
+                                    fn->at, CompilationError::unsafe_argument);
                             }
                         }
                     }
@@ -908,13 +908,13 @@ namespace das {
                     auto fann = static_cast<FunctionAnnotation*>(ann->annotation);
                     string err;
                     if ( !fann->lint(fn, *program->thisModuleGroup, ann->arguments, program->options, err) ) {
-                        program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::annotation_failed );
+                        program->error("function annotation lint failed\n", err, "", fn->at, CompilationError::runtime_function_annotation );
                     }
                 }
             }
             if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
-                    fn->at, CompilationError::no_init);
+                    fn->at, CompilationError::cant_function);
             }
             if ( alwaysCallSuper && fn->isClassMethod && fn->classParent && fn->classParent->parent && fn->name==(fn->classParent->name+"`"+fn->classParent->name)) {
                 isClassCtor = true; // detect class constructor, but only if we always call super
@@ -923,7 +923,7 @@ namespace das {
         virtual FunctionPtr visit ( Function * fn ) override {
             if ( isClassCtor && !anySuperCalls ) {
                 program->error("class constructor " + fn->name + " does not call super initializer", "",
-                    "", fn->at, CompilationError::invalid_member_function);
+                    "", fn->at, CompilationError::missing_function_body);
             }
             anySuperCalls = false;
             isClassCtor = false;
@@ -934,18 +934,18 @@ namespace das {
             Visitor::preVisitArgument(fn, var, lastArg);
             if (!isValidVarName(var->name)) {
                 program->error("invalid argument variable name " + var->name, "", "",
-                    var->at, CompilationError::invalid_name );
+                    var->at, CompilationError::invalid_argument_name );
             }
             if ( checkUnusedArgument ) {
                 if ( !var->marked_used && var->isAccessUnused() ) {
                     program->error("unused function argument " + var->name, "",
                           "use [unused_argument(" + var->name + ")] if intentional",
-                        var->at, CompilationError::unused_function_argument);
+                        var->at, CompilationError::invalid_function_argument);
                 }
             }
             if ( var->type->getSizeOf64()>0x7fffffff ) {
                 program->error("argument variable " + var->name + " is too big", "", "",
-                    var->at,CompilationError::invalid_variable_type);
+                    var->at,CompilationError::exceeds_argument);
             }
         }
         virtual void preVisit ( ExprBlock * block ) override {
@@ -954,38 +954,38 @@ namespace das {
                 if (  !block->returnType->isVoid() && !block->returnType->isAuto() ) {
                     if ( !exprReturns(block) ) {
                         program->error("not all control paths of the block return value",  "", "",
-                            block->at, CompilationError::not_all_paths_return_value);
+                            block->at, CompilationError::missing_block_result);
                     }
                 }
             }
             if (jitEnabled() && !block->finalList.empty() && block->hasExitByLabel) {
                 program->error("jit blocks can't have finally and goto", "", "",
-                    block->at, CompilationError::invalid_label);
+                    block->at, CompilationError::cant_block);
             }
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
             if (!isValidVarName(var->name)) {
                 program->error("invalid block argument variable name " + var->name, "", "",
-                    var->at, CompilationError::invalid_name );
+                    var->at, CompilationError::invalid_argument_name );
             }
             if ( checkUnusedBlockArgument ) {
                 if ( !var->marked_used && var->isAccessUnused() ) {
                     program->error("unused block argument " + var->name, "",
                           "use [unused_argument(" + var->name + ")] if intentional",
-                        var->at, CompilationError::unused_block_argument);
+                        var->at, CompilationError::invalid_block_argument);
                 }
             }
             if ( var->type->getSizeOf64()>0x7fffffff ) {
                 program->error("block argument variable " + var->name + " is too big", "", "",
-                    var->at,CompilationError::invalid_variable_type);
+                    var->at,CompilationError::exceeds_argument);
             }
         }
         virtual void preVisit ( ExprMakeStruct * mks ) override {
             Visitor::preVisit(mks);
             if ( mks->constructor && mks->constructor->arguments.size() ) {
                 program->error("default arguments of constructors can't be used in make declarations", "its not yet implemented", "",
-                    mks->at, CompilationError::unspecified);
+                    mks->at, CompilationError::cant_argument_structure);
             }
         }
         virtual void preVisit ( ExprTypeDecl * expr ) override {
@@ -1000,7 +1000,7 @@ namespace das {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
-                        expr->at, CompilationError::top_level_no_sideeffect_operation);
+                        expr->at, CompilationError::invalid_expression);
                 }
             }
         }
@@ -1016,7 +1016,7 @@ namespace das {
                 auto op2 = static_cast<ExprOp2 *>(expr);
                 if ( op2->func && op2->func->builtIn && op2->func->sideEffectFlags==0 ) {
                     program->error("top level no side effect operation " + op2->op, "", "",
-                        expr->at, CompilationError::top_level_no_sideeffect_operation);
+                        expr->at, CompilationError::invalid_expression);
                 }
             }
         }
@@ -1038,7 +1038,7 @@ namespace das {
                     } else {
                         program->error("potential table lookup collision for " + subexprText, "",
                                 "tab[key1] = tab[key2], or fun(tab[key1],tab[key2]) scenarios may produce undefined behavior",
-                                expr->subexpr->at, CompilationError::table_lookup_collision);
+                                expr->subexpr->at, CompilationError::invalid_table_expression);
                     }
                 } else {
                     tableLookupCollision.back().insert(subexprHash);
@@ -1143,7 +1143,7 @@ namespace das {
             auto it = ao.find(opt.name);
             if ( it != ao.end() ) {
                 error("internal error: option '" + string(opt.name) + "' is already defined",
-                    "", "", LineInfo(), CompilationError::internal_error);
+                    "", "", LineInfo(), CompilationError::internal_options);
             } else {
                 ao[opt.name] = opt.type;
             }
@@ -1152,7 +1152,7 @@ namespace das {
             auto it = ao.find(opt.first);
             if ( it != ao.end() ) {
                 error("internal error: option '" + opt.first + "' is already defined",
-                    "", "", LineInfo(), CompilationError::internal_error);
+                    "", "", LineInfo(), CompilationError::internal_options);
             } else {
                 ao[opt.first] = opt.second;
             }
@@ -1175,11 +1175,11 @@ namespace das {
                 error("invalid option type for '" + opt.name
                       + "', unexpected '" + das_to_string(opt.type)
                       + "', expecting '" + das_to_string(optT) + "'", "", "",
-                        LineInfo(), CompilationError::invalid_option);
+                        LineInfo(), CompilationError::invalid_options);
             } else if ( optT==Type::none ){
                 if ( opt.name[0]!='_' ) {
                     error("invalid option '" + opt.name + "'",  "", "",
-                        LineInfo(), CompilationError::invalid_option);
+                        LineInfo(), CompilationError::invalid_options);
                 } else {
                     // custom user option (name starts with '_'), we don't care what's in there
                     continue;
@@ -1214,7 +1214,7 @@ namespace das {
             if ( expr->rtti_isTypeDecl() ) return expr;
             if ( expr->type->isAliasOrExpr() ) {
                 program->error("internal error. leaking alias or expression type",expr->type->describe(),"",
-                    expr->at,CompilationError::internal_error);
+                    expr->at,CompilationError::internal_type);
             }
             return expr;
         }

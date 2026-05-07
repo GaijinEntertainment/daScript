@@ -2,7 +2,7 @@ options gen2
 
 // Each `_sql_update` / `_sql_delete` call below is intentionally malformed.
 // 40104 = macro_error (from the analyzer).
-expect 40104:7
+expect 50503:7
 
 require daslib/sql
 require sqlite/sqlite_boost

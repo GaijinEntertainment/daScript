@@ -1,5 +1,5 @@
 options gen2
-expect 40102:1
+expect 50501
 
 // Verify that [constexpr] annotation rejects non-constant arguments.
 // The call `foo("ouch", BOO)` must fail because BOO is a global variable,

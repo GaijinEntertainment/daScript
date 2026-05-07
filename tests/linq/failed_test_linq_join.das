@@ -5,7 +5,7 @@
 // Each rejected shape produces one macro_failed (40104) diagnostic.
 // See modules/dasSQLITE/API_REWORK.md "### 23-joins" for the spec.
 options gen2
-expect 40104:5
+expect 50503:5
 
 require daslib/linq
 require daslib/linq_boost

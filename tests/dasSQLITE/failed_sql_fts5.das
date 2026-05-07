@@ -5,7 +5,7 @@ options gen2
 //   1. @sql_column on @sql_fts_rank — rank is hardcoded to FTS5's hidden id.
 //
 // All fail with 30111 ("macro [sql_fts5] failed to apply").
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

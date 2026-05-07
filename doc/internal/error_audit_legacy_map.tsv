@@ -1,0 +1,1117 @@
+file	line	old_cerr	new_name	new_num	classification	wording_change
+src/ast/ast_infer_type.cpp	79	invalid_type	recursion_type_alias	31106	primary	
+src/ast/ast_infer_type.cpp	85	invalid_type	internal_type_alias	50638	internal	
+src/ast/ast_infer_type.cpp	91	invalid_type	not_resolved_yet_type_alias	31331	follow_on	
+src/ast/ast_infer_type.cpp	155		not_resolved_yet_enumerator	31311	follow_on	current cerr unspecified - should be not_resolved_yet_enumerator
+src/ast/ast_infer_type.cpp	167		not_resolved_yet_enumerator	31311	follow_on	current cerr unspecified - should be not_resolved_yet_enumerator
+src/ast/ast_infer_type.cpp	170	invalid_enumeration	invalid_enumerator_type	30149	primary	
+src/ast/ast_infer_type.cpp	177	invalid_enumeration	invalid_enumerator	30147	primary	
+src/ast/ast_infer_type.cpp	218	cant_infer_missing_initializer	missing_structure_field	30320	primary	
+src/ast/ast_infer_type.cpp	255		not_resolved_yet_structure_field	31326	follow_on	current cerr unspecified - should be not_resolved_yet_structure_field; vague: clarify what is not resolved
+src/ast/ast_infer_type.cpp	265	invalid_structure_field_type	lookup_structure_field_type	30826	primary	
+src/ast/ast_infer_type.cpp	272	invalid_structure_field_type	invalid_structure_field_type	30237	primary	
+src/ast/ast_infer_type.cpp	286	invalid_structure_field_type	invalid_structure_field_type	30237	primary	
+src/ast/ast_infer_type.cpp	289	invalid_structure_field_type	invalid_structure_field_type	30237	primary	
+src/ast/ast_infer_type.cpp	295	unsafe	unsafe_structure_field	31030	primary	
+src/ast/ast_infer_type.cpp	305	invalid_initialization_type	cant_structure_field	30947	primary	
+src/ast/ast_infer_type.cpp	312	invalid_initialization_type	invalid_structure_field_init	30236	wording_fix	typo: missing space, '<name>can't' -> '<name> can't'
+src/ast/ast_infer_type.cpp	315	cant_move	cant_structure_field	30947	primary	
+src/ast/ast_infer_type.cpp	360	invalid_type	recursion_structure	31105	primary	
+src/ast/ast_infer_type.cpp	370	unsafe	unsafe_global	31014	primary	
+src/ast/ast_infer_type.cpp	375	no_global_variables	invalid_global_options	30176	primary	
+src/ast/ast_infer_type.cpp	379	cant_infer_missing_initializer	missing_global_init	30312	primary	
+src/ast/ast_infer_type.cpp	387	invalid_type	lookup_global_type	30817	primary	
+src/ast/ast_infer_type.cpp	403	cant_infer_mismatching_restrictions	invalid_global_init_type	30175	primary	
+src/ast/ast_infer_type.cpp	420	invalid_initialization_type	invalid_global_init_type	30175	primary	
+src/ast/ast_infer_type.cpp	423	invalid_initialization_type	invalid_global_init_type	30175	primary	
+src/ast/ast_infer_type.cpp	426	cant_move	cant_global	30930	primary	
+src/ast/ast_infer_type.cpp	429	cant_copy	cant_global	30930	primary	
+src/ast/ast_infer_type.cpp	436	cant_move	cant_global	30930	primary	
+src/ast/ast_infer_type.cpp	467	no_init	invalid_global_init_options	30174	primary	
+src/ast/ast_infer_type.cpp	480	invalid_variable_type	invalid_global_type	30179	primary	
+src/ast/ast_infer_type.cpp	483	invalid_variable_type	invalid_global_type	30179	primary	
+src/ast/ast_infer_type.cpp	486	invalid_variable_type	invalid_global_type	30179	primary	
+src/ast/ast_infer_type.cpp	489	invalid_variable_type	invalid_global_shared	30178	primary	
+src/ast/ast_infer_type.cpp	492	invalid_variable_type	missing_global_shared_init	30313	primary	
+src/ast/ast_infer_type.cpp	496	invalid_variable_type	invalid_global_type_shared	30180	primary	
+src/ast/ast_infer_type.cpp	501	unsafe	unsafe_global_pointer	31015	primary	
+src/ast/ast_infer_type.cpp	505	invalid_variable_type	missing_global_init	30312	primary	
+src/ast/ast_infer_type.cpp	543	too_many_arguments	exceeds_function_argument	30505	primary	
+src/ast/ast_infer_type.cpp	547	no_init	invalid_function_options	30164	primary	
+src/ast/ast_infer_type.cpp	558	type_not_found	lookup_function_argument_type	30812	primary	
+src/ast/ast_infer_type.cpp	563	invalid_type	invalid_function_argument_type	30161	primary	
+src/ast/ast_infer_type.cpp	570	cant_infer_generic	already_declared_function	30702	recategorize	recategorize: cant_infer_generic - actually a name collision; should be already_declared_function
+src/ast/ast_infer_type.cpp	585	cant_infer_generic	invalid_function_argument_type	30161	primary	
+src/ast/ast_infer_type.cpp	596	invalid_type	invalid_function_argument_type	30161	primary	
+src/ast/ast_infer_type.cpp	600	invalid_type	invalid_function_argument_type	30161	primary	
+src/ast/ast_infer_type.cpp	607	cant_infer_generic	not_resolved_yet_function	31313	primary	
+src/ast/ast_infer_type.cpp	620	expecting_return_value	missing_function_result	30310	primary	
+src/ast/ast_infer_type.cpp	633	type_not_found	lookup_function_result_type	30814	primary	
+src/ast/ast_infer_type.cpp	639	invalid_return_type	invalid_function_result_type	30167	primary	
+src/ast/ast_infer_type.cpp	658	invalid_return_type	invalid_function_result_type	30167	primary	
+src/ast/ast_infer_type.cpp	677	unspecified	internal_function_changed	50611	internal	current cerr unspecified - should be internal_function_changed
+src/ast/ast_infer_type.cpp	783	invalid_enumeration	not_resolved_yet_enumerator	31311	follow_on	
+src/ast/ast_infer_type.cpp	843	type_not_found	not_resolved_yet_label_type	31319	follow_on	
+src/ast/ast_infer_type.cpp	848	invalid_label	invalid_label_type	30194	primary	
+src/ast/ast_infer_type.cpp	871	invalid_label	lookup_label	30819	primary	
+src/ast/ast_infer_type.cpp	885	unsupported_read_macro	invalid_macro_read	30204	primary	
+src/ast/ast_infer_type.cpp	893	invalid_label	already_declared_label	30703	primary	
+src/ast/ast_infer_type.cpp	936	invalid_type	cant_dereference	30921	recategorize	recategorize: invalid_type - actually a deref fault; should be cant_dereference
+src/ast/ast_infer_type.cpp	940	invalid_type	cant_dereference	30921	recategorize	recategorize: invalid_type - should be cant_dereference
+src/ast/ast_infer_type.cpp	961	type_not_found	lookup_function_address_type	30811	primary	
+src/ast/ast_infer_type.cpp	967	type_not_found	lookup_function_type	30815	primary	
+src/ast/ast_infer_type.cpp	977	type_not_found	invalid_function_type	30168	recategorize	recategorize: type_not_found - actually wrong-type fault; should be invalid_function_type
+src/ast/ast_infer_type.cpp	997	function_not_found	cant_address_template_function	30903	recategorize	recategorize: function_not_found - actually a forbidden-op; should be cant_address_template_function
+src/ast/ast_infer_type.cpp	1007	function_not_found	lookup_function	30810	primary	
+src/ast/ast_infer_type.cpp	1012	function_not_found	lookup_function	30810	mid_inference	
+src/ast/ast_infer_type.cpp	1036	type_not_found	cant_address_function	30902	recategorize	recategorize: type_not_found - actually forbidden; should be cant_address_builtin_function
+src/ast/ast_infer_type.cpp	1054	type_not_found	not_resolved_yet_dereference_type	31310	follow_on	
+src/ast/ast_infer_type.cpp	1059	cant_dereference	cant_dereference	30921	primary	
+src/ast/ast_infer_type.cpp	1062	cant_dereference	cant_dereference	30921	primary	
+src/ast/ast_infer_type.cpp	1078	cant_dereference	cant_take_pointer	30948	primary	
+src/ast/ast_infer_type.cpp	1099	unsafe	unsafe_address	31000	primary	
+src/ast/ast_infer_type.cpp	1153	type_not_found	not_resolved_yet_null_coalescing_type	31324	follow_on	
+src/ast/ast_infer_type.cpp	1159	cant_dereference	cant_dereference	30921	primary	
+src/ast/ast_infer_type.cpp	1162	cant_dereference	cant_dereference	30921	primary	
+src/ast/ast_infer_type.cpp	1165	cant_dereference	invalid_null_coalescing_type	30215	recategorize	recategorize: cant_dereference - actually type-mismatch; should be invalid_null_coalescing_type
+src/ast/ast_infer_type.cpp	1168	cant_dereference	invalid_null_coalescing_type	30215	recategorize	recategorize: cant_dereference - actually type-mismatch
+src/ast/ast_infer_type.cpp	1192	invalid_argument_count	invalid_static_assert_argument_count	30226	primary	
+src/ast/ast_infer_type.cpp	1199	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1204	invalid_argument_type	invalid_static_assert_condition_type	30228	primary	
+src/ast/ast_infer_type.cpp	1207	invalid_argument_type	invalid_static_assert_comment_type	30227	primary	
+src/ast/ast_infer_type.cpp	1233	concept_failed	concept_failed	31400	mid_inference	
+src/ast/ast_infer_type.cpp	1239	static_assert_failed	static_assert_failed	31403	mid_inference	
+src/ast/ast_infer_type.cpp	1260	invalid_argument_count	invalid_assert_argument_count	30116	primary	
+src/ast/ast_infer_type.cpp	1267	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1272	invalid_argument_type	invalid_assert_condition_type	30118	primary	
+src/ast/ast_infer_type.cpp	1275	invalid_argument_type	invalid_assert_comment_type	30117	primary	
+src/ast/ast_infer_type.cpp	1283	invalid_argument_count	invalid_quote_argument_count	30219	primary	
+src/ast/ast_infer_type.cpp	1306	invalid_argument_count	invalid_debug_argument_count	30141	primary	
+src/ast/ast_infer_type.cpp	1312	invalid_argument_type	invalid_debug_comment_type	30142	primary	
+src/ast/ast_infer_type.cpp	1325	invalid_argument_count	invalid_memzero_argument_count	30208	primary	
+src/ast/ast_infer_type.cpp	1332	invalid_argument_type	invalid_memzero_argument_type	30209	primary	
+src/ast/ast_infer_type.cpp	1335	invalid_argument_type	invalid_memzero_argument	30207	primary	
+src/ast/ast_infer_type.cpp	1357	function_not_found	ambiguous_call_macro	30602	primary	
+src/ast/ast_infer_type.cpp	1433	function_not_found	ambiguous_super_call	30610	mid_inference	
+src/ast/ast_infer_type.cpp	1440	function_not_found	lookup_super_method	30830	primary	
+src/ast/ast_infer_type.cpp	1444	function_not_found	invalid_super_call	30245	primary	
+src/ast/ast_infer_type.cpp	1450	function_not_found	not_resolved_yet_method_call	31322	follow_on	
+src/ast/ast_infer_type.cpp	1580	invalid_argument_count	recursion_function_argument	31103	primary	
+src/ast/ast_infer_type.cpp	1601	invalid_argument_count	not_resolved_yet_function	31313	follow_on	
+src/ast/ast_infer_type.cpp	1605	invalid_argument_count	invalid_invoke_argument_type	30187	primary	
+src/ast/ast_infer_type.cpp	1617	invalid_argument_count	invalid_invoke_target_type	30189	primary	
+src/ast/ast_infer_type.cpp	1620	invalid_argument_count	invalid_invoke_target_type	30189	wording_fix	duplicate error call - line 1617 already emitted same error; remove duplicate
+src/ast/ast_infer_type.cpp	1624	invalid_argument_count	lookup_method	30822	primary	
+src/ast/ast_infer_type.cpp	1628	invalid_argument_count	invalid_invoke_method_syntax	30188	primary	
+src/ast/ast_infer_type.cpp	1632	invalid_argument_count	not_resolved_yet_class_type	31307	follow_on	
+src/ast/ast_infer_type.cpp	1636	invalid_argument_count	invalid_invoke_method_syntax	30188	primary	
+src/ast/ast_infer_type.cpp	1640	invalid_argument_count	invalid_invoke_argument_count	30186	primary	
+src/ast/ast_infer_type.cpp	1659	invalid_argument_count	invalid_invoke_argument_count	30186	primary	
+src/ast/ast_infer_type.cpp	1667	invalid_argument_type	not_resolved_yet_invoke_argument_type	31317	follow_on	
+src/ast/ast_infer_type.cpp	1672	invalid_argument_type	not_resolved_yet_invoke_argument_type	31317	follow_on	
+src/ast/ast_infer_type.cpp	1687	invalid_argument_type	invalid_invoke_target_type	30189	primary	
+src/ast/ast_infer_type.cpp	1692	invalid_argument_count	invalid_invoke_argument_count	30186	primary	
+src/ast/ast_infer_type.cpp	1702	invalid_argument_type	not_resolved_yet_invoke_argument_type	31317	follow_on	
+src/ast/ast_infer_type.cpp	1709	invalid_argument_type	invalid_invoke_argument_type	30187	primary	
+src/ast/ast_infer_type.cpp	1752	invalid_argument_count	invalid_insert_argument_count	30185	primary	
+src/ast/ast_infer_type.cpp	1761	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1767	invalid_argument_type	invalid_table_key_type	30252	primary	
+src/ast/ast_infer_type.cpp	1771	invalid_argument_type	invalid_table_argument_type	30249	primary	
+src/ast/ast_infer_type.cpp	1784	invalid_argument_count	invalid_erase_argument_count	30150	primary	
+src/ast/ast_infer_type.cpp	1793	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1799	invalid_argument_type	invalid_table_key_type	30252	primary	
+src/ast/ast_infer_type.cpp	1803	invalid_argument_type	invalid_table_argument_type	30249	primary	
+src/ast/ast_infer_type.cpp	1816	invalid_argument_count	invalid_find_argument_count	30156	primary	
+src/ast/ast_infer_type.cpp	1825	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1831	invalid_argument_type	invalid_table_key_type	30252	primary	
+src/ast/ast_infer_type.cpp	1836	invalid_argument_type	invalid_table_argument_type	30249	primary	
+src/ast/ast_infer_type.cpp	1850	invalid_argument_count	invalid_key_exists_argument_count	30193	primary	
+src/ast/ast_infer_type.cpp	1859	type_not_found	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	1865	invalid_argument_type	invalid_table_key_type	30252	primary	
+src/ast/ast_infer_type.cpp	1869	invalid_argument_type	invalid_table_argument_type	30249	primary	
+src/ast/ast_infer_type.cpp	1884	type_not_found	not_resolved_yet_is_expression_type	31318	follow_on	
+src/ast/ast_infer_type.cpp	1896	type_not_found	not_resolved_yet_is_expression_type	31318	follow_on	
+src/ast/ast_infer_type.cpp	1907	type_not_found	lookup_is_expression_type	30818	primary	
+src/ast/ast_infer_type.cpp	1913	typeinfo_auto	invalid_is_expression	30191	primary	
+src/ast/ast_infer_type.cpp	1918	type_not_found	not_resolved_yet_is_expression_type	31318	follow_on	
+src/ast/ast_infer_type.cpp	1942	type_not_found	lookup_type	30832	primary	
+src/ast/ast_infer_type.cpp	1948	type_not_found	not_resolved_yet_type	31330	follow_on	
+src/ast/ast_infer_type.cpp	1976	type_not_found	not_resolved_yet_typeinfo	31332	follow_on	
+src/ast/ast_infer_type.cpp	1989	type_not_found	lookup_typeinfo_type	30837	primary	
+src/ast/ast_infer_type.cpp	1995	typeinfo_auto	invalid_typeinfo	30265	primary	
+src/ast/ast_infer_type.cpp	2000	type_not_found	not_resolved_yet_typeinfo	31332	follow_on	
+src/ast/ast_infer_type.cpp	2011	invalid_type	not_resolved_yet_typeinfo_sizeof	31336	follow_on	
+src/ast/ast_infer_type.cpp	2016	invalid_type	exceeds_typeinfo_sizeof	30514	primary	
+src/ast/ast_infer_type.cpp	2026	invalid_type	not_resolved_yet_typeinfo_alignof	31333	follow_on	
+src/ast/ast_infer_type.cpp	2037	type_not_found	not_resolved_yet_typeinfo_dim	31334	follow_on	
+src/ast/ast_infer_type.cpp	2045	typeinfo_dim	invalid_typeinfo_dim	30268	primary	
+src/ast/ast_infer_type.cpp	2050	type_not_found	invalid_typeinfo_dim_table_type	30270	recategorize	recategorize: type_not_found - actually wrong-type fault
+src/ast/ast_infer_type.cpp	2055	type_not_found	invalid_typeinfo_dim_table_type	30270	recategorize	recategorize: type_not_found - actually wrong-type fault
+src/ast/ast_infer_type.cpp	2060	type_not_found	not_resolved_yet_typeinfo_dim_table	31335	follow_on	
+src/ast/ast_infer_type.cpp	2068	typeinfo_dim	invalid_typeinfo_dim_table	30269	primary	
+src/ast/ast_infer_type.cpp	2078	invalid_type	invalid_typeinfo_variant_index_type	30281	primary	
+src/ast/ast_infer_type.cpp	2090	typeinfo_undefined	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	2096	typeinfo_undefined	missing_typeinfo_subexpression	30321	primary	
+src/ast/ast_infer_type.cpp	2102	typeinfo_undefined	lookup_function_mangled_name	30813	primary	
+src/ast/ast_infer_type.cpp	2109	typeinfo_undefined	invalid_typeinfo_mangled_subexpression	30273	primary	
+src/ast/ast_infer_type.cpp	2115	typeinfo_undefined	missing_typeinfo_subexpression	30321	primary	
+src/ast/ast_infer_type.cpp	2153	typeinfo_undefined	invalid_typeinfo_struct_name	30280	primary	
+src/ast/ast_infer_type.cpp	2162	typeinfo_undefined	invalid_typeinfo_struct_modulename	30279	primary	
+src/ast/ast_infer_type.cpp	2332	typeinfo_undefined	invalid_typeinfo_has_field_type	30272	primary	
+src/ast/ast_infer_type.cpp	2346	typeinfo_undefined	invalid_typeinfo_struct_has_annotation_type	30278	primary	
+src/ast/ast_infer_type.cpp	2358	typeinfo_undefined	lookup_typeinfo_annotation	30833	primary	
+src/ast/ast_infer_type.cpp	2371	typeinfo_undefined	invalid_typeinfo_struct_has_annotation_argument_type	30277	primary	
+src/ast/ast_infer_type.cpp	2381	typeinfo_undefined	lookup_typeinfo_annotation	30833	primary	
+src/ast/ast_infer_type.cpp	2387	typeinfo_undefined	lookup_typeinfo_annotation_argument	30834	primary	
+src/ast/ast_infer_type.cpp	2403	typeinfo_undefined	invalid_typeinfo_annotation_argument_type	30267	primary	
+src/ast/ast_infer_type.cpp	2409	typeinfo_undefined	invalid_typeinfo_struct_get_annotation_argument_type	30276	primary	
+src/ast/ast_infer_type.cpp	2420	typeinfo_undefined	lookup_typeinfo_offsetof_type	30836	primary	
+src/ast/ast_infer_type.cpp	2424	typeinfo_undefined	invalid_typeinfo_offsetof_type	30275	primary	
+src/ast/ast_infer_type.cpp	2429	typeinfo_undefined	missing_typeinfo_subexpression	30321	primary	
+src/ast/ast_infer_type.cpp	2438	typeinfo_undefined	invalid_typeinfo_function	30271	primary	
+src/ast/ast_infer_type.cpp	2445	typeinfo_undefined	invalid_typeinfo_mangled_subexpression	30273	primary	
+src/ast/ast_infer_type.cpp	2451	typeinfo_undefined	missing_typeinfo_subexpression	30321	primary	
+src/ast/ast_infer_type.cpp	2460	typeinfo_undefined	invalid_typeinfo_module_subexpression	30274	primary	
+src/ast/ast_infer_type.cpp	2469	typeinfo_undefined	invalid_typeinfo_annotation	30266	primary	
+src/ast/ast_infer_type.cpp	2478	typeinfo_undefined	ambiguous_typeinfo_macro	30614	primary	
+src/ast/ast_infer_type.cpp	2481	typeinfo_undefined	lookup_typeinfo_macro	30835	primary	
+src/ast/ast_infer_type.cpp	2491	typeinfo_macro_error	runtime_typeinfo_macro	31211	primary	
+src/ast/ast_infer_type.cpp	2502	typeinfo_macro_error	runtime_typeinfo_macro	31211	primary	
+src/ast/ast_infer_type.cpp	2505	typeinfo_macro_error	internal_typeinfo_macro	50639	internal	
+src/ast/ast_infer_type.cpp	2527	bad_delete	cant_delete_super	30920	primary	
+src/ast/ast_infer_type.cpp	2533	bad_delete	invalid_delete_super_self_type	30144	primary	
+src/ast/ast_infer_type.cpp	2540	bad_delete	lookup_super_class	30827	primary	
+src/ast/ast_infer_type.cpp	2576	bad_delete	lookup_super_finalizer	30829	primary	
+src/ast/ast_infer_type.cpp	2607	type_not_found	not_resolved_yet_delete_size_type	31309	follow_on	
+src/ast/ast_infer_type.cpp	2612	bad_delete	invalid_delete_size_type	30143	primary	
+src/ast/ast_infer_type.cpp	2618	unsafe	unsafe_delete	31009	primary	
+src/ast/ast_infer_type.cpp	2624	bad_delete	cant_delete	30917	primary	
+src/ast/ast_infer_type.cpp	2627	bad_delete	cant_delete	30917	primary	
+src/ast/ast_infer_type.cpp	2630	bad_delete	cant_delete	30917	primary	
+src/ast/ast_infer_type.cpp	2634	unsafe	unsafe_delete_pointer	31010	primary	
+src/ast/ast_infer_type.cpp	2638	bad_delete	cant_delete_smart_pointer	30919	primary	
+src/ast/ast_infer_type.cpp	2655	function_already_declared	ambiguous_finalizer	30606	mid_inference	
+src/ast/ast_infer_type.cpp	2739	type_not_found	lookup_cast_type	30805	primary	
+src/ast/ast_infer_type.cpp	2745	type_not_found	lookup_cast_type	30805	primary	
+src/ast/ast_infer_type.cpp	2770	unsafe	unsafe_cast	31004	primary	
+src/ast/ast_infer_type.cpp	2777	type_not_found	invalid_cast_type	30133	recategorize	recategorize: type_not_found - actually a cast-mismatch
+src/ast/ast_infer_type.cpp	2794	invalid_new_type	cant_ascend	30909	primary	
+src/ast/ast_infer_type.cpp	2799	invalid_new_type	invalid_ascend_array_handle_type	30114	primary	
+src/ast/ast_infer_type.cpp	2803	invalid_new_type	invalid_ascend_handle_type	30115	primary	
+src/ast/ast_infer_type.cpp	2823	too_many_arguments	exceeds_new_argument	30509	primary	
+src/ast/ast_infer_type.cpp	2833	invalid_argument_type	invalid_function_argument_type_block	30162	primary	
+src/ast/ast_infer_type.cpp	2852	type_not_found	not_resolved_yet_new_type	31323	follow_on	
+src/ast/ast_infer_type.cpp	2868	type_not_found	lookup_new_type	30823	primary	
+src/ast/ast_infer_type.cpp	2876	invalid_new_type	invalid_new_type	30214	primary	
+src/ast/ast_infer_type.cpp	2880	invalid_new_type	invalid_new_class_syntax	30211	primary	
+src/ast/ast_infer_type.cpp	2897	invalid_new_type	invalid_new_type	30214	primary	
+src/ast/ast_infer_type.cpp	2902	invalid_new_type	invalid_new_type	30214	primary	
+src/ast/ast_infer_type.cpp	2913	invalid_new_type	invalid_new_type	30214	primary	
+src/ast/ast_infer_type.cpp	2923	invalid_new_type	invalid_new_type	30214	primary	
+src/ast/ast_infer_type.cpp	2927	invalid_new_type	invalid_new_initializer_type	30213	primary	
+src/ast/ast_infer_type.cpp	2943	invalid_new_type	invalid_new_initializer_result_type	30212	primary	
+src/ast/ast_infer_type.cpp	2956	invalid_new_type	missing_new_default_initializer	30318	primary	
+src/ast/ast_infer_type.cpp	2992	type_not_found	not_resolved_yet_index_type	31316	follow_on	
+src/ast/ast_infer_type.cpp	2998	invalid_index_type	invalid_table_index_type	30251	primary	
+src/ast/ast_infer_type.cpp	3003	invalid_table_type	cant_index_table	30934	recategorize	recategorize: invalid_table_type - cant operation; should be cant_index_const_table
+src/ast/ast_infer_type.cpp	3008	invalid_index_type	cant_index_key	30932	primary	
+src/ast/ast_infer_type.cpp	3013	invalid_index_type	cant_index_table	30934	primary	
+src/ast/ast_infer_type.cpp	3018	unsafe	unsafe_table_index	31033	primary	
+src/ast/ast_infer_type.cpp	3026	invalid_index_type	invalid_handle_index_type	30181	primary	
+src/ast/ast_infer_type.cpp	3034	unsafe	unsafe_pointer_index	31023	primary	
+src/ast/ast_infer_type.cpp	3038	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3042	invalid_index_type	cant_index_pointer	30933	primary	
+src/ast/ast_infer_type.cpp	3061	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3073	cant_index	cant_index	30931	primary	
+src/ast/ast_infer_type.cpp	3077	cant_index	not_resolved_yet_array_dimension	31301	follow_on	
+src/ast/ast_infer_type.cpp	3108	type_not_found	not_resolved_yet_index_type	31316	follow_on	
+src/ast/ast_infer_type.cpp	3114	cant_index	cant_index_pointer	30933	primary	
+src/ast/ast_infer_type.cpp	3121	unsafe	unsafe_table_safe_index	31034	primary	
+src/ast/ast_infer_type.cpp	3125	invalid_index_type	invalid_table_safe_index_type	30253	primary	
+src/ast/ast_infer_type.cpp	3135	invalid_index_type	invalid_handle_safe_index_type	30182	primary	
+src/ast/ast_infer_type.cpp	3145	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3154	unsafe	unsafe_array_safe_index	31002	primary	
+src/ast/ast_infer_type.cpp	3162	cant_index	not_resolved_yet_array_dimension	31301	follow_on	
+src/ast/ast_infer_type.cpp	3179	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3184	unsafe	unsafe_pointer_safe_index	31024	primary	
+src/ast/ast_infer_type.cpp	3193	unsafe	unsafe_array_safe_index	31002	primary	
+src/ast/ast_infer_type.cpp	3197	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3207	unsafe	unsafe_table_safe_index	31034	primary	
+src/ast/ast_infer_type.cpp	3212	invalid_index_type	invalid_table_safe_index_type	30253	primary	
+src/ast/ast_infer_type.cpp	3217	invalid_index_type	cant_safe_index_table	30946	primary	
+src/ast/ast_infer_type.cpp	3226	unsafe	unsafe_fixed_array_safe_index	31011	primary	
+src/ast/ast_infer_type.cpp	3230	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3236	cant_index	not_resolved_yet_array_dimension	31301	follow_on	
+src/ast/ast_infer_type.cpp	3248	invalid_index_type	invalid_index_type	30184	primary	
+src/ast/ast_infer_type.cpp	3257	cant_index	cant_safe_index	30945	primary	
+src/ast/ast_infer_type.cpp	3274	malformed_ast	internal_block_missing_return_type	50604	internal	
+src/ast/ast_infer_type.cpp	3288	return_or_break_in_finally	invalid_block_finally	30127	primary	
+src/ast/ast_infer_type.cpp	3298	variable_not_found	already_declared_block_argument	30701	recategorize	recategorize: variable_not_found - shadowing not lookup miss; should be already_declared_block_argument
+src/ast/ast_infer_type.cpp	3308	variable_not_found	already_declared_block_argument	30701	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3315	variable_not_found	already_declared_block_argument	30701	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3321	variable_not_found	already_declared_block_argument	30701	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	3331	type_not_found	lookup_block_argument_type	30803	primary	
+src/ast/ast_infer_type.cpp	3336	cant_infer_missing_initializer	missing_block_argument_init	30303	primary	
+src/ast/ast_infer_type.cpp	3345	invalid_type	invalid_block_argument_type	30124	primary	
+src/ast/ast_infer_type.cpp	3352	invalid_type	not_resolved_yet_block_argument_init	31306	follow_on	
+src/ast/ast_infer_type.cpp	3359	cant_infer_mismatching_restrictions	invalid_block_argument_init_type	30123	primary	
+src/ast/ast_infer_type.cpp	3371	invalid_argument_type	invalid_block_argument_init_type	30123	primary	
+src/ast/ast_infer_type.cpp	3375	invalid_argument_type	invalid_block_argument_init_type	30123	primary	
+src/ast/ast_infer_type.cpp	3418	invalid_block	invalid_block_break	30125	primary	
+src/ast/ast_infer_type.cpp	3422	invalid_block	invalid_block_continue	30126	primary	
+src/ast/ast_infer_type.cpp	3441	type_not_found	lookup_block_result_type	30804	primary	
+src/ast/ast_infer_type.cpp	3462	invalid_swizzle_mask	invalid_swizzle_type	30247	primary	
+src/ast/ast_infer_type.cpp	3468	invalid_swizzle_mask	invalid_swizzle_mask	30246	primary	
+src/ast/ast_infer_type.cpp	3515	invalid_type	invalid_as	30113	recategorize	recategorize: invalid_type - actually wrong-construct; should be invalid_as_non_variant
+src/ast/ast_infer_type.cpp	3521	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3565	unsafe	unsafe_variant_safe_as	31036	primary	
+src/ast/ast_infer_type.cpp	3570	invalid_type	invalid_safe_as	30223	recategorize	recategorize: invalid_type - actually wrong-construct
+src/ast/ast_infer_type.cpp	3579	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3625	invalid_type	invalid_is	30190	recategorize	recategorize: invalid_type - actually wrong-construct
+src/ast/ast_infer_type.cpp	3631	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3660	cant_get_field	ambiguous_field_lookup	30605	primary	
+src/ast/ast_infer_type.cpp	3699	cant_get_field	missing_bitfield_init	30302	primary	
+src/ast/ast_infer_type.cpp	3702	cant_get_field	invalid_bitfield	30119	primary	
+src/ast/ast_infer_type.cpp	3720	cant_get_field	ambiguous_bitfield	30601	mid_inference	
+src/ast/ast_infer_type.cpp	3725	cant_get_field	lookup_bitfield	30802	primary	
+src/ast/ast_infer_type.cpp	3743	cant_get_field	ambiguous_field	30604	mid_inference	
+src/ast/ast_infer_type.cpp	3746	cant_get_field	lookup_field	30808	mid_inference	vague: clarify what 'X' means
+src/ast/ast_infer_type.cpp	3755	cant_get_field	invalid_field_syntax	30153	primary	
+src/ast/ast_infer_type.cpp	3770	cant_get_field	cant_get_field_pointer	30929	primary	
+src/ast/ast_infer_type.cpp	3792	cant_get_field	lookup_tuple_field	30831	primary	
+src/ast/ast_infer_type.cpp	3799	unsafe	unsafe_variant_field	31035	primary	
+src/ast/ast_infer_type.cpp	3805	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3819	type_not_found	not_resolved_yet_bitfield_type	31303	follow_on	
+src/ast/ast_infer_type.cpp	3825	cant_get_field	lookup_bitfield	30802	primary	
+src/ast/ast_infer_type.cpp	3847	cant_get_field	lookup_tuple_field	30831	primary	
+src/ast/ast_infer_type.cpp	3854	unsafe	unsafe_variant_field	31035	primary	
+src/ast/ast_infer_type.cpp	3860	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3866	cant_get_field	cant_get_field	30928	primary	
+src/ast/ast_infer_type.cpp	3878	type_not_found	lookup_field_type	30809	primary	
+src/ast/ast_infer_type.cpp	3898	cant_get_field	invalid_field_type	30154	primary	
+src/ast/ast_infer_type.cpp	3916	cant_get_field	lookup_field	30808	mid_inference	
+src/ast/ast_infer_type.cpp	3920	cant_get_field	lookup_field	30808	primary	
+src/ast/ast_infer_type.cpp	3950	cant_get_field	invalid_safe_dereference_type	30224	mid_inference	
+src/ast/ast_infer_type.cpp	3954	cant_get_field	invalid_safe_dereference_type	30224	primary	
+src/ast/ast_infer_type.cpp	3964	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type.cpp	3974	cant_get_field	cant_safe_get_field	30944	primary	
+src/ast/ast_infer_type.cpp	3978	type_not_found	lookup_safe_field_type	30824	primary	
+src/ast/ast_infer_type.cpp	3987	cant_get_field	cant_safe_get_field	30944	primary	
+src/ast/ast_infer_type.cpp	3994	cant_get_field	lookup_tuple_field	30831	primary	
+src/ast/ast_infer_type.cpp	4001	cant_get_field	invalid_safe_field_type	30225	primary	
+src/ast/ast_infer_type.cpp	4007	cant_get_field	invalid_safe_dereference_type	30224	primary	
+src/ast/ast_infer_type.cpp	4025	unbound_macro_tag	invalid_macro_tag	30205	primary	
+src/ast/ast_infer_type.cpp	4126	variable_not_found	invalid_global_self_init	30177	wording_fix	typo: cant't -> can't
+src/ast/ast_infer_type.cpp	4146	variable_not_found	invalid_variable_private	30283	mid_inference	
+src/ast/ast_infer_type.cpp	4149	variable_not_found	lookup_variable	30838	mid_inference	
+src/ast/ast_infer_type.cpp	4153	variable_not_found	lookup_variable	30838	primary	
+src/ast/ast_infer_type.cpp	4166	variable_not_found	ambiguous_variable	30615	mid_inference	
+src/ast/ast_infer_type.cpp	4169	variable_not_found	ambiguous_variable	30615	primary	
+src/ast/ast_infer_type.cpp	4212	invalid_return_semantics	invalid_return_semantics	30222	primary	
+src/ast/ast_infer_type.cpp	4220	invalid_return_type	unsafe_return_reference	31027	recategorize	recategorize: invalid_return_type - actually unsafe; should be unsafe_return_reference
+src/ast/ast_infer_type.cpp	4224	invalid_return_type	unsafe_return_block	31025	recategorize	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4228	unsafe	unsafe_return_smart_pointer	31028	primary	
+src/ast/ast_infer_type.cpp	4252	invalid_return_semantics	invalid_return_semantics	30222	primary	
+src/ast/ast_infer_type.cpp	4260	invalid_return_type	unsafe_return_reference	31027	recategorize	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4264	invalid_return_type	unsafe_return_function	31026	recategorize	recategorize: invalid_return_type - actually unsafe
+src/ast/ast_infer_type.cpp	4268	unsafe	unsafe_return_smart_pointer	31028	primary	
+src/ast/ast_infer_type.cpp	4285	invalid_yield	invalid_yield_in_block	30295	primary	
+src/ast/ast_infer_type.cpp	4289	invalid_yield	invalid_yield	30294	primary	
+src/ast/ast_infer_type.cpp	4307	invalid_loop	invalid_break	30128	primary	
+src/ast/ast_infer_type.cpp	4313	invalid_loop	invalid_continue	30140	primary	
+src/ast/ast_infer_type.cpp	4354	condition_must_be_bool	invalid_if_condition_type	30183	primary	
+src/ast/ast_infer_type.cpp	4372	condition_must_be_static	invalid_static_if_condition	30229	primary	
+src/ast/ast_infer_type.cpp	4392	invalid_yield	invalid_finally_in_generator_if	30155	primary	
+src/ast/ast_infer_type.cpp	4400	invalid_yield	invalid_finally_in_generator_if	30155	primary	
+src/ast/ast_infer_type.cpp	4420	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4428	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4435	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4443	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4453	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4463	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4466	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4481	invalid_assume	already_declared_assume_alias	30700	primary	
+src/ast/ast_infer_type.cpp	4486	invalid_assume	missing_assume_type	30301	primary	
+src/ast/ast_infer_type.cpp	4551	invalid_assume	recursion_assume_alias	31101	primary	
+src/ast/ast_infer_type.cpp	4569	invalid_with_type	invalid_with_array_type	30292	primary	
+src/ast/ast_infer_type.cpp	4576	invalid_with_type	invalid_with_type	30293	primary	
+src/ast/ast_infer_type.cpp	4583	variable_not_found	already_declared_with_shadow	30709	recategorize	recategorize: variable_not_found - shadowing not lookup miss
+src/ast/ast_infer_type.cpp	4606	invalid_loop	invalid_while_condition_type	30291	primary	
+src/ast/ast_infer_type.cpp	4640	invalid_loop	missing_for_iterator	30307	primary	
+src/ast/ast_infer_type.cpp	4644	invalid_loop	invalid_for_iterator_count	30157	primary	
+src/ast/ast_infer_type.cpp	4669	invalid_iteration_source	cant_iterate_iterator	30939	primary	
+src/ast/ast_infer_type.cpp	4687	invalid_iteration_source	invalid_iteration_source_type	30192	primary	
+src/ast/ast_infer_type.cpp	4697	variable_not_found	already_declared_variable	30708	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4705	variable_not_found	already_declared_variable	30708	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4713	variable_not_found	already_declared_variable	30708	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4720	variable_not_found	already_declared_variable	30708	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4726	variable_not_found	already_declared_variable	30708	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4734	invalid_iteration_source	invalid_for_iterator_tuple	30158	primary	
+src/ast/ast_infer_type.cpp	4862	type_not_found	lookup_local_type	30820	primary	
+src/ast/ast_infer_type.cpp	4867	cant_infer_missing_initializer	missing_local_init	30316	primary	
+src/ast/ast_infer_type.cpp	4872	variable_not_found	already_declared_local_variable	30704	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4880	variable_not_found	already_declared_local_variable	30704	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4888	variable_not_found	already_declared_local_variable	30704	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4895	variable_not_found	already_declared_local_variable	30704	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4901	variable_not_found	already_declared_local_variable	30704	recategorize	recategorize: variable_not_found - shadowing
+src/ast/ast_infer_type.cpp	4917	invalid_variable_type	missing_local_reference_init	30317	primary	
+src/ast/ast_infer_type.cpp	4921	unsafe	unsafe_local_reference	31019	primary	
+src/ast/ast_infer_type.cpp	4926	invalid_variable_type	invalid_local_type	30202	primary	
+src/ast/ast_infer_type.cpp	4931	invalid_variable_type	missing_local_block_init	30315	primary	
+src/ast/ast_infer_type.cpp	4935	invalid_variable_type	unsafe_local_type	31020	recategorize	recategorize: invalid_variable_type - actually unsafe
+src/ast/ast_infer_type.cpp	4940	unsafe	unsafe_local_class	31017	primary	
+src/ast/ast_infer_type.cpp	4946	invalid_variable_type	missing_local_init	30316	primary	
+src/ast/ast_infer_type.cpp	4971	invalid_variable_type	invalid_local_in_scope_finally	30196	primary	
+src/ast/ast_infer_type.cpp	4977	invalid_variable_type	invalid_local_in_scope	30195	primary	
+src/ast/ast_infer_type.cpp	4993	invalid_generator_finalizer	internal_generator_finalizer	50616	internal	
+src/ast/ast_infer_type.cpp	4998	invalid_generator_finalizer	internal_generator_finalizer_multiple	50617	internal	
+src/ast/ast_infer_type.cpp	5004	invalid_variable_type	internal_lambda_in_scope_conversion	50625	internal	
+src/ast/ast_infer_type.cpp	5012	bad_delete	cant_delete_local	30918	primary	
+src/ast/ast_infer_type.cpp	5018	invalid_variable_type	unsafe_local_in_scope_required	31018	recategorize	recategorize: invalid_variable_type - actually unsafe
+src/ast/ast_infer_type.cpp	5024	unsafe	unsafe_local	31016	wording_fix	inconsistent: uses [safe_when_uninitialized]; lines 295/370 use @safe_when_uninitialized
+src/ast/ast_infer_type.cpp	5062	cant_infer_mismatching_restrictions	invalid_local_init_type	30200	primary	
+src/ast/ast_infer_type.cpp	5065	cant_infer_mismatching_restrictions	invalid_local_init_type	30200	primary	
+src/ast/ast_infer_type.cpp	5082	invalid_initialization_type	invalid_local_init_type	30200	primary	
+src/ast/ast_infer_type.cpp	5085	invalid_initialization_type	invalid_local_init_type	30200	primary	
+src/ast/ast_infer_type.cpp	5089	invalid_initialization_type	invalid_local_init_block	30198	primary	
+src/ast/ast_infer_type.cpp	5093	invalid_initialization_type	invalid_local_init_constructor	30199	primary	
+src/ast/ast_infer_type.cpp	5096	invalid_initialization_type	invalid_local_init	30197	primary	
+src/ast/ast_infer_type.cpp	5099	invalid_initialization_type	invalid_local_init	30197	primary	
+src/ast/ast_infer_type.cpp	5102	invalid_initialization_type	invalid_local_init	30197	primary	
+src/ast/ast_infer_type.cpp	5109	cant_move	cant_local	30940	primary	
+src/ast/ast_infer_type.cpp	5143		not_resolved_yet_local_type	31321	follow_on	current cerr unspecified - should be not_resolved_yet_local_type; vague: clarify which type isn't ready
+src/ast/ast_infer_type.cpp	5173	invalid_type	invalid_local_tuple_expansion	30201	primary	
+src/ast/ast_infer_type.cpp	5195	unsupported_call_macro	runtime_call_macro	31201	primary	
+src/ast/ast_infer_type.cpp	5202	too_many_infer_passes	exceeds_call_depth	30503	recategorize	recategorize: too_many_infer_passes - actually call depth not infer passes
+src/ast/ast_infer_type.cpp	5213	too_many_arguments	exceeds_function_argument	30505	primary	
+src/ast/ast_infer_type.cpp	5231	too_many_infer_passes	exceeds_call_depth	30503	recategorize	recategorize: too_many_infer_passes - actually call depth
+src/ast/ast_infer_type.cpp	5242	too_many_arguments	exceeds_function_argument	30505	primary	
+src/ast/ast_infer_type.cpp	5264	invalid_argument_type	not_resolved_yet_argument_type	31300	follow_on	
+src/ast/ast_infer_type.cpp	5353		recursion_function_argument	31103	primary	current cerr unspecified - should be recursion_function_argument
+src/ast/ast_infer_type.cpp	5363	too_many_infer_passes	exceeds_call_depth	30503	recategorize	recategorize: too_many_infer_passes - actually call depth
+src/ast/ast_infer_type.cpp	5374	too_many_arguments	exceeds_function_argument	30505	primary	
+src/ast/ast_infer_type.cpp	5378	result_discarded	invalid_function_result_discarded	30166	primary	
+src/ast/ast_infer_type.cpp	5434	function_not_found	ambiguous_super_constructor	30611	mid_inference	
+src/ast/ast_infer_type.cpp	5441	function_not_found	lookup_super_constructor	30828	primary	
+src/ast/ast_infer_type.cpp	5445	function_not_found	invalid_super_call	30245	primary	
+src/ast/ast_infer_type.cpp	5467	invalid_cast	invalid_bitfield_cast_argument_count	30120	primary	
+src/ast/ast_infer_type.cpp	5602	unsafe	unsafe_function_call	31013	primary	
+src/ast/ast_infer_type.cpp	5605	unsafe	unsafe_function_call	31013	primary	
+src/ast/ast_infer_type.cpp	5608	unsafe	unsafe_function_call	31013	primary	
+src/ast/ast_infer_type.cpp	5640	annotation_failed	runtime_annotation_transform	31200	primary	
+src/ast/ast_infer_type.cpp	5652	unsafe	unsafe_class_stack_construction	31008	primary	
+src/ast/ast_infer_type.cpp	5663	expecting_return_value	invalid_string_builder_argument	30231	recategorize	recategorize: expecting_return_value - misnamed; actual fault is void argument
+src/ast/ast_infer_type.cpp	5666	invalid_type	invalid_string_builder_argument	30231	primary	
+src/ast/ast_infer_type.cpp	5702	unspecified	runtime_macro	50503	primary	current cerr unspecified - should be runtime_macro
+src/ast/ast_infer_type.cpp	5710	unspecified	runtime_macro_infer	31207	primary	current cerr unspecified - should be runtime_macro_infer
+src/ast/ast_infer_type.cpp	5732	unspecified	internal_relocate_infer	50631	internal	current cerr unspecified - should be internal_relocate_infer
+src/ast/ast_infer_type.cpp	5743	unspecified	internal_pod_analysis_infer	50630	internal	current cerr unspecified - should be internal_pod_analysis_infer
+src/ast/ast_infer_type.cpp	5755	too_many_infer_passes	exceeds_infer_passes	30507	primary	
+src/ast/ast_infer_type.cpp	5791	unspecified	internal_function_refresh	50614	internal	current cerr unspecified - should be internal_function_refresh
+src/ast/ast_infer_type.cpp	5822	too_many_infer_passes	exceeds_infer_passes	30507	primary	
+src/ast/ast_infer_type_function.cpp	607	function_not_found	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_function.cpp	610	function_not_found	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_function.cpp	617	function_not_found	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_function.cpp	620	function_not_found	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_function.cpp	1064		invalid_argument_type	30107	recategorize	missing cerr; assign invalid_argument_type
+src/ast/ast_infer_type_function.cpp	1088	too_many_infer_passes	exceeds_expression_recursion	30504	primary	
+src/ast/ast_infer_type_function.cpp	1109		recursion_argument	31100	recategorize	missing cerr; assign recursion-related code
+src/ast/ast_infer_type_function.cpp	1114	invalid_type	invalid_function_result	30165	primary	
+src/ast/ast_infer_type_function.cpp	1119		recursion_function	31102	recategorize	missing cerr; assign recursion-related code
+src/ast/ast_infer_type_function.cpp	1138	invalid_type	mismatching_function_argument	30404	primary	
+src/ast/ast_infer_type_function.cpp	1153		internal_array_type	50602	internal	missing cerr; internal invariant
+src/ast/ast_infer_type_function.cpp	1162		internal_array_type	50602	internal	typo: strcut -> struct; missing cerr; internal invariant
+src/ast/ast_infer_type_function.cpp	1212		internal_function	50609	internal	missing cerr; internal invariant
+src/ast/ast_infer_type_function.cpp	1303	invalid_type	lookup_argument_type	30801	primary	
+src/ast/ast_infer_type_function.cpp	1350	function_already_declared	already_declared_function	30702	primary	
+src/ast/ast_infer_type_function.cpp	1362	invalid_annotation	invalid_annotation_macro	30102	primary	
+src/ast/ast_infer_type_function.cpp	1391	function_not_found	cant_access_private_structure	30901	recategorize	recategorize from function_not_found to invalid_private/cant_access_private
+src/ast/ast_infer_type_function.cpp	1395	function_not_found	lookup_function	30810	primary	
+src/ast/ast_infer_type_function.cpp	1400	invalid_argument_count	invalid_function_argument_count	30160	primary	
+src/ast/ast_infer_type_helper.cpp	89	invalid_array_dimension	invalid_array_dimension	30109	primary	
+src/ast/ast_infer_type_helper.cpp	94	invalid_array_dimension	exceeds_array	50300	primary	
+src/ast/ast_infer_type_helper.cpp	106	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_helper.cpp	112	invalid_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_helper.cpp	116	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_helper.cpp	122	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_helper.cpp	127	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_helper.cpp	130	invalid_type	invalid_annotation_type	30103	primary	
+src/ast/ast_infer_type_helper.cpp	137	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_helper.cpp	148	invalid_array_type	not_resolved_yet_array_type	31302	follow_on	
+src/ast/ast_infer_type_helper.cpp	152	invalid_array_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_helper.cpp	156	invalid_array_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_helper.cpp	160	invalid_type	invalid_array_type	30112	primary	
+src/ast/ast_infer_type_helper.cpp	168	invalid_array_type	not_resolved_yet_table_type	31328	follow_on	recategorize: cerr is invalid_array_type but it's a table key
+src/ast/ast_infer_type_helper.cpp	172	invalid_table_type	invalid_table	30248	primary	
+src/ast/ast_infer_type_helper.cpp	176	invalid_table_type	invalid_table_type	30254	primary	typo: declare -> declared
+src/ast/ast_infer_type_helper.cpp	183	invalid_array_type	not_resolved_yet_table_type	31328	follow_on	recategorize: cerr is invalid_array_type but it's a table value
+src/ast/ast_infer_type_helper.cpp	187	invalid_table_type	invalid_table	30248	primary	
+src/ast/ast_infer_type_helper.cpp	191	invalid_type	invalid_table_type	30254	primary	
+src/ast/ast_infer_type_helper.cpp	199	invalid_return_type	invalid_result_type	30221	primary	
+src/ast/ast_infer_type_helper.cpp	206	invalid_argument_type	invalid_argument_type	30107	primary	
+src/ast/ast_infer_type_helper.cpp	214	invalid_type	invalid_tuple	30255	primary	
+src/ast/ast_infer_type_helper.cpp	218	invalid_type	invalid_tuple	30255	primary	
+src/ast/ast_infer_type_helper.cpp	222	invalid_type	invalid_tuple_type	30260	primary	
+src/ast/ast_infer_type_helper.cpp	230	invalid_type	invalid_variant	30284	primary	
+src/ast/ast_infer_type_helper.cpp	234	invalid_type	invalid_variant	30284	primary	
+src/ast/ast_infer_type_helper.cpp	238	invalid_type	invalid_variant_type	30289	primary	
+src/ast/ast_infer_type_helper.cpp	649	invalid_array_dimension	invalid_array_dimension	30109	primary	
+src/ast/ast_infer_type_helper.cpp	653	invalid_array_dimension	invalid_array_dimension_type	30110	primary	
+src/ast/ast_infer_type_helper.cpp	657	invalid_array_dimension	invalid_array_dimension	30109	primary	
+src/ast/ast_infer_type_helper.cpp	661	invalid_array_dimension	invalid_array_dimension	30109	primary	
+src/ast/ast_infer_type_helper.cpp	668	invalid_type	invalid_type_dimension	30263	primary	
+src/ast/ast_infer_type_helper.cpp	678	invalid_type	not_resolved_yet_type	31330	follow_on	
+src/ast/ast_infer_type_helper.cpp	682	invalid_type	not_resolved_yet_type	31330	follow_on	
+src/ast/ast_infer_type_helper.cpp	689	invalid_type	lookup_macro	30821	primary	
+src/ast/ast_infer_type_helper.cpp	692	invalid_type	ambiguous_macro	30608	primary	
+src/ast/ast_infer_type_helper.cpp	697	invalid_type	invalid_macro_type	30206	primary	
+src/ast/ast_infer_type_helper.cpp	770	invalid_cast	invalid_cast_structure	30131	primary	
+src/ast/ast_infer_type_helper.cpp	774	invalid_cast	invalid_cast_structure	30131	primary	
+src/ast/ast_infer_type_helper.cpp	791	invalid_cast	invalid_cast_structure_pointer	30132	primary	
+src/ast/ast_infer_type_helper.cpp	795	invalid_cast	invalid_cast_structure_pointer	30132	primary	
+src/ast/ast_infer_type_helper.cpp	805	invalid_cast	mismatching_function_argument_count	30405	primary	
+src/ast/ast_infer_type_helper.cpp	842	invalid_cast	invalid_cast_function	30130	primary	
+src/ast/ast_infer_type_helper.cpp	872	invalid_return_type	invalid_result_type	30221	primary	
+src/ast/ast_infer_type_helper.cpp	892	cant_get_field	cant_access_private_field	30900	recategorize	recategorize from cant_get_field to invalid_private/cant_access_private
+src/ast/ast_infer_type_helper.cpp	959	invalid_return_type	invalid_result	30220	primary	
+src/ast/ast_infer_type_helper.cpp	966		not_resolved_yet_expression_type	31312	follow_on	typo: subexpresion -> subexpression; missing cerr
+src/ast/ast_infer_type_helper.cpp	969		not_resolved_yet_expression_type	31312	follow_on	typo: subexpresion -> subexpression; missing cerr
+src/ast/ast_infer_type_helper.cpp	974	cant_infer_mismatching_restrictions	mismatching_result_type	30407	primary	
+src/ast/ast_infer_type_helper.cpp	995	not_expecting_return_value	not_expecting_result	31402	primary	
+src/ast/ast_infer_type_helper.cpp	1000	expecting_return_value	missing_result	30319	primary	
+src/ast/ast_infer_type_helper.cpp	1007	invalid_return_type	invalid_result_type	30221	primary	
+src/ast/ast_infer_type_helper.cpp	1011	invalid_return_type	invalid_result_type	30221	primary	
+src/ast/ast_infer_type_helper.cpp	1018	invalid_return_type	invalid_result_type	30221	primary	
+src/ast/ast_infer_type_helper.cpp	1023	cant_move	cant_result	30943	primary	
+src/ast/ast_infer_type_make.cpp	32	type_not_found	lookup_generator_type	30816	primary	
+src/ast/ast_infer_type_make.cpp	38	type_not_found	lookup_generator_type	30816	primary	
+src/ast/ast_infer_type_make.cpp	42	type_not_found	invalid_generator	30169	recategorize	recategorize: not a lookup miss; cerr should be invalid_type
+src/ast/ast_infer_type_make.cpp	47	invalid_argument_count	invalid_generator_argument_count	30170	primary	
+src/ast/ast_infer_type_make.cpp	50	invalid_argument_type	invalid_generator_argument_type	30171	primary	
+src/ast/ast_infer_type_make.cpp	57	invalid_block	not_resolved_yet_generator_block	31315	follow_on	
+src/ast/ast_infer_type_make.cpp	60	invalid_argument_type	invalid_generator_result_type	30172	primary	
+src/ast/ast_infer_type_make.cpp	63	invalid_argument_type	invalid_generator_argument_count	30170	primary	
+src/ast/ast_infer_type_make.cpp	136	invalid_block	internal_generator_finalizer_name	50618	internal	
+src/ast/ast_infer_type_make.cpp	140	invalid_block	internal_generator_function_name	50619	internal	
+src/ast/ast_infer_type_make.cpp	144	invalid_block	internal_generator_structure_name	50620	internal	
+src/ast/ast_infer_type_make.cpp	169	invalid_capture	invalid_capture_variable	30129	wording_fix	typo: captured -> capture
+src/ast/ast_infer_type_make.cpp	173	invalid_capture	unsafe_capture_variable	31003	primary	
+src/ast/ast_infer_type_make.cpp	177	invalid_capture	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	183	invalid_capture	unsafe_capture_variable	31003	primary	
+src/ast/ast_infer_type_make.cpp	189	invalid_capture	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	193	invalid_capture	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	199	invalid_capture	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	205	invalid_capture	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	217	invalid_block	not_resolved_yet_lambda_block	31320	follow_on	
+src/ast/ast_infer_type_make.cpp	260	invalid_block	internal_lambda_finalizer_name	50623	internal	
+src/ast/ast_infer_type_make.cpp	264	invalid_block	internal_lambda_function_name	50624	internal	
+src/ast/ast_infer_type_make.cpp	268	invalid_block	internal_lambda_structure_name	50626	internal	
+src/ast/ast_infer_type_make.cpp	281	invalid_block	not_resolved_yet_function_block	31314	follow_on	
+src/ast/ast_infer_type_make.cpp	295	invalid_block	internal_function_name	50612	internal	
+src/ast/ast_infer_type_make.cpp	307	invalid_argument_type	invalid_argument_type	30107	primary	
+src/ast/ast_infer_type_make.cpp	322	invalid_block	not_resolved_yet_block	31304	follow_on	
+src/ast/ast_infer_type_make.cpp	340	invalid_block	not_resolved_yet_block	31304	follow_on	
+src/ast/ast_infer_type_make.cpp	359	invalid_type	invalid_variant_type	30289	primary	
+src/ast/ast_infer_type_make.cpp	363	invalid_type	invalid_variant_array	30285	primary	
+src/ast/ast_infer_type_make.cpp	366	invalid_type	mismatching_variant_dimension	30412	primary	
+src/ast/ast_infer_type_make.cpp	371	invalid_type	invalid_variant	30284	primary	
+src/ast/ast_infer_type_make.cpp	385	cant_pass_temporary	cant_initialize_variant_field	30938	primary	
+src/ast/ast_infer_type_make.cpp	389	invalid_type	cant_variant_field	30951	recategorize	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_make.cpp	396	cant_move	cant_variant_field	30951	primary	
+src/ast/ast_infer_type_make.cpp	400	cant_get_field	lookup_variant_field	30839	primary	
+src/ast/ast_infer_type_make.cpp	417	type_not_found	lookup_variant_type	30840	primary	
+src/ast/ast_infer_type_make.cpp	423	type_not_found	lookup_variant_type	30840	primary	
+src/ast/ast_infer_type_make.cpp	427	type_not_found	invalid_variant	30284	recategorize	recategorize: not a lookup miss; cerr should be invalid_type
+src/ast/ast_infer_type_make.cpp	493	too_many_infer_passes	exceeds_expression_recursion	30504	primary	
+src/ast/ast_infer_type_make.cpp	509	invalid_type	invalid_structure_type	30243	primary	
+src/ast/ast_infer_type_make.cpp	514	invalid_type	invalid_structure_array	30234	primary	
+src/ast/ast_infer_type_make.cpp	517	invalid_type	mismatching_structure_dimension	30408	primary	
+src/ast/ast_infer_type_make.cpp	522	invalid_type	invalid_structure	30232	primary	
+src/ast/ast_infer_type_make.cpp	526	invalid_type	invalid_class_local	30135	primary	
+src/ast/ast_infer_type_make.cpp	531	invalid_type	invalid_structure_local	30239	primary	typo: can`t -> can't (backtick instead of apostrophe)
+src/ast/ast_infer_type_make.cpp	538	invalid_type	invalid_structure_initializer_required	30238	primary	
+src/ast/ast_infer_type_make.cpp	543	unsafe	unsafe_class_local	31007	primary	
+src/ast/ast_infer_type_make.cpp	548	unsafe	unsafe_structure_uninitialized	31031	primary	
+src/ast/ast_infer_type_make.cpp	557	invalid_type	internal_structure_block	50633	internal	
+src/ast/ast_infer_type_make.cpp	563	invalid_type	internal_block	50603	internal	
+src/ast/ast_infer_type_make.cpp	603	cant_pass_temporary	cant_capture_variable	30912	primary	
+src/ast/ast_infer_type_make.cpp	606	cant_pass_temporary	cant_initialize_structure_field	30937	primary	
+src/ast/ast_infer_type_make.cpp	611	invalid_type	cant_structure_field	30947	recategorize	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_make.cpp	618	cant_move	cant_structure_field	30947	primary	
+src/ast/ast_infer_type_make.cpp	622	cant_get_field	cant_initialize_private_field	30936	recategorize	recategorize: cerr is cant_get_field; should be invalid_private
+src/ast/ast_infer_type_make.cpp	672	cant_get_field	lookup_structure_field	30825	primary	
+src/ast/ast_infer_type_make.cpp	678	cant_get_field	invalid_annotation_field	30101	primary	
+src/ast/ast_infer_type_make.cpp	685	invalid_type	cant_annotation_field	30904	recategorize	recategorize: cerr is invalid_type but error is about copy semantics
+src/ast/ast_infer_type_make.cpp	692	cant_move	cant_annotation_field	30904	primary	
+src/ast/ast_infer_type_make.cpp	699	cant_get_field	lookup_annotation_field	30800	primary	
+src/ast/ast_infer_type_make.cpp	707	invalid_type	not_resolved_yet_tuple_type	31329	follow_on	
+src/ast/ast_infer_type_make.cpp	717	cant_get_field	lookup_tuple_field	30831	primary	
+src/ast/ast_infer_type_make.cpp	721	field_already_initialized	already_declared_tuple_field	30707	primary	
+src/ast/ast_infer_type_make.cpp	743	unsafe	unsafe_structure_visibility	31032	primary	
+src/ast/ast_infer_type_make.cpp	751	type_not_found	lookup_expression_type	30807	primary	
+src/ast/ast_infer_type_make.cpp	774	function_not_found	lookup_constructor	30806	primary	
+src/ast/ast_infer_type_make.cpp	788	invalid_block	invalid_structure_block_pipe	30235	primary	
+src/ast/ast_infer_type_make.cpp	796	invalid_block	invalid_block_argument_count	30122	primary	
+src/ast/ast_infer_type_make.cpp	814	invalid_block	not_resolved_yet_block_argument	31305	follow_on	
+src/ast/ast_infer_type_make.cpp	819	invalid_block	mismatching_block_argument_type	30402	primary	
+src/ast/ast_infer_type_make.cpp	824	invalid_block	invalid_block_argument	30121	primary	
+src/ast/ast_infer_type_make.cpp	835	invalid_type	invalid_class_variant	30137	primary	
+src/ast/ast_infer_type_make.cpp	839	invalid_type	invalid_structure_variant	30244	primary	
+src/ast/ast_infer_type_make.cpp	843	invalid_type	invalid_tuple_variant	30261	primary	
+src/ast/ast_infer_type_make.cpp	848	invalid_block	invalid_variant_block	30286	primary	
+src/ast/ast_infer_type_make.cpp	857	field_already_initialized	invalid_variant_initializer_count	30287	primary	
+src/ast/ast_infer_type_make.cpp	872	invalid_type	invalid_class_tuple	30136	primary	
+src/ast/ast_infer_type_make.cpp	876	invalid_type	invalid_structure_tuple	30242	primary	
+src/ast/ast_infer_type_make.cpp	880	invalid_type	invalid_variant_tuple	30288	primary	
+src/ast/ast_infer_type_make.cpp	885	invalid_block	invalid_tuple_block	30257	primary	
+src/ast/ast_infer_type_make.cpp	917	invalid_type	invalid_structure_template	30241	primary	
+src/ast/ast_infer_type_make.cpp	926	field_already_initialized	already_declared_structure_field_init	30705	primary	
+src/ast/ast_infer_type_make.cpp	941		not_resolved_yet_structure	31325	follow_on	missing cerr
+src/ast/ast_infer_type_make.cpp	1035	invalid_type	missing_enumeration_zero	30305	primary	
+src/ast/ast_infer_type_make.cpp	1060	invalid_type	not_resolved_yet_structure_type	31327	follow_on	
+src/ast/ast_infer_type_make.cpp	1064	unsafe	unsafe_class_initializer	31006	primary	
+src/ast/ast_infer_type_make.cpp	1068	invalid_type	invalid_class	30134	primary	
+src/ast/ast_infer_type_make.cpp	1072	invalid_type	invalid_structure	30232	primary	
+src/ast/ast_infer_type_make.cpp	1076	invalid_type	invalid_variant	30284	primary	
+src/ast/ast_infer_type_make.cpp	1080	invalid_type	invalid_tuple	30255	primary	
+src/ast/ast_infer_type_make.cpp	1097	invalid_type	exceeds_tuple_index	30511	primary	
+src/ast/ast_infer_type_make.cpp	1106	cant_move	cant_tuple	30949	primary	
+src/ast/ast_infer_type_make.cpp	1119	invalid_type	not_resolved_yet_tuple_type	31329	follow_on	
+src/ast/ast_infer_type_make.cpp	1126	invalid_type	internal_tuple_type	50636	internal	
+src/ast/ast_infer_type_make.cpp	1132	invalid_type	mismatching_tuple_argument_count	30409	primary	
+src/ast/ast_infer_type_make.cpp	1142	invalid_type	invalid_tuple_argument_type	30256	primary	
+src/ast/ast_infer_type_make.cpp	1162	invalid_type	invalid_tuple	30255	primary	
+src/ast/ast_infer_type_make.cpp	1172	invalid_type	mismatching_tuple_field_names	30410	primary	
+src/ast/ast_infer_type_make.cpp	1187	invalid_table_type	invalid_tuple_key	30258	primary	
+src/ast/ast_infer_type_make.cpp	1191	invalid_table_type	invalid_tuple_key_type	30259	primary	typo: declare -> declared
+src/ast/ast_infer_type_make.cpp	1197	invalid_type	invalid_tuple_type	30260	primary	
+src/ast/ast_infer_type_make.cpp	1214	invalid_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_make.cpp	1220	invalid_type	invalid_array_dimension	30109	primary	
+src/ast/ast_infer_type_make.cpp	1223	invalid_type	mismatching_array_dimension	30400	primary	
+src/ast/ast_infer_type_make.cpp	1228	invalid_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_make.cpp	1259	invalid_array_type	not_resolved_yet_array_type	31302	follow_on	
+src/ast/ast_infer_type_make.cpp	1266	invalid_array_type	invalid_array	30108	primary	
+src/ast/ast_infer_type_make.cpp	1275	invalid_array_type	not_resolved_yet_array_type	31302	follow_on	
+src/ast/ast_infer_type_make.cpp	1296	invalid_type	invalid_variant_unique	30290	primary	
+src/ast/ast_infer_type_make.cpp	1306	invalid_type	invalid_variant_unique	30290	mid_inference	verbose-gated branch with describe candidates
+src/ast/ast_infer_type_make.cpp	1310	invalid_type	invalid_variant_unique	30290	primary	
+src/ast/ast_infer_type_make.cpp	1331	cant_move	cant_array_element	30908	primary	
+src/ast/ast_infer_type_make.cpp	1334	cant_pass_temporary	cant_initialize_array_element	30935	primary	
+src/ast/ast_infer_type_make.cpp	1386	invalid_type	invalid_array_element_type	30111	primary	
+src/ast/ast_infer_type_make.cpp	1400	invalid_type	not_resolved_yet_type	31330	follow_on	
+src/ast/ast_infer_type_make.cpp	1404	invalid_type	mismatching_array_element_type	30401	primary	
+src/ast/ast_infer_type_make.cpp	1426	invalid_type	not_resolved_yet_array_type	31302	follow_on	
+src/ast/ast_infer_type_make.cpp	1444	invalid_type	invalid_comprehension_element_type	30139	primary	
+src/ast/ast_infer_type_make.cpp	1447	invalid_type	not_resolved_yet_comprehension_type	31308	follow_on	
+src/ast/ast_infer_type_op.cpp	34	invalid_type	cant_type	30950	primary	
+src/ast/ast_infer_type_op.cpp	47	invalid_type	not_resolved_yet_array_type	31302	follow_on	
+src/ast/ast_infer_type_op.cpp	58	operator_not_found	invalid_pointer_arithmetic	30218	primary	
+src/ast/ast_infer_type_op.cpp	66	operator_not_found	cant_apply_op	30905	primary	
+src/ast/ast_infer_type_op.cpp	70	operator_not_found	cant_apply_op	30905	primary	
+src/ast/ast_infer_type_op.cpp	104	unsafe	unsafe_operator	31022	primary	
+src/ast/ast_infer_type_op.cpp	270	invalid_type	cant_type	30950	primary	
+src/ast/ast_infer_type_op.cpp	295	operator_not_found	invalid_pointer_arithmetic	30218	primary	
+src/ast/ast_infer_type_op.cpp	303	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_op.cpp	310	invalid_type	cant_type	30950	primary	
+src/ast/ast_infer_type_op.cpp	327	invalid_type	invalid_enumeration	30145	primary	
+src/ast/ast_infer_type_op.cpp	360	unsafe	unsafe_operator	31022	primary	
+src/ast/ast_infer_type_op.cpp	379	operator_not_found	invalid_op3_expression	30216	wording_fix	reword: 'Op3 currently only supports ?:' (code uses ?, not 'is')
+src/ast/ast_infer_type_op.cpp	385	condition_must_be_bool	condition_must_be_bool	31401	primary	
+src/ast/ast_infer_type_op.cpp	388	operator_not_found	mismatching_type	30411	primary	
+src/ast/ast_infer_type_op.cpp	392	invalid_type	invalid_type	30262	primary	
+src/ast/ast_infer_type_op.cpp	426	<param>	cant_pointer	30942	primary	
+src/ast/ast_infer_type_op.cpp	433	<param>	cant_copy	30915	primary	
+src/ast/ast_infer_type_op.cpp	439	<param>	mismatching_type	30411	primary	
+src/ast/ast_infer_type_op.cpp	455	<param>	mismatching_type	30411	primary	
+src/ast/ast_infer_type_op.cpp	479	cant_write_to_non_reference	cant_move	30941	primary	
+src/ast/ast_infer_type_op.cpp	482	cant_write_to_non_reference	cant_move	30941	wording_fix	typo: 'move to from' -> 'move from'
+src/ast/ast_infer_type_op.cpp	485	cant_move_to_const	cant_move	30941	primary	
+src/ast/ast_infer_type_op.cpp	488	cant_move	cant_type	30950	primary	
+src/ast/ast_infer_type_op.cpp	491	cant_move	cant_move	30941	primary	
+src/ast/ast_infer_type_op.cpp	494	cant_pass_temporary	cant_move	30941	primary	
+src/ast/ast_infer_type_op.cpp	497	unsafe	unsafe_smart_pointer	31029	primary	
+src/ast/ast_infer_type_op.cpp	502	unsafe	unsafe_move	31021	primary	
+src/ast/ast_infer_type_op.cpp	508	unsafe	unsafe_class	31005	primary	
+src/ast/ast_infer_type_op.cpp	589	cant_write_to_non_reference	cant_copy	30915	primary	
+src/ast/ast_infer_type_op.cpp	592	cant_write_to_const	cant_write	30952	primary	
+src/ast/ast_infer_type_op.cpp	595	cant_pass_temporary	cant_copy	30915	primary	
+src/ast/ast_infer_type_op.cpp	598	unsafe	unsafe_class	31005	primary	
+src/ast/ast_infer_type_op.cpp	602	cant_copy	cant_type	30950	primary	
+src/ast/ast_infer_type_op.cpp	710	operator_not_found	mismatching_clone_type	30403	recategorize	recategorize: cerror operator_not_found wrong; this is type-mismatch on clone (use mismatching_type)
+src/ast/ast_infer_type_op.cpp	713	cant_write_to_non_reference	cant_clone	30913	primary	
+src/ast/ast_infer_type_op.cpp	716	cant_write_to_const	cant_clone	30913	primary	
+src/ast/ast_infer_type_op.cpp	736	invalid_type	invalid_clone_smart_pointer_type	30138	primary	
+src/ast/ast_infer_type_report.cpp	358	<param>	lookup_function	30810	mid_inference	gated by verbose; emits expensive describe()/candidate dump every infer pass
+src/ast/ast_infer_type_report.cpp	360	<param>	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	441	<param>	lookup_function	30810	mid_inference	gated by verbose; emits expensive describe()/candidate dump every infer pass
+src/ast/ast_infer_type_report.cpp	443	<param>	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	506	<param>	lookup_function	30810	mid_inference	gated by verbose; emits expensive describe()/candidate dump every infer pass
+src/ast/ast_infer_type_report.cpp	508	<param>	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	520	cant_copy	cant_clone_type	30914	mid_inference	gated by verbose; emits trait-walk for clonable subtypes
+src/ast/ast_infer_type_report.cpp	522	cant_copy	cant_clone_type	30914	primary	
+src/ast/ast_infer_type_report.cpp	534	<param>	cant_clone	30913	mid_inference	gated by verbose; emits trait-walk for non-clonable-from-const subtypes
+src/ast/ast_infer_type_report.cpp	536	<param>	cant_clone	30913	primary	
+src/ast/ast_infer_type_report.cpp	591	function_not_found	lookup_function	30810	mid_inference	gated by verbose; emits library-wide candidate scan
+src/ast/ast_infer_type_report.cpp	594	function_not_found	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	607	function_already_declared	missing_finalizer	30306	recategorize	recategorize: function_already_declared wrong cerr for missing finalizer (verbose path uses reportMissing which keeps it; non-verbose path emits as-is)
+src/ast/ast_infer_type_report.cpp	659	<param>	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	669	<param>	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_report.cpp	723	<param>	lookup_function	30810	primary	
+src/ast/ast_infer_type_report.cpp	735	<param>	ambiguous_function	30607	primary	
+src/ast/ast_infer_type_report.cpp	745	operator_not_found	cant_assign_op	30910	primary	reword: drop trailing period for consistency
+src/ast/ast_infer_type_report.cpp	749	operator_not_found	cant_assign_op	30910	primary	reword: drop trailing period for consistency
+src/ast/ast_infer_type_report.cpp	756	operator_not_found	mismatching_numeric_type	30406	mid_inference	gated by verbose; expensive describe of try-the-following hint
+src/ast/ast_infer_type_report.cpp	762	operator_not_found	mismatching_numeric_type	30406	primary	
+src/ast/ast_infer_type_report.cpp	773	operator_not_found	mismatching_numeric_type	30406	mid_inference	gated by verbose; expensive describe of try-one-of-the-following hint
+src/ast/ast_infer_type_report.cpp	779	operator_not_found	invalid_storage_type_op	30230	primary	
+src/ast/ast_infer_type_report.cpp	784	operator_not_found	mismatching_numeric_type	30406	mid_inference	gated by verbose; emits describe of left/right baseTypes
+src/ast/ast_infer_type_report.cpp	790	operator_not_found	mismatching_numeric_type	30406	primary	
+src/ast/ast.cpp	3033	invalid_annotation	cant_create_structure_annotation	30916	primary	
+src/ast/ast.cpp	3037	invalid_annotation	invalid_structure_annotation	30233	primary	
+src/ast/ast.cpp	3066	type_not_found	ambiguous_type	30612	ambiguous	wording: 'undefined' contradicts ambiguous semantics; cerr says type_not_found but multiple matches exist
+src/ast/ast.cpp	3076	structure_not_found	ambiguous_structure	30609	recategorize	recategorize: structure_not_found when multiple found is wrong; should be ambiguous_structure
+src/ast/ast.cpp	3088	handle_not_found	invalid_annotation	30100	recategorize	recategorize: handle_not_found is misleading; this is a type-mismatch on the resolved annotation
+src/ast/ast.cpp	3094	handle_not_found	ambiguous_annotation	30600	recategorize	recategorize: handle_not_found should be ambiguous_annotation when multiple found
+src/ast/ast.cpp	3106	enumeration_not_found	ambiguous_enumeration	30603	recategorize	recategorize: enumeration_not_found should be ambiguous_enumeration when multiple found
+src/ast/ast.cpp	3117	type_alias_not_found	ambiguous_type_alias	30613	recategorize	recategorize: type_alias_not_found should be ambiguous_type_alias when multiple found
+src/ast/ast.cpp	3146	function_not_found	ambiguous_function	30607	recategorize	recategorize: function_not_found should be ambiguous_function when multiple found
+src/ast/ast.cpp	3527		runtime_macro	50503	primary	missing cerr; suggest macro_failed
+src/ast/ast_annotations.cpp	33	invalid_annotation	cant_finalize_structure_annotation	30926	primary	
+src/ast/ast_annotations.cpp	45	invalid_annotation	cant_finalize_function_annotation	30925	primary	
+src/ast/ast_annotations.cpp	57	invalid_annotation	cant_finalize_block_annotation	30924	primary	
+src/ast/ast_annotations.cpp	65	invalid_annotation	internal_annotation	50600	internal	
+src/ast/ast_annotations.cpp	117	annotation_failed	runtime_function_annotation	50501	primary	
+src/ast/ast_annotations.cpp	131	annotation_failed	runtime_structure_annotation	31210	primary	
+src/ast/ast_annotations.cpp	179	annotation_failed	runtime_function_annotation	50501	primary	
+src/ast/ast_const_folding.cpp	86	missing_node	internal_function_not_resolved_yet	50613	internal	
+src/ast/ast_const_folding.cpp	851		invalid_expression	30151	primary	missing cerr; suggest static_assert_failed or new not_constexpr
+src/ast/ast_const_folding.cpp	859		runtime_expression	31202	primary	missing cerr; suggest static_assert_failed
+src/ast/ast_const_folding.cpp	872		runtime_expression	31202	primary	missing cerr; suggest static_assert_failed
+src/ast/ast_const_folding.cpp	888	concept_failed	missing_annotation	30300	primary	message is user-supplied; concept_failed cerr stays
+src/ast/ast_const_folding.cpp	894	static_assert_failed	missing_annotation	30300	primary	message is user-supplied; static_assert_failed cerr stays
+src/ast/ast_const_folding.cpp	904	run_failed	runtime_function	50500	primary	
+src/ast/ast_const_folding.cpp	907	run_failed	runtime_function	50500	primary	
+src/ast/ast_const_folding.cpp	962	run_failed	internal_function	50609	internal	
+src/ast/ast_derive_alias.cpp	355	make_local_aliasing	invalid_expression	30151	primary	
+src/ast/ast_derive_alias.cpp	375	make_local_aliasing	invalid_expression	30151	primary	
+src/ast/ast_derive_alias.cpp	383	make_local_aliasing	invalid_expression	30151	primary	
+src/ast/ast_derive_alias.cpp	447	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	471	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	480	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	502	argument_aliasing	invalid_argument_global	30105	primary	
+src/ast/ast_derive_alias.cpp	506	argument_aliasing	invalid_argument_global	30105	primary	
+src/ast/ast_derive_alias.cpp	534	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	555	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	564	argument_aliasing	invalid_argument	30104	primary	
+src/ast/ast_derive_alias.cpp	578	argument_aliasing	invalid_argument_global	30105	primary	
+src/ast/ast_derive_alias.cpp	593	argument_aliasing	invalid_argument_global	30105	primary	
+src/ast/ast_export.cpp	126		internal_function	50609	internal	missing cerr; suggest internal_error
+src/ast/ast_export.cpp	133		internal_variable	50640	internal	missing cerr; suggest internal_error
+src/ast/ast_lint.cpp	231	invalid_type	invalid_type_expression	30264	primary	
+src/ast/ast_lint.cpp	247	only_fast_aot_no_cpp_name	missing_function_name	30309	primary	
+src/ast/ast_lint.cpp	258	invalid_name	invalid_module_name	30210	primary	
+src/ast/ast_lint.cpp	271	invalid_name	invalid_argument_name	30106	primary	
+src/ast/ast_lint.cpp	287	invalid_type	exceeds_type_alias	30513	primary	
+src/ast/ast_lint.cpp	295	invalid_name	invalid_enumeration_name	30146	primary	
+src/ast/ast_lint.cpp	302	invalid_name	invalid_enumerator_name	30148	primary	
+src/ast/ast_lint.cpp	315	invalid_name	invalid_structure_name	30240	primary	
+src/ast/ast_lint.cpp	319	invalid_type	exceeds_structure	30510	primary	
+src/ast/ast_lint.cpp	329	unsafe_function	unsafe_global	31014	primary	
+src/ast/ast_lint.cpp	341	unsafe_function	unsafe_function	31012	primary	
+src/ast/ast_lint.cpp	354	invalid_name	invalid_field_name	30152	primary	
+src/ast/ast_lint.cpp	359	invalid_structure_field_type	cant_field_class	30923	primary	
+src/ast/ast_lint.cpp	367	invalid_name	invalid_variable_name	30282	primary	
+src/ast/ast_lint.cpp	372	no_global_variables	cant_global	30930	primary	
+src/ast/ast_lint.cpp	375	no_global_variables	cant_global	30930	primary	
+src/ast/ast_lint.cpp	381	no_global_heap	cant_global	30930	primary	
+src/ast/ast_lint.cpp	387	cant_be_null	missing_global	30311	primary	
+src/ast/ast_lint.cpp	392	cant_be_null	cant_global	30930	primary	
+src/ast/ast_lint.cpp	397	invalid_variable_type	exceeds_global	50301	primary	
+src/ast/ast_lint.cpp	417	variable_not_found	recursion_global	31104	recategorize	recategorize: variable_not_found is wrong; this is initialization-recursion
+src/ast/ast_lint.cpp	425	no_init	cant_global	30930	primary	
+src/ast/ast_lint.cpp	437	variable_not_found	invalid_global	30173	recategorize	recategorize: variable_not_found is wrong; this is initialization-order
+src/ast/ast_lint.cpp	451	invalid_name	invalid_variable_name	30282	primary	
+src/ast/ast_lint.cpp	459	cant_be_null	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	470	invalid_name	invalid_variable_name	30282	primary	
+src/ast/ast_lint.cpp	475	cant_be_null	missing_local	30314	primary	
+src/ast/ast_lint.cpp	480	cant_be_null	cant_local	30940	primary	
+src/ast/ast_lint.cpp	485	invalid_variable_type	exceeds_local	30508	primary	
+src/ast/ast_lint.cpp	493	cant_be_null	cant_result	30943	primary	
+src/ast/ast_lint.cpp	514	duplicate_key	already_declared_table	30706	primary	
+src/ast/ast_lint.cpp	532	duplicate_key	already_declared_table	30706	primary	
+src/ast/ast_lint.cpp	549	duplicate_key	already_declared_table	30706	primary	
+src/ast/ast_lint.cpp	562	duplicate_key	already_declared_table	30706	primary	
+src/ast/ast_lint.cpp	575	no_writing_to_nameless	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	594	missing_node	internal_function_not_resolved_yet	50613	internal	
+src/ast/ast_lint.cpp	618	deprecated_function	cant_function	30927	primary	
+src/ast/ast_lint.cpp	627	annotation_failed	runtime_function_annotation	50501	primary	
+src/ast/ast_lint.cpp	636	aot_side_effects	invalid_function_argument	30159	primary	
+src/ast/ast_lint.cpp	649	invalid_argument_type	invalid_function_argument	30159	primary	
+src/ast/ast_lint.cpp	653	not_expecting_return_value	cant_result	30943	primary	
+src/ast/ast_lint.cpp	663	cant_be_null	cant_argument	30906	primary	
+src/ast/ast_lint.cpp	722	aot_side_effects	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	732	aot_side_effects	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	783	cant_be_null	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	787	no_writing_to_nameless	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	797	aot_side_effects	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	802	cant_be_null	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	806	no_writing_to_nameless	cant_expression	30922	primary	
+src/ast/ast_lint.cpp	816	aot_side_effects	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	824	invalid_new_type	exceeds_type	30512	primary	
+src/ast/ast_lint.cpp	828	invalid_new_type	invalid_type	30262	primary	
+src/ast/ast_lint.cpp	835	invalid_new_type	exceeds_type	30512	primary	
+src/ast/ast_lint.cpp	839	invalid_new_type	invalid_type	30262	primary	
+src/ast/ast_lint.cpp	846	assert_with_side_effects	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	860	unsafe_function	unsafe_function	31012	primary	
+src/ast/ast_lint.cpp	882	invalid_name	invalid_function_name	30163	primary	
+src/ast/ast_lint.cpp	887	not_all_paths_return_value	missing_function_result	30310	primary	
+src/ast/ast_lint.cpp	899	unsafe_function	unsafe_argument	31001	primary	
+src/ast/ast_lint.cpp	911	annotation_failed	runtime_function_annotation	50501	primary	
+src/ast/ast_lint.cpp	916	no_init	cant_function	30927	primary	
+src/ast/ast_lint.cpp	925	invalid_member_function	missing_function_body	30308	primary	
+src/ast/ast_lint.cpp	936	invalid_name	invalid_argument_name	30106	primary	
+src/ast/ast_lint.cpp	941	unused_function_argument	invalid_function_argument	30159	primary	
+src/ast/ast_lint.cpp	947	invalid_variable_type	exceeds_argument	30500	primary	
+src/ast/ast_lint.cpp	956	not_all_paths_return_value	missing_block_result	30304	primary	
+src/ast/ast_lint.cpp	962	invalid_label	cant_block	30911	primary	
+src/ast/ast_lint.cpp	969	invalid_name	invalid_argument_name	30106	primary	
+src/ast/ast_lint.cpp	974	unused_block_argument	invalid_block_argument	30121	primary	
+src/ast/ast_lint.cpp	980	invalid_variable_type	exceeds_argument	30500	primary	
+src/ast/ast_lint.cpp	987	unspecified	cant_argument_structure	30907	primary	wording: 'its not yet implemented' belongs in fixme or extra; cerr=unspecified should be invalid_argument_type or new
+src/ast/ast_lint.cpp	1002	top_level_no_sideeffect_operation	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	1018	top_level_no_sideeffect_operation	invalid_expression	30151	primary	
+src/ast/ast_lint.cpp	1039	table_lookup_collision	invalid_table_expression	30250	primary	
+src/ast/ast_lint.cpp	1145	internal_error	internal_options	50629	internal	
+src/ast/ast_lint.cpp	1154	internal_error	internal_options	50629	internal	
+src/ast/ast_lint.cpp	1175	invalid_option	invalid_options	50100	primary	
+src/ast/ast_lint.cpp	1181	invalid_option	invalid_options	50100	primary	
+src/ast/ast_lint.cpp	1216	internal_error	internal_type	50637	internal	
+src/ast/ast_simulate.cpp	620	missing_node	internal_function_annotation	50610	internal	
+src/ast/ast_simulate.cpp	916		internal_structure	50632	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1124		internal_array	50601	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1225		internal_tuple	50635	internal	missing cerr; wording 'array' wrong context (tuple); suggest internal_error
+src/ast/ast_simulate.cpp	1252		internal_macro	50627	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1260		internal_label	50622	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1303		internal_function	50609	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1307		internal_function	50609	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1352		internal_expression	50607	internal	missing cerr; typo: simluate -> simulate; suggest internal_error
+src/ast/ast_simulate.cpp	1445		internal_generator	50615	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1453		internal_generator	50615	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1461		internal_array	50601	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1505		internal_field	50608	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1590		internal_table	50634	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1613		internal_table	50634	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1636		internal_table	50634	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1659		internal_table	50634	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1668		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1683		internal_macro	50627	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1689	typeinfo_macro_error	runtime_macro	50503	primary	
+src/ast/ast_simulate.cpp	1719	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1739	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1749	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1758		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1811	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1819	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1859	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1865	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	1890		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1900		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	1912	index_out_of_range	exceeds_array	50300	primary	
+src/ast/ast_simulate.cpp	1961		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2237		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2669		internal_macro	50627	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2683		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2705		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2720		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	2943		internal_block	50603	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3052	missing_node	internal_expression	50607	internal	
+src/ast/ast_simulate.cpp	3071		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3117		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3154		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3190		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3275		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3286		internal_expression	50607	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3305		internal_class	50605	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3309		internal_variable	50640	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3465		internal_global	50621	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3484		internal_function	50609	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3503		internal_annotation	50600	internal	missing cerr; suggest internal_error
+src/ast/ast_simulate.cpp	3572		invalid_options	50100	primary	missing cerr
+src/ast/ast_simulate.cpp	3619		internal_variable	50640	internal	missing cerr; wording: 'errors.' should be 'error,' and missing space before <var>; suggest internal_error
+src/ast/ast_simulate.cpp	3643		exceeds_global	50301	primary	missing cerr
+src/ast/ast_simulate.cpp	3647		exceeds_global	50301	primary	missing cerr
+src/ast/ast_simulate.cpp	3653		runtime_global	50502	primary	missing cerr
+src/ast/ast_simulate.cpp	3657		runtime_global	50502	primary	missing cerr
+src/ast/ast_simulate.cpp	3680	no_init	internal_function	50609	internal	extra-msg says 'made it all the way to simulate somehow' — this is a should-not-reach lint-bypass invariant, not a primary user-facing error
+src/ast/ast_simulate.cpp	3727	no_init	internal_global	50621	internal	extra-msg says 'made it all the way to simulate somehow' — should-not-reach invariant, not primary
+src/ast/ast_simulate.cpp	3796	cant_initialize	runtime_function_annotation	50501	primary	
+src/ast/ast_simulate.cpp	3913	cant_initialize	runtime_function	50500	primary	
+src/ast/ast_simulate.cpp	3937		runtime_macro	50503	primary	missing cerr; suggest macro_failed
+src/ast/ast_simulate.cpp	3971		runtime_macro	50503	primary	missing cerr; suggest macro_failed
+src/ast/ast_typedecl.cpp	3785		internal_name	50628	internal	DAS_VERIFY-only; not Program::error
+src/ast/ast_typedecl.cpp	3788		internal_name	50628	internal	DAS_VERIFY-only; not Program::error
+src/ast/ast_typedecl.cpp	3807		internal_type	50637	internal	DAS_VERIFY-only; typo: missing closing apostrophe in 'expecting '\]'
+src/ast/ast_typedecl.cpp	3817		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3820		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3828		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3831		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3859		internal_annotation	50600	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3861		internal_annotation	50600	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3874		internal_structure	50632	internal	DAS_VERIFY-only; logic-bug: condition is `stt.size()==1` but message says 'unknown' — should be ==0
+src/ast/ast_typedecl.cpp	3885		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3887		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3901		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3930		internal_enumeration	50606	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	3945		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	4065		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	4072		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_typedecl.cpp	4107		internal_type	50637	internal	DAS_VERIFY-only
+src/ast/ast_validate.cpp	71	unspecified	internal_type	50637	internal	
+src/ast/ast_validate.cpp	82	unspecified	internal_expression	50607	internal	
+src/ast/ast_validate.cpp	294	unspecified	internal_type	50637	internal	
+src/ast/ast_validate.cpp	302	unspecified	internal_expression	50607	internal	
+src/ast/ast_parse.cpp	777		lookup_file	20603	primary	
+src/ast/ast_parse.cpp	870	module_does_not_have_a_name	missing_module_name	20201	primary	
+src/ast/ast_parse.cpp	975	module_does_not_have_a_name	missing_module_name	20201	primary	
+src/ast/ast_parse.cpp	998	module_required_from_shared	invalid_module_require	20115	primary	
+src/ast/ast_parse.cpp	1149	module_not_found	lookup_module	20605	primary	
+src/ast/ast_parse.cpp	1241	syntax_error	internal_module	20901	internal	recategorize: not a syntax error
+src/ast/ast_parse.cpp	1249	syntax_error	internal_module	20901	internal	recategorize: not a syntax error; vague text — name the failing module
+src/ast/ast_parse.cpp	1258	module_not_found	already_declared_module	20510	primary	recategorize: collision not lookup
+src/ast/ast_parse.cpp	1267	module_not_found	already_declared_module	20510	primary	recategorize: collision not lookup
+src/parser/ds2_lexer.lpp	89	syntax_error	lookup_file	20603	primary	
+src/parser/ds2_lexer.lpp	97	invalid_line_directive	invalid_line	10100	primary	
+src/parser/ds2_lexer.lpp	101	unexpected_close_comment	invalid_line	10100	primary	UNCLASSIFIED:comment subject — propose 'comment'
+src/parser/ds2_lexer.lpp	158	comment_contains_eof	exceeds_file	10301	primary	
+src/parser/ds2_lexer.lpp	162	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds2_lexer.lpp	182	nested_string_constant	invalid_string	10101	primary	UNCLASSIFIED:string subject
+src/parser/ds2_lexer.lpp	191	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds2_lexer.lpp	217	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds2_lexer.lpp	244	syntax_error	lookup_file	20603	primary	
+src/parser/ds2_lexer.lpp	420	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	431	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	443	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	455	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	466	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	481	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	492	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	503	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	516	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	525	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	537	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	546	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	555	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	565	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	574	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	583	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	592	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	601	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	610	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds2_lexer.lpp	618	mismatching_parentheses	mismatching_parens	10202	primary	
+src/parser/ds2_lexer.lpp	630	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces are not parens; propose mismatching_square_brackets
+src/parser/ds2_lexer.lpp	651	mismatching_curly_bracers	mismatching_curly_bracers	10200	primary	wording: 'bracers' -> 'brackets' (also rename enum)
+src/parser/ds2_lexer.lpp	809		mismatching_module_name	10201	primary	UNCLASSIFIED:keyword subject; missing cerr — defaults to unspecified
+src/parser/ds2_lexer.lpp	819		mismatching_module_name	10201	primary	UNCLASSIFIED:keyword/type_function subject; missing cerr — defaults to unspecified
+src/parser/ds2_parser.ypp	569	syntax_error	invalid_module	20114	primary	recategorize: ordering not syntax_error
+src/parser/ds2_parser.ypp	628	module_already_has_a_name	already_declared_module_name	20511	primary	
+src/parser/ds2_parser.ypp	669	invalid_escape_sequence	invalid_escape	20105	primary	
+src/parser/ds2_parser.ypp	722	unsupported_read_macro	lookup_macro	30821	primary	
+src/parser/ds2_parser.ypp	729	unsupported_read_macro	ambiguous_macro	30608	primary	
+src/parser/ds2_parser.ypp	732	syntax_error	invalid_macro	20113	primary	
+src/parser/ds2_parser.ypp	763	invalid_option	invalid_options	50100	primary	
+src/parser/ds2_parser.ypp	1161	invalid_annotation	lookup_annotation	20600	primary	recategorize: it's a lookup miss not invalid
+src/parser/ds2_parser.ypp	1166	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1179	invalid_annotation	lookup_annotation	20600	primary	recategorize: it's a lookup miss not invalid
+src/parser/ds2_parser.ypp	1184	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1199	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1209	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1214	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1224	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1229	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1239	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1244	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds2_parser.ypp	1440	function_already_declared	already_declared_function	30702	primary	
+src/parser/ds2_parser.ypp	2798	enumeration_value_already_declared	already_declared_enumerator	20502	primary	wording: 'enumeration already declared' -> 'enumeration value already declared'
+src/parser/ds2_parser.ypp	2810	enumeration_value_already_declared	already_declared_enumerator	20502	primary	wording: 'enumeration already declared' -> 'enumeration value already declared'
+src/parser/ds2_parser.ypp	2841	invalid_type	invalid_type_alias	20121	primary	
+src/parser/ds2_parser.ypp	2846	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds2_parser.ypp	3191	invalid_type	exceeds_bitfield	20300	primary	recategorize: it's exceeds not invalid_type
+src/parser/ds2_parser.ypp	3240	invalid_type	invalid_array_type	30112	primary	
+src/parser/ds2_parser.ypp	3243	invalid_type	invalid_array_type	30112	primary	
+src/parser/ds2_parser.ypp	3513	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds2_parser.ypp	3552	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds2_parser.ypp	3594	invalid_type	exceeds_bitfield	20300	primary	recategorize: it's exceeds not invalid_type
+src/parser/ds2_parser.ypp	3603	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds2_parser.ypp	4036		invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — cerr passed through from caller
+src/parser/ds2_parser.ypp	4042	syntax_error	invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — defaults to syntax_error when caller passes none
+src/parser/ds_lexer.lpp	89	syntax_error	lookup_file	20603	primary	
+src/parser/ds_lexer.lpp	97	invalid_line_directive	invalid_line	10100	primary	
+src/parser/ds_lexer.lpp	101	unexpected_close_comment	invalid_line	10100	primary	UNCLASSIFIED:comment subject — propose 'comment'
+src/parser/ds_lexer.lpp	111	unexpected_close_comment	invalid_line	10100	primary	UNCLASSIFIED:comment subject — propose 'comment'
+src/parser/ds_lexer.lpp	182	comment_contains_eof	exceeds_file	10301	primary	
+src/parser/ds_lexer.lpp	186	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds_lexer.lpp	206	nested_string_constant	invalid_string	10101	primary	UNCLASSIFIED:string subject
+src/parser/ds_lexer.lpp	215	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds_lexer.lpp	242	string_constant_exceeds_file	exceeds_file	10301	primary	
+src/parser/ds_lexer.lpp	297	syntax_error	invalid_line	10100	primary	UNCLASSIFIED:indentation subject; missing cerr — defaults to syntax_error
+src/parser/ds_lexer.lpp	304	syntax_error	invalid_line	10100	primary	UNCLASSIFIED:indentation subject; missing cerr — defaults to syntax_error
+src/parser/ds_lexer.lpp	365	syntax_error	lookup_file	20603	primary	
+src/parser/ds_lexer.lpp	553	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	564	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	576	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	588	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	599	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	614	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	625	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	636	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	649	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	658	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	670	integer_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	679	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	688	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	698	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	707	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	716	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	725	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	734	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	743	floating_point_constant_out_of_range	exceeds_constant	10300	primary	
+src/parser/ds_lexer.lpp	751	mismatching_parentheses	mismatching_parens	10202	primary	
+src/parser/ds_lexer.lpp	763	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces are not parens; propose mismatching_square_brackets
+src/parser/ds_lexer.lpp	784	mismatching_curly_bracers	mismatching_curly_bracers	10200	primary	wording: 'bracers' -> 'brackets' (also rename enum)
+src/parser/ds_lexer.lpp	989	mismatching_parentheses	mismatching_curly_bracers	10200	primary	recategorize: text says curly but cerr is mismatching_parentheses
+src/parser/ds_lexer.lpp	1005	mismatching_parentheses	mismatching_curly_bracers	10200	primary	recategorize: text says curly but cerr is mismatching_parentheses
+src/parser/ds_lexer.lpp	1009	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces; propose mismatching_square_brackets
+src/parser/ds_lexer.lpp	1026	mismatching_parentheses	mismatching_curly_bracers	10200	primary	recategorize: text says curly but cerr is mismatching_parentheses
+src/parser/ds_lexer.lpp	1030	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces; propose mismatching_square_brackets
+src/parser/ds_lexer.lpp	1047	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces; propose mismatching_square_brackets
+src/parser/ds_lexer.lpp	1064	mismatching_parentheses	mismatching_parens	10202	primary	recategorize: square braces; propose mismatching_square_brackets
+src/parser/ds_lexer.lpp	1171		mismatching_module_name	10201	primary	UNCLASSIFIED:keyword subject; missing cerr — defaults to unspecified
+src/parser/ds_lexer.lpp	1181		mismatching_module_name	10201	primary	UNCLASSIFIED:keyword/type_function subject; missing cerr — defaults to unspecified
+src/parser/ds_parser.ypp	572	syntax_error	invalid_module	20114	primary	recategorize: ordering not syntax_error
+src/parser/ds_parser.ypp	621	module_already_has_a_name	already_declared_module_name	20511	primary	
+src/parser/ds_parser.ypp	662	invalid_escape_sequence	invalid_escape	20105	primary	
+src/parser/ds_parser.ypp	715	unsupported_read_macro	lookup_macro	30821	primary	
+src/parser/ds_parser.ypp	722	unsupported_read_macro	ambiguous_macro	30608	primary	
+src/parser/ds_parser.ypp	725	syntax_error	invalid_macro	20113	primary	
+src/parser/ds_parser.ypp	768	invalid_option	invalid_options	50100	primary	
+src/parser/ds_parser.ypp	1043	invalid_annotation	lookup_annotation	20600	primary	recategorize: it's a lookup miss not invalid
+src/parser/ds_parser.ypp	1047	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1060	invalid_annotation	lookup_annotation	20600	primary	recategorize: it's a lookup miss not invalid
+src/parser/ds_parser.ypp	1064	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1079	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1089	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1094	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1104	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1109	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1119	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1124	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/ds_parser.ypp	1307	function_already_declared	already_declared_function	30702	primary	
+src/parser/ds_parser.ypp	1507	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject; wording: drop '[[ ]]' once gen2 is canonical
+src/parser/ds_parser.ypp	1515	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject; wording: drop '[[ ]]' once gen2 is canonical
+src/parser/ds_parser.ypp	2466	syntax_error	invalid_annotation	30100	primary	recategorize: not syntax_error
+src/parser/ds_parser.ypp	2778	enumeration_value_already_declared	already_declared_enumerator	20502	primary	wording: 'enumeration already declared' -> 'enumeration value already declared'
+src/parser/ds_parser.ypp	2793	enumeration_value_already_declared	already_declared_enumerator	20502	primary	
+src/parser/ds_parser.ypp	2825	invalid_type	invalid_type_alias	20121	primary	
+src/parser/ds_parser.ypp	2830	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds_parser.ypp	3151	invalid_type	exceeds_bitfield	20300	primary	recategorize: it's exceeds not invalid_type
+src/parser/ds_parser.ypp	3193	invalid_type	invalid_array_type	30112	primary	
+src/parser/ds_parser.ypp	3196	invalid_type	invalid_array_type	30112	primary	
+src/parser/ds_parser.ypp	3442	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds_parser.ypp	3478	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds_parser.ypp	3517	invalid_type	exceeds_bitfield	20300	primary	recategorize: it's exceeds not invalid_type
+src/parser/ds_parser.ypp	3526	type_alias_already_declared	already_declared_type_alias	20513	primary	
+src/parser/ds_parser.ypp	4098		invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — cerr passed through from caller
+src/parser/ds_parser.ypp	4104	syntax_error	invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — defaults to syntax_error when caller passes none
+src/parser/parser_impl.cpp	18		invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — passes cerr through
+src/parser/parser_impl.cpp	22		invalid_expression	30151	primary	UNCLASSIFIED:dispatcher — passes cerr through
+src/parser/parser_impl.cpp	27	invalid_name	invalid_name	20116	primary	
+src/parser/parser_impl.cpp	123	cant_initialize	cant_type	30950	primary	UNCLASSIFIED:type-decl-default subject
+src/parser/parser_impl.cpp	129	invalid_aka	invalid_type_aka	20120	primary	UNCLASSIFIED:aka modifier
+src/parser/parser_impl.cpp	157	annotation_not_found	lookup_annotation	20600	primary	
+src/parser/parser_impl.cpp	161	annotation_not_found	ambiguous_annotation	30600	primary	recategorize: ambiguous not lookup
+src/parser/parser_impl.cpp	179	invalid_annotation	runtime_annotation	20800	primary	
+src/parser/parser_impl.cpp	189	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/parser_impl.cpp	213	invalid_aka	invalid_aka	20100	primary	UNCLASSIFIED:aka subject
+src/parser/parser_impl.cpp	244	invalid_override	cant_structure	20701	primary	recategorize: sealed-derive not override
+src/parser/parser_impl.cpp	252	structure_not_found	lookup_structure	20606	primary	
+src/parser/parser_impl.cpp	256	structure_not_found	ambiguous_structure	30609	primary	recategorize: ambiguous not lookup
+src/parser/parser_impl.cpp	266	structure_already_declared	already_declared_structure	20512	primary	
+src/parser/parser_impl.cpp	279	invalid_type	already_declared_type_alias	20513	primary	recategorize: already-declared not invalid_type
+src/parser/parser_impl.cpp	288	invalid_type	invalid_type_alias	20121	primary	
+src/parser/parser_impl.cpp	294	invalid_type	already_declared_type_alias	20513	primary	recategorize: already-declared not invalid_type
+src/parser/parser_impl.cpp	310	invalid_override	invalid_class	30134	primary	recategorize: derive-mismatch not override
+src/parser/parser_impl.cpp	313	invalid_override	invalid_structure	30232	primary	recategorize: derive-mismatch not override
+src/parser/parser_impl.cpp	324	function_already_declared	internal_function	50609	internal	
+src/parser/parser_impl.cpp	344	invalid_static	invalid_field_static	20108	primary	
+src/parser/parser_impl.cpp	348	invalid_static	invalid_field_static	20108	primary	
+src/parser/parser_impl.cpp	354	invalid_override	invalid_field	20107	primary	
+src/parser/parser_impl.cpp	376	invalid_static	already_declared_global	20507	primary	recategorize: already-declared not invalid_static
+src/parser/parser_impl.cpp	393	invalid_static	already_declared_field_static	20504	primary	recategorize: already-declared not invalid_static
+src/parser/parser_impl.cpp	398	invalid_override	invalid_field	20107	primary	
+src/parser/parser_impl.cpp	414	invalid_override	already_declared_field	20503	primary	recategorize: already-declared not invalid_override
+src/parser/parser_impl.cpp	447	invalid_annotation	runtime_annotation	20800	primary	
+src/parser/parser_impl.cpp	452	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/parser_impl.cpp	457	structure_already_declared	already_declared_structure	20512	primary	
+src/parser/parser_impl.cpp	483	enumeration_already_declared	already_declared_enumeration	20501	primary	
+src/parser/parser_impl.cpp	505	invalid_annotation	runtime_annotation	20800	primary	
+src/parser/parser_impl.cpp	524	invalid_aka	invalid_global_aka	20112	primary	UNCLASSIFIED:aka modifier
+src/parser/parser_impl.cpp	550	global_variable_already_declared	already_declared_global	20507	primary	
+src/parser/parser_impl.cpp	568	global_variable_already_declared	already_declared_global_bitfield	20508	primary	
+src/parser/parser_impl.cpp	582	invalid_aka	invalid_global_aka	20112	primary	UNCLASSIFIED:aka modifier
+src/parser/parser_impl.cpp	614	global_variable_already_declared	already_declared_global	20507	primary	
+src/parser/parser_impl.cpp	629	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	632	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	635	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	638	invalid_member_function	invalid_function_annotation	20110	primary	
+src/parser/parser_impl.cpp	642	invalid_member_function	missing_function_result	30310	primary	recategorize: missing-return-type not invalid_member_function
+src/parser/parser_impl.cpp	645	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	687	invalid_type	ambiguous_function_argument_type	20402	primary	recategorize: ambiguous not invalid_type
+src/parser/parser_impl.cpp	694	function_already_declared	already_declared_function	30702	primary	
+src/parser/parser_impl.cpp	707	invalid_member_function	internal_function	50609	internal	recategorize: internal not invalid_member_function
+src/parser/parser_impl.cpp	710	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	713	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	717	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	731	function_already_declared	already_declared_function	30702	primary	
+src/parser/parser_impl.cpp	771	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	775	invalid_member_function	invalid_function	20109	primary	
+src/parser/parser_impl.cpp	781	invalid_member_function	invalid_function_static	20111	primary	
+src/parser/parser_impl.cpp	791	function_already_declared	already_declared_function	30702	primary	wording: typo 'intializer' -> 'initializer'
+src/parser/parser_impl.cpp	811	function_already_declared	already_declared_function	30702	primary	
+src/parser/parser_impl.cpp	829	type_not_found	ambiguous_enumeration	30603	primary	recategorize: ambiguous not lookup
+src/parser/parser_impl.cpp	832	type_not_found	lookup_enumeration	20602	primary	
+src/parser/parser_impl.cpp	850	bitfield_not_found	lookup_bitfield	30802	primary	
+src/parser/parser_impl.cpp	854	syntax_error	invalid_type	30262	primary	recategorize: kind-mismatch not syntax_error
+src/parser/parser_impl.cpp	910	argument_already_declared	already_declared_block_argument	30701	primary	
+src/parser/parser_impl.cpp	922	invalid_capture	invalid_capture	20103	primary	
+src/parser/parser_impl.cpp	933	invalid_annotation	runtime_annotation	20800	primary	
+src/parser/parser_impl.cpp	937	invalid_annotation	invalid_annotation	30100	primary	
+src/parser/parser_impl.cpp	985	local_variable_already_declared	already_declared_local	20509	primary	
+src/parser/parser_impl.cpp	1034	local_variable_already_declared	already_declared_local	20509	primary	
+src/parser/parser_impl.cpp	1078	argument_already_declared	already_declared_function_argument	20506	primary	
+src/parser/parser_impl.cpp	1110	module_not_found	already_declared_module	20510	primary	recategorize: alias-conflict not lookup
+src/parser/parser_impl.cpp	1119	module_not_found	lookup_module	20605	primary	
+src/parser/parser_impl.cpp	1180	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1183	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1188	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1195	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1204	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1235	cant_pipe	cant_expression	30922	primary	UNCLASSIFIED:pipe subject
+src/parser/parser_impl.cpp	1289	syntax_error	invalid_capture	20103	primary	recategorize: not syntax_error
+src/builtin/module_builtin_ast.cpp	352	macro_failed	runtime_macro	50503	primary	
+src/builtin/module_builtin_ast.cpp	357	performance_lint	runtime_macro_performance	31208	primary	UNCLASSIFIED:performance_lint is a lint-warning facet not in taxonomy; needs `lint` facet or dedicated `performance` tag
+src/builtin/module_builtin_ast.cpp	362	style_lint	runtime_macro_style	31209	primary	UNCLASSIFIED:style_lint is a lint-warning facet not in taxonomy; needs `lint` facet or dedicated `style` tag
+src/builtin/module_builtin_ast_adapters.cpp	24	exception_during_macro	runtime_macro_exception	31206	primary	
+src/builtin/module_builtin_math.cpp	257	index_out_of_range	exceeds_array_index	30502	primary	
+src/builtin/module_builtin_runtime.cpp	188		invalid_macro_context	30203	primary	UNCLASSIFIED:no current_cerr; site needs an enum value (likely `unsupported_call_macro` or new `invalid_macro_context`)
+src/simulate/bin_serializer.cpp	40		exceeds_runtime_buffer	50302	primary	UNCLASSIFIED:runtime guard via DataWalker::error; no compile-time enum; subject `buffer` not in taxonomy
+src/simulate/bin_serializer.cpp	76		mismatching_runtime_type	50200	primary	UNCLASSIFIED:runtime guard; runtime-mismatch facet not modeled
+src/simulate/bin_serializer.cpp	89		mismatching_runtime_type_hash	50201	primary	UNCLASSIFIED:runtime guard; runtime-mismatch facet not modeled
+src/simulate/bin_serializer.cpp	122		cant_serialize_table	50407	primary	UNCLASSIFIED:runtime guard via DataWalker::error; verb `serialize` not modeled in taxonomy
+src/simulate/bin_serializer.cpp	125		cant_serialize_pointer	50406	primary	UNCLASSIFIED:subject `pointer` not in taxonomy; runtime guard
+src/simulate/bin_serializer.cpp	250		cant_serialize_null_pointer	50405	primary	UNCLASSIFIED:subject `pointer` not in taxonomy; runtime guard
+src/simulate/bin_serializer.cpp	253		cant_serialize_pointer	50406	primary	UNCLASSIFIED:subject `pointer` not in taxonomy; runtime guard
+src/simulate/bin_serializer.cpp	256		cant_serialize_iterator	50404	primary	UNCLASSIFIED:subject `iterator` not in taxonomy; runtime guard
+src/simulate/bin_serializer.cpp	259		cant_serialize_block	50403	primary	UNCLASSIFIED:runtime guard; verb `serialize` not modeled
+src/simulate/hash.cpp	56		cant_hash_iterator	50402	primary	UNCLASSIFIED:subject `iterator` not in taxonomy; runtime guard
+src/simulate/hash.cpp	57		cant_hash_block	50400	primary	UNCLASSIFIED:runtime guard; verb `hash` not modeled
+src/simulate/hash.cpp	58		cant_hash_context	50401	primary	UNCLASSIFIED:subject `context` not in taxonomy; runtime guard
