@@ -275,6 +275,7 @@ namespace das {
                 bool    explicitRef : 1;
                 bool    isPrivateAlias : 1;    // this is a private alias. only matters in the context of module aliasTypes (for now)
                 bool    autoToAlias : 1;       // this allows conversion of auto to alias
+                bool    safeWhenUninitialized : 1; // exempt this type from "Uninitialized variable/field is unsafe" — analog of struct-level safe_when_uninitialized for tuples / variants / aliases
             };
             uint32_t flags = 0;
         };

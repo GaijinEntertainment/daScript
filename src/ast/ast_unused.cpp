@@ -568,6 +568,12 @@ namespace das {
             if ( expr->func && expr->func->name == "finalize" && expr->arguments.size()==1 ) {
                 propagateWrite(expr->arguments[0]);
             }
+            // call with no resolved function — nothing to propagate; the typer
+            // either left this as an unresolved generic (error elsewhere) or it's
+            // a desugar artifact carrying no side-effect contract.
+            if ( !expr->func ) {
+                return;
+            }
             // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {

@@ -220,6 +220,7 @@ namespace das
         TT->ref = (TT->ref || autoT->ref) && !autoT->removeRef && !TT->removeRef;
         TT->constant = (TT->constant || autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
         TT->temporary = (TT->temporary || autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
+        TT->safeWhenUninitialized = TT->safeWhenUninitialized || autoT->safeWhenUninitialized;
         if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.erase(TT->dim.begin());
         TT->removeConstant = false;
         TT->removeDim = false;
@@ -1260,6 +1261,7 @@ namespace das
     }
 
     bool TypeDecl::unsafeInit( das_set<Structure*> & dep ) const {
+        if ( safeWhenUninitialized ) return false;
         if ( baseType==Type::tHandle ) {
             return  annotation->hasNonTrivialCtor();
         } if ( baseType==Type::tStructure ) {

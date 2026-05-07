@@ -24,13 +24,15 @@ require daslib/typemacro_boost
 
 //! Tagged ``some``/``none`` pair over payload type ``T``.
 //!
-//! When ``_has_value`` is ``false``, ``value`` holds the zero value of ``T`` and
-//! must not be read. Accessor functions should be used for reads/writes.
-[template_structure(T), safe_when_uninitialized]
+//! Resolves to ``tuple<_has_value : bool; _value : T>`` — a structural type with
+//! no module home, so ``Option<T>`` reached through any chain of ``require ...
+//! public`` collapses to one canonical ``tTuple`` candidate (issue #2598).
+//! When ``_has_value`` is ``false``, ``_value`` holds the zero value of ``T``
+//! and must not be read. Use the accessor functions below for reads / writes.
+[template_tuple(T)]
 struct template Option {
     _has_value : bool = false
-    @safe_when_uninitialized
-    _value : T
+    @safe_when_uninitialized _value : T
 }
 
 //! Construct ``Option<T>`` carrying ``v``. Payload type is inferred from ``v``.
@@ -55,8 +57,7 @@ def some(v : auto(TT)) {
 //! clone; for workhorse types (``int``, ``float``, ``string``, …) ``some`` is
 //! equivalent and cheaper to read.
 def move_some(var v : auto(TT)) {
-    typedef OT = $Option < TT - const >
-    return <- OT(_has_value = true, _value <- v)
+    return <- (_has_value = true, _value <- v)
 }
 
 //! Construct an empty ``Option<T>``. Pass the payload type as a witness::

@@ -4479,16 +4479,26 @@ namespace das {
         } else {
             auto clashAlias = findAlias(name);
             if (clashAlias) {
-                string extra;
-                if (verbose) {
-                    auto atClash = clashAlias->getDeclarationLocation();
-                    if (!atClash.empty()) {
-                        extra = "previously declarated at " + atClash.describe();
+                // Silent dedupe: if `assume X : T` redeclares an alias that already
+                // resolves to the exact same type, treat it as a no-op. This covers
+                // the auto-injected `assume TT : T` placed at the start of a generic
+                // instance body when an outer scope (e.g. a typemacro-expanded
+                // result type carrying ``int aka TT``) already binds TT to T.
+                if (expr->assumeType && expr->assumeType->isSameType(*clashAlias,
+                        RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
+                    // fall through — the duplicate is harmless
+                } else {
+                    string extra;
+                    if (verbose) {
+                        auto atClash = clashAlias->getDeclarationLocation();
+                        if (!atClash.empty()) {
+                            extra = "previously declared at " + atClash.describe();
+                        }
                     }
+                    error("can't assume " + name + ", type or alias name is already used", extra, "",
+                          expr->at, CompilationError::already_declared_assume_alias);
+                    return;
                 }
-                error("can't assume " + name + ", type or alias name is already used", extra, "",
-                      expr->at, CompilationError::already_declared_assume_alias);
-                return;
             }
             if (!expr->assumeType) {
                 error("assume without subexpression must have type", "", "",
@@ -4562,7 +4572,18 @@ namespace das {
             }
             assume.push_back(AssumeEntry{expr, move(collector.vars)});
         } else {
-            assumeType.emplace_back(expr);
+            // Skip recording when preVisit silently deduped a same-type
+            // re-assume — keeps assumeType free of self-shadowing duplicates
+            // that would otherwise add findAlias lookup cost and confuse
+            // diagnostics.
+            auto existing = findAlias(expr->alias);
+            if (existing && expr->assumeType && expr->assumeType->isSameType(*existing,
+                    RefMatters::no, ConstMatters::no, TemporaryMatters::no)) {
+                // already bound to the same type — preVisit let it through,
+                // and we leave assumeType untouched so the original wins.
+            } else {
+                assumeType.emplace_back(expr);
+            }
         }
         return expr;
     }
