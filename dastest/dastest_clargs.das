@@ -50,6 +50,10 @@ struct DastestArgs {
     @clarg_doc = "Path to the folder with scripts or single script to test"
     test_files : array<string>
 
+    @clarg_name = "exclude"
+    @clarg_doc = "Skip test files whose base name contains this substring (repeatable)"
+    exclude_files : array<string>
+
     @clarg_doc = "Run top-level tests matching this name prefix"
     test_names : array<string>
 

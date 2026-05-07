@@ -1,0 +1,27 @@
+# Build output
+output/
+
+# CMake build trees (in-source or cmake_temp/)
+CMakeFiles/
+CMakeCache.txt
+CopyOfCMakeCache.txt
+cmake_install.cmake
+cmake_temp/
+cmake/
+daslang_src/
+
+# Ninja
+build.ninja
+.ninja_deps
+.ninja_log
+
+# Fetched/built dependencies
+libglfw_static/
+libglfw_dyn/
+emsdk/
+
+# Generated include files
+include/modules/
+
+# Misc cmake artifacts
+CMakeXxdImpl.txt

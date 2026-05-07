@@ -10,7 +10,7 @@ var sampleList = {"examples":null, "tests":null};
 
 pageInit = function () {
 
-    $.getScript("daScript.js")
+    $.getScript("daslang_static.js")
 
 
     editorCode = document.getElementById("code");
