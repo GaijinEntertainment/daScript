@@ -9,7 +9,7 @@ options gen2
 // Good pattern:
 //   if (ptr == null) { ... }
 
-expect 40217:1
+expect 31208:1
 
 require daslib/perf_lint
 require daslib/ast_boost

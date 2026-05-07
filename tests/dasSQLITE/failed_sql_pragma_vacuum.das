@@ -2,7 +2,7 @@ options gen2
 
 // _sql_pragma / _sql_vacuum_into argument-shape errors. Each line triggers
 // exactly one macro_error (40104).
-expect 40104:5
+expect 50503:5
 
 require daslib/sql
 require sqlite/sqlite_boost

@@ -1,7 +1,7 @@
 options gen2
 
 // User declares Option<int64> against a NOT NULL INTEGER PRIMARY KEY column → compile error.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

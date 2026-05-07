@@ -2975,6 +2975,95 @@ namespace das {
         failToCompile = true;
     }
 
+    // Identify the "not_resolved_yet" follow-on family by numeric range.
+    // All `not_resolved_yet_*` codes live in the 31300-31399 block (the
+    // `not_resolved_yet` facet cluster within stage 3, semantic). See
+    // include/daScript/ast/compilation_errors.h.
+    static __forceinline bool isNotResolvedYet ( CompilationError cerr ) {
+        int v = int(cerr);
+        return v >= 31300 && v < 31400;
+    }
+
+    void Program::deduplicateErrors () {
+        if ( errors.size() < 2 ) return;
+        // errors are already sorted by Error::operator< (at, what, extra, fixme)
+        // before this is called.
+
+        // Pass 1: scan for "primary" errors. A primary is any error whose cerr
+        // is neither `unspecified` nor in the not_resolved_yet family. If any
+        // primary exists program-wide, Rule 4 drops every not_resolved_yet
+        // error; if any same-line coded error exists, Rule 3 drops same-line
+        // unspecified entries.
+        bool anyPrimaryProgramWide = false;
+        das_hash_set<uint64_t> linesWithCoded;
+        auto lineKey = [](const LineInfo & at) -> uint64_t {
+            return (uint64_t(uintptr_t(at.fileInfo)) ^ uint64_t(at.line)) * 0x9E3779B97F4A7C15ull;
+        };
+        for ( const auto & e : errors ) {
+            if ( e.cerr != CompilationError::unspecified && !isNotResolvedYet(e.cerr) ) {
+                anyPrimaryProgramWide = true;
+            }
+            if ( e.cerr != CompilationError::unspecified ) {
+                linesWithCoded.insert(lineKey(e.at));
+            }
+        }
+
+        // Pass 2: build the surviving list applying all four rules.
+        vector<Error> kept;
+        kept.reserve(errors.size());
+        size_t i = 0;
+        const size_t N = errors.size();
+        while ( i < N ) {
+            const Error & e = errors[i];
+
+            // Rule 4: drop not_resolved_yet entries program-wide if any primary exists.
+            if ( anyPrimaryProgramWide && isNotResolvedYet(e.cerr) ) {
+                ++i;
+                continue;
+            }
+            // Rule 3: drop same-line unspecified if any coded error sits on the same line.
+            if ( e.cerr == CompilationError::unspecified && linesWithCoded.count(lineKey(e.at)) ) {
+                ++i;
+                continue;
+            }
+            // Rule 1: collapse adjacent byte-identical entries.
+            size_t j = i + 1;
+            while ( j < N
+                && errors[j].at == e.at
+                && errors[j].what == e.what
+                && errors[j].extra == e.extra
+                && errors[j].fixme == e.fixme
+                && errors[j].cerr == e.cerr ) {
+                ++j;
+            }
+            int dupCount = int(j - i);
+            // Rule 2: same-line, same-cerr, different-text — collapse to first
+            // and append `(+N more on this line)` to the message.
+            int sameLineSameCerrCount = 0;
+            size_t k = j;
+            while ( k < N
+                && errors[k].at.fileInfo == e.at.fileInfo
+                && errors[k].at.line == e.at.line
+                && errors[k].cerr == e.cerr
+                && (errors[k].what != e.what || errors[k].extra != e.extra || errors[k].fixme != e.fixme) ) {
+                // distinct text, same line, same cerr — count it
+                ++sameLineSameCerrCount;
+                ++k;
+            }
+            // Emit the first instance with optional count suffixes.
+            Error out = e;
+            if ( dupCount > 1 ) {
+                out.what += " (\xC3\x97" + to_string(dupCount) + ")";
+            }
+            if ( sameLineSameCerrCount > 0 ) {
+                out.what += " (+" + to_string(sameLineSameCerrCount) + " more on this line)";
+            }
+            kept.push_back(out);
+            i = k;  // skip past Rule 1 dups + Rule 2 same-line same-cerr siblings
+        }
+        errors.swap(kept);
+    }
+
     void Program::linkError ( const string & str, const string & extra ) {
         aotErrors.emplace_back(str,extra,"",LineInfo(), CompilationError::missing_aot);
         if ( policies.fail_on_no_aot ) {
@@ -3030,11 +3119,11 @@ namespace das {
             if ( annotation->create(st,arg,err) ) {
                 return thisModule->addAnnotation(annotation, true);
             } else {
-                error("can't create structure handle "+ann->name,err,"",st->at,CompilationError::invalid_annotation);
+                error("can't create structure handle "+ann->name,err,"",st->at,CompilationError::cant_create_structure_annotation);
                 return false;
             }
         } else {
-            error("not a structure annotation "+ann->name,"","",st->at,CompilationError::invalid_annotation);
+            error("not a structure annotation "+ann->name,"","",st->at,CompilationError::invalid_structure_annotation);
             return false;
         }
     }
@@ -3064,7 +3153,7 @@ namespace das {
             candidates += describeCandidates(enums, false);
             candidates += describeCandidates(aliases, false);
             error("undefined make type declaration type "+name,candidates,"",
-                at,CompilationError::type_not_found);
+                at,CompilationError::ambiguous_type);
             return nullptr;
         } else if ( structs.size() ) {
             if ( structs.size()==1 ) {
@@ -3074,7 +3163,7 @@ namespace das {
             } else {
                 string candidates = describeCandidates(structs);
                 error("too many options for "+name,candidates,"",
-                    at,CompilationError::structure_not_found);
+                    at,CompilationError::ambiguous_structure);
                 return nullptr;
             }
         } else if ( handles.size() ) {
@@ -3086,13 +3175,13 @@ namespace das {
                     return pTD;
                 } else {
                     error("not a handled type annotation "+name,"","",
-                        at,CompilationError::handle_not_found);
+                        at,CompilationError::invalid_annotation);
                     return nullptr;
                 }
             } else {
                 string candidates = describeCandidates(handles);
                 error("too many options for "+name, candidates, "",
-                    at,CompilationError::handle_not_found);
+                    at,CompilationError::ambiguous_annotation);
                 return nullptr;
             }
         } else if ( enums.size() ) {
@@ -3104,7 +3193,7 @@ namespace das {
             } else {
                 string candidates = describeCandidates(enums);
                 error("too many options for "+name,candidates,"",
-                    at,CompilationError::enumeration_not_found);
+                    at,CompilationError::ambiguous_enumeration);
                 return nullptr;
             }
         } else if ( aliases.size() ) {
@@ -3115,7 +3204,7 @@ namespace das {
             } else {
                 string candidates = describeCandidates(aliases);
                 error("too many options for "+name,candidates,"",
-                    at,CompilationError::type_alias_not_found);
+                    at,CompilationError::ambiguous_type_alias);
                 return nullptr;
             }
         } else {
@@ -3143,7 +3232,7 @@ namespace das {
         } else if ( ptr.size()==0 ) {
             return new ExprCall(at,name);
         } else {
-            error("too many options for " + name,"","", at, CompilationError::function_not_found);
+            error("too many options for " + name,"","", at, CompilationError::ambiguous_function);
             return new ExprCall(at,name);
         }
     }
@@ -3524,7 +3613,7 @@ namespace das {
                     for ( const auto & pm : mod->optimizationMacros ) {
                         last |= pm->apply(this, thisModule.get());
                         if ( failed() ) {                       // if macro failed, we report it, and we are done
-                            error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo());
+                            error("optimization macro " + mod->name + "::" + pm->name + " failed", "","",LineInfo(), CompilationError::runtime_macro);
                             return false;
                         }
                     }

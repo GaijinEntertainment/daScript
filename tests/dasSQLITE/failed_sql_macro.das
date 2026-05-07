@@ -6,7 +6,7 @@ options gen2
 // some malformed chains additionally cascade real type errors before the
 // analyzer ever runs — e.g. `_select(_.Name) |> _select(_.Price)` is a
 // genuine type bug (string has no `Price` field). Those cascades are expected.
-expect 40104:20, 30304:1, 30503:2
+expect 30341, 30928:2, 50503:20
 
 require daslib/sql
 require sqlite/sqlite_boost

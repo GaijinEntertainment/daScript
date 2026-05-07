@@ -1,6 +1,6 @@
 options gen2
 // Test: completeness check catches missing abstract methods
-expect 30111
+expect 30926
 
 require daslib/interfaces
 

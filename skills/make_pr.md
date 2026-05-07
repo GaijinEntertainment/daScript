@@ -196,12 +196,13 @@ Must return empty. If not, go back to step 4a and add the missing function to a 
 MUST delete cache — cached builds hide errors:
 
 ```bash
-cd d:/Work/daScript/doc
-rm -rf sphinx-build ../site/doc
-d:/Work/daScript/.venv/Scripts/sphinx-build.exe -b html -d sphinx-build source ../site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
+rm -rf doc/sphinx-build site/doc
+sphinx-build -b html -d doc/sphinx-build doc/source site/doc 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tee /tmp/sphinx_out.txt
 tail -3 /tmp/sphinx_out.txt
 grep -iE "warning:|error:" /tmp/sphinx_out.txt
 ```
+
+Use `sphinx-build` from PATH. If unavailable, install with `pip install sphinx` (or `python -m pip install sphinx`) and re-run. The repo `.venv/` is not maintained — don't rely on it.
 
 Must say `build succeeded.` with **zero** warnings and errors. The `grep` must return empty.
 

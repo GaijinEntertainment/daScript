@@ -25,7 +25,7 @@ namespace das {
                     "macro caused exception during " + message,
                     context->getException(), "",
                     context->exceptionAt,
-                    CompilationError::exception_during_macro
+                    CompilationError::runtime_macro_exception
                 );
                 bound->g_Program->macroException = true;
             } else {

@@ -22,7 +22,7 @@ options gen2
 //   fire. LINT007 catches cases where operands are runtime values (function
 //   parameters, field reads, etc.). The fixture uses parameters on purpose.
 
-expect 40104:17
+expect 50503:17
 
 require daslib/lint
 

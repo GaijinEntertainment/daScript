@@ -2,14 +2,14 @@
 
 ## Overview
 
-The `style_lint` module detects non-idiomatic patterns in daslang code at compile time. It uses a `[lint_macro]` AST pass that walks the compiled program looking for known style issues and reports them as `CompilationError::style_lint` (error code 40218).
+The `style_lint` module detects non-idiomatic patterns in daslang code at compile time. It uses a `[lint_macro]` AST pass that walks the compiled program looking for known style issues and reports them as `CompilationError::runtime_macro_style` (error code 31209).
 
 ## Architecture
 
 - **Module:** `daslib/style_lint.das` — `module style_lint shared private`
 - **Entry point:** `[lint_macro] class StyleLintMacro : AstPassMacro` calls `style_lint(prog, true)` with `comment_hygiene` read from `options _comment_hygiene`
 - **Visitor:** `class StyleLintVisitor : AstVisitor` — walks the AST with source-line inspection
-- **Error reporting:** `macro_style_warning(compiling_program(), at, message)` — reports as error code 40218
+- **Error reporting:** `macro_style_warning(compiling_program(), at, message)` — reports as error code 31209
 - **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
 - **Tests:** `utils/lint/tests/` — one file per rule
 

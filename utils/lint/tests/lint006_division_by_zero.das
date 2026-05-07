@@ -11,7 +11,7 @@ options gen2
 // Good pattern:
 //   let y = x / divisor
 
-expect 40104:10
+expect 50503:10
 
 require daslib/lint
 

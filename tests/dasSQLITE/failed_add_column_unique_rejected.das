@@ -2,7 +2,7 @@ options gen2
 
 // AddColumnMacro must reject @sql_unique fields — SQLite cannot add a UNIQUE
 // column to an existing table inline; the user should use create_unique_index instead.
-expect 40104:1
+expect 50503
 
 require sqlite/sqlite_migrate
 

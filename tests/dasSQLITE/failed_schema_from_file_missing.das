@@ -1,7 +1,7 @@
 options gen2
 
 // `schema_from=` points to a path that doesn't exist.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

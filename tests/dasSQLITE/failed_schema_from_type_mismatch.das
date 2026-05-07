@@ -3,7 +3,7 @@ options gen2
 // Hand-declared field's type doesn't match the schema column's affinity.
 // This fires as a `concept_assert` failure inside the generated `_sql_table_name`
 // function — same compile-time chain, different error site.
-expect 40103:1
+expect 31400
 
 require daslib/sql
 require sqlite/sqlite_boost

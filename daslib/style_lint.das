@@ -10,7 +10,7 @@ module style_lint shared private
 //!
 //! Detects non-idiomatic patterns in daslang code at compile time.
 //! When this module is required, a lint pass runs after compilation and reports
-//! warnings as ``CompilationError::style_lint`` (error code 40218).
+//! warnings as ``CompilationError::runtime_macro_style`` (error code 31209).
 //!
 //! Rules:
 //!   STYLE001 — unnecessary <| pipe before block argument

@@ -605,20 +605,20 @@ namespace das {
             if (verbose) {
                 string candidates = program->describeCandidates(fnList);
                 error("both generated and custom '" + fnList.front()->name + "' functions exist for " + describeFunction(fnList.front()), candidates, "",
-                      at, CompilationError::function_not_found);
+                      at, CompilationError::ambiguous_function);
             } else {
                 error("both generated and custom '" + fnList.front()->name + "' functions exist", "", "",
-                      at, CompilationError::function_not_found);
+                      at, CompilationError::ambiguous_function);
             }
             return false;
         } else if (customCount > 1) {
             if (verbose) {
                 string candidates = program->describeCandidates(fnList);
                 error("too many custom '" + fnList.front()->name + "' functions exist for " + describeFunction(fnList.front()), candidates, "",
-                      at, CompilationError::function_not_found);
+                      at, CompilationError::ambiguous_function);
             } else {
                 error("too many custom '" + fnList.front()->name + "' functions exist", "", "",
-                      at, CompilationError::function_not_found);
+                      at, CompilationError::ambiguous_function);
             }
             return false;
         } else {
@@ -1061,7 +1061,7 @@ namespace das {
                 return false;
             }
             if(ar->type->baseType==Type::tVoid) {
-                error("void type is not allowed as argument", "", "", ar->at);
+                error("void type is not allowed as argument", "", "", ar->at, CompilationError::invalid_argument_type);
                 return false;
             }
             DAS_ASSERT(!ar->type->isExprType() && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
@@ -1086,7 +1086,7 @@ namespace das {
     FunctionPtr InferTypes::inferFunctionCall(ExprLooksLikeCall *expr, InferCallError cerr, Function *lookupFunction, bool failOnMissingCtor, bool visCheck) {
         if ( inferDepth > 1 ) {
             error("infer expression depth exceeded maximum allowed", "", "",
-                expr->at, CompilationError::too_many_infer_passes);
+                expr->at, CompilationError::exceeds_expression_recursion);
             return nullptr;
         }
         InferDepthGuard guard(&inferDepth);
@@ -1106,17 +1106,17 @@ namespace das {
         if (functions.size() == 1) {
             auto funcC = functions.back();
             if ( inArgumentInit && funcC==func ) {
-                error("recursive call in argument initializer is not allowed", "", "", expr->at);
+                error("recursive call in argument initializer is not allowed", "", "", expr->at, CompilationError::recursion_argument);
                 return nullptr;
             }
             if (funcC->result->baseType == Type::autoinfer) {
                 if ( cerr != InferCallError::tryOperator ) {
-                    error("cannot infer type for function call '" + expr->name + "' with 'auto' return type", "", "", expr->at, CompilationError::invalid_type);
+                    error("cannot infer type for function call '" + expr->name + "' with 'auto' return type", "", "", expr->at, CompilationError::invalid_function_result);
                     return nullptr;
                 }
             }
             if ( find(inInfer.begin(), inInfer.end(), funcC) != inInfer.end() ) {
-                error("recursive call in function is not allowed", "", "", expr->at);
+                error("recursive call in function is not allowed", "", "", expr->at, CompilationError::recursion_function);
                 return nullptr;
             }
             if (funcC->firstArgReturnType) {
@@ -1135,7 +1135,7 @@ namespace das {
                             auto block = static_cast<ExprBlock*>(mkBlock->block);
                             auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
                             if ( !retT ) {
-                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "", expr->at, CompilationError::invalid_type);
+                                error("default arguments don't match the function signature of '" + funcC->name + "'", "", "", expr->at, CompilationError::mismatching_function_argument);
                                 return nullptr;
                             }
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
@@ -1150,7 +1150,7 @@ namespace das {
                         if (arg->rtti_isMakeStruct()) { // its always MakeStruct
                             auto mkStruct = static_cast<ExprMakeStruct*>(arg);
                             if (mkStruct->structs.size()) {
-                                error("internal compiler error: array<auto> type not under default<array<auto>> or default<table<auto;auto>>", "", "", expr->at);
+                                error("internal compiler error: array<auto> type not under default<array<auto>> or default<table<auto;auto>>", "", "", expr->at, CompilationError::internal_array_type);
                                 return nullptr;
                             }
                             auto retT = TypeDecl::inferGenericType(mkStruct->type, funcC->arguments[iF]->type, true, true, nullptr);
@@ -1159,7 +1159,7 @@ namespace das {
                             mkStruct->makeType = retT;
                             reportAstChanged();
                         } else {
-                            error("internal compiler error: unknown array<auto> type not under make strcut", "", "", expr->at);
+                            error("internal compiler error: unknown array<auto> type not under make struct", "", "", expr->at, CompilationError::internal_array_type);
                             return nullptr;
                         }
                     }
@@ -1209,7 +1209,7 @@ namespace das {
                            << (instFn->module->name.empty() ? "this module" : ("'" + instFn->module->name + "'"))
                            << "\n";
                     }
-                    error("internal compiler error: multiple instances of '" + genName + "'", ss.str(), "", expr->at);
+                    error("internal compiler error: multiple instances of '" + genName + "'", ss.str(), "", expr->at, CompilationError::internal_function);
                 } else if (instancedFunctions.size() == 1) {
                     expr->name = callCloneName(genName);
                     reportAstChanged();
@@ -1302,7 +1302,7 @@ namespace das {
                             }
                             error("unknown type of argument " + clone->arguments[ai]->name + "; can't instance " + describeFunction(oneGeneric), "",
                                   "provide argument type explicitly",
-                                  expr->at, CompilationError::invalid_type);
+                                  expr->at, CompilationError::lookup_argument_type);
                             return nullptr;
                         }
                     }
@@ -1349,7 +1349,7 @@ namespace das {
                         if (exf->fromGeneric != clone->fromGeneric) { // TODO: getOrigin??
                             error("can't instance generic " + describeFunction(clone),
                                   +"\ttrying to instance from module " + clone->fromGeneric->module->name + "\n" + "\texisting instance from module " + exf->fromGeneric->module->name, "",
-                                  expr->at, CompilationError::function_already_declared);
+                                  expr->at, CompilationError::already_declared_function);
                             return nullptr;
                         }
                     } else {
@@ -1360,7 +1360,7 @@ namespace das {
                                 string err;
                                 if (!ann->generic_apply(clone, *(program->thisModuleGroup), pA->arguments, err)) {
                                     error("Macro [" + pA->annotation->name + "] failed to generic_apply to a function " + clone->name + "\n",
-                                          err, "", clone->at, CompilationError::invalid_annotation);
+                                          err, "", clone->at, CompilationError::invalid_annotation_macro);
                                     return nullptr;
                                 }
                             }
@@ -1389,16 +1389,16 @@ namespace das {
                             bool isPrivate = aliasT->structType->privateStructure;
                             if (isPrivate && aliasT->structType->module != thisModule) {
                                 error("can't access private structure " + aliasT->structType->name, "", "",
-                                      expr->at, CompilationError::function_not_found);
+                                      expr->at, CompilationError::cant_access_private_structure);
                             } else { // if ( !tryMakeStructureCtor (aliasT->structType, true, true) ) {
                                 if (failOnMissingCtor) {
                                     error("default constructor " + aliasT->structType->name + " is not visible directly",
-                                          "try default<" + expr->name + "> instead", "", expr->at, CompilationError::function_not_found);
+                                          "try default<" + expr->name + "> instead", "", expr->at, CompilationError::lookup_function);
                                 }
                             }
                         } else {
                             error("can only generate default structure constructor without arguments",
-                                  "", "", expr->at, CompilationError::invalid_argument_count);
+                                  "", "", expr->at, CompilationError::invalid_function_argument_count);
                         }
                     } else {
                         if (cerr == InferCallError::operatorOp2) {

@@ -13,7 +13,7 @@ options gen2
 // Good pattern:
 //   return <- make_thing()
 
-expect 40217:3
+expect 31208:3
 
 require daslib/perf_lint
 

@@ -2,7 +2,7 @@ options gen2
 
 // [sql_index] validation rules introduced in chunk 7. Each struct triggers
 // exactly one error; macro [sql_index] failures emit error 30111.
-expect 30111:4
+expect 20800:4
 
 require daslib/sql
 require sqlite/sqlite_boost

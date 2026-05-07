@@ -121,13 +121,13 @@ namespace das {
                     auto pVarType = new TypeDecl(*pDecl->pTypeDecl);
                     if ( pDecl->pInit ) {
                         das_yyerror(scanner,"can't have default values in a type declaration",
-                            (*pDecl->pNameList)[ai].at,CompilationError::cant_initialize);
+                            (*pDecl->pNameList)[ai].at,CompilationError::cant_type);
                     }
                     pType->argTypes.push_back(pVarType);
                     if ( needNames && pDecl->pNameList && !(*pDecl->pNameList)[ai].name.empty() ) {
                         if ( !(*pDecl->pNameList)[ai].aka.empty() ) {
                             das_yyerror(scanner,"type declaration can't have an aka", (*pDecl->pNameList)[ai].at,
-                                CompilationError::invalid_aka);
+                                CompilationError::invalid_type_aka);
                         }
                         anyNames = true;
                     }
@@ -154,11 +154,11 @@ namespace das {
         if ( ann.size()==1 ) {
             return ann.back();
         } else if ( ann.size()==0 ) {
-            das_yyerror(scanner,"annotation " + name + " not found", at, CompilationError::annotation_not_found );
+            das_yyerror(scanner,"annotation " + name + " not found", at, CompilationError::lookup_annotation );
             return nullptr;
         } else {
             string candidates = yyextra->g_Program->describeCandidates(ann);
-            das_yyerror(scanner,"too many options for annotation " + name + "\n" + candidates, at, CompilationError::annotation_not_found );
+            das_yyerror(scanner,"too many options for annotation " + name + "\n" + candidates, at, CompilationError::ambiguous_annotation );
             return nullptr;
         }
     }
@@ -177,7 +177,7 @@ namespace das {
                         string err;
                         if ( !ann->apply(func, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
-                                CompilationError::invalid_annotation);
+                                CompilationError::runtime_annotation);
                         } else if ( ann->name=="type_function" && ann->module->name=="$" ) {
                             // this is awkward. we need this so that [type_function] can be used in the same module
                             auto mod = func->module ? func->module : extra->g_Program->thisModule.get();
@@ -242,7 +242,7 @@ namespace das {
                 pStruct->parent = structs.back();
                 if ( pStruct->parent->sealed ) {
                     das_yyerror(scanner,"can't derive from a sealed class or structure "+*parent,atParent,
-                        CompilationError::invalid_override);
+                        CompilationError::cant_structure);
                 }
                 pStruct->annotations.clear();
                 pStruct->genCtor = false;
@@ -250,11 +250,11 @@ namespace das {
 
             } else if ( structs.size()==0 ) {
                 das_yyerror(scanner,"parent structure not found " + *parent,atParent,
-                    CompilationError::structure_not_found);
+                    CompilationError::lookup_structure);
             } else {
                 string candidates = yyextra->g_Program->describeCandidates(structs);
                 das_yyerror(scanner,"too many options for " + *parent + "\n" + candidates,atParent,
-                    CompilationError::structure_not_found);
+                    CompilationError::ambiguous_structure);
             }
             delete parent;
         }
@@ -264,7 +264,7 @@ namespace das {
         pStruct->sealed = sealed;
         if ( !yyextra->g_Program->addStructure(pStruct) ) {
             das_yyerror(scanner,"structure is already defined "+*name,atName,
-                CompilationError::structure_already_declared);
+                CompilationError::already_declared_structure);
             delete name;
             return nullptr;
         } else {
@@ -277,7 +277,7 @@ namespace das {
     bool ast_structureAlias ( yyscan_t scanner, string * name, TypeDecl * typeDecl, const LineInfo & atName ) {
         if (!typeDecl->alias.empty()) {
             das_yyerror(scanner,"alias is already defined "+typeDecl->alias, atName,
-                CompilationError::invalid_type);
+                CompilationError::already_declared_type_alias);
             delete name;
             delete typeDecl;
             return false;
@@ -286,13 +286,13 @@ namespace das {
         delete name;
         if ( !yyextra->g_thisStructure ) {
             das_yyerror(scanner,"typedef outside of structure", atName,
-                CompilationError::invalid_type);
+                CompilationError::invalid_type_alias);
             delete typeDecl;
             return false;
         }
         if ( yyextra->g_thisStructure->aliases.find(typeDecl->alias) ) {
             das_yyerror(scanner,"alias is already defined "+typeDecl->alias, atName,
-                CompilationError::invalid_type);
+                CompilationError::already_declared_type_alias);
             delete typeDecl;
             return false;
         }
@@ -308,10 +308,10 @@ namespace das {
             if ( pStruct->parent && pStruct->parent->isClass != pStruct->isClass ) {
                 if ( pStruct->isClass ) {
                     das_yyerror(scanner,"class can only derive from a class", pStruct->at,
-                        CompilationError::invalid_override);
+                        CompilationError::invalid_class);
                 } else {
                     das_yyerror(scanner,"structure can only derive from a structure", pStruct->at,
-                        CompilationError::invalid_override);
+                        CompilationError::invalid_structure);
                 }
                 delete annL;
                 deleteVariableDeclarationList(list);
@@ -322,7 +322,7 @@ namespace das {
                 auto virtfin = makeClassFinalize(pStruct);
                 if ( !yyextra->g_Program->addFunction(virtfin) ) {
                     das_yyerror(scanner,"built-in finalizer is already defined " + virtfin->getMangledName(),
-                        virtfin->at, CompilationError::function_already_declared);
+                        virtfin->at, CompilationError::internal_function);
                 }
             }
             for ( auto & ffd : pStruct->fields ) {
@@ -342,17 +342,17 @@ namespace das {
                     */
                     if ( (pDecl->override || pDecl->sealed) && pDecl->isStatic ) {
                         das_yyerror(scanner,"static member can't be sealed or override "+name_at.name,name_at.at,
-                            CompilationError::invalid_static);
+                            CompilationError::invalid_field_static);
                     }
                     if ( pDecl->isStatic && pDecl->annotation ) {
                         das_yyerror(scanner,"static member can't have an annotation "+name_at.name,name_at.at,
-                            CompilationError::invalid_static);
+                            CompilationError::invalid_field_static);
                     }
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.name);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
                             das_yyerror(scanner,"structure field is not overriding anything "+name_at.name,name_at.at,
-                                CompilationError::invalid_override);
+                                CompilationError::invalid_field);
                         } else {
                             TypeDeclPtr td = nullptr;
                             ExpressionPtr init = nullptr;
@@ -374,7 +374,7 @@ namespace das {
                                 pVar->private_variable = pDecl->isPrivate || pStruct->privateStructure;
                                 if ( !pStruct->module->addVariable(pVar,true) ) {
                                     das_yyerror(scanner,"static variable already exists "+name_at.name,name_at.at,
-                                        CompilationError::invalid_static);
+                                        CompilationError::already_declared_global);
                                 }
                                 pStruct->hasStaticMembers = true;
                             } else {
@@ -392,11 +392,11 @@ namespace das {
                         if ( pDecl->isStatic ) {
                             das_yyerror(scanner,"static structure field is already declared "+name_at.name
                                 +", can't have both member at static at the same name",name_at.at,
-                                    CompilationError::invalid_static);
+                                    CompilationError::already_declared_field_static);
                         } else if ( pDecl->sealed || pDecl->override ) {
                             if ( oldFd->sealed ) {
                                 das_yyerror(scanner,"structure field "+name_at.name+" is sealed",
-                                    name_at.at, CompilationError::invalid_override);
+                                    name_at.at, CompilationError::invalid_field);
                             }
                             if ( pDecl->pInit ) {
                                 if ( pDecl->pNameList->size()>1 ) {
@@ -413,7 +413,7 @@ namespace das {
                         } else {
                             das_yyerror(scanner,"structure field is already declared "+name_at.name
                                 +", use override to replace initial value instead",name_at.at,
-                                    CompilationError::invalid_override);
+                                    CompilationError::already_declared_field);
                         }
                     }
                 }
@@ -445,7 +445,7 @@ namespace das {
                             string err;
                             if ( !ann->touch(pStruct, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                                 das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to the structure " + pStruct->name + "\n" + err,
-                                    loc, CompilationError::invalid_annotation);
+                                    loc, CompilationError::runtime_annotation);
                             }
                         } else if ( pA->annotation->rtti_isStructureTypeAnnotation() ) {
                             if ( annL->size()!=1 ) {
@@ -455,7 +455,7 @@ namespace das {
                                 if ( !yyextra->g_Program->addStructureHandle(pStruct,
                                     static_cast<StructureTypeAnnotation*>(pA->annotation), pA->arguments) ) {
                                         das_yyerror(scanner,"handled structure is already defined "+pStruct->name, loc,
-                                        CompilationError::structure_already_declared);
+                                        CompilationError::already_declared_structure);
                                 } else {
                                     pStruct->module->removeStructure(pStruct);
                                 }
@@ -481,7 +481,7 @@ namespace das {
         pEnum->at = atName;
         if ( !yyextra->g_Program->addEnumeration(pEnum) ) {
             das_yyerror(scanner,"enumeration is already defined "+pEnum->name, atName,
-                CompilationError::enumeration_already_declared);
+                CompilationError::already_declared_enumeration);
             return pEnum;
         } else {
             return pEnum;
@@ -503,7 +503,7 @@ namespace das {
                         string err;
                         if ( !ann->touch(pEnum, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to finalize the enumeration " + pEnum->name + "\n" + err, atannL,
-                                CompilationError::invalid_annotation);
+                                CompilationError::runtime_annotation);
                         }
                     }
                 }
@@ -522,7 +522,7 @@ namespace das {
                     pVar->aka = name_at.aka;
                     if ( !name_at.aka.empty() ) {
                         das_yyerror(scanner,"global variable " + name_at.name + " can't have an aka",name_at.at,
-                            CompilationError::invalid_aka);
+                            CompilationError::invalid_global_aka);
                     }
                     pVar->at = name_at.at;
                     if ( pDecl->pNameList->size()>1 ) {
@@ -548,7 +548,7 @@ namespace das {
                     pVar->private_variable = !pub_var;
                     if ( !yyextra->g_Program->addVariable(pVar) )
                         das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
-                            CompilationError::global_variable_already_declared);
+                            CompilationError::already_declared_global);
                 }
             }
         }
@@ -566,7 +566,7 @@ namespace das {
         pVar->bitfield_constant = true;
         if ( !yyextra->g_Program->addVariable(pVar) ) {
             das_yyerror(scanner,"global bitfield constant is already declared " + name,expr->at,
-                CompilationError::global_variable_already_declared);
+                CompilationError::already_declared_global_bitfield);
         }
     }
 
@@ -580,7 +580,7 @@ namespace das {
                 pVar->aka = name_at.aka;
                 if ( !name_at.aka.empty() ) {
                     das_yyerror(scanner,"global variable " + name_at.name + " can't have an aka",name_at.at,
-                        CompilationError::invalid_aka);
+                        CompilationError::invalid_global_aka);
                 }
                 pVar->at = name_at.at;
                 if ( pDecl->pNameList->size()>1 ) {
@@ -612,7 +612,7 @@ namespace das {
                 }
                 if ( !yyextra->g_Program->addVariable(pVar) )
                     das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
-                        CompilationError::global_variable_already_declared);
+                        CompilationError::already_declared_global);
             }
         }
         delete pDecl;
@@ -627,23 +627,23 @@ namespace das {
         if ( yyextra->g_thisStructure ) {
             if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
                 das_yyerror(scanner,"structure can't have a member function",
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function);
             } else if ( func->isGeneric() ) {
                 das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function);
             } else if ( func->name==yyextra->g_thisStructure->name || func->name=="finalize" ) {
                 das_yyerror(scanner,"initializers and finalizers can't be abstract " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function);
             } else if ( annL!=nullptr ) {
                 das_yyerror(scanner,"abstract functions can't have annotations " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function_annotation);
                 delete annL;
             } else if ( func->result->baseType==Type::autoinfer ) {
                 das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::missing_function_result);
             } else if ( isOpName(func->name) ) {
                 das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function);
             } else {
                 auto varName = func->name;
                 func->name = yyextra->g_thisStructure->name + "`" + func->name;
@@ -686,13 +686,13 @@ namespace das {
                     // opt.type has matching options opt.option1 and opt.option2
                     das_yyerror(scanner,"generic function argument " + arg->name + " of type " + opt.optionType->describe()
                     + " has matching options " + opt.option1->describe() + " and " + opt.option2->describe(),
-                        opt.optionType->at, CompilationError::invalid_type);
+                        opt.optionType->at, CompilationError::ambiguous_function_argument_type);
                 }
             }
         }
         if ( !yyextra->g_Program->addGeneric(func) ) {
             das_yyerror(scanner,"generic function is already defined " + func->getMangledName(),
-                func->at, CompilationError::function_already_declared);
+                func->at, CompilationError::already_declared_function);
         }
     }
 
@@ -705,17 +705,17 @@ namespace das {
         auto isGeneric = func->isGeneric();
         if ( !yyextra->g_thisStructure ) {
             das_yyerror(scanner,"internal error or invalid macro. member function is declared outside of a class",
-                func->at, CompilationError::invalid_member_function);
+                func->at, CompilationError::internal_function);
         } else if ( yyextra->g_Program->policies.no_members_functions_in_struct && !yyextra->g_thisStructure->isClass ) {
             das_yyerror(scanner,"structure can't have a member function",
-                func->at, CompilationError::invalid_member_function);
+                func->at, CompilationError::invalid_function);
         } else if ( isGeneric && !isStatic ) {
             das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
-                func->at, CompilationError::invalid_member_function);
+                func->at, CompilationError::invalid_function);
         } else if ( isOpName(func->name) ) {
             if ( ovr ) {
                 das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
+                    func->at, CompilationError::invalid_function);
             }
             if ( isStatic ) {
                 func->isClassMethod = true;
@@ -729,7 +729,7 @@ namespace das {
             runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
             if ( !yyextra->g_Program->addFunction(func) ) {
                 das_yyerror(scanner,"function is already defined " + func->getMangledName(),
-                    func->at, CompilationError::function_already_declared);
+                    func->at, CompilationError::already_declared_function);
             }
             func->delRef();
         } else {
@@ -769,17 +769,17 @@ namespace das {
             } else {
                 if ( ovr ) {
                     das_yyerror(scanner,"can't override an initializer or a finalizer " + func->getMangledName(),
-                        func->at, CompilationError::invalid_member_function);
+                        func->at, CompilationError::invalid_function);
                 }
                 if ( cnst ) {
                     das_yyerror(scanner,"can't have a constant initializer or a finalizer " + func->getMangledName(),
-                        func->at, CompilationError::invalid_member_function);
+                        func->at, CompilationError::invalid_function);
                 }
                 if ( isStatic ) {
                     // its just a regular function named as the class
                     if ( func->name=="finalize" ) {
                         das_yyerror(scanner,"finalizer can't be static " + func->getMangledName(),
-                            func->at, CompilationError::invalid_member_function);
+                            func->at, CompilationError::invalid_function_static);
                     }
                     func->isClassMethod = true;
                     func->isStaticClassMethod = true;
@@ -788,8 +788,8 @@ namespace das {
                 } else if ( func->name!="finalize" ) {
                     auto ctr = makeClassConstructor(yyextra->g_thisStructure, func);
                     if ( !yyextra->g_Program->addFunction(ctr) ) {
-                        das_yyerror(scanner,"intializer is already defined " + ctr->getMangledName(),
-                            ctr->at, CompilationError::function_already_declared);
+                        das_yyerror(scanner,"initializer is already defined " + ctr->getMangledName(),
+                            ctr->at, CompilationError::already_declared_function);
                     }
                     func->name = yyextra->g_thisStructure->name + "`" + yyextra->g_thisStructure->name;
                     modifyToClassMember(func, yyextra->g_thisStructure, false, false);
@@ -809,7 +809,7 @@ namespace das {
                 runFunctionAnnotations(scanner, yyextra, func, annL, annLAt);
                 if ( !yyextra->g_Program->addFunction(func) ) {
                     das_yyerror(scanner,"function is already defined " + func->getMangledName(),
-                        func->at, CompilationError::function_already_declared);
+                        func->at, CompilationError::already_declared_function);
                 }
             }
             func->delRef();
@@ -827,10 +827,10 @@ namespace das {
             if ( enums.size() ) candidates += yyextra->g_Program->describeCandidates(enums);
             if ( aliases.size() ) candidates += yyextra->g_Program->describeCandidates(aliases);
             das_yyerror(scanner,"too many options for the " + *ena + "\n" + candidates, enaAt,
-                CompilationError::type_not_found);
+                CompilationError::ambiguous_enumeration);
         } else if ( enums.size()==0 && aliases.size()==0 ) {
             das_yyerror(scanner,"enumeration or bitfield not found " + *ena, enaAt,
-                CompilationError::type_not_found);
+                CompilationError::lookup_enumeration);
         } else if ( enums.size()==1 ) {
             pEnum = enums.back();
         } else if ( aliases.size()==1 ) {
@@ -848,11 +848,11 @@ namespace das {
                     resConst = bitConst;
                 } else {
                     das_yyerror(scanner,"enumeration or bitfield not found " + *ena, enaAt,
-                        CompilationError::bitfield_not_found);
+                        CompilationError::lookup_bitfield);
                 }
             } else {
                 das_yyerror(scanner,"expecting enumeration or bitfield " + *ena, enaAt,
-                    CompilationError::syntax_error);
+                    CompilationError::invalid_type);
             }
         }
         if ( pEnum ) {
@@ -908,7 +908,7 @@ namespace das {
                             closure->arguments.push_back(pVar);
                         } else {
                             das_yyerror(scanner,"block argument is already declared " + name_at.name,
-                                name_at.at,CompilationError::argument_already_declared);
+                                name_at.at,CompilationError::already_declared_block_argument);
                         }
                     }
                 }
@@ -931,7 +931,7 @@ namespace das {
                         string err;
                         if ( !ann->apply(closure, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to the block\n" + err, annLAt,
-                                CompilationError::invalid_annotation);
+                                CompilationError::runtime_annotation);
                         }
                     } else {
                         das_yyerror(scanner,"blocks are only allowed function macros", annLAt,
@@ -983,7 +983,7 @@ namespace das {
                     pLet->variables.push_back(pVar);
                 } else {
                     das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,
-                        CompilationError::local_variable_already_declared);
+                        CompilationError::already_declared_local);
                 }
             }
         }
@@ -1032,7 +1032,7 @@ namespace das {
                         pLet->variables.push_back(pVar);
                     } else {
                         das_yyerror(scanner,"local variable is already declared " + name_at.name,name_at.at,
-                            CompilationError::local_variable_already_declared);
+                            CompilationError::already_declared_local);
                     }
                 }
             }
@@ -1076,7 +1076,7 @@ namespace das {
                             pFunction->arguments.push_back(pVar);
                         } else {
                             das_yyerror(scanner,"function argument is already declared " + name_at.name,name_at.at,
-                                CompilationError::argument_already_declared);
+                                CompilationError::already_declared_function_argument);
                         }
                     }
                 }
@@ -1108,7 +1108,7 @@ namespace das {
                 if ( ita !=yyextra->das_module_alias.end() ) {
                     if ( ita->second != info.moduleName ) {
                         das_yyerror(scanner,"module alias already used " + malias + " as " + ita->second,atName,
-                            CompilationError::module_not_found);
+                            CompilationError::already_declared_module);
                     }
                 } else {
                     yyextra->das_module_alias[malias] = info.moduleName;
@@ -1117,7 +1117,7 @@ namespace das {
         } else {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*name,info.fileName,pub,atName));
             das_yyerror(scanner,"required module not found " + *name,atName,
-                CompilationError::module_not_found);
+                CompilationError::lookup_module);
         }
         delete name;
         if ( modalias) delete modalias;
@@ -1178,22 +1178,22 @@ namespace das {
             if ( pMS->block ) {
                 if ( pMS->type ) {
                     das_yyerror(scanner,"can't pipe into make " + pMS->type->describe() + ". it already has where closure",
-                        locAt,CompilationError::cant_pipe);
+                        locAt,CompilationError::cant_expression);
                 } else {
                     das_yyerror(scanner,"can't pipe into make struct. it already has where closure",
-                        locAt,CompilationError::cant_pipe);
+                        locAt,CompilationError::cant_expression);
                 }
                 delete arg;
             } else if ( !arg->rtti_isMakeBlock() ) {
                 das_yyerror(scanner,"can't pipe into make struct. argument must be a block",
-                    locAt,CompilationError::cant_pipe);
+                    locAt,CompilationError::cant_expression);
                 delete arg;
             } else {
                 auto mkb = (ExprMakeBlock *) arg;
                 auto blk = (ExprBlock *) mkb->block;
                 if ( blk->arguments.size() != 1 ) {
                     das_yyerror(scanner,"can't pipe into make struct. block must have exactly one argument (that structure itself)",
-                        locAt,CompilationError::cant_pipe);
+                        locAt,CompilationError::cant_expression);
                     delete arg;
                 } else {
                     pMS->block = arg;
@@ -1202,7 +1202,7 @@ namespace das {
             return fncall;
         } else {
             das_yyerror(scanner,"can only pipe into function call or make type",
-                locAt,CompilationError::cant_pipe);
+                locAt,CompilationError::cant_expression);
             delete arg;
             return fncall;
         }
@@ -1232,7 +1232,7 @@ namespace das {
             pField->value = ast_rpipe(scanner, arg, pField->value, locAt);
             return fncall;
         } else {
-            das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
+            das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_expression);
             return fncall;
         }
     }
@@ -1286,7 +1286,7 @@ namespace das {
         else if ( op=="move" ) mode = CaptureMode::capture_by_move;
         else if ( op=="copy" ) mode = CaptureMode::capture_by_copy;
         else if ( op=="ref" ) mode = CaptureMode::capture_by_reference;
-        else yyextra->g_Program->error("unknown capture mode " + op, "", "", at, CompilationError::syntax_error);
+        else yyextra->g_Program->error("unknown capture mode " + op, "", "", at, CompilationError::invalid_capture);
         return new CaptureEntry(name,mode);
     }
 

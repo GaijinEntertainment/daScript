@@ -1,7 +1,7 @@
 options gen2
 
 // User declares non-optional `string` against a nullable TEXT column → compile error.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

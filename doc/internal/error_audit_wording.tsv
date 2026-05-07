@@ -1,0 +1,22 @@
+file	line	classification	current_msg_template	wording_change
+src/ast/ast_infer_type.cpp	255	follow_on	not fully resolved yet	current cerr unspecified - should be not_resolved_yet_structure_field; vague: clarify what is not resolved
+src/ast/ast_infer_type.cpp	312	wording_fix	field <var>can't be initialized at all	typo: missing space, '<name>can't' -> '<name> can't'
+src/ast/ast_infer_type.cpp	1620	wording_fix	'<var>->.<var>' expecting function	duplicate error call - line 1617 already emitted same error; remove duplicate
+src/ast/ast_infer_type.cpp	3746	mid_inference	Don't know what '<var>' is	vague: clarify what 'X' means
+src/ast/ast_infer_type.cpp	4126	wording_fix	global variable '<var>' cant't be initialized with itself	typo: cant't -> can't
+src/ast/ast_infer_type.cpp	5024	wording_fix	Uninitialized variable <var> is unsafe	inconsistent: uses [safe_when_uninitialized]; lines 295/370 use @safe_when_uninitialized
+src/ast/ast_infer_type.cpp	5143	follow_on	type not ready yet	current cerr unspecified - should be not_resolved_yet_local_type; vague: clarify which type isn't ready
+src/ast/ast_infer_type_function.cpp	1162	internal	internal compiler error: unknown array<auto> type not under make strcut	typo: strcut -> struct; missing cerr; internal invariant
+src/ast/ast_infer_type_helper.cpp	176	primary	table key has to be declare as a basic 'hashable' type: '<var>'	typo: declare -> declared
+src/ast/ast_infer_type_helper.cpp	966	follow_on	subexpresion type is not resolved yet	typo: subexpresion -> subexpression; missing cerr
+src/ast/ast_infer_type_helper.cpp	969	follow_on	subexpresion type is not fully resolved yet	typo: subexpresion -> subexpression; missing cerr
+src/ast/ast_infer_type_make.cpp	169	wording_fix	can't captured variable <var>	typo: captured -> capture
+src/ast/ast_infer_type_make.cpp	531	primary	<var>() can`t be allocated locally (on the stack...)	typo: can`t -> can't (backtick instead of apostrophe)
+src/ast/ast_infer_type_make.cpp	1191	primary	a => b tuple key has to be declare as a basic 'hashable' type	typo: declare -> declared
+src/ast/ast_infer_type_op.cpp	379	wording_fix	Op3 currently only supports 'is'	reword: 'Op3 currently only supports ?:' (code uses ?, not 'is')
+src/ast/ast_infer_type_op.cpp	482	wording_fix	can only move to from a reference<info>	typo: 'move to from' -> 'move from'
+src/ast/ast_simulate.cpp	1352	internal	internal compilation error simluateNullCoalescing returned null	missing cerr; typo: simluate -> simulate; suggest internal_error
+src/ast/ast_simulate.cpp	3619	internal	Internal compiler errors. Simulating variable which is not used<var>	missing cerr; wording: 'errors.' should be 'error,' and missing space before <var>; suggest internal_error
+src/ast/ast_typedecl.cpp	3807	internal	expecting ']'	DAS_VERIFY-only; typo: missing closing apostrophe in 'expecting '\]'
+src/ast/ast_parse.cpp	1249	internal	internal error	recategorize: not a syntax error; vague text — name the failing module
+src/parser/parser_impl.cpp	791	primary	intializer is already defined <fn>	wording: typo 'intializer' -> 'initializer'

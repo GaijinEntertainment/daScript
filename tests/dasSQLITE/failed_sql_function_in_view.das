@@ -12,7 +12,7 @@ options gen2
 // doesn't cascade into the other and inflate the count.
 // 30305: free `_` reference in the un-replaced AST after the `_create_view` call_macro
 // returns null on the directonly check. The 40104 messages above are the actionable ones.
-expect 40104:4, 30305:1
+expect 30838, 50503:2
 
 require daslib/sql
 require sqlite/sqlite_boost

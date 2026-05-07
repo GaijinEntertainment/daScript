@@ -3,7 +3,7 @@ options gen2
 // AddColumnMacro requires the DEFAULT to be a compile-time literal: int / float /
 // double / bool / string. Runtime expressions (function calls, variables, arithmetic)
 // are rejected with a fixit pointing to db |> exec(…).
-expect 40104:1
+expect 50503
 
 require sqlite/sqlite_migrate
 

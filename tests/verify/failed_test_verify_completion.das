@@ -1,5 +1,5 @@
 options gen2
-expect 40104:8
+expect 50503:8
 
 // Verify that [verify_completion] rejects unbounded loops and recursive calls.
 

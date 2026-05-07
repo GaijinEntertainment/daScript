@@ -10,7 +10,7 @@ options gen2
 //   7. name= with non-string value (silently coerced default would mask the typo)
 //   8. deterministic= with non-bool value
 //   9. directonly= with non-bool value
-expect 30111:9
+expect 20800:9
 
 require daslib/sql
 require sqlite/sqlite_boost

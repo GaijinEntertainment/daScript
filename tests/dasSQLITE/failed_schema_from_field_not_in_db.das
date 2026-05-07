@@ -1,7 +1,7 @@
 options gen2
 
 // Hand-declared field that doesn't exist in the schema_from .db → compile error.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

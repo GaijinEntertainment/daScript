@@ -10,7 +10,7 @@ options gen2
 //      daslang name of a sibling field.
 //
 // All five fail with 30111 ("macro [sql_table] failed to apply").
-expect 30111:5
+expect 20800:5
 
 require daslib/sql
 require sqlite/sqlite_boost

@@ -2,16 +2,16 @@
 
 ## Overview
 
-The `perf_lint` module detects common performance anti-patterns in daslang code at compile time. It uses a `[lint_macro]` AST pass that walks the compiled program looking for known-slow patterns and reports them as `CompilationError::performance_lint` (error code 40217).
+The `perf_lint` module detects common performance anti-patterns in daslang code at compile time. It uses a `[lint_macro]` AST pass that walks the compiled program looking for known-slow patterns and reports them as `CompilationError::runtime_macro_performance` (error code 31208).
 
 ## Architecture
 
 - **Module:** `daslib/perf_lint.das` — `module perf_lint shared private`
 - **Entry point:** `[lint_macro] class PerfLintMacro : AstPassMacro` calls `perf_lint(prog, true)`
 - **Visitor:** `class PerfLintVisitor : AstVisitor` — walks the AST with loop depth tracking
-- **Error reporting:** `macro_performance_warning(compiling_program(), at, message)` — reports as error code 40217
+- **Error reporting:** `macro_performance_warning(compiling_program(), at, message)` — reports as error code 31208
 - **Utility:** `utils/lint/main.das` — unified lint checker (all 3 passes: paranoid, perf, style)
-- **Tests:** `utils/lint/tests/` — one file per rule with `expect 40217:N`
+- **Tests:** `utils/lint/tests/` — one file per rule with `expect 31208:N`
 
 ## How to Add a New Rule
 
@@ -61,7 +61,7 @@ options gen2
 //       for (i in range(100)) { write(w, "x") }
 //   }
 
-expect 40217:N  // where N = number of warnings this file should produce
+expect 31208:N  // where N = number of warnings this file should produce
 
 require daslib/perf_lint
 

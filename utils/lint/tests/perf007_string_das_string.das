@@ -14,7 +14,7 @@ options gen2
 //   if (name == "foo") { ... }
 //   if (a == b) { ... }
 
-expect 40217:3
+expect 31208:3
 
 require daslib/perf_lint
 require daslib/ast_boost

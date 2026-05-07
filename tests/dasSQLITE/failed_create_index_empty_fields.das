@@ -2,7 +2,7 @@ options gen2
 
 // CreateIndexMacro must reject an empty-string field name — equivalent to "fields=()".
 // Mirrors [sql_index]'s "missing or empty `fields=`" error.
-expect 40104:1
+expect 50503
 
 require sqlite/sqlite_migrate
 

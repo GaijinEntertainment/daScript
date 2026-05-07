@@ -4,7 +4,7 @@ options gen2
 // generic at sqlite_boost.das fires its concept_assert (40103). This is the
 // happy path for "user forgot to define sql_bind for their type" and
 // confirms the analyzer no longer rejects unrecognized AST shapes.
-expect 40103:1
+expect 31400
 
 require daslib/sql
 require sqlite/sqlite_boost

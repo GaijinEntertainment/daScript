@@ -7,7 +7,7 @@ options gen2
 // Without this rejection a single payload type would silently route
 // through whichever adapter was emitted first — a BLOB column reading
 // from `sql_bind(T) : string` or vice versa.
-expect 30111:3
+expect 20800:3
 
 require daslib/sql
 require sqlite/sqlite_boost

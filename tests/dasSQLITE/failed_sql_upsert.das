@@ -2,7 +2,7 @@ options gen2
 
 // Each `_sql_upsert` call below is intentionally malformed and must emit
 // a macro_error (40104) from the analyzer.
-expect 40104:10
+expect 50503:10
 
 require daslib/sql
 require sqlite/sqlite_boost

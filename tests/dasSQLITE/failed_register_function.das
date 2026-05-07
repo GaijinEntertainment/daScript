@@ -8,7 +8,7 @@ options gen2
 //   3. pointer argument
 //   4. lambda passed instead of @@fn (not a function pointer)
 //   5. > 4 arguments
-expect 40104:5
+expect 50503:5
 
 require daslib/sql
 require sqlite/sqlite_boost

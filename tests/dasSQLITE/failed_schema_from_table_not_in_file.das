@@ -1,7 +1,7 @@
 options gen2
 
 // `name=` references a table that doesn't exist in the .db.
-expect 30111:1
+expect 20800
 
 require daslib/sql
 require sqlite/sqlite_boost

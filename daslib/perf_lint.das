@@ -10,7 +10,7 @@ module perf_lint shared private
 //!
 //! Detects common performance anti-patterns in daslang code at compile time.
 //! When this module is required, a lint pass runs after compilation and reports
-//! warnings as ``CompilationError::performance_lint`` (error code 40217).
+//! warnings as ``CompilationError::runtime_macro_performance`` (error code 31208).
 //!
 //! Rules:
 //!   PERF001 — string += in loop (O(n²))

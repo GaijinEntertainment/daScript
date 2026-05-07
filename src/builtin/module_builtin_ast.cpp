@@ -349,17 +349,17 @@ namespace das {
 
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
-        prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
+        prog->error(message ? message : "macro error","","",at,CompilationError::runtime_macro);
     }
 
     void ast_performance_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
-        prog->error(message ? message : "performance warning","","",at,CompilationError::performance_lint);
+        prog->error(message ? message : "performance warning","","",at,CompilationError::runtime_macro_performance);
     }
 
     void ast_style_warning ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
         if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
-        prog->error(message ? message : "style warning","","",at,CompilationError::style_lint);
+        prog->error(message ? message : "style warning","","",at,CompilationError::runtime_macro_style);
     }
 
     int32_t get_variant_field_offset ( TypeDecl * td, int32_t index, Context * context, LineInfoArg * at ) {

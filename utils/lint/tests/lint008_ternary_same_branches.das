@@ -11,7 +11,7 @@ options gen2
 // Good pattern:
 //   return cond ? then_value : else_value
 
-expect 40104:3
+expect 50503:3
 
 require daslib/lint
 

@@ -5464,7 +5464,7 @@ yyreduce:
   case 3: /* program: program module_declaration  */
                                    {
             if ( yyextra->das_has_type_declarations ) {
-                das2_yyerror(scanner,"module name has to be first declaration",tokAt(scanner,(yylsp[0])), CompilationError::syntax_error);
+                das2_yyerror(scanner,"module name has to be first declaration",tokAt(scanner,(yylsp[0])), CompilationError::invalid_module);
             }
         }
     break;
@@ -5545,7 +5545,7 @@ yyreduce:
             yyextra->g_Program->library.renameModule(yyextra->g_Program->thisModule.get(),*(yyvsp[-3].s));
         } else if ( yyextra->g_Program->thisModule->name != *(yyvsp[-3].s) ){
             das2_yyerror(scanner,"this module already has a name " + yyextra->g_Program->thisModule->name,tokAt(scanner,(yylsp[-3])),
-                CompilationError::module_already_has_a_name);
+                CompilationError::already_declared_module_name);
         }
         if ( !yyextra->g_Program->policies.ignore_shared_modules ) {
             yyextra->g_Program->promoteToBuiltin = (yyvsp[-2].b);
@@ -5610,7 +5610,7 @@ yyreduce:
                                                                                   {
         bool err;
         auto esconst = unescapeString(*(yyvsp[0].s),&err);
-        if ( err ) das2_yyerror(scanner,"invalid escape sequence",tokAt(scanner,(yylsp[-1])), CompilationError::invalid_escape_sequence);
+        if ( err ) das2_yyerror(scanner,"invalid escape sequence",tokAt(scanner,(yylsp[-1])), CompilationError::invalid_escape);
         auto sc = new ExprConstString(tokAt(scanner,(yylsp[0])),esconst);
         delete (yyvsp[0].s);
         static_cast<ExprStringBuilder *>((yyvsp[-1].pExpression))->elements.push_back(sc);
@@ -5670,17 +5670,17 @@ yyreduce:
         auto macros = yyextra->g_Program->getReaderMacro(*(yyvsp[0].s));
         if ( macros.size()==0 ) {
             das2_yyerror(scanner,"reader macro " + *(yyvsp[0].s) + " not found",tokAt(scanner,(yylsp[0])),
-                CompilationError::unsupported_read_macro);
+                CompilationError::lookup_macro);
         } else if ( macros.size()>1 ) {
             string options;
             for ( auto & x : macros ) {
                 options += "\t" + x->module->name + "::" + x->name + "\n";
             }
             das2_yyerror(scanner,"too many options for the reader macro " + *(yyvsp[0].s) +  "\n" + options, tokAt(scanner,(yylsp[0])),
-                CompilationError::unsupported_read_macro);
+                CompilationError::ambiguous_macro);
         } else if ( yychar != '~' ) {
             das2_yyerror(scanner,"expecting ~ after the reader macro", tokAt(scanner,(yylsp[0])),
-                CompilationError::syntax_error);
+                CompilationError::invalid_macro);
         } else {
             yyextra->g_ReaderMacro = macros.back();
             yyextra->g_ReaderExpr = new ExprReader(tokAt(scanner,(yylsp[-1])),yyextra->g_ReaderMacro);
@@ -5716,7 +5716,7 @@ yyreduce:
                 yyextra->g_Program->options.push_back(opt);
             } else {
                 das2_yyerror(scanner,"option " + opt.name + " is not allowed here",
-                    tokAt(scanner,(yylsp[0])), CompilationError::invalid_option);
+                    tokAt(scanner,(yylsp[0])), CompilationError::invalid_options);
             }
         }
         delete (yyvsp[0].aaList);
@@ -6279,7 +6279,7 @@ yyreduce:
             } else {
                 (yyval.fa)->annotation = new Annotation(*(yyvsp[0].s));
                 das2_yyerror(scanner,"annotation " + *(yyvsp[0].s) + " is not found",
-                            tokAt(scanner,(yylsp[0])), CompilationError::invalid_annotation);
+                            tokAt(scanner,(yylsp[0])), CompilationError::lookup_annotation);
             }
         } else {
             (yyval.fa)->annotation = new Annotation(*(yyvsp[0].s));
@@ -6300,7 +6300,7 @@ yyreduce:
             } else {
                 (yyval.fa)->annotation = new Annotation(*(yyvsp[-3].s));
                 das2_yyerror(scanner,"annotation " + *(yyvsp[-3].s) + " is not found",
-                            tokAt(scanner,(yylsp[-3])), CompilationError::invalid_annotation);
+                            tokAt(scanner,(yylsp[-3])), CompilationError::lookup_annotation);
             }
         } else {
             (yyval.fa)->annotation = new Annotation(*(yyvsp[-3].s));
@@ -6940,7 +6940,7 @@ yyreduce:
             if ( !yyextra->g_Program->addFunction((yyvsp[0].pFuncDecl)) ) {
                 das2_yyerror(scanner,"function is already defined " +
                     (yyvsp[0].pFuncDecl)->getMangledName(),(yyvsp[0].pFuncDecl)->at,
-                        CompilationError::function_already_declared);
+                        CompilationError::already_declared_function);
             }
         }
         (yyvsp[0].pFuncDecl)->delRef();
@@ -9193,7 +9193,7 @@ yyreduce:
         (yyval.pEnumList) = new Enumeration();
         if ( !(yyval.pEnumList)->add((yyvsp[0].pEnumPair)->name,(yyvsp[0].pEnumPair)->expr,(yyvsp[0].pEnumPair)->at) ) {
             das2_yyerror(scanner,"enumeration already declared " + (yyvsp[0].pEnumPair)->name, (yyvsp[0].pEnumPair)->at,
-                CompilationError::enumeration_value_already_declared);
+                CompilationError::already_declared_enumerator);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             for ( auto & crd : yyextra->g_CommentReaders ) {
@@ -9208,7 +9208,7 @@ yyreduce:
                                                  {
         if ( !(yyvsp[-2].pEnumList)->add((yyvsp[0].pEnumPair)->name,(yyvsp[0].pEnumPair)->expr,(yyvsp[0].pEnumPair)->at) ) {
             das2_yyerror(scanner,"enumeration already declared " + (yyvsp[0].pEnumPair)->name, (yyvsp[0].pEnumPair)->at,
-                CompilationError::enumeration_value_already_declared);
+                CompilationError::already_declared_enumerator);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             for ( auto & crd : yyextra->g_CommentReaders ) {
@@ -9247,12 +9247,12 @@ yyreduce:
         (yyvsp[0].pTypeDecl)->isPrivateAlias = !(yyvsp[-4].b);
         if ( (yyvsp[0].pTypeDecl)->baseType == Type::alias ) {
             das2_yyerror(scanner,"alias cannot be defined in terms of another alias "+*(yyvsp[-3].s),tokAt(scanner,(yylsp[-3])),
-                CompilationError::invalid_type);
+                CompilationError::invalid_type_alias);
         }
         (yyvsp[0].pTypeDecl)->alias = *(yyvsp[-3].s);
         if ( !yyextra->g_Program->addAlias((yyvsp[0].pTypeDecl)) ) {
             das2_yyerror(scanner,"type alias is already defined "+*(yyvsp[-3].s),tokAt(scanner,(yylsp[-3])),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,(yylsp[0]));
@@ -9793,7 +9793,7 @@ yyreduce:
             auto maxBits = (yyval.pTypeDecl)->maxBitfieldBits();
             if ( (yyval.pTypeDecl)->argNames.size()>maxBits ) {
                 das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,(yylsp[-5])),
-                    CompilationError::invalid_type);
+                    CompilationError::exceeds_bitfield);
             }
             (yyval.pTypeDecl)->at = tokAt(scanner,(yylsp[-5]));
             delete (yyvsp[-2].pNameList);
@@ -9852,10 +9852,10 @@ yyreduce:
                                                                        {
         if ( (yyvsp[-1].pTypeDecl)->baseType==Type::typeDecl ) {
             das2_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,(yylsp[-1])),
-                CompilationError::invalid_type);
+                CompilationError::invalid_array_type);
         } else if ( (yyvsp[-1].pTypeDecl)->baseType==Type::typeMacro ) {
             das2_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,(yylsp[-1])),
-                CompilationError::invalid_type);
+                CompilationError::invalid_array_type);
         }
         (yyvsp[-1].pTypeDecl)->dim.insert((yyvsp[-1].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.begin(), (yyvsp[0].pTypeDecl)->dim.end());
         (yyvsp[-1].pTypeDecl)->dimExpr.insert((yyvsp[-1].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.begin(), (yyvsp[0].pTypeDecl)->dimExpr.end());
@@ -10372,7 +10372,7 @@ yyreduce:
         deleteVariableDeclarationList((yyvsp[-3].pVarDeclList));
         if ( !yyextra->g_Program->addAlias(vtype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*(yyvsp[-8].s),tokAt(scanner,(yylsp[-8])),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,(yylsp[-8]));
@@ -10427,7 +10427,7 @@ yyreduce:
         deleteVariableDeclarationList((yyvsp[-3].pVarDeclList));
         if ( !yyextra->g_Program->addAlias(vtype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*(yyvsp[-8].s),tokAt(scanner,(yylsp[-8])),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,(yylsp[-8]));
@@ -10485,7 +10485,7 @@ yyreduce:
         auto maxBits = btype->maxBitfieldBits();
         if ( btype->argNames.size()>maxBits ) {
             das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,(yylsp[-9])),
-                CompilationError::invalid_type);
+                CompilationError::exceeds_bitfield);
         }
         for ( auto & p : *(yyvsp[-3].pNameExprList) ) {
             if ( get<1>(p) ) {
@@ -10494,7 +10494,7 @@ yyreduce:
         }
         if ( !yyextra->g_Program->addAlias(btype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*(yyvsp[-9].s),tokAt(scanner,(yylsp[-9])),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,(yylsp[-9]));
@@ -11360,7 +11360,7 @@ void das2_yyerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error 
     if ( !yyextra->das_suppress_errors ) {
         yyextra->g_Program->error(error,"","",LineInfo(yyextra->g_FileAccessStack.back(),
             lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
-                CompilationError::syntax_error);
+                CompilationError::invalid_expression);
     }
 }
 

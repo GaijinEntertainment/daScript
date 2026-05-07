@@ -2,7 +2,7 @@ options gen2
 
 // AddColumnMacro must reject a struct without [sql_table] — there's no table
 // identifier to ALTER, so the call is meaningless.
-expect 40104:1
+expect 50503
 
 require sqlite/sqlite_migrate
 

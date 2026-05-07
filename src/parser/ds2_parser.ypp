@@ -566,7 +566,7 @@ program
     :
     |   program module_declaration {
             if ( yyextra->das_has_type_declarations ) {
-                das2_yyerror(scanner,"module name has to be first declaration",tokAt(scanner,@module_declaration), CompilationError::syntax_error);
+                das2_yyerror(scanner,"module name has to be first declaration",tokAt(scanner,@module_declaration), CompilationError::invalid_module);
             }
         }
     |   program structure_declaration           { yyextra->das_has_type_declarations = true; }
@@ -626,7 +626,7 @@ module_declaration
             yyextra->g_Program->library.renameModule(yyextra->g_Program->thisModule.get(),*$name);
         } else if ( yyextra->g_Program->thisModule->name != *$name ){
             das2_yyerror(scanner,"this module already has a name " + yyextra->g_Program->thisModule->name,tokAt(scanner,@name),
-                CompilationError::module_already_has_a_name);
+                CompilationError::already_declared_module_name);
         }
         if ( !yyextra->g_Program->policies.ignore_shared_modules ) {
             yyextra->g_Program->promoteToBuiltin = $mtype;
@@ -666,7 +666,7 @@ string_builder_body
     |   string_builder_body[sb] character_sequence[sconst] %prec STRING_CHARACTER {
         bool err;
         auto esconst = unescapeString(*$sconst,&err);
-        if ( err ) das2_yyerror(scanner,"invalid escape sequence",tokAt(scanner,@sb), CompilationError::invalid_escape_sequence);
+        if ( err ) das2_yyerror(scanner,"invalid escape sequence",tokAt(scanner,@sb), CompilationError::invalid_escape);
         auto sc = new ExprConstString(tokAt(scanner,@sconst),esconst);
         delete $sconst;
         static_cast<ExprStringBuilder *>($sb)->elements.push_back(sc);
@@ -720,17 +720,17 @@ expr_reader
         auto macros = yyextra->g_Program->getReaderMacro(*$mark);
         if ( macros.size()==0 ) {
             das2_yyerror(scanner,"reader macro " + *$mark + " not found",tokAt(scanner,@mark),
-                CompilationError::unsupported_read_macro);
+                CompilationError::lookup_macro);
         } else if ( macros.size()>1 ) {
             string options;
             for ( auto & x : macros ) {
                 options += "\t" + x->module->name + "::" + x->name + "\n";
             }
             das2_yyerror(scanner,"too many options for the reader macro " + *$mark +  "\n" + options, tokAt(scanner,@mark),
-                CompilationError::unsupported_read_macro);
+                CompilationError::ambiguous_macro);
         } else if ( yychar != '~' ) {
             das2_yyerror(scanner,"expecting ~ after the reader macro", tokAt(scanner,@mark),
-                CompilationError::syntax_error);
+                CompilationError::invalid_macro);
         } else {
             yyextra->g_ReaderMacro = macros.back();
             yyextra->g_ReaderExpr = new ExprReader(tokAt(scanner,@loc),yyextra->g_ReaderMacro);
@@ -761,7 +761,7 @@ options_declaration
                 yyextra->g_Program->options.push_back(opt);
             } else {
                 das2_yyerror(scanner,"option " + opt.name + " is not allowed here",
-                    tokAt(scanner,@list), CompilationError::invalid_option);
+                    tokAt(scanner,@list), CompilationError::invalid_options);
             }
         }
         delete $list;
@@ -1159,7 +1159,7 @@ annotation_declaration_basic
             } else {
                 $$->annotation = new Annotation(*$name);
                 das2_yyerror(scanner,"annotation " + *$name + " is not found",
-                            tokAt(scanner,@name), CompilationError::invalid_annotation);
+                            tokAt(scanner,@name), CompilationError::lookup_annotation);
             }
         } else {
             $$->annotation = new Annotation(*$name);
@@ -1177,7 +1177,7 @@ annotation_declaration_basic
             } else {
                 $$->annotation = new Annotation(*$name);
                 das2_yyerror(scanner,"annotation " + *$name + " is not found",
-                            tokAt(scanner,@name), CompilationError::invalid_annotation);
+                            tokAt(scanner,@name), CompilationError::lookup_annotation);
             }
         } else {
             $$->annotation = new Annotation(*$name);
@@ -1439,7 +1439,7 @@ global_function_declaration
             if ( !yyextra->g_Program->addFunction($func) ) {
                 das2_yyerror(scanner,"function is already defined " +
                     $func->getMangledName(),$func->at,
-                        CompilationError::function_already_declared);
+                        CompilationError::already_declared_function);
             }
         }
         $func->delRef();
@@ -2796,7 +2796,7 @@ enum_list
         $$ = new Enumeration();
         if ( !$$->add($eE->name,$eE->expr,$eE->at) ) {
             das2_yyerror(scanner,"enumeration already declared " + $eE->name, $eE->at,
-                CompilationError::enumeration_value_already_declared);
+                CompilationError::already_declared_enumerator);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             for ( auto & crd : yyextra->g_CommentReaders ) {
@@ -2808,7 +2808,7 @@ enum_list
     |   enum_list[pE] commas enum_expression[eE] {
         if ( !$pE->add($eE->name,$eE->expr,$eE->at) ) {
             das2_yyerror(scanner,"enumeration already declared " + $eE->name, $eE->at,
-                CompilationError::enumeration_value_already_declared);
+                CompilationError::already_declared_enumerator);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             for ( auto & crd : yyextra->g_CommentReaders ) {
@@ -2839,12 +2839,12 @@ single_alias
         $tdecl->isPrivateAlias = !$pubA;
         if ( $tdecl->baseType == Type::alias ) {
             das2_yyerror(scanner,"alias cannot be defined in terms of another alias "+*$name,tokAt(scanner,@name),
-                CompilationError::invalid_type);
+                CompilationError::invalid_type_alias);
         }
         $tdecl->alias = *$name;
         if ( !yyextra->g_Program->addAlias($tdecl) ) {
             das2_yyerror(scanner,"type alias is already defined "+*$name,tokAt(scanner,@name),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@tdecl);
@@ -3189,7 +3189,7 @@ bitfield_type_declaration
             auto maxBits = $$->maxBitfieldBits();
             if ( $$->argNames.size()>maxBits ) {
                 das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,@basicType),
-                    CompilationError::invalid_type);
+                    CompilationError::exceeds_bitfield);
             }
             $$->at = tokAt(scanner,@basicType);
             delete $nl;
@@ -3238,10 +3238,10 @@ type_declaration_no_options
     |   type_declaration_no_options_no_dim[typeDecl] dim_list[dimlist] {
         if ( $typeDecl->baseType==Type::typeDecl ) {
             das2_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
-                CompilationError::invalid_type);
+                CompilationError::invalid_array_type);
         } else if ( $typeDecl->baseType==Type::typeMacro ) {
             das2_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,@typeDecl),
-                CompilationError::invalid_type);
+                CompilationError::invalid_array_type);
         }
         $typeDecl->dim.insert($typeDecl->dim.begin(), $dimlist->dim.begin(), $dimlist->dim.end());
         $typeDecl->dimExpr.insert($typeDecl->dimExpr.begin(), $dimlist->dimExpr.begin(), $dimlist->dimExpr.end());
@@ -3511,7 +3511,7 @@ tuple_alias_declaration
         deleteVariableDeclarationList($list);
         if ( !yyextra->g_Program->addAlias(vtype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
@@ -3550,7 +3550,7 @@ variant_alias_declaration
         deleteVariableDeclarationList($list);
         if ( !yyextra->g_Program->addAlias(vtype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
@@ -3592,7 +3592,7 @@ bitfield_alias_declaration
         auto maxBits = btype->maxBitfieldBits();
         if ( btype->argNames.size()>maxBits ) {
             das_yyerror(scanner,"only " + to_string(maxBits) + " different bits are allowed in a bitfield",tokAt(scanner,@vname),
-                CompilationError::invalid_type);
+                CompilationError::exceeds_bitfield);
         }
         for ( auto & p : *$list ) {
             if ( get<1>(p) ) {
@@ -3601,7 +3601,7 @@ bitfield_alias_declaration
         }
         if ( !yyextra->g_Program->addAlias(btype) ) {
             das2_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
-                CompilationError::type_alias_already_declared);
+                CompilationError::already_declared_type_alias);
         }
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
@@ -4041,7 +4041,7 @@ void das2_yyerror ( DAS2_YYLTYPE * lloc, yyscan_t scanner, const string & error 
     if ( !yyextra->das_suppress_errors ) {
         yyextra->g_Program->error(error,"","",LineInfo(yyextra->g_FileAccessStack.back(),
             lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
-                CompilationError::syntax_error);
+                CompilationError::invalid_expression);
     }
 }
 

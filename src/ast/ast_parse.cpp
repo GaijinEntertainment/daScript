@@ -774,7 +774,7 @@ namespace das {
                 das_yylex_destroy(scanner);
             }
         } else {
-            program->error(fileName + " not found", "","",LineInfo());
+            program->error(fileName + " not found", "","",LineInfo(), CompilationError::lookup_file);
             program->isCompiling = false;
             daScriptEnvironment::getBound()->g_Program.reset();
             daScriptEnvironment::getBound()->g_compilerLog = nullptr;
@@ -790,6 +790,7 @@ namespace das {
             daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
             daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             sort(program->errors.begin(),program->errors.end());
+            program->deduplicateErrors();
             program->isCompiling = false;
             return program;
         } else {
@@ -863,13 +864,14 @@ namespace das {
             daScriptEnvironment::getBound()->g_compilingFileName = nullptr;
             daScriptEnvironment::getBound()->g_compilingModuleName = nullptr;
             sort(program->errors.begin(), program->errors.end());
+            program->deduplicateErrors();
             program->isCompiling = false;
             if ( !program->failed() ) {
                 if ( program->needMacroModule ) {
                     if ( !program->thisModule->isModule ) { // checking if its a module
                         program->error("Module " + fileName + " is not setup correctly for macros",
                             "module Module_Name is required", "", LineInfo(),
-                                CompilationError::module_does_not_have_a_name);
+                                CompilationError::missing_module_name);
                     }
                     callCompilationCallback(moduleName, fileName, "macro_module");
                     auto timeM = ref_time_ticks();
@@ -974,7 +976,7 @@ namespace das {
             return true;
         program->error("Module " + mod.moduleName + " is not setup correctly for AOT",
             "module " + mod.moduleName + " is required", "", LineInfo(),
-                CompilationError::module_does_not_have_a_name);
+                CompilationError::missing_module_name);
         return false;
     }
 
@@ -997,7 +999,7 @@ namespace das {
             if ( !reqM.first->builtIn ) {
                 program->error("Shared module " + program->thisModule->name + " has incorrect dependency type.",
                     "Can't require " + reqM.first->name + " because its not shared", "", LineInfo(),
-                        CompilationError::module_required_from_shared);
+                        CompilationError::invalid_module_require);
                 regFromShar = true;
             }
         }
@@ -1147,7 +1149,7 @@ namespace das {
             reportChain(err, nameless.chain);
         }
         program->error(err.str(), "", "", at,
-                        CompilationError::module_not_found);
+                        CompilationError::lookup_module);
         return program;
     }
 
@@ -1238,7 +1240,7 @@ namespace das {
         bool allGood = addExtraDependency("builtin", builtin_path, missing, circular, notAllowed, req, dependencies, namelessReq, namelessMismatches, access, libGroup, policies, &logs);
         if ( !allGood ) {
             auto res = make_smart<Program>();
-            res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::syntax_error);
+            res->error("internal error: failed to build builtin.das", logs.str(), "", LineInfo(), CompilationError::internal_module);
             return res;
         }
         for ( const auto & em : access->getExtraModules() ) {
@@ -1246,7 +1248,7 @@ namespace das {
         }
         if ( !allGood ) {
             auto res = make_smart<Program>();
-            res->error("internal error", logs.str(), "", LineInfo(), CompilationError::syntax_error);
+            res->error("internal error", logs.str(), "", LineInfo(), CompilationError::internal_module);
             return res;
         }
         if ( getPrerequisits(fileName, access, modName, req, missing, circular, notAllowed, chain,
@@ -1256,7 +1258,7 @@ namespace das {
             if ( !verifyModuleNamesUnique(req, logs) ) {
                 auto res = make_smart<Program>();
                 res->error("Several modules with invalid names", logs.str(), "", LineInfo(),
-                           CompilationError::module_not_found);
+                           CompilationError::already_declared_module);
                 return res;
             }
             for ( const auto & mod : req) {
@@ -1265,7 +1267,7 @@ namespace das {
                     TextWriter err;
                     err << "Module '" << modName << "' required for another builtin module (probably debugger/profiler/jit is enabled). Disable conflicting builtin modules.\n";
                     res->error(err.str(), logs.str(), "", LineInfo(),
-                               CompilationError::module_not_found);
+                               CompilationError::already_declared_module);
                     return res;
                 }
             }

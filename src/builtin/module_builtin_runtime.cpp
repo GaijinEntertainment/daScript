@@ -185,7 +185,7 @@ namespace das
         MakeFunctionUnsafeCallMacro() : CallMacro("make_function_unsafe") { }
         virtual ExpressionPtr visit (  Program * prog, Module *, ExprCallMacro * call ) override {
             if ( !call->inFunction ) {
-                prog->error("make_function_unsafe can only be used inside a function", "", "", call->at);
+                prog->error("make_function_unsafe can only be used inside a function", "", "", call->at, CompilationError::invalid_macro_context);
                 return nullptr;
             }
             call->inFunction->unsafeOperation = true;

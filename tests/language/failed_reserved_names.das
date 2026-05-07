@@ -3,7 +3,7 @@
 // as enum names, enum values, struct names, struct fields, function names,
 // function args, local variables, and lambda parameters
 options gen2
-expect 30116:9
+expect 30106:3, 30146, 30148, 30152, 30163, 30240, 30282
 
 enum do {// 30116: invalid name
     foo
