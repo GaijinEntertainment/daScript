@@ -57,3 +57,21 @@ Every `.das` benchmark file in this directory tree is listed below, grouped by s
 | File | Description |
 |---|---|
 | `bench_v_ldu.das` | Fusion-engine `Op2At` array-indexed read at sizeof(T) ∈ {4,8,12,16} — int, int64, float3, float4. Used to compare DAS_FUSION=0 vs current `DAS_LDU_WORKHORSE` ladder vs `v_zero+memcpy(sizeof(CTYPE))` |
+
+## sql/
+
+3-mode comparison: `_sql` macro over `:memory:` SQLite vs pure in-memory `array<T>` LINQ, with the array form measured both in its naive (intermediate-materializing) and `_fold`-fused shapes. Mirrors the `tests/dasSQLITE/parity_check_*.das` pattern but oriented to throughput.
+
+| Mode | Source | Form |
+|---|---|---|
+| `m1` | `:memory:` SQLite | `_sql` — compile-time SQL emission, work pushed to the engine |
+| `m3` | pre-populated `array<Car>` | plain LINQ chain — materializes intermediate filter/sort arrays |
+| `m3f` | pre-populated `array<Car>` | `_fold` from `daslib/linq_boost` — fuses the chain into a single pass, in-place where possible |
+
+| File | Description |
+|---|---|
+| `_common.das` | Shared `Car` `[sql_table]` + `fixture_db` / `fixture_array` (not a benchmark) |
+| `select_where.das` | Filter chain — `_where(_.price > 500)` over 10K rows. Modest asymmetry; m3 walks every row. |
+| `select_where_order_take.das` | Filter + sort + limit — `_where \|> _order_by(_.price) \|> take(10)`. SQL ORDER BY + LIMIT bounds work; m3 sorts the full filtered set. |
+| `count_aggregate.das` | Aggregate — `count()` after `_where` over 1M rows. SQL pushes `COUNT(*)` to the engine returning one row; m3 materializes the full filtered array then counts it; m3f fuses where+count into one pass. Highest-asymmetry chain in daslang's favor. |
+| `indexed_lookup.das` | Indexed point lookup — `_where(_.id == K)` against the PRIMARY KEY over 1M rows. SQLite uses the PK b-tree (O(log n)); m3/m3f have no index (O(n) linear scan). Inverse-asymmetry: SQLite wins by ~1000×, illustrating where indexed storage earns its keep. |

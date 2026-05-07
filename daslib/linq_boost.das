@@ -956,6 +956,11 @@ var private g_foldSeq = [               // those are applied in order
         calls = ["distinct", "order" ],
         folder = @@fold_order_distinct
     ),
+// where + count (single-pass count, no intermediate filter array)
+    FoldSequence(
+        calls = ["where_", "count"],
+        folder = @@fold_where_count
+    ),
 // select and where
     FoldSequence(
         calls = ["where_", "select" ],
@@ -1028,6 +1033,38 @@ def private fold_where(argIndex : int; var topValue : Expression?; var blk : Exp
     var whereCond = fold_linq_cond(eWhere.arguments[1], "it")
     var comprehension = qmacro([for (it in $e(topValue)); it; where $e(whereCond)])
     return append_comprehension(argIndex, topValue, comprehension, blk, calls[0]._0.at)
+}
+
+[macro_function]
+def private fold_where_count(argIndex : int; var topValue : Expression?; var blk : ExprBlock?; var calls : array<tuple<ExprCall?; LinqCall?>>) : Expression? {
+    //! folds `_where(p) |> count()` into a single-pass loop with the predicate inlined — no intermediate filter array, no block-call overhead
+    var eWhere = calls[0]._0
+    let srcName = "`source`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
+    let itName  = "`it`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
+    let nName   = "`n`{argIndex}`{eWhere.at.line}`{eWhere.at.column}"
+    var whereCond = fold_linq_cond(eWhere.arguments[1], itName)
+    var fusedCall : Expression? = qmacro(invoke($($i(srcName) : typedecl($e(topValue)) - const) {
+        var $i(nName) = 0
+        for ($i(itName) in $i(srcName)) {
+            if ($e(whereCond)) {
+                $i(nName) ++
+            }
+        }
+        return $i(nName)
+    }, $e(topValue)))
+    fusedCall.force_at(calls[0]._0.at)
+    fusedCall.force_generated(true)
+    let newArgName = "pass_{argIndex}"
+    blk.list |> emplace_new <| qmacro_expr() {
+        var $i(newArgName) = $e(fusedCall)
+    }
+    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+    if (argIndex != 0) {
+        blk.list |> emplace_new <| qmacro_expr() {
+            delete $e(topValue)
+        }
+    }
+    return qmacro($i(newArgName))
 }
 
 [macro_function]

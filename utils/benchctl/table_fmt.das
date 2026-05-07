@@ -1,3 +1,5 @@
+options gen2
+
 require math
 require strings
 
