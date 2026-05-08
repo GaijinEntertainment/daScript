@@ -162,6 +162,10 @@ def rebuild(db : SqlRunner; root : string) : int {
                 to_log(LOG_WARNING, "skipping {f}: missing slug")
                 continue
             }
+            if (!is_valid_slug(doc.frontmatter.slug)) {
+                to_log(LOG_WARNING, "skipping {f}: invalid slug `{doc.frontmatter.slug}` (would be unretrievable via get)")
+                continue
+            }
             db |> insert(DocRow(
                 slug = doc.frontmatter.slug,
                 path = f,

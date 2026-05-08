@@ -250,6 +250,7 @@ bin/Release/daslang.exe utils/mouse/main.das -- log --misses
 
 For each recent miss:
 - **Did this PR (or your session research) answer it?** If yes — `mouse__add` it now (or `mouse add` from CLI). Next session won't redo the work.
+- **Did you _almost_ ask mouse this session but didn't?** Try asking now — misses-you-skipped don't show up in `--misses`. If the work you just did has the answer, add it.
 
 ```bash
 bin/Release/daslang.exe utils/mouse/main.das -- log

@@ -519,6 +519,45 @@ def test_rebuild_dedupes_duplicate_links(t : T?) {
     cleanup_root(root)
 }
 
+// A hand-edited `.md` with an invalid frontmatter slug (uppercase, dot,
+// leading underscore, etc.) would otherwise be indexed but unretrievable
+// via cmd_get/tool_get since they enforce is_valid_slug. Skip+warn so
+// search results never point at unfetchable docs.
+[test]
+def test_rebuild_skips_invalid_frontmatter_slug(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let no_q : array<string>
+    seed_doc(t, root, "good", "Good", "good body", no_links, no_q)
+    let fm = Frontmatter(
+        slug = "Bad.Slug",
+        title = "Bad",
+        created = "2026-05-08",
+        last_verified = "2026-05-08")
+    var werr : string
+    let bad_path = path_join(path_join(root, "docs"), "bad.md")
+    let wrote = write_doc(bad_path, fm, "bad body\n", werr)
+    t |> success(wrote, "seed bad slug: {werr}")
+    var n = -1
+    var slugs : array<string>
+    with_index_db(root) $(db) {
+        n = rebuild(db, root)
+        let rows <- _sql(db |> select_from(type<DocRow>) |> _select(_.slug))
+        for (s in rows) {
+            slugs |> push(s)
+        }
+    }
+    t |> equal(n, 1)  // only `good` indexed; bad-slug doc skipped
+    t |> equal(length(slugs), 1)
+    if (length(slugs) >= 1) {
+        t |> equal(slugs[0], "good")
+    }
+    cleanup_root(root)
+}
+
 [test]
 def test_add_doc_accepts_valid_slug_hint(t : T?) {
     let root = make_temp_root(t)

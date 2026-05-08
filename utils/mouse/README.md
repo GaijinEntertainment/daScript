@@ -47,12 +47,12 @@ mouse-data/
 
 ## Development
 
-```bash
-# Run the test suite
-daslang dastest/dastest.das -- --test utils/mouse/tests/
+Run the test suite:
 
-# Format
-mcp__daslang__format_file utils/mouse/*.das utils/mouse/tests/*.das
+```bash
+daslang dastest/dastest.das -- --test utils/mouse/tests/
 ```
+
+Format `.das` files via the daslang MCP `format_file` tool (`mcp__daslang__format_file` when invoking from an agent) — there is no shell equivalent, so the snippet above is shell-runnable but the formatter is not.
 
 CLAUDE.md has a top-level "Asking blind-mouse" section describing when to reach for this tool from inside Claude Code.
