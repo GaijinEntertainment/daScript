@@ -243,6 +243,58 @@ def test_search_respects_k(t : T?) {
     cleanup_root(root)
 }
 
+// SQLite treats LIMIT -1 as "no limit", so a non-positive k must short-
+// circuit before reaching the SQL layer.
+[test]
+def test_search_k_zero_returns_empty(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["foo question"]
+    seed_doc(t, root, "alpha", "Foo title", "foo body", no_links, qs)
+    var n_zero = -1
+    var n_neg = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let h0 <- search(db, "foo", 0)
+        n_zero = length(h0)
+        let hn <- search(db, "foo", -3)
+        n_neg = length(hn)
+    }
+    t |> equal(n_zero, 0)
+    t |> equal(n_neg, 0)
+    cleanup_root(root)
+}
+
+// Tabs in the query previously survived sanitize then sat inside a single
+// `split(" ")` token, breaking matches. Verify a tab-separated query
+// still matches a doc whose body contains the words.
+[test]
+def test_search_handles_tab_in_query(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["sample"]
+    seed_doc(t, root, "alpha", "Tab Match", "alpha gamma sample body", no_links, qs)
+    var hits_count = -1
+    var top_slug = ""
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let hits <- search(db, "alpha\tgamma", 5)
+        hits_count = length(hits)
+        if (length(hits) > 0) {
+            top_slug = hits[0].slug
+        }
+    }
+    t |> success(hits_count >= 1, "tab-separated query produced a hit")
+    t |> equal(top_slug, "alpha")
+    cleanup_root(root)
+}
+
 // ─── cross-refs ──────────────────────────────────────────────────────
 
 [test]

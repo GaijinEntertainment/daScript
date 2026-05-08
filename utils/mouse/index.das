@@ -10,6 +10,7 @@ require sqlite/sqlite_linq public
 require sqlite/sqlite_migrate public
 require daslib/fio public
 require strings public
+require math
 require store public
 
 // ─── on-disk layout ──────────────────────────────────────────────────
@@ -173,13 +174,12 @@ def rebuild(db : SqlRunner; root : string) : int {
                     from_slug = doc.frontmatter.slug,
                     to_slug = link))
             }
+            // doc.body already contains the `## Questions` section, so
+            // we don't append doc.questions separately — that would
+            // double-index aliases and skew BM25.
             let combined = build_string() $(var w) {
                 if (!empty(doc.frontmatter.title)) {
                     w |> write(doc.frontmatter.title)
-                    w |> write("\n")
-                }
-                for (q in doc.questions) {
-                    w |> write(q)
                     w |> write("\n")
                 }
                 w |> write(doc.body)
@@ -209,7 +209,7 @@ def sanitize_fts5_query(q : string) : string {
             let is_safe = ((c >= '0' && c <= '9') ||
                            (c >= 'a' && c <= 'z') ||
                            (c >= 'A' && c <= 'Z') ||
-                           c == ' ' || c == '\t' || c == '*')
+                           c == ' ' || c == '*')
             if (is_safe) {
                 w |> write(slice(q, i, i + 1))
             } else {
@@ -219,8 +219,17 @@ def sanitize_fts5_query(q : string) : string {
     }
 }
 
+// Hit-count cap. Untrusted callers (CLI/MCP) supply `k`, and SQLite
+// treats `LIMIT -1` as "no limit", so a negative or oversize `k` would
+// scan the whole index. 50 is well above any sane top-k for this corpus.
+let MAX_SEARCH_K = 50
+
 def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
     var out : array<SearchHit>
+    if (k <= 0) {
+        return <- out
+    }
+    let kk = min(k, MAX_SEARCH_K)
     let cleaned = strip(sanitize_fts5_query(query))
     if (empty(cleaned)) {
         return <- out
@@ -245,7 +254,7 @@ def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
     let raw_hits <- _try_sql(db |> select_from(type<SearchRow>)
                                 |> _where(_.Text |> text_match(or_query))
                                 |> _order_by(_.Rank)
-                                |> take(k))
+                                |> take(kk))
     if (raw_hits |> is_err) {
         to_log(LOG_WARNING, "search failed: {raw_hits |> unwrap_err}")
         return <- out
@@ -344,10 +353,7 @@ def add_doc(db : SqlRunner; root : string;
     }
     var slug : string
     if (!empty(slug_hint) && is_valid_slug(slug_hint)) {
-        slug = slug_hint
-        if (key_exists(existing, slug)) {
-            slug = slug_from_title_dedupe(slug, existing)
-        }
+        slug = dedupe_slug(slug_hint, existing)
     } else {
         slug = slug_from_title_dedupe(question, existing)
     }

@@ -193,8 +193,10 @@ def is_valid_slug(s : string) : bool {
     return true
 }
 
-def slug_from_title_dedupe(title : string; existing : table<string>) : string {
-    let base = slug_from_title(title)
+// Append `-2`, `-3`, ... to `base` until a free slot is found. Preserves
+// `base` verbatim — does NOT re-slugify, so a valid hint with `_` keeps
+// its `_` on collision.
+def dedupe_slug(base : string; existing : table<string>) : string {
     if (empty(base)) {
         return ""
     }
@@ -211,6 +213,10 @@ def slug_from_title_dedupe(title : string; existing : table<string>) : string {
     }
     panic("slug collision overflow for {base}")
     return ""
+}
+
+def slug_from_title_dedupe(title : string; existing : table<string>) : string {
+    return dedupe_slug(slug_from_title(title), existing)
 }
 
 // ─── body hash (FNV-1a 64-bit, decimal) ──────────────────────────────

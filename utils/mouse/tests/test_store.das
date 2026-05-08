@@ -149,6 +149,21 @@ def test_slug_dedupe_no_collision(t : T?) {
     t |> equal(s, "bar")
 }
 
+[test]
+def test_dedupe_slug_preserves_underscore(t : T?) {
+    var existing : table<string>
+    existing |> insert("my_doc")
+    let s = dedupe_slug("my_doc", existing)
+    t |> equal(s, "my_doc-2")
+}
+
+[test]
+def test_dedupe_slug_no_collision_returns_verbatim(t : T?) {
+    let existing : table<string>
+    let s = dedupe_slug("any-shape_keeps", existing)
+    t |> equal(s, "any-shape_keeps")
+}
+
 // ─── slug validation ─────────────────────────────────────────────────
 
 [test]

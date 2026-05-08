@@ -369,7 +369,7 @@ def tool_add(args : JsonValue?) : string {
                 for (s in outcome.similar) {
                     w |> write("  [{s.rank}] {s.slug} — {s.title}\n")
                 }
-                w |> write("\nHint: prefer extending an existing doc by editing its .md (use mouse__get <slug> to find the path). Re-call with force=true only when the new answer is genuinely a different topic.")
+                w |> write("\nHint: prefer extending an existing doc by editing its .md (call mouse__get with one of the slugs above to find the path). Re-call with force=true only when the new answer is genuinely a different topic.")
             }
         }
     }
