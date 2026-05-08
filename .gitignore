@@ -50,6 +50,7 @@ web/output/.idea/
 yzg.code-workspace
 
 examples/wip.das
+examples/wip_macro.das
 
 utils/dasFormatter/ds_parser.output
 src/parser/ds2_parser.output

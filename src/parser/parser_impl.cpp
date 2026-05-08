@@ -546,6 +546,9 @@ namespace das {
                     }
                     pVar->global_shared = glob_shar;
                     pVar->private_variable = !pub_var;
+                    if ( pDecl->annotation ) {
+                        pVar->annotation = *pDecl->annotation;
+                    }
                     if ( !yyextra->g_Program->addVariable(pVar) )
                         das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
                             CompilationError::already_declared_global);
