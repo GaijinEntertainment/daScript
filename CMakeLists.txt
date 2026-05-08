@@ -1555,6 +1555,16 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/daspkg/fixtures/
     FILES_MATCHING PATTERN "*.das_package"
 )
 
+# Install das-fmt (daslang formatter)
+file(GLOB DAS_FMT_FILES ${PROJECT_SOURCE_DIR}/utils/das-fmt/*.das)
+install(FILES ${DAS_FMT_FILES} DESTINATION utils/das-fmt)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/das-fmt/README.md
+    ${PROJECT_SOURCE_DIR}/utils/das-fmt/LICENSE
+    ${PROJECT_SOURCE_DIR}/utils/das-fmt/pre-commit
+    DESTINATION utils/das-fmt
+)
+
 # Install daspkg examples
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/daspkg/
     DESTINATION examples/daspkg

@@ -4,15 +4,16 @@
 
 ### New Features
 
-#### daSQLite: Typed SQLite Query Layer Expansion (#2481, #2485, #2487, #2489, #2492, #2496, #2507, #2509, #2511, #2518, #2524, #2528, #2534)
+#### daSQLite: Typed SQLite Query Layer Expansion (#2481, #2485, #2487, #2489, #2492, #2496, #2507, #2509, #2511, #2518, #2524, #2528, #2534, #2551, #2553, #2561, #2563, #2564, #2566, #2568, #2575, #2581, #2592, #2595, #2603)
 
 `modules/dasSQLITE` now extends `daslib/linq` with SQL-backed queries, letting familiar linq-style transforms compile down to typed SQLite operations. This release then broadens that foundation with a large tutorial-driven expansion across the rest of the SQLite layer.
 
-- **Insert + query macros** — typed insert flows, raw `query` / `try_query` helpers, and much deeper `_sql(...)` analysis
-- **Read-side operators** — `distinct`, `take`, `skip`, ordering, aggregates, grouping, joins, set operations, and multi-source queries
-- **Write-side operations** — typed update/delete flows, transaction helpers, and UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns
+- **Insert + query macros** — typed insert flows, raw `query` / `try_query` helpers, much deeper `_sql(...)` analysis with multi-quantifier (multi-Q) lowering, and a parity audit comparing in-memory linq vs. SQL emission
+- **Read-side operators** — `distinct`, `take`, `skip`, ordering, aggregates, grouping, the full join family (`_left_join`, `_inner_join`, `_right_join`, `_full_outer_join`, `_cross_join`), set operations, multi-source queries, and `_in` / `_not_in` against captured collections via SQLite `json_each`
+- **Write-side operations** — typed update/delete flows, transaction helpers, UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns, plus user-defined SQL functions via `[sql_function]` (auto-registered and visible inside `_sql` chains)
 - **Custom storage types** — custom adapters plus `@sql_json` and `@sql_blob` field support, JSON-path descent inside `_sql`, and column metadata introspection
-- **Operational SQLite features** — SQL fragment building, `ATTACH DATABASE`, FTS5 groundwork, and pre-migration utilities
+- **Schema introspection and migrations** — `[sql_table(schema_from=...)]` + `check_schema` validate live database schema against the daslang struct at compile time; `daslib/sqlite_migrate` ships versioned `[sql_migration]` blocks with typed ALTER macros (`add_column` / `drop_column` / `rename_column`) and full-table rebuilds via `[struct_convert]` + `convert_and_rename` + `[sql_table(legacy=true)]` for non-trivial schema changes
+- **Operational SQLite features** — SQL fragment building, `ATTACH DATABASE`, FTS5 (`[sql_fts5]` + `text_match`), and pre-migration utilities
 
 #### Style Lint and Unified Linting (#2386, #2390, #2391, #2417, #2441, #2516, #2517, #2533, #2538)
 
@@ -47,6 +48,16 @@ daslang now has a much clearer leak-debugging story for both language-side and C
 - **Cheat-sheet documentation** — unified guidance explains GC leaks, heap reports, smart-pointer tracking, jobque leaks, and handle-registry dumps
 - **Profiler and heap tooling** — better reporting and supporting leak-audit work across the runtime
 
+#### daspkg: Project Bundling for Distribution (#2579, #2584, #2588, #2590)
+
+`daspkg release` produces a redistributable bundle of a daslang project — a directory containing the standalone exe, every transitively-required `.shared_module` dylib, every asset matching the project's release globs, and every transitive dep package's release assets. The bundle runs on a machine with no daslang installed.
+
+- **`daspkg release` command** — `release()` hook in `.das_package` declares `release_main`, `release_name`, `release_include` / `release_exclude` globs, and force-included shared modules
+- **Exe-relative shared-module resolution** — `daslang -exe` resolves shared modules in three tiers (exe directory → `das_root` → absolute path), making relocated bundles portable
+- **`-list-shared-modules`** — auxiliary flag walks `program_for_each_module` and writes a JSON manifest of every dylib the program touches; `daspkg release` consumes it for auto-detection
+- **Project-local + relocated-bundle support** — `get_this_module_dir`, the JIT runtime, and the daspkg resolver all honor project-local layouts, so a moved or copied bundle continues to find its modules
+- **Native shared deps** — packages can ship platform-specific dylibs alongside their `.das` sources via `release_include_dll`; dasPUGIXML is enabled by default for Info.plist generation on macOS
+
 ### Improvements
 
 #### Strudel Audio Engine: Second Wave (#2403, #2423, #2425, #2426, #2427, #2428, #2429, #2430, #2435, #2440, #2457, #2464, #2519)
@@ -57,13 +68,21 @@ The new Strudel engine from `0.6.1` received a broad follow-up pass across synth
 - Reduced memory usage and multiple leak fixes in the threaded player, visualizer, and shutdown path
 - Expanded documentation and examples for the newer audio stack
 
-#### Compiler, AOT, and JIT Work (#2396, #2402, #2405, #2406, #2416, #2422, #2433, #2442, #2445, #2458, #2461, #2480, #2499, #2500)
+#### Compiler, AOT, and JIT Work (#2396, #2402, #2405, #2406, #2416, #2422, #2433, #2442, #2445, #2458, #2461, #2480, #2499, #2500, #2460, #2554, #2565, #2569, #2585, #2594, #2596, #2601, #2604, #2605)
 
 A substantial runtime/compiler pass improved code generation, packaging flexibility, and test coverage.
 
 - Continued push toward more daslang-authored AOT logic and cleaner AOT/JIT boundaries
 - Better standalone-exe behavior, transitive JIT type resolution, prologue sizing, and function registration
 - More build configurations (`RelWithDebInfo`, static PIC), more daslib AOT coverage, and platform-specific AOT fixes
+- **Tuple-strict typer** (#2565) — tuple field names are now part of the type, so `tuple<a:int;b:int>` and `tuple<x:int;y:int>` no longer collide and unnamed tuples remain distinct from named ones
+- **`Option<T>` / `Result<T,E>` via `[template_tuple]`** (#2601) — both types are now structural named-tuples generated through a generic mechanism, replacing bespoke handling
+- **Call-site block arrow body** (#2554) — `def f(...) : T => expr` shorthand parses alongside the existing block form
+- **Error reporting audit** (#2596) — diagnostics retagged for consistency, with `Program::deduplicateErrors` suppressing repeated identical errors from the same site
+- **`super` walks past empty intermediates** (#2594) — `super` now skips empty intermediate base classes when looking for a method
+- **Block-form global variable annotations** (#2604) — `@field` annotations now propagate to globals declared inside `variable { ... }` blocks
+- **`cbind` prefixes** (#2585) — generated bindings can be namespaced with a per-include prefix
+- **Compiler refactor** (#2460, #2569, #2605) — `Program` and `Context` extracted from `simulate` / `ast` into their own translation units; serialization unified with eden / daNetGame; large-file split for build-time and editor-friendliness
 
 #### GC / AST / Ownership Cleanup (#2400, #2404, #2407, #2409, #2410, #2411, #2415, #2420, #2421, #2470, #2506)
 
@@ -73,21 +92,38 @@ Core compiler internals continued the transition away from older `smart_ptr`-sty
 - Macro, visitor, binding, and validator code no longer has to fight as many `smart_ptr`-era ownership patterns and pointer conversions
 - Tracker stability improved when GC is active, reducing false crashes during debugging
 
-#### Runtime Libraries and Infrastructure (#2393, #2398, #2399, #2412, #2413, #2414, #2431, #2443, #2451, #2455, #2466, #2467, #2474, #2488, #2494, #2495, #2512, #2514, #2536, #2539)
+#### Runtime Libraries and Infrastructure (#2393, #2398, #2399, #2412, #2413, #2414, #2431, #2443, #2451, #2455, #2466, #2467, #2474, #2488, #2494, #2495, #2512, #2514, #2536, #2539, #2555, #2572, #2576, #2577)
 
 A broad utility pass landed across libraries, docs, and developer workflow.
 
 - **dasPEG** — more tests, docs, CI coverage, and standalone/LLVM fixes
-- **Core libraries** — validated numeric conversions in `daslib/strings_convert`, continued `Option` / `Result` work including non-copyable support, and C API completeness fixes
+- **Core libraries** — validated numeric conversions in `daslib/strings_convert`, continued `Option` / `Result` work including non-copyable support, and C API completeness fixes; `daslib/clargs` now returns `Result` from parsing for cleaner error handling
 - **Runtime data structures** — new in-tree `das_hash_map` backend to avoid empty-construction allocations and behave better in thread-local usage
+- **Path-aware glob in `daslib/fio`** (#2576, #2577) — `match_glob`, `glob`, `glob_filtered`, plus `expand_glob` / `parse_file_list` promoted from the MCP utility into the stdlib; byte-loops collapsed to `find` / `replace` with a new `skills/strings.md` rollup
+- **Math: common numeric functions** (#2555) — `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `log10`, `log1p`, `expm1`, `cbrt`, `trunc`, `hypot`, `fmod`, `remainder` added to the math module
+- **das-fmt vendored in-tree** — `utils/das-fmt/` now holds a local copy of the formatter; CI runs against it instead of an external clone
 - **Tooling/docs** — filesystem guidance, handle-registry tutorial work, class-boost coverage, integer-returning `main()` for tools, compilation progress reporting, and assorted AST/class-method polish
+
+#### Build, CI, and Web (#2578, #2600, #2602)
+
+- **Tutorials build in CI** (#2578) — every tutorial now compiles in CI as part of the regular check run
+- **Web target reuses the main `CMakeLists`** (#2600) — `daslang-web` picks up tests and tracks the same build configuration as the native targets, removing the duplicated CMake graph
+- **MCP: parse-aware C++ source-search tools** (#2602) — `cpp_find_symbol`, `cpp_grep_usage`, `cpp_outline`, `cpp_goto_definition` join the existing daslang-side tools, with a configurable search root and git-signature staleness detection
 
 ### Bug Fixes
 
-- **Build, tooling, and CI fixes** (#2385, #2394, #2395, #2424, #2447, #2521, #2537) — package `.gitignore` handling, PEG standalone/LLVM issues, `require` fixes, `dasbind` fixes, glob dependency tracking, and documentation/error-position corrections
-- **Runtime/compiler correctness** (#2387, #2392, #2486, #2520, #2526, #2531) — JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, `runWithCatch` state cleanup, and ASAN/diagnostic follow-up
+- **Build, tooling, and CI fixes** (#2385, #2394, #2395, #2424, #2447, #2521, #2537, #2591) — package `.gitignore` handling, PEG standalone/LLVM issues, `require` fixes, `dasbind` fixes, glob dependency tracking, documentation/error-position corrections, and daslang plugin: completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope
+- **Runtime/compiler correctness** (#2387, #2392, #2486, #2520, #2526, #2531, #2587, #2593) — JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, `runWithCatch` state cleanup, ASAN/diagnostic follow-up, fix #2583 (standalone-exe shutdown crash), and fix #2582 (top-level `let`-init now correctly registers builtins)
+- **Fusion engine** — TSan-safe `v_ldu` via `DAS_LDU_WORKHORSE`, `call1` / `call2` `loadSize` stamped from `fnPtr->debugInfo`, and a TSan suppression for the over-read in fusion call/return shells
 - **Language/runtime edge cases** (#2444, #2446, #2463, #2468) — `finally` loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, and strict-weak-ordering cleanup
 - **Graphics and platform fixes** (#2540) — OpenGL/package integration cleanup after the daspkg migration work
+- **Architecture-specific** — skipped `#pragma float_control` on `__e2k__` to silence warnings on the Elbrus toolchain
+
+### Examples
+
+- **Asteroids** (#2552, #2556) — full asteroid-shooter game with waves, audio, and powerups; later migrated to DECS for the entity model with a polish pass on visuals and powerup VFX
+- **Pacman** (#2589) — classic arcade game added to the `examples/` lineup
+- **River Run** (#2560, #2562, #2567) — top-down river shooter built across three rounds: initial gameplay (river splits, combat, VFX, audio, HUD, collisions), then scenery / bonus / engine sound / tuning, and finally shadows, pickup burst, rich music, 3D HUD, and a juice pass
 
 ## 0.6.1 (April 2026)
 
