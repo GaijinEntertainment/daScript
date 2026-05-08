@@ -4,30 +4,24 @@ When updating or creating AI instruction files (`CLAUDE.md` + skills) for the in
 
 ## File layout
 
-Source files live under `install/` in the repo; CMake installs them to the SDK root:
+`install/CLAUDE.md` is the SDK-facing main instructions file (audience-curated counterpart to top-level `CLAUDE.md`). The skills tree is **not** mirrored under `install/skills/` — there is a single source of truth at `skills/`, and `install/skills.list` is a manifest naming which skills get copied to the SDK at install time.
 
 | Source (repo) | Installed to | Purpose |
 |---|---|---|
 | `install/CLAUDE.md` | `CLAUDE.md` (root) | Main AI instructions for SDK users |
-| `install/skills/das_formatting.md` | `skills/das_formatting.md` | Code formatter usage |
-| `install/skills/cpp_integration.md` | `skills/cpp_integration.md` | C++ embedding patterns |
-| `install/skills/daslib_modules.md` | `skills/daslib_modules.md` | Standard library module reference |
-| `install/skills/das_macros.md` | `skills/das_macros.md` | Macro & AST programming |
-| `install/skills/daspkg.md` | `skills/daspkg.md` | Package manager usage |
-| `install/skills/dynamic_modules.md` | `skills/dynamic_modules.md` | `.das_module` descriptors |
-| `install/skills/daslang_live.md` | `skills/daslang_live.md` | Live-reload host |
-| `install/skills/clargs_usage.md` | `skills/clargs_usage.md` | Command-line argument parsing for user tools |
-| `install/skills/json.md` | `skills/json.md` | JSON read/write via `sprint_json`/`sscan_json` and `JV`/`from_JV` |
-| `install/skills/xml.md` | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` |
-| `install/skills/filesystem.md` | `skills/filesystem.md` | Filename & filesystem ops via `fio` / `daslib/fio` (path helpers, `stat`, `dir_rec`, RAII `fopen`, `_result` variants) |
-| `install/skills/writing_tests.md` | `skills/writing_tests.md` | dastest framework usage for SDK consumers |
-| `install/skills/memory_leak_detection.md` | `skills/memory_leak_detection.md` | Heap / gc_node / smart_ptr / handle leak detection — runtime CLI flags |
-| `install/skills/jobque_debugging.md` | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Stream/Feature leak debugging with `--track-job-status` |
-| `install/skills/detect_dupe.md` | `skills/detect_dupe.md` | Duplicate-function detection — corpus build, MCP tools (`export_corpus`, `detect_duplicates`), CLI modes |
-| `install/skills/mcp_tools.md` | `skills/mcp_tools.md` | Full MCP tool table + live-API reference (CLAUDE.md only carries a 2-line pointer) |
-| `install/skills/regex.md` | `skills/regex.md` | Regular expressions — `daslib/regex` API + `%regex~...%%` reader macro |
+| `install/skills.list` | (not installed) | Manifest naming which `skills/*.md` to ship |
+| `skills/<name>.md` | `skills/<name>.md` | Each skill listed in `install/skills.list` |
 | `utils/mcp/` (whole dir) | `utils/mcp/` | MCP server for AI assistants (gated on dasHV) |
-| `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector (canonicalizer, clusterer, MinHash, pattern filter) |
+| `utils/detect-dupe/` (whole dir) | `utils/detect-dupe/` | Duplicate-function detector |
+
+The current ship list lives in [install/skills.list](../install/skills.list) — alphabetical, `#` comments allowed.
+
+## Adding or removing a shipped skill
+
+1. **Adding:** put the skill at `skills/<name>.md` (or use an existing one). Add a single line `<name>.md` to `install/skills.list` in alphabetical order. Add a row to the `install/CLAUDE.md` skill table with the SDK-facing description.
+2. **Removing:** delete the line from `install/skills.list` and the row from `install/CLAUDE.md`. Decide whether to keep the skill at `skills/<name>.md` (repo-only) or delete it entirely.
+
+The CMake install rule (in root `CMakeLists.txt`) reads the manifest with `file(STRINGS ...)` and `install(FILES ...)` for each named basename. Missing files trigger `FATAL_ERROR` at configure time, so a typo in `install/skills.list` fails loudly.
 
 ## What belongs in install instructions
 
@@ -35,7 +29,7 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 
 - daslang language reference (gen2 syntax, all rules)
 - Running scripts (`bin/daslang path/to/script.das`)
-- AOT generation (`bin/daslang -aot input.das output.cpp`)
+- AOT generation, JIT execution, project files
 - Debugging tips (exit codes, crash diagnosis)
 - Memory management, move semantics, smart pointers
 - AST macros, structure macros, qmacro/quote (advanced but language-level)
@@ -45,77 +39,64 @@ Source files live under `install/` in the repo; CMake installs them to the SDK r
 - Code formatting tool usage
 - Install directory layout (bin/, lib/, daslib/, include/, examples/)
 - MCP server usage (starting, configuring, available tools)
-- Keywords reference
 
 **Exclude (repo-dev-only):**
 
 - Build system details (CMake, MSVC, generate_*.bat)
 - GitHub operations, PR workflow
-- Test framework internals (dastest conventions, writing tests for the repo)
+- Repo-internal test infrastructure (registering test directories in CMake, AOT test build wiring)
 - Documentation generation (RST, Sphinx, das2rst)
-- Benchmark framework
-- Repo-internal source paths (src/, tests/, doc/reflections/)
+- Benchmark framework, perf/style lint rule authoring
+- Repo-internal source paths (`src/`, `tests/`, `doc/reflections/`)
 - "Updating instructions with new knowledge" meta-notes
 - CI/CD configuration
 
-## Path conventions
+## Path conventions in shipped content
 
 - Use **cross-platform paths** without OS-specific extensions: `bin/daslang` not `bin/daslang.exe`
 - Use **relative paths from install root**: `bin/daslang`, `daslib/linq.das`, `examples/hello_world.das`
-- Never reference repo-internal paths like `bin/Release/daslang.exe`
+- Never reference repo-internal paths like `bin/Release/daslang.exe`, `src/builtin/...`, `tests/...`
 
 ## Keeping content in sync
 
-The install CLAUDE.md derives from the repo CLAUDE.md but is NOT a copy. When updating:
+Since the skills tree is single-sourced, most updates only touch one file. The exception is the two CLAUDE.md heads:
 
-1. **Language knowledge changes** (gen2 syntax, gotchas, new keywords) — update BOTH repo `CLAUDE.md` AND `install/CLAUDE.md`
-2. **Repo-dev-only changes** (build system, CI, test conventions) — update repo `CLAUDE.md` only
-3. **New daslib module docs** — update BOTH `skills/daslib_modules.md` AND `install/skills/daslib_modules.md`
-4. **New C++ integration patterns** — update BOTH `skills/cpp_integration.md` AND `install/skills/cpp_integration.md`; omit repo-internal codebase notes from the install version
-5. **Formatter changes** — update BOTH `skills/das_formatting.md` AND `install/skills/das_formatting.md`; use `bin/daslang` paths in the install version
-6. **MCP tool changes** (new tools, API changes) — update BOTH repo `CLAUDE.md` MCP section AND `install/CLAUDE.md` MCP section; use `bin/daslang` paths in install version. The MCP source files (`utils/mcp/`) are installed directly by CMake (gated on `NOT DAS_HV_DISABLED`)
-7. **Library / module skills** (`json.md`, `xml.md`, `daslib_modules.md`, etc.) — update BOTH repo and install versions. In the install version: drop `tests/` references (tests aren't shipped), drop repo-only doc paths (`doc/source/...`), drop CMake-flag / `.vscode/settings.json` build-config sections (install users get a pre-built binary — they cannot flip `DAS_*_DISABLED`), drop the "no `print` in tests/daslib" gotcha (a repo-development convention, not user-facing), drop `skills/tutorials.md` cross-references (not in install). Keep all `daslib/*.das`, `tutorials/`, `examples/`, `utils/mcp/`, `utils/daspkg/`, `modules/<X>/daslib/*.das` references — those all ship
+1. **Language knowledge changes** (gen2 syntax, gotchas, new keywords) — update BOTH `CLAUDE.md` AND `install/CLAUDE.md`. The two heads carry near-identical syntax content.
+2. **Repo-dev-only changes** (build system, CI, test conventions) — update top-level `CLAUDE.md` only.
+3. **Skill table edits** — update BOTH if the skill ships, top-level only if it doesn't.
+4. **Skill content edits** — update `skills/<name>.md` only. If the skill ships, the same content reaches SDK users automatically via the manifest.
 
 ## CMake install rules
 
-Install rules are in the root `CMakeLists.txt`. The CLAUDE.md and skills are installed alongside README.md:
+Install rules live in the root `CMakeLists.txt` near line 1471. The shape:
 
 ```cmake
-# AI instructions
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/install/skills DESTINATION ${DAS_INSTALL_DOCDIR})
+
+# Skills via manifest
+file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW)
+set(SHIPPED_SKILLS "")
+foreach(LINE IN LISTS SHIPPED_SKILLS_RAW)
+    string(STRIP "${LINE}" LINE)
+    if(LINE AND NOT LINE MATCHES "^#")
+        set(SKILL_PATH "${PROJECT_SOURCE_DIR}/skills/${LINE}")
+        if(NOT EXISTS "${SKILL_PATH}")
+            message(FATAL_ERROR "install/skills.list references missing file: skills/${LINE}")
+        endif()
+        list(APPEND SHIPPED_SKILLS "${SKILL_PATH}")
+    endif()
+endforeach()
+install(FILES ${SHIPPED_SKILLS} DESTINATION ${DAS_INSTALL_DOCDIR}/skills)
 ```
 
-`DAS_INSTALL_DOCDIR` is the install root (`.`), so CLAUDE.md ends up at the top level and skills/ as a subdirectory.
+`DAS_INSTALL_DOCDIR` is the install root (`.`), so `CLAUDE.md` lands at the top level and `skills/` as a subdirectory.
 
 ## Verification
 
-After modifying install instructions, install to a scratch prefix and verify the layout. Replace `<prefix>` with whatever directory you prefer (e.g. `~/daslang-test`, `/tmp/daslang`, `D:/daslang`).
+After modifying install instructions, install to a scratch prefix and verify the layout. Replace `<prefix>` with whatever directory you prefer (e.g. `~/daslang-test`, `/tmp/daslang`).
 
 1. Rebuild: `cmake --build build --config Release --target daslang`
 2. Install: `cmake --install build --config Release --prefix <prefix>`
-3. Verify files exist under `<prefix>/`:
-   - `CLAUDE.md`
-   - `skills/das_formatting.md`
-   - `skills/cpp_integration.md`
-   - `skills/daslib_modules.md`
-   - `skills/das_macros.md`
-   - `skills/daspkg.md`
-   - `skills/dynamic_modules.md`
-   - `skills/daslang_live.md`
-   - `skills/clargs_usage.md`
-   - `skills/json.md`
-   - `skills/xml.md`
-   - `skills/filesystem.md`
-   - `skills/writing_tests.md`
-   - `skills/memory_leak_detection.md`
-   - `skills/jobque_debugging.md`
-   - `skills/detect_dupe.md`
-   - `skills/mcp_tools.md`
-   - `skills/regex.md`
-   - `utils/mcp/main.das` (only if built with `DAS_HV_DISABLED=OFF`)
-   - `utils/mcp/tools/common.das` (only if built with `DAS_HV_DISABLED=OFF`)
-   - `utils/detect-dupe/main.das`
-   - `utils/detect-dupe/patterns.das`
-   - `utils/detect-dupe/fixture/synth.das`
-4. Spot-check that no repo-internal paths leaked into install files
+3. Verify `<prefix>/CLAUDE.md` exists and reads as the SDK-facing version (not the top-level repo one).
+4. Verify `<prefix>/skills/` contains exactly the basenames listed in `install/skills.list` and no others. Cross-check: `ls <prefix>/skills/ | sort` should match `grep -v '^#' install/skills.list | grep -v '^$' | sort`.
+5. Spot-check a couple of shipped skills for repo-internal-path leakage (`bin/Release`, `src/builtin/`, `tests/...`).

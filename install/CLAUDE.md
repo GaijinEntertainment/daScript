@@ -4,21 +4,7 @@
 
 [daslang](https://daslang.io/) (formerly daScript) is a high-performance statically-typed programming language designed for games and real-time applications, standalone or embedded. Many C++ API names still use the old "daScript" spelling.
 
-## What and Why
-
-daslang was created at Gaijin Entertainment to solve a concrete problem: **interop overhead** between scripting languages (Lua/LuaJIT, Squirrel) and C++ was killing frame budgets in their ECS game engine. The key insight is that daslang's data layout matches C++ — no marshaling, no boxing — making script↔C++ calls near-zero cost.
-
-**Core design principles:**
-- **Iteration speed is king** — full production game recompiles in ~5 sec; hot reload built in
-- **Explicit, not implicit** — no hidden conversions, no silent allocations; `options log` shows exactly what the compiler produces
-- **99% safe, not 100%** — eliminate real-world C++ bugs pragmatically, not at Rust-level cost; `unsafe` for the remaining 1%
-- **No data marshaling** — C++-compatible data layout; this is what makes ECS-scale scripting viable
-- **If it gets slow, you can fix it** — manual `delete` to reduce GC pressure, AOT compilation for native speed
-- **Language reflects the domain** — macros (FORTRAN+LISP inspiration) let libraries reshape syntax to match the problem
-
-**Three execution tiers** (all planned from day one): fast tree-based interpreter → AOT to C++ (required for consoles) → JIT via LLVM. Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter.
-
-**Audience:** game scripters (largest group — hot reload, fast compile, never rewrite to C++), engine/tools programmers (zero-cost interop, macros), and a growing standalone/ecosystem community (LLVM executables, package manager in development).
+For the **why** — design principles, three-tier execution model (interpreter / AOT / JIT), the macros-as-design-lens rule — read `skills/project_overview.md`.
 
 ## Running Scripts
 
@@ -70,6 +56,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 
 | Skill file | Read BEFORE... |
 |---|---|
+| `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
@@ -89,6 +76,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 | `skills/linq.md` | Filter/map/sort/group/aggregate transforms — prefer comprehension → linq_boost → plain `for`; avoid `daslib/functional` for new code |
 | `skills/decs.md` | Programming with `daslib/decs` / `decs_boost` — entities, components, queries, `[decs_template]`, stages, bulk creation, `from_decs` linq bridge |
 | `skills/regex.md` | Writing regular expressions in `.das` code |
+| `skills/strudel_port.md` | Porting strudel.cc patterns into `dasStrudel` |
 
 Multiple skill files may apply to a single task. For example, embedding daslang and calling its standard library requires reading both `skills/cpp_integration.md` and `skills/daslib_modules.md`.
 

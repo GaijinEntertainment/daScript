@@ -93,48 +93,6 @@ When testing operations on types containing non-copyable fields (`array<T>`, `ta
 - **Test non-copyable fields explicitly**: include at least one struct with an `array<T>` or `table<K;V>` field to catch accidental copies
 - **Helper functions**: write `make_xxx()` factory helpers that construct test values — keeps test code concise and avoids repetition
 
-## Test index (`tests/README.md`)
-
-The file `tests/README.md` is a comprehensive index of every `.das` test file. **When you add, remove, or rename a test file, update `tests/README.md`** to keep it in sync:
-
-- Add a row to the correct directory table with the filename, a short description, and `**expect** <codes>` if the file uses `expect` directives.
-
-## AOT tests (`tests/aot/`)
-
-Tests under `tests/aot/` are compiled ahead-of-time into the `test_aot` binary. They verify that daslang functions compile to C++ correctly and that AOT stubs link at runtime.
-
-- **Adding AOT tests**: see `skills/aot_testing.md` for full details
-- **Running**: `bin/Release/test_aot.exe dastest/dastest.das -- --test tests/aot`
-- AOT tests also run under the regular interpreter: `bin/Release/daslang.exe dastest/dastest.das -- --test tests/aot`
-- **Semantic hash pitfall**: avoid using `aot_enabled()` or `is_in_aot()` in assertion logic — these are constant-folded differently at AOT generation time vs runtime, causing hash mismatches (error 50101)
-- If creating a new subdirectory, add a new section header and table.
-- Mark helper/module files (non-test) with *(helper)*.
-
-## IMPORTANT: Register ALL test directories in CMake for AOT
-
-**Every test directory under `tests/` must be registered in `tests/aot/CMakeLists.txt`** so that the `test_aot` binary generates and links AOT stubs for those tests. If a test file is not registered, `test_aot` will fail with `error[50101]: AOT link failed` when it encounters functions without AOT stubs.
-
-When adding a new test directory (e.g., `tests/foo/`), follow the pattern in `tests/aot/CMakeLists.txt`:
-
-1. Add a `FILE(GLOB ...)` to collect test files:
-   ```cmake
-   FILE(GLOB AOT_FOO_FILES RELATIVE ${PROJECT_SOURCE_DIR} "tests/foo/*.das")
-   ```
-2. Add a custom target and `DAS_AOT` call:
-   ```cmake
-   add_custom_target(test_aot_foo)
-   SET(FOO_AOT_GENERATED_SRC)
-   DAS_AOT("${AOT_FOO_FILES}" FOO_AOT_GENERATED_SRC test_aot_foo daslang)
-   ```
-3. Add `SOURCE_GROUP_FILES`:
-   ```cmake
-   SOURCE_GROUP_FILES("aot generated" FOO_AOT_GENERATED_SRC)
-   ```
-4. Add `${FOO_AOT_GENERATED_SRC}` to the `add_executable(test_aot ...)` source list
-5. Add `test_aot_foo` to the `ADD_DEPENDENCIES(test_aot ...)` list
-
-**Do NOT use `options no_aot`** to work around AOT link failures — fix the root cause by ensuring the test is registered in the AOT build.
-
 ## Test-first bug verification
 
 When fixing bugs, write the failing test BEFORE applying the fix:

@@ -223,10 +223,6 @@ See [skills/daspkg.md](skills/daspkg.md#L224) for the bundle-shipping side of th
 ## Reference
 
 - [daslib/fio.das](daslib/fio.das) — daslang wrapper layer (RAII `fopen`, `_result` variants, `mkdir_rec`, `disk_space`, whole-file `fread`/`fwrite` by path, glob bundle)
-- [src/builtin/module_builtin_fio.cpp:1218-1457](src/builtin/module_builtin_fio.cpp#L1218-L1457) — C++ registrations (the `fio_core` layer)
 - [include/daScript/simulate/aot_builtin_fio.h](include/daScript/simulate/aot_builtin_fio.h) — `FStat`, `DiskSpaceInfo` structs
-- [doc/source/stdlib/handmade/module-fio.rst](doc/source/stdlib/handmade/module-fio.rst) — auto-generated module reference
-- [tests/fio/fio_utils.das](tests/fio/fio_utils.das) — read/write by path, recursive `rmdir`, `_result` variants
-- [tests/fio/glob_test.das](tests/fio/glob_test.das) and [tests/fio/expand_glob_test.das](tests/fio/expand_glob_test.das) — glob primitives + expander/parser tests
 - [tutorials/dasAudio/02_playing_files.das](tutorials/dasAudio/02_playing_files.das) — `fopen` + `fmap` for binary data
 - [skills/glob.md](skills/glob.md) — pathname glob matching, when to use `match_glob` vs `glob_match`, full `expand_glob` / `parse_file_list` cookbook

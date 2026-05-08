@@ -143,3 +143,9 @@ existing flags like `--track-smart-ptr`, `--das-profiler-log-file`.
   subcommands.
 - `modules/dasLLVM/daslib/llvm_exe.das` (`ReleaseDepsArgs`) — sharing
   argv with another consumer (daslang's own flag set).
+
+## Migrating hand-rolled `get_command_line_arguments()` callers
+
+Standing rule: when you edit any in-tree tool that still parses `get_command_line_arguments()` directly, migrate its argv handling to `daslib/clargs` in the same PR. Don't open a dedicated "migrate every tool" PR — keep migrations opportunistic so they ride along with whatever you were already doing. Migrate **only** the tool you're already editing.
+
+To find remaining callers, grep `get_command_line_arguments` under `utils/`, `daslib/`, and `examples/` before adding "still pending" claims to a PR description. The migration is a small, self-contained change: declare the config struct, pick the argv accessor, call `parse_args`, wire help. The reference example is `examples/clargs/main.das`; production patterns are in `utils/daspkg/commands.das`.

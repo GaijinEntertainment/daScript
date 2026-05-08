@@ -1,36 +1,76 @@
 # Macro & AST Programming
 
-Read this skill file before writing compile-time macros, AST manipulation code, structure macros, qmacro/quote code generation, or any code that uses `smart_ptr<T>` ownership patterns (e.g., `TypeDeclPtr`, `ExpressionPtr`, `FunctionPtr`, `StructurePtr`).
+Read this skill file before writing compile-time macros, AST manipulation
+code, structure macros, qmacro/quote code generation, or any code that
+manipulates AST node pointers (e.g., `TypeDeclPtr`, `ExpressionPtr`,
+`FunctionPtr`, `StructurePtr`).
 
-## Move semantics for smart pointers (`<-` vs `move`)
+## AST nodes are gc_node — unique, no `inscope`, no `<-` for assignment
+
+Every AST type — `TypeDecl`, `Expression` (every subclass: `ExprBlock`,
+`ExprCall`, `ExprFor`, …), `Function`, `Structure`, `Enumeration`,
+`Variable`, `MakeFieldDecl`, `MakeStruct`, every `Annotation` subclass —
+is a **plain raw pointer** (`gc_node`), not a smart_ptr. Their lifetime
+is owned by a `gc_root` (typically the Module), and the GC sweeps
+unreachable nodes.
+
+**Rules:**
+
+- **No `var inscope`** for AST pointer types. Plain `var x = new ExprConstInt(...)` or `var x = clone_expression(e)`.
+- **No `<-` for assignment** to AST node fields. Use plain `=`:
+  - `fn.body = newBlock`
+  - `td.firstType = elemType`
+  - `field |> move_new <| expr` is also legacy — write `field = expr`.
+- **No `move_new`, no `move`, no `add_ptr_ref` on AST pointers** — those were smart_ptr-era helpers. `add_ptr_ref` still exists for bridging to the residual `smart_ptr<T>` types (e.g., `smart_ptr<Program>`), not for AST.
+- **Don't call `get_ptr(x)` on AST pointers** — `x` is already a raw pointer. `expr is ExprVar` works directly, `x.field` works directly, `x == null` works directly.
+- **AST is unique — clone, don't copy.** Each AST node lives at exactly one location. Inserting the same `ExpressionPtr` into two parent expressions creates aliasing — both think they own the child, gc_collect walks it twice, mutations leak across, and the AST validator complains. To duplicate, use the matching `clone_*`:
+
+  | Type | Clone fn | Notes |
+  |---|---|---|
+  | `TypeDeclPtr` | `clone_type(t)` | |
+  | `ExpressionPtr` | `clone_expression(e)` | recursive deep clone |
+  | `FunctionPtr` | `clone_function(f)` | returned via move: `var x <- clone_function(f)` |
+  | `VariablePtr` | `clone_variable(v)` | |
+  | `StructurePtr` | `clone_structure(s)` | (no `get_ptr(st)` wrapping needed) |
+
+- **Don't substitute `clone_to_move`** for the type-specific `clone_*` — `clone_to_move` is the generic copy-then-move helper for non-copyable values like `array<T>`. AST pointers want the type-specific clone.
+- **Tools/utilities that build AST at runtime** (outside the normal compile pipeline) must wrap the scope in `ast_gc_guard() { ... }` from `daslib/ast`, otherwise the leak detector reports `GC APP LEAK` at exit.
+
+If you find yourself reading older guidance about `var inscope`, `<-`,
+`move_new`, `add_ptr_ref` for AST types, the source is pre-migration.
+The post-migration rules above are correct as of daslang 0.6.x.
+
+## The few residual smart_ptr types — `Program`, `Context`, `FileAccess`
+
+A small set of types are still `smart_ptr<T>` (refcounted with manual
+addRef/releaseRef on the C++ side). These DO follow the older
+`var inscope` / `<-` patterns:
+
+- `ProgramPtr` = `smart_ptr<Program>`
+- `ContextPtr` = `smart_ptr<Context>`
+- `FileAccessPtr` = `smart_ptr<FileAccess>`
+- `DebugAgentPtr`, `VisitorAdapterPtr` (from `make_visitor`) — internal
+
+For these:
 
 - **`<-` operator**: ALWAYS `memcpy(dest, src) + memset(src, 0)` — it is a raw memory operation, NOT smart_ptr-aware. It zeros the source regardless of type.
-- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` or `move(dest) src` for `smart_ptr<T>` transfers.
+- **`move` function**: Bound via C++ `builtin_smart_ptr_move*` family in `module_builtin_runtime.cpp` — proper smart pointer move with reference counting. Use `move(dest, src)` for `smart_ptr<T>` transfers when the refcount needs to be tracked.
 - **`return <- expr`**: Moves value to return slot and zeroes `expr`. If `expr` is a `&` ref parameter, this zeroes the *caller's* variable since they share memory.
-- **Key subtlety**: When a function takes `var x : smart_ptr<T>&` (by reference) and internally calls a function that takes `var x : smart_ptr<T>` (by value/move), the `<-` inside `return` zeroes the `&` ref. Callers MUST capture the return value: `unsafe { expr <- apply_template(expr) $() { ... } }`
-- **Safe pattern**: `unsafe { variable <- function_returning_smart_ptr(variable) $() { ... } }` — captures return value back into the same variable
-
-## AST smart pointer ownership
-
-- Many AST functions take `smart_ptr<T>` **by value** — this **moves** the pointer from the caller. After the call, the caller's variable is null/zeroed.
-- **`var inscope` + move = double-free crash**: If you declare `var inscope p = make_something()` and pass `p` to a function that moves it, `p` is zeroed by the move. Then `inscope` destroys `p` at scope exit → double-free → Access Violation.
-- **`clone_type(typeExpr)`** — deep-copies a `TypeDeclPtr`. Use when passing a type to a consuming function while keeping the original, or when the source is a `var inscope` variable.
-- **`clone_expression(expr)`** — deep-copies an `ExpressionPtr`. Same ownership rules as `clone_type`.
-- **Safe pattern for `add_structure_field`**: pass temporaries directly — `st |> add_structure_field("name", clone_type(qmacro_type(type<int>)), qmacro($v(val)))` — the `clone_type` result is a temporary safely consumed by the move.
-- **`move_new`**: `field |> move_new <| expr` — idiomatic way to assign a newly created `smart_ptr<T>` into a field. Equivalent to `field <- expr` but does not require `unsafe`. Preferred over `field := null; unsafe { field <- expr }` when setting AST node fields (e.g. `cm.init |> move_new <| qmacro(...)`).
-- **`add_ptr_ref(raw_ptr)`** — wraps a raw pointer (`T?`) into a `smart_ptr<T>` by adding a reference. AST node fields are often raw pointers (e.g. `typeDecl.structType` is `Structure?`, `typeDecl.enumType` is `Enumeration?`), but many API functions expect `smart_ptr<T>`. Use `add_ptr_ref` to bridge: `var inscope st <- add_ptr_ref(pair_type.structType)` gives a `StructurePtr` from a `Structure?` field. Also accepts `smart_ptr<T>` input (adds a ref and returns a new smart_ptr). Always use `var inscope` for the result to manage lifetime.
-- **Rule of thumb**: if a function signature takes `var x : smart_ptr<T>` (not `&`), it **consumes** `x`. Pass a temporary, a clone, or accept that your variable will be null after the call.
+- **Visitor adapters** (`make_visitor` returns `VisitorAdapterPtr`) need `var inscope adapter <- make_visitor(*v)` and an `unsafe` block at the call site — see `daslib/ast.das` for examples.
 
 ## Structure macros — generating types and functions
 
 - **`[structure_macro(name=foo)]`** — annotation on a class inheriting `AstStructureAnnotation`; the `apply` method runs at compile time when a struct has `[foo]`. Use to generate companion types, operators, and functions.
-- **`clone_structure(get_ptr(st))`** — deep-copies a `StructurePtr` for creating modified companion types (e.g., SOA layout where every field becomes `array<FieldType>`)
-- **`get_ptr(st)`** — extracts raw pointer from `smart_ptr<Structure>` for use in `TypeDecl.structType` fields
+- **`clone_structure(st)`** — deep-copies a `StructurePtr` for creating modified companion types (e.g., SOA layout where every field becomes `array<FieldType>`). Pass the pointer directly — no `get_ptr` wrapping.
 - **`compiling_module() |> add_function(fn)`** — registers a concrete function in the current module
 - **`compiling_module() |> add_generic(fn)`** — registers a generic function (instanced per call site)
 - **`compiling_module() |> add_structure(st)`** — registers a generated struct
 - **`compiling_module() |> add_alias(tdef)`** — registers a type alias
 - **`fn.flags |= FunctionFlags.generated`** — marks a function as compiler-generated (suppresses "unused" warnings, enables special error messages)
+- **`add_structure_field(st, name, typeDeclPtr, defaultExprPtr)`** — adds a field. Pass `clone_type(qmacro_type(type<int>))` for the type and `default<ExpressionPtr>` for "no default value":
+  ```das
+  st |> add_structure_field("count", clone_type(qmacro_type(type<int>)), default<ExpressionPtr>)
+  ```
 - **`ExprFieldFieldFlags.no_promotion`** / **`ExprAtFlags.no_promotion`** — prevent the compiler from promoting field access or index access to a different type; needed in generated AST to preserve exact types
 - **`[tag_function(tag_name)]`** on a function + **`[tag_function_macro(tag="tag_name")]`** on a class — intercepts calls to the tagged function and rewrites them in the `transform` method. Used for compile-time call rewriting (e.g., SOA `operator .` rewrites `soa[i].field` → `soa.field[i]`).
 - **`[for_loop_macro(name=foo)]`** on a class inheriting `AstForLoopMacro` — intercepts `for` loops whose source is a matching type. Override `visitExprFor` to rewrite the loop AST (e.g., SOA for-loop expands `for (it in soa)` into per-field array iteration).
@@ -58,26 +98,7 @@ Read this skill file before writing compile-time macros, AST manipulation code, 
 - **`$i(stringVar)`** — splice a string as an **identifier** (variable name)
 - **`$f(stringVar)`** — splice a string as a **field name**. Example: `st.$f(fieldName)` becomes `st.x` when `fieldName="x"`
 - **`$a(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as function call **arguments**
-- **`$b(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as a **block body** (sequence of statements). Build the array with `emplace_new`, then `$b(bodyExprs)` inlines all statements into the function body
-
-### Generating statements with `qmacro_expr`
-
-`qmacro_expr(${ statement; })` generates a statement-level expression — assignments, variable declarations, returns. The `${ }` block requires a trailing semicolon.
-
-```das
-// Generate an assignment statement
-blk |> emplace_new <| qmacro_expr(${ my_var = some_function(); })
-
-// Generate a variable declaration
-blk |> emplace_new <| qmacro_expr(${ var $i(varName) : int; })
-
-// Generate a return statement
-blk |> emplace_new <| qmacro_expr(${ return $i(resName); })
-```
-
-**Key difference from `qmacro()`**: `qmacro()` generates expressions (function calls, field access, etc.). `qmacro_expr()` generates statements that include `=`, `var`, `return`, etc. — things that aren't valid as standalone expressions.
-
-**Caveat**: Identifiers used in `qmacro_expr` are resolved in the **macro's** scope, not the generated code's scope. If generating references to variables that only exist in the generated code (not in the macro), the identifier must exist somewhere the macro can see it, or use manual AST construction instead.
+- **`$b(arrayOfExprPtr)`** — splice an `array<ExpressionPtr>` as a **block body** (sequence of statements). Build the array with `push <| qmacro_expr(...)`, then `$b(bodyExprs)` inlines all statements into the function body
 
 ### Default-initializing generated struct variables
 
@@ -85,40 +106,24 @@ In macro-generated code, `var x : $t(st)` fails with "uninitialized variable" fo
 
 ```das
 // WRONG — fails if struct has uninitialized fields
-blk |> emplace_new <| qmacro_block() { var entity : $t(st) }
+blk |> push <| qmacro_block() { var entity : $t(st) }
 
 // CORRECT — default-initializes all fields
-blk |> emplace_new <| qmacro_block() { var entity := default<$t(st)> }
+blk |> push <| qmacro_block() { var entity := default<$t(st)> }
 ```
 
-### Generating complex function bodies
-
-For functions with variable declarations, nested blocks, and captured parameters, the `pass` + `reinterpret<ExprBlock?>` + `qmacro_block()` pattern works reliably:
-
-```das
-var inscope fn <- qmacro_function("my_func") $(count : int) : void {
-    pass
-}
-var blk = unsafe(reinterpret<ExprBlock?> fn.body)
-blk.list |> clear()
-blk.list |> emplace_new <| qmacro_block() {
-    var cache : array<int>
-    // ... complex body with nested blocks, invokes, etc.
-}
-```
-
-### Pattern-matching call shapes — never rely on leading `!`
+## Pattern-matching call shapes — never rely on leading `!`
 
 When a macro walks an AST and pattern-matches specific call shapes to
 route them differently (e.g. `_sql` detects nested
 `select_from(...)._any(...)` and emits SQL `EXISTS`, vs. `_none(...)`
 emitting `NOT EXISTS`), **do not rely on detecting `!expr` to flip the
 emitted output**. Standing rule: AST walkers do not have leading-`!`
-support. The `!` often sits across
-intermediate AST nodes — parentheses, `if` expressions, local `let`
-bindings, constant-folded wrappers — that break a naive pattern match.
-Pattern-matching `!any(...)` is correct for some cases, silently wrong
-for any user that parenthesizes or refactors the condition.
+support. The `!` often sits across intermediate AST nodes —
+parentheses, `if` expressions, local `let` bindings, constant-folded
+wrappers — that break a naive pattern match. Pattern-matching `!any(...)`
+is correct for some cases, silently wrong for any user that
+parenthesizes or refactors the condition.
 
 **Ship explicit positive/negative name pairs instead.** Convention:
 the negative form gets a `_not_` or `_no` prefix on the positive name.
@@ -141,8 +146,6 @@ specifically for macro-expansion-time pattern matching.
 **Docs:** when documenting a macro with negated forms, list the
 positive/negative pair together — do not say "negate with `!`".
 Discoverability is part of the UX.
-
-This avoids parser issues with `qmacro_function` body that contains complex nested blocks or variable declarations.
 
 ## `[call_macro]` entry-guard contract
 

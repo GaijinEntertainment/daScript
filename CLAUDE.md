@@ -2,35 +2,9 @@
 
 ## Project Overview
 
-This is the [daslang](https://dascript.org/) programming language repository (GaijinEntertainment/daScript). daslang (formerly daScript) is a high-performance statically-typed scripting language designed for games and real-time applications. The language has been renamed to **daslang**, but the repository and many C++ API names still use the old "daScript" spelling.
+This is the [daslang](https://dascript.org/) programming language repository (GaijinEntertainment/daScript). daslang (formerly daScript) is a high-performance statically-typed scripting language for games and real-time applications. The repository and many C++ API names still use the old "daScript" spelling.
 
-## What and Why
-
-daslang was created at Gaijin Entertainment to solve a concrete problem: **interop overhead** between scripting languages (Lua/LuaJIT, Squirrel) and C++ was killing frame budgets in their ECS game engine. The key insight is that daslang’s data layout matches C++ — no marshaling, no boxing — making script↔C++ calls near-zero cost.
-
-**Core design principles:**
-- **Iteration speed is king** — full production game recompiles in ~5 sec; hot reload built in
-- **Explicit, not implicit** — no hidden conversions, no silent allocations; `options log` shows exactly what the compiler produces
-- **99% safe, not 100%** — eliminate real-world C++ bugs pragmatically, not at Rust-level cost; `unsafe` for the remaining 1%
-- **No data marshaling** — C++-compatible data layout; this is what makes ECS-scale scripting viable
-- **If it gets slow, you can fix it** — manual `delete` to reduce GC pressure, AOT compilation for native speed
-- **Language reflects the domain** — macros (FORTRAN+LISP inspiration) let libraries reshape syntax to match the problem
-
-**Three execution tiers** (all planned from day one): fast tree-based interpreter → AOT to C++ (required for consoles) → JIT via LLVM. Hybrid mode uses semantic hashing: unchanged functions stay AOT, changed ones fall back to the interpreter.
-
-**Audience:** game scripters (largest group — hot reload, fast compile, never rewrite to C++), engine/tools programmers (zero-cost interop, macros), and a growing standalone/ecosystem community (LLVM executables, package manager in development).
-
-See `doc/source/reference/design_philosophy.rst` for the full design philosophy document.
-
-## Designing with macros — the quantum advantage
-
-Other languages have macros (Rust, C++, Lisp). What daslang combines that they don't is full AST + type access at compile time, gen2 syntax that already reads like the target domain, qmacro/quote sugar for AST construction, and zero-runtime-cost expansion. The mix makes a different class of EDSL viable. Every flagship win in this codebase falls out of that — `[sql_table]`, `_sql`, `linq_boost`, `text_match`, `[sql_index]`, the AOT codegen itself — each one collapses 20+ lines of user-side ceremony into a single declarative form *and* keeps the library implementation smaller than the hand-rolled equivalent. Macros are not a "fancy template" — they are how daslang competes.
-
-**Use macros as a design lens.** Before writing an API or its implementation, ask: *would a macro collapse this?* If the user's call site is mechanical — derivable from a smaller declarative form — the macro is probably the answer. The win compounds: a typed surface saves boilerplate at the call site (`add_column(type<T>, .Field)` vs hand-typed `ALTER TABLE … ADD COLUMN …` strings), and the macro generates the codegen at the library layer. Two boilerplates collapsed at once.
-
-**Don't stop at one meta level.** When a macro itself has mechanical patterns — qmatch templates, repeated AST shape walks, parallel arm-per-form blocks — write a sub-macro. `linq_boost`'s pattern-matchers, dasSQLITE's shared walker, qmacro-built ExprMakeStruct helpers — all macro-on-macro. If macro-on-macro buys an order-of-magnitude reduction in either user code or library code, do it. The compile-time cost is a few ms per expansion; the maintenance cost saved is ongoing.
-
-Read `skills/das_macros.md` before reaching for a hand-rolled solution that a macro would have collapsed.
+For the **why** — design principles, three-tier execution model, the macros-as-design-lens rule — read `skills/project_overview.md`. The full long-form rationale lives in `doc/source/reference/design_philosophy.rst`.
 
 ## Build & Run
 
@@ -67,6 +41,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 
 | Skill file | Read BEFORE... |
 |---|---|
+| `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
 | `skills/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
@@ -95,9 +70,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
 | `skills/pr_review_iteration.md` | Working an open PR through CI failures and Copilot/human review feedback after the PR is created |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
-| `skills/gc_use_after_sweep.md` | Debugging `bad_alloc` / `length_error` in TypeDecl/Expression copy-ctors (use-after-sweep) |
-| `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs` |
-| `skills/clargs_migration.md` | Editing any tool that still parses `get_command_line_arguments()` directly — migrate to `daslib/clargs` in the same PR |
+| `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
 | `skills/json.md` | Reading/writing JSON in `.das` code (`sprint_json`/`sscan_json`, `JV`, manual `JsonValue?`) |
 | `skills/xml.md` | XML via `dasPUGIXML`/`PUGIXML_boost` (RAII parsing, builder, XPath, struct round-trip) |
 | `skills/sql.md` | SQL via `dasSQLITE` — `[sql_table]` / `[sql_view]` / `[sql_fts5]` / `[sql_function]`, the `_sql(...)` LINQ-to-SQL flagship + `_each_sql` / `_sql_update` / `_sql_delete` / `_sql_upsert` / `_create_view`, custom-type adapter rail, `@sql_json` / `@sql_blob` columns, transactions, migrations (`[sql_migration]` + `with_latest_sqlite`) |
