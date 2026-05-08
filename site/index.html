@@ -701,11 +701,12 @@ def fibI(n)
         <h4>dasSQLITE: Typed SQLite Query Layer</h4>
         <p>modules/dasSQLITE extends daslib/linq with SQL-backed queries &mdash; familiar linq-style transforms compile down to typed SQLite operations. After the initial landing, the layer was broadened tutorial-by-tutorial across the rest of the SQLite surface.</p>
         <ul>
-            <li><b>Insert + query macros</b> &mdash; typed insert flows, raw query / try_query helpers, much deeper _sql(...) analysis</li>
-            <li><b>Read-side operators</b> &mdash; distinct, take, skip, ordering, aggregates, grouping, joins, set operations, multi-source queries</li>
-            <li><b>Write-side</b> &mdash; typed update/delete flows, transaction helpers, UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns</li>
+            <li><b>Insert + query macros</b> &mdash; typed insert flows, raw query / try_query helpers, deeper _sql(...) analysis with multi-quantifier (multi-Q) lowering, and a parity audit comparing in-memory linq vs. SQL emission</li>
+            <li><b>Read-side operators</b> &mdash; distinct, take, skip, ordering, aggregates, grouping, the full join family (_left_join, _inner_join, _right_join, _full_outer_join, _cross_join), set operations, multi-source queries, and _in / _not_in against captured collections via SQLite json_each</li>
+            <li><b>Write-side</b> &mdash; typed update/delete flows, transaction helpers, UPSERT with schema annotations for foreign keys, indexes, defaults, and computed columns, plus user-defined SQL functions via [sql_function] (auto-registered and visible inside _sql chains)</li>
             <li><b>Custom storage types</b> &mdash; user-defined adapters plus @sql_json and @sql_blob field support, JSON-path descent inside _sql, column metadata introspection</li>
-            <li><b>Operational</b> &mdash; SQL fragment building, ATTACH DATABASE, FTS5 groundwork, pre-migration utilities</li>
+            <li><b>Schema introspection and migrations</b> &mdash; [sql_table(schema_from=...)] + check_schema validate live database schema against the daslang struct at compile time; daslib/sqlite_migrate ships versioned [sql_migration] blocks with typed ALTER macros (add_column / drop_column / rename_column) and full-table rebuilds via [struct_convert] + [sql_table(legacy=true)] for non-trivial changes</li>
+            <li><b>Operational</b> &mdash; SQL fragment building, ATTACH DATABASE, FTS5 ([sql_fts5] + text_match), pre-migration utilities</li>
         </ul>
 
         <h4>Style Lint and Unified Linting</h4>
@@ -738,6 +739,16 @@ def fibI(n)
             <li>Profiler and heap tooling polish supporting leak-audit work across the runtime</li>
         </ul>
 
+        <h4>daspkg: Project Bundling for Distribution</h4>
+        <p><code>daspkg release</code> produces a redistributable bundle of a daslang project &mdash; the standalone exe, every transitively-required .shared_module dylib, every asset matching the project's release globs, and every transitive dep package's release assets. The bundle runs on a machine with no daslang installed.</p>
+        <ul>
+            <li><b>release() hook in .das_package</b> &mdash; declares release_main, release_name, release_include / release_exclude globs, and force-included shared modules</li>
+            <li><b>Exe-relative shared-module resolution</b> &mdash; daslang -exe resolves shared modules in three tiers (exe directory &rarr; das_root &rarr; absolute path), making relocated bundles portable</li>
+            <li><b>-list-shared-modules</b> &mdash; auxiliary flag walks program_for_each_module and writes a JSON manifest of every dylib the program touches; daspkg release consumes it for auto-detection</li>
+            <li><b>Project-local + relocated-bundle support</b> &mdash; get_this_module_dir, the JIT runtime, and the daspkg resolver all honor project-local layouts</li>
+            <li><b>Native shared deps</b> &mdash; packages can ship platform-specific dylibs alongside their .das sources via release_include_dll; dasPUGIXML enabled by default for Info.plist generation on macOS</li>
+        </ul>
+
         <h4>daStrudel: Second Wave</h4>
         <ul>
             <li>Better synth and drum voices, more SF2 support, offline/WAV rendering workflows, further live and demo polish</li>
@@ -759,22 +770,49 @@ def fibI(n)
             <li>Continued push toward more daslang-authored AOT logic and cleaner AOT/JIT boundaries</li>
             <li>Better standalone-exe behavior, transitive JIT type resolution, prologue sizing, function registration</li>
             <li>More build configurations (RelWithDebInfo, static PIC), more daslib AOT coverage, platform-specific AOT fixes</li>
+            <li><b>Tuple-strict typer</b> &mdash; tuple field names are now part of the type, so <code>tuple&lt;a:int;b:int&gt;</code> and <code>tuple&lt;x:int;y:int&gt;</code> no longer collide and unnamed tuples remain distinct from named ones</li>
+            <li><b>Option&lt;T&gt; / Result&lt;T,E&gt; via [template_tuple]</b> &mdash; both types are now structural named-tuples generated through a generic mechanism, replacing bespoke handling</li>
+            <li><b>Call-site block arrow body</b> &mdash; <code>def f(...) : T =&gt; expr</code> shorthand parses alongside the existing block form</li>
+            <li><b>Error reporting audit</b> &mdash; diagnostics retagged for consistency, with <code>Program::deduplicateErrors</code> suppressing repeated identical errors from the same site</li>
+            <li><b>super walks past empty intermediates</b> &mdash; <code>super</code> now skips empty intermediate base classes when looking for a method</li>
+            <li><b>Block-form global variable annotations</b> &mdash; <code>@field</code> annotations now propagate to globals declared inside <code>variable { ... }</code> blocks</li>
+            <li><b>cbind prefixes</b> &mdash; generated bindings can be namespaced with a per-include prefix</li>
+            <li><b>Compiler refactor</b> &mdash; <code>Program</code> and <code>Context</code> extracted from <code>simulate</code> / <code>ast</code> into their own translation units; serialization unified with eden / daNetGame</li>
         </ul>
 
         <h4>Runtime Libraries and Infrastructure</h4>
         <ul>
             <li><b>dasPEG</b> &mdash; more tests, docs, CI coverage, and standalone/LLVM fixes</li>
-            <li><b>Core libraries</b> &mdash; validated numeric conversions in daslib/strings_convert, continued Option/Result work including non-copyable support, C API completeness</li>
+            <li><b>Core libraries</b> &mdash; validated numeric conversions in daslib/strings_convert, continued Option/Result work including non-copyable support, C API completeness; daslib/clargs now returns Result from parsing for cleaner error handling</li>
             <li><b>das_hash_map</b> &mdash; new in-tree hash map backend that avoids empty-construction allocations and behaves better in thread-local usage</li>
+            <li><b>Path-aware glob in daslib/fio</b> &mdash; match_glob, glob, glob_filtered, plus expand_glob / parse_file_list promoted from the MCP utility into the stdlib</li>
+            <li><b>Math: common numeric functions</b> &mdash; sinh, cosh, tanh, asinh, acosh, atanh, log10, log1p, expm1, cbrt, trunc, hypot, fmod, remainder added to the math module</li>
+            <li><b>das-fmt vendored in-tree</b> &mdash; utils/das-fmt/ now holds a local copy of the formatter; CI runs against it instead of an external clone</li>
             <li>Filesystem guidance, handle-registry tutorial work, class-boost coverage, integer-returning main() for tools, compilation progress reporting</li>
+        </ul>
+
+        <h4>Build, CI, and Web</h4>
+        <ul>
+            <li><b>Tutorials build in CI</b> &mdash; every tutorial now compiles in CI as part of the regular check run</li>
+            <li><b>Web target reuses the main CMakeLists</b> &mdash; daslang-web picks up tests and tracks the same build configuration as the native targets, removing the duplicated CMake graph</li>
+            <li><b>MCP: parse-aware C++ source-search tools</b> &mdash; cpp_find_symbol, cpp_grep_usage, cpp_outline, cpp_goto_definition join the existing daslang-side tools, with a configurable search root and git-signature staleness detection</li>
         </ul>
 
         <h4>Bug Fixes</h4>
         <ul>
-            <li><b>Build, tooling, CI</b> &mdash; package .gitignore handling, PEG standalone/LLVM, require fixes, dasbind fixes, glob dependency tracking, doc/error-position corrections</li>
-            <li><b>Runtime/compiler correctness</b> &mdash; JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, runWithCatch state cleanup, ASAN follow-up</li>
+            <li><b>Build, tooling, CI</b> &mdash; package .gitignore handling, PEG standalone/LLVM, require fixes, dasbind fixes, glob dependency tracking, doc/error-position corrections, and daslang plugin: completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope</li>
+            <li><b>Runtime/compiler correctness</b> &mdash; JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, runWithCatch state cleanup, ASAN follow-up, fix for the standalone-exe shutdown crash, and fix for top-level let-init now correctly registering builtins</li>
+            <li><b>Fusion engine</b> &mdash; TSan-safe v_ldu via DAS_LDU_WORKHORSE, call1 / call2 loadSize stamped from fnPtr-&gt;debugInfo, and a TSan suppression for the over-read in fusion call/return shells</li>
             <li><b>Language edge cases</b> &mdash; finally loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, strict-weak-ordering cleanup</li>
             <li><b>Graphics and platform</b> &mdash; OpenGL/package integration cleanup after the daspkg migration</li>
+            <li><b>Architecture-specific</b> &mdash; skipped #pragma float_control on __e2k__ to silence warnings on the Elbrus toolchain</li>
+        </ul>
+
+        <h4>Examples</h4>
+        <ul>
+            <li><b>Asteroids</b> &mdash; full asteroid-shooter game with waves, audio, and powerups; later migrated to DECS for the entity model with a polish pass on visuals and powerup VFX</li>
+            <li><b>Pacman</b> &mdash; classic arcade game added to the examples/ lineup</li>
+            <li><b>River Run</b> &mdash; top-down river shooter built across three rounds: initial gameplay (river splits, combat, VFX, audio, HUD, collisions), then scenery / bonus / engine sound / tuning, and finally shadows, pickup burst, rich music, 3D HUD, and a juice pass</li>
         </ul>
 
         <h3>0.6.1 (April 2026)</h3>
