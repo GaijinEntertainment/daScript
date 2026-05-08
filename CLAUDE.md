@@ -43,6 +43,24 @@ Full reference (per-platform generator commands, build flags, AOT debugging, exi
 - **Use GitHub MCP tools** (`mcp__github__*`) for all GitHub operations (creating PRs, listing issues, reading PRs, etc.) — they avoid shell escaping issues entirely
 - **Fallback:** If MCP tools are unavailable, use `gh` CLI with `--body-file` for any text containing backticks (they're shell escape characters in every supported shell)
 
+## MCP-first search
+
+Before reaching for `Bash`/`Grep`/`Read` to find a symbol or trace usages in this repo, ToolSearch the daslang MCP tool that answers the question and call it. The tools are deferred (schemas not in turn-start context) so the workflow is two calls: `ToolSearch select:mcp__daslang__<tool>` → invoke. (`defer_loading: false` in `.mcp.json` is the documented knob to flip this, but [it's currently broken upstream](https://github.com/anthropics/claude-code/issues/26844) — set it anyway, then operate as if deferred.)
+
+| Question | Tool |
+|---|---|
+| Where is symbol X defined? (`.das`) | `find_symbol` — pass `with_cpp_source=true` for builtins / handled types to bridge daslang→C++ in one call |
+| Where is symbol X defined? (`.cpp`) | `cpp_find_symbol` |
+| Where is X used? (`.das`) | `grep_usage` |
+| Where is X used? (`.cpp`) | `cpp_grep_usage` |
+| What's in this file? | `outline` (`.das`) / `cpp_outline` (`.cpp`) |
+| Goto definition at cursor | `goto_definition` (`.das`) / `cpp_goto_definition` (`.cpp`) |
+| All references to X (`.das`) | `find_references` |
+
+Same applies to lint/format: `mcp__daslang__lint` / `format_file`, not shell `bin/daslang` invocations. Same applies to GitHub operations (see above): `mcp__github__*`, not `gh` shell.
+
+Fall back to `Bash`/`Grep`/`Read` only when the MCP tool reports an error or the question is genuinely outside MCP coverage (RST prose, CMake, Python tooling).
+
 ## Skill Files (REQUIRED)
 
 Task-specific instructions are split into skill files under `skills/`. You MUST read the relevant skill file(s) before performing the corresponding task.

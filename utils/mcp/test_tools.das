@@ -28,6 +28,10 @@ require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
+require tools/cpp_grep_usage public
+require tools/cpp_find_symbol public
+require tools/cpp_outline public
+require tools/cpp_goto_definition public
 require tools/aot public
 require tools/lint_tool public
 require tools/detect_duplicates public
@@ -1803,3 +1807,444 @@ def test_export_corpus_workers_failure_propagates(t : T?) {
     }
 }
 
+// ── cpp_grep_usage ───────────────────────────────────────────────────
+
+// Diagnostic helper: when a cpp_* tool returns is_error=true unexpectedly the
+// CI log only shows the assertion message, not the envelope text. Embed a
+// truncated snapshot so a Windows-only failure surfaces what sg actually said.
+def private cpp_diag(text : string) : string {
+    let trimmed = length(text) > 800 ? slice(text, 0, 800) : text
+    return "envelope: {trimmed}"
+}
+
+[test]
+def test_cpp_grep_usage(t : T?) {
+    t |> run("finds known C++ symbol in src/ast") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("addExternFunc", "src/ast", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "ast_interop.cpp") >= 0, "should mention ast_interop.cpp -- {cpp_diag(text)}")
+    }
+    t |> run("missing dir reports cleanly") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("anything", "/no/such/dir/here", "", ""), text, is_error)
+        t |> success(is_error || find(text, "No matches") >= 0, "should error or report no matches")
+    }
+    t |> run("missing symbol arg returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("", "src", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── cpp_grep_usage v2: multi-kind identifier matching ────────────────
+//
+// Each test below FAILS under the old `sg run -p Symbol` implementation
+// because that pattern only matches bare identifier expressions. The new
+// implementation generates a multi-kind YAML rule (identifier +
+// type_identifier + namespace_identifier + field_identifier) so usages in
+// type positions, qualified calls, base-class clauses, etc. are all caught.
+
+[test]
+def test_cpp_grep_usage_type_position(t : T?) {
+    t |> run("finds Outer used as a return type") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // GrepDerived::makeOuter() returns Outer.
+        parse_result(do_cpp_grep_usage("Outer", "utils/mcp/tests", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "Outer makeOuter()") >= 0,
+            "must catch type_identifier in return position -- {cpp_diag(text)}")
+    }
+    t |> run("finds Outer used as a parameter type") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("Outer", "utils/mcp/tests", "", ""), text, is_error)
+        t |> success(find(text, "void takeOuter(const Outer & o)") >= 0,
+            "must catch type_identifier in parameter position -- {cpp_diag(text)}")
+    }
+    t |> run("finds Outer used as a base class") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("Outer", "utils/mcp/tests", "", ""), text, is_error)
+        t |> success(find(text, "class GrepDerived : public Outer") >= 0,
+            "must catch namespace_identifier in base_class_clause -- {cpp_diag(text)}")
+    }
+    t |> run("finds Outer used as qualified scope") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("Outer", "utils/mcp/tests", "", ""), text, is_error)
+        t |> success(find(text, "Outer::Inner inner") >= 0,
+            "must catch namespace_identifier in qualified type expression -- {cpp_diag(text)}")
+    }
+}
+
+[test]
+def test_cpp_grep_usage_dedup(t : T?) {
+    t |> run("a single source line appears at most once even if multiple AST nodes match") <| @(t : T?) {
+        // The destructor signature `TextWriter::~TextWriter()` produces both a
+        // namespace_identifier and a type_identifier hit; the line should
+        // appear exactly once in the output.
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("TextWriter", "src/misc/string_writer.cpp", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        // count occurrences of the destructor line.
+        var count = 0
+        var pos = 0
+        let needle = "TextWriter::~TextWriter()"
+        while (true) {
+            let i = find(text, needle, pos)
+            if (i < 0) {
+                break
+            }
+            count++
+            pos = i + length(needle)
+        }
+        t |> equal(count, 1, "destructor line should appear exactly once after dedup")
+    }
+}
+
+// ── cpp_find_symbol ──────────────────────────────────────────────────
+
+[test]
+def test_cpp_find_symbol(t : T?) {
+    t |> run("finds class in src/") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=Module", "class", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "Module") >= 0, "should find Module -- {cpp_diag(text)}")
+    }
+    t |> run(".h languageGlobs regression — finds class in header") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=FsFileSystem", "class", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "fs_file_info.h") >= 0, "should find FsFileSystem in fs_file_info.h (proves .h is treated as cpp) -- {cpp_diag(text)}")
+    }
+    t |> run("no-match returns clean empty result") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("zzznotarealsymbolzzz_xyzzy", "", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error on no-match -- {cpp_diag(text)}")
+        t |> success(find(text, "No matches") >= 0, "should report no matches -- {cpp_diag(text)}")
+    }
+    t |> run("kind filter rejects wrong kinds") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=addFunction", "class", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "No matches") >= 0, "kind=class should reject methods named addFunction -- {cpp_diag(text)}")
+    }
+    t |> run("missing query returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("", "", "src", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── cpp_outline ──────────────────────────────────────────────────────
+
+[test]
+def test_cpp_outline(t : T?) {
+    t |> run("lists declarations in a known file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_outline("src/ast/ast_interop.cpp", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "[function]") >= 0 || find(text, "[class]") >= 0 || find(text, "[struct]") >= 0, "should list at least one declaration -- {cpp_diag(text)}")
+    }
+    t |> run("missing both args returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_outline("", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+    t |> run("invalid mode rejected") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_outline(fixture_path("_fixture_cpp_outline.h"), "", "verbose"), text, is_error)
+        t |> success(is_error, "unknown mode should error")
+    }
+}
+
+// ── cpp_outline v2 (signatures, nesting, anti-misparse, qualified names) ─
+
+let private CPP_OUTLINE_FIXTURE = "_fixture_cpp_outline.h"
+
+def cpp_outline_text(mode : string) : string {
+    var text : string
+    var is_error = false
+    parse_result(do_cpp_outline(fixture_path(CPP_OUTLINE_FIXTURE), "", mode), text, is_error)
+    return text
+}
+
+[test]
+def test_cpp_outline_signatures(t : T?) {
+    t |> run("multi-line function declaration collapsed into a single signature") <| @(t : T?) {
+        let text = cpp_outline_text("")
+        // describe() is declared across 5 lines in the fixture; the renderer
+        // must show the full param list with default values on one output line.
+        t |> success(find(text, "void describe( const char * name, int count = 0, bool verbose = false ) const") >= 0,
+            "expected collapsed signature")
+    }
+    t |> run("free function shows return type and params") <| @(t : T?) {
+        let text = cpp_outline_text("")
+        t |> success(find(text, "[function] void freeFunction(int x)") >= 0,
+            "expected freeFunction signature")
+    }
+}
+
+[test]
+def test_cpp_outline_class_misparse_filtered(t : T?) {
+    t |> run("class with macro prefix is reported as the class, not as a function") <| @(t : T?) {
+        let text = cpp_outline_text("")
+        // The fixture has `class MY_EXPORT Outer { ... }`. tree-sitter-cpp emits
+        // both a class_specifier and a bogus function_definition for that line;
+        // the post-filter must drop the function. The class name must be Outer
+        // (not MY_EXPORT).
+        t |> success(find(text, "[class] Outer") >= 0, "expected [class] Outer")
+        t |> success(find(text, "[function] class MY_EXPORT") < 0,
+            "must NOT emit a function entry for the misparsed class line")
+        t |> success(find(text, "[class] MY_EXPORT") < 0,
+            "name extractor must not pick the leading macro as the class name")
+    }
+}
+
+[test]
+def test_cpp_outline_anonymous_filtered(t : T?) {
+    t |> run("anonymous union/struct/enum entries are dropped") <| @(t : T?) {
+        let text = cpp_outline_text("")
+        // The fixture has an anonymous union AND an anonymous enum inside Outer.
+        // Neither should appear as an unnamed entry.
+        t |> success(find(text, "[union] union \{") < 0, "anonymous union must be dropped")
+        t |> success(find(text, "[union]\n") < 0, "no bare [union] entries")
+        t |> success(find(text, "[enum] enum \{") < 0, "anonymous enum must be dropped")
+        // kFlagA is an enumerator inside the anonymous enum — must NOT leak as a name.
+        t |> success(find(text, "[enum] kFlagA") < 0, "anonymous enum's enumerators must not leak as the name")
+    }
+}
+
+[test]
+def test_cpp_outline_template_specializations(t : T?) {
+    t |> run("template specializations show distinct args") <| @(t : T?) {
+        let text = cpp_outline_text("")
+        t |> success(find(text, "[struct] Trait\n") >= 0, "primary Trait should appear")
+        t |> success(find(text, "Trait<int>") >= 0, "Trait<int> should appear with args")
+        t |> success(find(text, "Trait<float>") >= 0, "Trait<float> should appear with args")
+    }
+}
+
+[test]
+def test_cpp_outline_nesting(t : T?) {
+    t |> run("methods nest under their enclosing class in tree mode") <| @(t : T?) {
+        let text = cpp_outline_text("tree")
+        // Tree mode: Inner is a child of Outer (depth 2 from namespace).
+        // Methods of Inner are at depth 3, indented 6 spaces past the line-num column.
+        t |> success(find(text, "    [class] Inner") >= 0, "Inner should be indented under Outer")
+        t |> success(find(text, "      [function] void method()") >= 0,
+            "Inner's method should be indented under Inner")
+    }
+    t |> run("auto mode picks tree when nesting exists") <| @(t : T?) {
+        let auto_text = cpp_outline_text("")
+        let tree_text = cpp_outline_text("tree")
+        t |> success(auto_text == tree_text, "auto mode should match tree mode for a nested file")
+    }
+}
+
+[test]
+def test_cpp_outline_qualified_names(t : T?) {
+    t |> run("flat mode prefixes in-class methods with their ancestor chain") <| @(t : T?) {
+        let text = cpp_outline_text("flat")
+        // In flat mode the indentation goes away; ancestors must show as :: prefix.
+        t |> success(find(text, "fixns::Outer::describe") >= 0,
+            "Outer::describe should be qualified with namespace + class")
+        t |> success(find(text, "fixns::Outer::Inner::method") >= 0,
+            "deeply-nested method should carry full qualifier chain")
+    }
+    t |> run("flat mode does not double-prefix already-qualified names") <| @(t : T?) {
+        let text = cpp_outline_text("flat")
+        // The out-of-class definition `void Outer::describe(...)` already has ::;
+        // flat-mode injection must not produce `fixns::Outer::describe::Outer::describe`.
+        t |> success(find(text, "fixns::Outer::describe::") < 0,
+            "must not double-qualify out-of-class definition")
+    }
+}
+
+// ── cpp_goto_definition ──────────────────────────────────────────────
+
+[test]
+def test_cpp_goto_definition_errors(t : T?) {
+    t |> run("missing args returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+    t |> run("non-positive line/column returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("src/ast/ast_interop.cpp", "0", "0"), text, is_error)
+        t |> success(is_error, "should be error on 0/0 line/col")
+    }
+    t |> run("nonexistent file returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("/no/such/file.cpp", "1", "1"), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── with_cpp_source redirect on find_symbol / goto_definition ────────
+
+[test]
+def test_find_symbol_with_cpp_source(t : T?) {
+    t |> run("redirect off (default) — no '→ cpp:' line") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("=print", "", "", "", false), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "print") >= 0, "should still find print -- {cpp_diag(text)}")
+        t |> success(find(text, "→ cpp:") < 0, "no redirect line when with_cpp_source=false -- {cpp_diag(text)}")
+    }
+    t |> run("redirect on — emits '→ cpp:' line for builtins") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("=print", "function", "", "", true), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        // Either we located print's cpp source OR we report (not located).
+        // Both prove the redirect path fired.
+        t |> success(find(text, "→ cpp:") >= 0, "redirect line should appear when with_cpp_source=true -- {cpp_diag(text)}")
+    }
+}
+
+[test]
+def test_goto_definition_with_cpp_source(t : T?) {
+    t |> run("redirect off (default) — no C++: line") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // line 34 col 5 is the 'p' of print(...) on `print("{d}\n")` — resolves to a builtin
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", false), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "Kind: builtin") >= 0, "should resolve to a builtin -- {cpp_diag(text)}")
+    }
+    t |> run("redirect on — appends C++: line for builtin") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", true), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "Kind: builtin") >= 0, "should still resolve to a builtin -- {cpp_diag(text)}")
+        t |> success(find(text, "C++:") >= 0, "C++ line should appear when with_cpp_source=true -- {cpp_diag(text)}")
+    }
+}
+
+// ── cpp_search_config + staleness signature ──────────────────────────
+
+[test]
+def test_cpp_search_config(t : T?) {
+    t |> run("CPP_SEARCH_DIRS contains expected defaults") <| @(t : T?) {
+        var saw_modules = false
+        for (d in CPP_SEARCH_DIRS) {
+            if (d == "modules") {
+                saw_modules = true
+            }
+        }
+        t |> success(saw_modules, "CPP_SEARCH_DIRS should include 'modules'")
+    }
+    t |> run("CPP_SEARCH_INCLUDE_GLOBS locks to *.cpp/*.h/*.hpp") <| @(t : T?) {
+        let n = length(CPP_SEARCH_INCLUDE_GLOBS)
+        t |> success(n >= 3, "should list at least 3 include globs")
+    }
+}
+
+[test]
+def test_cpp_index_signature(t : T?) {
+    t |> run("signature is stable across two consecutive calls (no edits)") <| @(t : T?) {
+        let sig1 = cpp_compute_index_signature()
+        let sig2 = cpp_compute_index_signature()
+        t |> success(!empty(sig1), "first signature should not be empty")
+        t |> success(sig1 == sig2, "signature should be stable across consecutive calls (no fs changes)")
+    }
+}
+
+[test]
+def test_cpp_filesystem_signature(t : T?) {
+    // Direct unit test for the no-git fallback's filesystem walker.
+    // (`cpp_compute_index_signature` only invokes it when git fails — hard to
+    // simulate in CI without breaking git, so we exercise it directly here.)
+    t |> run("filesystem signature is non-empty for default search dirs") <| @(t : T?) {
+        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
+        t |> success(!empty(fs_sig), "should return at least one path:mtime line for daslang's tree")
+    }
+    t |> run("filesystem signature is stable across consecutive calls (no edits)") <| @(t : T?) {
+        let dirs <- cpp_default_search_dirs()
+        let sig1 = cpp_compute_filesystem_signature(dirs)
+        let sig2 = cpp_compute_filesystem_signature(dirs)
+        t |> success(sig1 == sig2, "two back-to-back calls should produce identical signatures")
+    }
+    t |> run("filesystem signature only mentions indexed extensions") <| @(t : T?) {
+        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
+        // Any *.das, *.cmake, *.txt, *.md path slipping into the signature is
+        // a bug — `is_indexed_path` should have filtered them out.
+        t |> success(find(fs_sig, ".das:") < 0, "should not include .das files")
+        t |> success(find(fs_sig, ".cmake:") < 0, "should not include .cmake files")
+        t |> success(find(fs_sig, "CMakeLists") < 0, "should not include CMakeLists.txt")
+    }
+}
+
+[test]
+def test_cpp_collect_git_excludes(t : T?) {
+    t |> run("daspkg cache .git is auto-excluded if present") <| @(t : T?) {
+        let modules_dir = path_join(get_das_root(), "modules")
+        let cache_git = path_join(modules_dir, ".daspkg_cache/index/.git")
+        if (!stat(cache_git).is_valid) {
+            // skip silently if cache not present (e.g. fresh checkout)
+            return
+        }
+        var search_dirs : array<string>
+        search_dirs |> push(modules_dir)
+        let no_overrides : array<string>
+        let excludes <- cpp_collect_git_excludes(search_dirs, no_overrides)
+        var found = false
+        for (g in excludes) {
+            if (find(g, ".daspkg_cache/index") >= 0) {
+                found = true
+            }
+        }
+        t |> success(found, "modules/.daspkg_cache/index should be in the auto-exclude list")
+    }
+}
+
+[test]
+def test_cpp_function_declarations_visible(t : T?) {
+    // Regression for Copilot review #1: function declarations in headers
+    // (no body, e.g. `void foo();`) must be findable. Without the
+    // cpp-outline-functions-decl rule + has:function_declarator constraint,
+    // these were silently invisible.
+    t |> run("finds function declaration in ast.h header") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=pull_all_auto_registered_modules", "function", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "ast.h") >= 0, "should locate declaration in include/daScript/ast/ast.h -- {cpp_diag(text)}")
+    }
+}
+
+[test]
+def test_cpp_using_alias_visible(t : T?) {
+    // Regression for Copilot review #2: `using X = Y;` aliases must surface
+    // under kind=typedef. Without the cpp-outline-typedefs-using rule, only
+    // the legacy `typedef X Y;` form was visible.
+    t |> run("finds 'using' alias as typedef") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("module_pull_t", "typedef", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
+        t |> success(find(text, "module_pull_t") >= 0, "should locate the using-alias -- {cpp_diag(text)}")
+    }
+}

@@ -28,6 +28,10 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 | `describe_type` | Reading source to understand type fields, methods, and values |
 | `grep_usage` | Built-in Grep across `.das` files (parse-aware via ast-grep + tree-sitter) |
 | `outline` | Manually scanning files for function/struct/enum declarations |
+| `cpp_grep_usage` | Built-in Grep across `.cpp/.h/.hpp/.cc` files (parse-aware via ast-grep + tree-sitter-cpp) |
+| `cpp_find_symbol` | Searching for C++ symbol DECLARATIONS by name + kind (function/class/struct/enum/union/typedef/namespace/macro) |
+| `cpp_outline` | Manually scanning C++ files for top-level declarations |
+| `cpp_goto_definition` | Approximate "where is this defined" for C++ — best-effort, no scope resolution; returns up to 5 ranked candidates |
 | `aot` | Manually running AOT generation and extracting function C++ |
 | `lint` | Running lint/perf_lint/style_lint manually |
 | `export_corpus` | `detect-dupe --export-functions` from a shell |
@@ -47,6 +51,12 @@ The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, prog
 
 **Cursor-based tools** (`goto_definition`, `type_of`, `find_references`) accept a `no_opt` parameter that disables compiler optimizations to preserve the full AST — useful when globals, enum values, or bitfield constants get constant-folded away.
 
+**C++ source tools** (`cpp_grep_usage`, `cpp_find_symbol`, `cpp_outline`, `cpp_goto_definition`) all use ast-grep with tree-sitter-cpp. Search scope is configured in `utils/mcp/cpp_search_config.das` — `CPP_SEARCH_DIRS` (defaults `src/` `include/` `modules/`), `CPP_SEARCH_INCLUDE_GLOBS` locks file extensions to `*.cpp`/`*.cc`/`*.h`/`*.hpp`, `CPP_SEARCH_INCLUDE_OVERRIDES` re-includes auto-excluded folders. Folders containing a `.git` file/directory (submodules, daspkg-installed packages, FetchContent destinations) are auto-excluded. `cpp_find_symbol` with `kind=function` covers both definitions and header-only declarations; `kind=typedef` covers both `typedef X Y;` and modern `using X = Y;`. Caveats: best-effort name extraction (complex templates and function-pointer typedefs may report partial names), specializations not separately listed, macro-expanded declarations like `DAS_BIND_FN(foo)` are invisible. `cpp_goto_definition` is approximate (no scope resolution); for substring/usage lookups prefer `cpp_grep_usage`.
+
+**`with_cpp_source` redirect.** `find_symbol` and `goto_definition` accept an optional `with_cpp_source` boolean. When `true`, results that have a C++ implementation (builtins, handled types) get a resolved C++ source location appended via the lazily-built cpp index. First call costs ~2s; subsequent calls cost ~150ms (a git-state staleness signature: `rev-parse HEAD` + filtered `git status` + per-file mtimes + config file mtime). The index rebuilds automatically when relevant `.cpp/.cc/.h/.hpp` files change, when HEAD moves, or when the search config is edited. Default off — opt in when the question is "where is X *actually* implemented".
+
 **Live tools.** `live_*` interact with a running `daslang-live` instance via its REST API. `live_launch` starts one if not already running (sets working directory to the script's folder). All live tools accept an optional `port` parameter (default 9090). When a compilation error is active, `live_command` and `live_pause` return HTTP 503 with the error — use `live_reload` to fix. Hitting any unknown endpoint returns JSON help with all endpoints + curl examples.
 
 **Configuration.** Configure `.mcp.json` with `"command": "bin/daslang", "args": ["utils/mcp/main.das"]`. See `utils/mcp/README.md` for details and Claude Code permissions.
+
+**`"defer_loading": false`.** Add to the `daslang` server entry to load tool schemas at session start (no per-call `ToolSearch`). The flag is currently non-functional in the upstream Claude Code harness (Issue #26844) but harmless to set; tools fall back to the deferred path when ignored.

@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require cpp_common public
 require daslib/ast_cursor
 require daslib/ast_boost
 require math
@@ -16,6 +17,12 @@ struct DefinitionResult {
     line : int
     column : int
     snippet : string    // source lines around the definition
+    cppName : string    // C++ symbol name for builtin functions and handled types.
+                        //   Set by:
+                        //     - ExprCall to a builtin function → BuiltInFunction.cppName
+                        //     - Type fallback on a handled type → TypeAnnotation.cppName
+                        //   NOT yet populated for ExprVar of a handled type or ExprField
+                        //   on a handled-type parent — see "v2 roadmap" in the file footer.
 }
 
 // Read a few lines from a file around a given line number
@@ -88,6 +95,11 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
         let c = expr as ExprCall
         if (c.func != null) {
             if (c.func.flags.builtIn) {
+                var cppName : string
+                let bfn = c.func as BuiltInFunction
+                if (bfn != null) {
+                    cppName = string(bfn.cppName)
+                }
                 return DefinitionResult(
                     found = true,
                     kind = "builtin",
@@ -95,7 +107,8 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
                     snippet = build_string() $(var w) {
                         write(w, "builtin def {c.func.name}")
                         write_func_signature(w, *c.func)
-                    }
+                    },
+                    cppName = cppName
                 )
             }
             let file = lineinfo_file(c.func.at)
@@ -190,6 +203,19 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
         let td = expr._type
+        // Handled type (C++-backed via MAKE_TYPE_FACTORY / addAnnotation) →
+        // emit kind=handled with cppName so `with_cpp_source` can redirect.
+        // This mirrors the path `find_symbol` already takes for handled
+        // type entries.
+        if (td.isHandle && td.annotation != null) {
+            let ann = td.annotation
+            return DefinitionResult(
+                found = true,
+                kind = "handled",
+                name = string(ann.name),
+                cppName = string(ann.cppName)
+            )
+        }
         if (td.structType != null) {
             let st = td.structType
             let file = lineinfo_file(st.at)
@@ -222,7 +248,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     return DefinitionResult()
 }
 
-def format_result(defn : DefinitionResult; hit : CursorHit) : string {
+def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bool) : string {
     return build_string() $(var w) {
         write(w, "Symbol: {defn.name}\n")
         write(w, "Kind: {defn.kind}\n")
@@ -230,6 +256,23 @@ def format_result(defn : DefinitionResult; hit : CursorHit) : string {
             write(w, "File: {defn.file}\n")
             write(w, "Line: {defn.line}\n")
             write(w, "Column: {defn.column}\n")
+        }
+        if (!empty(defn.cppName)) {
+            write(w, "C++: {defn.cppName}")
+            if (with_cpp_source) {
+                var match : CppMatch
+                if (cpp_lookup_by_name(defn.cppName, match)) {
+                    write(w, " ({match.file}:{match.line})")
+                } else {
+                    let why = cpp_index_status()
+                    if (!empty(why)) {
+                        write(w, " (index unavailable: {why})")
+                    } else {
+                        write(w, " (not located)")
+                    }
+                }
+            }
+            write(w, "\n")
         }
         if (hit.func != null) {
             write(w, "In function: {hit.func.name}\n")
@@ -240,7 +283,7 @@ def format_result(defn : DefinitionResult; hit : CursorHit) : string {
     }
 }
 
-def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = "") : string {
+def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = ""; with_cpp_source : bool = false) : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) {
@@ -256,7 +299,7 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         for (hit in hits) {
             let defn = resolve_definition(hit)
             if (defn.found) {
-                return format_result(defn, hit)
+                return format_result(defn, hit, with_cpp_source)
             }
         }
         // nothing resolved — show what we found at cursor
@@ -268,3 +311,40 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         }
     }
 }
+
+// ── v2 roadmap (cppName population gaps) ─────────────────────────────
+//
+// `with_cpp_source` currently fires the cpp redirect for:
+//   ✓ ExprCall to a builtin function           (BuiltInFunction.cppName)
+//   ✓ Type fallback on a handled type           (TypeAnnotation.cppName)
+//
+// Not yet wired up — drop into `resolve_definition` when needed:
+//
+//   • ExprVar of a handled type
+//       e.g. `var ctx : Context; ctx |> ...` — goto on `ctx` returns
+//       kind=variable with no cppName. Could populate from
+//       `variable._type.annotation.cppName` when `variable._type.isHandle`.
+//
+//   • ExprField on a handled-type parent
+//       e.g. `func.name` where `func : Function?` (handled type) — goto on
+//       `name` falls through (no `structType`) and returns "not found".
+//       Needs an `is_basic_structure_annotation`-aware path that walks the
+//       annotation's fields and emits cppName for the matched field.
+//
+//   • ExprCall to an addExtern'd non-builtin
+//       Most addExterns are flagged builtIn so the existing branch catches
+//       them. If a future overload escapes that flag, fall back to
+//       `c.func.cppName` (Function.cppName).
+//
+// The shared theme: every code path that already produces a kind!=builtin
+// DefinitionResult could optionally fold in cppName when the underlying
+// declaration has C++ backing — but keep `with_cpp_source` semantics narrow
+// (one redirect per result, no speculative scanning).
+//
+// Test gap: the handled-type fallback path is currently exercised only
+// indirectly (via the parallel `find_symbol` test path that uses the same
+// `TypeAnnotation.cppName`). A direct goto test needs a fixture that uses
+// a handled type without pulling in `rtti`/`ast` (they're not registered as
+// user-script-visible modules in the default MCP context). When v2 lands,
+// add such a fixture (e.g. via a small custom-typed module or a scratch
+// file written at test time) and assert `→ cpp:` resolves.

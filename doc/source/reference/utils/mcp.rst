@@ -41,7 +41,8 @@ Configure in ``.mcp.json`` (project root):
      "mcpServers": {
        "daslang": {
          "command": "bin/Release/daslang.exe",
-         "args": ["utils/mcp/main.das"]
+         "args": ["utils/mcp/main.das"],
+         "defer_loading": false
        }
      }
    }
@@ -52,6 +53,14 @@ Or add via CLI::
 
 Claude Code starts and stops the server automatically with each
 session.
+
+The ``"defer_loading": false`` field requests that tool schemas load
+at session start instead of being deferred (deferred = the assistant
+must ``ToolSearch`` each tool by name before it can be called).  When
+the harness honors the flag the per-call friction is removed; when it
+doesn't (currently the upstream behavior --- see
+`Issue #26844 <https://github.com/anthropics/claude-code/issues/26844>`_),
+the flag is harmless and the tools fall back to the deferred path.
 
 
 Tools
@@ -114,12 +123,29 @@ Code navigation
      - Cross-module symbol search (functions, generics, structs,
        handled types, enums, globals, typedefs, fields).
        Case-insensitive substring by default; ``=query`` for exact
-       match.
+       match.  Optional ``with_cpp_source`` to redirect builtins /
+       handled types to their C++ source location (see below).
 
 Cursor-based tools (``goto_definition``, ``type_of``,
 ``find_references``) support a ``no_opt`` parameter that disables
 compiler optimizations to preserve the full AST -- useful when globals,
 enum values, or bitfield constants get constant-folded away.
+
+``with_cpp_source`` redirect
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``find_symbol`` and ``goto_definition`` accept an optional
+``with_cpp_source`` boolean.  When ``true``, results that have a C++
+implementation (builtin functions, handled types via ``addExtern`` /
+``MAKE_TYPE_FACTORY``) get a resolved C++ source location appended via
+the lazily-built C++ index.  First call costs ~2 s (one full
+``src/include/modules`` scan); subsequent calls cost ~150 ms (a
+git-state staleness signature: ``git rev-parse HEAD`` + filtered
+``git status`` + per-file mtimes + the search-config file's mtime).
+The index rebuilds automatically when relevant ``.cpp/.cc/.h/.hpp``
+files in the search scope change, when ``HEAD`` moves, or when the
+search config is edited.  Default off -- opt in when the question is "where
+is X *actually* implemented", not when just enumerating symbols.
 
 Program introspection
 ---------------------
@@ -198,6 +224,87 @@ Parse-aware search (tree-sitter)
        tree-sitter.  Works on broken/incomplete code -- no compilation
        needed.  Conditional on ``sg`` CLI.
 
+C++ source search (tree-sitter-cpp)
+------------------------------------
+
+Parallel parse-aware tools for the C++ side of the codebase, backed by
+ast-grep with tree-sitter-cpp.  Search scope and exclusions are
+configured in :ref:`utils_mcp_cpp_search_config` (defaults: ``src/``,
+``include/``, ``modules/`` --- locked to
+``.cpp``/``.cc``/``.h``/``.hpp`` ---
+with ``build*/``, ``cmake-build-*/``, ``CMakeFiles/``, ``_deps/``,
+``3rdparty/``, ``.git/`` always excluded plus an auto-exclude for any
+folder that contains a ``.git`` file or directory).  All tools are
+conditional on the ``sg`` CLI.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Tool
+     - Description
+   * - ``cpp_grep_usage``
+     - Parse-aware identifier search across ``.cpp``/``.cc``/``.h``/``.hpp``
+       files.  Driven by a generated multi-kind ast-grep rule file
+       (``identifier`` / ``type_identifier`` / ``namespace_identifier`` /
+       ``field_identifier``) so usages in type position
+       (``Foo writer;``), qualified calls (``Foo::method()``) and
+       base-class clauses (``class Bar : public Foo``) are all caught.
+       Skips comments and strings.  Hits deduped by ``(file, line)``.
+   * - ``cpp_find_symbol``
+     - Search C++ symbol *declarations* by name + kind.  ``kind`` accepts
+       ``function``, ``class``, ``struct``, ``enum``, ``union``,
+       ``typedef``, ``namespace``, ``macro``.  Covers function
+       definitions *and* header-only function declarations
+       (e.g. ``void foo();``); ``typedef`` matches both legacy
+       ``typedef X Y;`` and modern ``using X = Y;``.  Best-effort name
+       extraction; complex templates and function-pointer typedefs may
+       report partial names.  Specializations are not separately listed
+       (primary template only).  Macro-expanded declarations like
+       ``DAS_BIND_FN(foo)`` are invisible to ast-grep.
+   * - ``cpp_outline``
+     - Top-level declarations in a C++ file or glob via tree-sitter-cpp.
+       Works on broken/incomplete code -- no compile DB needed.
+   * - ``cpp_goto_definition``
+     - Given a cursor position in a C++ file, return up to five
+       plausible definition locations.  **Approximate** -- no scope
+       resolution, no overload disambiguation, no template-specialization
+       tracking.  For substring/usage searches prefer ``cpp_grep_usage``.
+       A clangd-backed precise mode is on the v2 roadmap.
+
+.. _utils_mcp_cpp_search_config:
+
+Search-scope configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Edit ``utils/mcp/cpp_search_config.das`` to change which folders the
+C++ tools (and the ``with_cpp_source`` redirect) scan.  The file
+declares four constants:
+
+- ``CPP_SEARCH_DIRS`` --- root folders to scan, recursively.
+  Defaults to ``["src", "include", "modules"]``.
+- ``CPP_SEARCH_ALWAYS_EXCLUDE`` --- ``--globs`` exclusion patterns
+  always applied (``build*/``, ``cmake-build-*/``, ``CMakeFiles/``,
+  ``_deps/``, ``3rdparty/``, ``.git/``).
+- ``CPP_SEARCH_INCLUDE_GLOBS`` --- file-extension lock; defaults to
+  ``["*.cpp", "*.cc", "*.h", "*.hpp"]``.  ``.cc`` is included so
+  consumers who embed the MCP server in a Google/Chromium-style
+  codebase get coverage out of the box; the daslang repo itself only
+  uses ``.cpp``/``.h``/``.hpp``.
+- ``CPP_SEARCH_INCLUDE_OVERRIDES`` --- repo-relative paths to
+  re-include even when the auto-``.git``-folder rule would have
+  excluded them.  Empty by default.
+
+Folders containing a ``.git`` file or directory at any depth are
+auto-excluded.  This covers daspkg-installed packages (in
+``modules/.daspkg_cache/``), git submodules, ``FetchContent``
+destinations, and ad-hoc clones.  To force-include such a folder, add
+its repo-relative path to ``CPP_SEARCH_INCLUDE_OVERRIDES``.
+
+Edits to ``cpp_search_config.das`` trigger an index rebuild on the
+next lookup automatically (the file's mtime is part of the staleness
+signature; see the ``with_cpp_source`` redirect section above).
+
 Duplicate detection
 -------------------
 
@@ -270,11 +377,11 @@ instance via its REST API.  All accept an optional ``port`` parameter
 ast-grep / tree-sitter setup
 =============================
 
-The ``grep_usage`` and ``outline`` tools use
+The ``grep_usage``, ``outline``, and ``cpp_*`` tools use
 `ast-grep <https://ast-grep.github.io/>`_ (``sg`` CLI) with a custom
-tree-sitter grammar for daslang.  The ``sgconfig.yml`` config file is
-platform-specific (shared library extension differs), so it is
-gitignored.
+tree-sitter grammar for daslang plus the built-in tree-sitter-cpp
+grammar.  The ``sgconfig.yml`` config file is platform-specific (shared
+library extension differs), so it is gitignored.
 
 Copy the appropriate template to ``sgconfig.yml`` in the project root:
 
@@ -288,6 +395,10 @@ Copy the appropriate template to ``sgconfig.yml`` in the project root:
 
    # macOS
    cp sgconfig.yml.osx sgconfig.yml
+
+All three templates include a ``languageGlobs: { cpp: ["*.h", "*.hpp"] }``
+block.  Without this, ast-grep classifies ``.h`` files as C (not C++)
+and the ``cpp_*`` tools silently produce zero matches on headers.
 
 
 Architecture
@@ -347,6 +458,10 @@ Optionally, allow all MCP tools without prompting by adding to
          "mcp__daslang__describe_type",
          "mcp__daslang__grep_usage",
          "mcp__daslang__outline",
+         "mcp__daslang__cpp_grep_usage",
+         "mcp__daslang__cpp_find_symbol",
+         "mcp__daslang__cpp_outline",
+         "mcp__daslang__cpp_goto_definition",
          "mcp__daslang__aot"
        ]
      }
