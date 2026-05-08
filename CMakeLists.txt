@@ -1559,6 +1559,20 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/find-dupe/tests/
     FILES_MATCHING PATTERN "*.das"
 )
 
+# Install blind-mouse (personal Q&A cache MCP server).
+file(GLOB DAS_MOUSE_FILES ${PROJECT_SOURCE_DIR}/utils/mouse/*.das)
+install(FILES ${DAS_MOUSE_FILES} DESTINATION utils/mouse)
+install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/mouse/README.md
+    ${PROJECT_SOURCE_DIR}/utils/mouse/OVERVIEW.md
+    ${PROJECT_SOURCE_DIR}/utils/mouse/.das_package
+    DESTINATION utils/mouse
+)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mouse/tests/
+    DESTINATION utils/mouse/tests
+    FILES_MATCHING PATTERN "*.das" PATTERN "*.md"
+)
+
 # Install daspkg (package manager)
 file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)

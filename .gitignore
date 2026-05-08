@@ -29,6 +29,13 @@ _aot_generated/
 
 opencoede.json
 
+# blind-mouse — ignore the regenerable SQLite index, but check in the .md
+# corpus under mouse-data/docs/ so curated answers ship in PRs.
+mouse-data/index.db
+mouse-data/index.db-journal
+mouse-data/*.db-wal
+mouse-data/*.db-shm
+
 modules/dasSFML/libsfml/
 site/
 doc/sphinx-build/

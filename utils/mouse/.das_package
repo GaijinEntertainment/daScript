@@ -1,0 +1,18 @@
+options gen2
+
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("mouse")
+    package_description("blind-mouse — personal Q&A cache MCP server. Curated `.md` answers backed by SQLite/FTS5 retrieval; agents both consume and curate.")
+}
+
+[export]
+def dependencies(version : string) {
+}
+
+[export]
+def release() {
+    release_main("main.das")
+}
