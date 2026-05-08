@@ -233,21 +233,20 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     }
 
     let old_entries <- query_benchmarks(db, parsed.old_commit, parsed.old_tag)
-    let raw_new_entries <- query_benchmarks(db, parsed.new_commit, parsed.new_tag)
 
-    // Exclude rows already in --old from --new so identical / overlapping filters
-    // (e.g. both empty) cannot compare a result set against itself.
-    var old_id_set : table<int; bool>
+    // Exclude rows already in --old from --new so identical / overlapping
+    // filters (e.g. both empty) cannot compare a result set against itself.
+    // Push to SQL via `_not_in(old_ids)` — JSON-bridge handles arbitrary size.
+    var old_ids : array<int>
+    old_ids |> reserve(length(old_entries))
     for (e in old_entries) {
-        old_id_set |> insert(e.id, true)
+        old_ids |> push(e.id)
     }
-    var new_entries : array<Benchmark>
-    new_entries |> reserve(length(raw_new_entries))
-    for (e in raw_new_entries) {
-        if (!key_exists(old_id_set, e.id)) {
-            new_entries |> push_clone(e)
-        }
-    }
+    let new_want_tag = (parsed.new_tag == "" ? "" : "[{parsed.new_tag}]")
+    let new_entries <- _sql(db |> select_from(type<Benchmark>)
+        |> _where(parsed.new_commit == "" || _.commit_hash == parsed.new_commit)
+        |> _where(new_want_tag == "" || _.tags |> contains(new_want_tag))
+        |> _where(_.id._not_in(old_ids)))
 
     if (length(old_entries) == 0) {
         return "no rows match --old-commit / --old-tag"

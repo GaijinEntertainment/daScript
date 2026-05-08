@@ -10,10 +10,12 @@ require sqlite/sqlite_linq
 // Parity check for tutorial 17 — subqueries.
 //
 // Shapes (each must produce identical row sets across the three modes):
-//   1. `_in(subquery)`     — IN
-//   2. `_not_in(subquery)` — NOT IN
-//   3. `_any(predicate)`   — EXISTS WHERE
-//   4. `_none(predicate)`  — NOT EXISTS WHERE
+//   1. `_in(subquery)`            — IN
+//   2. `_not_in(subquery)`        — NOT IN
+//   3. `_any(predicate)`          — EXISTS WHERE
+//   4. `_none(predicate)`         — NOT EXISTS WHERE
+//   5. `_in(captured_array)`      — IN (SELECT value FROM json_each(?))
+//   6. `_not_in(captured_array)`  — NOT IN (SELECT value FROM json_each(?))
 //
 // The 1-arg form `subquery._any()` (test if non-empty, lifts to plain
 // `EXISTS (...)` under `_sql`) is Mode-1-only. The `_any` linq_boost
@@ -156,5 +158,40 @@ def parity_none_predicate(t : T?) {
         t |> equal(length(m1), 3, "_none(>1000): all 3 users surface")
         t |> success(users_equal(m1, m2), "_none: M1 ≡ M2")
         t |> success(users_equal(m2, m3), "_none: M2 ≡ M3")
+    }
+}
+
+[test]
+def parity_in_collection(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users <- fixture_users()
+        let want_ids <- [1, 2]
+
+        let m1 <- _sql(db |> select_from(type<User>) |> _where(_.Id._in(want_ids)))
+        let m2 <- (db |> select_from(type<User>) |> _where(_.Id._in(want_ids)))
+        let m3 <- (users |> _where(_.Id._in(want_ids)))
+
+        t |> equal(length(m1), 2, "_in(arr): Alice + Bob match")
+        t |> success(users_equal(m1, m2), "_in(arr): M1 ≡ M2")
+        t |> success(users_equal(m2, m3), "_in(arr): M2 ≡ M3")
+    }
+}
+
+[test]
+def parity_not_in_collection(t : T?) {
+    with_sqlite(":memory:") $(db) {
+        fixture_db(db)
+        var users <- fixture_users()
+        let want_ids <- [1, 2]
+
+        // Id is non-nullable PK → naive NOT IN form, identical across all three modes.
+        let m1 <- _sql(db |> select_from(type<User>) |> _where(_.Id._not_in(want_ids)))
+        let m2 <- (db |> select_from(type<User>) |> _where(_.Id._not_in(want_ids)))
+        let m3 <- (users |> _where(_.Id._not_in(want_ids)))
+
+        t |> equal(length(m1), 1, "_not_in(arr): only Carol survives")
+        t |> success(users_equal(m1, m2), "_not_in(arr): M1 ≡ M2")
+        t |> success(users_equal(m2, m3), "_not_in(arr): M2 ≡ M3")
     }
 }

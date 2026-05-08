@@ -153,6 +153,9 @@ part re-uses the same [sql_table] from Part 1.
     NOT EXISTS / IN / NOT IN, correlated and uncorrelated. Introduces:
     why negated names exist (`!expr` isn't AST-walkable — see
     API_REWORK pattern note). Mockup: [24-subqueries.das](tutorial-mockup/24-subqueries.das.mockup).
+    The captured-runtime-collection form of `_in` / `_not_in` (lowering
+    to `IN (SELECT value FROM json_each(?))`) ships as a separate
+    tutorial — see #42 below.
 18. **NULL handling — `Option<T>` everywhere** — nullable columns typed
     as `Option<T>` in the struct, `_.Col |> is_some()` / `is_none()` in
     predicates emit IS NOT NULL / IS NULL, `|> unwrap_or(x)` emits
@@ -365,6 +368,11 @@ Niche, but tractable once the base is down.
 41. **Triggers** — DB-level callbacks via raw SQL inside migrations.
     Deliberately *no* daslang-side trigger DSL. Per API_REWORK §41.
     Mockup: **no API impact — concept tutorial**.
+42. **`_in` / `_not_in` — captured-collection form** — bind a runtime
+    `array<T>` and lower to `WHERE Col IN (SELECT value FROM json_each(?))`
+    via SQLite's table-valued JSON1. Single bind, any size, plan-cache-
+    friendly (matches EF Core 8's default). NULL-correct `_not_in` on
+    nullable columns via the defensive `OR Col IS NULL` form.
 
 ---
 
@@ -444,12 +452,14 @@ E. **Forward-looking: `dasSQL` abstraction layer** — the roadmap beyond
 | 39 | UD SQL functions | `32-sql_functions.das` | **Shipped** (chunk 10); `register_function(db, name, @@fn[, deterministic[, directonly]])` call macro; arity 0..4; arg/return tags derived from function-pointer type; NULL short-circuit; panic recovery via `Context::runWithCatch` |
 | 40 | FTS5 | `39-fts5.das` | Has mockup |
 | 41 | Triggers | — | No-API — concept tutorial |
+| 42 | `_in` / `_not_in` — captured-collection form | `tutorials/sql/44-in_not_in_collections.das` | **Shipped** (2026-05-08); JSON-bridge lowering to `IN (SELECT value FROM json_each(?))` for runtime `array<T>`; defensive `OR IS NULL` for `_not_in` on `Option<T>` columns; subquery form of `_in` / `_not_in` (tutorial 17) unchanged |
 
 **Mockup coverage:** 27 tutorials have a mockup already. 7 need a new mockup
 (mostly in Part 3 — the `_sql` chain deep-dives — plus BLOB round-trip and
 two introspection tutorials). 4 are no-API concept tutorials and don't get
 a mockup by design. 5 concept appendices (A-E) are prose-only reference
-docs.
+docs. Tutorial 42 (captured-collection `_in` / `_not_in`) shipped without
+a prior mockup — extends the subquery form from tutorial 17.
 
 **Inherited-file cross-reference:** see [API_REWORK.md](API_REWORK.md)'s
 per-section headers (`### NN-topic` prefix) for the decision log behind
