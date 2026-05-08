@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.16)
+cmake_minimum_required (VERSION 3.17)
 project (DAS VERSION 0.6.2)
 # enable_testing() must live at the top-level scope of the top-level
 # CMakeLists.txt for `ninja test` / ctest to work from the build root.
@@ -684,6 +684,7 @@ src/ast/ast_typedecl.cpp
 src/ast/ast_match.cpp
 src/ast/ast_module.cpp
 src/ast/ast_print.cpp
+src/ast/ast_program.cpp
 src/ast/ast_infer_type.cpp
 src/ast/ast_infer_type_report.cpp
 src/ast/ast_infer_type_function.cpp
@@ -889,6 +890,7 @@ src/simulate/data_walker.cpp
 include/daScript/simulate/data_walker.h
 src/simulate/debug_print.cpp
 src/simulate/json_print.cpp
+src/runtime/context.cpp
 src/simulate/json_scan.cpp
 include/daScript/simulate/debug_print.h
 include/daScript/simulate/for_each.h
