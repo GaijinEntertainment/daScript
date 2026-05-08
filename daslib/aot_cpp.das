@@ -342,10 +342,15 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             }
         } elif (baseType == Type.tStructure) {
             if (typeDecl.structType != null) {
+                // Elaborated-type-specifier (`struct X`) keeps GCC's -Wchanges-meaning
+                // happy when a field name shadows the struct name in the same scope —
+                // e.g. `struct User { TTuple<...,struct Profile> Profile; }`. Valid in
+                // every C++ context where a bare struct name is, including template args
+                // and qualified names.
                 if (typeDecl.structType._module.name.empty()) {
-                    write(writer, "{aotStructName(typeDecl.structType)}")
+                    write(writer, "struct {aotStructName(typeDecl.structType)}")
                 } else {
-                    write(writer, "{aotModuleName(typeDecl.structType._module)}::{aotStructName(typeDecl.structType)}")
+                    write(writer, "struct {aotModuleName(typeDecl.structType._module)}::{aotStructName(typeDecl.structType)}")
                 }
             } else {
                 write(writer, "DAS_COMMENT(unspecified structure) ");
