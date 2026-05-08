@@ -6,7 +6,7 @@ Read this skill before writing any `.das` code that transforms a sequence — fi
 2. **LINQ** — for everything else (multi-step chains, lazy iterators, set ops, joins, aggregations)
 3. **Plain `for` loop** — when there is a side effect (writing to a builder, mutating shared state) or an early `break`
 
-Do NOT use `daslib/functional` (`map`, `filter`, `each`, `to_array`) for new code. The linq operators (`select`, `where_`, `_select`, `_where`, `to_array`, …) are the supported chainable ones; `daslib/functional` is older, less integrated with the pipe-syntax macros, and patterns built on it have been the source of fusion-runtime bugs (see issue #2505).
+Do NOT use `daslib/functional` (`map`, `filter`, `each`, `to_array`) for new code. The linq operators (`select`, `where_`, `_select`, `_where`, `to_array`, …) are the supported chainable ones; `daslib/functional` is older, less integrated with the pipe-syntax macros, and patterns built on it have been the source of fusion-runtime bugs.
 
 ## When comprehension wins
 
@@ -139,7 +139,7 @@ Use a `for` loop when:
 - You need `break` / `continue` / multi-line control flow.
 - You're driving an iteration purely for its side effect with no result value.
 
-Do NOT shoehorn side effects into `_select` lambdas — they're meant to be pure. Mixing `each() + map() + to_array()` to drive side effects is what produced the iterator-fusion UAF documented in issue #2505.
+Do NOT shoehorn side effects into `_select` lambdas — they're meant to be pure. Mixing `each() + map() + to_array()` to drive side effects has historically produced iterator-fusion use-after-free bugs.
 
 ## Anti-patterns
 

@@ -40,17 +40,17 @@ Every `Feature` has:
 
 ## Step 1: Get the Leak Dump
 
-`DumpJobQueLeaks()` runs at exit in both `daslang.exe` and `daslang-live.exe`. It walks both linked lists and prints all surviving objects.
+`DumpJobQueLeaks()` runs at exit in both `daslang` and `daslang-live`. It walks both linked lists and prints all surviving objects.
 
-**With daslang.exe:**
+**With daslang:**
 ```bash
-bin/Debug/daslang.exe path/to/script.das
+bin/daslang path/to/script.das
 ```
 
-**With daslang-live.exe** — capture output to file:
+**With daslang-live** — capture output to file:
 ```bash
 cd path/to/script/dir
-bin/Debug/daslang-live.exe main.das > /tmp/output.txt 2>&1 &
+bin/daslang-live main.das > /tmp/output.txt 2>&1 &
 # ... interact, then shutdown via REST API or live_shutdown MCP tool
 cat /tmp/output.txt
 ```
@@ -75,7 +75,7 @@ total 1 leaked Feature objects
 Once you know the leaking ID, use `--track-job-status` to get every addRef/releaseRef with source locations:
 
 ```bash
-bin/Debug/daslang.exe --track-job-status 4 path/to/script.das
+bin/daslang --track-job-status 4 path/to/script.das
 ```
 
 This sets `g_jobque_track_id = 4`. Every `addRef`/`releaseRef` on that object prints immediately:
@@ -172,7 +172,7 @@ def main() {
 
 Then test:
 ```bash
-bin/Debug/daslang.exe --track-job-status 4 path/to/script.das -- --max-frames 30
+bin/daslang --track-job-status 4 path/to/script.das -- --max-frames 30
 ```
 
 Note: `--track-job-status` goes before the script path (daslang arg), `--max-frames` goes after `--` (script arg).

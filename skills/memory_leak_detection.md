@@ -37,7 +37,7 @@ context, with the full daslang call stack that produced it.
 
 **Invoke:**
 ```bash
-bin/Release/daslang.exe --das-profiler --das-profiler-leaks path/to/script.das
+bin/daslang --das-profiler --das-profiler-leaks path/to/script.das
 ```
 
 Optional `--das-profiler-log-file <path>` to write the report to a file
@@ -75,7 +75,7 @@ id, optional comment, and daslang `file:line`.
 
 **Invoke:**
 ```bash
-bin/Release/daslang.exe -track-allocations -heap-report path/to/script.das
+bin/daslang -track-allocations -heap-report path/to/script.das
 ```
 
 **Output (default linear heap — one line per chunk):**
@@ -148,7 +148,7 @@ checked in the gc_node constructor and triggers `os_debug_break()` — you get
 the full C++ + daslang stack trace for the creation site.
 
 ```bash
-DAS_GC_BREAK_ON_ID=1234 bin/Debug/daslang.exe path/to/script.das
+DAS_GC_BREAK_ON_ID=1234 bin/daslang path/to/script.das
 ```
 
 **Common causes:** daslang code that creates AST nodes at runtime
@@ -169,7 +169,7 @@ FileAccess, gc-migrated types via their policy, any other smart_ptr).
 
 **Invoke:**
 ```bash
-bin/Release/daslang.exe --track-smart-ptr 0x5a path/to/script.das
+bin/daslang --track-smart-ptr 0x5a path/to/script.das
 ```
 
 The id is the `ref_count_id` of the target object — usually read from a
@@ -180,7 +180,7 @@ prior `DumpTrackPtr()` dump line like
 hits `os_debug_break()`. Attach a debugger (or `-das-wait-debugger`) to
 collect stack traces.
 
-**Automatic companion:** at exit `daslang.exe` calls
+**Automatic companion:** at exit `daslang` calls
 `ptr_ref_count::DumpTrackPtr()` (`utils/daScript/main.cpp:723`) which prints
 all surviving smart pointers. Read a suspect id from there, rerun with
 `--track-smart-ptr <id>`, debug.
@@ -198,7 +198,7 @@ debugger if you need it.
 
 **Invoke:**
 ```bash
-bin/Release/daslang.exe --track-job-status <id> path/to/script.das
+bin/daslang --track-job-status <id> path/to/script.das
 ```
 
 `DumpJobQueLeaks()` runs automatically at exit. See the dedicated skill
@@ -216,7 +216,7 @@ side. Used by dasHV for `hv::WebSocketClient`, `hv::WebSocketServer`,
 `include/daScript/misc/handle_registry.h`.
 
 **Invoke:** nothing. `handleRegistry_dumpAll()` runs inside
-`Module::Shutdown(dumpLeaks)` in both `daslang.exe` and `daslang-live.exe`,
+`Module::Shutdown(dumpLeaks)` in both `daslang` and `daslang-live`,
 in the window between the module destructor loop (which drains job
 threads via `Module_JobQue::~Module_JobQue`) and the
 `DynamicModuleInfo` teardown that unloads shared modules. That ordering

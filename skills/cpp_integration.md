@@ -256,7 +256,7 @@ addEnumeration(new EnumerationDasName());
 - `DAS_BIND_ENUM_CAST(CppEnum)` — explicit `cast<>` specialization (often not needed, SFINAE default suffices)
 - `DAS_BASE_BIND_ENUM_98` — for unscoped (C-style) enums
 - **Critical**: place enum macros BEFORE `using namespace das` — the macros define names inside `namespace das` that collide with global enum names
-- **Name collision pitfall**: `das::LogLevel` is defined internally in `include/daScript/misc/string_writer.h` — do NOT name your enum `LogLevel` when `using namespace das`
+- **Name collision pitfall**: `das::LogLevel` is defined internally — do NOT name your enum `LogLevel` when `using namespace das`
 - Manual construction alternative: `new Enumeration("Name")` + `pEnum->addIEx("Value", "CppEnum::Value", intValue, LineInfo())`
 
 ## Low-level interop — `addInterop`

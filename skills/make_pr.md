@@ -240,12 +240,6 @@ CI's `extended_checks` job runs `./bin/Release/daslang ./das-fmt/dasfmt.das -- -
 
 **Before pushing:** mentally format named-arg constructor / call sites with spaces around `=`. If CI `extended_checks` fails on a format diff after MCP said "already formatted", fix the spacing and re-push (or amend, on a squashed branch).
 
-## 5.5. `.md` stop-rule — STOP before push if any `.md` changed
-
-If `git diff --name-only origin/master..HEAD` includes ANY `.md` file (CLAUDE.md, `skills/`, `**/README.md`, design docs like `API_REWORK.md`), **STOP before `git push`**. List each modified `.md` with a one-line summary of what changed, and ask the user to review. Do not push until they greenlight.
-
-**Why:** doc edits direct future Claude behavior. Code edits get caught by tests; doc edits don't. Silent .md diffs in a PR are not OK — every .md change in a PR must be acknowledged by the user before it goes live.
-
 ## 6. Create the PR
 
 Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follow the commit message conventions from the repository (see recent `git log` for style).

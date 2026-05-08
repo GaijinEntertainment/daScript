@@ -1,0 +1,25 @@
+# Skills shipped to the SDK at install time.
+# CMake reads this list and copies each named file from skills/ to the SDK
+# under <DAS_INSTALL_DOCDIR>/skills/. Single source of truth: top-level skills/.
+# Edit this list when adding a user-facing (vs repo-internal) skill.
+clargs_usage.md
+cpp_integration.md
+das_formatting.md
+das_macros.md
+daslang_live.md
+daslib_modules.md
+daspkg.md
+decs.md
+detect_dupe.md
+dynamic_modules.md
+filesystem.md
+jobque_debugging.md
+json.md
+linq.md
+mcp_tools.md
+memory_leak_detection.md
+project_overview.md
+regex.md
+strudel_port.md
+writing_tests.md
+xml.md

@@ -7,10 +7,6 @@ Read this skill file before running daspkg commands or working with `.das_packag
 Run daspkg via the daslang interpreter:
 
 ```bash
-# From repo root (development)
-bin/Release/daslang.exe utils/daspkg/main.das -- <command> [args] --root <project_root>
-
-# From installed SDK
 bin/daslang utils/daspkg/main.das -- <command> [args] --root <project_root>
 ```
 
@@ -254,12 +250,6 @@ The macro captures the call-site source file path at expansion, then walks the s
 - The `.das_package` and `daspkg.lock` files.
 - Anything not matched by a `release_include` glob.
 
-## Package Index
-
-- Public index: `borisbat/daspkg-index` on GitHub
-- `introduce` creates PRs on the index repo (NOT on `GaijinEntertainment/daScript`)
-- `search` queries the index for matching packages
-
 ## Resetting a Project (cleanup)
 
 Use `cleanup` to wipe a consumer project's daspkg state so the next `install` starts from scratch — useful when auditing packages or recovering from a bad partial install.
@@ -287,5 +277,5 @@ Safety rails:
 From the package root:
 
 ```bash
-bin/Release/daslang.exe dastest/dastest.das -- --test test_module.das
+bin/daslang dastest/dastest.das -- --test test_module.das
 ```

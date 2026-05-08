@@ -1471,7 +1471,23 @@ install(FILES
 install(FILES ${PROJECT_SOURCE_DIR}/install/README.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/CLAUDE.md DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/install/.gitignore DESTINATION ${DAS_INSTALL_DOCDIR})
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/install/skills DESTINATION ${DAS_INSTALL_DOCDIR})
+
+# Skills shipped to the SDK — the manifest install/skills.list names which
+# files from skills/ get copied into the install tree under skills/. Keeps
+# top-level skills/ as the single source of truth (no install/skills/ mirror).
+file(STRINGS ${PROJECT_SOURCE_DIR}/install/skills.list SHIPPED_SKILLS_RAW)
+set(SHIPPED_SKILLS "")
+foreach(LINE IN LISTS SHIPPED_SKILLS_RAW)
+    string(STRIP "${LINE}" LINE)
+    if(LINE AND NOT LINE MATCHES "^#")
+        set(SKILL_PATH "${PROJECT_SOURCE_DIR}/skills/${LINE}")
+        if(NOT EXISTS "${SKILL_PATH}")
+            message(FATAL_ERROR "install/skills.list references missing file: skills/${LINE}")
+        endif()
+        list(APPEND SHIPPED_SKILLS "${SKILL_PATH}")
+    endif()
+endforeach()
+install(FILES ${SHIPPED_SKILLS} DESTINATION ${DAS_INSTALL_DOCDIR}/skills)
 install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR})
 install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION ${DAS_INSTALL_DOCDIR} RENAME URIPARSER.LICENSE)
 install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION ${DAS_INSTALL_DOCDIR} RENAME DAG_NOISE.LICENSE)
