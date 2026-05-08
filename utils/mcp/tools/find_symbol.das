@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require cpp_common public
 require daslib/ast_boost
 
 let MAX_FIND_RESULTS = 50
@@ -20,6 +21,21 @@ def write_location(var w : StringBuilderWriter; at) {
 def write_cpp_name(var w : StringBuilderWriter; cppName : string) {
     if (!empty(cppName)) {
         write(w, "  // C++ {cppName}")
+    }
+}
+
+// When `with_cpp_source` is enabled and the entry has a non-empty cppName, look
+// up the C++ source location via the lazily-built cpp index and append a
+// "      → cpp: path:line" line. On miss: "      → cpp: <name> (not located)".
+def write_cpp_redirect(var w : StringBuilderWriter; cppName : string; with_cpp_source : bool) {
+    if (!with_cpp_source || empty(cppName)) {
+        return
+    }
+    var match : CppMatch
+    if (cpp_lookup_by_name(cppName, match)) {
+        write(w, "\n      → cpp: {match.file}:{match.line}")
+    } else {
+        write(w, "\n      → cpp: {cppName} (not located)")
     }
 }
 
@@ -75,7 +91,7 @@ def write_handled_fields_highlighted(var w : StringBuilderWriter; value : Annota
     }
 }
 
-def search_module(var results : array<string>; var total_found : int&; mname : string; mod : Module?; query : string; kind : string) {
+def search_module(var results : array<string>; var total_found : int&; mname : string; mod : Module?; query : string; kind : string; with_cpp_source : bool) {
     let dname = module_display_name(mname)
     // functions
     if (total_found < MAX_FIND_RESULTS && (empty(kind) || kind == "function")) {
@@ -90,10 +106,12 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (!symbol_matches(fname, query)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let cppName = get_func_cpp_name(func)
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] def {fname}")
                 write_func_signature(w, func)
-                write_cpp_name(w, get_func_cpp_name(func))
+                write_cpp_name(w, cppName)
+                write_cpp_redirect(w, cppName, with_cpp_source)
             }
             results |> push(entry)
             total_found++
@@ -112,10 +130,12 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (fname |> starts_with("```") || !symbol_matches(fname, query)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let cppName = get_func_cpp_name(func)
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] def {fname}")
                 write_func_signature(w, func)
-                write_cpp_name(w, get_func_cpp_name(func))
+                write_cpp_name(w, cppName)
+                write_cpp_redirect(w, cppName, with_cpp_source)
             }
             results |> push(entry)
             total_found++
@@ -138,7 +158,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (kind != "field" && !name_match && !field_match) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 if (value.flags.isClass) {
                     write(w, "  [{dname}] class {value.name}")
                 } else {
@@ -167,9 +187,11 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (kind != "field" && !name_match && !field_match) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let cppName = string(value.cppName)
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] handled {value.name}")
-                write_cpp_name(w, string(value.cppName))
+                write_cpp_name(w, cppName)
+                write_cpp_redirect(w, cppName, with_cpp_source)
                 write(w, "\n")
                 if (is_basic) {
                     write_handled_fields_highlighted(w, value, query, field_match && !name_match)
@@ -191,7 +213,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (!symbol_matches(string(value.name), query)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] enum {value.name}")
                 write_location(w, value.at)
                 write(w, "\n")
@@ -217,7 +239,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (!symbol_matches(sname, query)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] typedef {sname} = {describe(value)}")
                 write_location(w, td.at)
             }
@@ -237,7 +259,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
             if (!symbol_matches(string(value.name), query)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  [{dname}] {value.name} : {describe(value._type)}")
                 write_location(w, value.at)
             }
@@ -247,7 +269,7 @@ def search_module(var results : array<string>; var total_found : int&; mname : s
     }
 }
 
-def do_find_symbol(query : string; kind : string = ""; file : string = ""; project : string = "") : string {
+def do_find_symbol(query : string; kind : string = ""; file : string = ""; project : string = ""; with_cpp_source : bool = false) : string {
     if (empty(query)) {
         return make_tool_result("'query' must not be empty", true)
     }
@@ -261,7 +283,7 @@ def do_find_symbol(query : string; kind : string = ""; file : string = ""; proje
                 if (mname == "__main__" || empty(mname)) {
                     return
                 }
-                search_module(results, total_found, mname, mod, query, kind)
+                search_module(results, total_found, mname, mod, query, kind, with_cpp_source)
             }
             return format_find_results(results, total_found, query, kind)
         }
@@ -274,7 +296,7 @@ def do_find_symbol(query : string; kind : string = ""; file : string = ""; proje
             if (mname == "__main__" || empty(mname)) {
                 return
             }
-            search_module(results, total_found, mname, mod, query, kind)
+            search_module(results, total_found, mname, mod, query, kind, with_cpp_source)
         }
         return make_tool_result(format_find_results(results, total_found, query, kind))
     }

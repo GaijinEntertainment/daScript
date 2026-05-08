@@ -3,6 +3,7 @@ options no_unused_function_arguments = false
 options no_unused_block_arguments = false
 
 require common public
+require cpp_common public
 require daslib/ast_cursor
 require daslib/ast_boost
 require math
@@ -16,6 +17,7 @@ struct DefinitionResult {
     line : int
     column : int
     snippet : string    // source lines around the definition
+    cppName : string    // C++ name for builtin functions / handled types (when resolvable)
 }
 
 // Read a few lines from a file around a given line number
@@ -88,6 +90,11 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
         let c = expr as ExprCall
         if (c.func != null) {
             if (c.func.flags.builtIn) {
+                var cppName : string
+                let bfn = c.func as BuiltInFunction
+                if (bfn != null) {
+                    cppName = string(bfn.cppName)
+                }
                 return DefinitionResult(
                     found = true,
                     kind = "builtin",
@@ -95,7 +102,8 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
                     snippet = build_string() $(var w) {
                         write(w, "builtin def {c.func.name}")
                         write_func_signature(w, *c.func)
-                    }
+                    },
+                    cppName = cppName
                 )
             }
             let file = lineinfo_file(c.func.at)
@@ -222,7 +230,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     return DefinitionResult()
 }
 
-def format_result(defn : DefinitionResult; hit : CursorHit) : string {
+def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bool) : string {
     return build_string() $(var w) {
         write(w, "Symbol: {defn.name}\n")
         write(w, "Kind: {defn.kind}\n")
@@ -230,6 +238,18 @@ def format_result(defn : DefinitionResult; hit : CursorHit) : string {
             write(w, "File: {defn.file}\n")
             write(w, "Line: {defn.line}\n")
             write(w, "Column: {defn.column}\n")
+        }
+        if (!empty(defn.cppName)) {
+            write(w, "C++: {defn.cppName}")
+            if (with_cpp_source) {
+                var match : CppMatch
+                if (cpp_lookup_by_name(defn.cppName, match)) {
+                    write(w, " ({match.file}:{match.line})")
+                } else {
+                    write(w, " (not located)")
+                }
+            }
+            write(w, "\n")
         }
         if (hit.func != null) {
             write(w, "In function: {hit.func.name}\n")
@@ -240,7 +260,7 @@ def format_result(defn : DefinitionResult; hit : CursorHit) : string {
     }
 }
 
-def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = "") : string {
+def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = ""; with_cpp_source : bool = false) : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) {
@@ -256,7 +276,7 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         for (hit in hits) {
             let defn = resolve_definition(hit)
             if (defn.found) {
-                return format_result(defn, hit)
+                return format_result(defn, hit, with_cpp_source)
             }
         }
         // nothing resolved — show what we found at cursor

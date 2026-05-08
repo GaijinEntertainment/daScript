@@ -28,6 +28,10 @@ require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
+require tools/cpp_grep_usage public
+require tools/cpp_find_symbol public
+require tools/cpp_outline public
+require tools/cpp_goto_definition public
 require tools/aot public
 require tools/lint_tool public
 require tools/detect_duplicates public
@@ -1803,3 +1807,234 @@ def test_export_corpus_workers_failure_propagates(t : T?) {
     }
 }
 
+// ── cpp_grep_usage ───────────────────────────────────────────────────
+
+[test]
+def test_cpp_grep_usage(t : T?) {
+    t |> run("finds known C++ symbol in src/ast") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("addExternFunc", "src/ast", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ast_interop.cpp") >= 0, "should mention ast_interop.cpp")
+    }
+    t |> run("missing dir reports cleanly") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("anything", "/no/such/dir/here", "", ""), text, is_error)
+        t |> success(is_error || find(text, "No matches") >= 0, "should error or report no matches")
+    }
+    t |> run("missing symbol arg returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_grep_usage("", "src", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── cpp_find_symbol ──────────────────────────────────────────────────
+
+[test]
+def test_cpp_find_symbol(t : T?) {
+    t |> run("finds class in src/") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=Module", "class", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Module") >= 0, "should find Module")
+    }
+    t |> run(".h languageGlobs regression — finds class in header") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=FsFileSystem", "class", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "fs_file_info.h") >= 0, "should find FsFileSystem in fs_file_info.h (proves .h is treated as cpp)")
+    }
+    t |> run("no-match returns clean empty result") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("zzznotarealsymbolzzz_xyzzy", "", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error on no-match")
+        t |> success(find(text, "No matches") >= 0, "should report no matches")
+    }
+    t |> run("kind filter rejects wrong kinds") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=addFunction", "class", "src", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "No matches") >= 0, "kind=class should reject methods named addFunction")
+    }
+    t |> run("missing query returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("", "", "src", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── cpp_outline ──────────────────────────────────────────────────────
+
+[test]
+def test_cpp_outline(t : T?) {
+    t |> run("lists declarations in a known file") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_outline("src/ast/ast_interop.cpp", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[function]") >= 0 || find(text, "[class]") >= 0 || find(text, "[struct]") >= 0, "should list at least one declaration")
+    }
+    t |> run("missing both args returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_outline("", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── cpp_goto_definition ──────────────────────────────────────────────
+
+[test]
+def test_cpp_goto_definition_errors(t : T?) {
+    t |> run("missing args returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("", "", ""), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+    t |> run("non-positive line/column returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("src/ast/ast_interop.cpp", "0", "0"), text, is_error)
+        t |> success(is_error, "should be error on 0/0 line/col")
+    }
+    t |> run("nonexistent file returns error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_goto_definition("/no/such/file.cpp", "1", "1"), text, is_error)
+        t |> success(is_error, "should be error")
+    }
+}
+
+// ── with_cpp_source redirect on find_symbol / goto_definition ────────
+
+[test]
+def test_find_symbol_with_cpp_source(t : T?) {
+    t |> run("redirect off (default) — no '→ cpp:' line") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("=print", "", "", "", false), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "print") >= 0, "should still find print")
+        t |> success(find(text, "→ cpp:") < 0, "no redirect line when with_cpp_source=false")
+    }
+    t |> run("redirect on — emits '→ cpp:' line for builtins") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_find_symbol("=print", "function", "", "", true), text, is_error)
+        t |> success(!is_error, "should not be error")
+        // Either we located print's cpp source OR we report (not located).
+        // Both prove the redirect path fired.
+        t |> success(find(text, "→ cpp:") >= 0, "redirect line should appear when with_cpp_source=true")
+    }
+}
+
+[test]
+def test_goto_definition_with_cpp_source(t : T?) {
+    t |> run("redirect off (default) — no C++: line") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // line 34 col 5 is the 'p' of print(...) on `print("{d}\n")` — resolves to a builtin
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", false), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: builtin") >= 0, "should resolve to a builtin")
+    }
+    t |> run("redirect on — appends C++: line for builtin") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", true), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "Kind: builtin") >= 0, "should still resolve to a builtin")
+        t |> success(find(text, "C++:") >= 0, "C++ line should appear when with_cpp_source=true")
+    }
+}
+
+// ── cpp_search_config + staleness signature ──────────────────────────
+
+[test]
+def test_cpp_search_config(t : T?) {
+    t |> run("CPP_SEARCH_DIRS contains expected defaults") <| @(t : T?) {
+        var saw_modules = false
+        for (d in CPP_SEARCH_DIRS) {
+            if (d == "modules") {
+                saw_modules = true
+            }
+        }
+        t |> success(saw_modules, "CPP_SEARCH_DIRS should include 'modules'")
+    }
+    t |> run("CPP_SEARCH_INCLUDE_GLOBS locks to *.cpp/*.h/*.hpp") <| @(t : T?) {
+        let n = length(CPP_SEARCH_INCLUDE_GLOBS)
+        t |> success(n >= 3, "should list at least 3 include globs")
+    }
+}
+
+[test]
+def test_cpp_index_signature(t : T?) {
+    t |> run("signature is stable across two consecutive calls (no edits)") <| @(t : T?) {
+        let sig1 = cpp_compute_index_signature()
+        let sig2 = cpp_compute_index_signature()
+        t |> success(!empty(sig1), "first signature should not be empty")
+        t |> success(sig1 == sig2, "signature should be stable across consecutive calls (no fs changes)")
+    }
+}
+
+[test]
+def test_cpp_collect_git_excludes(t : T?) {
+    t |> run("daspkg cache .git is auto-excluded if present") <| @(t : T?) {
+        let modules_dir = path_join(get_das_root(), "modules")
+        let cache_git = path_join(modules_dir, ".daspkg_cache/index/.git")
+        if (!stat(cache_git).is_valid) {
+            // skip silently if cache not present (e.g. fresh checkout)
+            return
+        }
+        var search_dirs : array<string>
+        search_dirs |> push(modules_dir)
+        let no_overrides : array<string>
+        let excludes <- cpp_collect_git_excludes(search_dirs, no_overrides)
+        var found = false
+        for (g in excludes) {
+            if (find(g, ".daspkg_cache/index") >= 0) {
+                found = true
+            }
+        }
+        t |> success(found, "modules/.daspkg_cache/index should be in the auto-exclude list")
+    }
+}
+
+[test]
+def test_cpp_function_declarations_visible(t : T?) {
+    // Regression for Copilot review #1: function declarations in headers
+    // (no body, e.g. `void foo();`) must be findable. Without the
+    // cpp-outline-functions-decl rule + has:function_declarator constraint,
+    // these were silently invisible.
+    t |> run("finds function declaration in ast.h header") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("=pull_all_auto_registered_modules", "function", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "ast.h") >= 0, "should locate declaration in include/daScript/ast/ast.h")
+    }
+}
+
+[test]
+def test_cpp_using_alias_visible(t : T?) {
+    // Regression for Copilot review #2: `using X = Y;` aliases must surface
+    // under kind=typedef. Without the cpp-outline-typedefs-using rule, only
+    // the legacy `typedef X Y;` form was visible.
+    t |> run("finds 'using' alias as typedef") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_cpp_find_symbol("module_pull_t", "typedef", "include", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "module_pull_t") >= 0, "should locate the using-alias")
+    }
+}

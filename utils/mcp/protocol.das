@@ -32,6 +32,10 @@ require tools/eval_expression public
 require tools/describe_type public
 require tools/grep_usage public
 require tools/outline public
+require tools/cpp_grep_usage public
+require tools/cpp_find_symbol public
+require tools/cpp_outline public
+require tools/cpp_goto_definition public
 require tools/aot public
 require tools/lint_tool public
 require tools/detect_duplicates public
@@ -310,7 +314,8 @@ def handle_tools_list(id_json : string) : string {
             "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix with '=' for exact case-sensitive match (e.g. '=print')"),
             "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
             "file" => PropertySchema(_type = "string", description = "Optional .das file - if provided, searches all modules loaded by that file (including daslib)"),
-            "project" => PROJECT_PROP
+            "project" => PROJECT_PROP,
+            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true', for each result with a C++ implementation (builtin functions, handled types), append the resolved C++ source location via the cpp index. Adds ~2s on first call (lazy index build).")
         },
         ["query"]
     ))
@@ -341,7 +346,8 @@ def handle_tools_list(id_json : string) : string {
             "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
             "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
-            "project" => PROJECT_PROP
+            "project" => PROJECT_PROP,
+            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true' and the resolved symbol is a builtin (or has a C++ implementation), append the resolved C++ source location. Adds ~2s on first call (lazy index build).")
         },
         ["file", "line", "column"]
     ))
@@ -412,6 +418,47 @@ def handle_tools_list(id_json : string) : string {
                 "glob" => PropertySchema(_type = "string", description = "Glob pattern to scan multiple files (e.g. 'daslib/*.das')")
             },
             ["file"]
+        ))
+        result.tools |> emplace(make_tool(
+            "cpp_grep_usage",
+            "Parse-aware C++ identifier search across .cpp/.h/.hpp/.cc files using ast-grep + tree-sitter-cpp. Skips comments and strings. Searches src/, include/, modules/ by default; build*/, _deps/, 3rdparty/ are always excluded.",
+            {
+                "symbol" => PropertySchema(_type = "string", description = "Identifier to search for (e.g. 'addExternFunc', 'Module::addFunction')"),
+                "directory" => PropertySchema(_type = "string", description = "Directory to search (default: src/ include/ modules/). Repo-relative or absolute."),
+                "glob" => PropertySchema(_type = "string", description = "Extra file filter (gitignore syntax, '!pattern' for exclusion). Combined with default excludes."),
+                "context_lines" => PropertySchema(_type = "string", description = "Reserved for future context-line control (currently unused; ast-grep returns the matched line)")
+            },
+            ["symbol"]
+        ))
+        result.tools |> emplace(make_tool(
+            "cpp_find_symbol",
+            "Search C++ symbol DECLARATIONS by name + kind across .cpp/.h/.hpp/.cc files. Best-effort name extraction; complex templates and function-pointer typedefs may report partial names. Macro-expanded declarations (e.g. DAS_BIND_FN(foo)) are invisible to ast-grep.",
+            {
+                "query" => PropertySchema(_type = "string", description = "Case-insensitive substring search. Prefix '=' for exact case-sensitive match (e.g. '=Module')"),
+                "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'class', 'struct', 'enum', 'union', 'typedef', 'namespace', 'macro'. Empty matches any."),
+                "directory" => PropertySchema(_type = "string", description = "Directory to search (default: src/ include/ modules/)."),
+                "glob" => PropertySchema(_type = "string", description = "Extra file filter (gitignore syntax)")
+            },
+            ["query"]
+        ))
+        result.tools |> emplace(make_tool(
+            "cpp_outline",
+            "List C++ top-level declarations (function, class, struct, enum, union, typedef, namespace, macro) in a file or glob via tree-sitter-cpp. Works on broken code; no compile DB needed.",
+            {
+                "file" => PropertySchema(_type = "string", description = "Path to a single C++ file (.cpp/.h/.hpp/.cc), repo-relative or absolute"),
+                "glob" => PropertySchema(_type = "string", description = "Glob pattern to scan multiple files (e.g. 'src/builtin/*.cpp'). Searches src/ include/ modules/ when only `glob` is given.")
+            },
+            []
+        ))
+        result.tools |> emplace(make_tool(
+            "cpp_goto_definition",
+            "Given a cursor position in a C++ file, return up to 5 plausible definition locations. APPROXIMATE — no scope resolution, no overload disambiguation, no template specialization. For substring/usage search, prefer cpp_grep_usage.",
+            {
+                "file" => PropertySchema(_type = "string", description = "Path to a C++ file (.cpp/.h/.hpp/.cc)"),
+                "line" => PropertySchema(_type = "string", description = "Line number (1-based)"),
+                "column" => PropertySchema(_type = "string", description = "Column number (1-based)")
+            },
+            ["file", "line", "column"]
         ))
     }
     result.tools |> emplace(make_tool(
@@ -596,7 +643,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
-        return do_goto_definition(arg1, arg2, arg3, arg4, project)
+        return do_goto_definition(arg1, arg2, arg3, arg4, project, arg5 == "true")
     } elif (tool_name == "type_of") {
         return do_type_of(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "find_references") {
@@ -606,13 +653,21 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "list_modules") {
         return do_list_modules(arg1 == "true")
     } elif (tool_name == "find_symbol") {
-        return do_find_symbol(arg1, arg2, arg3, project)
+        return do_find_symbol(arg1, arg2, arg3, project, arg4 == "true")
     } elif (tool_name == "list_module_api") {
         return do_list_module_api(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "grep_usage") {
         return do_grep_usage(arg1, arg2, arg3, arg4)
     } elif (tool_name == "outline") {
         return do_outline(arg1, arg2)
+    } elif (tool_name == "cpp_grep_usage") {
+        return do_cpp_grep_usage(arg1, arg2, arg3, arg4)
+    } elif (tool_name == "cpp_find_symbol") {
+        return do_cpp_find_symbol(arg1, arg2, arg3, arg4)
+    } elif (tool_name == "cpp_outline") {
+        return do_cpp_outline(arg1, arg2)
+    } elif (tool_name == "cpp_goto_definition") {
+        return do_cpp_goto_definition(arg1, arg2, arg3)
     } elif (tool_name == "aot") {
         return do_aot(arg1, arg2, project)
     } elif (tool_name == "lint") {
@@ -717,7 +772,16 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
         }
         arg2 = get_string_arg(args, "inplace")
-    } elif (name == "goto_definition" || name == "type_of") {
+    } elif (name == "goto_definition") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "line")
+        arg3 = get_string_arg(args, "column")
+        arg4 = get_string_arg(args, "no_opt")
+        arg5 = get_string_arg(args, "with_cpp_source")
+    } elif (name == "type_of") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
             return json_rpc_error(id_json, -32602, "missing 'file' argument")
@@ -764,6 +828,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         }
         arg2 = get_string_arg(args, "kind")
         arg3 = get_string_arg(args, "file")
+        arg4 = get_string_arg(args, "with_cpp_source")
     } elif (name == "list_module_api") {
         arg1 = get_string_arg(args, "module")
         if (empty(arg1)) {
@@ -792,6 +857,35 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         if (empty(arg1) && empty(arg2)) {
             return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
         }
+    } elif (name == "cpp_grep_usage") {
+        arg1 = get_string_arg(args, "symbol")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
+        }
+        arg2 = get_string_arg(args, "directory")
+        arg3 = get_string_arg(args, "context_lines")
+        arg4 = get_string_arg(args, "glob")
+    } elif (name == "cpp_find_symbol") {
+        arg1 = get_string_arg(args, "query")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'query' argument")
+        }
+        arg2 = get_string_arg(args, "kind")
+        arg3 = get_string_arg(args, "directory")
+        arg4 = get_string_arg(args, "glob")
+    } elif (name == "cpp_outline") {
+        arg1 = get_string_arg(args, "file")
+        arg2 = get_string_arg(args, "glob")
+        if (empty(arg1) && empty(arg2)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
+        }
+    } elif (name == "cpp_goto_definition") {
+        arg1 = get_string_arg(args, "file")
+        if (empty(arg1)) {
+            return json_rpc_error(id_json, -32602, "missing 'file' argument")
+        }
+        arg2 = get_string_arg(args, "line")
+        arg3 = get_string_arg(args, "column")
     } elif (name == "list_modules") {
         arg1 = get_string_arg(args, "json")
     } elif (name == "aot") {

@@ -1,0 +1,52 @@
+id: cpp-outline-functions
+language: cpp
+rule:
+  kind: function_definition
+---
+id: cpp-outline-functions-decl
+language: cpp
+rule:
+  kind: declaration
+  has:
+    stopBy: end
+    kind: function_declarator
+---
+id: cpp-outline-classes
+language: cpp
+rule:
+  kind: class_specifier
+---
+id: cpp-outline-structs
+language: cpp
+rule:
+  kind: struct_specifier
+---
+id: cpp-outline-enums
+language: cpp
+rule:
+  kind: enum_specifier
+---
+id: cpp-outline-unions
+language: cpp
+rule:
+  kind: union_specifier
+---
+id: cpp-outline-typedefs
+language: cpp
+rule:
+  kind: type_definition
+---
+id: cpp-outline-typedefs-using
+language: cpp
+rule:
+  kind: alias_declaration
+---
+id: cpp-outline-namespaces
+language: cpp
+rule:
+  kind: namespace_definition
+---
+id: cpp-outline-macros
+language: cpp
+rule:
+  kind: preproc_def
