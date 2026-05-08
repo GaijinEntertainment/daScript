@@ -35,6 +35,18 @@ Same applies to lint/format: `mcp__daslang__lint` / `format_file`, not shell `bi
 
 Fall back to `Bash`/`Grep`/`Read` only when the MCP tool reports an error or the question is genuinely outside MCP coverage (RST prose, CMake, Python tooling).
 
+## Asking blind-mouse
+
+Before doing significant research on a "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" question, ask `mouse__ask`. blind-mouse (`utils/mouse/`) is a personal Q&A cache backed by curated `.md` answers — full vision in `utils/mouse/OVERVIEW.md`. Same deferred-tool dance as the daslang MCP: `ToolSearch select:mcp__mouse__<tool>` → invoke.
+
+| Reach for the mouse when… | Don't, when… |
+|---|---|
+| "how do I write a `[typefunction]` macro?" / "what's the right pattern for X?" / "why does Y behave this way?" | symbol lookup — use the daslang MCP (`find_symbol`, `grep_usage`, `find_references`) |
+| Discovered facts that don't fit any `skills/*.md` slot | categorical conventions — those belong in `skills/*.md` / `CLAUDE.md` |
+| Recurring questions you remember answering before but forget the answer | project state, branch status, who's doing what — use git/issues/memory |
+
+If `mouse__ask` returns nothing relevant and you do the research yourself, finish with `mouse__add` so the next session doesn't redo the work. If a returned answer is stale or wrong, edit the `.md` directly under `mouse-data/docs/` (it's a regular file, `Edit` works) and bump `last_verified`.
+
 ## Skill Files (REQUIRED)
 
 Task-specific instructions are split into skill files under `skills/`. You MUST read the relevant skill file(s) before performing the corresponding task.

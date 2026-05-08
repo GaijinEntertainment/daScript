@@ -76,6 +76,7 @@ SET(DAS_UTILS_TO_TEST
     detect-dupe
     find-dupe/tests
     hygiene
+    mouse/tests
 )
 
 FOREACH(_das ${DAS_UTILS_TO_TEST})
