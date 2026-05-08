@@ -267,23 +267,23 @@ MACRO(SETUP_CPP11 _targetName)
 	ENDIF()
 ENDMACRO()
 
-MACRO(CMAKE_TEXT_XXD project_name file_name)
+function(CMAKE_TEXT_XXD project_name file_name)
 	add_custom_command(
 		DEPENDS ${file_name}
 		OUTPUT ${file_name}.inc
 		VERBATIM
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
-			-P ${CMAKE_SOURCE_DIR}/CMakeXxdImpl.txt
+			-P ${CMAKE_CURRENT_LIST_DIR}/CMakeXxdImpl.txt
 	)
 
-	list(APPEND XXD_DEPENDS_LIST_${project_name} ${file_name}.inc)
+	set(XXD_DEPENDS_LIST_${project_name} ${XXD_DEPENDS_LIST_${project_name}} ${file_name}.inc PARENT_SCOPE)
  	execute_process(
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
-			-P ${CMAKE_SOURCE_DIR}/CMakeXxdImpl.txt
+			-P ${CMAKE_CURRENT_LIST_DIR}/CMakeXxdImpl.txt
 	)
-ENDMACRO()
+endfunction()
 
 MACRO(ADD_TARGET_PROJECT_XXD_DEPENDS target project_name)
 	IF(NOT TARGET ${project_name}_xxd)
