@@ -2203,20 +2203,23 @@ def is_option_field_type(td : TypeDeclPtr) : bool {
     if (td.baseType == Type.typeMacro && length(td.dimExpr) > 0 && (td.dimExpr[0] is ExprConstString)) {
         return (td.dimExpr[0] as ExprConstString).value == "Option"
     }
-    // Post-instantiation form: tStructure named `Option<T>` (the [template_structure] machinery stamps
-    // the type-arg into the struct name). Templates instantiated downstream show _module=<callee>, not
-    // the original "option" module — match on the name shape instead.
-    if (td.baseType == Type.tStructure && td.structType != null) {
-        let sname = string(td.structType.name)
-        if (sname == "Option" || sname |> starts_with("Option<")) {
-            return true
-        }
+    // Post-instantiation form: structural named tuple ``tuple<_has_value:bool; _value:T>``.
+    // Option is built by daslib/option's typemacro_function as a structural tuple — no
+    // module home, no Structure clone. Match the canonical shape.
+    if (td.baseType == Type.tTuple
+            && length(td.argTypes) == 2
+            && length(td.argNames) == 2
+            && td.argNames[0] == "_has_value"
+            && td.argNames[1] == "_value"
+            && td.argTypes[0].baseType == Type.tBool) {
+        return true
     }
     return false
 }
 
 def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
-    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], structType in `_value`.
+    // Unwrap Option<T> → T (or td unchanged); typeMacro carries T in dimExpr[1], the
+    // structural tuple form carries T in argTypes[1] (the `_value` slot).
     if (td == null) {
         return td
     }
@@ -2232,18 +2235,14 @@ def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
         }
         return clone_type((td.dimExpr[1] as ExprTypeDecl).typeexpr)
     }
-    // Post-instantiation form: tStructure named `Option` or `Option<T>`. Mirrors is_option_field_type's
-    // shape detection — module identity doesn't load-bear once we're inside an Option-shaped struct;
-    // template instantiation downstream of "option" stamps the callee's _module, not "option".
-    if (td.baseType == Type.tStructure && td.structType != null) {
-        let sname = string(td.structType.name)
-        if (sname == "Option" || sname |> starts_with("Option<")) {
-            for (f in td.structType.fields) {
-                if ("{f.name}" == "_value") {
-                    return clone_type(f._type)
-                }
-            }
-        }
+    // Post-instantiation form: structural named tuple ``tuple<_has_value:bool; _value:T>``.
+    if (td.baseType == Type.tTuple
+            && length(td.argTypes) == 2
+            && length(td.argNames) == 2
+            && td.argNames[0] == "_has_value"
+            && td.argNames[1] == "_value"
+            && td.argTypes[0].baseType == Type.tBool) {
+        return clone_type(td.argTypes[1])
     }
     return td
 }

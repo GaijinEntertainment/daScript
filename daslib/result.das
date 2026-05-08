@@ -26,17 +26,18 @@ require daslib/option public
 
 //! Tagged ``ok``/``err`` pair over payload ``T`` and error ``E``.
 //!
-//! When ``is_ok`` is ``true``, ``value`` is meaningful and ``error`` holds the zero
-//! value of ``E``. When ``is_ok`` is ``false``, ``error`` is meaningful and ``value``
-//! holds the zero value of ``T``. Prefer the accessor functions below over direct
-//! field reads.
-[template_structure(T, E)]
+//! Resolves to ``tuple<_is_ok : bool; _value : T; _error : E>`` — a structural
+//! type with no module home, so ``Result<T, E>`` reached through any chain of
+//! ``require ... public`` collapses to one canonical ``tTuple`` candidate
+//! (issue #2598). When ``is_ok`` is ``true``, ``value`` is meaningful and
+//! ``error`` holds the zero value of ``E``; when ``is_ok`` is ``false``,
+//! ``error`` is meaningful and ``value`` holds the zero value of ``T``. Prefer
+//! the accessor functions below over direct field reads.
+[template_tuple(T, E)]
 struct template Result {
     _is_ok : bool = false
-    @safe_when_uninitialized
-    _value : T
-    @safe_when_uninitialized
-    _error : E
+    @safe_when_uninitialized _value : T
+    @safe_when_uninitialized _error : E
 }
 
 //! Construct ``Result<T, E>`` carrying successful ``v``. Pass the error type as a witness::
@@ -64,8 +65,7 @@ def ok(v : auto(TT); etype : auto(EE)) {
 //! payloads where ``ok`` would clone.
 [template(etype)]
 def move_ok(var v : auto(TT); etype : auto(EE)) {
-    typedef RT = $Result < TT - const; EE - const >
-    return <- RT(_is_ok = true, _value <- v)
+    return <- (_is_ok = true, _value <- v, _error = default<EE>)
 }
 
 //! Construct ``Result<T, E>`` carrying error ``e``. Pass the value type as a witness::
@@ -93,8 +93,7 @@ def err(e : auto(EE); ttype : auto(TT)) {
 //! payloads where ``err`` would clone.
 [template(ttype)]
 def move_err(var e : auto(EE); ttype : auto(TT)) {
-    typedef RT = $Result < TT - const; EE - const >
-    return <- RT(_is_ok = false, _error <- e)
+    return <- (_is_ok = false, _value = default<TT>, _error <- e)
 }
 
 //! ``true`` iff the result is a successful ``ok``.

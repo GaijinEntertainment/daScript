@@ -157,7 +157,7 @@ namespace das {
             "removeRef", "removeConstant", "removeDim",
             "removeTemporary", "explicitConst", "aotAlias", "smartPtr",
             "smartPtrNative", "isExplicit", "isNativeDim", "isTag", "explicitRef",
-            "isPrivateAlias", "autoToAlias" };
+            "isPrivateAlias", "autoToAlias", "safeWhenUninitialized" };
         return ft;
     }
 

@@ -555,6 +555,134 @@ class TemplateStructure : AstStructureAnnotation {
     }
 }
 
+[structure_macro(name="template_tuple")]
+class TemplateTuple : AstStructureAnnotation {
+    //! Like ``[template_structure]``, but produces a typemacro that returns a
+    //! named tuple instead of cloning a structure. Result is structural — no
+    //! module home, no per-consumer cloning. Use for sum-type / discriminated-
+    //! pair shapes (``Option``, ``Result``) where structural identity across
+    //! transitive ``require ... public`` is the desired behavior (issue #2598).
+    //!
+    //! Field types may be arbitrary type expressions referencing the template
+    //! arguments — ``T``, ``array<T>``, ``tuple<int; T; E>``, etc. The runtime
+    //! body uses ``apply_template`` (templates_boost) to walk each field's
+    //! TypeDecl and substitute alias slots with the corresponding typemacro arg.
+    //!
+    //! ``@safe_when_uninitialized`` on a source field propagates to the
+    //! corresponding tuple element's ``TypeDeclFlags.safeWhenUninitialized``,
+    //! so ``default<Foo<T>>`` succeeds even when that field's payload type is
+    //! itself unsafe-when-uninitialized. The tuple's recursive ``unsafeInit``
+    //! walks its element types, so per-element marking gives the same effect
+    //! as the legacy struct-level ``[safe_when_uninitialized]`` did.
+    def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
+        if (length(args) == 0) {
+            errors := "expecting at least one template argument name"
+            return false
+        }
+        var argNames : array<string>
+        var ctxFnArguments : array<VariablePtr>
+        for (arg in args) {
+            if (arg.basicType != Type.tBool) {
+                errors := "template_tuple only supports type-arg names; got '{arg.name}' of {arg.basicType}"
+                return false
+            }
+            argNames |> push(string(arg.name))
+            var argVar <- new Variable(name := string(arg.name), at = st.at)
+            argVar._type = new TypeDecl(baseType = Type.alias, alias := "TypeDeclPtr")
+            ctxFnArguments.emplace(argVar)
+        }
+        let typeMacroFunctionName = string(st.name)
+        let nFields = length(st.fields)
+        // Alias TypeDecl for the source struct — at typemacro-execution time
+        // ``typeinfo ast_typedecl(type<$t(aliasT)>)`` resolves through the
+        // module-scoped alias to the source struct, giving us its field list
+        // (with template aliases like ``T`` / ``array<T>`` preserved).
+        var aliasT = new TypeDecl(baseType = Type.alias, alias := string(st.name))
+        // Per-field argName checks — guard the generic path before the
+        // recursive unifier runs.
+        var perFieldArgNameChecks : array<ExpressionPtr>
+        for (i, fld in iter_range(st.fields), st.fields) {
+            let fname = string(fld.name)
+            perFieldArgNameChecks |> push(qmacro_block() {
+                if (passArgument.argNames[$v(i)] != $v(fname)) {
+                    return null
+                }
+            })
+        }
+        // Rules-block statements — substitute each template-arg alias
+        // (``T``, ``E``, ...) with the runtime arg. The same rules drive
+        // both paths: in the concrete path the runtime arg is a fully
+        // resolved type (``int``), and in the generic path it's
+        // ``auto(<caller-name>)`` — exactly the binding-slot the recursive
+        // unifier (``inferGenericType`` / ``updateAliasMap``) needs.
+        var rulesStmts : array<ExpressionPtr>
+        for (an in argNames) {
+            rulesStmts |> push(qmacro_expr() {
+                rules |> replaceTypeWithTypeDecl($v(an), clone_type($i(an)));
+            })
+        }
+        var typeMacroFunction = qmacro_function(typeMacroFunctionName) $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
+            if (passArgument != null) {
+                if (passArgument.baseType != Type.tTuple) {
+                    return null
+                }
+                if (length(passArgument.argTypes) != $v(nFields)) {
+                    return null
+                }
+                if (length(passArgument.argNames) != $v(nFields)) {
+                    return null
+                }
+                $b(perFieldArgNameChecks)
+                // Build (argument_type, inferred_type) pairs from the source
+                // struct's fields and let ``infer_template_types`` run the
+                // standard unifier loop. ``apply_template`` substitutes each
+                // alias (``T``, ``E``, ...) with the runtime arg — concrete
+                // type when caller passed one, ``auto(<caller-name>)`` in
+                // generic context. Either form is what
+                // ``infer_template_types`` expects in ``argument_type``.
+                var src_type_g = typeinfo ast_typedecl(type<$t(aliasT)>)
+                var src_g = src_type_g.structType
+                var template_arguments : array<TypeMacroTemplateArgument>
+                for (i, fld in iter_range(src_g.fields), src_g.fields) {
+                    var fldType <- clone_type(fld._type)
+                    var fldAuto <- apply_template(fld.at, fldType) <| $(var rules : Template) {
+                        $b(rulesStmts)
+                    }
+                    template_arguments |> push(TypeMacroTemplateArgument(
+                        name = string(fld.name),
+                        argument_type = fldAuto,
+                        inferred_type = clone_type(passArgument.argTypes[i])))
+                }
+                return <- infer_template_types(passArgument, template_arguments)
+            }
+            // Concrete path: walk the source struct's fields and substitute
+            // template aliases with the runtime args via templates_boost's
+            // existing TypeDecl visitor — handles array<T>, tuple<int; T>, etc.
+            var src_type = typeinfo ast_typedecl(type<$t(aliasT)>)
+            var src = src_type.structType
+            var tt = new TypeDecl(baseType = Type.tTuple, at = macroArgument.at)
+            tt.argNames |> resize($v(nFields))
+            for (i, fld in iter_range(src.fields), src.fields) {
+                var fldType <- clone_type(fld._type)
+                var elt <- apply_template(fld.at, fldType) <| $(var rules : Template) {
+                    $b(rulesStmts)
+                }
+                tt.argTypes |> emplace_new <| elt
+                tt.argNames[i] := string(fld.name)
+                if (!(find_arg(fld.annotation, "safe_when_uninitialized") is nothing)) {
+                    tt.argTypes[i].flags |= TypeDeclFlags.safeWhenUninitialized
+                }
+            }
+            return <- tt
+        }
+        append_annotation(typeMacroFunction, "typemacro_boost", "typemacro_function", [])
+        if (!(compiling_module() |> add_function(typeMacroFunction))) {
+            panic("can't add function {typeMacroFunctionName}")
+        }
+        return true
+    }
+}
+
 [macro_function]
 def public is_custom_work_done(structType : Structure?) : bool {
     //! Returns true if custom work has already been performed on the template structure.
