@@ -166,6 +166,14 @@ def rebuild(db : SqlRunner; root : string) : int {
                 to_log(LOG_WARNING, "skipping {f}: invalid slug `{doc.frontmatter.slug}` (would be unretrievable via get)")
                 continue
             }
+            // get rebuilds the path as <docs>/{slug}.md, so a hand-edited
+            // file whose basename diverges from its frontmatter slug would
+            // be searchable but unfetchable.
+            let expected_basename = "{doc.frontmatter.slug}.md"
+            if (base_name(f) != expected_basename) {
+                to_log(LOG_WARNING, "skipping {f}: basename does not match slug (expected `{expected_basename}`, would be unretrievable via get)")
+                continue
+            }
             db |> insert(DocRow(
                 slug = doc.frontmatter.slug,
                 path = f,
@@ -238,7 +246,11 @@ def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
         return <- out
     }
     let kk = min(k, MAX_SEARCH_K)
-    let cleaned = strip(sanitize_fts5_query(query))
+    // to_lower: FTS5 keywords (OR/AND/NOT/NEAR) are uppercase-only operators.
+    // A user query like "foo OR bar" would tokenize to [foo, OR, bar] and
+    // OR-join to `foo OR OR OR bar` — invalid FTS syntax → empty result.
+    // Downcasing every token makes user-typed keywords inert.
+    let cleaned = to_lower(strip(sanitize_fts5_query(query)))
     if (empty(cleaned)) {
         return <- out
     }

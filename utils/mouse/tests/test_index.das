@@ -519,6 +519,75 @@ def test_rebuild_dedupes_duplicate_links(t : T?) {
     cleanup_root(root)
 }
 
+// `cmd_get`/`tool_get` build the path as `<docs>/{slug}.md`, never reading
+// `DocRow.path`. A file whose basename diverges from its frontmatter slug
+// (rename without re-frontmatter, or hand-edited slug) would be searchable
+// but unfetchable. Skip+warn during rebuild so search results never point
+// at unfetchable docs.
+[test]
+def test_rebuild_skips_basename_slug_mismatch(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let no_q : array<string>
+    seed_doc(t, root, "good", "Good", "good body", no_links, no_q)
+    // Frontmatter slug `actual-slug` written into a file named `weird.md`.
+    let fm = Frontmatter(
+        slug = "actual-slug",
+        title = "Mismatch",
+        created = "2026-05-08",
+        last_verified = "2026-05-08")
+    var werr : string
+    let weird_path = path_join(path_join(root, "docs"), "weird.md")
+    let wrote = write_doc(weird_path, fm, "weird body\n", werr)
+    t |> success(wrote, "seed mismatched basename: {werr}")
+    var n = -1
+    var slugs : array<string>
+    with_index_db(root) $(db) {
+        n = rebuild(db, root)
+        let rows <- _sql(db |> select_from(type<DocRow>) |> _select(_.slug))
+        for (s in rows) {
+            slugs |> push(s)
+        }
+    }
+    t |> equal(n, 1)  // only `good`; mismatched-basename doc skipped
+    t |> equal(length(slugs), 1)
+    if (length(slugs) >= 1) {
+        t |> equal(slugs[0], "good")
+    }
+    cleanup_root(root)
+}
+
+// FTS5 keywords (OR/AND/NOT/NEAR) are uppercase-only operators, and tokens
+// are OR-joined raw (no quoting). `foo OR bar` would tokenize to
+// [foo, OR, bar] and join to `foo OR OR OR bar` — invalid syntax, caught,
+// empty result. Downcasing every token makes user-typed keywords inert.
+[test]
+def test_search_handles_uppercase_fts_keywords(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha"]
+    seed_doc(t, root, "alpha", "Alpha title", "alpha bravo body", no_links, qs)
+    var hits_count = -1
+    var top_slug = ""
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let hits <- search(db, "alpha OR bravo", 5)
+        hits_count = length(hits)
+        if (length(hits) > 0) {
+            top_slug = hits[0].slug
+        }
+    }
+    t |> success(hits_count >= 1, "uppercase OR token must not break query")
+    t |> equal(top_slug, "alpha")
+    cleanup_root(root)
+}
+
 // A hand-edited `.md` with an invalid frontmatter slug (uppercase, dot,
 // leading underscore, etc.) would otherwise be indexed but unretrievable
 // via cmd_get/tool_get since they enforce is_valid_slug. Skip+warn so

@@ -125,6 +125,12 @@ def cmd_get(args : MouseArgs) {
             to_log(LOG_ERROR, "could not read {slug}: {err}")
             return
         }
+        // rebuild already skips parse_error docs from the index, so they
+        // can only reach get via an explicit slug. Warn-and-continue
+        // (rather than fail) — a partial header is still better than nothing.
+        if (!empty(doc.parse_error)) {
+            to_log(LOG_WARNING, "{slug}: {doc.parse_error}")
+        }
         print("# {doc.frontmatter.title}\n")
         print("slug: {doc.frontmatter.slug}\n")
         if (!empty(doc.frontmatter.created)) {
@@ -396,8 +402,18 @@ def tool_get(args : JsonValue?) : string {
             is_error = true
             return
         }
+        // rebuild already skips parse_error docs from the index. Surface a
+        // warning prefix so MCP callers see the diagnostic without losing
+        // the partial body.
+        var parse_warning : string
+        if (!empty(doc.parse_error)) {
+            parse_warning = "[W] {slug}: {doc.parse_error}\n\n"
+        }
         let froms <- linked_from(db, slug)
         output = build_string() $(var w) {
+            if (!empty(parse_warning)) {
+                w |> write(parse_warning)
+            }
             w |> write("# {doc.frontmatter.title}\n")
             w |> write("slug: {doc.frontmatter.slug}\n")
             if (!empty(doc.frontmatter.created)) {
