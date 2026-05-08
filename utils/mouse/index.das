@@ -170,7 +170,11 @@ def rebuild(db : SqlRunner; root : string) : int {
                 last_verified = doc.frontmatter.last_verified,
                 body_hash = doc.body_hash))
             for (link in doc.frontmatter.links) {
-                db |> insert(LinkRow(
+                // insert_or_ignore: a doc accidentally listing the same
+                // link twice in frontmatter would otherwise hit the
+                // UNIQUE(from_slug, to_slug) constraint and abort the
+                // whole rebuild transaction.
+                db |> insert_or_ignore(LinkRow(
                     from_slug = doc.frontmatter.slug,
                     to_slug = link))
             }
@@ -338,8 +342,13 @@ def add_doc(db : SqlRunner; root : string;
             question : string; body : string;
             slug_hint : string; force : bool) : AddOutcome {
     var outcome : AddOutcome
+    let clean_question = sanitize_question(question)
+    if (empty(clean_question)) {
+        outcome.error = "question is empty after sanitization"
+        return <- outcome
+    }
     if (!force) {
-        var similar <- dupe_check(db, question, 5)
+        var similar <- dupe_check(db, clean_question, 5)
         if (length(similar) > 0) {
             outcome.similar <- similar
             outcome.created = false
@@ -355,7 +364,7 @@ def add_doc(db : SqlRunner; root : string;
     if (!empty(slug_hint) && is_valid_slug(slug_hint)) {
         slug = dedupe_slug(slug_hint, existing)
     } else {
-        slug = slug_from_title_dedupe(question, existing)
+        slug = slug_from_title_dedupe(clean_question, existing)
     }
     if (empty(slug)) {
         slug = "doc-{ref_time_ticks()}"
@@ -363,7 +372,7 @@ def add_doc(db : SqlRunner; root : string;
     let now = today_iso(db)
     let fm = Frontmatter(
         slug = slug,
-        title = question,
+        title = clean_question,
         created = now,
         last_verified = now)
     let composed = build_string() $(var w) {
@@ -372,7 +381,7 @@ def add_doc(db : SqlRunner; root : string;
             w |> write("\n")
         }
         w |> write("\n## Questions\n")
-        w |> write("- {question}\n")
+        w |> write("- {clean_question}\n")
     }
     let path = path_join(docs_dir(root), "{slug}.md")
     var werr : string

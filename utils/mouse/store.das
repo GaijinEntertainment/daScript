@@ -8,6 +8,12 @@ require strings public
 require daslib/strings_boost public
 require daslib/fio public
 
+// Slug length cap. Shared by `is_valid_slug`, `slug_from_title`, and the
+// suffix-fits-too math in `dedupe_slug`. Untrusted callers (MCP/CLI) hit
+// `is_valid_slug` so any auto-generated slug must stay within this limit
+// or the resulting doc would be unfetchable.
+let MAX_SLUG_LEN = 128
+
 struct Frontmatter {
     slug : string
     title : string
@@ -166,36 +172,51 @@ def slug_from_title(title : string) : string {
     while (e > s && character_at(raw, e - 1) == '-') {  // nolint:PERF003
         e -= 1
     }
+    // Cap to MAX_SLUG_LEN so a long title can't produce a slug that
+    // `is_valid_slug` later rejects (making the doc unfetchable). Re-trim
+    // trailing dashes since the cut may land on a `-`.
+    if (e - s > MAX_SLUG_LEN) {
+        e = s + MAX_SLUG_LEN
+        while (e > s && character_at(raw, e - 1) == '-') {  // nolint:PERF003
+            e -= 1
+        }
+    }
     return s < e ? slice(raw, s, e) : ""
 }
 
 // A slug is the on-disk filename and SQL primary key. Untrusted input
 // (MCP JSON-RPC, CLI args) flows here, so reject anything that could
 // escape <root>/docs/ or break path joins. Shape: lowercase alnum, dash,
-// underscore; must start with alnum; capped at 128 chars.
+// underscore; must start with alnum; capped at MAX_SLUG_LEN chars.
 def is_valid_slug(s : string) : bool {
     let n = length(s)
-    if (n == 0 || n > 128) {
+    if (n == 0 || n > MAX_SLUG_LEN) {
         return false
     }
-    let first = character_at(s, 0)
-    let first_ok = (first >= '0' && first <= '9') || (first >= 'a' && first <= 'z')
-    if (!first_ok) {
-        return false
-    }
-    for (i in range(n)) {
-        let c = character_at(s, i)  // nolint:PERF003
-        let ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || c == '-' || c == '_'
-        if (!ok) {
-            return false
+    var ok = true
+    peek_data(s) $(bytes) {
+        let first = int(bytes[0])
+        let first_ok = (first >= '0' && first <= '9') || (first >= 'a' && first <= 'z')
+        if (!first_ok) {
+            ok = false
+            return
+        }
+        for (b in bytes) {
+            let c = int(b)
+            let valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || c == '-' || c == '_'
+            if (!valid) {
+                ok = false
+                return
+            }
         }
     }
-    return true
+    return ok
 }
 
 // Append `-2`, `-3`, ... to `base` until a free slot is found. Preserves
-// `base` verbatim — does NOT re-slugify, so a valid hint with `_` keeps
-// its `_` on collision.
+// `base` verbatim when there's no collision — does NOT re-slugify, so a
+// valid hint with `_` keeps its `_`. On collision, truncates `base` only
+// as much as needed to fit the suffix within MAX_SLUG_LEN.
 def dedupe_slug(base : string; existing : table<string>) : string {
     if (empty(base)) {
         return ""
@@ -203,20 +224,51 @@ def dedupe_slug(base : string; existing : table<string>) : string {
     if (!key_exists(existing, base)) {
         return base
     }
+    // Suffix is at most `-99999` (6 chars). Cap base to leave room.
+    let max_base = MAX_SLUG_LEN - 6
+    var capped = length(base) > max_base ? slice(base, 0, max_base) : base
+    while (!empty(capped) && character_at(capped, length(capped) - 1) == '-') {  // nolint:PERF003
+        capped = slice(capped, 0, length(capped) - 1)
+    }
+    if (empty(capped)) {
+        return ""
+    }
+    if (capped != base && !key_exists(existing, capped)) {
+        return capped
+    }
     var n = 2
     while (n < 100000) {
-        let candidate = "{base}-{n}"
+        let candidate = "{capped}-{n}"
         if (!key_exists(existing, candidate)) {
             return candidate
         }
         n++
     }
-    panic("slug collision overflow for {base}")
+    panic("slug collision overflow for {capped}")
     return ""
 }
 
 def slug_from_title_dedupe(title : string; existing : table<string>) : string {
     return dedupe_slug(slug_from_title(title), existing)
+}
+
+// Strip CR/LF (and surrounding whitespace) from a question. Without this,
+// MCP-supplied newlines in `question` would split the YAML `title:` line
+// across multiple lines and could inject sibling keys into frontmatter.
+// Callers must treat empty-after-sanitize as a rejection.
+def sanitize_question(q : string) : string {
+    let cleaned = build_string() $(var w) {
+        let n = length(q)
+        for (i in range(n)) {
+            let c = character_at(q, i)  // nolint:PERF003
+            if (c == '\n' || c == '\r') {
+                w |> write(" ")
+            } else {
+                w |> write(slice(q, i, i + 1))
+            }
+        }
+    }
+    return strip(cleaned)
 }
 
 // ─── body hash (FNV-1a 64-bit, decimal) ──────────────────────────────

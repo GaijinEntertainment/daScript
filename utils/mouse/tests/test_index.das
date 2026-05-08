@@ -444,6 +444,81 @@ def test_add_doc_rejects_traversal_slug_hint(t : T?) {
     cleanup_root(root)
 }
 
+// Newlines in `question` would otherwise split the YAML `title:` line and
+// could inject sibling frontmatter keys.
+[test]
+def test_add_doc_sanitizes_question_newlines(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    var written_path : string
+    var produced_slug : string
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let injected = "Hello\nslug: hijacked"
+        let outcome <- add_doc(db, root, injected, "answer", "", true)
+        written_path = outcome.written_path
+        produced_slug = outcome.slug
+    }
+    var doc : ParsedDoc
+    var err : string
+    let ok = read_doc(written_path, doc, err)
+    t |> success(ok, "read back: {err}")
+    t |> success(find(doc.frontmatter.title, "\n") < 0, "no newlines in title: {doc.frontmatter.title}")
+    t |> success(produced_slug != "hijacked", "slug not hijacked: {produced_slug}")
+    t |> success(doc.frontmatter.slug != "hijacked", "frontmatter slug not hijacked: {doc.frontmatter.slug}")
+    cleanup_root(root)
+}
+
+[test]
+def test_add_doc_rejects_blank_question(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    var created = false
+    var error : string
+    var n_files_after = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let outcome <- add_doc(db, root, "  \n\r  ", "answer", "", true)
+        created = outcome.created
+        error = outcome.error
+        let files <- list_doc_files(root)
+        n_files_after = length(files)
+    }
+    t |> success(!created, "must not create with blank question")
+    t |> success(!empty(error), "error message populated: {error}")
+    t |> equal(n_files_after, 0)
+    cleanup_root(root)
+}
+
+// A doc accidentally listing the same link twice in frontmatter must not
+// abort the rebuild transaction on UNIQUE(from_slug, to_slug).
+[test]
+def test_rebuild_dedupes_duplicate_links(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let dup_links <- ["target", "target", "target"]
+    let no_q : array<string>
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", dup_links, no_q)
+    var n_links_after = -1
+    var n_docs = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let link_rows <- _sql(db |> select_from(type<LinkRow>))
+        n_links_after = length(link_rows)
+        let doc_rows <- _sql(db |> select_from(type<DocRow>))
+        n_docs = length(doc_rows)
+    }
+    t |> equal(n_links_after, 1)
+    t |> equal(n_docs, 1)  // doc itself still indexed
+    cleanup_root(root)
+}
+
 [test]
 def test_add_doc_accepts_valid_slug_hint(t : T?) {
     let root = make_temp_root(t)

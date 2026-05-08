@@ -164,6 +164,58 @@ def test_dedupe_slug_no_collision_returns_verbatim(t : T?) {
     t |> equal(s, "any-shape_keeps")
 }
 
+// Long titles otherwise produce slugs that `is_valid_slug` rejects, making
+// the doc unfetchable via cmd_get/tool_get.
+[test]
+def test_slug_from_title_caps_at_max_len(t : T?) {
+    let s = slug_from_title(repeat("a", MAX_SLUG_LEN * 2))
+    t |> equal(length(s), MAX_SLUG_LEN)
+    t |> success(is_valid_slug(s), "capped slug passes is_valid_slug")
+}
+
+// If the cap lands on a `-` (dash inserted between word boundaries), the
+// trailing dash must be trimmed so the slug doesn't end with `-`.
+[test]
+def test_slug_from_title_cap_trims_trailing_dash(t : T?) {
+    // "aaa...(MAX-1) bbb...(200)" → raw has `-` exactly at position MAX-1.
+    let prefix = repeat("a", MAX_SLUG_LEN - 1)
+    let suffix = repeat("b", 200)
+    let title = "{prefix} {suffix}"
+    let s = slug_from_title(title)
+    t |> success(length(s) <= MAX_SLUG_LEN, "len {length(s)} <= {MAX_SLUG_LEN}")
+    t |> success(!ends_with(s, "-"), "no trailing dash after cap: {s}")
+}
+
+// On collision, base must be capped enough to leave room for `-N` suffix
+// so candidate stays within MAX_SLUG_LEN.
+[test]
+def test_dedupe_slug_caps_long_base_when_suffixing(t : T?) {
+    let huge = repeat("a", MAX_SLUG_LEN)
+    let huge_capped = repeat("a", MAX_SLUG_LEN - 6)
+    var existing : table<string>
+    existing |> insert(huge)
+    existing |> insert(huge_capped)
+    let s = dedupe_slug(huge, existing)
+    t |> success(length(s) <= MAX_SLUG_LEN, "deduped len {length(s)} <= {MAX_SLUG_LEN}")
+    t |> success(is_valid_slug(s), "deduped slug passes is_valid_slug: {s}")
+    t |> equal(s, "{huge_capped}-2")
+}
+
+// ─── question sanitization ──────────────────────────────────────────
+
+[test]
+def test_sanitize_question_replaces_newlines(t : T?) {
+    t |> equal(sanitize_question("hello\nworld"), "hello world")
+    t |> equal(sanitize_question("a\r\nb"), "a  b")
+    t |> equal(sanitize_question("  trim\nme  "), "trim me")
+}
+
+[test]
+def test_sanitize_question_blank_returns_empty(t : T?) {
+    t |> equal(sanitize_question("   \n\r  "), "")
+    t |> equal(sanitize_question(""), "")
+}
+
 // ─── slug validation ─────────────────────────────────────────────────
 
 [test]
@@ -187,10 +239,7 @@ def test_is_valid_slug_rejects(t : T?) {
     t |> success(!is_valid_slug("foo.md"), "contains dot")
     t |> success(!is_valid_slug("foo bar"), "space")
     t |> success(!is_valid_slug("FOO"), "uppercase")
-    var huge = ""
-    for (i in range(200)) {
-        huge += "a"
-    }
+    let huge = repeat("a", 200)
     t |> success(!is_valid_slug(huge), "over 128 chars")
 }
 
@@ -204,7 +253,7 @@ def test_read_doc_clears_stale_error(t : T?) {
         return
     }
     let root = unsafe(r.value)
-    var fm = Frontmatter(slug = "alpha", title = "Alpha", created = "2026-05-08", last_verified = "2026-05-08")
+    let fm = Frontmatter(slug = "alpha", title = "Alpha", created = "2026-05-08", last_verified = "2026-05-08")
     let path = path_join(root, "alpha.md")
     var werr : string
     let wrote = write_doc(path, fm, "body content\n", werr)
