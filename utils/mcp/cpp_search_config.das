@@ -36,12 +36,13 @@ let CPP_SEARCH_ALWAYS_EXCLUDE <- [
     "!**/.git/**"
 ]
 
-// File extensions to scan. Repo audit (2026-05) shows only .cpp/.h/.hpp
-// are used in the search scope (.c/.cc/.cxx/.hxx/.inl/.ipp don't appear).
-// Locking the list this way future-proofs against accidentally vendored
-// files in unusual extensions pulling noise into the index.
+// File extensions to scan. The daslang repo itself only uses .cpp/.h/.hpp,
+// but `.cc` is included so consumers who embed the MCP server in a codebase
+// that uses Google/Chromium-style `.cc` get coverage out of the box. Other
+// extensions (.c/.cxx/.hxx/.inl/.ipp) don't appear in either tree audited.
 let CPP_SEARCH_INCLUDE_GLOBS <- [
     "*.cpp",
+    "*.cc",
     "*.h",
     "*.hpp"
 ]
@@ -57,3 +58,10 @@ let CPP_SEARCH_INCLUDE_GLOBS <- [
 // repo-relative path here. Example:
 //   let CPP_SEARCH_INCLUDE_OVERRIDES <- ["modules/myExternalCppLib"]
 let CPP_SEARCH_INCLUDE_OVERRIDES : array<string>
+
+// Result-count caps for the cpp_* MCP tools. Raise these for codebases where
+// a common identifier (e.g. `Logger`, `Result`) legitimately has hundreds of
+// declarations and the default cutoff hides the one you want. Lower them to
+// keep tool output compact.
+let CPP_MAX_FIND_RESULTS = 50      // cpp_find_symbol — declaration matches per query
+let CPP_MAX_GOTO_CANDIDATES = 5    // cpp_goto_definition — ranked candidates shown

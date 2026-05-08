@@ -6,26 +6,37 @@ require common public
 require daslib/json
 require daslib/json_boost
 
+// Validate via the same mechanism callers use (popen_argv → CreateProcess on
+// Windows). A shell-based check would falsely accept a name like "sg" when
+// only `sg.cmd` exists in PATH — `cmd.exe` resolves the .cmd shim, but
+// CreateProcess does NOT auto-extend bare names to .cmd/.bat, so production
+// `popen_argv(["sg", ...])` calls would fail with exit -1 even though
+// detection passed. Cross-checking via popen_argv keeps the two paths in sync.
 def private try_ast_grep(cmd : string) : bool {
     var found = false
-    unsafe {
-        popen("{cmd} --version") $(f) {
-            if (f == null) {
-                return
-            }
-            let line = fgets(f)
-            if (find(line, "ast-grep") >= 0) {
-                found = true
-            }
+    let rc = unsafe(popen_argv([cmd, "--version"], 5.0, $(f) {
+        if (f == null) {
+            return
         }
-    }
-    return found
+        let line = unsafe(fread_to_eof(f))
+        if (find(line, "ast-grep") >= 0) {
+            found = true
+        }
+    }))
+    return found && rc == 0
 }
 
 def detect_ast_grep() : string {
-    // try bare "sg" first (works when .venv is activated or sg is on PATH)
-    if (try_ast_grep("sg")) {
-        return "sg"
+    // try bare "sg" first — works on Linux/macOS (execvp resolves PATH) and
+    // on Windows when a real `sg.exe` is on PATH. On Windows-only npm installs
+    // (`npm install -g @ast-grep/cli`) the global PATH only gets `sg.cmd`, so
+    // CreateProcess(NULL, "sg ...") fails — fall through to the explicit
+    // `.cmd` / `.exe` / `.bat` candidates so the shim is picked up.
+    let candidates = ["sg", "sg.exe", "sg.cmd", "sg.bat"]
+    for (c in candidates) {
+        if (try_ast_grep(c)) {
+            return c
+        }
     }
     // try .venv paths (not activated): Scripts/ on Windows, bin/ on Linux/macOS
     let das_root = get_das_root()

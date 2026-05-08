@@ -142,9 +142,9 @@ the lazily-built C++ index.  First call costs ~2 s (one full
 ``src/include/modules`` scan); subsequent calls cost ~150 ms (a
 git-state staleness signature: ``git rev-parse HEAD`` + filtered
 ``git status`` + per-file mtimes + the search-config file's mtime).
-The index rebuilds automatically when relevant ``.cpp/.h/.hpp`` files
-in the search scope change, when ``HEAD`` moves, or when the search
-config is edited.  Default off -- opt in when the question is "where
+The index rebuilds automatically when relevant ``.cpp/.cc/.h/.hpp``
+files in the search scope change, when ``HEAD`` moves, or when the
+search config is edited.  Default off -- opt in when the question is "where
 is X *actually* implemented", not when just enumerating symbols.
 
 Program introspection
@@ -230,7 +230,8 @@ C++ source search (tree-sitter-cpp)
 Parallel parse-aware tools for the C++ side of the codebase, backed by
 ast-grep with tree-sitter-cpp.  Search scope and exclusions are
 configured in :ref:`utils_mcp_cpp_search_config` (defaults: ``src/``,
-``include/``, ``modules/`` --- locked to ``.cpp``/``.h``/``.hpp`` ---
+``include/``, ``modules/`` --- locked to
+``.cpp``/``.cc``/``.h``/``.hpp`` ---
 with ``build*/``, ``cmake-build-*/``, ``CMakeFiles/``, ``_deps/``,
 ``3rdparty/``, ``.git/`` always excluded plus an auto-exclude for any
 folder that contains a ``.git`` file or directory).  All tools are
@@ -243,8 +244,13 @@ conditional on the ``sg`` CLI.
    * - Tool
      - Description
    * - ``cpp_grep_usage``
-     - Parse-aware identifier search across ``.cpp``/``.h``/``.hpp``
-       files via ``sg run -p``.  Skips comments and strings.
+     - Parse-aware identifier search across ``.cpp``/``.cc``/``.h``/``.hpp``
+       files.  Driven by a generated multi-kind ast-grep rule file
+       (``identifier`` / ``type_identifier`` / ``namespace_identifier`` /
+       ``field_identifier``) so usages in type position
+       (``Foo writer;``), qualified calls (``Foo::method()``) and
+       base-class clauses (``class Bar : public Foo``) are all caught.
+       Skips comments and strings.  Hits deduped by ``(file, line)``.
    * - ``cpp_find_symbol``
      - Search C++ symbol *declarations* by name + kind.  ``kind`` accepts
        ``function``, ``class``, ``struct``, ``enum``, ``union``,
@@ -281,8 +287,10 @@ declares four constants:
   always applied (``build*/``, ``cmake-build-*/``, ``CMakeFiles/``,
   ``_deps/``, ``3rdparty/``, ``.git/``).
 - ``CPP_SEARCH_INCLUDE_GLOBS`` --- file-extension lock; defaults to
-  ``["*.cpp", "*.h", "*.hpp"]``.  Repo audit shows these cover 99.3%
-  of the C++ surface; extending this is rarely needed.
+  ``["*.cpp", "*.cc", "*.h", "*.hpp"]``.  ``.cc`` is included so
+  consumers who embed the MCP server in a Google/Chromium-style
+  codebase get coverage out of the box; the daslang repo itself only
+  uses ``.cpp``/``.h``/``.hpp``.
 - ``CPP_SEARCH_INCLUDE_OVERRIDES`` --- repo-relative paths to
   re-include even when the auto-``.git``-folder rule would have
   excluded them.  Empty by default.

@@ -347,7 +347,7 @@ def handle_tools_list(id_json : string) : string {
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
             "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
             "project" => PROJECT_PROP,
-            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true' and the resolved symbol is a builtin (or has a C++ implementation), append the resolved C++ source location. Adds ~2s on first call (lazy index build).")
+            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true' and the resolved symbol is a builtin function or a handled type, append the resolved C++ source location. Adds ~2s on first call (lazy index build).")
         },
         ["file", "line", "column"]
     ))
@@ -443,10 +443,11 @@ def handle_tools_list(id_json : string) : string {
         ))
         result.tools |> emplace(make_tool(
             "cpp_outline",
-            "List C++ top-level declarations (function, class, struct, enum, union, typedef, namespace, macro) in a file or glob via tree-sitter-cpp. Works on broken code; no compile DB needed.",
+            "List C++ declarations (function, class, struct, enum, union, typedef, namespace, macro) in a file or glob via tree-sitter-cpp. Output groups entries by file and shows containment (methods nested under their class, classes under their namespace). Functions show the full signature; template specializations include their args. Works on broken code; no compile DB needed.",
             {
                 "file" => PropertySchema(_type = "string", description = "Path to a single C++ file (.cpp/.h/.hpp/.cc), repo-relative or absolute"),
-                "glob" => PropertySchema(_type = "string", description = "Glob pattern to scan multiple files (e.g. 'src/builtin/*.cpp'). Searches src/ include/ modules/ when only `glob` is given.")
+                "glob" => PropertySchema(_type = "string", description = "Glob pattern to scan multiple files (e.g. 'src/builtin/*.cpp'). Searches src/ include/ modules/ when only `glob` is given."),
+                "mode" => PropertySchema(_type = "string", description = "'' (default, auto: tree if any nesting exists, else flat), 'tree' (force indented hierarchy), or 'flat' (one entry per line with `Outer::Inner::name` qualified prefixes)")
             },
             []
         ))
@@ -665,7 +666,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "cpp_find_symbol") {
         return do_cpp_find_symbol(arg1, arg2, arg3, arg4)
     } elif (tool_name == "cpp_outline") {
-        return do_cpp_outline(arg1, arg2)
+        return do_cpp_outline(arg1, arg2, arg3)
     } elif (tool_name == "cpp_goto_definition") {
         return do_cpp_goto_definition(arg1, arg2, arg3)
     } elif (tool_name == "aot") {
@@ -876,6 +877,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } elif (name == "cpp_outline") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "glob")
+        arg3 = get_string_arg(args, "mode")
         if (empty(arg1) && empty(arg2)) {
             return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
         }

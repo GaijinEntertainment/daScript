@@ -87,6 +87,11 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
     // scan cost once per server lifetime, then O(1) per goto.
     var candidates <- cpp_lookup_all_by_name(ident)
     if (empty(candidates)) {
+        let why = cpp_index_status()
+        if (!empty(why)) {
+            // Disambiguate "really no matches" from "the index couldn't build".
+            return make_tool_result("No definition found for '{ident}' (cpp index unavailable: {why})", true)
+        }
         return make_tool_result("No definition found for '{ident}'")
     }
     // Rank: same file > same dir > shorter path
@@ -105,7 +110,7 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
         }
         return length(a.file) < length(b.file)
     }
-    let max_show = min(5, length(candidates))
+    let max_show = min(CPP_MAX_GOTO_CANDIDATES, length(candidates))
     let output = build_string() $(var w) {
         if (length(candidates) > max_show) {
             w |> write("Found {length(candidates)} candidates for '{ident}' (showing top {max_show}; approximate — no scope resolution):\n\n")

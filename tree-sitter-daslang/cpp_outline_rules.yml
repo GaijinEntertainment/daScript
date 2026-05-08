@@ -11,6 +11,14 @@ rule:
     stopBy: end
     kind: function_declarator
 ---
+id: cpp-outline-functions-field
+language: cpp
+rule:
+  kind: field_declaration
+  has:
+    stopBy: end
+    kind: function_declarator
+---
 id: cpp-outline-classes
 language: cpp
 rule:

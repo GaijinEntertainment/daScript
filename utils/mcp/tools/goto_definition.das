@@ -17,7 +17,12 @@ struct DefinitionResult {
     line : int
     column : int
     snippet : string    // source lines around the definition
-    cppName : string    // C++ name for builtin functions / handled types (when resolvable)
+    cppName : string    // C++ symbol name for builtin functions and handled types.
+                        //   Set by:
+                        //     - ExprCall to a builtin function → BuiltInFunction.cppName
+                        //     - Type fallback on a handled type → TypeAnnotation.cppName
+                        //   NOT yet populated for ExprVar of a handled type or ExprField
+                        //   on a handled-type parent — see "v2 roadmap" in the file footer.
 }
 
 // Read a few lines from a file around a given line number
@@ -198,6 +203,19 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     // Fallback: resolve type reference from _type
     if (expr._type != null) {
         let td = expr._type
+        // Handled type (C++-backed via MAKE_TYPE_FACTORY / addAnnotation) →
+        // emit kind=handled with cppName so `with_cpp_source` can redirect.
+        // This mirrors the path `find_symbol` already takes for handled
+        // type entries.
+        if (td.isHandle && td.annotation != null) {
+            let ann = td.annotation
+            return DefinitionResult(
+                found = true,
+                kind = "handled",
+                name = string(ann.name),
+                cppName = string(ann.cppName)
+            )
+        }
         if (td.structType != null) {
             let st = td.structType
             let file = lineinfo_file(st.at)
@@ -246,7 +264,12 @@ def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bo
                 if (cpp_lookup_by_name(defn.cppName, match)) {
                     write(w, " ({match.file}:{match.line})")
                 } else {
-                    write(w, " (not located)")
+                    let why = cpp_index_status()
+                    if (!empty(why)) {
+                        write(w, " (index unavailable: {why})")
+                    } else {
+                        write(w, " (not located)")
+                    }
                 }
             }
             write(w, "\n")
@@ -288,3 +311,40 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         }
     }
 }
+
+// ── v2 roadmap (cppName population gaps) ─────────────────────────────
+//
+// `with_cpp_source` currently fires the cpp redirect for:
+//   ✓ ExprCall to a builtin function           (BuiltInFunction.cppName)
+//   ✓ Type fallback on a handled type           (TypeAnnotation.cppName)
+//
+// Not yet wired up — drop into `resolve_definition` when needed:
+//
+//   • ExprVar of a handled type
+//       e.g. `var ctx : Context; ctx |> ...` — goto on `ctx` returns
+//       kind=variable with no cppName. Could populate from
+//       `variable._type.annotation.cppName` when `variable._type.isHandle`.
+//
+//   • ExprField on a handled-type parent
+//       e.g. `func.name` where `func : Function?` (handled type) — goto on
+//       `name` falls through (no `structType`) and returns "not found".
+//       Needs an `is_basic_structure_annotation`-aware path that walks the
+//       annotation's fields and emits cppName for the matched field.
+//
+//   • ExprCall to an addExtern'd non-builtin
+//       Most addExterns are flagged builtIn so the existing branch catches
+//       them. If a future overload escapes that flag, fall back to
+//       `c.func.cppName` (Function.cppName).
+//
+// The shared theme: every code path that already produces a kind!=builtin
+// DefinitionResult could optionally fold in cppName when the underlying
+// declaration has C++ backing — but keep `with_cpp_source` semantics narrow
+// (one redirect per result, no speculative scanning).
+//
+// Test gap: the handled-type fallback path is currently exercised only
+// indirectly (via the parallel `find_symbol` test path that uses the same
+// `TypeAnnotation.cppName`). A direct goto test needs a fixture that uses
+// a handled type without pulling in `rtti`/`ast` (they're not registered as
+// user-script-visible modules in the default MCP context). When v2 lands,
+// add such a fixture (e.g. via a small custom-typed module or a scratch
+// file written at test time) and assert `→ cpp:` resolves.

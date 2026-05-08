@@ -35,7 +35,12 @@ def write_cpp_redirect(var w : StringBuilderWriter; cppName : string; with_cpp_s
     if (cpp_lookup_by_name(cppName, match)) {
         write(w, "\n      → cpp: {match.file}:{match.line}")
     } else {
-        write(w, "\n      → cpp: {cppName} (not located)")
+        let why = cpp_index_status()
+        if (!empty(why)) {
+            write(w, "\n      → cpp: {cppName} (index unavailable: {why})")
+        } else {
+            write(w, "\n      → cpp: {cppName} (not located)")
+        }
     }
 }
 

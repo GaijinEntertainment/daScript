@@ -14,17 +14,19 @@ require math public
 require daslib/fio public
 
 let CPP_RULES_FILE = "tree-sitter-daslang/cpp_outline_rules.yml"
-let CPP_MAX_FIND_RESULTS = 50
 
 let private CPP_SEARCH_CONFIG_PATH = "utils/mcp/cpp_search_config.das"
 
 struct CppMatch {
-    file : string       // relative to das_root, generic-path
-    line : int          // 1-based
-    kind : string       // function/class/struct/enum/union/typedef/namespace/macro
-    name : string       // extracted identifier (best-effort, unqualified)
-    qualified : string  // fully-qualified name where available (e.g. "Module::addFunction")
-    text : string       // first line of declaration
+    file : string         // relative to das_root, generic-path
+    line : int            // 1-based start line
+    end_line : int        // 1-based end line (inclusive); equals `line` for single-line matches
+    kind : string         // function/class/struct/enum/union/typedef/namespace/macro
+    name : string         // extracted identifier (best-effort, unqualified)
+    qualified : string    // fully-qualified name where available (e.g. "Module::addFunction")
+    template_args : string // "<float>" / "<T, U>" with surrounding angles for templated entries; "" otherwise
+    signature : string    // for functions: collapsed param list with return type (e.g. "void foo(int x) const"); "" for non-functions
+    text : string         // first line of declaration (kept for fallback rendering)
 }
 
 def cpp_default_search_dirs() : array<string> {
@@ -126,14 +128,12 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
             var rest = strip(slice(line, kw_pos + length(kw)))
             // skip optional API macros (any UPPER_SNAKE token before the name)
             while (length(rest) > 0 && (first_character(rest) >= 'A' && first_character(rest) <= 'Z')) {
-                // Keep looking — only skip if the first token is followed by a space and the *next*
-                // token starts with another uppercase letter or is a known macro.
                 let first_space = find(rest, " ")
                 if (first_space < 0) {
                     break
                 }
                 let head = slice(rest, 0, first_space)
-                // Heuristic: if the head is all uppercase/underscore and ≥ 3 chars, treat it as macro and skip.
+                // Heuristic: if the head is all uppercase/underscore and ≥ 3 chars, treat it as macro.
                 var all_upper = true
                 for (i in range(length(head))) {
                     let c = character_at(head, i) // nolint:PERF002,PERF003
@@ -142,11 +142,18 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
                         break
                     }
                 }
-                if (all_upper && length(head) >= 3) {
-                    rest = strip(slice(rest, first_space + 1))
-                } else {
+                if (!all_upper || length(head) < 3) {
                     break
                 }
+                // Don't skip when the next token isn't another identifier — that would mean
+                // `head` is the actual class name (e.g. `class DAS_API LOG : public ...` —
+                // we already skipped DAS_API; LOG looks like a macro by shape, but the
+                // following `:` proves it's the class name).
+                let after = strip(slice(rest, first_space + 1))
+                if (empty(after) || first_character(after) == ':' || first_character(after) == '<' || first_character(after) == '{' || first_character(after) == ';') {
+                    break
+                }
+                rest = strip(slice(rest, first_space + 1))
             }
             // name ends at '{', ':', '<', whitespace, or ';'
             var nend = length(rest)
@@ -267,6 +274,237 @@ def cpp_extract_name(text : string; kind : string) : string {
     return pair._0
 }
 
+// Collapse all whitespace runs (newlines, tabs, multi-space) to a single space.
+// Used to normalize multi-line declarations down to one display line.
+def cpp_collapse_whitespace(s : string) : string {
+    var out : array<string>
+    let n = length(s)
+    var i = 0
+    while (i < n) {
+        while (i < n && (character_at(s, i) == ' ' || character_at(s, i) == '\t' || character_at(s, i) == '\n' || character_at(s, i) == '\r')) { // nolint:PERF002,PERF003
+            i++
+        }
+        if (i >= n) {
+            break
+        }
+        let start = i
+        while (i < n && character_at(s, i) != ' ' && character_at(s, i) != '\t' && character_at(s, i) != '\n' && character_at(s, i) != '\r') { // nolint:PERF002,PERF003
+            i++
+        }
+        out |> push(slice(s, start, i))
+    }
+    return join(out, " ")
+}
+
+// For functions: extract the signature — return type + name + balanced (params) + trailing
+// qualifiers (const/noexcept/override/final). Multi-line input is collapsed to a single line.
+// Returns "" for non-functions or when the text doesn't look parsable.
+def cpp_extract_signature(full_text : string; kind : string) : string {
+    if (kind != "function") {
+        return ""
+    }
+    let paren_open = find_open_paren(full_text)
+    if (paren_open <= 0) {
+        return ""
+    }
+    // Walk balanced parens forward to find matching ')'.
+    var depth = 1
+    var i = paren_open + 1
+    let n = length(full_text)
+    while (i < n && depth > 0) {
+        let ch = character_at(full_text, i) // nolint:PERF002,PERF003
+        if (ch == '(') {
+            depth++
+        } elif (ch == ')') {
+            depth--
+        }
+        i++
+    }
+    if (depth != 0) {
+        return ""
+    }
+    let paren_close = i - 1
+    // Walk back from '(' over whitespace, then over operator chars + identifier chars
+    // to find the start of the function name.
+    var j = paren_open - 1
+    while (j >= 0 && (character_at(full_text, j) == ' ' || character_at(full_text, j) == '\t' || character_at(full_text, j) == '\n')) { // nolint:PERF002,PERF003
+        j--
+    }
+    while (j >= 0 && is_cpp_op_char(character_at(full_text, j))) { // nolint:PERF002,PERF003
+        j--
+    }
+    while (j >= 0 && is_cpp_ident_char(character_at(full_text, j))) { // nolint:PERF002,PERF003
+        j--
+    }
+    let name_start = j + 1
+    // Return type spans from the previous statement boundary up to name_start.
+    var ret_start = name_start
+    while (ret_start > 0) {
+        let prev = character_at(full_text, ret_start - 1) // nolint:PERF002,PERF003
+        if (prev == '{' || prev == '}' || prev == ';') {
+            break
+        }
+        ret_start--
+    }
+    // Skip leading whitespace in return type.
+    while (ret_start < name_start && (character_at(full_text, ret_start) == ' ' || character_at(full_text, ret_start) == '\t' || character_at(full_text, ret_start) == '\n')) { // nolint:PERF002,PERF003
+        ret_start++
+    }
+    let ret_type = strip(cpp_collapse_whitespace(slice(full_text, ret_start, name_start)))
+    let name_part = strip(cpp_collapse_whitespace(slice(full_text, name_start, paren_open)))
+    let params = cpp_collapse_whitespace(slice(full_text, paren_open, paren_close + 1))
+    // Trailing qualifiers between ')' and '{' or ';'.
+    var trailing_end = n
+    for (k in range(paren_close + 1, n)) {
+        let ch = character_at(full_text, k) // nolint:PERF002,PERF003
+        if (ch == '{' || ch == ';') {
+            trailing_end = k
+            break
+        }
+    }
+    let trailing = strip(cpp_collapse_whitespace(slice(full_text, paren_close + 1, trailing_end)))
+    var result = empty(ret_type) ? "" : "{ret_type} "
+    result = "{result}{name_part}{params}"
+    if (!empty(trailing)) {
+        result = "{result} {trailing}"
+    }
+    return result
+}
+
+// Extract template specialization args ("<float>" / "<T*>") for a struct/class/union
+// or function template specialization. Returns empty when there are no args.
+def cpp_extract_template_args(full_text : string; kind : string; name : string) : string {
+    if (empty(name)) {
+        return ""
+    }
+    var search_name = name
+    let last_sep = rfind(search_name, "::")
+    if (last_sep >= 0) {
+        search_name = slice(search_name, last_sep + 2)
+    }
+    if (starts_with(search_name, "operator")) {
+        return ""  // operator<< / operator< would false-match
+    }
+    let n = length(full_text)
+    // Bound the search to the declaration prefix.
+    var bound = n
+    if (kind == "function") {
+        let p = find_open_paren(full_text)
+        if (p > 0) {
+            bound = p
+        }
+    } elif (kind == "struct" || kind == "class" || kind == "union") {
+        for (i in range(n)) {
+            let c = character_at(full_text, i) // nolint:PERF002,PERF003
+            if (c == '{' || c == ';') {
+                bound = i
+                break
+            }
+        }
+    } else {
+        return ""
+    }
+    let needle = "{search_name}<"
+    let pos = find(full_text, needle)
+    if (pos < 0 || pos >= bound) {
+        return ""
+    }
+    // 'pos' is start of name; '<' is at pos + length(name).
+    let lt = pos + length(search_name)
+    var depth = 1
+    var i2 = lt + 1
+    while (i2 < n && depth > 0) {
+        let ch = character_at(full_text, i2) // nolint:PERF002,PERF003
+        if (ch == '<') {
+            depth++
+        } elif (ch == '>') {
+            depth--
+        }
+        i2++
+    }
+    if (depth != 0) {
+        return ""
+    }
+    return slice(full_text, lt, i2)
+}
+
+// Escape regex meta-characters so the input string matches itself literally.
+// Used when generating ast-grep rules from arbitrary user-supplied symbol names
+// (e.g. operator overloads with `+` / `<` characters).
+def cpp_regex_escape(s : string) : string {
+    return build_string() $(var w) {
+        let n = length(s)
+        for (i in range(n)) {
+            let c = character_at(s, i) // nolint:PERF002,PERF003
+            if (c == '.' || c == '+' || c == '*' || c == '?' || c == '(' || c == ')'
+                || c == '[' || c == ']' || c == '{' || c == '}' || c == '|'
+                || c == '^' || c == '$' || c == '\\') {
+                w |> write("\\")
+            }
+            w |> write(slice(s, i, i + 1))
+        }
+    }
+}
+
+// Process-local temp path for the generated grep rule file. Allocated lazily
+// on first call via `create_temp_file_result` (which yields a unique path
+// inside the system temp directory — `$TMPDIR` on macOS/Linux, `%TEMP%` on
+// Windows — so concurrent MCP server instances don't race on the same path)
+// and reused for subsequent calls so we don't accumulate one file per call.
+var private CPP_GREP_RULE_PATH : string
+
+// Generate an ast-grep multi-rule YAML file that matches `symbol` as any C++
+// identifier-leaf node kind: identifier, type_identifier, namespace_identifier,
+// field_identifier. The single-pattern form (`sg run -p X`) only matches bare
+// identifier expressions, missing every use where the symbol is a child of a
+// larger node (`X writer;`, `X::method()`, `class Y : public X`).
+//
+// On success, returns the path to the written file (process-local, overwritten
+// on every call). On failure (path-allocation or write error), returns `""` and
+// populates `err_message` so the caller can surface a clear error instead of
+// running `sg scan -r <stale_or_missing_path>`.
+def cpp_write_grep_rule_file(symbol : string; var err_message : string&) : string {
+    if (empty(CPP_GREP_RULE_PATH)) {
+        let r = create_temp_file_result("das_mcp_grep", ".yml")
+        if (r is value) {
+            CPP_GREP_RULE_PATH := unsafe(r.value)
+        } else {
+            // Fallback to system tmpdir with a stable name; concurrent server
+            // instances may race here but that's strictly better than a hard
+            // failure on platforms where create_temp_file misbehaves.
+            let td = temp_directory_result()
+            let dir = (td is value) ? unsafe(td.value) : "."
+            CPP_GREP_RULE_PATH := path_join(dir, "das_mcp_grep_rule.yml")
+        }
+    }
+    let escaped = cpp_regex_escape(symbol)
+    let kinds = ["identifier", "type_identifier", "namespace_identifier", "field_identifier"]
+    let body = build_string() $(var w) {
+        for (i in range(length(kinds))) {
+            if (i > 0) {
+                w |> write("---\n")
+            }
+            w |> write("id: cpp-grep-{kinds[i]}\n")
+            w |> write("language: cpp\n")
+            w |> write("rule:\n")
+            w |> write("  kind: {kinds[i]}\n")
+            w |> write("  regex: '^{escaped}$'\n")
+        }
+    }
+    var success = false
+    fopen(CPP_GREP_RULE_PATH, "wb") $(fw) {
+        if (fw != null) {
+            fw |> fprint(body)
+            success = true
+        }
+    }
+    if (!success) {
+        err_message := "Failed to write ast-grep rule file: {CPP_GREP_RULE_PATH}"
+        return ""
+    }
+    return CPP_GREP_RULE_PATH
+}
+
 // Walk `search_dirs` looking for sub-folders that contain a `.git` file or
 // directory — submodules, daspkg-installed packages, FetchContent destinations,
 // ad-hoc clones. Returns `--globs` exclusion patterns for each, except those
@@ -274,14 +512,19 @@ def cpp_extract_name(text : string; kind : string) : string {
 def cpp_collect_git_excludes(search_dirs : array<string>; overrides : array<string>) : array<string> {
     var excl : array<string>
     var seen : table<string; bool>
+    let das_root = get_das_root()
     for (sd in search_dirs) {
-        let sd_base = base_name(sd)  // e.g. "modules" from "/abs/.../modules"
+        // Use the full repo-relative prefix, not just `base_name(sd)` — so that
+        // a nested search root like `modules/dasSQLITE` produces overrides
+        // keyed `modules/dasSQLITE/...`, matching how `CPP_SEARCH_INCLUDE_OVERRIDES`
+        // is documented (repo-relative generic paths).
+        let sd_rel = to_generic_path(make_relative_path(sd, das_root))
         dir_rec(sd) $(filename, is_dir) {
             if (base_name(filename) != ".git") {
                 return
             }
             let inner_repo = dir_name(filename)  // ".daspkg_cache/index"
-            let rel = empty(inner_repo) ? sd_base : "{sd_base}/{to_generic_path(inner_repo)}"
+            let rel = empty(inner_repo) ? sd_rel : "{sd_rel}/{to_generic_path(inner_repo)}"
             if (key_exists(seen, rel)) {
                 return
             }
@@ -361,11 +604,19 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
     if (empty(raw) || raw == "[]") {
         return <- entries
     }
+    // Parse-first: on Windows, sg sometimes exits non-zero while still emitting
+    // valid JSON to stdout (warnings on stderr get merged in by run_and_capture).
+    // Try to parse; only fail if parse itself fails, and enrich the message with
+    // the rc when sg exited non-zero (likely a real failure with non-JSON text).
     var parse_err : string
     var parsed = read_json(raw, parse_err)
     if (parsed == null) {
         let truncated = length(raw) > 500 ? slice(raw, 0, 500) : raw
-        err_message := "Failed to parse sg scan output: {parse_err}\nRaw: {truncated}"
+        if (rc != 0) {
+            err_message := "sg scan failed (exit {rc}): {truncated}"
+        } else {
+            err_message := "Failed to parse sg scan output: {parse_err}\nRaw: {truncated}"
+        }
         return <- entries
     }
     if (!(parsed.value is _array)) {
@@ -380,22 +631,115 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
             let rule_id = get_json_string(m, "ruleId")
             let kind = cpp_rule_id_to_kind(rule_id)
             let file_path = get_json_string(m, "file")
-            let text = get_json_string(m, "text")
+            // Prefer the JSON `lines` field over `text`. `text` is the matched node's
+            // exact span — for tree-sitter-cpp misparses (e.g. `class DAS_API Foo`
+            // gets parsed as a class_specifier covering only "class DAS_API"), `text`
+            // is truncated and the name extractor reads "DAS_API" instead of "Foo".
+            // `lines` gives the full source line(s), which is strictly more informative.
+            let lines = get_json_string(m, "lines")
             let rng = (m.value as _object)?["range"] ?? null
             let start = rng != null ? ((rng.value as _object)?["start"] ?? null) : null
+            let endp = rng != null ? ((rng.value as _object)?["end"] ?? null) : null
             let line_num = start != null ? get_json_int(start, "line") + 1 : 0
-            let pair = cpp_extract_name_pair(text, kind)
+            let end_line_num = endp != null ? get_json_int(endp, "line") + 1 : line_num
+            let pair = cpp_extract_name_pair(lines, kind)
+            let sig = cpp_extract_signature(lines, kind)
+            let tmpl = cpp_extract_template_args(lines, kind, pair._1)
             entries |> emplace(CppMatch(
                 file = make_relative_path(file_path, das_root),
                 line = line_num,
+                end_line = end_line_num,
                 kind = kind,
                 name = pair._0,
                 qualified = pair._1,
-                text = cpp_first_line(text)
+                template_args = tmpl,
+                signature = sig,
+                text = cpp_first_line(lines)
             ))
         }
     }
     unsafe { delete parsed; }
+    // Tree-sitter-cpp can't parse `class DAS_API Foo : Bar { ... }` — it emits both a
+    // truncated class_specifier (range covers only "class DAS_API", no body) AND a
+    // bogus function_definition that DOES cover the whole body. Transfer the bogus
+    // function's range onto the class match so methods inside still nest properly,
+    // then drop the bogus function.
+    cpp_extend_class_ranges(entries)
+    return <- cpp_filter_entries(entries)
+}
+
+// Walk `entries`; for each `function` match that's actually a misparsed class body
+// (same file:start_line as a class/struct match, text starts with "class "/"struct "),
+// extend the class/struct match's `end_line` to cover the bogus function's range.
+// Mutates `entries` in place.
+def cpp_extend_class_ranges(var entries : array<CppMatch>) {
+    var class_idx_at : table<string; int>
+    for (i in range(length(entries))) {
+        let e & = unsafe(entries[i])
+        if (e.kind == "class" || e.kind == "struct") {
+            class_idx_at["{e.file}:{e.line}"] = i
+        }
+    }
+    for (e in entries) {
+        if (e.kind != "function") {
+            continue
+        }
+        let key = "{e.file}:{e.line}"
+        if (!key_exists(class_idx_at, key)) {
+            continue
+        }
+        let stripped = strip(e.text)
+        if (!starts_with(stripped, "class ") && !starts_with(stripped, "struct ")) {
+            continue
+        }
+        let cls_idx = class_idx_at[key]
+        if (entries[cls_idx].end_line < e.end_line) {
+            entries[cls_idx].end_line = e.end_line
+        }
+    }
+}
+
+// Drop two classes of garbage matches:
+// 1. tree-sitter-cpp misparses `class DAS_API Foo : Bar { ... }` as a function_definition
+//    (DAS_API is unknown, so the parser reads `class DAS_API` as a return type and `Foo`
+//    as a function name). These collide with the legitimate class/struct match at the
+//    same start line and have "class " or "struct " as their text prefix.
+// 2. Anonymous unions/structs/enums (`union { int a; float f; };`,
+//    `enum { type = X };` inside a template specialization). Name extractor returns
+//    empty `qualified`; these are inline members and add no information.
+// Filters entries IN PLACE (mutates `entries`), removing the two classes of garbage.
+// Returns the modified `entries` (move-out). `entries` is left empty on the caller side.
+def cpp_filter_entries(var entries : array<CppMatch>) : array<CppMatch> {
+    // Build a set of (file, start_line) pairs that have a class/struct match.
+    var class_struct_at : table<string; bool>
+    for (e in entries) {
+        if (e.kind == "class" || e.kind == "struct") {
+            class_struct_at["{e.file}:{e.line}"] = true
+        }
+    }
+    // Walk forward, write the survivors to a write_idx; truncate at the end.
+    var write_idx = 0
+    for (read_idx in range(length(entries))) {
+        let e & = unsafe(entries[read_idx])
+        var keep = true
+        if (e.kind == "function") {
+            let key = "{e.file}:{e.line}"
+            if (key_exists(class_struct_at, key)
+                && (starts_with(strip(e.text), "class ") || starts_with(strip(e.text), "struct "))) {
+                keep = false
+            }
+        }
+        if ((e.kind == "union" || e.kind == "struct" || e.kind == "enum") && empty(e.qualified)) {
+            keep = false
+        }
+        if (keep) {
+            if (write_idx != read_idx) {
+                entries[write_idx] = entries[read_idx]
+            }
+            write_idx++
+        }
+    }
+    entries |> resize(write_idx)
     return <- entries
 }
 
@@ -425,6 +769,10 @@ def cpp_resolve_search_dirs(directory : string) : array<string> {
 var cpp_index_signature : string  // empty == not built yet
 var cpp_index : table<string; array<int>>
 var cpp_index_entries : array<CppMatch>
+// Last build error (e.g. "ast-grep not available", "sg scan failed (exit 1)").
+// Cleared on a successful build. Surfaced by callers via `cpp_index_status`
+// so users get a real reason instead of a silent "no matches".
+var cpp_index_error : string
 
 // True if `path` (extracted from a `git status --porcelain` line) refers to a
 // .cpp/.h/.hpp file inside one of CPP_SEARCH_DIRS. Anything else (.das edits,
@@ -476,18 +824,80 @@ def private stat_mtime_or_zero(path : string) : int64 {
     return st.is_valid ? int64(st.mtime) : 0l
 }
 
+// Filesystem-only staleness signature for the no-git fallback. Walks
+// `search_dirs` recursively, hashes (repo-relative path, mtime) for every
+// file matching `is_indexed_path`, and prunes any subtree that
+// `cpp_collect_git_excludes` would skip (vendored repos, daspkg cache, etc.).
+//
+// This is the slow path — ~50–200ms for daslang's tree (~1500 files). Only
+// invoked when `git rev-parse` / `git status` fails, so users with a normal
+// git checkout pay nothing.
+def cpp_compute_filesystem_signature(search_dirs : array<string>) : string {
+    let das_root = get_das_root()
+    let raw_excludes <- cpp_collect_git_excludes(search_dirs, CPP_SEARCH_INCLUDE_OVERRIDES)
+    // `cpp_collect_git_excludes` returns ast-grep `--globs` patterns of the
+    // form `!**/<rel>/**`; strip the wrapping to get bare repo-relative
+    // prefixes for prefix-match pruning.
+    var pruned : array<string>
+    pruned |> reserve(length(raw_excludes))
+    for (p in raw_excludes) {
+        if (starts_with(p, "!**/") && ends_with(p, "/**")) {
+            pruned |> push(slice(p, 4, length(p) - 3))
+        }
+    }
+    return build_string() $(var w) {
+        for (sd in search_dirs) {
+            // `dir_rec` yields filenames RELATIVE to `sd`, not absolute. To
+            // match what `is_indexed_path` expects (full repo-relative path
+            // starting with one of CPP_SEARCH_DIRS) we prepend sd's repo-rel
+            // form, and to stat() we join filename onto sd.
+            let sd_rel = to_generic_path(make_relative_path(sd, das_root))
+            dir_rec(sd) $(filename, is_dir) {
+                if (is_dir) {
+                    return
+                }
+                let leaf = to_generic_path(filename)
+                let rel = empty(sd_rel) ? leaf : "{sd_rel}/{leaf}"
+                for (pr in pruned) {
+                    if (starts_with(rel, "{pr}/")) {
+                        return
+                    }
+                }
+                if (!is_indexed_path(rel)) {
+                    return
+                }
+                w |> write("{rel}:{stat_mtime_or_zero(path_join(sd, filename))}\n")
+            }
+        }
+    }
+}
+
 // Compute the staleness signature. Empty result on git failure → caller
 // treats as "no-git" or as transient and retries.
+//
+// `git -C <das_root>` is used (not bare `git`) so the signature is computed
+// against the daslang tree even when the MCP server was launched from a
+// subdirectory or with `--dasroot` pointing elsewhere. Likewise, paths from
+// `git status --porcelain` are repo-relative and stat()'d relative to
+// `das_root`, not the process CWD.
 def cpp_compute_index_signature() : string {
+    let das_root = get_das_root()
+    let cfg_path = path_join(das_root, CPP_SEARCH_CONFIG_PATH)
+    let cfg_sig = "cfg:{stat_mtime_or_zero(cfg_path)}"
     var head_buf : string
-    if (run_and_capture(["git", "rev-parse", "HEAD"], head_buf, 5.0) != 0
+    if (run_and_capture(["git", "-C", das_root, "rev-parse", "HEAD"], head_buf, 5.0) != 0
         || empty(head_buf)) {
-        return "no-git"
+        // No git checkout (or git unavailable). Walk the search dirs and fold
+        // a per-file mtime hash into the signature so source edits invalidate
+        // the cache even without git. ~50–200ms; only on this rare path.
+        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
+        return "no-git:{cfg_sig}:fs:{hash(fs_sig)}"
     }
     var status_buf : string
-    if (run_and_capture(["git", "status", "--porcelain", "--untracked-files=normal"],
+    if (run_and_capture(["git", "-C", das_root, "status", "--porcelain", "--untracked-files=normal"],
                        status_buf, 5.0) != 0) {
-        return "no-git"
+        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
+        return "no-git:{cfg_sig}:fs:{hash(fs_sig)}"
     }
     let lines <- split(status_buf, "\n")
     let combined = build_string() $(var w) {
@@ -495,12 +905,10 @@ def cpp_compute_index_signature() : string {
         for (line in lines) {
             let path = extract_status_path(line)
             if (!empty(path) && is_indexed_path(path)) {
-                w |> write("{line}:{stat_mtime_or_zero(path)}\n")
+                w |> write("{line}:{stat_mtime_or_zero(path_join(das_root, path))}\n")
             }
         }
-        // include config file mtime so config edits trigger rebuild
-        let cfg_path = path_join(get_das_root(), CPP_SEARCH_CONFIG_PATH)
-        w |> write("cfg:{stat_mtime_or_zero(cfg_path)}\n")
+        w |> write("{cfg_sig}\n")
     }
     return "{hash(combined)}"
 }
@@ -517,6 +925,7 @@ def ensure_cpp_index() {
     var entries <- cpp_run_scan(cpp_default_search_dirs(), "", err)
     if (!empty(err)) {
         cpp_index_signature := ""  // reset; next call retries the scan
+        cpp_index_error := err
         return
     }
     for (i in range(length(entries))) {
@@ -532,6 +941,16 @@ def ensure_cpp_index() {
         }
     }
     cpp_index_signature := sig  // commit on success
+    cpp_index_error := ""        // clear last error
+}
+
+// Returns the last error from `ensure_cpp_index`, or "" if the index built
+// successfully (or hasn't been queried yet). Callers that have an opportunity
+// to surface a "tool unavailable" message to the user (e.g. `cpp_goto_definition`
+// when no candidates are found) should call this to disambiguate "really no
+// matches" from "the index couldn't build".
+def cpp_index_status() : string {
+    return cpp_index_error
 }
 
 // Look up a C++ name (qualified or unqualified). Returns true if found and
