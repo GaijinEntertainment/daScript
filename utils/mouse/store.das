@@ -35,10 +35,8 @@ struct ParsedDoc {
 def private parse_inline_list(value : string) : array<string> {
     var out : array<string>
     let trimmed = strip(value)
-    if (length(trimmed) < 2) {
-        return <- out
-    }
-    if (first_character(trimmed) != '[' || character_at(trimmed, length(trimmed) - 1) != ']') {  // nolint:PERF003
+    // The trailing-`]` check uses character_at to keep the guard a one-liner.
+    if (length(trimmed) < 2 || first_character(trimmed) != '[' || character_at(trimmed, length(trimmed) - 1) != ']') {  // nolint:PERF003
         return <- out
     }
     let inner = slice(trimmed, 1, length(trimmed) - 1)
@@ -69,7 +67,7 @@ def private parse_kv_line(line : string; var key : string&; var value : string&)
 // closing fence, returns whole input with parse_error set.
 def parse_frontmatter_text(text : string; var fm : Frontmatter) : tuple<body : string; parse_error : string> {
     let lines <- split(text, "\n")
-    if (length(lines) == 0) {
+    if (empty(lines)) {
         return (body = "", parse_error = "")
     }
     if (strip(lines[0]) != "---") {
@@ -154,8 +152,8 @@ def slug_from_title(title : string) : string {
         let n = length(lower)
         for (i in range(n)) {
             let c = character_at(lower, i)  // nolint:PERF003
-            let is_alnum = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
-            if (is_alnum) {
+            // `lower` is already lowercased, so is_alnum's uppercase half can never match — equivalent to the explicit ranges.
+            if (is_alnum(c)) {
                 w |> write(slice(lower, i, i + 1))
                 prev_dash = false
             } elif (!prev_dash) {
@@ -167,10 +165,10 @@ def slug_from_title(title : string) : string {
     var s = 0
     var e = length(raw)
     while (s < e && character_at(raw, s) == '-') {  // nolint:PERF003
-        s += 1
+        s ++
     }
     while (e > s && character_at(raw, e - 1) == '-') {  // nolint:PERF003
-        e -= 1
+        e --
     }
     // Cap to MAX_SLUG_LEN so a long title can't produce a slug that
     // `is_valid_slug` later rejects (making the doc unfetchable). Re-trim
@@ -178,7 +176,7 @@ def slug_from_title(title : string) : string {
     if (e - s > MAX_SLUG_LEN) {
         e = s + MAX_SLUG_LEN
         while (e > s && character_at(raw, e - 1) == '-') {  // nolint:PERF003
-            e -= 1
+            e --
         }
     }
     return s < e ? slice(raw, s, e) : ""
@@ -195,15 +193,19 @@ def is_valid_slug(s : string) : bool {
     }
     var ok = true
     peek_data(s) $(bytes) {
+        // Slugs must be lowercase-only — using is_alnum here would silently allow
+        // uppercase letters and break the on-disk filename round-trip on
+        // case-sensitive filesystems. The explicit ranges intentionally reject
+        // uppercase, so the broader is_alnum() helper is wrong here.
         let first = int(bytes[0])
-        let first_ok = (first >= '0' && first <= '9') || (first >= 'a' && first <= 'z')
+        let first_ok = (first >= '0' && first <= '9') || (first >= 'a' && first <= 'z')  // nolint:PERF014
         if (!first_ok) {
             ok = false
             return
         }
         for (b in bytes) {
             let c = int(b)
-            let valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || c == '-' || c == '_'
+            let valid = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || c == '-' || c == '_'  // nolint:PERF014
             if (!valid) {
                 ok = false
                 return

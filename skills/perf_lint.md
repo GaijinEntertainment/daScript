@@ -118,3 +118,14 @@ After compilation, `Expression._type` is resolved. Check `expr._type.baseType ==
 | PERF010 | `get_ptr(x) == null` | Low | unnecessary; smart_ptr supports == null directly |
 | PERF011 | `get_ptr(x).field` | Low | unnecessary; smart_ptr auto-dereferences for field access |
 | PERF012 | `find(string(das_string), ...)` | Medium | unnecessary allocation; use `peek(das_string)` instead |
+| PERF013 | `a += 1` / `a -= 1` (six numeric scalars) | Low | use postfix `a++` / `a--` (single SimNode, idiomatic) |
+| PERF014 | closed-interval char-class range (`'0'..'9'` / `'a'..'z'` / `'A'..'Z'`) | Info | use `strings::is_alpha` / `is_alnum` / `is_number` |
+| PERF015 | ternary min/max (`a < b ? a : b`) | Low | use `math::min(a, b)` / `max(a, b)` |
+| PERF016 | ternary abs (`x < 0 ? -x : x`) | Low | use `math::abs(x)` (negabs `x < 0 ? x : -x` not flagged) |
+| PERF017 | `length(x) == 0` / `> 0` / `>= 1` etc. | Medium | use `empty(x)` / `!empty(x)`; avoids strlen on strings |
+
+## Visitor gotchas
+
+- **`in_closure > 0` is NOT a useful guard in `preVisitExprOp2`** — `loop_depth` already doesn't increment inside closure bodies (`preVisitExprFor` / `While` gate on `in_closure == 0`), so PERF001's `loop_depth > 0` correctly excludes closure-internal loops without a separate skip. An `in_closure` early-return at the top of `preVisitExprOp2` hides syntactic patterns (PERF007/008/010/013/014/017) inside the natural `build_string() $(var w) { ... }` idiom and is a bug, not a feature.
+- **Macro-generated functions need `current_function.flags.generated`-suppression** — `[CommandLineArgs]`-style codegen synthesizes AST that the user never wrote. Both `perf_warning` and `style_warning` should early-return when `current_function.flags.generated` is true. Otherwise warnings surface at the source-struct's line with no clear way to fix them.
+- **Self-implementation suppression** — when a rule's suggested replacement is itself implemented in terms of the pattern (e.g. `empty(arr)`'s body is literally `length(arr) == 0`), gate the rule with `current_function.name == "<callee>" || (fromGeneric != null && fromGeneric.name == "<callee>")`. The generic-instantiation arm catches `empty<int>`, `empty<MyType>`, etc.
