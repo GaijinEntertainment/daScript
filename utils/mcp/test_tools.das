@@ -381,6 +381,21 @@ def test_list_module_api(t : T?) {
         t |> success(find(text, "sin") >= 0, "should list sin function")
         t |> success(find(text, "cos") >= 0, "should list cos function")
     }
+    t |> run("rewrites unqualified daslib name") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("ast", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[resolved 'ast' as 'daslib/ast']") >= 0, "should announce rewrite")
+        t |> success(find(text, "AstVisitor") >= 0, "should list daslib/ast contents")
+    }
+    t |> run("no rewrite when name is already qualified") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_list_module_api("daslib/ast", "", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[resolved") < 0, "should not announce rewrite")
+    }
 }
 
 // ── list_module_api annotations ──────────────────────────────────────
@@ -959,6 +974,45 @@ def test_eval_expression(t : T?) {
         parse_result(do_eval_expression("", ""), text, is_error)
         t |> success(is_error, "should be error")
     }
+    t |> run("rewrites unqualified daslib require") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 2", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[resolved unqualified modules under daslib/") >= 0, "should announce rewrite")
+        t |> success(find(text, "3") >= 0, "should evaluate to 3")
+    }
+    t |> run("retry-also-fails surfaces retry error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_eval_expression("1 + 2", "nonexistent_module_xyz"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "also retried with require 'daslib/nonexistent_module_xyz'") >= 0,
+                "should mention retry attempt with rewritten name")
+    }
+    t |> run("retry skipped for non-module-resolution failures") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // Builtin module 'math' resolves fine, but the expression fails (undefined symbol).
+        // Retry must NOT fire — otherwise the user sees a misleading 'daslib/math' error
+        // instead of the actual undefined-symbol error.
+        parse_result(do_eval_expression("undefined_func_xyz()", "math"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "daslib/math") < 0,
+                "should NOT mention daslib/math — failure is not module-resolution")
+        t |> success(find(text, "also retried") < 0, "should NOT announce a retry attempt")
+    }
+    t |> run("mixed list rewrites only the missing token") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        // 'math' is builtin (resolves), 'ast' needs daslib/. Retry must rewrite ONLY 'ast',
+        // leaving 'math' verbatim. Otherwise the retry would fail on 'daslib/math' missing.
+        parse_result(do_eval_expression("1 + 2", "math, ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "math, daslib/ast") >= 0, "should rewrite ast but keep math")
+        t |> success(find(text, "daslib/math") < 0, "should NOT rewrite the builtin math")
+        t |> success(find(text, "3") >= 0, "should evaluate to 3")
+    }
 }
 
 // ── describe_type ───────────────────────────────────────────────────
@@ -996,6 +1050,14 @@ def test_describe_type(t : T?) {
         parse_result(do_describe_type("NonExistentType", ""), text, is_error)
         t |> success(!is_error, "should not be error")
         t |> success(find(text, "not found") >= 0, "should report not found")
+    }
+    t |> run("rewrites unqualified daslib module") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_describe_type("AstFunctionAnnotation", "ast"), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[resolved 'ast' as 'daslib/ast']") >= 0, "should announce rewrite")
+        t |> success(find(text, "class AstFunctionAnnotation") >= 0, "should describe class")
     }
 }
 
