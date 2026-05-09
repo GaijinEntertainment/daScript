@@ -44,7 +44,7 @@ def seed_doc(t : T?; root : string;
         if (!empty(body) && character_at(body, length(body) - 1) != '\n') {  // nolint:PERF003
             w |> write("\n")
         }
-        if (length(questions) > 0) {
+        if (!empty(questions)) {
             w |> write("\n## Questions\n")
             for (q in questions) {
                 w |> write("- {q}\n")
@@ -286,7 +286,7 @@ def test_search_handles_tab_in_query(t : T?) {
         rebuild(db, root)
         let hits <- search(db, "alpha\tgamma", 5)
         hits_count = length(hits)
-        if (length(hits) > 0) {
+        if (!empty(hits)) {
             top_slug = hits[0].slug
         }
     }
@@ -315,7 +315,7 @@ def test_links_table_populated(t : T?) {
         }
     }
     t |> equal(length(links), 1)
-    if (length(links) >= 1) {
+    if (!empty(links)) {
         t |> equal(links[0].from_slug, "doc-a")
         t |> equal(links[0].to_slug, "other-slug")
     }
@@ -554,7 +554,7 @@ def test_rebuild_skips_basename_slug_mismatch(t : T?) {
     }
     t |> equal(n, 1)  // only `good`; mismatched-basename doc skipped
     t |> equal(length(slugs), 1)
-    if (length(slugs) >= 1) {
+    if (!empty(slugs)) {
         t |> equal(slugs[0], "good")
     }
     cleanup_root(root)
@@ -579,7 +579,7 @@ def test_search_handles_uppercase_fts_keywords(t : T?) {
         rebuild(db, root)
         let hits <- search(db, "alpha OR bravo", 5)
         hits_count = length(hits)
-        if (length(hits) > 0) {
+        if (!empty(hits)) {
             top_slug = hits[0].slug
         }
     }
@@ -621,7 +621,7 @@ def test_rebuild_skips_invalid_frontmatter_slug(t : T?) {
     }
     t |> equal(n, 1)  // only `good` indexed; bad-slug doc skipped
     t |> equal(length(slugs), 1)
-    if (length(slugs) >= 1) {
+    if (!empty(slugs)) {
         t |> equal(slugs[0], "good")
     }
     cleanup_root(root)
@@ -662,7 +662,7 @@ def test_log_query_records_hit(t : T?) {
         rows <- _sql(db |> select_from(type<QueryLog>))
     }
     t |> equal(length(rows), 1)
-    if (length(rows) >= 1) {
+    if (!empty(rows)) {
         t |> equal(rows[0].question, "typefunction")
         t |> equal(rows[0].source, "cli")
         t |> success(rows[0].match_count >= 1, "match_count populated")
@@ -689,7 +689,7 @@ def test_log_query_records_miss(t : T?) {
         rows <- _sql(db |> select_from(type<QueryLog>))
     }
     t |> equal(length(rows), 1)
-    if (length(rows) >= 1) {
+    if (!empty(rows)) {
         t |> equal(rows[0].match_count, 0)
         t |> equal(rows[0].top_slug, "")
         t |> equal(rows[0].source, "mcp")

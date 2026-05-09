@@ -204,7 +204,7 @@ def rebuild(db : SqlRunner; root : string) : int {
                 Slug = doc.frontmatter.slug,
                 Text = combined,
                 Rank = 0.0f))
-            n += 1
+            n ++
         }
     }
     return n
@@ -222,10 +222,7 @@ def sanitize_fts5_query(q : string) : string {
         let n = length(q)
         for (i in range(n)) {
             let c = character_at(q, i)  // nolint:PERF003
-            let is_safe = ((c >= '0' && c <= '9') ||
-                           (c >= 'a' && c <= 'z') ||
-                           (c >= 'A' && c <= 'Z') ||
-                           c == ' ' || c == '*')
+            let is_safe = is_alnum(c) || c == ' ' || c == '*'
             if (is_safe) {
                 w |> write(slice(q, i, i + 1))
             } else {
@@ -267,7 +264,7 @@ def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
             meaningful |> push(w)
         }
     }
-    if (length(meaningful) == 0) {
+    if (empty(meaningful)) {
         return <- out
     }
     let or_query = meaningful |> join(" OR ")
@@ -325,7 +322,7 @@ def now_iso(db : SqlRunner) : string {
 
 def log_query(db : SqlRunner; question : string;
               hits : array<SearchHit>; source : string) {
-    let top = length(hits) > 0 ? hits[0].slug : ""
+    let top = !empty(hits) ? hits[0].slug : ""
     db |> insert(QueryLog(
         asked_at = now_iso(db),
         question = question,
@@ -365,7 +362,7 @@ def add_doc(db : SqlRunner; root : string;
     }
     if (!force) {
         var similar <- dupe_check(db, clean_question, 5)
-        if (length(similar) > 0) {
+        if (!empty(similar)) {
             outcome.similar <- similar
             outcome.created = false
             return <- outcome

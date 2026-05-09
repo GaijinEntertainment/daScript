@@ -93,7 +93,7 @@ def cmd_ask(args : MouseArgs) {
     with_index_db(root) $(db) {
         let hits <- search(db, query, args.k)
         log_query(db, query, hits, "cli")
-        if (length(hits) == 0) {
+        if (empty(hits)) {
             print("(no results){HINT_NO_MATCH}\n")
             return
         }
@@ -139,12 +139,12 @@ def cmd_get(args : MouseArgs) {
         if (!empty(doc.frontmatter.last_verified)) {
             print("last_verified: {doc.frontmatter.last_verified}\n")
         }
-        if (length(doc.frontmatter.links) > 0) {
+        if (!empty(doc.frontmatter.links)) {
             let links_str = doc.frontmatter.links |> join(", ")
             print("links: {links_str}\n")
         }
         let froms <- linked_from(db, slug)
-        if (length(froms) > 0) {
+        if (!empty(froms)) {
             let froms_str = froms |> join(", ")
             print("linked from: {froms_str}\n")
         }
@@ -199,7 +199,7 @@ def cmd_log(args : MouseArgs) {
     let n = args.limit > 0 ? args.limit : 20
     with_index_db(root) $(db) {
         let rows <- recent_queries(db, n, args.misses)
-        if (length(rows) == 0) {
+        if (empty(rows)) {
             print("(no queries logged yet)\n")
             return
         }
@@ -332,7 +332,7 @@ def tool_ask(args : JsonValue?) : string {
     with_index_db(root) $(db) {
         let hits <- search(db, question, k)
         log_query(db, question, hits, "mcp")
-        if (length(hits) == 0) {
+        if (empty(hits)) {
             output = "(no results for: {question}){HINT_NO_MATCH}"
             return
         }
@@ -422,11 +422,11 @@ def tool_get(args : JsonValue?) : string {
             if (!empty(doc.frontmatter.last_verified)) {
                 w |> write("last_verified: {doc.frontmatter.last_verified}\n")
             }
-            if (length(doc.frontmatter.links) > 0) {
+            if (!empty(doc.frontmatter.links)) {
                 let links_str = doc.frontmatter.links |> join(", ")
                 w |> write("links: {links_str}\n")
             }
-            if (length(froms) > 0) {
+            if (!empty(froms)) {
                 let froms_str = froms |> join(", ")
                 w |> write("linked from: {froms_str}\n")
             }
