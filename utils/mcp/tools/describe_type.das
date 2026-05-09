@@ -4,21 +4,27 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_describe_type(name, module_name : string; project : string = "") : string {
-    if (empty(name)) {
-        return make_tool_result("missing 'name' argument", true)
-    }
-    // build stub that requires the module (if specified)
+def private try_describe_type(name, module_name, preamble, project : string) : TryResult {
     let stub_path = make_temp_das_file()
     var stub = "options gen2\n"
     if (!empty(module_name)) {
         stub = "{stub}require {module_name}\n"
     }
     stub = "{stub}[export]\ndef main() \{\}\n"
+    var write_ok = false
     fopen(stub_path, "w") $(f) {
-        fwrite(f, stub)
+        if (f != null) {
+            fwrite(f, stub)
+            write_ok = true
+        }
     }
+    if (!write_ok) {
+        remove(stub_path)
+        return TryResult(text = make_tool_result("Cannot write temp file: {stub_path}", true), ok = false, retryable = false)
+    }
+    var ok = false
     let res = compile_and_simulate(stub_path, project) $(program; issues) {
+        ok = true
         var result = ""
         // search all modules for the type
         program_for_each_module(program) $(mod) {
@@ -27,13 +33,8 @@ def do_describe_type(name, module_name : string; project : string = "") : string
             }
             // structs and classes
             for_each_structure(mod) $(value) {
-                if (!empty(result)) {
-                    return
-                }
-                if (string(value.name) != name) {
-                    return
-                }
-                if (value.flags.isLambda || value.flags._generator || value.flags.generated) {
+                if (!empty(result) || value.name != name ||
+                        value.flags.isLambda || value.flags._generator || value.flags.generated) {
                     return
                 }
                 result = build_string() $(var w) {
@@ -43,13 +44,7 @@ def do_describe_type(name, module_name : string; project : string = "") : string
             // handled types
             if (empty(result)) {
                 module_for_each_annotation(mod) $(value) {
-                    if (!empty(result)) {
-                        return
-                    }
-                    if (!value.isBasicStructureAnnotation) {
-                        return
-                    }
-                    if (string(value.name) != name) {
+                    if (!empty(result) || !value.isBasicStructureAnnotation || value.name != name) {
                         return
                     }
                     result = build_string() $(var w) {
@@ -60,10 +55,7 @@ def do_describe_type(name, module_name : string; project : string = "") : string
             // enumerations
             if (empty(result)) {
                 for_each_enumeration(mod) $(value) {
-                    if (!empty(result)) {
-                        return
-                    }
-                    if (string(value.name) != name) {
+                    if (!empty(result) || value.name != name) {
                         return
                     }
                     result = build_string() $(var w) {
@@ -74,10 +66,7 @@ def do_describe_type(name, module_name : string; project : string = "") : string
             // typedefs (bitfields, variants, tuples, aliases)
             if (empty(result)) {
                 for_each_typedef(mod) $(tname, td) {
-                    if (!empty(result)) {
-                        return
-                    }
-                    if (string(tname) != name) {
+                    if (!empty(result) || tname != name) {
                         return
                     }
                     result = build_string() $(var w) {
@@ -87,12 +76,29 @@ def do_describe_type(name, module_name : string; project : string = "") : string
             }
         }
         if (empty(result)) {
-            return "Type '{name}' not found"
+            return "{preamble}Type '{name}' not found"
         }
-        return result
+        return "{preamble}{result}"
     }
     remove(stub_path)
-    return res
+    return TryResult(text = res, ok = ok, retryable = true)
+}
+
+def do_describe_type(name, module_name : string; project : string = "") : string {
+    if (empty(name)) {
+        return make_tool_result("missing 'name' argument", true)
+    }
+    let first = try_describe_type(name, module_name, "", project)
+    if (first.ok || !first.retryable || empty(module_name) || is_qualified_module_name(module_name)) {
+        return first.text
+    }
+    let resolved = "daslib/{module_name}"
+    let preamble = "[resolved '{module_name}' as '{resolved}']\n"
+    let second = try_describe_type(name, resolved, preamble, project)
+    if (second.ok) {
+        return second.text
+    }
+    return first.text
 }
 
 def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {
@@ -110,7 +116,7 @@ def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {
     }
     write(w, "\n")
     // fields
-    if (length(value.fields) > 0) {
+    if (!empty(value.fields)) {
         write(w, "Fields:\n")
         for (fld in value.fields) {
             write(w, "  {fld.name} : {describe(fld._type)}")
@@ -123,23 +129,16 @@ def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {
     // methods
     var methods : array<string>
     for_each_function(mod, "") $(func) {
-        if (!func.flags.isClassMethod) {
+        if (!func.flags.isClassMethod || empty(func.arguments)) {
             return
         }
-        if (length(func.arguments) == 0) {
+        let self_type = func.arguments[0]._type
+        if (self_type == null || self_type.structType == null ||
+                self_type.structType.name != value.name ||
+                (func.flags.generated && func.fromGeneric == null)) {
             return
         }
-        var self_type = func.arguments[0]._type
-        if (self_type == null || self_type.structType == null) {
-            return
-        }
-        if (string(self_type.structType.name) != string(value.name)) {
-            return
-        }
-        if (func.flags.generated && func.fromGeneric == null) {
-            return
-        }
-        var entry = build_string() $(var ew) {
+        let entry = build_string() $(var ew) {
             write(ew, "  def {func.name}")
             write_func_signature(ew, func)
         }
@@ -179,20 +178,17 @@ def write_handled_type_detail(var w : StringBuilderWriter; value : Annotation co
     // methods on handled types — functions where first arg matches this type
     var methods : array<string>
     for_each_function(mod, "") $(func) {
-        if (func.flags.privateFunction || func.flags._lambda || func.flags.generated) {
+        if (func.flags.privateFunction || func.flags._lambda || func.flags.generated || empty(func.arguments)) {
             return
         }
-        if (length(func.arguments) == 0) {
-            return
-        }
-        var first_type = func.arguments[0]._type
+        let first_type = func.arguments[0]._type
         if (first_type == null) {
             return
         }
         // check if first arg is this handled type (possibly as pointer)
         if (first_type.baseType == Type.tHandle) {
-            if (first_type.annotation != null && string(first_type.annotation.name) == string(value.name)) {
-                var entry = build_string() $(var ew) {
+            if (first_type.annotation != null && first_type.annotation.name == value.name) {
+                let entry = build_string() $(var ew) {
                     write(ew, "  def {func.name}")
                     write_func_signature(ew, func)
                 }

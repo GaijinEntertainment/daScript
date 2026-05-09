@@ -4,33 +4,58 @@ options no_unused_block_arguments = false
 
 require common public
 
-def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; compact_str : string = ""; project : string = "") : string {
-    let compact = compact_str == "true"
-    // write a temp stub file that requires the module
+def private try_list_module_api(name : string; preamble : string; filter : string; section : string; compact : bool; project : string) : TryResult {
     let stub_path = make_temp_das_file()
-    let stub = "require {module_name}\n[export]\ndef main\n    pass\n"
+    let stub = "require {name}\n[export]\ndef main\n    pass\n"
+    var write_ok = false
     fopen(stub_path, "w") $(f) {
-        fwrite(f, stub)
+        if (f != null) {
+            fwrite(f, stub)
+            write_ok = true
+        }
     }
+    if (!write_ok) {
+        remove(stub_path)
+        return TryResult(text = make_tool_result("Cannot write temp file: {stub_path}", true), ok = false, retryable = false)
+    }
+    var ok = false
     let result = compile_and_simulate(stub_path, project) $(program; issues) {
-        // find the target module
         var target_mod : Module?
         program_for_each_module(program) $(mod) {
             let mname = string(mod.name)
-            if (mname == module_name || "{module_name}" |> ends_with("/{mname}")) {
+            if (mname == name || "{name}" |> ends_with("/{mname}")) {
                 target_mod = mod
             }
         }
         if (target_mod == null) {
-            return "Module '{module_name}' not found after compilation"
+            return "Module '{name}' not found after compilation"
         }
-        var res = build_string() $(var writer) {
+        let res = build_string() $(var writer) {
+            if (!empty(preamble)) {
+                write(writer, preamble)
+            }
             write_module_api(writer, target_mod, filter, section, compact)
         }
+        ok = true
         return empty(res) ? "(empty module)" : res
     }
     remove(stub_path)
-    return result
+    return TryResult(text = result, ok = ok, retryable = true)
+}
+
+def do_list_module_api(module_name : string; filter : string = ""; section : string = ""; compact_str : string = ""; project : string = "") : string {
+    let compact = compact_str == "true"
+    let first = try_list_module_api(module_name, "", filter, section, compact, project)
+    if (first.ok || !first.retryable || is_qualified_module_name(module_name)) {
+        return first.text
+    }
+    let resolved = "daslib/{module_name}"
+    let preamble = "[resolved '{module_name}' as '{resolved}']\n"
+    let second = try_list_module_api(resolved, preamble, filter, section, compact, project)
+    if (second.ok) {
+        return second.text
+    }
+    return first.text
 }
 
 def is_operator_function(name : string) : bool {
@@ -95,7 +120,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
             if (!name_matches_filter(fname, filter)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 if (compact) {
                     write_compact_func_signature(w, func)
@@ -113,14 +138,14 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     // generics via AST
     if (want_section(section, "generics") || want_section(section, "operators")) {
         for_each_generic(mod) $(func) {
-            if (func.flags.privateFunction || func.flags.generated || string(func.name) |> starts_with("```")) {
+            if (func.flags.privateFunction || func.flags.generated || string(func.name) |> starts_with("```")) {  // nolint:PERF012
                 return
             }
             let fname = string(func.name)
             if (!name_matches_filter(fname, filter)) {
                 return
             }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 if (compact) {
                     write_compact_func_signature(w, func)
@@ -138,44 +163,39 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     // structures via AST
     if (want_section(section, "structs")) {
         for_each_structure(mod) $(value) {
-        if (value.flags.isLambda || value.flags._generator || value.flags.generated || value.flags.privateStructure) {
-            return
-        }
-        if (!name_matches_filter(string(value.name), filter)) {
-            return
-        }
-        var entry = build_string() $(var w) {
-            if (value.flags.isClass) {
-                write(w, "  class {value.name}")
-            } else {
-                write(w, "  struct {value.name}")
+            if (value.flags.isLambda || value.flags._generator || value.flags.generated || value.flags.privateStructure ||
+                    !name_matches_filter(string(value.name), filter)) {
+                return
             }
-            if (value.parent != null) {
-                write(w, " : {value.parent.name}")
-            }
-            if (!compact && int(value.at.line) > 0) {
-                write(w, "  // line {int(value.at.line)}")
-            }
-            write(w, "\n")
-            if (!compact) {
-                for (fld in value.fields) {
-                    write(w, "    {fld.name} : {describe(fld._type)}\n")
+            let entry = build_string() $(var w) {
+                if (value.flags.isClass) {
+                    write(w, "  class {value.name}")
+                } else {
+                    write(w, "  struct {value.name}")
+                }
+                if (value.parent != null) {
+                    write(w, " : {value.parent.name}")
+                }
+                if (!compact && int(value.at.line) > 0) {
+                    write(w, "  // line {int(value.at.line)}")
+                }
+                write(w, "\n")
+                if (!compact) {
+                    for (fld in value.fields) {
+                        write(w, "    {fld.name} : {describe(fld._type)}\n")
+                    }
                 }
             }
-        }
-        structs |> push(entry)
+            structs |> push(entry)
         }
     }
     // handled types via annotations
     if (want_section(section, "handled")) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isBasicStructureAnnotation) {
+            if (!value.isBasicStructureAnnotation || !name_matches_filter(string(value.name), filter)) {
                 return
             }
-            if (!name_matches_filter(string(value.name), filter)) {
-                return
-            }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 if (compact) {
                     write(w, "  handled {value.name}\n")
                 } else {
@@ -188,13 +208,10 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     // enumerations via AST
     if (want_section(section, "enums")) {
         for_each_enumeration(mod) $(value) {
-            if (value.isPrivate) {
+            if (value.isPrivate || !name_matches_filter(string(value.name), filter)) {
                 return
             }
-            if (!name_matches_filter(string(value.name), filter)) {
-                return
-            }
-            var entry = build_string() $(var w) {
+            let entry = build_string() $(var w) {
                 write(w, "  enum {value.name}")
                 if (!compact && int(value.at.line) > 0) {
                     write(w, "  // line {int(value.at.line)}")
@@ -289,10 +306,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     // globals via AST
     if (want_section(section, "globals")) {
         for_each_global(mod) $(value) {
-            if (value.flags.private_variable) {
-                return
-            }
-            if (!name_matches_filter(string(value.name), filter)) {
+            if (value.flags.private_variable || !name_matches_filter(string(value.name), filter)) {
                 return
             }
             var line = "  {value.name} : {describe(value._type)}"

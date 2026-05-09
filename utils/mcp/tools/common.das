@@ -26,10 +26,25 @@ struct ToolResult {
 
 // query matching: case-insensitive substring by default, "=foo" for exact case-sensitive
 def symbol_matches(name, query : string) : bool {
-    if (length(query) > 0 && first_character(query) == '=') {
+    if (!empty(query) && first_character(query) == '=') {
         return name == slice(query, 1)
     }
     return find(to_lower(name), to_lower(query)) >= 0
+}
+
+// True when `name` looks like a path-qualified module ("daslib/ast", "foo/bar").
+// Used to gate the auto-`daslib/` fallback: only single-token names get rewritten.
+def is_qualified_module_name(name : string) : bool {
+    return find(name, "/") >= 0
+}
+
+// Result of an attempt by an MCP tool helper that compiles a stub-with-`require`.
+// `retryable=false` means the failure happened before compile (e.g. temp-file write),
+// so retrying with `daslib/<name>` cannot help.
+struct TryResult {
+    text : string
+    ok : bool
+    retryable : bool
 }
 
 def make_tool_result(text : string; is_error : bool = false) : string {
@@ -309,13 +324,10 @@ def resolve_path(path : string) : string {
     if (empty(path)) {
         return get_das_root()
     }
-    if (is_absolute(path)) {
-        return path
-    }
-    // Preserve Windows drive-relative paths (`C:foo`). std::filesystem
-    // doesn't classify them as absolute (no trailing separator), so they'd
-    // otherwise be joined under das_root and produce an invalid path.
-    if (find(path, ":") == 1) {
+    // `find(path, ":") == 1` preserves Windows drive-relative paths (`C:foo`):
+    // std::filesystem doesn't classify them as absolute (no trailing separator),
+    // so they'd otherwise be joined under das_root and produce an invalid path.
+    if (is_absolute(path) || find(path, ":") == 1) {
         return path
     }
     return path_join(get_das_root(), path)

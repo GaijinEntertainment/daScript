@@ -272,7 +272,7 @@ def handle_tools_list(id_json : string) : string {
         "Evaluate a daslang expression and return its printed result. Wraps the expression in a string builder print statement. Use 'require' to add module imports (comma-separated).",
         {
             "expression" => PropertySchema(_type = "string", description = "daslang expression to evaluate (e.g. 'to_float(42) + 1.0', 'length(\"hello\")')"),
-            "require" => PropertySchema(_type = "string", description = "Comma-separated module imports (e.g. 'math', 'strings, daslib/json')")
+            "require" => PropertySchema(_type = "string", description = "Comma-separated module imports (e.g. 'math', 'strings, daslib/json'). On compile failure, single-token names are retried under 'daslib/'.")
         },
         ["expression"]
     ))
@@ -281,7 +281,7 @@ def handle_tools_list(id_json : string) : string {
         "Describe a type in detail: fields, methods, enum values, bitfield flags, variant options. Works for structs, classes, handled types, enums, bitfields, variants, tuples, and typedefs.",
         {
             "name" => PropertySchema(_type = "string", description = "Type name (e.g. 'TypeDecl', 'ExprCall', 'Type', 'FunctionFlags')"),
-            "module" => PropertySchema(_type = "string", description = "Module to require for the type (e.g. 'ast', 'daslib/json')"),
+            "module" => PropertySchema(_type = "string", description = "Module to require for the type (e.g. 'ast', 'daslib/json'). Single-token names that fail to resolve are auto-retried as 'daslib/<name>'."),
             "project" => PROJECT_PROP
         },
         ["name"]
@@ -390,7 +390,7 @@ def handle_tools_list(id_json : string) : string {
         "list_module_api",
         "List all functions, types, enums, globals, and annotations exported by a daslang module (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')",
         {
-            "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json')"),
+            "module" => PropertySchema(_type = "string", description = "Module name (e.g. 'math', 'strings', 'fio', 'ast', 'daslib/json'). Single-token names that fail to resolve are auto-retried as 'daslib/<name>'."),
             "filter" => PropertySchema(_type = "string", description = "Substring filter on names (e.g. 'for_each', 'json')"),
             "section" => PropertySchema(_type = "string", description = "Limit to section: 'functions', 'generics', 'operators', 'structs', 'handled', 'enums', 'globals', 'annotations'"),
             "compact" => PropertySchema(_type = "string", description = "Set to 'true' for compact output: function signatures show types only (no arg names), structs/enums omit fields/values. Use with large modules like 'ast', then drill down with describe_type or filter"),
