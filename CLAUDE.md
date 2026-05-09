@@ -120,9 +120,11 @@ All code MUST use gen2 syntax (add `options gen2` at the top of every file). Key
 - **Bare blocks:** `{ var x = 1; ... }` at statement level creates a lexical scope (NOT a table literal). Supports `finally`: `{ ... } finally { ... }`
 - **Named arguments:** `foo([name = value])` with square brackets
 - **Block arguments:** block/lambda after `func()` pipes as last arg. No `$` for parameterless blocks: `defer() { ... }`. With params: `build_string() $(var writer) { ... }`. Lambdas: `emplace() @(x : int) { ... }`
+- **Positional block literal `${ ... }`:** anonymous parameterless block usable as a non-trailing argument — `split_h(${ left() }, ${ right() })`. Multi-line form needs each statement on its own line; single-line form needs a trailing `;` (`${ stmt; }`). Distinct from the trailing block-arg syntax above; use this when you need *multiple* block args in one call
 - **Lambda:** `@(args) { body }` or `@@(args) { body }` (no-capture). **Inline arrow form:** `@(x) => expr` (capture lambda) and `@@(x) => expr` (no-capture function pointer) — preferred for short transforms passed as arguments: `sometimes(pat, @@(x) => fast(x, 2.0lf))`
 - **Generator:** `$() { yield value; }` or `$ { yield value; }`
 - **Tuple `=>`:** `a => b` creates `tuple<auto;auto>`
+- **Range literal `..`:** `0..10` is sugar for `interval(0, 10)`, returning a `range` value (fields `.x`/`.y`). Variants by operand type: `range` / `urange` / `range64` / `urange64`. **Integer-only today** — `0.0f..10.0f` does not parse (`interval` is not overloaded for float). Fixable at the parser/builtins level if a use case wants it. Iterable directly in `for (i in 0..10)`; pass-by-value to functions taking `range`
 - **`typeinfo`:** `typeinfo trait_name(type<T>)` — trait name outside parens
 - **`static_if`:** `static_if (condition) { ... }` — parentheses required
 - **Type function call:** `take(type<int>, 1, 2)` — NOT `take < int > (1, 2)`
