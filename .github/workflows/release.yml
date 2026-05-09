@@ -123,10 +123,14 @@ jobs:
             architecture: 32
 
           # The linux_arm × 64 cell is the one that produces the linux arm64
-          # bundle (release_arch: arm64 via the include block); the ×arm64
-          # cell would fall through to the *) build case which applies
-          # CMAKE_OSX_ARCHITECTURES with no architecture_string set — invalid
-          # on Linux. Keep excluded.
+          # bundle (release_arch: arm64 via the include block at L53-57).
+          # Removing this exclude makes the ×arm64 cell run, where it fails
+          # at cmake configure: the install-deps case statement (L147)
+          # gates apt-get on `linux64|linux_arm64`, which doesn't match
+          # `linux_armarm64` (the concatenation of target + architecture for
+          # this cell) — no OpenGL deps land, dasGlfw configure dies on
+          # missing OPENGL_opengl_LIBRARY. To actually support this cell,
+          # the install-deps pattern would need broadening (e.g. linux_arm*).
           - target: linux_arm
             architecture: arm64
 
