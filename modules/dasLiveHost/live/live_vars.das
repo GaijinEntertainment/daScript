@@ -117,17 +117,23 @@ class LiveVarsPass : AstPassMacro {
                 if (st == null) {
                     return
                 }
+                // Per-field hash combines the global's initializer (if any) with the
+                // field's own default. A change to either source-level expression
+                // invalidates the persisted value for the field. Without the global
+                // part, edits to `var s : S = S(x = 100)` wouldn't bust the cache
+                // for `s.x` even though the user-visible source default changed.
+                let gInitPart = g.init != null ? int64(hash(describe(g.init))) : int64(0)
                 for (f in st.fields) {
                     if (f.annotation |> find_arg("live") ?as tBool ?? false) {
                         if (f._type.flags.constant) {
                             continue  // lint pass already errored
                         }
-                        let fInitHash = f.init != null ? int64(hash(describe(f.init))) : int64(0)
+                        let fInitPart = f.init != null ? int64(hash(describe(f.init))) : int64(0)
                         field_targets |> emplace(LiveFieldTarget(
                             var_name = string(g.name),
                             field_name = string(f.name),
                             key = "__live_vars_{mod.name}_{g.name}__{f.name}",
-                            init_hash = fInitHash))
+                            init_hash = gInitPart ^ fInitPart))
                     }
                 }
             }

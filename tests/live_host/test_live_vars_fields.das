@@ -156,4 +156,43 @@ def test_per_field_archive_round_trip(t : T?) {
         }
         t |> equal(restored, 0)
     }
+
+    t |> run("per-field hash combines field init AND global init (XOR)") <| @(t : T?) {
+        // Mirrors the macro's hash composition. Source-level edits to either
+        // the struct field's init or the global's initializer must invalidate
+        // the cache. Both parts together = single per-field key.
+        let key = "__live_vars__synthetic_combined_hash"
+
+        let g_init_old = int64(hash("S(x = 100)"))
+        let g_init_new = int64(hash("S(x = 999)"))
+        let f_init = int64(hash("5"))
+
+        let combined_old = g_init_old ^ f_init
+        let combined_new = g_init_new ^ f_init  // same field, different global init
+
+        var v = 7777
+        var ser = new MemSerializer()
+        var arch = Archive(reading = false, stream = ser)
+        var h = combined_old
+        arch |> serialize(h)
+        arch |> serialize(v)
+        let data <- ser->extractData()
+        live_store_bytes(key, data)
+        unsafe { delete ser; }
+
+        // Reload as if source g.init changed: we expect combined_new.
+        var restored = 0
+        var load_data : array<uint8>
+        if (live_load_bytes(key, load_data) && length(load_data) > 0) {
+            var deser = new MemSerializer(load_data)
+            var arch2 = Archive(reading = true, stream = deser)
+            var stored_hash : int64
+            arch2 |> serialize(stored_hash)
+            if (stored_hash == combined_new) {
+                arch2 |> serialize(restored)
+            }
+            unsafe { delete deser; }
+        }
+        t |> equal(restored, 0)  // editing g.init alone busts the per-field cache
+    }
 }
