@@ -122,6 +122,14 @@ jobs:
           - target: linux_arm
             architecture: 32
 
+          # The linux_arm × 64 cell is the one that produces the linux arm64
+          # bundle (release_arch: arm64 via the include block); the ×arm64
+          # cell would fall through to the *) build case which applies
+          # CMAKE_OSX_ARCHITECTURES with no architecture_string set — invalid
+          # on Linux. Keep excluded.
+          - target: linux_arm
+            architecture: arm64
+
           - target: windows
             architecture: arm64
 
