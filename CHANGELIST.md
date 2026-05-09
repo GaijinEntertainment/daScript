@@ -15,13 +15,14 @@
 - **Schema introspection and migrations** — `[sql_table(schema_from=...)]` + `check_schema` validate live database schema against the daslang struct at compile time; `daslib/sqlite_migrate` ships versioned `[sql_migration]` blocks with typed ALTER macros (`add_column` / `drop_column` / `rename_column`) and full-table rebuilds via `[struct_convert]` + `convert_and_rename` + `[sql_table(legacy=true)]` for non-trivial schema changes
 - **Operational SQLite features** — SQL fragment building, `ATTACH DATABASE`, FTS5 (`[sql_fts5]` + `text_match`), and pre-migration utilities
 
-#### Style Lint and Unified Linting (#2386, #2390, #2391, #2417, #2441, #2516, #2517, #2533, #2538)
+#### Style Lint and Unified Linting (#2386, #2390, #2391, #2417, #2441, #2516, #2517, #2533, #2538, #2612)
 
 New compile-time linting now covers daslang style in addition to the existing correctness and performance passes.
 
 - **`daslib/style_lint`** — detects non-idiomatic gen2 patterns such as unnecessary block pipes, declaration-then-assignment, array literal construction via repeated `push`, and long comment blocks
 - **Unified lint flow** — shared warning collection, `nolint` suppression, comment-hygiene rules, and codebase-wide cleanup to drive warnings back down
 - **Noise reduction** — one-line style enforcement was relaxed where it produced more friction than signal
+- **Nine new perf/style rules** (#2612) — `PERF013`–`PERF017` and `STYLE016`–`STYLE019` extend the rule set with additional anti-patterns surfaced during the codebase sweep
 
 #### Duplicate Detection Pipeline: `detect-dupe` and `find-dupe` (#2491, #2493, #2497, #2502, #2508, #2510, #2522)
 
@@ -104,15 +105,18 @@ A broad utility pass landed across libraries, docs, and developer workflow.
 - **das-fmt vendored in-tree** — `utils/das-fmt/` now holds a local copy of the formatter; CI runs against it instead of an external clone
 - **Tooling/docs** — filesystem guidance, handle-registry tutorial work, class-boost coverage, integer-returning `main()` for tools, compilation progress reporting, and assorted AST/class-method polish
 
-#### Build, CI, and Web (#2578, #2600, #2602)
+#### Build, CI, and Web (#2578, #2600, #2602, #2611, #2614, #2616)
 
 - **Tutorials build in CI** (#2578) — every tutorial now compiles in CI as part of the regular check run
 - **Web target reuses the main `CMakeLists`** (#2600) — `daslang-web` picks up tests and tracks the same build configuration as the native targets, removing the duplicated CMake graph
 - **MCP: parse-aware C++ source-search tools** (#2602) — `cpp_find_symbol`, `cpp_grep_usage`, `cpp_outline`, `cpp_goto_definition` join the existing daslang-side tools, with a configurable search root and git-signature staleness detection
+- **MCP: auto-retry unqualified module names under `daslib/`** (#2616) — when a tool call references e.g. `fio` and the symbol can't be found, the server retries against `daslib/fio` before reporting a miss
+- **`daslib/blind_mouse`: personal Q&A cache MCP server** (#2611) — `mouse__ask` / `mouse__add` keep a curated `.md` answer cache for "how do I X?" / "what's the pattern for Y?" questions across sessions
+- **`@live` extends to struct fields** (#2614) — `live_host` now annotates individual struct fields with `@live`, with per-field `init_hash` combining `f.init` and `g.init` so partial-struct reloads stay coherent
 
 ### Bug Fixes
 
-- **Build, tooling, and CI fixes** (#2385, #2394, #2395, #2424, #2447, #2521, #2537, #2591) — package `.gitignore` handling, PEG standalone/LLVM issues, `require` fixes, `dasbind` fixes, glob dependency tracking, documentation/error-position corrections, and daslang plugin: completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope
+- **Build, tooling, and CI fixes** (#2385, #2394, #2395, #2424, #2447, #2521, #2537, #2591, #2617) — package `.gitignore` handling, PEG standalone/LLVM issues, `require` fixes, `dasbind` fixes, glob dependency tracking, documentation/error-position corrections, daslang plugin: completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope, and `find_call_macro` null-deref fix with `macro_call` regression coverage
 - **Runtime/compiler correctness** (#2387, #2392, #2486, #2520, #2526, #2531, #2587, #2593) — JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, `runWithCatch` state cleanup, ASAN/diagnostic follow-up, fix #2583 (standalone-exe shutdown crash), and fix #2582 (top-level `let`-init now correctly registers builtins)
 - **Fusion engine** — TSan-safe `v_ldu` via `DAS_LDU_WORKHORSE`, `call1` / `call2` `loadSize` stamped from `fnPtr->debugInfo`, and a TSan suppression for the over-read in fusion call/return shells
 - **Language/runtime edge cases** (#2444, #2446, #2463, #2468) — `finally` loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, and strict-weak-ordering cleanup
