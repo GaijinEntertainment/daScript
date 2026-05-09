@@ -719,6 +719,7 @@ def fibI(n)
             <li><b>daslib/style_lint</b> &mdash; flags non-idiomatic gen2 patterns: unnecessary block pipes, declaration-then-assignment, array literal construction via repeated push, long comment blocks</li>
             <li><b>Unified lint flow</b> &mdash; shared warning collection, nolint suppression, comment-hygiene rules, and a codebase-wide cleanup that drove warnings back to zero</li>
             <li><b>Noise reduction</b> &mdash; one-line style enforcement was relaxed where it produced more friction than signal</li>
+            <li><b>Nine new perf/style rules</b> &mdash; PERF013&ndash;017 and STYLE016&ndash;019 extend the rule set with additional anti-patterns surfaced during the codebase sweep</li>
         </ul>
 
         <h4>Duplicate Detection: detect-dupe and find-dupe</h4>
@@ -800,11 +801,14 @@ def fibI(n)
             <li><b>Tutorials build in CI</b> &mdash; every tutorial now compiles in CI as part of the regular check run</li>
             <li><b>Web target reuses the main CMakeLists</b> &mdash; daslang-web picks up tests and tracks the same build configuration as the native targets, removing the duplicated CMake graph</li>
             <li><b>MCP: parse-aware C++ source-search tools</b> &mdash; cpp_find_symbol, cpp_grep_usage, cpp_outline, cpp_goto_definition join the existing daslang-side tools, with a configurable search root and git-signature staleness detection</li>
+            <li><b>MCP: auto-retry unqualified module names under daslib/</b> &mdash; when a tool call references e.g. <code>fio</code> and the symbol can't be found, the server retries against <code>daslib/fio</code> before reporting a miss</li>
+            <li><b>daslib/blind_mouse: personal Q&amp;A cache MCP server</b> &mdash; mouse__ask / mouse__add keep a curated .md answer cache for "how do I X?" / "what's the pattern for Y?" questions across sessions</li>
+            <li><b>@live extends to struct fields</b> &mdash; live_host annotates individual struct fields with @live, with per-field init_hash combining f.init and g.init so partial-struct reloads stay coherent</li>
         </ul>
 
         <h4>Bug Fixes</h4>
         <ul>
-            <li><b>Build, tooling, CI</b> &mdash; package .gitignore handling, PEG standalone/LLVM, require fixes, dasbind fixes, glob dependency tracking, doc/error-position corrections, and daslang plugin: completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope</li>
+            <li><b>Build, tooling, CI</b> &mdash; package .gitignore handling, PEG standalone/LLVM, require fixes, dasbind fixes, glob dependency tracking, doc/error-position corrections, daslang plugin completion no longer silently bails when an external binding (e.g. OpenGL, GLSL preprocessor) is in scope, and find_call_macro null-deref fix with macro_call regression coverage</li>
             <li><b>Runtime/compiler correctness</b> &mdash; JIT global-function arguments, handled-type property write propagation, function-lookup cache pointer reuse, runWithCatch state cleanup, ASAN follow-up, fix for the standalone-exe shutdown crash, and fix for top-level let-init now correctly registering builtins</li>
             <li><b>Fusion engine</b> &mdash; TSan-safe v_ldu via DAS_LDU_WORKHORSE, call1 / call2 loadSize stamped from fnPtr-&gt;debugInfo, and a TSan suppression for the over-read in fusion call/return shells</li>
             <li><b>Language edge cases</b> &mdash; finally loop rework, clearer inference failure on bad calls, GCC reference shadow fixes, strict-weak-ordering cleanup</li>
