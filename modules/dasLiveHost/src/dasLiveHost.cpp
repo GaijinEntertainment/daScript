@@ -62,6 +62,12 @@ extern "C" {
     }
     DAS_EXPORT_DLL bool live_host_is_context_dead()    { return g_state.context_dead; }
     DAS_EXPORT_DLL void live_host_clear_context_dead() { g_state.context_dead = false; }
+    DAS_EXPORT_DLL void live_host_set_auth_token(const char * token) {
+        g_state.auth_token = token ? token : "";
+    }
+    DAS_EXPORT_DLL const char * live_host_get_auth_token() {
+        return g_state.auth_token.empty() ? nullptr : g_state.auth_token.c_str();
+    }
     DAS_EXPORT_DLL void live_host_clear_error() {
         g_state.last_error.clear();
     }
@@ -188,7 +194,12 @@ bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx) {
 // Called from the live_api agent context. Since the HV handler runs on the main
 // thread during tick(), the main context is idle and safe to call into.
 
-const char * live_dispatch_command_via_host(const char * cmd_json, Context * callerCtx) {
+const char * live_dispatch_command_via_host(const char * cmd_json, const char * auth_token, Context * callerCtx) {
+    if (!g_state.auth_token.empty()) {
+        if (!auth_token || g_state.auth_token != auth_token) {
+            return callerCtx->allocateString("{\"error\": \"unauthorized\"}", nullptr);
+        }
+    }
     if (!g_state.dispatch_context || !g_state.dispatch_fn || !cmd_json) {
         return callerCtx->allocateString("{\"error\": \"no dispatch context\"}", nullptr);
     }
@@ -388,7 +399,7 @@ public:
         // Command dispatch bridge (called from live_api agent, dispatches in main context)
         addExtern<DAS_BIND_FUN(live_dispatch_command_via_host)>(*this, lib, "dispatch_command",
             SideEffects::modifyExternal, "das::live_dispatch_command_via_host")
-                ->args({"command_json", "context"});
+                ->args({"command_json", "auth_token", "context"});
     }
 
     virtual ModuleAotType aotRequire(TextWriter & tw) const override {

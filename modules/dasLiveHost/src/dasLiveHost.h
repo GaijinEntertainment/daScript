@@ -44,6 +44,9 @@ namespace das {
 
         // Set by DLL when command exception kills context
         bool context_dead = false;
+
+        // Authentication token for command dispatch (empty = no auth required)
+        string auth_token;
     };
 
     // Functions bound to daScript — declared here for AOT.
@@ -65,6 +68,6 @@ namespace das {
     bool live_load_bytes(const char * key, TArray<uint8_t> & data, Context * ctx);
     void live_collect_gc(Context * ctx);
     void live_collect_string_gc(Context * ctx);
-    const char * live_dispatch_command_via_host(const char * cmd_json, Context * callerCtx);
+    const char * live_dispatch_command_via_host(const char * cmd_json, const char * auth_token, Context * callerCtx);
 
 }

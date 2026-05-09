@@ -162,7 +162,12 @@ class LiveApiServer : HvWebServer {
             if (empty(body)) {
                 return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
             }
-            let result = dispatch_command(body)
+            let auth_header = string(get_header(req, "Authorization"))
+            var token = ""
+            if (length(auth_header) > 7 && slice(auth_header, 0, 7) == "Bearer ") {
+                token = slice(auth_header, 7, length(auth_header))
+            }
+            let result = dispatch_command(body, token)
             return resp |> JSON(result, http_status.OK)
         }
 
