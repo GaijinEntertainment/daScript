@@ -61,7 +61,7 @@ def cpp_rule_id_to_kind(rule_id : string) : string {
 }
 
 def is_cpp_ident_char(ch : int) : bool {
-    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == ':' || ch == '~'
+    return is_alpha(ch) || is_number(ch) || ch == '_' || ch == ':' || ch == '~'
 }
 
 def is_cpp_op_char(ch : int) : bool {
@@ -127,7 +127,7 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
         if (kw_pos >= 0) {
             var rest = strip(slice(line, kw_pos + length(kw)))
             // skip optional API macros (any UPPER_SNAKE token before the name)
-            while (length(rest) > 0 && (first_character(rest) >= 'A' && first_character(rest) <= 'Z')) {
+            while (!empty(rest) && (first_character(rest) >= 'A' && first_character(rest) <= 'Z')) { // nolint:PERF014
                 let first_space = find(rest, " ")
                 if (first_space < 0) {
                     break
@@ -137,7 +137,7 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
                 var all_upper = true
                 for (i in range(length(head))) {
                     let c = character_at(head, i) // nolint:PERF002,PERF003
-                    if (!((c >= 'A' && c <= 'Z') || c == '_' || (c >= '0' && c <= '9'))) {
+                    if (!((c >= 'A' && c <= 'Z') || c == '_' || is_number(c))) { // nolint:PERF014
                         all_upper = false
                         break
                     }
@@ -175,7 +175,7 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
             } elif (starts_with(rest, "struct ")) {
                 rest = strip(slice(rest, 7))
             }
-            if (length(rest) > 0 && first_character(rest) != '{') {
+            if (!empty(rest) && first_character(rest) != '{') {
                 var nend = length(rest)
                 for (i in range(length(rest))) {
                     let c = character_at(rest, i) // nolint:PERF002,PERF003
@@ -972,6 +972,47 @@ def cpp_lookup_by_name(cppName : string; var match : CppMatch&) : bool {
         if (key_exists(cpp_index, unq)) {
             let idx = cpp_index[unq][0]
             match = cpp_index_entries[idx]
+            return true
+        }
+    }
+    return false
+}
+
+// Like cpp_lookup_by_name but scans `dirs` fresh (no global cache touched).
+// Used by `with_cpp_source` callers that want a narrower scan than the
+// default CPP_SEARCH_DIRS — typical for tests pointing at a specific subtree
+// (e.g. "src/builtin") to avoid the multi-hundred-file index build cost.
+//
+// Single-symbol callers only — re-scans on every call. Multi-symbol callers
+// (e.g. find_symbol) should call cpp_run_scan once and use
+// cpp_lookup_by_name_in_entries below to avoid N rescans of the same dirs.
+def cpp_lookup_by_name_scoped(cppName : string; dirs : array<string>; var match : CppMatch&) : bool {
+    if (empty(cppName) || empty(dirs)) {
+        return false
+    }
+    var err : string
+    let entries <- cpp_run_scan(dirs, "", err)
+    if (!empty(err)) {
+        return false
+    }
+    return cpp_lookup_by_name_in_entries(cppName, entries, match)
+}
+
+// Lookup by name against a pre-scanned entry list. Use when one tool call
+// resolves N symbols against the same dirs — scan once, look up N times.
+def cpp_lookup_by_name_in_entries(cppName : string; entries : array<CppMatch>; var match : CppMatch&) : bool {
+    if (empty(cppName)) {
+        return false
+    }
+    let last_sep = rfind(cppName, "::")
+    let unq = last_sep >= 0 ? slice(cppName, last_sep + 2) : ""
+    for (i in range(length(entries))) {
+        let e & = unsafe(entries[i])
+        if (empty(e.name)) {
+            continue
+        }
+        if (e.name == cppName || e.qualified == cppName || (!empty(unq) && e.name == unq)) {
+            match = entries[i]
             return true
         }
     }

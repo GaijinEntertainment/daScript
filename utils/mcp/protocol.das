@@ -315,7 +315,8 @@ def handle_tools_list(id_json : string) : string {
             "kind" => PropertySchema(_type = "string", description = "Limit to kind: 'function', 'generic', 'struct', 'handled', 'field', 'enum', 'global'"),
             "file" => PropertySchema(_type = "string", description = "Optional .das file - if provided, searches all modules loaded by that file (including daslib)"),
             "project" => PROJECT_PROP,
-            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true', for each result with a C++ implementation (builtin functions, handled types), append the resolved C++ source location via the cpp index. Adds ~2s on first call (lazy index build).")
+            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true', for each result with a C++ implementation (builtin functions, handled types), append the resolved C++ source location via the cpp index. Adds ~2s on first call (lazy index build)."),
+            "cpp_dirs" => PropertySchema(_type = "string", description = "Optional comma-separated repo-relative paths to scope the C++ source-redirect lookup to (e.g. 'src/builtin'). Only consulted when with_cpp_source='true'. Empty -> use the cached global C++ index over CPP_SEARCH_DIRS. Non-empty -> fresh scoped scan, no global cache touched. Useful when you know which subtree the symbol lives in and want to skip the multi-hundred-file index build.")
         },
         ["query"]
     ))
@@ -347,7 +348,8 @@ def handle_tools_list(id_json : string) : string {
             "column" => PropertySchema(_type = "string", description = "Column number (1-based)"),
             "no_opt" => PropertySchema(_type = "string", description = "If 'true', disable optimizations to preserve original AST (constant folding, inlining)"),
             "project" => PROJECT_PROP,
-            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true' and the resolved symbol is a builtin function or a handled type, append the resolved C++ source location. Adds ~2s on first call (lazy index build).")
+            "with_cpp_source" => PropertySchema(_type = "string", description = "If 'true' and the resolved symbol is a builtin function or a handled type, append the resolved C++ source location. Adds ~2s on first call (lazy index build)."),
+            "cpp_dirs" => PropertySchema(_type = "string", description = "Optional comma-separated repo-relative paths to scope the C++ source-redirect lookup to (e.g. 'src/builtin'). Only consulted when with_cpp_source='true'. Empty -> cached global C++ index. Non-empty -> fresh scoped scan, no global cache touched.")
         },
         ["file", "line", "column"]
     ))
@@ -644,7 +646,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "convert_to_gen2") {
         return do_convert_to_gen2(arg1, arg2 == "true")
     } elif (tool_name == "goto_definition") {
-        return do_goto_definition(arg1, arg2, arg3, arg4, project, arg5 == "true")
+        return do_goto_definition(arg1, arg2, arg3, arg4, project, arg5 == "true", arg6)
     } elif (tool_name == "type_of") {
         return do_type_of(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "find_references") {
@@ -654,7 +656,7 @@ def dispatch_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : strin
     } elif (tool_name == "list_modules") {
         return do_list_modules(arg1 == "true")
     } elif (tool_name == "find_symbol") {
-        return do_find_symbol(arg1, arg2, arg3, project, arg4 == "true")
+        return do_find_symbol(arg1, arg2, arg3, project, arg4 == "true", arg5)
     } elif (tool_name == "list_module_api") {
         return do_list_module_api(arg1, arg2, arg3, arg4, project)
     } elif (tool_name == "grep_usage") {
@@ -782,6 +784,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg3 = get_string_arg(args, "column")
         arg4 = get_string_arg(args, "no_opt")
         arg5 = get_string_arg(args, "with_cpp_source")
+        arg6 = get_string_arg(args, "cpp_dirs")
     } elif (name == "type_of") {
         arg1 = get_string_arg(args, "file")
         if (empty(arg1)) {
@@ -830,6 +833,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg2 = get_string_arg(args, "kind")
         arg3 = get_string_arg(args, "file")
         arg4 = get_string_arg(args, "with_cpp_source")
+        arg5 = get_string_arg(args, "cpp_dirs")
     } elif (name == "list_module_api") {
         arg1 = get_string_arg(args, "module")
         if (empty(arg1)) {

@@ -1974,10 +1974,11 @@ def test_cpp_grep_usage_dedup(t : T?) {
 
 [test]
 def test_cpp_find_symbol(t : T?) {
-    t |> run("finds class in src/") <| @(t : T?) {
+    t |> run("finds class in src/ast") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_find_symbol("=Module", "class", "src", ""), text, is_error)
+        // narrowed from "src" (~144 files) to "src/ast" (~34 files); Module lives in src/ast
+        parse_result(do_cpp_find_symbol("=Module", "class", "src/ast", ""), text, is_error)
         t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
         t |> success(find(text, "Module") >= 0, "should find Module -- {cpp_diag(text)}")
     }
@@ -1991,21 +1992,23 @@ def test_cpp_find_symbol(t : T?) {
     t |> run("no-match returns clean empty result") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_find_symbol("zzznotarealsymbolzzz_xyzzy", "", "src", ""), text, is_error)
+        // narrowed scope; absence-of-symbol is structural, not scope-dependent
+        parse_result(do_cpp_find_symbol("zzznotarealsymbolzzz_xyzzy", "", "src/ast", ""), text, is_error)
         t |> success(!is_error, "should not be error on no-match -- {cpp_diag(text)}")
         t |> success(find(text, "No matches") >= 0, "should report no matches -- {cpp_diag(text)}")
     }
     t |> run("kind filter rejects wrong kinds") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_find_symbol("=addFunction", "class", "src", ""), text, is_error)
+        // addFunction is a method (not a class) in src/ast/; narrowed scope still proves the kind filter
+        parse_result(do_cpp_find_symbol("=addFunction", "class", "src/ast", ""), text, is_error)
         t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
         t |> success(find(text, "No matches") >= 0, "kind=class should reject methods named addFunction -- {cpp_diag(text)}")
     }
     t |> run("missing query returns error") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_cpp_find_symbol("", "", "src", ""), text, is_error)
+        parse_result(do_cpp_find_symbol("", "", "src/ast", ""), text, is_error)
         t |> success(is_error, "should be error")
     }
 }
@@ -2177,7 +2180,10 @@ def test_find_symbol_with_cpp_source(t : T?) {
     t |> run("redirect on — emits '→ cpp:' line for builtins") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_find_symbol("=print", "function", "", "", true), text, is_error)
+        // cpp_dirs="src/builtin" narrows the C++ scan from full CPP_SEARCH_DIRS
+        // (~947 files) to ~33 files where `print` lives. Drops this test from
+        // ~19s to ~1s.
+        parse_result(do_find_symbol("=print", "function", "", "", true, "src/builtin"), text, is_error)
         t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
         // Either we located print's cpp source OR we report (not located).
         // Both prove the redirect path fired.
@@ -2198,7 +2204,8 @@ def test_goto_definition_with_cpp_source(t : T?) {
     t |> run("redirect on — appends C++: line for builtin") <| @(t : T?) {
         var text : string
         var is_error = false
-        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", true), text, is_error)
+        // cpp_dirs="src/builtin" narrows the redirect lookup; drops this from ~17s to ~1s.
+        parse_result(do_goto_definition(fixture_path("_fixture_goto.das"), "34", "5", "", "", true, "src/builtin"), text, is_error)
         t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
         t |> success(find(text, "Kind: builtin") >= 0, "should still resolve to a builtin -- {cpp_diag(text)}")
         t |> success(find(text, "C++:") >= 0, "C++ line should appear when with_cpp_source=true -- {cpp_diag(text)}")
@@ -2308,5 +2315,78 @@ def test_cpp_using_alias_visible(t : T?) {
         parse_result(do_cpp_find_symbol("module_pull_t", "typedef", "include", ""), text, is_error)
         t |> success(!is_error, "should not be error -- {cpp_diag(text)}")
         t |> success(find(text, "module_pull_t") >= 0, "should locate the using-alias -- {cpp_diag(text)}")
+    }
+}
+
+// ── run_mcp_subtool wiring tests ──────────────────────────────────────
+//
+// The 270 tool-level tests above already cover the wiring end-to-end via
+// `do_<tool>(...)`. These four pin down the four behaviors of the helper
+// itself: argv passthrough, missing-subtool, timeout, and non-zero exit.
+// Fixtures live alongside the real subtools at utils/mcp/subtools/_test_*.das
+// so they share the same require-chain shape (no behavioral surprises).
+
+[test]
+def test_run_mcp_subtool_passthrough(t : T?) {
+    t |> run("argv round-trips through `--` separator") <| @(t : T?) {
+        let raw = run_mcp_subtool("_test_passthrough", ["alpha", "beta", "gamma"])
+        var text : string
+        var is_error = false
+        parse_result(raw, text, is_error)
+        t |> success(!is_error, "should not be error -- text={text}")
+        t |> success(find(text, "PASSTHROUGH: alpha beta gamma") >= 0,
+                     "args should round-trip verbatim -- text={text}")
+    }
+    t |> run("empty args list still works") <| @(t : T?) {
+        let raw = run_mcp_subtool("_test_passthrough", [])
+        var text : string
+        var is_error = false
+        parse_result(raw, text, is_error)
+        t |> success(!is_error, "should not be error -- text={text}")
+        t |> success(find(text, "PASSTHROUGH:") >= 0,
+                     "marker present even with no args -- text={text}")
+    }
+}
+
+[test]
+def test_run_mcp_subtool_missing(t : T?) {
+    t |> run("nonexistent subtool surfaces as error") <| @(t : T?) {
+        let raw = run_mcp_subtool("_does_not_exist_xyzzy", [])
+        var text : string
+        var is_error = false
+        parse_result(raw, text, is_error)
+        t |> success(is_error, "should be error -- text={text}")
+        t |> success(find(text, "_does_not_exist_xyzzy") >= 0,
+                     "error should name the missing subtool -- text={text}")
+    }
+}
+
+[test]
+def test_run_mcp_subtool_timeout(t : T?) {
+    t |> run("subtool exceeding timeout surfaces 'timed out'") <| @(t : T?) {
+        // Sleep 5s, allow 0.5s — guaranteed timeout. Wall clock cost ~0.5s
+        // (process is killed at the deadline, not after the full sleep).
+        let raw = run_mcp_subtool("_test_sleep", ["5000"], 0.5)
+        var text : string
+        var is_error = false
+        parse_result(raw, text, is_error)
+        t |> success(is_error, "should be error -- text={text}")
+        t |> success(find(text, "timed out") >= 0,
+                     "error should mention 'timed out' -- text={text}")
+    }
+}
+
+[test]
+def test_run_mcp_subtool_nonzero_exit(t : T?) {
+    t |> run("panicking subtool surfaces 'failed (exit ...)'") <| @(t : T?) {
+        let raw = run_mcp_subtool("_test_panic", [])
+        var text : string
+        var is_error = false
+        parse_result(raw, text, is_error)
+        t |> success(is_error, "should be error -- text={text}")
+        t |> success(find(text, "failed (exit") >= 0,
+                     "error should report non-zero exit -- text={text}")
+        t |> success(find(text, "STDOUT_BEFORE_PANIC") >= 0,
+                     "captured stdout before the panic should be in the error payload -- text={text}")
     }
 }
