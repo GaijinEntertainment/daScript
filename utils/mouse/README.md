@@ -5,14 +5,18 @@ Personal Q&A cache MCP server. `.md` answers backed by SQLite/FTS5 retrieval. Lo
 ## Quick start
 
 ```bash
-# Rebuild the index from <root>/docs/ (defaults to ./mouse-data, override via --root or $MOUSE_ROOT)
-daslang utils/mouse/main.das -- rebuild
-
-# Search
+# Search (defaults to ./mouse-data, override via --root or $MOUSE_ROOT;
+# every entry point auto-reindexes via git-staleness — no manual rebuild needed)
 daslang utils/mouse/main.das -- ask "how do I X"
 
-# Add a Q&A (dupe-gated by default)
+# Search with raw FTS5 syntax (phrases, NEAR, explicit AND/OR)
+daslang utils/mouse/main.das -- ask '"foo bar" OR baz' --raw-query
+
+# Add a Q&A. Surfaces top similar docs; hard-blocks only on Jaccard ≥ 0.7.
 daslang utils/mouse/main.das -- add "how do I X" --body "answer body"
+
+# Force a full rescan + signature reset (rarely needed)
+daslang utils/mouse/main.das -- rebuild
 
 # Run as MCP stdio server
 daslang utils/mouse/main.das -- serve
@@ -43,7 +47,7 @@ mouse-data/
   index.db             -- SQLite, rebuildable from docs/
 ```
 
-`.md` files are checked-in-friendly. `git pull` + `mouse rebuild` re-syncs the index.
+`.md` files are checked-in-friendly. `git pull` and the next mouse command auto-reindex via the git-staleness signature (HEAD + porcelain status over `<root>/docs/*.md` + per-changed-file mtimes). No manual `rebuild` needed.
 
 ## Development
 

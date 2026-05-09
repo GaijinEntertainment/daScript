@@ -6,6 +6,7 @@ require common public
 require grep_usage public
 require outline public
 require ../cpp_search_config.das public
+require ../../common/git_signature.das
 require daslib/json public
 require daslib/json_boost public
 require daslib/strings_boost public
@@ -774,21 +775,6 @@ var cpp_index_entries : array<CppMatch>
 // so users get a real reason instead of a silent "no matches".
 var cpp_index_error : string
 
-// True if `path` (extracted from a `git status --porcelain` line) refers to a
-// .cpp/.h/.hpp file inside one of CPP_SEARCH_DIRS. Anything else (.das edits,
-// .cmake edits, tutorials/foo.cpp, etc.) is irrelevant to the index.
-def private is_indexed_path(path : string) : bool {
-    if (!ends_with_any(path, CPP_SEARCH_INCLUDE_GLOBS)) {
-        return false
-    }
-    for (dir in CPP_SEARCH_DIRS) {
-        if (path == dir || starts_with(path, "{dir}/")) {
-            return true
-        }
-    }
-    return false
-}
-
 // `*.cpp` / `*.h` / `*.hpp` style patterns are simple suffixes (no embedded
 // glob meta-chars) — a substring compare is sufficient and avoids pulling
 // in a full glob engine just for extension checks.
@@ -803,41 +789,11 @@ def private ends_with_any(path : string; suffix_globs : array<string>) : bool {
     return false
 }
 
-// Strip `git status --porcelain` 3-char status prefix. Handles the "rename"
-// form `R  old -> new` by returning the new name.
-def private extract_status_path(line : string) : string {
-    if (length(line) <= 3) {
-        return ""
-    }
-    var path = slice(line, 3)
-    let arrow = find(path, " -> ")
-    if (arrow >= 0) {
-        path = slice(path, arrow + 4)
-    }
-    return path
-}
-
-// stat() wrapper that returns 0 on missing/error so signature compute doesn't
-// crash on a deleted file.
-def private stat_mtime_or_zero(path : string) : int64 {
-    let st = stat(path)
-    return st.is_valid ? int64(st.mtime) : 0l
-}
-
-// Filesystem-only staleness signature for the no-git fallback. Walks
-// `search_dirs` recursively, hashes (repo-relative path, mtime) for every
-// file matching `is_indexed_path`, and prunes any subtree that
-// `cpp_collect_git_excludes` would skip (vendored repos, daspkg cache, etc.).
-//
-// This is the slow path — ~50–200ms for daslang's tree (~1500 files). Only
-// invoked when `git rev-parse` / `git status` fails, so users with a normal
-// git checkout pay nothing.
-def cpp_compute_filesystem_signature(search_dirs : array<string>) : string {
-    let das_root = get_das_root()
+// `cpp_collect_git_excludes` returns ast-grep `--globs` patterns of the
+// form `!**/<rel>/**`; strip the wrapping to get bare repo-relative
+// prefixes suitable for prefix-match pruning.
+def private collect_prune_prefixes(search_dirs : array<string>) : array<string> {
     let raw_excludes <- cpp_collect_git_excludes(search_dirs, CPP_SEARCH_INCLUDE_OVERRIDES)
-    // `cpp_collect_git_excludes` returns ast-grep `--globs` patterns of the
-    // form `!**/<rel>/**`; strip the wrapping to get bare repo-relative
-    // prefixes for prefix-match pruning.
     var pruned : array<string>
     pruned |> reserve(length(raw_excludes))
     for (p in raw_excludes) {
@@ -845,76 +801,31 @@ def cpp_compute_filesystem_signature(search_dirs : array<string>) : string {
             pruned |> push(slice(p, 4, length(p) - 3))
         }
     }
-    return build_string() $(var w) {
-        for (sd in search_dirs) {
-            // `dir_rec` yields filenames RELATIVE to `sd`, not absolute. To
-            // match what `is_indexed_path` expects (full repo-relative path
-            // starting with one of CPP_SEARCH_DIRS) we prepend sd's repo-rel
-            // form, and to stat() we join filename onto sd.
-            let sd_rel = to_generic_path(make_relative_path(sd, das_root))
-            dir_rec(sd) $(filename, is_dir) {
-                if (is_dir) {
-                    return
-                }
-                let leaf = to_generic_path(filename)
-                let rel = empty(sd_rel) ? leaf : "{sd_rel}/{leaf}"
-                for (pr in pruned) {
-                    if (starts_with(rel, "{pr}/")) {
-                        return
-                    }
-                }
-                if (!is_indexed_path(rel)) {
-                    return
-                }
-                w |> write("{rel}:{stat_mtime_or_zero(path_join(sd, filename))}\n")
-            }
-        }
-    }
+    return <- pruned
 }
 
-// Compute the staleness signature. Empty result on git failure → caller
-// treats as "no-git" or as transient and retries.
-//
-// `git -C <das_root>` is used (not bare `git`) so the signature is computed
-// against the daslang tree even when the MCP server was launched from a
-// subdirectory or with `--dasroot` pointing elsewhere. Likewise, paths from
-// `git status --porcelain` are repo-relative and stat()'d relative to
-// `das_root`, not the process CWD.
-def cpp_compute_index_signature() : string {
+def private is_pruned(path : string; prune_dirs : array<string>) : bool {
+    for (pr in prune_dirs) {
+        if (starts_with(path, "{pr}/")) {
+            return true
+        }
+    }
+    return false
+}
+
+// Compute the staleness signature for the cpp index. Wraps the shared
+// git_signature.compute_signature with cpp's predicate (extension globs
+// + vendored-tree pruning) and folds in the cpp_search_config.das mtime
+// so config edits invalidate the cache too.
+def ensure_cpp_index() {
     let das_root = get_das_root()
     let cfg_path = path_join(das_root, CPP_SEARCH_CONFIG_PATH)
     let cfg_sig = "cfg:{stat_mtime_or_zero(cfg_path)}"
-    var head_buf : string
-    if (run_and_capture(["git", "-C", das_root, "rev-parse", "HEAD"], head_buf, 5.0) != 0
-        || empty(head_buf)) {
-        // No git checkout (or git unavailable). Walk the search dirs and fold
-        // a per-file mtime hash into the signature so source edits invalidate
-        // the cache even without git. ~50–200ms; only on this rare path.
-        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
-        return "no-git:{cfg_sig}:fs:{hash(fs_sig)}"
-    }
-    var status_buf : string
-    if (run_and_capture(["git", "-C", das_root, "status", "--porcelain", "--untracked-files=normal"],
-                       status_buf, 5.0) != 0) {
-        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
-        return "no-git:{cfg_sig}:fs:{hash(fs_sig)}"
-    }
-    let lines <- split(status_buf, "\n")
-    let combined = build_string() $(var w) {
-        w |> write(head_buf)
-        for (line in lines) {
-            let path = extract_status_path(line)
-            if (!empty(path) && is_indexed_path(path)) {
-                w |> write("{line}:{stat_mtime_or_zero(path_join(das_root, path))}\n")
-            }
-        }
-        w |> write("{cfg_sig}\n")
-    }
-    return "{hash(combined)}"
-}
-
-def ensure_cpp_index() {
-    let sig = cpp_compute_index_signature()
+    let prune_dirs <- collect_prune_prefixes(cpp_default_search_dirs())
+    let core = compute_signature(das_root,
+                                 unsafe(@ capture(& prune_dirs) (p : string) => ends_with_any(p, CPP_SEARCH_INCLUDE_GLOBS) && !is_pruned(p, prune_dirs)),
+                                 cpp_default_search_dirs())
+    let sig = empty(core) ? "" : "{cfg_sig}:{core}"
     if (!empty(sig) && sig == cpp_index_signature) {
         return  // cache hit
     }

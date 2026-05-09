@@ -61,6 +61,9 @@ struct MouseArgs {
     @clarg_doc = "Show only queries with no result (log)"
     misses : bool
 
+    @clarg_doc = "Treat the question as raw FTS5 query syntax (no sanitization, no OR-join). See https://www.sqlite.org/fts5.html#full_text_query_syntax"
+    raw_query : bool
+
     @clarg_short = "?"
     @clarg_name = "show-help"
     @clarg_doc = "Show this help and exit"
@@ -91,16 +94,18 @@ def cmd_ask(args : MouseArgs) {
         return
     }
     with_index_db(root) $(db) {
-        let hits <- search(db, query, args.k)
+        ensure_index_fresh(db, root)
+        let hits <- search(db, query, args.k, args.raw_query)
         log_query(db, query, hits, "cli")
         if (empty(hits)) {
             print("(no results){HINT_NO_MATCH}\n")
             return
         }
+        let qtok = tokenize_for_jaccard(query)
+        print("Top {length(hits)} best match(es):\n")
         for (h in hits) {
-            print("[{h.rank}] {h.slug} — {h.title}\n")
-            print("    path: {h.path}\n")
-            print("    last_verified: {h.last_verified}\n")
+            let ttok = tokenize_for_jaccard(h.title)
+            print(fmt_search_hit(h, jaccard(qtok, ttok)))
         }
         print("{HINT_HIT}\n")
     }
@@ -118,6 +123,7 @@ def cmd_get(args : MouseArgs) {
         return
     }
     with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
         let path = path_join(docs_dir(root), "{slug}.md")
         var doc : ParsedDoc
         var err : string
@@ -166,21 +172,30 @@ def cmd_add(args : MouseArgs) {
         return
     }
     with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
         let outcome <- add_doc(db, root, question, args.body, args.slug, args.force)
         if (!empty(outcome.error)) {
             to_log(LOG_ERROR, outcome.error)
             return
         }
         if (outcome.created) {
-            print("created: {outcome.slug}\n")
+            print("Created: {outcome.slug}\n")
             print("path: {outcome.written_path}\n")
-            print("\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`.\n")
-        } else {
-            print("not created (use --force to override). similar:\n")
-            for (s in outcome.similar) {
-                print("  [{s.rank}] {s.slug} — {s.title}\n")
+            if (!empty(outcome.similar)) {
+                print("\nTop {length(outcome.similar)} similar document(s) (none above the {JACCARD_HARD_BLOCK:.2f} block threshold; surfaced for awareness):\n")
+                for (s in outcome.similar) {
+                    print(fmt_dupe_match(s))
+                }
+                print("\nHint: similarity > 0.5 may overlap meaningfully — consider whether the new doc could fold into one of these instead. Edit `last_verified` on the merged doc and `mouse rebuild` to drop this one.\n")
+            } else {
+                print("\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`.\n")
             }
-            print("\nHint: prefer extending an existing doc by editing its .md (use mouse get <slug> to find the path). Re-call with --force only when the new answer is genuinely a different topic.\n")
+        } else {
+            print("Did NOT create — top {length(outcome.similar)} similar document(s) (similarity ≥ {JACCARD_HARD_BLOCK:.2f}, looks like a duplicate):\n")
+            for (s in outcome.similar) {
+                print(fmt_dupe_match(s))
+            }
+            print("\nSuggestion: prefer extending an existing doc (run `mouse get <slug>` to find the path).\nRe-call with --force if this really is a different topic — the caller's judgment overrides the threshold.\n")
         }
     }
 }
@@ -190,6 +205,7 @@ def cmd_rebuild(args : MouseArgs) {
     var n = 0
     with_index_db(root) $(db) {
         n = rebuild(db, root)
+        set_index_signature(db, compute_index_signature(root))
     }
     print("rebuilt: {n} doc(s) in {root}\n")
 }
@@ -198,6 +214,7 @@ def cmd_log(args : MouseArgs) {
     let root = resolve_root(args.root)
     let n = args.limit > 0 ? args.limit : 20
     with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
         let rows <- recent_queries(db, n, args.misses)
         if (empty(rows)) {
             print("(no queries logged yet)\n")
@@ -302,8 +319,8 @@ def handle_initialize(id : string) : string {
 def tools_list_body() : string {
     return build_string() $(var w) {
         w |> write("\{\"tools\":[")
-        w |> write("\{\"name\":\"mouse__ask\",\"description\":\"Search the blind-mouse Q&A cache. Returns top-K matching .md docs ranked by FTS5 BM25.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"k\":\{\"type\":\"integer\",\"default\":5\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\"]\}\},")
-        w |> write("\{\"name\":\"mouse__add\",\"description\":\"Add a Q&A to the cache. With force=false (default), runs dupe-check first and returns similar docs without writing if any are found.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"body\":\{\"type\":\"string\"\},\"slug\":\{\"type\":\"string\"\},\"force\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\",\"body\"]\}\},")
+        w |> write("\{\"name\":\"mouse__ask\",\"description\":\"Search the blind-mouse Q&A cache. Returns top-K matches ranked by FTS5 BM25, each annotated with a Jaccard title-similarity (sim 0..1) so you can judge relevance at a glance. Set rawQuery=true to pass raw FTS5 syntax (https://www.sqlite.org/fts5.html#full_text_query_syntax) — quoted phrases, NEAR, explicit AND/OR.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"k\":\{\"type\":\"integer\",\"default\":5\},\"rawQuery\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\"]\}\},")
+        w |> write("\{\"name\":\"mouse__add\",\"description\":\"Add a Q&A to the cache. Runs a Jaccard similarity check on the question; with force=false (default), hard-blocks creation only when the top match scores >= 0.7 (a near-paraphrase) and returns the similar list without writing. Below the threshold, the doc is created and the similar list is returned for awareness. Set force=true to override the hard block.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"body\":\{\"type\":\"string\"\},\"slug\":\{\"type\":\"string\"\},\"force\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\",\"body\"]\}\},")
         w |> write("\{\"name\":\"mouse__get\",\"description\":\"Fetch a doc by slug. Returns body, frontmatter, and reverse-link footer (which docs link to this one).\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"slug\":\{\"type\":\"string\"\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"slug\"]\}\},")
         w |> write("\{\"name\":\"mouse__rebuild\",\"description\":\"Rescan <root>/docs/ and rebuild the SQLite index from disk. .md files are the source of truth.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"root\":\{\"type\":\"string\"\}\}\}\}")
         w |> write("]\}")
@@ -314,8 +331,14 @@ def handle_tools_list(id : string) : string {
     return jsonrpc_response(id, tools_list_body())
 }
 
-def fmt_search_hit(h : SearchHit) : string {
-    return "[{h.rank}] {h.slug} — {h.title}\n    path: {h.path}\n    last_verified: {h.last_verified}\n"
+// FTS5 BM25 rank (negative; smaller = better) shown alongside Jaccard
+// title-similarity (0..1) so the caller can read both signals at a glance.
+def fmt_search_hit(h : SearchHit; sim : float) : string {
+    return "  [BM25 {h.rank:.3f} | sim {sim:.3f}] {h.slug} — {h.title}\n      path: {h.path}\n      last_verified: {h.last_verified}\n"
+}
+
+def fmt_dupe_match(d : DupeMatch) : string {
+    return "  [sim {d.similarity:.3f}] {d.slug} — {d.title}\n"
 }
 
 let HINT_NO_MATCH = "\nHint: nothing matched. Do the research yourself, then call mouse__add(question, body) so the next session doesn't redo this work."
@@ -327,18 +350,23 @@ def tool_ask(args : JsonValue?) : string {
         return make_tool_result("missing 'question' argument", true)
     }
     let k = get_int_arg(args, "k", 5)
+    let raw_query = get_bool_arg(args, "rawQuery")
     let root = resolve_root(get_string_arg(args, "root"))
     var output : string
     with_index_db(root) $(db) {
-        let hits <- search(db, question, k)
+        ensure_index_fresh(db, root)
+        let hits <- search(db, question, k, raw_query)
         log_query(db, question, hits, "mcp")
         if (empty(hits)) {
             output = "(no results for: {question}){HINT_NO_MATCH}"
             return
         }
+        let qtok = tokenize_for_jaccard(question)
         output = build_string() $(var w) {
+            w |> write("Top {length(hits)} best match(es):\n")
             for (h in hits) {
-                w |> write(fmt_search_hit(h))
+                let ttok = tokenize_for_jaccard(h.title)
+                w |> write(fmt_search_hit(h, jaccard(qtok, ttok)))
             }
             w |> write(HINT_HIT)
         }
@@ -361,6 +389,7 @@ def tool_add(args : JsonValue?) : string {
     var output : string
     var is_error = false
     with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
         let outcome <- add_doc(db, root, question, body, slug_hint, force)
         if (!empty(outcome.error)) {
             output = outcome.error
@@ -368,14 +397,26 @@ def tool_add(args : JsonValue?) : string {
             return
         }
         if (outcome.created) {
-            output = "created: {outcome.slug}\npath: {outcome.written_path}\n\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`."
+            if (!empty(outcome.similar)) {
+                output = build_string() $(var w) {
+                    w |> write("Created: {outcome.slug}\n")
+                    w |> write("path: {outcome.written_path}\n\n")
+                    w |> write("Top {length(outcome.similar)} similar document(s) (none above the {JACCARD_HARD_BLOCK:.2f} block threshold; surfaced for awareness):\n")
+                    for (s in outcome.similar) {
+                        w |> write(fmt_dupe_match(s))
+                    }
+                    w |> write("\nHint: similarity > 0.5 may overlap meaningfully — consider whether the new doc could fold into one of these instead. Edit `last_verified` on the merged doc and call mouse__rebuild to drop this one.")
+                }
+            } else {
+                output = "Created: {outcome.slug}\npath: {outcome.written_path}\n\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`."
+            }
         } else {
             output = build_string() $(var w) {
-                w |> write("not created (use force=true to override). similar:\n")
+                w |> write("Did NOT create — top {length(outcome.similar)} similar document(s) (similarity ≥ {JACCARD_HARD_BLOCK:.2f}, looks like a duplicate):\n")
                 for (s in outcome.similar) {
-                    w |> write("  [{s.rank}] {s.slug} — {s.title}\n")
+                    w |> write(fmt_dupe_match(s))
                 }
-                w |> write("\nHint: prefer extending an existing doc by editing its .md (call mouse__get with one of the slugs above to find the path). Re-call with force=true only when the new answer is genuinely a different topic.")
+                w |> write("\nSuggestion: prefer extending an existing doc (call mouse__get with one of the slugs above to find the path).\nRe-call with force=true if this really is a different topic — the caller's judgment overrides the threshold.")
             }
         }
     }
@@ -394,6 +435,7 @@ def tool_get(args : JsonValue?) : string {
     var output : string
     var is_error = false
     with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
         let path = path_join(docs_dir(root), "{slug}.md")
         var doc : ParsedDoc
         var err : string
@@ -443,6 +485,7 @@ def tool_rebuild(args : JsonValue?) : string {
     var n = 0
     with_index_db(root) $(db) {
         n = rebuild(db, root)
+        set_index_signature(db, compute_index_signature(root))
     }
     return make_tool_result("rebuilt: {n} doc(s) in {root}", false)
 }
