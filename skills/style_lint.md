@@ -28,6 +28,10 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE013 | `var a = Foo(); a.x = 1; a.y = 2` (or `var a : Foo` for `[safe_when_uninitialized]` structs), ≥ 2 contiguous field assignments | Use a named-argument constructor: `var a = Foo(x = 1, y = 2)`. Skipped when init is non-empty (`Foo(x=1)` then `a.y = 2` stays silent), when assignments are not contiguous, or for `inscope`/generated/generic-instantiation vars |
 | STYLE014 | `//` or `//!` comment block of more than 3 contiguous lines at module/public scope | Trim to a 1-line WHY (move design notes to a `.md` doc, not source). Module-leading docstring (block before any AST decl in the file) is always allowed. Suppress per-block with `//!@nolint` on first line of a `//!` block (also stripped from generated RST), or `// nolint:STYLE014` on first line of a `//` block. **Opt-in via `options _comment_hygiene = true`** (disabled by default). |
 | STYLE015 | `//` or `//!` comment block of more than 1 contiguous line inside a `def private` | Private symbols don't surface in any doc generator, so multi-line prose there is dead weight. Trim to one line, or suppress on first line with `// nolint:STYLE015`. **Opt-in via `options _comment_hygiene = true`** (disabled by default). |
+| STYLE016 | adjacent `if (a) { return X }` / `if (b) { return X }` (or else-chained form) with the same payload | Combine with `\|\|`. Detection covers both `(a) two adjacent ExprIfThenElse statements` and `(b) if/else if chain`. Bare `break`/`continue` payloads count as equal; `return` payloads are structurally compared. |
+| STYLE017 | `if (cond) return true; else return false` (and the inverse) | Use `return cond` / `return !cond`. Two AST shapes: if-else with bool-literal returns, and `if (cond) { return b1 }` followed immediately by `return b2` (b1 != b2). |
+| STYLE018 | `b == true` / `b == false` / `b != true` / `b != false` (and Yoda forms) | Use `b` / `!b` directly. Skipped when both sides are bool literals (e.g. `true == true`). |
+| STYLE019 | `min(max(x, lo), hi)` (and the `max(min(x, hi), lo)` mirror) | Use `clamp(x, lo, hi)` from math module. Inner/outer must resolve to math::min/max specifically, not user overloads. |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -110,4 +114,4 @@ bin/Release/daslang.exe utils/lint/main.das -- file1.das [file2.das ...] [--quie
 ## Known Limitations
 
 - **STYLE001-003 source detection**: Uses `get_file_source_line()` which reads one line at a time. Multi-line call expressions are handled by scanning from the call's line to the block's line.
-- **`[lint_macro]` errors vs `expect`**: Style warnings emitted via `[lint_macro]` don't work with `expect` directives. Tests use the standalone runner instead.
+- **`[lint_macro]` errors vs `expect`**: works (both for `expect 31208:N` and `expect 31209:N`). The earlier limitation note here was stale; STYLE016/017/018/019 tests under `utils/lint/tests/` validate exact warning counts via dastest exactly the same way PERF tests do.

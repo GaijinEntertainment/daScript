@@ -112,10 +112,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         return
     }
     fio::dir(path) $(name) {
-        if (name == "." || name == "..") {
-            return
-        }
-        if (name |> starts_with("_") || is_skip_dir(name)) {
+        if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name)) {
             return
         }
         let full = "{path}/{name}"
@@ -198,7 +195,7 @@ def main() : int {
             paths |> push(arg)
         }
     }
-    if (length(paths) == 0) {
+    if (empty(paths)) {
         print("Error: no files or directories specified\n\n")
         print_help(get_command_info(type<Config>), "utils/lint/main.das")
         return 1
@@ -213,7 +210,7 @@ def main() : int {
     for (p in paths) {
         scan_das_files(p, files, cache)
     }
-    if (length(files) == 0) {
+    if (empty(files)) {
         print("Error: no .das files found\n")
         return 1
     }

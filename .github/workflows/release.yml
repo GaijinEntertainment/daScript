@@ -196,7 +196,12 @@ jobs:
             cmake)
               case "${{ matrix.target }}${{ matrix.architecture }}" in
                 linux64)
-                  cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
+                  # Match build.yml: use clang. The default ubuntu-24.04 g++ (GCC 13.3)
+                  # rejects AOT-generated patterns like `struct User { TTuple<…,Profile> Profile; }`
+                  # with -Wchanges-meaning, even though daslib/aot_cpp.das now emits
+                  # elaborated `struct Profile` to avoid that — keeping clang consistent
+                  # across CI eliminates the divergence.
+                  CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} \
                     -G "${{ matrix.cmake_generator }}" $ACTIVE_MODULES
                   cmake --build ./build --config ${{ matrix.cmake_preset }} --parallel
                   ;;

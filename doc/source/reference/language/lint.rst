@@ -501,6 +501,111 @@ string reference.
         pos = find(s, "foo")
     }
 
+PERF013 — ``a += 1`` / ``a -= 1`` should be ``a++`` / ``a--``
+=============================================================
+
+``a += 1`` lowers to a 2-node read-modify-write in interpreted mode. The
+postfix ``++`` / ``--`` collapses to a single ``SimNode_op1`` and reads as
+the canonical inc/dec idiom. Applies to the six numeric workhorse scalars
+(``int``, ``uint``, ``int64``, ``uint64``, ``float``, ``double``); vectors
+(``int2``, ``float3``, …) do **not** support ``++``/``--`` so they are
+skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
+
+.. code-block:: das
+
+    // Bad
+    a += 1                                      // PERF013
+    a -= 1                                      // PERF013
+    a += -1                                     // PERF013
+
+    // Good
+    a ++
+    a --
+
+PERF014 — closed-interval char-class range check
+==================================================
+
+Hand-rolled ranges like ``c >= 'a' && c <= 'z'`` reimplement
+``strings::is_alpha``/``is_alnum``/``is_number``/``is_white_space``/etc.
+The helper functions read clearer and centralise locale/codepoint
+behaviour. Only three closed ranges are flagged:
+
+* ``'0'..'9'`` (48..57) — ``is_number``
+* ``'a'..'z'`` (97..122) — ``is_alpha`` lower half
+* ``'A'..'Z'`` (65..90) — ``is_alpha`` upper half
+
+The hex extras ``'a'..'f'`` / ``'A'..'F'`` are deliberately **not**
+flagged — ``is_hex`` is broader. Open intervals (``c > '0' && c < '9'``)
+have different endpoints, so they are also skipped.
+
+.. code-block:: das
+
+    // Bad
+    if (c >= 'a' && c <= 'z') { ... }           // PERF014
+    if (c >= 48  && c <= 57)  { ... }           // PERF014 (raw int form)
+
+    // Good
+    if (is_alpha(c))  { ... }
+    if (is_number(c)) { ... }
+
+PERF015 — ternary min / max
+============================
+
+``a < b ? a : b`` reimplements ``min(a, b)``. The math builtins are
+vec-friendly and the intent is clearer. All eight orientations of
+``< / <= / > / >=`` × ``T==L,F==R`` / ``T==R,F==L`` are flagged.
+
+.. code-block:: das
+
+    // Bad
+    let smaller = a < b ? a : b                 // PERF015 — min
+    let larger  = a > b ? a : b                 // PERF015 — max
+
+    // Good
+    let smaller = min(a, b)
+    let larger  = max(a, b)
+
+PERF016 — ternary abs
+======================
+
+``x < 0 ? -x : x`` reimplements ``abs(x)``. ``abs`` exists for every
+signed numeric type. Only the four orientations that match ``abs`` are
+flagged; the negabs shape (``x < 0 ? x : -x``) is **not** — it is a
+different function.
+
+.. code-block:: das
+
+    // Bad
+    let positive = x < 0 ? -x : x               // PERF016
+    let positive_alt = x > 0 ? x : -x           // PERF016
+
+    // Good
+    let positive = abs(x)
+
+PERF017 — ``length(s) == 0`` should be ``empty(s)``
+====================================================
+
+For strings, ``length`` walks the whole string (``strlen``); ``empty``
+checks one byte. For arrays/tables both are O(1) but ``empty`` is the
+idiomatic form. Six comparison ops are mapped to either ``empty(x)`` or
+``!empty(x)``:
+
+* ``length(x) == 0``, ``length(x) <= 0``, ``length(x) < 1`` → ``empty(x)``
+* ``length(x) != 0``, ``length(x) > 0``,  ``length(x) >= 1`` → ``!empty(x)``
+
+Vector magnitude (``length(float3_var)`` from the math module) is **not**
+flagged — different semantics, no ``empty`` for vectors.
+
+.. code-block:: das
+
+    // Bad
+    if (length(s)   == 0) { ... }               // PERF017
+    if (length(arr) >  0) { ... }               // PERF017
+
+    // Good
+    if (empty(s))   { ... }
+    if (!empty(arr)) { ... }
+
 .. _style_lint:
 
 -----------
@@ -755,6 +860,92 @@ block.
         // single WHY line — silent
         ...
     }
+
+STYLE016 — adjacent guards leading to identical early-exit
+============================================================
+
+Two adjacent ``if`` guards with the same exit (``return`` with the same
+payload, or ``break``/``continue``) read as one decision. Combine them
+with ``||``. Two AST shapes are detected:
+
+* two adjacent ``if (a) { return X }`` statements in the same block
+* the ``if (a) { return X } else if (b) { return X }`` chain
+
+.. code-block:: das
+
+    // Bad
+    if (name == "." || name == "..") {          // STYLE016
+        return
+    }
+    if (name |> starts_with("_")) {
+        return
+    }
+
+    // Good
+    if (name == "." || name == ".." || name |> starts_with("_")) {
+        return
+    }
+
+STYLE017 — ``if (cond) return true; else return false`` should be ``return cond``
+==================================================================================
+
+Three lines (or two if-else branches) that just propagate the boolean
+condition unchanged. Read better as a single ``return``. Detection covers
+both forms:
+
+* ``if (cond) return b1 else return b2`` (b1 ≠ b2)
+* ``if (cond) return b1`` immediately followed by ``return b2`` (b1 ≠ b2)
+
+.. code-block:: das
+
+    // Bad
+    if (cond) {                                 // STYLE017
+        return true
+    } else {
+        return false
+    }
+
+    // Good
+    return cond
+
+    // Good (negated)
+    return !cond
+
+STYLE018 — redundant boolean comparison
+========================================
+
+Comparing a bool to a boolean literal is redundant — the bool already IS
+the value. Drop the comparison. Both Yoda forms (``true == flag``) are
+detected.
+
+.. code-block:: das
+
+    // Bad
+    if (flag == true)  { ... }                  // STYLE018
+    if (flag != false) { ... }                  // STYLE018
+    if (flag == false) { ... }                  // STYLE018
+    if (true == flag)  { ... }                  // STYLE018 (Yoda)
+
+    // Good
+    if (flag)  { ... }
+    if (!flag) { ... }
+
+STYLE019 — nested ``min(max(...))`` should be ``clamp(...)``
+==============================================================
+
+``min(max(x, lo), hi)`` reads as a clamp; the math builtin says so
+directly. Both orientations (and the mirror form) are detected — the
+inner call must resolve to the math module's ``min`` / ``max``, not a
+user overload.
+
+.. code-block:: das
+
+    // Bad
+    let bounded = min(max(x, lo), hi)           // STYLE019
+    let bounded_alt = max(min(x, hi), lo)       // STYLE019 (mirror)
+
+    // Good
+    let bounded = clamp(x, lo, hi)
 
 -----
 Tests
