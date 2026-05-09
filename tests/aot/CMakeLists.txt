@@ -259,6 +259,12 @@ SET(AOT_LINQ_MODULE_FILES
     tests/linq/_common.das
 )
 
+# AOT for macro_call test files
+FILE(GLOB AOT_MACRO_CALL_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/macro_call/*.das")
+# Exclude helpers (files prefixed with `_`); they are required transitively
+# by the actual test files and don't need standalone AOT entries.
+list(FILTER AOT_MACRO_CALL_FILES EXCLUDE REGEX "/_")
+
 # AOT for match test files
 FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/match/*.das")
 
@@ -519,6 +525,10 @@ add_custom_target(test_aot_linq_modules)
 SET(LINQ_MODULES_AOT_GENERATED_SRC)
 DAS_AOT_LIB("${AOT_LINQ_MODULE_FILES}" LINQ_MODULES_AOT_GENERATED_SRC test_aot_linq_modules daslang)
 
+add_custom_target(test_aot_macro_call)
+SET(MACRO_CALL_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_MACRO_CALL_FILES}" MACRO_CALL_AOT_GENERATED_SRC test_aot_macro_call daslang)
+
 add_custom_target(test_aot_match)
 SET(MATCH_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_MATCH_FILES}" MATCH_AOT_GENERATED_SRC test_aot_match daslang)
@@ -643,6 +653,7 @@ SOURCE_GROUP_FILES("aot generated" JOBQUE_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" JSON_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" LINQ_MODULES_AOT_GENERATED_SRC)
+SOURCE_GROUP_FILES("aot generated" MACRO_CALL_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATCH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_AOT_GENERATED_SRC)
 SOURCE_GROUP_FILES("aot generated" MATH_MODULES_AOT_GENERATED_SRC)
@@ -709,6 +720,7 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${JSON_AOT_GENERATED_SRC}
     ${LINQ_AOT_GENERATED_SRC}
     ${LINQ_MODULES_AOT_GENERATED_SRC}
+    ${MACRO_CALL_AOT_GENERATED_SRC}
     ${MATCH_AOT_GENERATED_SRC}
     ${MATH_AOT_GENERATED_SRC}
     ${MATH_MODULES_AOT_GENERATED_SRC}
@@ -757,6 +769,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_interfaces
     test_aot_jobque test_aot_json
     test_aot_linq test_aot_linq_modules
+    test_aot_macro_call
     test_aot_match
     test_aot_math test_aot_math_modules test_aot_module_tests
     test_aot_option

@@ -83,6 +83,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/version_update.md` | Bumping the daslang version number |
 | `skills/jobque_debugging.md` | Channel/LockBox/JobStatus/Feature leaks (`--track-job-status`, `DumpJobQueLeaks`) |
 | `skills/make_pr.md` | Creating a pull request (lint, test, AOT, format checklist) |
+| `skills/task_wrap_up.md` | Read AFTER finishing any major chunk of work — blind-mouse curation pass (review log, surface the un-asked, add what was learned). Not just for PRs |
 | `skills/pr_review_iteration.md` | Working an open PR through CI failures and Copilot/human review feedback after the PR is created |
 | `skills/strudel_port.md` | Porting strudel.cc patterns into daslang |
 | `skills/clargs_usage.md` | Writing or editing any tool that parses command-line flags — declarative argv parsing via `daslib/clargs`, plus migration discipline for legacy `get_command_line_arguments()` callers |
@@ -289,3 +290,15 @@ Most layout is obvious from `ls`. Non-obvious ones worth knowing:
 The daslang MCP server (`utils/mcp/main.das`) exposes compiler diagnostics, program introspection, and live-reload control. **Prefer MCP tools** over manual compilation and grep — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl.
 
 Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
+
+---
+
+## MOUSE FIRST (hard rule)
+
+`mouse__ask` is the **first** tool on any "how do I X?" / "what's the right pattern for Y?" / "why does Z behave this way?" question — before Explore, before Grep, before Read, before any agent.
+
+If you catch yourself mid-research thinking "I should have asked mouse first" — stop, ask now. If the cache had the answer, you just saved minutes; if it didn't, finish the research and `mouse__add` the answer before moving on. Either way the cache gets a little smarter.
+
+Cache misses you skipped never show up in `mouse log --misses` — the only safety net is the wrap-up curation pass. After every meaningful chunk of work, run `skills/task_wrap_up.md` to sweep both the recorded misses and the un-asked questions you researched the long way.
+
+The cost of an extra `mouse__ask` is ~50ms; the cost of redoing research that's already cached is minutes. The asymmetry is the whole point. Treat this as a hard rule, not a hint — a session that researches without asking mouse first is a session leaking time.

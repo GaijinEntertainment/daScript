@@ -2236,7 +2236,9 @@ namespace das {
     }
 
     CallMacro *findModuleCallMacro ( Module * module, const char *name, Context * /*context*/, LineInfoArg * at ) {
-        auto exprCallMacro = static_cast<ExprCallMacro*>((*module->findCall(name))(*at));
+        auto factory = module->findCall(name);
+        if ( !factory ) return nullptr;
+        auto exprCallMacro = static_cast<ExprCallMacro*>((*factory)(*at));
         auto res = exprCallMacro->macro;
         delete exprCallMacro;
         return res;
