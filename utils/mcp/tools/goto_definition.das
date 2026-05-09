@@ -38,7 +38,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
     while (!feof(f)) {
         var ln = fgets(f)
         // strip trailing newline/cr
-        while (length(ln) > 0) {
+        while (!empty(ln)) {
             let last_ch = character_at(ln, length(ln) - 1) // nolint:PERF003
             if (last_ch == '\n' || last_ch == '\r') {
                 ln = slice(ln, 0, length(ln) - 1)
@@ -49,7 +49,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
         lines |> push(ln)
     }
     fclose(f)
-    if (length(lines) == 0) {
+    if (empty(lines)) {
         return ""
     }
     let first = max(0, line - 1 - context_lines)
@@ -248,7 +248,7 @@ def resolve_definition(hit : CursorHit) : DefinitionResult {
     return DefinitionResult()
 }
 
-def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bool) : string {
+def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bool; cpp_dirs : array<string>) : string {
     return build_string() $(var w) {
         write(w, "Symbol: {defn.name}\n")
         write(w, "Kind: {defn.kind}\n")
@@ -261,15 +261,19 @@ def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bo
             write(w, "C++: {defn.cppName}")
             if (with_cpp_source) {
                 var match : CppMatch
-                if (cpp_lookup_by_name(defn.cppName, match)) {
+                let found = empty(cpp_dirs) ? cpp_lookup_by_name(defn.cppName, match) : cpp_lookup_by_name_scoped(defn.cppName, cpp_dirs, match)
+                if (found) {
                     write(w, " ({match.file}:{match.line})")
-                } else {
+                } elif (empty(cpp_dirs)) {
                     let why = cpp_index_status()
                     if (!empty(why)) {
                         write(w, " (index unavailable: {why})")
                     } else {
                         write(w, " (not located)")
                     }
+                } else {
+                    let dirs_csv = join(cpp_dirs, ",")
+                    write(w, " (not located in {dirs_csv})")
                 }
             }
             write(w, "\n")
@@ -283,13 +287,22 @@ def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bo
     }
 }
 
-def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = ""; with_cpp_source : bool = false) : string {
+def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = ""; with_cpp_source : bool = false; cpp_dirs : string = "") : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
     if (line <= 0 || col <= 0) {
         return make_tool_result("Invalid line or column (must be >= 1)", true)
     }
     let no_opt = no_opt_str == "true"
+    var cpp_dirs_arr : array<string>
+    if (!empty(cpp_dirs)) {
+        for (part in split(cpp_dirs, ",")) {
+            let trimmed = strip(part)
+            if (!empty(trimmed)) {
+                cpp_dirs_arr |> push(trimmed)
+            }
+        }
+    }
     return compile_program(file, true, no_opt, project) $(program; issues) {
         var hits <- find_at_cursor(program, file, line, col)
         if (empty(hits)) {
@@ -299,7 +312,7 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
         for (hit in hits) {
             let defn = resolve_definition(hit)
             if (defn.found) {
-                return format_result(defn, hit, with_cpp_source)
+                return format_result(defn, hit, with_cpp_source, cpp_dirs_arr)
             }
         }
         // nothing resolved — show what we found at cursor

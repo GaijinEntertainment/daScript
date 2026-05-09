@@ -311,6 +311,73 @@ def run_and_capture(args : array<string>; var output : string&; timeout_sec : fl
     return exit_code
 }
 
+// ── MCP subtool runner ──────────────────────────────────────────────
+//
+// Why subprocess: in-process compile_file / RTTI walks leak C++-side
+// [function_macro] and [call_macro] registrations into the long-lived MCP
+// daslang process. A second call against an edited .das file sees the OLD
+// macros. Spawning a fresh daslang.exe per call resets that state entirely.
+//
+// Subtool contract:
+//   - Lives at utils/mcp/subtools/<subtool_name>.das.
+//   - [export] def main reads positional argv via get_command_line_arguments().
+//   - Prints the FINAL tool-result envelope (the full make_tool_result(...) JSON)
+//     to stdout. The wrapper passes it through verbatim — no extra wrapping.
+//   - Exits 0 on success AND on tool-level failure (e.g. compile errors are a
+//     successful tool run that reports isError=true). Exit non-0 ONLY on
+//     catastrophic failure (cannot read args, internal panic).
+// Inside an MCP subtool's `[export] def main`, locate the caller-supplied
+// args inside daslang's full argv. Conventional invocation:
+//   daslang.exe utils/mcp/subtools/<name>.das -- <arg1> <arg2> ...
+// Returns the args after `--`. Falls back to args[2..] (skip exe + script
+// path) if no `--` is present, so subtools can also be invoked manually
+// for debugging without the separator.
+def subtool_user_args(args : array<string>) : array<string> {
+    var out : array<string>
+    var i = 0
+    while (i < length(args)) {
+        if (args[i] == "--") {
+            i++
+            while (i < length(args)) {
+                out |> push(args[i])
+                i++
+            }
+            return <- out
+        }
+        i++
+    }
+    out |> reserve(max(0, length(args) - 2))
+    for (j in range(2, length(args))) {
+        out |> push(args[j])
+    }
+    return <- out
+}
+
+def run_mcp_subtool(subtool_name : string; args : array<string>; timeout_sec : float = 120.0) : string {
+    let exe = get_daslang_exe()
+    if (empty(exe)) {
+        return make_tool_result("Cannot determine daslang executable path", true)
+    }
+    let subtool_path = path_join(get_das_root(), "utils/mcp/subtools/{subtool_name}.das")
+    // `--` is critical: without it, daslang treats positional argv as extra
+    // .das files to load AND auto-runs each. With `--`, daslang stops parsing
+    // its own options and just exposes the rest via get_command_line_arguments().
+    var argv <- [exe, subtool_path, "--"]
+    argv |> reserve(length(argv) + length(args))
+    for (a in args) {
+        argv |> push(a)
+    }
+    var output : string
+    let exit_code = run_and_capture(argv, output, timeout_sec)
+    if (exit_code == popen_timed_out) {
+        return make_tool_result("MCP subtool '{subtool_name}' timed out after {timeout_sec}s:\n{output}", true)
+    }
+    if (exit_code != 0) {
+        return make_tool_result("MCP subtool '{subtool_name}' failed (exit {exit_code}):\n{output}", true)
+    }
+    return output
+}
+
 // ── Temp file utilities ──────────────────────────────────────────────
 
 // Returns a unique temp .das file path that won't collide with concurrent processes.
