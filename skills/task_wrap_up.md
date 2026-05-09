@@ -7,15 +7,17 @@ Skip if you don't keep a personal blind-mouse cache. The PR pre-flight (`skills/
 ## 1. Review the query log
 
 ```bash
-bin/Release/daslang.exe utils/mouse/main.das -- log --misses
+bin/daslang utils/mouse/main.das -- log --misses
 ```
+
+(On Windows MSVC layout the binary is `bin/Release/daslang.exe` — same args after.)
 
 For each recent miss:
 - **Did this session answer it?** If yes — `mouse__add` (or `mouse add` from CLI). Next session won't redo the work.
 - **Did you _almost_ ask mouse this session but didn't?** Try asking now — misses-you-skipped don't show up in `--misses`. If the work you just did has the answer, add it.
 
 ```bash
-bin/Release/daslang.exe utils/mouse/main.das -- log
+bin/daslang utils/mouse/main.das -- log
 ```
 
 For recent hits:
