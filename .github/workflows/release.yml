@@ -122,15 +122,12 @@ jobs:
           - target: linux_arm
             architecture: 32
 
-          # The linux_arm × 64 cell is the one that produces the linux arm64
-          # bundle (release_arch: arm64 via the include block at L53-57).
-          # Removing this exclude makes the ×arm64 cell run, where it fails
-          # at cmake configure: the install-deps case statement (L147)
-          # gates apt-get on `linux64|linux_arm64`, which doesn't match
-          # `linux_armarm64` (the concatenation of target + architecture for
-          # this cell) — no OpenGL deps land, dasGlfw configure dies on
-          # missing OPENGL_opengl_LIBRARY. To actually support this cell,
-          # the install-deps pattern would need broadening (e.g. linux_arm*).
+          # The linux_arm × 64 cell already produces daslang-bundle-linux-arm64.zip
+          # (release_arch: arm64 via the include overlay at L53-57, which applies
+          # to all linux_arm cells regardless of architecture). Lifting this
+          # exclude would make the ×arm64 cell build the same bundle name on the
+          # same ARM64 hardware (ubuntu-24.04-arm-fat) and clobber via the
+          # `--clobber` flag in the upload step. Wasted CI for no extra artifact.
           - target: linux_arm
             architecture: arm64
 
@@ -154,7 +151,7 @@ jobs:
         run: |
           set -eux
           case "${{ matrix.target }}${{ matrix.architecture }}" in
-            linux64|linux_arm64)
+            linux64|linux_arm*)
               echo "MARCH=64" >> $GITHUB_ENV
               sudo apt-get update -y
               sudo apt-get install --no-install-recommends -y \
