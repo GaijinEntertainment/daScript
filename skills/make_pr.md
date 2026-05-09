@@ -240,26 +240,9 @@ CI's `extended_checks` job runs `./bin/Release/daslang ./das-fmt/dasfmt.das -- -
 
 **Before pushing:** mentally format named-arg constructor / call sites with spaces around `=`. If CI `extended_checks` fails on a format diff after MCP said "already formatted", fix the spacing and re-push (or amend, on a squashed branch).
 
-## 5.5. Review the blind-mouse query log
+## 5.5. Run the task-wrap-up curation pass
 
-If you use blind-mouse, take 60 seconds to close the loop before pushing — work is final, you know what was learned, diff is locked. Skip if you don't keep a personal Q&A cache.
-
-```bash
-bin/Release/daslang.exe utils/mouse/main.das -- log --misses
-```
-
-For each recent miss:
-- **Did this PR (or your session research) answer it?** If yes — `mouse__add` it now (or `mouse add` from CLI). Next session won't redo the work.
-- **Did you _almost_ ask mouse this session but didn't?** Try asking now — misses-you-skipped don't show up in `--misses`. If the work you just did has the answer, add it.
-
-```bash
-bin/Release/daslang.exe utils/mouse/main.das -- log
-```
-
-For recent hits:
-- **Did this PR invalidate a cached answer?** If yes, edit `mouse-data/docs/<slug>.md` directly and bump `last_verified` (or delete if no longer relevant).
-
-This is curation, not verification — the PR doesn't depend on it. Goal: keep the personal cache aligned with what just shipped.
+Pre-PR is a natural moment to close the blind-mouse loop — work is final, you know what was learned, diff is locked. The full curation steps (review log, surface un-asked, cost calculus) live in `skills/task_wrap_up.md` and apply to *any* major task wrap-up, not just PRs. Run that pass now if you keep a personal Q&A cache.
 
 ## 6. Create the PR
 
@@ -280,7 +263,7 @@ Stage, commit, push, and create the PR using GitHub MCP tools or `gh` CLI. Follo
 | AOT tests | `test_aot.exe -use-aot dastest/dastest.das -- --use-aot --test tests` | Same as regular tests |
 | Docs | `das2rst.das` + stubs + Sphinx | Only if daslib/C++ bindings/RST changed |
 | Format | MCP `format_file` with comma-separated list or glob of changed `.das` files (single call) | Only changed files |
-| Mouse log | `mouse log --misses` / `mouse log` | Optional. Add answers for misses, edit cached answers this PR invalidated |
+| Wrap-up curation | `skills/task_wrap_up.md` | Optional. Add answers for cache misses, edit cached answers this PR invalidated |
 | `.md` stop | `git diff --name-only origin/master..HEAD \| grep '\.md$'` | If any match: STOP, list changes, ask user to review BEFORE push |
 | PR | GitHub MCP `create_pull_request` or `gh pr create` | — |
 | Review iter | Follow `skills/pr_review_iteration.md` | One round per Copilot pass; convergence in 1-3 rounds is normal |
