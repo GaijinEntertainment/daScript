@@ -124,6 +124,13 @@ DAS_C_INTEGRATION_TUTORIAL(integration_c_13
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/13_shared_module.c
 )
 
+#################################
+# Tutorial 14 — Passing Arrays
+#################################
+DAS_C_INTEGRATION_TUTORIAL(integration_c_14
+    ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/14_passing_arrays.c
+)
+
 # Install C integration tutorial source files
 file(GLOB C_INTEGRATION_TUTORIAL_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/integration/c/*.c
