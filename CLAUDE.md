@@ -37,9 +37,7 @@ Fall back to `Bash`/`Grep`/`Read` only when the MCP tool reports an error or the
 
 ## Asking blind-mouse
 
-Before doing significant research on a "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" question, ask `mouse__ask`. blind-mouse (`utils/mouse/`) is a personal Q&A cache backed by curated `.md` answers — full vision in `utils/mouse/OVERVIEW.md`. Same deferred-tool dance as the daslang MCP: `ToolSearch select:mcp__mouse__<tool>` → invoke.
-
-**During plan mode / planning phase, ask the mouse early and often.** Planning is exactly the phase where prior-session research has the highest leverage: each "what's the pattern for X" / "where do we usually put Y" / "why did we pick Z" answer that's already in the cache saves a research detour, and each new finding worth keeping is one `mouse__add` away from being free next time. Concrete planning-phase prompts: design questions ("what's the right pattern for adding a new `[sql_*]` annotation?"), prior-art questions ("have we hit this glob-vs-rfind path bug before?"), gotcha-recall ("what's the const-stripping reinterpret incantation?"), trade-off recall ("why did we pick (a) over (b) last time?"). If the cache has nothing useful, do the research yourself — then `mouse__add` the answer before moving on, even if rough. The cost of writing a brief `.md` is far smaller than re-researching the same thing.
+Before doing significant research on a "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" question, ask `mouse__ask`. blind-mouse (`utils/mouse/`) is a personal Q&A cache backed by curated `.md` answers. Operational manual: `skills/mouse.md`. Design vision: `utils/mouse/OVERVIEW.md`.
 
 | Reach for the mouse when… | Don't, when… |
 |---|---|
@@ -47,8 +45,6 @@ Before doing significant research on a "how do I X?" / "what's the pattern for Y
 | "how do I write a `[typefunction]` macro?" / "what's the right pattern for X?" / "why does Y behave this way?" | categorical conventions — those belong in `skills/*.md` / `CLAUDE.md` |
 | Discovered facts that don't fit any `skills/*.md` slot | project state, branch status, who's doing what — use git/issues/memory |
 | Recurring questions you remember answering before but forget the answer | |
-
-If `mouse__ask` returns nothing relevant and you do the research yourself, finish with `mouse__add` so the next session doesn't redo the work. If a returned answer is stale or wrong, edit the `.md` directly under `mouse-data/docs/` (it's a regular file, `Edit` works) and bump `last_verified`.
 
 ## Skill Files (REQUIRED)
 
@@ -59,6 +55,7 @@ Task-specific instructions are split into skill files under `skills/`. You MUST 
 | `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
 | `skills/build_and_debug.md` | Build flags, AOT build commands, exit-code/crash diagnosis, `options log_infer_passes` |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
+| `skills/mouse.md` | Asking, adding, or curating blind-mouse cards (`mouse__ask` / `mouse__add`) — operational manual behind the MOUSE FIRST rule |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/writing_tests.md` | Writing or editing test files under `tests/` |
 | `skills/writing_cpp_tests.md` | Writing or editing C++ tests under `tests-cpp/` (doctest, leak guards, ctest wiring) |

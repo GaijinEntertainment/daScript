@@ -58,6 +58,7 @@ Task-specific instructions are in skill files under `skills/`. Read the relevant
 |---|---|
 | `skills/project_overview.md` | First significant task — design philosophy, three execution tiers, macros-as-design-lens |
 | `skills/mcp_tools.md` | Full MCP tool table + live-API reference |
+| `skills/mouse.md` | Asking, adding, or curating blind-mouse cards (`mouse__ask` / `mouse__add`) — operational manual for the personal Q&A cache |
 | `skills/das_formatting.md` | Creating or modifying any `.das` file |
 | `skills/cpp_integration.md` | Embedding daslang in C++; binding types/functions/enums |
 | `skills/daslib_modules.md` | Using `daslib/` modules (linq, json, regex, etc.) |
@@ -244,6 +245,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.
 - `tutorials/` — Language, integration, and module tutorials
 - `dastest/` — Test framework (usable for testing your own code)
 - `utils/mcp/` — MCP server for AI coding assistants (stdio transport, no extra deps)
+- `utils/mouse/` — Personal Q&A cache MCP server (BM25 + Jaccard retrieval over a per-project `mouse-data/docs/` corpus)
 - `utils/detect-dupe/` — Cross-file duplicate-function detector (also exposed via the `export_corpus` and `detect_duplicates` MCP tools)
 - `utils/daspkg/` — Package manager
 - `utils/dascov/` — Code coverage tool
@@ -268,3 +270,11 @@ See `skills/daspkg.md` for `.das_package` manifest format and package structure.
 `utils/mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes compiler diagnostics and program introspection to AI coding assistants. Stdio transport — no extra build dependencies. **Prefer MCP tools** over manual compilation and grep — `grep_usage` is parse-aware (tree-sitter), `find_references` resolves cross-module symbols, and `live_*` tools talk to `daslang-live` directly instead of curl.
 
 Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), live-API caveats, and `.mcp.json` configuration: **`skills/mcp_tools.md`**.
+
+## Personal Q&A Cache (blind-mouse)
+
+`utils/mouse/` is a separate MCP server backing a per-project Q&A cache — `.md` cards under `mouse-data/docs/`, retrieved via BM25 + Jaccard ranking. Built for the long tail that doesn't fit the other channels: "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" — discovered facts that don't belong in `skills/*.md` (categorical) or symbol-lookup tools (live).
+
+Before researching such a question yourself, ask `mouse__ask` first. After answering one through your own research, `mouse__add` the answer so the next session doesn't redo the work.
+
+Operational manual (asking, adding, frontmatter, dupe-on-add gate, edit flow, carve-outs): **`skills/mouse.md`**. Design vision and FTS5 internals: **`utils/mouse/OVERVIEW.md`**.
