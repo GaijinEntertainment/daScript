@@ -8,7 +8,7 @@ Read this BEFORE asking, adding, or curating mouse cards. The hard rule (MOUSE F
 |---|---|
 | About to research a "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" question | `mouse__ask` first |
 | Just answered such a question through your own research | `mouse__add` before moving on |
-| `mouse__ask` returned cards but none of them address what you actually asked | `mouse__bad(query_id)` immediately, then research and `mouse__add` if the answer's worth caching |
+| `mouse__ask` returned cards but none of them address what you actually asked | `mouse__bad(queryId)` immediately, then research and `mouse__add` if the answer's worth caching |
 | Wrap-up after a meaningful chunk of work | See `skills/task_wrap_up.md` (review `mouse log --misses` for zero-result asks, `mouse log --review` for unrated hits) |
 | Symbol/field/type lookup ("where is X defined?", "all references to Y") | NOT mouse — use daslang MCP (`find_symbol`, `grep_usage`, `find_references`) |
 | Categorical convention (gen2 syntax, build flags, formatting) | NOT mouse — `CLAUDE.md` / `skills/*.md` |

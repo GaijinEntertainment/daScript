@@ -251,7 +251,9 @@ def cmd_log(args : MouseArgs) {
         ensure_index_fresh(db, root)
         let rows <- recent_queries(db, n, mode)
         if (empty(rows)) {
-            print("(no queries logged yet)\n")
+            // Distinguish "no queries at all" from "filter matched none of N queries".
+            // Saying "no queries logged yet" while the log has hundreds of rows is misleading.
+            print(mode == LogMode.All ? "(no queries logged yet)\n" : "(no rows matching the selected filter)\n")
             return
         }
         for (r in rows) {
@@ -608,11 +610,22 @@ def parse_log_mode(s : string) : LogMode {
     return LogMode.All
 }
 
+// Display the LogMode the request actually filtered by — derived from the
+// parsed enum, NOT the raw input string. So an omitted/empty `mode`
+// surfaces as "all" instead of "mode=" with an empty trailing value.
+def log_mode_display(m : LogMode) : string {
+    return "misses" if (m == LogMode.Misses)
+    return "bad"    if (m == LogMode.Bad)
+    return "review" if (m == LogMode.Review)
+    return "all"
+}
+
 let HINT_LOG_REVIEW = "\nWrap-up tip: scan rows above where the listed top slug doesn't address the question. Call mouse__bad(queryId) on each, then mouse__add the answer if you found it during this session."
 
 def tool_log(args : JsonValue?) : string {
     let mode_str = get_string_arg(args, "mode")
     let mode = parse_log_mode(mode_str)
+    let mode_display = log_mode_display(mode)
     let n_arg = get_int_arg(args, "limit", 20)
     let n = n_arg > 0 ? n_arg : 20
     let root = resolve_root(get_string_arg(args, "root"))
@@ -621,11 +634,11 @@ def tool_log(args : JsonValue?) : string {
         ensure_index_fresh(db, root)
         let rows <- recent_queries(db, n, mode)
         if (empty(rows)) {
-            output = "(no rows matching mode={mode_str})"
+            output = "(no rows matching mode={mode_display})"
             return
         }
         output = build_string() $(var w) {
-            w |> write("{length(rows)} row(s), mode={mode_str}:\n")
+            w |> write("{length(rows)} row(s), mode={mode_display}:\n")
             for (r in rows) {
                 w |> write(fmt_log_row(r))
             }
