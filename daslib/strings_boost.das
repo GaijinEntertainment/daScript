@@ -205,6 +205,37 @@ def levenshtein_distance_fast(s, t : string implicit) : int {
     return v0[tLen]
 }
 
+def public jaccard(a : table<string>; b : table<string>) : float {
+    //! Jaccard similarity over two string-sets: ``|intersection| / |union|`` in 0..1.
+    //! Empty either side returns 0.0. Use ``table<string>`` (the set form) so
+    //! the intersect lookup is O(1).
+    if (empty(a) || empty(b)) {
+        return 0.0f
+    }
+    var intersect = 0
+    for (k in keys(a)) {
+        if (key_exists(b, k)) {
+            intersect ++
+        }
+    }
+    let unionSize = length(a) + length(b) - intersect
+    return float(intersect) / float(unionSize)
+}
+
+def public jaccard(a, b : array<string>) : float {
+    //! Jaccard similarity over two string arrays. Builds two ``table<string>``
+    //! sets and delegates — convenient when callers don't already have sets.
+    var sa : table<string>
+    for (x in a) {
+        sa |> insert(x)
+    }
+    var sb : table<string>
+    for (x in b) {
+        sb |> insert(x)
+    }
+    return jaccard(sa, sb)
+}
+
 def replace_multiple(source : string; replaces : array<tuple<text : string; replacement : string>>) {
     //! replaces occurances of multiple strings in a string. does not support overlap
     if (empty(source) || empty(replaces)) {

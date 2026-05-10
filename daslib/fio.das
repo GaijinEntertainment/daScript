@@ -704,3 +704,26 @@ def rmdir_rec_result(path : string) : fs_result_bool {
     }
     return fs_result_bool(value = res)
 }
+
+def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    //! Run an external command and capture its stdout+stderr (merged into one
+    //! pipe by the underlying ``popen_argv``). Returns the process exit code;
+    //! ``output`` is filled with whatever the child wrote to either stream.
+    //!
+    //! ``args[0]`` is the executable; remaining elements are positional arguments.
+    //! ``timeout_sec > 0`` kills the process tree after that many seconds (returns
+    //! ``popen_timed_out``); ``timeout_sec <= 0`` means no timeout.
+    //!
+    //! Argv-based: bypasses the shell entirely (Windows: CreateProcess; Unix:
+    //! fork+execvp). No ``cmd.exe`` quote-stripping, no ``/bin/sh`` ``$()``/backtick
+    //! expansion — every argv element reaches the child verbatim. Callers don't
+    //! (and shouldn't) quote arguments themselves.
+    var captured : string
+    let exit_code = unsafe(popen_argv(args, timeout_sec, $(f) {
+        if (f != null) {
+            captured := unsafe(fread_to_eof(f))
+        }
+    }))
+    output := captured
+    return exit_code
+}

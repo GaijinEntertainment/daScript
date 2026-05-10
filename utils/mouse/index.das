@@ -9,9 +9,11 @@ require sqlite/sqlite_boost public
 require sqlite/sqlite_linq public
 require sqlite/sqlite_migrate public
 require daslib/fio public
+require daslib/strings_boost public
 require strings public
 require math
 require store public
+require ../common/git_signature.das
 
 // ─── on-disk layout ──────────────────────────────────────────────────
 
@@ -107,6 +109,20 @@ def migration_002(db : SqlRunner) {
     db |> create_table(type<QueryLog>)
 }
 
+// Persisted across cold opens: the staleness signature used by
+// ensure_index_fresh. Without persistence every CLI invocation would see an
+// empty in-memory signature and rebuild from scratch.
+[sql_table(name = "index_meta")]
+struct IndexMeta {
+    @sql_primary_key key : string
+    value : string
+}
+
+[sql_migration(version = 3, description = "add index_meta for staleness signature")]
+def migration_003(db : SqlRunner) {
+    db |> create_table(type<IndexMeta>)
+}
+
 def with_index_db(root : string; blk : block<(db : SqlRunner) : void>) {
     ensure_root(root)
     with_latest_sqlite(db_path(root)) $(db) {
@@ -127,7 +143,8 @@ struct SearchHit {
 struct DupeMatch {
     slug : string
     title : string
-    rank : float
+    rank : float        // FTS5 BM25; kept for power users / debugging
+    similarity : float  // Jaccard, 0..1; primary ranking key for dedup decisions
 }
 
 struct AddOutcome {
@@ -210,6 +227,60 @@ def rebuild(db : SqlRunner; root : string) : int {
     return n
 }
 
+// ─── staleness signature & auto-reindex ──────────────────────────────
+
+// Persisted (via index_meta) so the cost only pays out on real changes.
+let SIGNATURE_KEY = "signature"
+
+def get_index_signature(db : SqlRunner) : string {
+    let opt <- _sql(db |> select_from(type<IndexMeta>)
+                       |> _where(_.key == SIGNATURE_KEY)
+                       |> _first_opt())
+    if (opt |> is_some) {
+        return (opt |> unwrap).value
+    }
+    return ""
+}
+
+def set_index_signature(db : SqlRunner; sig : string) {
+    db |> _sql_upsert(
+        IndexMeta(key = SIGNATURE_KEY, value = sig),
+        _.key,
+        (value = _excluded.value))
+}
+
+// The canonical staleness signature for a docs root — `compute_signature`
+// over `*.md` under `docs/`. Use this everywhere we stamp a fresh signature
+// so the input shape stays in lockstep with `ensure_index_fresh`'s read.
+def public compute_docs_signature(root : string) : string {
+    return compute_signature(root, @(p : string) => ends_with(p, ".md"), [docs_dir(root)])
+}
+
+// Reconcile the SQLite index against on-disk docs. If the staleness signature
+// matches what's stored, this is a no-op. On mismatch, rebuilds and stores
+// the new signature. Returns the number of docs (re)indexed (0 on cache hit).
+//
+// Signature compute is delegated to utils/common/git_signature: the predicate
+// only narrows by file extension because the shared module pre-narrows status
+// output and filesystem walks to paths under `search_dirs_abs = [docs_dir]`.
+def ensure_index_fresh(db : SqlRunner; root : string) : int {
+    let docs_abs = docs_dir(root)
+    if (!is_directory_path(docs_abs)) {
+        return 0
+    }
+    let sig = compute_docs_signature(root)
+    if (empty(sig)) {
+        return 0
+    }
+    let stored = get_index_signature(db)
+    if (sig == stored) {
+        return 0
+    }
+    let n = rebuild(db, root)
+    set_index_signature(db, sig)
+    return n
+}
+
 // ─── search ──────────────────────────────────────────────────────────
 
 // Strip non-alphanumeric chars (except whitespace and `*`) so a free-form
@@ -237,39 +308,48 @@ def sanitize_fts5_query(q : string) : string {
 // scan the whole index. 50 is well above any sane top-k for this corpus.
 let MAX_SEARCH_K = 50
 
-def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
+def search(db : SqlRunner; query : string; k : int; raw_query : bool = false) : array<SearchHit> {
     var out : array<SearchHit>
     if (k <= 0) {
         return <- out
     }
     let kk = min(k, MAX_SEARCH_K)
-    // to_lower: FTS5 keywords (OR/AND/NOT/NEAR) are uppercase-only operators.
-    // A user query like "foo OR bar" would tokenize to [foo, OR, bar] and
-    // OR-join to `foo OR OR OR bar` — invalid FTS syntax → empty result.
-    // Downcasing every token makes user-typed keywords inert.
-    let cleaned = to_lower(strip(sanitize_fts5_query(query)))
-    if (empty(cleaned)) {
-        return <- out
-    }
-    // Free-form queries → OR-joined so BM25 ranks docs by how many of the
-    // user's words appear, rather than failing when one word is missing.
-    // FTS5 default is whitespace-AND, which is wrong for a "find related"
-    // search. Users who want strict AND/phrase have to wait for
-    // vNext --raw-query.
-    let words <- split(cleaned, " ")
-    var meaningful : array<string>
-    meaningful |> reserve(length(words))
-    for (w in words) {
-        if (length(w) >= 2) {
-            meaningful |> push(w)
+    var fts_query : string
+    if (raw_query) {
+        // Power-user path: pass the user's string straight to FTS5. Bad
+        // syntax surfaces via _try_sql + LOG_WARNING below.
+        fts_query = strip(query)
+        if (empty(fts_query)) {
+            return <- out
         }
+    } else {
+        // to_lower: FTS5 keywords (OR/AND/NOT/NEAR) are uppercase-only operators.
+        // A user query like "foo OR bar" would tokenize to [foo, OR, bar] and
+        // OR-join to `foo OR OR OR bar` — invalid FTS syntax → empty result.
+        // Downcasing every token makes user-typed keywords inert.
+        let cleaned = to_lower(strip(sanitize_fts5_query(query)))
+        if (empty(cleaned)) {
+            return <- out
+        }
+        // Free-form queries → OR-joined so BM25 ranks docs by how many of the
+        // user's words appear, rather than failing when one word is missing.
+        // FTS5 default is whitespace-AND, which is wrong for a "find related"
+        // search. Users who want strict AND/phrase pass raw_query=true.
+        let words <- split(cleaned, " ")
+        var meaningful : array<string>
+        meaningful |> reserve(length(words))
+        for (w in words) {
+            if (length(w) >= 2) {
+                meaningful |> push(w)
+            }
+        }
+        if (empty(meaningful)) {
+            return <- out
+        }
+        fts_query = meaningful |> join(" OR ")
     }
-    if (empty(meaningful)) {
-        return <- out
-    }
-    let or_query = meaningful |> join(" OR ")
     let raw_hits <- _try_sql(db |> select_from(type<SearchRow>)
-                                |> _where(_.Text |> text_match(or_query))
+                                |> _where(_.Text |> text_match(fts_query))
                                 |> _order_by(_.Rank)
                                 |> take(kk))
     if (raw_hits |> is_err) {
@@ -294,13 +374,63 @@ def search(db : SqlRunner; query : string; k : int) : array<SearchHit> {
     return <- out
 }
 
+// ─── dedup scoring (Jaccard over titles, stop-words filtered) ────────
+
+// add_doc treats a hit at or above this as "looks like a duplicate" and
+// blocks the create unless force=true. Below this, hits are advisory only —
+// shown to the caller, but the add proceeds. The caller (LLM or human) is
+// the actual decider; the threshold just stops obvious near-paraphrases
+// from sneaking in.
+let JACCARD_HARD_BLOCK = 0.7f
+
+// Conservative English stopword set. Kept small on purpose: filter common
+// glue words that flood OR-queries, but bias toward false negatives (let
+// borderline words like `do` through) over false positives (filtering rare
+// words used semantically).
+let STOP_WORDS : table<string> <- {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "do", "does", "did", "doing", "can", "could", "should", "would", "will",
+    "may", "might", "of", "in", "on", "at", "to", "for", "with", "from", "by",
+    "as", "and", "or", "but", "not", "no", "if", "how", "what", "why", "when",
+    "where", "which", "that", "this", "these", "those", "i", "you", "my"
+}
+
+def tokenize_for_jaccard(s : string) : table<string> {
+    var out : table<string>
+    let cleaned = to_lower(strip(sanitize_fts5_query(s)))
+    if (empty(cleaned)) {
+        return <- out
+    }
+    let parts <- split(cleaned, " ")
+    for (w in parts) {
+        if (length(w) >= 2 && !key_exists(STOP_WORDS, w)) {
+            out |> insert(w)
+        }
+    }
+    return <- out
+}
+
+// Score every BM25 hit by Jaccard on tokenized titles, filter out the
+// zero-similarity noise, and return the rest sorted by similarity desc.
+// dupe_check no longer makes the block decision — that moved into add_doc
+// (and into the response messaging in main.das). Callers see the ranking.
 def dupe_check(db : SqlRunner; question : string; k : int = 5) : array<DupeMatch> {
     let hits <- search(db, question, k)
+    let qtok = tokenize_for_jaccard(question)
     var out : array<DupeMatch>
     out |> reserve(length(hits))
     for (h in hits) {
-        out |> push(DupeMatch(slug = h.slug, title = h.title, rank = h.rank))
+        let ttok = tokenize_for_jaccard(h.title)
+        let s = jaccard(qtok, ttok)
+        if (s > 0.0f) {
+            out |> push(DupeMatch(
+                slug = h.slug,
+                title = h.title,
+                rank = h.rank,
+                similarity = s))
+        }
     }
+    sort(out) <| $(a, b) => a.similarity > b.similarity
     return <- out
 }
 
@@ -362,11 +492,14 @@ def add_doc(db : SqlRunner; root : string;
     }
     if (!force) {
         var similar <- dupe_check(db, clean_question, 5)
-        if (!empty(similar)) {
+        if (!empty(similar) && similar[0].similarity >= JACCARD_HARD_BLOCK) {
             outcome.similar <- similar
             outcome.created = false
             return <- outcome
         }
+        // Below threshold: stash the list so the success path can surface
+        // the closest matches as an awareness hint.
+        outcome.similar <- similar
     }
     var existing : table<string>
     let all_slugs <- _sql(db |> select_from(type<DocRow>) |> _select(_.slug))
@@ -403,6 +536,7 @@ def add_doc(db : SqlRunner; root : string;
         return <- outcome
     }
     rebuild(db, root)
+    set_index_signature(db, compute_docs_signature(root))
     outcome.slug = slug
     outcome.created = true
     outcome.written_path = path

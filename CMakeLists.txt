@@ -1573,6 +1573,15 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/mouse/tests/
     FILES_MATCHING PATTERN "*.das" PATTERN "*.md"
 )
 
+# Install utils/common (git-aware staleness signature shared between
+# utils/mcp/tools/cpp_common and utils/mouse/index).
+file(GLOB DAS_UTILS_COMMON_FILES ${PROJECT_SOURCE_DIR}/utils/common/*.das)
+install(FILES ${DAS_UTILS_COMMON_FILES} DESTINATION utils/common)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/common/tests/
+    DESTINATION utils/common/tests
+    FILES_MATCHING PATTERN "*.das"
+)
+
 # Install daspkg (package manager)
 file(GLOB DAS_DASPKG_FILES ${PROJECT_SOURCE_DIR}/utils/daspkg/*.das)
 install(FILES ${DAS_DASPKG_FILES} DESTINATION utils/daspkg)

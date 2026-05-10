@@ -359,16 +359,20 @@ def test_dupe_check_finds_similar(t : T?) {
     seed_doc(t, root, "doc-a", "Writing typefunction macros", "details", no_links, qs)
     var n_similar = -1
     var top_slug : string
+    var top_sim = 0.0f
     with_index_db(root) $(db) {
         rebuild(db, root)
         let similar <- dupe_check(db, "typefunction", 5)
         n_similar = length(similar)
         if (n_similar > 0) {
             top_slug = similar[0].slug
+            top_sim = similar[0].similarity
         }
     }
     t |> success(n_similar > 0, "expected at least one match")
     t |> equal(top_slug, "doc-a")
+    // single rare keyword in a 3-word title => Jaccard = 1/3 ≈ 0.33
+    t |> success(top_sim >= 0.3f, "similarity should be set: got {top_sim}")
     cleanup_root(root)
 }
 
@@ -392,7 +396,40 @@ def test_dupe_check_no_match(t : T?) {
 }
 
 [test]
-def test_add_dupe_gate_no_force(t : T?) {
+def test_add_dupe_gate_blocks_high_similarity(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["how to write typefunction macros"]
+    // Title and incoming question share 5 of 6 content tokens after stop-word
+    // filtering ⇒ Jaccard ≈ 0.83, well above the 0.7 hard-block threshold.
+    seed_doc(t, root, "doc-a", "How to write typefunction macros", "body", no_links, qs)
+    var created = true
+    var n_similar = -1
+    var top_sim = 0.0f
+    var n_files_after = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let outcome <- add_doc(db, root, "how to write typefunction macros for daslang", "answer body", "", false)
+        created = outcome.created
+        n_similar = length(outcome.similar)
+        if (n_similar > 0) {
+            top_sim = outcome.similar[0].similarity
+        }
+        let files <- list_doc_files(root)
+        n_files_after = length(files)
+    }
+    t |> success(!created, "high-similarity dupe should block create")
+    t |> success(n_similar > 0, "should return the similar doc")
+    t |> success(top_sim >= 0.7f, "top similarity above hard block: got {top_sim}")
+    t |> equal(n_files_after, 1)  // only doc-a; no new file written
+    cleanup_root(root)
+}
+
+[test]
+def test_add_dupe_gate_allows_low_similarity(t : T?) {
     let root = make_temp_root(t)
     if (empty(root)) {
         return
@@ -400,20 +437,57 @@ def test_add_dupe_gate_no_force(t : T?) {
     let no_links : array<string>
     let qs <- ["how to typefunction"]
     seed_doc(t, root, "doc-a", "Typefunction", "typefunction body", no_links, qs)
-    var created = true
+    var created = false
     var n_similar = -1
+    var top_sim = -1.0f
     var n_files_after = -1
     with_index_db(root) $(db) {
         rebuild(db, root)
+        // "typefunction question paraphrase" vs title "Typefunction" =>
+        // Jaccard 1/3 ≈ 0.33, BELOW the 0.7 hard block. Add proceeds.
         let outcome <- add_doc(db, root, "typefunction question paraphrase", "answer body", "", false)
         created = outcome.created
         n_similar = length(outcome.similar)
+        if (n_similar > 0) {
+            top_sim = outcome.similar[0].similarity
+        }
         let files <- list_doc_files(root)
         n_files_after = length(files)
     }
-    t |> success(!created, "should not create when similar exists")
-    t |> success(n_similar > 0, "should return at least one similar")
-    t |> equal(n_files_after, 1)  // only doc-a, no new file written
+    t |> success(created, "low-similarity match should NOT block; add must proceed")
+    t |> success(n_similar > 0, "advisory similar list still returned")
+    t |> success(top_sim < 0.7f, "top similarity below hard block: got {top_sim}")
+    t |> equal(n_files_after, 2)  // doc-a + the new doc
+    cleanup_root(root)
+}
+
+// Common glue words ("how", "do", "I") shouldn't drag rare-content queries
+// across the threshold. After stop-word filtering, the rare-token overlap
+// here is empty.
+[test]
+def test_dupe_check_jaccard_filters_common_words(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["how to write tests"]
+    seed_doc(t, root, "doc-a", "how do I write tests", "body", no_links, qs)
+    var n_similar = -1
+    var top_sim = 0.0f
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let similar <- dupe_check(db, "how do I add git tracking", 5)
+        n_similar = length(similar)
+        if (n_similar > 0) {
+            top_sim = similar[0].similarity
+        }
+    }
+    // Even if FTS5 returns the doc (matches "how"/"do"), the Jaccard score
+    // after stop-word filter is 0 — and dupe_check drops zero-similarity
+    // hits — so n_similar may be 0. Either way, we must not look like a
+    // duplicate.
+    t |> success(top_sim < 0.2f, "common-word overlap should not look like a duplicate: n_similar={n_similar}, top_sim={top_sim}")
     cleanup_root(root)
 }
 
@@ -778,5 +852,121 @@ def test_add_dupe_gate_force(t : T?) {
     t |> success(created, "should create with force=true")
     t |> equal(n_files_after, 2)
     t |> success(found_via_search, "newly added doc retrievable via search")
+    cleanup_root(root)
+}
+
+// ─── auto-reindex via signature ───────────────────────────────────────
+
+[test]
+def test_ensure_index_fresh_picks_up_new_md(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs1 <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha title", "alpha body", no_links, qs1)
+    var n_initial = -1
+    var n_after = -1
+    var found = false
+    with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
+        let rows1 <- _sql(db |> select_from(type<DocRow>))
+        n_initial = length(rows1)
+        // Drop a new .md straight onto disk, simulating a `git pull`.
+        let qs2 <- ["beta question"]
+        seed_doc(t, root, "beta", "Beta title", "beta body", no_links, qs2)
+        ensure_index_fresh(db, root)
+        let rows2 <- _sql(db |> select_from(type<DocRow>))
+        n_after = length(rows2)
+        let hits <- search(db, "beta", 5)
+        for (h in hits) {
+            if (h.slug == "beta") {
+                found = true
+            }
+        }
+    }
+    t |> equal(n_initial, 1)
+    t |> equal(n_after, 2)
+    t |> success(found, "newly-dropped doc must be retrievable after ensure_index_fresh")
+    cleanup_root(root)
+}
+
+[test]
+def test_ensure_index_fresh_noop_when_unchanged(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha q"]
+    seed_doc(t, root, "alpha", "Alpha", "body", no_links, qs)
+    var sig1 : string
+    var sig2 : string
+    var rebuild_count = -1
+    with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
+        sig1 = get_index_signature(db)
+        // No filesystem changes — second call should hit the cache and
+        // return 0, AND the persisted signature should still equal the first.
+        rebuild_count = ensure_index_fresh(db, root)
+        sig2 = get_index_signature(db)
+    }
+    t |> success(!empty(sig1), "signature populated on first ensure")
+    t |> equal(sig1, sig2)
+    t |> equal(rebuild_count, 0)  // 0 = cache hit, no rebuild
+    cleanup_root(root)
+}
+
+// ─── --raw-query FTS5 passthrough ─────────────────────────────────────
+
+[test]
+def test_search_raw_query(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs1 <- ["title alpha question"]
+    let qs2 <- ["title bravo question"]
+    seed_doc(t, root, "alpha", "alphakeyword content", "alpha body", no_links, qs1)
+    seed_doc(t, root, "bravo", "bravokeyword content", "bravo body", no_links, qs2)
+    var raw_n = 0
+    var sanitized_n = 0
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        // Raw-query path: explicit FTS5 OR — both docs match.
+        let raw_hits <- search(db, "alphakeyword OR bravokeyword", 10, true)
+        raw_n = length(raw_hits)
+        // Sanitized path lowercases "OR" to "or" (a 2-char regular token);
+        // it gets joined with the keywords via OR, so still matches both.
+        // What we really want to assert is that the raw path works; the
+        // sanitized path's exact behavior is tested elsewhere.
+        let san_hits <- search(db, "alphakeyword OR bravokeyword", 10, false)
+        sanitized_n = length(san_hits)
+    }
+    t |> equal(raw_n, 2, "raw FTS5 OR returns both docs")
+    t |> success(sanitized_n >= 2, "sanitized path also returns both via OR-join: got {sanitized_n}")
+    cleanup_root(root)
+}
+
+[test]
+def test_search_raw_query_phrase(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["the alpha bravo charlie sequence"]
+    seed_doc(t, root, "alpha", "alpha bravo charlie", "the order matters: alpha bravo charlie", no_links, qs)
+    var quoted_hits = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        // Phrase queries are valuable raw-query users. Sanitizer would strip
+        // the quotes — raw_query=true preserves them.
+        let hits <- search(db, "\"alpha bravo\"", 10, true)
+        quoted_hits = length(hits)
+    }
+    t |> equal(quoted_hits, 1)
     cleanup_root(root)
 }
