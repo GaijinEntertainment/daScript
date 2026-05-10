@@ -205,7 +205,7 @@ def cmd_rebuild(args : MouseArgs) {
     var n = 0
     with_index_db(root) $(db) {
         n = rebuild(db, root)
-        set_index_signature(db, compute_index_signature(root))
+        set_index_signature(db, compute_docs_signature(root))
     }
     print("rebuilt: {n} doc(s) in {root}\n")
 }
@@ -485,7 +485,7 @@ def tool_rebuild(args : JsonValue?) : string {
     var n = 0
     with_index_db(root) $(db) {
         n = rebuild(db, root)
-        set_index_signature(db, compute_index_signature(root))
+        set_index_signature(db, compute_docs_signature(root))
     }
     return make_tool_result("rebuilt: {n} doc(s) in {root}", false)
 }

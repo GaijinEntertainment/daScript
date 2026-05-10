@@ -249,6 +249,13 @@ def set_index_signature(db : SqlRunner; sig : string) {
         (value = _excluded.value))
 }
 
+// The canonical staleness signature for a docs root — `compute_signature`
+// over `*.md` under `docs/`. Use this everywhere we stamp a fresh signature
+// so the input shape stays in lockstep with `ensure_index_fresh`'s read.
+def public compute_docs_signature(root : string) : string {
+    return compute_signature(root, @(p : string) => ends_with(p, ".md"), [docs_dir(root)])
+}
+
 // Reconcile the SQLite index against on-disk docs. If the staleness signature
 // matches what's stored, this is a no-op. On mismatch, rebuilds and stores
 // the new signature. Returns the number of docs (re)indexed (0 on cache hit).
@@ -261,9 +268,7 @@ def ensure_index_fresh(db : SqlRunner; root : string) : int {
     if (!is_directory_path(docs_abs)) {
         return 0
     }
-    let sig = compute_signature(root,
-                                @(p : string) => ends_with(p, ".md"),
-                                [docs_abs])
+    let sig = compute_docs_signature(root)
     if (empty(sig)) {
         return 0
     }
@@ -531,9 +536,7 @@ def add_doc(db : SqlRunner; root : string;
         return <- outcome
     }
     rebuild(db, root)
-    set_index_signature(db, compute_signature(root,
-                                              @(p : string) => ends_with(p, ".md"),
-                                              [docs_dir(root)]))
+    set_index_signature(db, compute_docs_signature(root))
     outcome.slug = slug
     outcome.created = true
     outcome.written_path = path
