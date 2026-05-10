@@ -1,0 +1,1 @@
+Jaccard similarity over two string-sets, returning ``|intersection| / |union|`` in 0..1. Empty either side returns 0. Pass two ``table<string>`` (the set form) for O(1) intersect lookup, or two ``array<string>`` and the array overload will build the sets internally.

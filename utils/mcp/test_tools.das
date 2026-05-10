@@ -2233,38 +2233,19 @@ def test_cpp_search_config(t : T?) {
 
 [test]
 def test_cpp_index_signature(t : T?) {
-    t |> run("signature is stable across two consecutive calls (no edits)") <| @(t : T?) {
-        let sig1 = cpp_compute_index_signature()
-        let sig2 = cpp_compute_index_signature()
-        t |> success(!empty(sig1), "first signature should not be empty")
-        t |> success(sig1 == sig2, "signature should be stable across consecutive calls (no fs changes)")
+    t |> run("ensure_cpp_index produces a stable signature across consecutive calls (no edits)") <| @(t : T?) {
+        ensure_cpp_index()
+        let sig1 = cpp_index_signature
+        ensure_cpp_index()
+        let sig2 = cpp_index_signature
+        t |> success(!empty(sig1), "first signature should not be empty after ensure_cpp_index()")
+        t |> success(sig1 == sig2, "signature should be stable across consecutive ensure_cpp_index() calls (no fs changes)")
     }
 }
 
-[test]
-def test_cpp_filesystem_signature(t : T?) {
-    // Direct unit test for the no-git fallback's filesystem walker.
-    // (`cpp_compute_index_signature` only invokes it when git fails — hard to
-    // simulate in CI without breaking git, so we exercise it directly here.)
-    t |> run("filesystem signature is non-empty for default search dirs") <| @(t : T?) {
-        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
-        t |> success(!empty(fs_sig), "should return at least one path:mtime line for daslang's tree")
-    }
-    t |> run("filesystem signature is stable across consecutive calls (no edits)") <| @(t : T?) {
-        let dirs <- cpp_default_search_dirs()
-        let sig1 = cpp_compute_filesystem_signature(dirs)
-        let sig2 = cpp_compute_filesystem_signature(dirs)
-        t |> success(sig1 == sig2, "two back-to-back calls should produce identical signatures")
-    }
-    t |> run("filesystem signature only mentions indexed extensions") <| @(t : T?) {
-        let fs_sig = cpp_compute_filesystem_signature(cpp_default_search_dirs())
-        // Any *.das, *.cmake, *.txt, *.md path slipping into the signature is
-        // a bug — `is_indexed_path` should have filtered them out.
-        t |> success(find(fs_sig, ".das:") < 0, "should not include .das files")
-        t |> success(find(fs_sig, ".cmake:") < 0, "should not include .cmake files")
-        t |> success(find(fs_sig, "CMakeLists") < 0, "should not include CMakeLists.txt")
-    }
-}
+// Direct unit tests for the filesystem-fallback walker live with the shared
+// module they exercise: utils/common/tests/test_git_signature.das. Behavioral
+// integration is covered by test_cpp_index_signature above.
 
 [test]
 def test_cpp_collect_git_excludes(t : T?) {

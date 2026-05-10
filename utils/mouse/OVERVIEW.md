@@ -55,27 +55,30 @@ Frontmatter fields: `slug` (stable ID, used for cross-refs), `title` (1-line des
 
 | Operation | CLI | MCP tool | Notes |
 |---|---|---|---|
-| Retrieve | `mouse ask "<q>"` | `mouse__ask` | Top-K BM25 ranked. Words OR-joined. |
-| Add Q&A | `mouse add "<q>" --body "..."` | `mouse__add` | Dupe-gated by default; pass `--force` / `force=true` to override. |
+| Retrieve | `mouse ask "<q>"` | `mouse__ask` | Top-K BM25 ranked, each annotated with a Jaccard title-similarity. Words OR-joined; `--raw-query` / `rawQuery=true` passes raw FTS5 syntax (phrases, NEAR, explicit AND/OR). |
+| Add Q&A | `mouse add "<q>" --body "..."` | `mouse__add` | Advisory similar list always; hard-blocks only on Jaccard ≥ 0.7. `--force` / `force=true` overrides the block. |
 | Get doc | `mouse get <slug>` | `mouse__get` | Body + frontmatter + reverse-link footer. |
-| Rebuild | `mouse rebuild` | `mouse__rebuild` | Rescans `<root>/docs/`; idempotent. |
+| Rebuild | `mouse rebuild` | `mouse__rebuild` | Force full rescan + signature reset. Normally not needed — every entry point auto-reindexes via the git-staleness check. |
 | Serve MCP | `mouse serve` | (this _is_ the server) | stdio JSON-RPC. |
 
-`add`'s **dupe-on-add gate** is the corpus-hygiene mechanism. With `force=false` (default), `add` first runs retrieval on the new question and returns the similar docs without writing if any match. The agent decides: extend an existing doc (edit the `.md`) or create a new one (re-call with `force=true`).
+**Dupe-on-add gate.** `add` always runs a Jaccard-scored similarity check against the corpus and surfaces the top matches (whether it created or not). With `force=false` (default), it hard-blocks only when the top match scores ≥ 0.7 — a near-paraphrase. Below that threshold, the add proceeds and the similar list is shown for awareness. The caller (LLM or human) is the actual decider; the threshold just stops obvious near-paraphrases from sneaking in. Below 0.5 nothing is surfaced unless content overlap is genuine.
 
 ## Storage model
 
 The `.md` files under `<root>/docs/` are the **source of truth**. The SQLite index at `<root>/index.db` is rebuildable — `mouse rebuild` repopulates it from disk. Implications:
 
-- The corpus is `git`-friendly. Check it in if you want a shared corpus; `git pull` followed by `mouse rebuild` syncs.
-- Hand-edits work. `Edit` an answer, run `mouse rebuild`, the index reflects the change.
+- The corpus is `git`-friendly. Check it in if you want a shared corpus; `git pull` and the next `mouse__ask` (or any other entry point) auto-reindexes — no manual `mouse rebuild` needed.
+- Hand-edits work. `Edit` an answer, run any mouse command, the index reflects the change.
 - The DB is disposable. Lose it, regenerate it.
+
+**Auto-reindex.** Every entry point computes a cheap staleness signature, delegated to the shared `utils/common/git_signature` module: per-tree `git rev-parse HEAD:<docs_rel>` (the docs subtree's hash at HEAD) + filtered `git status --porcelain` over `<root>/docs/*.md` + per-changed-file mtimes, hashed. **Per-tree HEAD** matters: a `git pull` (or branch switch) that doesn't touch `<root>/docs/` leaves the docs tree hash unchanged, so the index doesn't rebuild — a normal monorepo workflow no longer churns the cache. The signature is persisted in an `index_meta` table; on mismatch, the index rebuilds and the new signature replaces the old. If `<root>` isn't inside a git checkout (or git is unavailable), the fallback is a recursive filesystem walk that collects `(path, mtime)` for every `.md`, **sorts by path**, then hashes — sort makes the signature deterministic across platforms (Windows `_findfirst` and Unix `readdir` don't guarantee stable order). The same module backs the daslang MCP server's cpp source-search staleness tracking.
 
 The SQLite schema (managed via `[sql_migration]` from `sqlite/sqlite_migrate`):
 
 - `docs` — slug PK, path, title, created, last_verified, body_hash.
 - `links` — composite-PK pair `(from_slug, to_slug)` for cross-refs.
 - `search_idx` — FTS5 virtual table; per-doc concatenation of title + question aliases + body. BM25 ranks via the `@sql_fts_rank` column.
+- `index_meta` — `(key, value)` k/v table. Currently stores the staleness signature; future-proof for other persistent metadata.
 
 Rebuild is whole-corpus delete+repopulate — simple, correct, fast for small corpora. Incremental update (re-index only changed `body_hash`) is a vNext optimization once the corpus is large enough that whole-rebuild matters.
 
