@@ -226,8 +226,11 @@ def cmd_rebuild(args : MouseArgs) {
     print("rebuilt: {n} doc(s) in {root}\n")
 }
 
-// Resolve mutually exclusive --misses / --bad / --review flags into a
-// single LogMode. First-set-wins; default (none set) means All.
+// Resolve --misses / --bad / --review into a single LogMode. If more
+// than one is set, the fixed priority is misses > bad > review (set by
+// the order of the checks below, not flag-set order on the CLI). The
+// help text declares them mutually exclusive; we resolve rather than
+// error so a callsite passing two by accident still gets a sane mode.
 def resolve_log_mode(args : MouseArgs) : LogMode {
     return LogMode.Misses if (args.misses)
     return LogMode.Bad    if (args.bad)
@@ -325,48 +328,6 @@ def jsonrpc_error(id : string; code : int; msg : string) : string {
     return "\{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":\{\"code\":{code},\"message\":{escaped}\}\}"
 }
 
-def get_string_arg(args : JsonValue?; key : string) : string {
-    if (args == null) {
-        return ""
-    }
-    let v = args?[key]
-    if (v == null) {
-        return ""
-    }
-    if (v.value is _string) {
-        return v.value as _string
-    }
-    return ""
-}
-
-def get_int_arg(args : JsonValue?; key : string; dflt : int) : int {
-    if (args == null) {
-        return dflt
-    }
-    let v = args?[key]
-    if (v == null) {
-        return dflt
-    }
-    if (v.value is _number) {
-        return int(v.value as _number)
-    }
-    return dflt
-}
-
-def get_bool_arg(args : JsonValue?; key : string) : bool {
-    if (args == null) {
-        return false
-    }
-    let v = args?[key]
-    if (v == null) {
-        return false
-    }
-    if (v.value is _bool) {
-        return v.value as _bool
-    }
-    return false
-}
-
 def jsonvalue_id_to_string(id : JsonValue?) : string {
     if (id == null) {
         return "null"
@@ -410,13 +371,13 @@ let HINT_NO_MATCH = "\nHint: nothing matched. Do the research yourself, then cal
 let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at the `path:` shown and bump `last_verified` (or delete the file if it's no longer relevant). To fetch one of the answers in full, call mouse__get with the slug shown next to the `BM25`/`sim` scores."
 
 def tool_ask(args : JsonValue?) : string {
-    let question = get_string_arg(args, "question")
+    let question : string = args?["question"] ?? ""
     if (empty(question)) {
         return make_tool_result("missing 'question' argument", true)
     }
-    let k = get_int_arg(args, "k", 5)
-    let raw_query = get_bool_arg(args, "rawQuery")
-    let root = resolve_root(get_string_arg(args, "root"))
+    let k : int = args?["k"] ?? 5
+    let raw_query : bool = args?["rawQuery"] ?? false
+    let root = resolve_root(args?["root"] ?? "")
     var output : string
     with_index_db(root) $(db) {
         ensure_index_fresh(db, root)
@@ -441,17 +402,17 @@ def tool_ask(args : JsonValue?) : string {
 }
 
 def tool_add(args : JsonValue?) : string {
-    let question = get_string_arg(args, "question")
+    let question : string = args?["question"] ?? ""
     if (empty(question)) {
         return make_tool_result("missing 'question' argument", true)
     }
-    let body = get_string_arg(args, "body")
+    let body : string = args?["body"] ?? ""
     if (empty(body)) {
         return make_tool_result("missing 'body' argument", true)
     }
-    let slug_hint = get_string_arg(args, "slug")
-    let force = get_bool_arg(args, "force")
-    let root = resolve_root(get_string_arg(args, "root"))
+    let slug_hint : string = args?["slug"] ?? ""
+    let force : bool = args?["force"] ?? false
+    let root = resolve_root(args?["root"] ?? "")
     var output : string
     var is_error = false
     with_index_db(root) $(db) {
@@ -490,7 +451,7 @@ def tool_add(args : JsonValue?) : string {
 }
 
 def tool_get(args : JsonValue?) : string {
-    let raw_slug = get_string_arg(args, "slug")
+    let raw_slug : string = args?["slug"] ?? ""
     if (empty(raw_slug)) {
         return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar')", true)
     }
@@ -502,7 +463,7 @@ def tool_get(args : JsonValue?) : string {
         }
         return make_tool_result("invalid slug '{slug}' — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
     }
-    let root = resolve_root(get_string_arg(args, "root"))
+    let root = resolve_root(args?["root"] ?? "")
     var output : string
     var is_error = false
     with_index_db(root) $(db) {
@@ -559,7 +520,7 @@ def tool_get(args : JsonValue?) : string {
 }
 
 def tool_rebuild(args : JsonValue?) : string {
-    let root = resolve_root(get_string_arg(args, "root"))
+    let root = resolve_root(args?["root"] ?? "")
     var n = 0
     with_index_db(root) $(db) {
         n = rebuild(db, root)
@@ -568,26 +529,12 @@ def tool_rebuild(args : JsonValue?) : string {
     return make_tool_result("rebuilt: {n} doc(s) in {root}", false)
 }
 
-def get_int64_arg(args : JsonValue?; key : string; dflt : int64) : int64 {
-    if (args == null) {
-        return dflt
-    }
-    let v = args?[key]
-    if (v == null) {
-        return dflt
-    }
-    if (v.value is _number) {
-        return int64(v.value as _number)
-    }
-    return dflt
-}
-
 def tool_bad(args : JsonValue?) : string {
-    let qid = get_int64_arg(args, "queryId", 0l)
+    let qid : int64 = args?["queryId"] ?? 0l
     if (qid <= 0l) {
         return make_tool_result("missing or invalid 'queryId' (positive int64 required) — pass the value shown next to `query_id:` in the mouse__ask response", true)
     }
-    let root = resolve_root(get_string_arg(args, "root"))
+    let root = resolve_root(args?["root"] ?? "")
     var output : string
     var is_error = false
     with_index_db(root) $(db) {
@@ -623,12 +570,12 @@ def log_mode_display(m : LogMode) : string {
 let HINT_LOG_REVIEW = "\nWrap-up tip: scan rows above where the listed top slug doesn't address the question. Call mouse__bad(queryId) on each, then mouse__add the answer if you found it during this session."
 
 def tool_log(args : JsonValue?) : string {
-    let mode_str = get_string_arg(args, "mode")
+    let mode_str : string = args?["mode"] ?? ""
     let mode = parse_log_mode(mode_str)
     let mode_display = log_mode_display(mode)
-    let n_arg = get_int_arg(args, "limit", 20)
+    let n_arg : int = args?["limit"] ?? 20
     let n = n_arg > 0 ? n_arg : 20
-    let root = resolve_root(get_string_arg(args, "root"))
+    let root = resolve_root(args?["root"] ?? "")
     var output : string
     with_index_db(root) $(db) {
         ensure_index_fresh(db, root)
