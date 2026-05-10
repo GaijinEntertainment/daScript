@@ -37,6 +37,10 @@ def compile_check_single(file : string; project : string = "") : string {
     }
 }
 
+// Caller must have already validated `project` via validate_project_arg.
+// Hoisted to run_compile_check so an invalid project surfaces the focused
+// error once instead of N times (or, in the non-JSON FAIL path, getting
+// dropped entirely while only `FAIL <file>` lines print).
 def private compile_check_single_json(file : string; project : string = "") : CompileResult {
     var result = CompileResult(file = file)
     var inscope access <- make_file_access(project)
@@ -66,6 +70,10 @@ def private compile_check_single_json(file : string; project : string = "") : Co
 }
 
 def run_compile_check(file : string; project : string = ""; json : bool = false) : string {
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        return make_tool_result(proj_err, true)
+    }
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {

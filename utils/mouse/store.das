@@ -182,6 +182,29 @@ def slug_from_title(title : string) : string {
     return s < e ? slice(raw, s, e) : ""
 }
 
+// Lenient slug normalization for MCP/CLI callers. The wire format is the
+// bare slug, but callers (especially LLMs) routinely paste the path or
+// filename instead — `./mouse-data/docs/foo.md`, `foo.md`, `docs\foo`.
+// Strip the directory components and trailing `.md` so those forms route
+// to the same doc. Trim whitespace too. Returns the cleaned string; the
+// caller should still run `is_valid_slug` to catch anything weirder.
+def normalize_slug_input(raw : string) : string {
+    var s = trim(raw)
+    if (empty(s)) {
+        return s
+    }
+    // to_generic_path first so backslashes count as separators on POSIX too —
+    // LLM/MCP callers paste Windows-style paths regardless of host.
+    let bn = base_name(to_generic_path(s))
+    if (!empty(bn)) {
+        s = bn
+    }
+    if (ends_with(s, ".md")) {
+        s = slice(s, 0, length(s) - 3)
+    }
+    return s
+}
+
 // A slug is the on-disk filename and SQL primary key. Untrusted input
 // (MCP JSON-RPC, CLI args) flows here, so reject anything that could
 // escape <root>/docs/ or break path joins. Shape: lowercase alnum, dash,

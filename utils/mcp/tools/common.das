@@ -54,6 +54,32 @@ def make_tool_result(text : string; is_error : bool = false) : string {
     return sprint_json(result, false)
 }
 
+// Validate the `project` argument shared across MCP subtools. Empty is fine
+// (means "no project, default file access"). Non-empty must point at an
+// existing regular `.das_project` file. Returns empty on success, otherwise
+// a focused error suitable for `make_tool_result(...)`. Catches the common
+// failure mode where callers pass a directory or a non-project file and the
+// underlying compile_file() surfaces a misleading "missing prerequisite".
+def validate_project_arg(project : string) : string {
+    if (empty(project)) {
+        return ""
+    }
+    if (!ends_with(project, ".das_project")) {
+        return "invalid 'project' argument: '{project}' — expected a path to a .das_project file"
+    }
+    let st = stat(project)
+    if (!st.is_valid) {
+        return "'project' file not found: '{project}'"
+    }
+    if (st.is_dir) {
+        return "'project' is a directory, not a .das_project file: '{project}'"
+    }
+    if (!st.is_reg) {
+        return "'project' is not a regular file: '{project}'"
+    }
+    return ""
+}
+
 def write_deduped(var writer : StringBuilderWriter; messages : array<string>; prefix : string = "  ") {
     var counts : table<string; int>
     var order : array<string>
@@ -80,6 +106,10 @@ def compile_and_simulate(file : string; project : string = ""; blk : block<(prog
 }
 
 def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) : string>) : string {
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        return make_tool_result(proj_err, true)
+    }
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
@@ -112,6 +142,10 @@ def compile_program(file : string; _export_all : bool; blk : block<(program : sm
 }
 
 def compile_program(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        return make_tool_result(proj_err, true)
+    }
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
@@ -151,6 +185,10 @@ def compile_only(file : string; _export_all : bool; project : string = ""; blk :
 }
 
 def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; _lint : bool = false; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        return make_tool_result(proj_err, true)
+    }
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
