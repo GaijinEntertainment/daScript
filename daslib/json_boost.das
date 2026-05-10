@@ -586,9 +586,9 @@ def JV(value : auto(TT)) : JsonValue? {
                     static_if (typeinfo is_string(field)) {
                         if (empty(field)) { return ; }
                     } static_elif (typeinfo is_array(field)) {
-                        if (length(field) == 0) { return ; }
+                        if (empty(field)) { return ; }
                     } static_elif (typeinfo is_table(field)) {
-                        if (length(field) == 0) { return ; }
+                        if (empty(field)) { return ; }
                     } static_elif (typeinfo is_pointer(field)) {
                         if (field == null) { return ; }
                     } else {
