@@ -6,34 +6,41 @@ last_verified: 2026-05-10
 links: []
 ---
 
-**Use `@safe_when_uninitialized` on the field.** The `[widget]` macro auto-emits the per-ident state global as a bare `var IDENT : StateStruct` — no constructor call, just bit-zero init. For `string`, bit-zero is null pointer; daslang refuses to compile a global with an uninitialized string heap-pointer field, raising error 31014: `Uninitialized variable IDENT is unsafe. Use initializer syntax or @safe_when_uninitialized when intended.`
-
-The field annotation that suppresses this is `@safe_when_uninitialized`. It goes immediately before the field name (one line up or same line, `@`-form, NOT `[...]`):
+**Two equivalent options. Lead with the default literal:**
 
 ```das
 struct InputTextState {
-    @safe_when_uninitialized @live value : string         //! current text
-    @live capacity : int                                  //! widget body promotes 0 → default
+    @live value : string = ""                             //! current text
+    @live capacity : int = 256
     @optional has_pending : bool
-    @safe_when_uninitialized @optional pending_value : string
+    @optional pending_value : string = ""
     @optional changed : bool
-    @optional buffer : array<uint8>                       // working buffer
+    @optional buffer : array<uint8>
 }
 ```
 
-After this, `IDENT.value` is a daslang null string at first read. Most string ops are null-safe (`length(null) == 0`, `"{x}"` interpolation prints empty), so the widget body can read `state.value` even before the user has set anything. JV serialization handles null strings cleanly too.
+`= ""` makes the field initialized at the type level, so the `[widget]` macro's auto-emitted `var IDENT : T = T()` produces a fully-formed struct value, no error 31014.
+
+**Alternative: `@safe_when_uninitialized`** on the field. Before the `[widget]` auto-init fix (dasImgui commit `111f7dc`), this was the only option because the macro emitted a bare `var IDENT : T` with no constructor. Post-fix, the constructor runs and `= ""` is the cleaner answer; `@safe_when_uninitialized` still works for fields that genuinely should start as null/zero (rare for strings, more common for handle-typed fields):
+
+```das
+struct LegacyShape {
+    @safe_when_uninitialized @live value : string         //! starts as null pointer
+}
+```
+
+After this, `IDENT.value` is a daslang null string at first read. Most string ops are null-safe (`length(null) == 0`, `"{x}"` interpolation prints empty), so reads work before any explicit set. JV serialization handles null strings cleanly too.
 
 **Companion gotchas (same pattern, same struct):**
 
-1. **Numeric defaults still don't fire.** `@live capacity : int = 256` does NOT mean the global starts at 256 — it starts at 0. Promote to the desired default in the widget body's first-frame init: `if (state.capacity == 0) { state.capacity = 256 }`. (See sibling card `dasimgui-widget-auto-emit-skips-struct-field-defaults`.)
-2. **Cross-context string lifetime.** When dispatcher receives a `string` payload from `imgui_set` (decoded by `from_JV` against a JV the live_command machinery owns), the bytes drop when the dispatcher returns. Use `:=` (clone), NOT `=`, when storing to the state field: `state.pending_value := from_JV(payload?["value"], type<string>, "")`. This forces a clone into the widget context heap so the next frame's read is safe.
-3. **`@safe_when_uninitialized` and `@optional` compose.** Apply both when the field is both initially-null AND skip-when-zero: `@safe_when_uninitialized @optional pending_value : string`.
-4. **`array<T>` doesn't need this annotation.** Bit-zero array means empty array; daslang doesn't refuse to compile. `array<uint8>` working buffers are the right "raw bytes" companion to a `string` value field.
+1. **Cross-context string lifetime.** When dispatcher receives a `string` payload from `imgui_set` (decoded by `from_JV` against a JV the live_command machinery owns), the bytes drop when the dispatcher returns. Use `:=` (clone), NOT `=`, when storing to the state field: `state.pending_value := from_JV(payload?["value"], type<string>, "")`. This forces a clone into the widget context heap so the next frame's read is safe.
+2. **Default `+` annotations compose.** Numeric / vector / enum / struct-ctor defaults all fire on the auto-emitted global post-fix — see card `dasimgui-widget-state-struct-field-defaults-fire`. Stack `@live` / `@optional` / `@safe_when_uninitialized` with the default expression as needed.
+3. **`array<T>` doesn't need this annotation.** Bit-zero array means empty array; daslang doesn't refuse to compile. `array<uint8>` working buffers are the right "raw bytes" companion to a `string` value field.
 
-**Found 2026-05-10**, dasImgui Phase 0b.4 (`InputTextState` design). String fields were the blocker — without the annotation, the whole struct was unusable as a `[widget]` state, even though arrays and ints in the same struct were fine.
+**Found 2026-05-10**, dasImgui Phase 0b.4 (`InputTextState` design). Updated 2026-05-10 post auto-init fix — `= ""` is now the recommended primary form.
 
 ## See also
-- `dasimgui-widget-auto-emit-skips-struct-field-defaults` — sibling: numeric defaults don't fire either, push to call-site
+- `dasimgui-widget-state-struct-field-defaults-fire` — auto-emit invokes `T()` so field defaults fire on the global
 - `daslang-strings-cannot-carry-embedded-nulls-use-array-uint8-and-reinterpret-string-temp-for-c-api-zero-separated-buffers` — when you need to *avoid* `string` and use `array<uint8>` for the same payload
 
 ## Questions
