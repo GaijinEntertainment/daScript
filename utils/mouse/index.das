@@ -86,7 +86,10 @@ struct SearchRow {
 
 // Append-only log of every ask. Survives rebuild() (which only wipes the
 // doc cache). The miss list is the input signal for `mouse__add` —
-// "questions asked but no doc covers them yet".
+// "questions asked but no doc covers them yet". `useful` captures the
+// false-positive case: hit rows the caller marked as no-match (BM25
+// returned cards but none addressed the question). NULL = unrated;
+// 0 = no-match. We never write 1 — implicit positive avoids sycophancy.
 [sql_table(name = "query_log")]
 struct QueryLog {
     @sql_primary_key id : int64
@@ -95,6 +98,7 @@ struct QueryLog {
     match_count : int
     top_slug : string
     source : string  // "cli" | "mcp"
+    @safe_when_uninitialized useful : Option<int>
 }
 
 [sql_migration(version = 1, description = "create docs/links/search_idx")]
@@ -106,7 +110,13 @@ def migration_001(db : SqlRunner) {
 
 [sql_migration(version = 2, description = "add query_log")]
 def migration_002(db : SqlRunner) {
-    db |> create_table(type<QueryLog>)
+    // Raw SQL pinned to the v2-era schema. Originally this was
+    // `db |> create_table(type<QueryLog>)`, but `create_table` regenerates
+    // DDL from the current struct on every fresh-DB migration — so as soon
+    // as a later migration evolves QueryLog (e.g. v4 adds `useful`), v2
+    // would create the column too, and v4's add_column would duplicate.
+    // Pinning v2's DDL here decouples migration history from struct shape.
+    db |> exec("CREATE TABLE query_log (id INTEGER PRIMARY KEY, asked_at TEXT NOT NULL, question TEXT NOT NULL, match_count INTEGER NOT NULL, top_slug TEXT NOT NULL, source TEXT NOT NULL)")
 }
 
 // Persisted across cold opens: the staleness signature used by
@@ -121,6 +131,11 @@ struct IndexMeta {
 [sql_migration(version = 3, description = "add index_meta for staleness signature")]
 def migration_003(db : SqlRunner) {
     db |> create_table(type<IndexMeta>)
+}
+
+[sql_migration(version = 4, description = "add useful flag to query_log")]
+def migration_004(db : SqlRunner) {
+    db |> add_column(type<QueryLog>, "useful")
 }
 
 def with_index_db(root : string; blk : block<(db : SqlRunner) : void>) {
@@ -451,20 +466,50 @@ def now_iso(db : SqlRunner) : string {
 }
 
 def log_query(db : SqlRunner; question : string;
-              hits : array<SearchHit>; source : string) {
+              hits : array<SearchHit>; source : string) : int64 {
     let top = !empty(hits) ? hits[0].slug : ""
     db |> insert(QueryLog(
         asked_at = now_iso(db),
         question = question,
         match_count = length(hits),
         top_slug = top,
-        source = source))
+        source = source,
+        useful = none(type<int>)))
+    return db |> last_insert_rowid()
 }
 
-def recent_queries(db : SqlRunner; n : int; misses_only : bool) : array<QueryLog> {
-    if (misses_only) {
+// Mark a query_log row as no-match (useful = 0). Returns rows affected
+// (0 if id doesn't exist; 1 on success). Idempotent — re-marking is a
+// no-op SET to the same value.
+def mark_no_match(db : SqlRunner; id : int64) : int {
+    return db |> _sql_update(type<QueryLog>, _.id == id, (useful = some(0)))
+}
+
+enum LogMode {
+    All     //!< every row (newest first)
+    Misses  //!< match_count == 0 (FTS5 returned nothing)
+    Bad     //!< useful == 0 (caller marked the hit irrelevant)
+    Review  //!< match_count > 0 AND useful IS NULL (queue for retrospective rating)
+}
+
+def recent_queries(db : SqlRunner; n : int; mode : LogMode) : array<QueryLog> {
+    if (mode == LogMode.Misses) {
         var rows <- _sql(db |> select_from(type<QueryLog>)
                            |> _where(_.match_count == 0)
+                           |> _order_by_descending(_.id)
+                           |> take(n))
+        return <- rows
+    }
+    if (mode == LogMode.Bad) {
+        var rows <- _sql(db |> select_from(type<QueryLog>)
+                           |> _where(_.useful |> unwrap_or(-1) == 0)
+                           |> _order_by_descending(_.id)
+                           |> take(n))
+        return <- rows
+    }
+    if (mode == LogMode.Review) {
+        var rows <- _sql(db |> select_from(type<QueryLog>)
+                           |> _where(_.match_count > 0 && _.useful |> is_none)
                            |> _order_by_descending(_.id)
                            |> take(n))
         return <- rows

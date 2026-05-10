@@ -35,7 +35,7 @@ def _first_opt(arr : array<auto(TT)>) : Option<TT -const -#> {
     //! Compat-mode fallback: returns ``some(arr[0])`` if non-empty, ``none`` otherwise.
     //! Inside `_sql(...)` the macro intercepts this call before evaluation
     //! and emits ` LIMIT 1` with the OneOpt materializer.
-    if (length(arr) > 0) {
+    if (!empty(arr)) {
         return some(arr[0])
     }
     return none(type<TT -const -#>)

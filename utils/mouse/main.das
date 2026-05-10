@@ -5,8 +5,9 @@
 //   daslang utils/mouse/main.das -- add "question" --body "answer body"
 //   daslang utils/mouse/main.das -- get <slug>
 //   daslang utils/mouse/main.das -- rebuild
-//   daslang utils/mouse/main.das -- log [-n N] [--misses]
-//   daslang utils/mouse/main.das -- serve            # MCP stdio loop
+//   daslang utils/mouse/main.das -- log [-n N] [--misses | --bad | --review]
+//   daslang utils/mouse/main.das -- bad <query-id>     # mark hit as no-match
+//   daslang utils/mouse/main.das -- serve              # MCP stdio loop
 
 options gen2
 options persistent_heap
@@ -20,6 +21,7 @@ require daslib/clargs
 require daslib/json_boost
 require daslib/fio
 require daslib/strings_boost
+require daslib/strings_convert
 require strings
 require store
 require index
@@ -29,11 +31,11 @@ require index
 [CommandLineArgs]
 struct MouseArgs {
     @clarg_positional
-    @clarg_doc = "Subcommand: ask | add | get | rebuild | log | serve"
+    @clarg_doc = "Subcommand: ask | add | get | rebuild | log | bad | serve"
     command : Option<string>
 
     @clarg_positional
-    @clarg_doc = "Argument: question text (ask, add) or slug (get)"
+    @clarg_doc = "Argument: question text (ask, add), slug (get), or query-id (bad)"
     arg : Option<string>
 
     @clarg_short = "r"
@@ -58,8 +60,14 @@ struct MouseArgs {
     @clarg_doc = "Limit (log)"
     limit : int = 20
 
-    @clarg_doc = "Show only queries with no result (log)"
+    @clarg_doc = "log: show only zero-result misses (match_count == 0)"
     misses : bool
+
+    @clarg_doc = "log: show only hits the caller marked as no-match (useful == 0)"
+    bad : bool
+
+    @clarg_doc = "log: show unrated hits (match_count > 0 AND useful IS NULL) — the queue for retrospective rating during wrap-up"
+    review : bool
 
     @clarg_doc = "Treat the question as raw FTS5 query syntax (no sanitization, no OR-join). See https://www.sqlite.org/fts5.html#full_text_query_syntax"
     raw_query : bool
@@ -96,13 +104,13 @@ def cmd_ask(args : MouseArgs) {
     with_index_db(root) $(db) {
         ensure_index_fresh(db, root)
         let hits <- search(db, query, args.k, args.raw_query)
-        log_query(db, query, hits, "cli")
+        let qid = log_query(db, query, hits, "cli")
         if (empty(hits)) {
-            print("(no results){HINT_NO_MATCH}\n")
+            print("query_id: {qid}\n(no results){HINT_NO_MATCH}\n")
             return
         }
         let qtok = tokenize_for_jaccard(query)
-        print("Top {length(hits)} best match(es):\n")
+        print("query_id: {qid}\nTop {length(hits)} best match(es):\n")
         for (h in hits) {
             let ttok = tokenize_for_jaccard(h.title)
             print(fmt_search_hit(h, jaccard(qtok, ttok)))
@@ -218,24 +226,69 @@ def cmd_rebuild(args : MouseArgs) {
     print("rebuilt: {n} doc(s) in {root}\n")
 }
 
+// Resolve mutually exclusive --misses / --bad / --review flags into a
+// single LogMode. First-set-wins; default (none set) means All.
+def resolve_log_mode(args : MouseArgs) : LogMode {
+    return LogMode.Misses if (args.misses)
+    return LogMode.Bad    if (args.bad)
+    return LogMode.Review if (args.review)
+    return LogMode.All
+}
+
+def fmt_log_row(r : QueryLog) : string {
+    if (r.match_count == 0) {
+        return "[id {r.id}] [{r.asked_at}] ({r.source}) {r.question} -> MISS\n"
+    }
+    let useful_tag = r.useful |> is_some && r.useful |> unwrap_or(-1) == 0 ? " [BAD]" : ""
+    return "[id {r.id}] [{r.asked_at}] ({r.source}) {r.question} -> {r.match_count} hit(s) (top: {r.top_slug}){useful_tag}\n"
+}
+
 def cmd_log(args : MouseArgs) {
     let root = resolve_root(args.root)
     let n = args.limit > 0 ? args.limit : 20
+    let mode = resolve_log_mode(args)
     with_index_db(root) $(db) {
         ensure_index_fresh(db, root)
-        let rows <- recent_queries(db, n, args.misses)
+        let rows <- recent_queries(db, n, mode)
         if (empty(rows)) {
             print("(no queries logged yet)\n")
             return
         }
         for (r in rows) {
-            if (r.match_count == 0) {
-                print("[{r.asked_at}] ({r.source}) {r.question} -> MISS\n")
-            } else {
-                print("[{r.asked_at}] ({r.source}) {r.question} -> {r.match_count} hit(s) (top: {r.top_slug})\n")
-            }
+            print(fmt_log_row(r))
         }
     }
+}
+
+// Returns 0 on success, 1 on missing/invalid id, 2 if no row matches —
+// non-zero exit so shell callers can branch on it (mouse__bad MCP wraps
+// the same logic in a tool-result with isError=true on the same conditions).
+def cmd_bad(args : MouseArgs) : int {
+    let root = resolve_root(args.root)
+    let id_str = positional_value(args.arg)
+    if (empty(id_str)) {
+        to_log(LOG_ERROR, "bad: missing query-id; pass as positional arg (see `mouse log` for ids)")
+        return 1
+    }
+    let id_r <- try_to_int64(id_str)
+    if (id_r |> is_err) {
+        let err = id_r |> unwrap_err
+        to_log(LOG_ERROR, "bad: '{id_str}' is not a valid query-id ({err})")
+        return 1
+    }
+    let id = id_r |> unwrap
+    var rc = 0
+    with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
+        let n = mark_no_match(db, id)
+        if (n == 0) {
+            to_log(LOG_ERROR, "bad: no query_log row with id={id}")
+            rc = 2
+            return
+        }
+        print("marked id={id} as no-match\n")
+    }
+    return rc
 }
 
 // ─── MCP stdio server ────────────────────────────────────────────────
@@ -327,10 +380,12 @@ def handle_initialize(id : string) : string {
 def tools_list_body() : string {
     return build_string() $(var w) {
         w |> write("\{\"tools\":[")
-        w |> write("\{\"name\":\"mouse__ask\",\"description\":\"Search the blind-mouse Q&A cache. Returns top-K matches ranked by FTS5 BM25, each annotated with a Jaccard title-similarity (sim 0..1) so you can judge relevance at a glance. Set rawQuery=true to pass raw FTS5 syntax (https://www.sqlite.org/fts5.html#full_text_query_syntax) — quoted phrases, NEAR, explicit AND/OR.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"k\":\{\"type\":\"integer\",\"default\":5\},\"rawQuery\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\"]\}\},")
+        w |> write("\{\"name\":\"mouse__ask\",\"description\":\"Search the blind-mouse Q&A cache. Returns top-K matches ranked by FTS5 BM25, each annotated with a Jaccard title-similarity (sim 0..1) so you can judge relevance at a glance. The response begins with a `query_id:` line — capture it; if NONE of the returned cards address your question, pass that id to mouse__bad before moving on. Set rawQuery=true to pass raw FTS5 syntax (https://www.sqlite.org/fts5.html#full_text_query_syntax) — quoted phrases, NEAR, explicit AND/OR.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"k\":\{\"type\":\"integer\",\"default\":5\},\"rawQuery\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\"]\}\},")
         w |> write("\{\"name\":\"mouse__add\",\"description\":\"Add a Q&A to the cache. Runs a Jaccard similarity check on the question; with force=false (default), hard-blocks creation only when the top match scores >= 0.7 (a near-paraphrase) and returns the similar list without writing. Below the threshold, the doc is created and the similar list is returned for awareness. Set force=true to override the hard block.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"question\":\{\"type\":\"string\"\},\"body\":\{\"type\":\"string\"\},\"slug\":\{\"type\":\"string\"\},\"force\":\{\"type\":\"boolean\",\"default\":false\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"question\",\"body\"]\}\},")
         w |> write("\{\"name\":\"mouse__get\",\"description\":\"Fetch a doc by slug. Returns body, frontmatter, and reverse-link footer (which docs link to this one).\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"slug\":\{\"type\":\"string\"\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"slug\"]\}\},")
-        w |> write("\{\"name\":\"mouse__rebuild\",\"description\":\"Rescan <root>/docs/ and rebuild the SQLite index from disk. .md files are the source of truth.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"root\":\{\"type\":\"string\"\}\}\}\}")
+        w |> write("\{\"name\":\"mouse__rebuild\",\"description\":\"Rescan <root>/docs/ and rebuild the SQLite index from disk. .md files are the source of truth.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"root\":\{\"type\":\"string\"\}\}\}\},")
+        w |> write("\{\"name\":\"mouse__bad\",\"description\":\"Mark a previous mouse__ask result as no-match. Call this when the cards mouse__ask returned didn't actually address your question — BM25 matched on shared tokens but the corpus has no real answer. Pass the queryId from the `query_id:` line in the mouse__ask response. Default-positive bias means we never mark hits as 'good'; only the negative signal carries information. Idempotent (re-marking is a no-op).\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"queryId\":\{\"type\":\"integer\",\"description\":\"The query_id returned by mouse__ask\"\},\"root\":\{\"type\":\"string\"\}\},\"required\":[\"queryId\"]\}\},")
+        w |> write("\{\"name\":\"mouse__log\",\"description\":\"List recent mouse__ask rows for retrospective curation. Use mode='review' during wrap-up to surface unrated hits (match_count > 0 AND useful IS NULL) — scan each row, decide if the top slug actually addressed the question, mark unhelpful ones via mouse__bad. mode='misses' shows zero-result asks (the existing add-candidate queue). mode='bad' shows already-marked false positives. mode='all' (default) returns everything newest-first.\",\"inputSchema\":\{\"type\":\"object\",\"properties\":\{\"mode\":\{\"type\":\"string\",\"enum\":[\"all\",\"misses\",\"bad\",\"review\"],\"default\":\"all\"\},\"limit\":\{\"type\":\"integer\",\"default\":20\},\"root\":\{\"type\":\"string\"\}\}\}\}")
         w |> write("]\}")
     }
 }
@@ -364,19 +419,20 @@ def tool_ask(args : JsonValue?) : string {
     with_index_db(root) $(db) {
         ensure_index_fresh(db, root)
         let hits <- search(db, question, k, raw_query)
-        log_query(db, question, hits, "mcp")
+        let qid = log_query(db, question, hits, "mcp")
         if (empty(hits)) {
-            output = "(no results for: {question}){HINT_NO_MATCH}"
+            output = "query_id: {qid}\n(no results for: {question}){HINT_NO_MATCH}"
             return
         }
         let qtok = tokenize_for_jaccard(question)
         output = build_string() $(var w) {
-            w |> write("Top {length(hits)} best match(es):\n")
+            w |> write("query_id: {qid}\nTop {length(hits)} best match(es):\n")
             for (h in hits) {
                 let ttok = tokenize_for_jaccard(h.title)
                 w |> write(fmt_search_hit(h, jaccard(qtok, ttok)))
             }
             w |> write(HINT_HIT)
+            w |> write("\nIf NONE of the cards above address your question, call mouse__bad with this query_id ({qid}) before moving on — that's the signal that BM25 matched on shared tokens but the corpus has no real answer yet. Then research and mouse__add the answer when you find it.")
         }
     }
     return make_tool_result(output, false)
@@ -510,6 +566,77 @@ def tool_rebuild(args : JsonValue?) : string {
     return make_tool_result("rebuilt: {n} doc(s) in {root}", false)
 }
 
+def get_int64_arg(args : JsonValue?; key : string; dflt : int64) : int64 {
+    if (args == null) {
+        return dflt
+    }
+    let v = args?[key]
+    if (v == null) {
+        return dflt
+    }
+    if (v.value is _number) {
+        return int64(v.value as _number)
+    }
+    return dflt
+}
+
+def tool_bad(args : JsonValue?) : string {
+    let qid = get_int64_arg(args, "queryId", 0l)
+    if (qid <= 0l) {
+        return make_tool_result("missing or invalid 'queryId' (positive int64 required) — pass the value shown next to `query_id:` in the mouse__ask response", true)
+    }
+    let root = resolve_root(get_string_arg(args, "root"))
+    var output : string
+    var is_error = false
+    with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
+        let n = mark_no_match(db, qid)
+        if (n == 0) {
+            output = "no query_log row with id={qid}"
+            is_error = true
+            return
+        }
+        output = "marked id={qid} as no-match. If you have the answer, call mouse__add now so the next session doesn't redo this."
+    }
+    return make_tool_result(output, is_error)
+}
+
+def parse_log_mode(s : string) : LogMode {
+    return LogMode.Misses if (s == "misses")
+    return LogMode.Bad    if (s == "bad")
+    return LogMode.Review if (s == "review")
+    return LogMode.All
+}
+
+let HINT_LOG_REVIEW = "\nWrap-up tip: scan rows above where the listed top slug doesn't address the question. Call mouse__bad(queryId) on each, then mouse__add the answer if you found it during this session."
+
+def tool_log(args : JsonValue?) : string {
+    let mode_str = get_string_arg(args, "mode")
+    let mode = parse_log_mode(mode_str)
+    let n_arg = get_int_arg(args, "limit", 20)
+    let n = n_arg > 0 ? n_arg : 20
+    let root = resolve_root(get_string_arg(args, "root"))
+    var output : string
+    with_index_db(root) $(db) {
+        ensure_index_fresh(db, root)
+        let rows <- recent_queries(db, n, mode)
+        if (empty(rows)) {
+            output = "(no rows matching mode={mode_str})"
+            return
+        }
+        output = build_string() $(var w) {
+            w |> write("{length(rows)} row(s), mode={mode_str}:\n")
+            for (r in rows) {
+                w |> write(fmt_log_row(r))
+            }
+            if (mode == LogMode.Review) {
+                w |> write(HINT_LOG_REVIEW)
+            }
+        }
+    }
+    return make_tool_result(output, false)
+}
+
 def handle_tools_call(id : string; params : JsonValue?) : string {
     if (params == null) {
         return jsonrpc_error(id, -32602, "missing params")
@@ -529,6 +656,10 @@ def handle_tools_call(id : string; params : JsonValue?) : string {
         result = tool_get(args)
     } elif (name == "mouse__rebuild") {
         result = tool_rebuild(args)
+    } elif (name == "mouse__bad") {
+        result = tool_bad(args)
+    } elif (name == "mouse__log") {
+        result = tool_log(args)
     } else {
         return jsonrpc_error(id, -32602, "unknown tool: {name}")
     }
@@ -619,22 +750,22 @@ def cmd_serve(args : MouseArgs) {
 // ─── main ────────────────────────────────────────────────────────────
 
 [export]
-def main() {
+def main() : int {
     var args_r <- parse_args(type<MouseArgs>)
     if (args_r |> is_err) {
         to_log(LOG_ERROR, "error: {args_r |> unwrap_err}")
         print_help(get_command_info(type<MouseArgs>), "mouse")
-        return
+        return 1
     }
     let args <- args_r |> move_unwrap
     if (args.help) {
         print_help(get_command_info(type<MouseArgs>), "mouse")
-        return
+        return 0
     }
     let cmd = positional_value(args.command)
     if (empty(cmd)) {
         print_help(get_command_info(type<MouseArgs>), "mouse")
-        return
+        return 0
     }
     if (cmd == "ask") {
         cmd_ask(args)
@@ -646,10 +777,14 @@ def main() {
         cmd_rebuild(args)
     } elif (cmd == "log") {
         cmd_log(args)
+    } elif (cmd == "bad") {
+        return cmd_bad(args)
     } elif (cmd == "serve") {
         cmd_serve(args)
     } else {
         to_log(LOG_ERROR, "unknown command: {cmd}")
         print_help(get_command_info(type<MouseArgs>), "mouse")
+        return 1
     }
+    return 0
 }

@@ -8,7 +8,8 @@ Read this BEFORE asking, adding, or curating mouse cards. The hard rule (MOUSE F
 |---|---|
 | About to research a "how do I X?" / "what's the pattern for Y?" / "why does Z behave this way?" question | `mouse__ask` first |
 | Just answered such a question through your own research | `mouse__add` before moving on |
-| Wrap-up after a meaningful chunk of work | See `skills/task_wrap_up.md` (review `mouse log --misses` + un-asked questions) |
+| `mouse__ask` returned cards but none of them address what you actually asked | `mouse__bad(query_id)` immediately, then research and `mouse__add` if the answer's worth caching |
+| Wrap-up after a meaningful chunk of work | See `skills/task_wrap_up.md` (review `mouse log --misses` for zero-result asks, `mouse log --review` for unrated hits) |
 | Symbol/field/type lookup ("where is X defined?", "all references to Y") | NOT mouse — use daslang MCP (`find_symbol`, `grep_usage`, `find_references`) |
 | Categorical convention (gen2 syntax, build flags, formatting) | NOT mouse — `CLAUDE.md` / `skills/*.md` |
 | Project state (in-progress branches, who's doing what) | NOT mouse — `git log` / memory |
@@ -23,6 +24,7 @@ The mouse MCP server is deferred — the call dance is `ToolSearch select:mcp__m
 - **Free-form natural language is fine.** The retriever ORs words and ranks by BM25 + Jaccard title-similarity. Don't write FTS5 syntax unless you specifically need phrase matching (then pass `rawQuery=true`).
 - **One question per call.** Three sub-questions → three asks. They hit different cards; compressing them into one query dilutes BM25 scoring.
 - **Plan-mode sweep.** During planning, ask the mouse early and often — design questions, prior-art questions, gotcha-recall, trade-off recall. Each cached answer saves a research detour; each cache miss is one `mouse__add` away from being free next time.
+- **Mark no-match (false-positive hits).** The response begins with `query_id: N`. If you scan the returned cards and **none** of them address the question — BM25 matched on shared tokens but the corpus has no real answer yet — call `mouse__bad(queryId=N)` before moving on. That converts a false-positive hit into the same actionable signal as `match_count = 0`. Skip when you're unsure whether a card kind-of helped — only the clear-negative signal carries information; we never mark hits as good (default-positive bias would make `useful=true` ratings noise).
 
 ## Adding
 

@@ -846,8 +846,7 @@ def skip_while_to_array(var src : iterator<auto(TT)>; predicate : block<(arg : T
 
 def take(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields only the first `total` elements
-    let len = length(arr)
-    let taking = (total < len)  ? total : len
+    let taking = min(total, length(arr))
     return <- subarray(arr, 0..taking)
 }
 
