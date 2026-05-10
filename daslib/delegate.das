@@ -52,7 +52,7 @@ def private build_invoke_call(at : LineInfo; var targetExpr : ExpressionPtr; fun
 
 // ── template: non-void return ──────────────────────────────────────────
 
-struct template DelegateReturn {
+struct template public DelegateReturn {
     private invocation_list : array<DelegateLambda>
 
     def DelegateReturn {}
@@ -122,7 +122,7 @@ struct template DelegateReturn {
 
 // ── template: void return ──────────────────────────────────────────────
 
-struct template DelegateVoid {
+struct template public DelegateVoid {
     private invocation_list : array<DelegateLambda>
 
     def DelegateVoid {}
