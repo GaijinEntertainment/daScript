@@ -113,13 +113,21 @@ def cmd_ask(args : MouseArgs) {
 
 def cmd_get(args : MouseArgs) {
     let root = resolve_root(args.root)
-    let slug = positional_value(args.arg)
-    if (empty(slug)) {
+    let raw_slug = positional_value(args.arg)
+    if (empty(raw_slug)) {
         to_log(LOG_ERROR, "get: missing slug")
         return
     }
+    let slug = normalize_slug_input(raw_slug)
+    if (slug != raw_slug) {
+        to_log(LOG_WARNING, "get: normalized slug '{raw_slug}' → '{slug}'")
+    }
     if (!is_valid_slug(slug)) {
-        to_log(LOG_ERROR, "get: invalid slug '{slug}'")
+        if (slug != raw_slug) {
+            to_log(LOG_ERROR, "get: invalid slug '{slug}' (normalized from '{raw_slug}')")
+        } else {
+            to_log(LOG_ERROR, "get: invalid slug '{slug}'")
+        }
         return
     }
     with_index_db(root) $(db) {
@@ -424,14 +432,17 @@ def tool_add(args : JsonValue?) : string {
 }
 
 def tool_get(args : JsonValue?) : string {
-    let slug = get_string_arg(args, "slug")
-    if (empty(slug)) {
-        return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar'), NOT the `path:` value", true)
+    let raw_slug = get_string_arg(args, "slug")
+    if (empty(raw_slug)) {
+        return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar')", true)
     }
+    let slug = normalize_slug_input(raw_slug)
+    let was_normalized = slug != raw_slug
     if (!is_valid_slug(slug)) {
-        let looks_like_path = find(slug, "/") >= 0 || find(slug, "\\") >= 0 || ends_with(slug, ".md")
-        let hint = looks_like_path ? " — looks like a file path; pass just the slug (the bare-token form shown next to the `BM25`/`sim` scores in mouse__ask output)" : ""
-        return make_tool_result("invalid slug '{slug}'{hint}", true)
+        if (was_normalized) {
+            return make_tool_result("invalid slug '{slug}' (normalized from '{raw_slug}') — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
+        }
+        return make_tool_result("invalid slug '{slug}' — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
     }
     let root = resolve_root(get_string_arg(args, "root"))
     var output : string
@@ -442,7 +453,11 @@ def tool_get(args : JsonValue?) : string {
         var doc : ParsedDoc
         var err : string
         if (!read_doc(path, doc, err)) {
-            output = "could not read {slug}: {err}"
+            if (was_normalized) {
+                output = "could not read {slug} (normalized from '{raw_slug}'): {err}"
+            } else {
+                output = "could not read {slug}: {err}"
+            }
             is_error = true
             return
         }
@@ -455,6 +470,9 @@ def tool_get(args : JsonValue?) : string {
         }
         let froms <- linked_from(db, slug)
         output = build_string() $(var w) {
+            if (was_normalized) {
+                w |> write("[normalized slug: '{raw_slug}' → '{slug}' — pass the bare slug next time]\n\n")
+            }
             if (!empty(parse_warning)) {
                 w |> write(parse_warning)
             }

@@ -243,6 +243,39 @@ def test_is_valid_slug_rejects(t : T?) {
     t |> success(!is_valid_slug(huge), "over 128 chars")
 }
 
+// ─── slug normalization (input leniency) ─────────────────────────────
+
+[test]
+def test_normalize_slug_input_passthrough(t : T?) {
+    t |> equal(normalize_slug_input("foo"), "foo")
+    t |> equal(normalize_slug_input("alpha-beta_gamma"), "alpha-beta_gamma")
+}
+
+[test]
+def test_normalize_slug_input_strips_md(t : T?) {
+    t |> equal(normalize_slug_input("foo.md"), "foo")
+    t |> equal(normalize_slug_input("alpha-beta.md"), "alpha-beta")
+}
+
+[test]
+def test_normalize_slug_input_strips_path(t : T?) {
+    t |> equal(normalize_slug_input("./mouse-data/docs/foo.md"), "foo")
+    t |> equal(normalize_slug_input("docs/foo"), "foo")
+    t |> equal(normalize_slug_input("a\\b\\foo.md"), "foo")
+}
+
+[test]
+def test_normalize_slug_input_trims_whitespace(t : T?) {
+    t |> equal(normalize_slug_input("  foo  "), "foo")
+    t |> equal(normalize_slug_input("\tfoo.md\n"), "foo")
+}
+
+[test]
+def test_normalize_slug_input_empty(t : T?) {
+    t |> equal(normalize_slug_input(""), "")
+    t |> equal(normalize_slug_input("   "), "")
+}
+
 // ─── read/write error contracts ──────────────────────────────────────
 
 [test]

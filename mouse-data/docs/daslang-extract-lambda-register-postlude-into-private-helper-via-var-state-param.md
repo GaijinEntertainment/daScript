@@ -31,7 +31,7 @@ Each widget collapses to:
 ```das
 [widget]
 def small_button(var state : ClickState; text : string) : bool {
-    let im_clicked = SmallButton(text)
+    let clicked = SmallButton(text)
     /* ... per-widget state mutation ... */
     click_finalize(widget_ident, "small_button", state)
     return clicked

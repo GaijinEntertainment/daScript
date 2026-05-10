@@ -70,14 +70,12 @@ struct LintFileResult {
     failed : bool
 }
 
+// Caller must have already validated `project` via validate_project_arg.
+// Multi-file callers do this once up front so an invalid project surfaces
+// the focused error instead of N misleading FAIL lines (the per-file
+// FAIL path drops result.errors).
 def lint_file(file : string; project : string = "") : LintFileResult {
     var result = LintFileResult(file = file)
-    let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        result.failed = true
-        result.errors |> push(proj_err)
-        return <- result
-    }
     var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
@@ -111,6 +109,10 @@ def lint_file(file : string; project : string = "") : LintFileResult {
 }
 
 def run_lint(file : string; project : string = "") : string {
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        return make_tool_result(proj_err, true)
+    }
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {

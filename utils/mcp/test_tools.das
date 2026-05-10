@@ -156,6 +156,26 @@ def test_compile_check_glob_no_match(t : T?) {
     }
 }
 
+// Locks the focused project-arg errors emitted by validate_project_arg so the
+// pre-#2622 misleading "missing prerequisite ''" failure mode can't return.
+[test]
+def test_compile_check_invalid_project(t : T?) {
+    t |> run("missing project file reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(fixture_path("_fixture_valid.das"), "nonexistent_xyz.das_project"), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "'project' file not found") >= 0, "should mention project file not found")
+    }
+    t |> run("non-.das_project extension reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_compile_check(fixture_path("_fixture_valid.das"), fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "expected a path to a .das_project file") >= 0, "should mention expected extension")
+    }
+}
+
 // ── parse_file_list (smoke) ──────────────────────────────────────────
 // Canonical unit tests for `parse_file_list` and `expand_glob` live in
 // `tests/fio/expand_glob_test.das` (the helpers moved to `daslib/fio`).
@@ -1492,6 +1512,28 @@ def test_lint_no_match(t : T?) {
         t |> success(ok, "parse result JSON")
         t |> success(is_error, "should be error")
         t |> success(find(text, "no files matched") >= 0, "should mention no files matched")
+    }
+}
+
+// Same focused-error contract as test_compile_check_invalid_project, but for
+// run_lint's hoisted validate_project_arg call site.
+[test]
+def test_lint_invalid_project(t : T?) {
+    t |> run("missing project file reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_lint(fixture_path("_fixture_valid.das"), "nonexistent_xyz.das_project"), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "'project' file not found") >= 0, "should mention project file not found")
+    }
+    t |> run("non-.das_project extension reports focused error") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        let ok = parse_result(do_lint(fixture_path("_fixture_valid.das"), fixture_path("_fixture_valid.das")), text, is_error)
+        t |> success(ok, "parse result JSON")
+        t |> success(is_error, "should be error")
+        t |> success(find(text, "expected a path to a .das_project file") >= 0, "should mention expected extension")
     }
 }
 
