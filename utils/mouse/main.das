@@ -342,7 +342,7 @@ def fmt_dupe_match(d : DupeMatch) : string {
 }
 
 let HINT_NO_MATCH = "\nHint: nothing matched. Do the research yourself, then call mouse__add(question, body) so the next session doesn't redo this work."
-let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at the `file:` path and bump `last_verified` (or delete the file if it's no longer relevant). To fetch one of the answers in full, call mouse__get with the slug shown after the `[rank]`."
+let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at the `path:` shown and bump `last_verified` (or delete the file if it's no longer relevant). To fetch one of the answers in full, call mouse__get with the slug shown next to the `BM25`/`sim` scores."
 
 def tool_ask(args : JsonValue?) : string {
     let question = get_string_arg(args, "question")
@@ -426,11 +426,11 @@ def tool_add(args : JsonValue?) : string {
 def tool_get(args : JsonValue?) : string {
     let slug = get_string_arg(args, "slug")
     if (empty(slug)) {
-        return make_tool_result("missing 'slug' argument — pass the slug shown after the `[rank]` in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar'), NOT the `file:` path", true)
+        return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar'), NOT the `path:` value", true)
     }
     if (!is_valid_slug(slug)) {
         let looks_like_path = find(slug, "/") >= 0 || find(slug, "\\") >= 0 || ends_with(slug, ".md")
-        let hint = looks_like_path ? " — looks like a file path; pass just the slug (the bare-token form shown after the `[rank]` in mouse__ask output)" : ""
+        let hint = looks_like_path ? " — looks like a file path; pass just the slug (the bare-token form shown next to the `BM25`/`sim` scores in mouse__ask output)" : ""
         return make_tool_result("invalid slug '{slug}'{hint}", true)
     }
     let root = resolve_root(get_string_arg(args, "root"))
