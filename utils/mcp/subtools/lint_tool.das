@@ -72,6 +72,12 @@ struct LintFileResult {
 
 def lint_file(file : string; project : string = "") : LintFileResult {
     var result = LintFileResult(file = file)
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        result.failed = true
+        result.errors |> push(proj_err)
+        return <- result
+    }
     var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {

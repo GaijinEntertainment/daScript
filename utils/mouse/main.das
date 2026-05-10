@@ -99,7 +99,7 @@ def cmd_ask(args : MouseArgs) {
         }
         for (h in hits) {
             print("[{h.rank}] {h.slug} — {h.title}\n")
-            print("    path: {h.path}\n")
+            print("    file: {h.path}\n")
             print("    last_verified: {h.last_verified}\n")
         }
         print("{HINT_HIT}\n")
@@ -173,8 +173,8 @@ def cmd_add(args : MouseArgs) {
         }
         if (outcome.created) {
             print("created: {outcome.slug}\n")
-            print("path: {outcome.written_path}\n")
-            print("\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`.\n")
+            print("file: {outcome.written_path}\n")
+            print("\nHint: if you discover this answer is wrong later, edit the .md at the file path above and bump `last_verified`.\n")
         } else {
             print("not created (use --force to override). similar:\n")
             for (s in outcome.similar) {
@@ -315,11 +315,11 @@ def handle_tools_list(id : string) : string {
 }
 
 def fmt_search_hit(h : SearchHit) : string {
-    return "[{h.rank}] {h.slug} — {h.title}\n    path: {h.path}\n    last_verified: {h.last_verified}\n"
+    return "[{h.rank}] {h.slug} — {h.title}\n    file: {h.path}\n    last_verified: {h.last_verified}\n"
 }
 
 let HINT_NO_MATCH = "\nHint: nothing matched. Do the research yourself, then call mouse__add(question, body) so the next session doesn't redo this work."
-let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at the path shown and bump `last_verified` (or delete the file if it's no longer relevant)."
+let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at the `file:` path and bump `last_verified` (or delete the file if it's no longer relevant). To fetch one of the answers in full, call mouse__get with the slug shown after the `[rank]`."
 
 def tool_ask(args : JsonValue?) : string {
     let question = get_string_arg(args, "question")
@@ -368,7 +368,7 @@ def tool_add(args : JsonValue?) : string {
             return
         }
         if (outcome.created) {
-            output = "created: {outcome.slug}\npath: {outcome.written_path}\n\nHint: if you discover this answer is wrong later, edit the .md at the path above and bump `last_verified`."
+            output = "created: {outcome.slug}\nfile: {outcome.written_path}\n\nHint: if you discover this answer is wrong later, edit the .md at the file path above and bump `last_verified`."
         } else {
             output = build_string() $(var w) {
                 w |> write("not created (use force=true to override). similar:\n")
@@ -385,10 +385,12 @@ def tool_add(args : JsonValue?) : string {
 def tool_get(args : JsonValue?) : string {
     let slug = get_string_arg(args, "slug")
     if (empty(slug)) {
-        return make_tool_result("missing 'slug' argument", true)
+        return make_tool_result("missing 'slug' argument — pass the slug shown after the `[rank]` in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar'), NOT the `file:` path", true)
     }
     if (!is_valid_slug(slug)) {
-        return make_tool_result("invalid slug '{slug}'", true)
+        let looks_like_path = find(slug, "/") >= 0 || find(slug, "\\") >= 0 || ends_with(slug, ".md")
+        let hint = looks_like_path ? " — looks like a file path; pass just the slug (the bare-token form shown after the `[rank]` in mouse__ask output)" : ""
+        return make_tool_result("invalid slug '{slug}'{hint}", true)
     }
     let root = resolve_root(get_string_arg(args, "root"))
     var output : string

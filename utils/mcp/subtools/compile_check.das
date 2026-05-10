@@ -39,6 +39,11 @@ def compile_check_single(file : string; project : string = "") : string {
 
 def private compile_check_single_json(file : string; project : string = "") : CompileResult {
     var result = CompileResult(file = file)
+    let proj_err = validate_project_arg(project)
+    if (!empty(proj_err)) {
+        result.errors = proj_err
+        return result
+    }
     var inscope access <- make_file_access(project)
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
