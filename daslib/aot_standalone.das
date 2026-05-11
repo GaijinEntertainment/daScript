@@ -53,8 +53,7 @@ def writeStandaloneContextMethods(var prog : ProgramPtr; var logs : StringBuilde
     var coll = new BlockVariableCollector();
 
     for (fn in fnn) {
-        if (!fn.flags.exports) continue;
-        if (fn._module != prog.getThisModule) continue;
+        if (!fn.flags.exports || fn._module != prog.getThisModule) continue;
         if (declare_only) {
             write(logs, "    ");
         }
@@ -232,8 +231,8 @@ class StandaloneContextGen : CppAot {
         var globals : array<Variable?>;
         prog.get_ptr() |> for_each_module_no_order($(pm) {
             pm |> for_each_global($(pvar) {
-                if (pvar.index < 0 || !pvar.flags.used) return ;
-                if (pvar._module == prog.getThisModule) return ;
+                if (pvar.index < 0 || !pvar.flags.used
+                        || pvar._module == prog.getThisModule) return ;
                 globals.push(pvar);
             });
         });

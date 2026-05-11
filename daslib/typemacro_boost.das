@@ -41,9 +41,9 @@ def append_expressions(var blk : ExprBlock?; var eblk : ExpressionPtr) {
 def is_typedecl_ptr(t : TypeDeclPtr) {
     if (t.baseType != Type.tPointer) return false
     assume pt = t.firstType
-    if (pt == null) return false
-    if (pt.baseType != Type.tHandle || pt.annotation.name != "TypeDecl" || pt.annotation._module.name != "ast_core") return false
-    return true
+    return (pt != null && pt.baseType == Type.tHandle
+            && pt.annotation.name == "TypeDecl"
+            && pt.annotation._module.name == "ast_core")
 }
 
 [macro_function]
@@ -177,7 +177,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
             let macroArgIndex = ai - 1
             assume argType = func.arguments[ai]._type
             assume argDefaultValue = func.arguments[ai].init
-            if (length(argType.dim) > 0) {
+            if (!empty(argType.dim)) {
                 errors := "expecting non-array arguments"
                 return false
             }
@@ -256,12 +256,11 @@ def public is_typemacro_template_instance(passArgument, templateType : TypeDeclP
     for (ann in passArgument.structType.annotations) {
         if (ann.annotation.name == "typemacro_template") {
             let parentName = find_arg(ann.arguments, "parent")
-            return false if (!(parentName is tString))
-            return false if ((parentName as tString) != "{templateType.structType._module.name}::{templateType.structType.name}")
+            return false if (!(parentName is tString)
+                    || (parentName as tString) != "{templateType.structType._module.name}::{templateType.structType.name}")
             for (ex in extra) {
                 let arg = find_arg(ann.arguments, ex._0)
-                return false if (!(arg is tString))
-                return false if ((arg as tString) != ex._1)
+                return false if (!(arg is tString) || (arg as tString) != ex._1)
             }
             return true
         }
@@ -294,8 +293,8 @@ def public infer_template_types(passArgument : TypeDeclPtr; var args  : array<Ty
         assume inferredTemplateType = arg.inferred_type
         if (templateType.isAutoOrAlias) {
             var resT = infer_generic_type(templateType, inferredTemplateType, true, true)
-            return null if (resT == null)
-            return null if (!inferredTemplateType |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
+            return null if (resT == null
+                    || !inferredTemplateType |> is_same_type(resT, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
             compiling_program() |> update_alias_map(templateType, resT)
         } else {
             return null if (!inferredTemplateType |> is_same_type(templateType, RefMatters.no, ConstMatters.no, TemporaryMatters.yes))
@@ -434,7 +433,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
                 mk_extra_array_expr.values |> emplace(mk_tuple)
             }
         }
-        if (length(mk_extra_array_expr.values) == 0) {
+        if (empty(mk_extra_array_expr.values)) {
             body.list |> emplace_new <| qmacro_expr() {
                 var inscope extra_template_arguments : array<tuple<string, string>>
             }

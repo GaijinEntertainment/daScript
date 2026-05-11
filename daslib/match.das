@@ -207,9 +207,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?;
     }
     log_m("\tuple match passed\n")
     for (i in range(wthsLength)) {
-        if (i == tagIndex) {// skip ...
-            continue
-        }
+        if (i == tagIndex) continue  // skip ...
         let ei = i <= tagIndex ? i : whatDim - (wthsLength - i)
         {// to create scope for defer delete
             var new_access = qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
@@ -307,6 +305,7 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         to.errors |> match_error("{describe(what)} number of variant elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false
     }
+    to.conditions |> reserve(length(to.conditions) + wthsLength)
     for (mf, i in wths.variants, count()) {
         {// to create scope for defer delete
             var new_access = whatDim == 1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
@@ -585,7 +584,7 @@ def join_conditions(var conditions : array<Expression?>; at : LineInfo) : Expres
     if (clen == 0) return new ExprConstBool(value = true, at = at)
     var tail = conditions |> back()
     conditions |> pop()
-    while (length(conditions) > 0) {
+    while (!empty(conditions)) {
         {
             var last = conditions |> back()
             conditions |> pop()
@@ -632,7 +631,7 @@ class MatchMacro : AstCallMacro {
         macro_verify(blk._type.isGoodBlockType, prog, expr.at, "match `block` argument did not resolve")
         macro_verify(blk is ExprMakeBlock, prog, expr.at, "match `block` argument must be immediate block declaration")
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
-        macro_verify(length(eblk.finalList) == 0, prog, expr.at, "match `block` argument can't have finally section")
+        macro_verify(empty(eblk.finalList), prog, expr.at, "match `block` argument can't have finally section")
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
                 let eite = ee as ExprIfThenElse

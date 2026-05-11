@@ -1049,8 +1049,7 @@ def public commit {
 def public is_alive(eid : EntityId) : bool {
     //! Returns true if the entity is alive (exists and has not been deleted).
     //! An entity is alive when its id is within bounds and its generation matches the lookup table.
-    if (eid == INVALID_ENTITY_ID) return false
-    if (int(eid.id) >= length(decsState.entityLookup)) return false
+    if (eid == INVALID_ENTITY_ID || int(eid.id) >= length(decsState.entityLookup)) return false
     return decsState.entityLookup[eid.id].generation == eid.generation
 }
 

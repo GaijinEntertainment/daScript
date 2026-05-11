@@ -39,9 +39,7 @@ class SoaCallMacro : AstFunctionAnnotation {
     //! This is the core of the SOA access pattern — it transforms AOS-style element access
     //! into column-wise array indexing for better cache locality.
     def override transform(var expr : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
-        if (is_in_completion()) {
-            return null
-        }
+        if (is_in_completion()) return null
         if (expr.arguments |> length != 2) {
             errors := "expecting soa[index].field"
             return null
@@ -95,7 +93,7 @@ class SoaStructMacro : AstStructureAnnotation {
             compiling_module() |> add_alias(tdef)
             return true
         }
-        if (st.fields |> length == 0) {
+        if (empty(st.fields)) {
             errors := "soa macro expects at least one field"
             return false
         }
@@ -337,9 +335,7 @@ def collect_and_replace_iterator_fields(prefix : string; blk : ExpressionPtr) : 
 class SoaForLoop : AstForLoopMacro {
     //! For-loop macro that transforms SOA array iteration.
     def override visitExprFor(prog : ProgramPtr; mod : Module?; expr : ExprFor?) : ExpressionPtr {
-        if (is_in_completion()) {
-            return null
-        }
+        if (is_in_completion()) return null
         var soa_index = -1
         for (index, its in count(), expr.sources) {
             if (its._type != null && its._type.isStructure) {
@@ -365,7 +361,7 @@ class SoaForLoop : AstForLoopMacro {
             new_for.iteratorsAka |> erase(soa_index)
             new_for.iteratorsTags |> erase(soa_index)
             var names <- collect_and_replace_iterator_fields(it_prefix, new_for.body)
-            if (names |> length == 0) {
+            if (empty(names)) {
                 names |> push <| string(expr.sources[soa_index]._type.structType.fields[0].name)
             }
             for (itn in names) {

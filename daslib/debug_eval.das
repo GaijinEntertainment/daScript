@@ -256,9 +256,7 @@ def expr_value(var st : TokenStream) : Result {
             if (token(st) ?as punkt ?? 0 != ')') return st |> error("expecting )")
             return <- res
         }
-        if (Token(punkt = $v(any))) {
-            return st |> error("unexpected character {to_char(any)}, expecting number or (")
-        }
+        if (Token(punkt = $v(any))) return st |> error("unexpected character {to_char(any)}, expecting number or (")  // nolint:STYLE005 (qmatch macro expansion)
     }
     return st |> error("unexpected token {token}, expecting number or (")
 }
@@ -450,9 +448,7 @@ def expr_unary(var st : TokenStream) : Result {
         if (Token(punkt = '~')) {
             return Result(~st |> getI(expr_unary(st)))
         }
-        if (Token(punkt = '!')) {
-            return Result(st |> getI(expr_unary(st)) == 0l)
-        }
+        if (Token(punkt = '!')) return Result(st |> getI(expr_unary(st)) == 0l)  // nolint:STYLE005 (qmatch macro expansion)
     }
     unput(st, token)
     return expr_at(st)

@@ -303,11 +303,11 @@ def public utf32_to_lower(cp : uint) : uint {
     if (cp >= 0x14Au && cp <= 0x177u) return ((cp & 1u) == 0u) ? cp + 1u : cp
     if (cp == 0x178u) return 0xFFu  // Ÿ → ÿ
     if (cp >= 0x179u && cp <= 0x17Eu) return ((cp & 1u) == 1u) ? cp + 1u : cp
-    // Greek: Α-Ω (0x391..0x3A9) → α-ω (0x3B1..0x3C9), excluding 0x3A2 (reserved).
-    if (cp >= 0x391u && cp <= 0x3A1u) return cp + 0x20u
-    if (cp >= 0x3A3u && cp <= 0x3ABu) return cp + 0x20u
-    // Cyrillic: А-Я (0x410..0x42F) → а-я (0x430..0x44F).
-    if (cp >= 0x410u && cp <= 0x42Fu) return cp + 0x20u
+    // Greek Α-Ω (0x391..0x3A9, excl. 0x3A2 reserved) → α-ω;
+    // Cyrillic А-Я (0x410..0x42F) → а-я; all shift by 0x20.
+    if ((cp >= 0x391u && cp <= 0x3A1u)
+            || (cp >= 0x3A3u && cp <= 0x3ABu)
+            || (cp >= 0x410u && cp <= 0x42Fu)) return cp + 0x20u
     // Cyrillic: Ё (0x401) → ё (0x451), plus Ѐ-Џ (0x400..0x40F) → ѐ-џ (0x450..0x45F).
     if (cp >= 0x400u && cp <= 0x40Fu) return cp + 0x50u
     return cp

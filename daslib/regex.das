@@ -272,15 +272,15 @@ def private is_set_character(ch : int) : bool {
 }
 
 def private is_digit(ch : int) : bool {
-    return ch >= '0' && ch <= '9'
+    return ch >= '0' && ch <= '9'  // nolint:PERF014 (regex char-class primitive)
 }
 
 def private is_word_character(ch : int) : bool {
-    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
+    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'  // nolint:PERF014
 }
 
 def private from_hex(ch : int) {
-    if (ch >= '0' && ch <= '9') return ch - '0'
+    if (ch >= '0' && ch <= '9') return ch - '0'  // nolint:PERF014
     if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10
     if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10
     panic("from_hex")
@@ -450,8 +450,7 @@ def private re_set_items(expr : string; offset : int) : MaybeReNode {
 // <set> ::= <positive-set> | <negative-set>
 def private re_set(expr : string; offset : int) : MaybeReNode {
     trace("re_set", offset)
-    if (eos(expr, offset)) return nada()
-    if (at(expr, offset) != '[') return nada();
+    if (eos(expr, offset) || at(expr, offset) != '[') return nada()
     var negative = false;
     if (at(expr, offset + 1) == '^') {
         negative = true;
@@ -502,8 +501,7 @@ def private re_bos(expr : string; offset : int) : MaybeReNode {
 // <group> ::= "(" <RE> ")" | "(?:" <RE> ")" | "(?P<name>" <RE> ")"
 def private re_group(expr : string; offset : int) : MaybeReNode {
     trace("re_group", offset)
-    if (eos(expr, offset)) return nada()
-    if (at(expr, offset) != '(') return nada();
+    if (eos(expr, offset) || at(expr, offset) != '(') return nada()
     var group_offset = offset + 1
     var non_capturing = false
     var group_name = ""
@@ -923,7 +921,7 @@ def private re_assign_match_functions(var re : Regex) {
 
 def private ci_lower(ch : int) : int {
     //! Converts ASCII uppercase to lowercase for case-insensitive matching.
-    if (ch >= 'A' && ch <= 'Z') return ch + 32
+    if (ch >= 'A' && ch <= 'Z') return ch + 32  // nolint:PERF014
     return ch
 }
 
@@ -932,7 +930,7 @@ def private case_fold_set(var cset : CharSet) {
     for (ch in range(0, 256)) {
         if (is_char_in_set(ch, cset)) {
             let lo = ci_lower(ch)
-            let up = (lo >= 'a' && lo <= 'z') ? lo - 32 : lo
+            let up = (lo >= 'a' && lo <= 'z') ? lo - 32 : lo  // nolint:PERF014
             set_or_char(cset, lo)
             set_or_char(cset, up)
         }
@@ -1040,8 +1038,7 @@ def private re_match2_set(var regex : Regex; var node : ReNode?; str : uint8 con
     if (log_match_enabled) {
         print("match2 set {str}\n")
     }
-    if (*str == 0u8) return null
-    if (!is_char_in_set(int(*str), node.cset)) return null
+    if (*str == 0u8 || !is_char_in_set(int(*str), node.cset)) return null
     unsafe {
         var tail = str + 1
         node.tail = tail
@@ -1059,8 +1056,7 @@ def private re_match2_any(var regex : Regex; var node : ReNode?; str : uint8 con
     if (log_match_enabled) {
         print("match2 any {str}\n")
     }
-    if (*str == 0u8) return null
-    if (!regex.dotAll && int(*str) == '\n') return null
+    if (*str == 0u8 || (!regex.dotAll && int(*str) == '\n')) return null
     unsafe {
         var tail = str + 1
         node.tail = tail
@@ -1153,8 +1149,7 @@ def private re_match2_plus_set(var regex : Regex; var node : ReNode?; str : uint
     if (log_match_enabled) {
         print("match2 plus {str}\n")
     }
-    if (*str == 0u8) return null
-    if (!is_char_in_set(int(*str), node.cset)) return null
+    if (*str == 0u8 || !is_char_in_set(int(*str), node.cset)) return null
     unsafe {
         var ofs = str + 1
         var osym = ofs
@@ -1544,9 +1539,9 @@ def private re_early_out(var cset : CharSet; node : ReNode?) : bool {
         let fc = first_character(node.text)
         set_or_char(cset, fc)
         // if case-insensitive, also add the opposite-case first char
-        if (fc >= 'A' && fc <= 'Z') {
+        if (fc >= 'A' && fc <= 'Z') {  // nolint:PERF014
             set_or_char(cset, fc + 32)
-        } elif (fc >= 'a' && fc <= 'z') {
+        } elif (fc >= 'a' && fc <= 'z') {  // nolint:PERF014
             set_or_char(cset, fc - 32)
         }
         return false

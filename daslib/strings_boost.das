@@ -343,7 +343,7 @@ def public capitalize(str : string) : string {
     //! The rest of the string is unchanged.
     if (str |> empty()) return str
     let first = first_character(str)
-    if (first >= 'a' && first <= 'z') return build_string() $(writer) {
+    if (first >= 'a' && first <= 'z') return build_string() $(writer) {  // nolint:PERF014 (ASCII case-shift)
             writer |> write_char(first - 'a' + 'A')
             if (str |> length() > 1) {
                 writer |> write(str |> slice(1))

@@ -25,17 +25,21 @@ def report_to_debugger(var ctx : Context; category, name : string; value : auto(
 def isExpressionType(_vinfo) {
     if (_vinfo.basicType != Type.tPointer || _vinfo.firstType == null) return false
     let vinfo = _vinfo.firstType
-    if (vinfo.basicType != Type.tHandle) return false
-    if (vinfo.annotation._module.name != "ast_core") return false
-    return !!string(vinfo.annotation.name) |> starts_with("Expr")
+    if (vinfo.basicType != Type.tHandle
+            || vinfo.annotation._module.name != "ast_core") return false
+    var result = false
+    peek(vinfo.annotation.name) $(n) {
+        result = n |> starts_with("Expr")
+    }
+    return result
 }
 
 def isModulePtrType(_vinfo; mod, what : string) {
     if (_vinfo.basicType != Type.tPointer || _vinfo.firstType == null) return false
     let vinfo = _vinfo.firstType
-    if (vinfo.basicType != Type.tHandle) return false
-    if (vinfo.annotation._module.name != mod) return false
-    return !(vinfo.annotation.name != what)
+    if (vinfo.basicType != Type.tHandle
+            || vinfo.annotation._module.name != mod) return false
+    return vinfo.annotation.name == what
 }
 
 def isAstPtrType(_vinfo; what : string) {
@@ -47,9 +51,9 @@ def isRttiPtrType(_vinfo; what : string) {
 }
 
 def isRttiType(vinfo; what : string) {
-    if (vinfo.basicType != Type.tHandle) return false
-    if (vinfo.annotation._module.name != "rtti_core") return false
-    return !(vinfo.annotation.name != what)
+    if (vinfo.basicType != Type.tHandle
+            || vinfo.annotation._module.name != "rtti_core") return false
+    return vinfo.annotation.name == what
 }
 
 def describe_arg(var ctxid : Context; vinfo; arg : void?) : void {

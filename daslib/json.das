@@ -538,7 +538,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
     } elif (jsv.value is _longint) {
         write(writer, jsv.value as _longint)
     } elif (jsv.value is _array) {
-        if (length(jsv.value as _array) == 0) {
+        if (empty(jsv.value as _array)) {
             write(writer, "[]")
         } else {
             write(writer, "[\n")
@@ -557,17 +557,13 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
             write(writer, "]")
         }
     } elif (jsv.value is _object) {
-        if (length(jsv.value as _object) == 0) {
+        if (empty(jsv.value as _object)) {
             write(writer, "\{\}")
         } else {
             write(writer, "\{\n")
             var first = true
             for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
-                if (no_empty_arrays) {
-                    if (elemV.value is _array) {
-                        if (length(elemV.value as _array) == 0) continue
-                    }
-                }
+                if (no_empty_arrays && elemV.value is _array && empty(elemV.value as _array)) continue
                 if (first) {
                     first = false
                 } else {
@@ -644,9 +640,7 @@ def try_fixing_broken_json(var bad : string) {
                     writer |> write_char(int(str[i]));
                     i ++;
                 }
-                if (i >= lstr) {// if eof we done
-                    break;
-                }
+                if (i >= lstr) break  // eof — done
                 // write the first quote
                 writer |> write_char('"')
                 i ++

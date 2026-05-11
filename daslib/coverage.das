@@ -277,8 +277,8 @@ class CoverageMacro : AstVisitor {
     def override preVisitFunction(var fun : FunctionPtr) {
         //! Stores a pointer to the current function being visited and records function info for coverage.
         func = fun
-        if (fun.flags.generated || fun.flags.init || fun.flags.builtIn) return
-        if (fun.at.fileInfo == null) return
+        if (fun.flags.generated || fun.flags.init || fun.flags.builtIn
+                || fun.at.fileInfo == null) return
         let file = resolve_file_path(string(fun.at.fileInfo.name))
         let fname = string(fun.name)
         let line = fun.at.line
@@ -302,9 +302,8 @@ class CoverageMacro : AstVisitor {
 
     def override preVisitFunctionBody(fun : FunctionPtr; expr : ExpressionPtr) {
         //! Inserts function coverage call at the start of each function body.
-        if (fun.flags.generated || fun.flags.init || fun.flags.builtIn) return
-        if (fun.at.fileInfo == null) return
-        if (!(expr is ExprBlock)) return
+        if (fun.flags.generated || fun.flags.init || fun.flags.builtIn
+                || fun.at.fileInfo == null || !(expr is ExprBlock)) return
         let file = resolve_file_path(string(fun.at.fileInfo.name))
         let fname = string(fun.name)
         var blk = unsafe(reinterpret<ExprBlock?> expr)
@@ -314,8 +313,8 @@ class CoverageMacro : AstVisitor {
         }
         blk.list |> clear()
         blk.list |> emplace_new <| qmacro(_::add_func_coverage($v(file), $v(fname)))
-        for (el in range(prev |> length)) {
-            blk.list |> emplace <| prev[el]
+        for (el in prev) {
+            blk.list |> emplace <| el
         }
         astChanged = true
         func.not_inferred()
@@ -353,8 +352,8 @@ class CoverageMacro : AstVisitor {
             }
             true_blk.list |> clear()
             true_blk.list |> emplace_new <| qmacro(_::add_branch_coverage($v(file), $v(true_idx)))
-            for (el in range(prevTrue |> length)) {
-                true_blk.list |> emplace <| prevTrue[el]
+            for (el in prevTrue) {
+                true_blk.list |> emplace <| el
             }
         }
         // instrument false branch
@@ -366,8 +365,8 @@ class CoverageMacro : AstVisitor {
             }
             false_blk.list |> clear()
             false_blk.list |> emplace_new <| qmacro(_::add_branch_coverage($v(file), $v(false_idx)))
-            for (el in range(prevFalse |> length)) {
-                false_blk.list |> emplace <| prevFalse[el]
+            for (el in prevFalse) {
+                false_blk.list |> emplace <| el
             }
         } elif (ifte.if_false == null) {
             // no else branch — create one with just the branch coverage call
@@ -390,16 +389,16 @@ class CoverageMacro : AstVisitor {
             prev.emplace(ex)
         }
         blk.list |> clear()
-        for (el in range(prev |> length)) {
+        for (el in prev) {
             // Todo: add linter phase to check fileInfo is never null.
-            if (prev[el].at.fileInfo != null) {
-                let file = resolve_file_path(string(prev[el].at.fileInfo.name))
+            if (el.at.fileInfo != null) {
+                let file = resolve_file_path(string(el.at.fileInfo.name))
                 if (file |> ends_with("coverage.das")) {
-                    blk.list |> emplace <| prev[el]
+                    blk.list |> emplace <| el
                     continue
                 }
                 let fname = string(func.name)
-                let line = prev[el].at.line
+                let line = el.at.line
                 coverageData |> get_with_default(file) $(var data) {
                     data.line_cov.insert(line)
                 }
@@ -409,7 +408,7 @@ class CoverageMacro : AstVisitor {
                     }
                 }
                 blk.list |> emplace_new <| qmacro(_::add_line_coverage($v(file), $v(fname), $v(line)))
-                blk.list |> emplace <| prev[el]
+                blk.list |> emplace <| el
             }
         }
         return <- blk

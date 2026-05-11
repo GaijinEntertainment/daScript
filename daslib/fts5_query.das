@@ -328,8 +328,7 @@ def private _parse_and_expr(var st : ParseState) : int {
     var left = _parse_unary(st)
     if (left == -1 || !empty(st.err)) return left
     while (true) {
-        if (_at_expr_terminator(st)) break
-        if (_peek_keyword(st, "OR") || _peek_keyword(st, "NOT")) break
+        if (_at_expr_terminator(st) || _peek_keyword(st, "OR") || _peek_keyword(st, "NOT")) break
         let had_explicit_and = _peek_keyword(st, "AND")
         if (had_explicit_and) {
             _consume_keyword(st, "AND")
@@ -345,8 +344,7 @@ def private _parse_and_expr(var st : ParseState) : int {
 
 def private _parse_not_expr(var st : ParseState) : int {
     let left = _parse_and_expr(st)
-    if (left == -1 || !empty(st.err)) return left
-    if (!_peek_keyword(st, "NOT")) return left
+    if (left == -1 || !empty(st.err) || !_peek_keyword(st, "NOT")) return left
     _consume_keyword(st, "NOT")
     _skip_ws(st)
     let right = _parse_and_expr(st)

@@ -418,8 +418,7 @@ class ParseMacro : AstCallMacro {
                 parser.input := inp
             }
 
-            var result : $t(unsafe(gen.return_types[gram[0].name]))
-            result <- $c(parse_main_func)(parser)
+            var result : $t(unsafe(gen.return_types[gram[0].name])) <- $c(parse_main_func)(parser)
 
             if (result.success) {
                 invoke(blk, result.value, array<ParsingError>())

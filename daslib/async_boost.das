@@ -217,8 +217,9 @@ class CollectAndReplaceIteratorFields : AstVisitor {
 
 
     def override visitExprYield(var expr : ExprYield?) : ExpressionPtr {
-        if (voidRoutine) return <- expr
-        if (expr._type != null && expr._type |> is_same_type(retType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return <- expr
+        if (voidRoutine
+                || (expr._type != null
+                    && expr._type |> is_same_type(retType, RefMatters.no, ConstMatters.no, TemporaryMatters.no))) return <- expr
         if (!retType.argTypes[0].canCopy) {
             var res = qmacro_expr(${ yield <- variant type<$t(retType)>(res <- $e(expr.subexpr)); })
             res |> force_at(expr.at)

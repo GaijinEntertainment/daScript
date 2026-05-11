@@ -76,15 +76,15 @@ class FixerVisitor : AstVisitor {
 
     def override preVisitFunction(var fn : FunctionPtr) : void {
         current_function = fn
-        // Skip BOTH `[template]` and `[macro_function]` bodies. The latter's AST
-        // contains macro-substituted nodes whose `.at` doesn't reliably point at
-        // user-written source; rewriting via those positions corrupts the file.
-        // Also skip `flags.generated` — synthesized functions from struct
+        // Skip `flags.generated` — synthesized functions from struct
         // annotations like `[CommandLineArgs]` carry the struct's LineInfo
         // throughout their body, so a `length(args) == 0` check inside the
         // generated parse_args would rewrite to a span starting at the struct
         // definition (massive corruption observed on utils/daspkg/commands.das).
-        in_template = fn.moreFlags.isTemplate || fn.moreFlags.macroFunction || fn.flags.generated
+        // `isTemplate`/`macroFunction` bodies are user-written daslang code —
+        // their AST `.at` points at real source; post-rewrite `try_compile`
+        // verification catches any edge case that slips through.
+        in_template = fn.flags.generated
     }
 
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
@@ -442,11 +442,13 @@ class FixerVisitor : AstVisitor {
         //! and rightmost_pos_of can derive exact bounds from the AST without
         //! needing to read invisible-in-AST tokens (parens, deref `*`).
         //! Chain shapes walk recursively (ExprField → value, ExprAt → subexpr).
-        //! ExprPtr2Ref is NOT safe — parens around `(*pv)` aren't in AST so
-        //! leftmost lands on the `*`, missing the leading `(`.
+        //! ExprRef2Value is a typer artifact (invisible in source) and is
+        //! peeled transparently. ExprPtr2Ref is NOT — parens around `(*pv)`
+        //! aren't in the AST so leftmost lands on the `*`, missing `(`.
         //! ExprCall with a backticked property name (`.foo` form) is also
         //! NOT safe — the call's source extent depends on hidden arg ordering.
         return false if (e == null)
+        if (e is ExprRef2Value) return self->is_simple_subject((e as ExprRef2Value).subexpr)
         if (e is ExprConstString || e is ExprConstInt || e is ExprConstUInt
                 || e is ExprConstBool || e is ExprConstFloat || e is ExprConstDouble
                 || e is ExprVar) return true

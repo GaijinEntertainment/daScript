@@ -50,8 +50,7 @@ def check_recursive(at : LineInfo; var fun : Function?) {
 
 [macro_function]
 def collect_call_tree(fun : Function?; var visited : table<Function?>) {
-    if (fun.flags.builtIn) return
-    if (visited |> key_exists(fun)) return
+    if (fun.flags.builtIn || visited |> key_exists(fun)) return
     visited |> insert(fun)
     unsafe(reinterpret<FunctionPtr> fun) |> get_use_functions() $(f) {
         collect_call_tree(f, visited)
@@ -167,8 +166,10 @@ class JIT_LLVM : AstSimulateMacro {
         }
     }
     def override simulate(prog : Program?; var ctx : Context?) : bool {
-        return true if (is_in_completion() || is_compiling_macros())
-        return true if (ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context || ctx.category.debugger_tick || ctx.category.debugger_attached)
+        return true if (is_in_completion() || is_compiling_macros()
+                || ctx.category.debug_context || ctx.category.macro_context
+                || ctx.category.folding_context || ctx.category.debugger_tick
+                || ctx.category.debugger_attached)
         if (prog._options |> find_arg("shader_like") ?as tBool ?? false) {
             lint_module(prog, ctx)
             return true

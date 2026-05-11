@@ -57,7 +57,7 @@ class DecsTemplate : AstStructureAnnotation {
     //!   * ``apply_decs_template_arch(arch, eidx, eid, src)`` — writes directly into archetype storage
     //!   * ``create_entities`T(count, blk)`` — bulk creation with direct archetype writes
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        if (length(st.fields) == 0) {
+        if (empty(st.fields)) {
             errors := "expecting at least one field in the desc_template {st.name}"
             return false
         }
@@ -393,7 +393,7 @@ class DecsQueryMacro : AstCallMacro {
         macro_verify(expr.arguments[block_arg_index] is ExprMakeBlock, compiling_program(), expr.at, "expecting $(block_with_arguments)")
         let mblk = expr.arguments[block_arg_index] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
-        macro_verify(length(qblk.arguments) != 0, compiling_program(), expr.at, "expecting query($(block_with_arguments)), arguments are missing")
+        macro_verify(!empty(qblk.arguments), compiling_program(), expr.at, "expecting query($(block_with_arguments)), arguments are missing")
         let prefix = "__{expr.at.line}_desc"
         let arch_name = "{prefix}_arch"
         var req <- build_req_from_args(qblk)
@@ -507,7 +507,7 @@ class DecsQueryMacro : AstCallMacro {
             rules |> replaceVariable("tag_loop") <| add_ptr_ref(qtop)
         }
         var qres = move_unquote_block(qblock)
-        assert(length(qres.list) == 1 && length(qres.finalList) == 0)
+        assert(length(qres.list) == 1 && empty(qres.finalList))
         var rqres = qres.list[0]
         qres := null
         rqres.genFlags.alwaysSafe = true
@@ -563,7 +563,7 @@ class DecsEcsMacro : AstFunctionAnnotation {
         let passName = argPass as tString
         let passFuncName = "decs`pass`{passName}"
         var blk <- setup_call_list(passFuncName, func.at, false, true)
-        if (length(blk.list) == 0) {
+        if (empty(blk.list)) {
             var reg <- setup_call_list("register`decs`passes", func.at, true, true)
             reg.list |> push(qmacro(decs::register_decs_stage_call($v(passName), @@$c(passFuncName))))
         }
@@ -653,7 +653,7 @@ class FromDecsMacro : AstCallMacro {
         macro_verify(expr.arguments[0] is ExprMakeBlock, prog, expr.at, "expecting from_decs($(block_with_arguments))")
         let mblk = expr.arguments[0] as ExprMakeBlock
         let qblk = mblk._block as ExprBlock
-        macro_verify(length(qblk.arguments) != 0, prog, expr.at, "expecting from_decs($(block_with_arguments)), arguments are missing")
+        macro_verify(!empty(qblk.arguments), prog, expr.at, "expecting from_decs($(block_with_arguments)), arguments are missing")
         for (arg in qblk.arguments) {
             macro_verify(!arg._type.isAutoOrAlias, prog, expr.at, "argument types are not fully inferred")
         }

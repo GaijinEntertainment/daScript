@@ -36,6 +36,7 @@ class EachBitfieldMacro : AstFunctionAnnotation {
         macro_verify(call.arguments[0]._type != null, compiling_program(), call.at, "expecting argument type")
         macro_verify(call.arguments[0]._type.isBitfield, compiling_program(), call.at, "expecting a bitfield type")
         var yields : array<ExpressionPtr>
+        yields |> reserve(length(call.arguments[0]._type.argNames))
         if (call.arguments[0]._type.baseType == Type.tBitfield8) {
             for (bit in iter_range(call.arguments[0]._type.argNames)) {
                 yields |> push(qmacro_expr(${ yield $v(bitfield8(1ul << uint64(bit))); }))

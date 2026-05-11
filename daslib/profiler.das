@@ -279,8 +279,8 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
         dump("\{\"name\":\"{fnName}\",\"cat\": \"PERF\",\"ph\":\"{phase}\",\"pid\": 0,\"tid\":{int64(tid)},\"ts\":{ev.ts/1000l}\}")
     }
     def dump_node(node : PerfNode?; tab : int = -1) {
-        if (node == null) return
-        if (report_memory && node.fun != null && node.total_heap_bytes == 0ul && node.total_string_heap_bytes == 0ul) return
+        if (node == null
+                || (report_memory && node.fun != null && node.total_heap_bytes == 0ul && node.total_string_heap_bytes == 0ul)) return
         if (node.fun != null) {
             let tabs = repeat("  ", tab)
             if (report_memory) {

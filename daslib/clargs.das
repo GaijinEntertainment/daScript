@@ -92,11 +92,11 @@ def clargs_flag_name(field_name : string) : string {
 def public find_bool_flag_raw_value(args : array<string>; flag_name : string) : Option<string> {
     let prefix = "{flag_name}="
     var result = none(type<string>)
-    for (i in range(length(args))) {
-        if (args[i] == flag_name) {
+    for (a in args) {
+        if (a == flag_name) {
             result = some("true")
-        } elif (starts_with(args[i], prefix)) {
-            result = some(slice(args[i], length(prefix)))
+        } elif (starts_with(a, prefix)) {
+            result = some(slice(a, length(prefix)))
         }
     }
     return result
@@ -122,8 +122,7 @@ def public find_flag_raw_value(args : array<string>; flag_name : string) : Optio
 def public flag_present(args : array<string>; flag_name : string) : bool {
     let prefix = "{flag_name}="
     for (a in args) {
-        if (a == flag_name) return true
-        if (starts_with(a, prefix)) return true
+        if (a == flag_name || starts_with(a, prefix)) return true
     }
     return false
 }
@@ -379,8 +378,8 @@ def public count_flag_value_violation(args : array<string>; arg_info : CommandAr
     let long_prefix = "{arg_info.flag_name}="
     let short_prefix = has_short ? "{arg_info.short_flag_name}=" : ""
     for (a in args) {
-        if (starts_with(a, long_prefix)) return "{arg_info.flag_name}: count flag does not accept a value"
-        if (has_short && starts_with(a, short_prefix)) return "{arg_info.flag_name}: count flag does not accept a value"
+        if (starts_with(a, long_prefix)
+                || (has_short && starts_with(a, short_prefix))) return "{arg_info.flag_name}: count flag does not accept a value"
     }
     return ""
 }
@@ -390,8 +389,7 @@ def public count_flag_value_violation(args : array<string>; arg_info : CommandAr
 def public find_mutex_violation(args : array<string>; info : CommandInfo) : string {
     var groups : table<string; array<string>>
     for (a in info.args) {
-        if (empty(a.mutex_group)) continue
-        if (!flag_present(args, a)) continue
+        if (empty(a.mutex_group) || !flag_present(args, a)) continue
         if (!key_exists(groups, a.mutex_group)) {
             groups[a.mutex_group] <- [a.flag_name]
         } else {
@@ -455,8 +453,8 @@ def public format_help_with_auto_help(info : CommandInfo; prog_name : string) : 
 // Bool flags omit the =PLACEHOLDER. Enum flag docs include `(V1|V2|...)`.
 
 def value_placeholder(arg : CommandArgumentInfo) : string {
-    if (arg.is_positional || arg.is_count) return ""
-    if (arg.value_type == Type.tBool && !arg.is_array) return ""
+    if (arg.is_positional || arg.is_count
+            || (arg.value_type == Type.tBool && !arg.is_array)) return ""
     if (arg.value_type == Type.tInt) return "=INT"
     if (arg.value_type == Type.tFloat) return "=FLOAT"
     if (arg.value_type == Type.tEnumeration) return "=ENUM"
@@ -464,10 +462,8 @@ def value_placeholder(arg : CommandArgumentInfo) : string {
 }
 
 def render_flag_spec(arg : CommandArgumentInfo) : string {
-    if (arg.is_positional) {
-        // arg.flag_name is already wrapped as "<name>" by collect_command_info.
-        return arg.flag_name
-    }
+    // For positionals, flag_name is already wrapped as "<name>" by collect_command_info.
+    if (arg.is_positional) return arg.flag_name
     var spec = ""
     if (!empty(arg.short_flag_name)) {
         spec = "{arg.short_flag_name}, "
@@ -615,9 +611,9 @@ def public print_help(info : CommandInfo; prog_name : string) : void {
 
 def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
     if (t.baseType == Type.typeMacro) {
-        if (length(t.dimExpr) < 2 || t.dimExpr[0] == null || !(t.dimExpr[0] is ExprConstString)) return null
-        if ((t.dimExpr[0] as ExprConstString).value != "Option") return null
-        if (t.dimExpr[1] == null || !(t.dimExpr[1] is ExprTypeDecl)) return null
+        if (length(t.dimExpr) < 2 || t.dimExpr[0] == null || !(t.dimExpr[0] is ExprConstString)
+                || (t.dimExpr[0] as ExprConstString).value != "Option"
+                || t.dimExpr[1] == null || !(t.dimExpr[1] is ExprTypeDecl)) return null
         return clone_type((t.dimExpr[1] as ExprTypeDecl).typeexpr)
     }
     if (t.baseType != Type.tStructure || t.structType == null) return null

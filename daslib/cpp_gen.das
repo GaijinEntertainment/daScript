@@ -207,7 +207,7 @@ def with_array(var jso; field; blk : block<(var val : array<JsonValue?>) : void>
 
 def is_valid_loc(var loc) {
     //! Checks if a source location is valid (non-empty).
-    return !(loc |> length == 0)
+    return !empty(loc)
 }
 
 def onInner(var root) {
@@ -222,10 +222,8 @@ def onInner(var root) {
                     skip = !loc |> is_valid_loc
                 }
             }
-            if (skip) {
-                if (verbose) {
-                    print("// skipping {decl["name"] as _string}\n")
-                }
+            if (skip) {  // nolint:STYLE005 (const-folded verbose-print leaves single continue)
+                print("// skipping {decl["name"] as _string}\n") if (verbose)
                 continue
             }
             let kind = decl["kind"] as _string
@@ -260,8 +258,7 @@ def onInner(var root) {
 [sideeffects] // TODO: fixme. find why we need to specify [sideeffects] here
 def onLinkageSpec(var root) {
     //! Processes an extern linkage specification node.
-    if (!allow_extern_c) return
-    if (!root |> key_exists("inner")) return
+    if (!allow_extern_c || !root |> key_exists("inner")) return
     if (verbose) {
         if (root |> key_exists("language")) {
             print("extern \"{root["language"] as _string}\"\n")
@@ -678,8 +675,7 @@ def needToGenStruct(st) {
 
 def needToGenField(fld) {
     //! Determines if a struct field should be included in binding generation.
-    if (empty(fld.name)) return false
-    if (fld.access != AccessKind.Public) return false
+    if (empty(fld.name) || fld.access != AccessKind.Public) return false
     return !fld.qtype |> isBlockedType
 }
 
@@ -704,9 +700,10 @@ def genStructs(hf, mf, df : FILE const?) {
     }
     fprint(mf, "\n")
     for (st in values(ast.structs)) {
-        if (!needToGenStruct(st)) continue
-        if (alias_types |> key_exists(st.cppName)) {
-            /*
+        // alias_types branch is documented-but-unused; the legacy alias-factory
+        // emission lives in the dead-code block below for future reference.
+        if (!needToGenStruct(st) || alias_types |> key_exists(st.cppName)) continue
+        /*  legacy alias-factory emission — left as a recipe; revisit if alias annotations ever come back
             let alias_value = alias_types[st.cppName]
             fprint(mf,"template <> struct typeFactory<{st.cppName}> \{\n")
             fprint(mf,"\tstatic TypeDeclPtr make(const ModuleLibrary &) \{\n")
@@ -718,9 +715,7 @@ def genStructs(hf, mf, df : FILE const?) {
             fprint(mf,"\};\n")
             fprint(mf,"template <> struct typeName<{st.cppName}> \{ constexpr static const char * name() \{ return \"{st.name}\"; \} \};\n")
             fprint(df,"addAlias(typeFactory<{st.cppName}>::make(lib));\n")
-            */
-            continue
-        }
+         */
         fprint(df, "#ifdef {getDefinePrefix(st.cppName)}\n")
         fprint(df, "auto ann_{st.name} = make_smart<{st.name}_GeneratedAnnotation>(lib);\n")
         fprint(df, "addAnnotation(ann_{st.name});\n")
@@ -736,10 +731,7 @@ def genStructs(hf, mf, df : FILE const?) {
         fprint(mf, "\t\}\n")
         fprint(mf, "\tvoid init () \{\n")
         for (fld in st.fields) {
-            if (!needToGenField(fld)) continue
-            if (fld.isBitfield) {// TODO: support bitfields
-                continue
-            }
+            if (!needToGenField(fld) || fld.isBitfield) continue  // TODO: support bitfields
             var substType = ""
             substitute_field_types |> get("{st.cppName}::{fld.cppName}") $(val) {
                 substType = val
@@ -755,8 +747,7 @@ def genStructs(hf, mf, df : FILE const?) {
         fprint(mf, "#endif\n")
     }
     for (st in values(ast.structs)) {
-        if (!needToGenStruct(st)) continue
-        if (alias_types |> key_exists(st.cppName)) continue
+        if (!needToGenStruct(st) || alias_types |> key_exists(st.cppName)) continue
         fprint(df, "#ifdef {getDefinePrefix(st.cppName)}\n")
         fprint(df, "initRecAnnotation(ann_{st.name},lib);\n")
         fprint(df, "#endif\n")
