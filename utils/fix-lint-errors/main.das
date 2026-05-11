@@ -60,6 +60,12 @@ class FixerVisitor : AstVisitor {
     @do_not_delete current_function : Function?
     in_template : bool = false
     in_closure : int = 0
+    has_math_require : bool = false  // gates PERF015/PERF016 (rewrites use math::min/max/abs)
+    // The file we're currently editing. `visit_with_generics` walks generic
+    // instantiations whose `.at` may point to a DIFFERENT file (e.g. builtin
+    // instantiated from us). Gate every edit on filename equality to avoid
+    // emitting edits for cross-file source positions.
+    target_filename : string
 
     def FixerVisitor() {
         pass
@@ -373,18 +379,38 @@ class FixerVisitor : AstVisitor {
     }
 
     def is_simple_subject(e : Expression? const) : bool {
-        //! True if `e` has a clean, known source span via leftmost_pos_of /
-        //! rightmost_pos_of. Compound operator expressions and parenthesized
-        //! forms don't qualify — STYLE018 / similar rules bail on them.
+        //! True if `e` has a clean, known source span — both leftmost_pos_of
+        //! and rightmost_pos_of can derive exact bounds from the AST without
+        //! needing to read invisible-in-AST tokens (parens, deref `*`).
+        //! Chain shapes walk recursively (ExprField → value, ExprAt → subexpr).
+        //! ExprPtr2Ref is NOT safe — parens around `(*pv)` aren't in AST so
+        //! leftmost lands on the `*`, missing the leading `(`.
         return false if (e == null)
-        return (e is ExprVar || e is ExprField || e is ExprSafeField
-                || e is ExprAt || e is ExprSafeAt || e is ExprCall)
+        if (e is ExprVar || e is ExprCall || e is ExprConstString
+                || e is ExprConstInt || e is ExprConstUInt
+                || e is ExprConstBool || e is ExprConstFloat || e is ExprConstDouble) {
+            return true
+        }
+        if (e is ExprField) {
+            return self->is_simple_subject((e as ExprField).value)
+        }
+        if (e is ExprSafeField) {
+            return self->is_simple_subject((e as ExprSafeField).value)
+        }
+        if (e is ExprAt) {
+            return self->is_simple_subject((e as ExprAt).subexpr)
+        }
+        if (e is ExprSafeAt) {
+            return self->is_simple_subject((e as ExprSafeAt).subexpr)
+        }
+        return false
     }
 
     def leftmost_pos_of(e : Expression? const; var lo_line : int&; var lo_col : int&) : void {
         //! Recursive leftmost source position. ExprField.at points at the `.`
         //! separator and ExprAt.at at the `[`, so the user-source start lives
-        //! in the chain root.
+        //! in the chain root. Auto-deref wrappers (ExprPtr2Ref, ExprRef2Value)
+        //! introduced by the typer have unreliable `.at` — recurse past them.
         if (e == null) {
             lo_line = 0; lo_col = 0
             return
@@ -403,6 +429,14 @@ class FixerVisitor : AstVisitor {
         }
         if (e is ExprSafeAt) {
             self->leftmost_pos_of((e as ExprSafeAt).subexpr, lo_line, lo_col)
+            return
+        }
+        if (e is ExprPtr2Ref) {
+            self->leftmost_pos_of((e as ExprPtr2Ref).subexpr, lo_line, lo_col)
+            return
+        }
+        if (e is ExprRef2Value) {
+            self->leftmost_pos_of((e as ExprRef2Value).subexpr, lo_line, lo_col)
             return
         }
         lo_line = int(e.at.line)
@@ -504,6 +538,11 @@ class FixerVisitor : AstVisitor {
     }
 
     def push_edit(at : LineInfo; replacement : string; rule : string) : void {
+        // Gate on filename — visit_with_generics may surface AST from another
+        // file (e.g. builtin) and we must not emit edits with those coordinates.
+        return if (at.fileInfo == null)
+        let fname = string(at.fileInfo.name)
+        return if (!empty(target_filename) && fname != target_filename)
         self->push_edit_span(int(at.line), int(at.column),
                              int(at.last_line), int(at.last_column),
                              replacement, rule)
@@ -522,12 +561,23 @@ class FixerVisitor : AstVisitor {
         replacements |> push(replacement)
     }
 
+    def in_target_file(at : LineInfo) : bool {
+        //! Gate that callers using push_edit_span (with explicit ints) must
+        //! check first — otherwise out-of-file source coordinates leak through.
+        return false if (at.fileInfo == null)
+        return true if (empty(target_filename))
+        return string(at.fileInfo.name) == target_filename
+    }
+
     // --- STYLE005 / STYLE017: ExprIfThenElse ---
 
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
-        return if (in_template || in_closure > 0)
-        // STYLE017(a): if (cond) return true else return false  →  return cond
-        self->check_style017a(ifte)
+        return if (!self->in_target_file(ifte.at))
+        // STYLE017(a) is intentionally NOT auto-fixed: match blocks parse as a
+        // chain of ExprIfThenElse where the wildcard arm's body becomes the
+        // innermost else, making them indistinguishable from a real if/else
+        // at the AST level. Auto-fixing them produces broken match code.
+        // Hand-fix STYLE017(a) hits flagged by the linter.
         return if (ifte.if_flags.isStatic || ifte.if_false != null)
         return if (!(ifte.if_true is ExprBlock))
         let blk = ifte.if_true as ExprBlock
@@ -546,7 +596,8 @@ class FixerVisitor : AstVisitor {
     // --- PERF013 / PERF017 / STYLE018 ---
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
-        return if (in_template || in_closure > 0)
+        return if (in_template)
+        return if (!self->in_target_file(expr.at))
         let opname = string(expr.op)
         // PERF013: a += ±1 / a -= ±1 → a++ / a--
         if (opname == "+=" || opname == "-=") {
@@ -605,8 +656,12 @@ class FixerVisitor : AstVisitor {
         // Some C++-bound `length` overloads (e.g. strings::length) have a hidden
         // `context` arg; we only need arg[0], the user-passed collection.
         return if (empty(len_call.arguments))
-        let arg_at = len_call.arguments[0].at
-        let arg_text = self->extract_source(arg_at)
+        let raw_arg = len_call.arguments[0]
+        let arg = self->peel_ref2value(raw_arg)
+        // Bail on compound / parenthesized / deref args — their source bounds
+        // aren't reliable (parens aren't in AST, ExprPtr2Ref.at covers `*` only).
+        return if (!self->is_simple_subject(arg))
+        let arg_text = self->extract_expr_source(arg, expr.at.fileInfo)
         return if (empty(arg_text))
         let replacement = is_empty_pattern ? "empty({arg_text})" : "!empty({arg_text})"
         // ExprOp2.at covers only the operator token, not the full expression.
@@ -636,6 +691,8 @@ class FixerVisitor : AstVisitor {
         //! a += 1 / a -= 1 / a += -1 / a -= -1 → a++ / a--
         //! Net delta: '+=' with +N has sign of N; '-=' flips the sign.
         return if (expr.left == null || !self->is_workhorse_numeric(expr.left._type))
+        // Bail on compound / parenthesized LHS — their span isn't reliable.
+        return if (!self->is_simple_subject(self->peel_ref2value(expr.left)))
         var rhs_sign = 0
         return if (!self->is_const_pm_one(expr.right, rhs_sign))
         let delta = opname == "+=" ? rhs_sign : -rhs_sign
@@ -683,7 +740,8 @@ class FixerVisitor : AstVisitor {
     def check_style017b(blk : ExprBlock?) : void {
         //! Form (b): adjacent `if (cond) return b1` / `return b2` (b1 != b2) →
         //! `return cond` or `return !cond`. Spans both statements.
-        return if (in_template || in_closure > 0)
+        return if (in_template)
+        return if (!self->in_target_file(blk.at))
         let n = length(blk.list)
         return if (n < 2)
         for (i in range(n - 1)) {
@@ -739,7 +797,8 @@ class FixerVisitor : AstVisitor {
     // --- PERF015 / PERF016: ternary min/max/abs ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        return if (in_template || in_closure > 0)
+        return if (in_template)
+        return if (!self->in_target_file(expr.at))
         return if (string(expr.op) != "?" || expr.subexpr == null
                 || !(expr.subexpr is ExprOp2))
         let cmp = expr.subexpr as ExprOp2
@@ -754,6 +813,7 @@ class FixerVisitor : AstVisitor {
     }
 
     def try_perf015(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
+        return false if (!has_math_require)
         let cl = cmp.left
         let cr = cmp.right
         return false if (cl == null || cr == null)
@@ -801,6 +861,7 @@ class FixerVisitor : AstVisitor {
     }
 
     def try_perf016(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
+        return false if (!has_math_require)
         var x_on_left = false
         if (self->is_const_zero(cmp.right)) {
             x_on_left = true
@@ -864,7 +925,7 @@ class FixerVisitor : AstVisitor {
     def check_style017a(ifte : ExprIfThenElse?) : void {
         //! Form (a): `if (cond) return b1 else return b2` (b1 != b2) →
         //! `return cond` or `return !cond`.
-        return if (in_template || in_closure > 0 || ifte.if_false == null)
+        return if (in_template || ifte.if_false == null)
         var b1 = false
         var b2 = false
         return if (!self->is_const_bool_return(ifte.if_true, b1))
@@ -1067,9 +1128,37 @@ struct EditRecord {
     rule : string
 }
 
+def file_requires_math(file : string) : bool {
+    //! True if the source file has a `require math` (any variant). PERF015 /
+    //! PERF016 rewrites resolve `min`/`max`/`abs` from the math module, so
+    //! files without the require would fail to compile post-rewrite.
+    let text = fread(file)
+    return false if (empty(text))
+    let lines <- text |> split("\n")
+    for (line in lines) {
+        let trimmed = line |> strip
+        if (trimmed |> starts_with("require math")
+                || trimmed |> starts_with("require_jit math")
+                || trimmed == "require math"
+                || trimmed |> starts_with("require math ")) {
+            return true
+        }
+        // Stop scanning once past the require block — declarations indicate
+        // we're in the body and there are no more requires above this line.
+        if (trimmed |> starts_with("def ") || trimmed |> starts_with("[")
+                || trimmed |> starts_with("class ") || trimmed |> starts_with("struct ")
+                || trimmed |> starts_with("variant ") || trimmed |> starts_with("enum ")
+                || trimmed |> starts_with("typedef ")) {
+            return false
+        }
+    }
+    return false
+}
+
 def collect_edits(file : string; var records : array<EditRecord>) : bool {
     //! Returns true if the file compiled (whether or not edits were collected).
     var ok_out = false
+    let math_required = file_requires_math(file)
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
@@ -1082,8 +1171,10 @@ def collect_edits(file : string; var records : array<EditRecord>) : bool {
                 ok_out = ok
                 return if (!ok)
                 var astVisitor = new FixerVisitor()
+                astVisitor.has_math_require = math_required
+                astVisitor.target_filename := file
                 make_visitor(*astVisitor) $(adapter) {
-                    visit(program, adapter)
+                    visit_with_generics(program, adapter)
                 }
                 let n = length(astVisitor.edits)
                 records |> reserve(length(records) + n)
@@ -1116,15 +1207,36 @@ def edits_overlap(a : EditRecord; b : EditRecord) : bool {
     return !(a_before_b || b_before_a)
 }
 
+def try_compile(file : string) : bool {
+    //! Best-effort post-rewrite verification. Compiles the file with the same
+    //! settings used during edit collection. Returns true if compile is clean.
+    var ok_out = false
+    var inscope access <- make_file_access("")
+    using() $(var mg : ModuleGroup) {
+        using() $(var cop : CodeOfPolicies) {
+            cop.ignore_shared_modules = true
+            cop.export_all = true
+            cop.lint_check = false
+            cop.no_optimizations = true
+            cop.no_infer_time_folding = true
+            compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                ok_out = ok
+            }
+        }
+    }
+    return ok_out
+}
+
 def apply_edits_to_file(file : string; var records : array<EditRecord>; dry_run : bool) : int {
     //! Applies all edits to a file's source, returning the number written.
     //! Sorts edits by descending end position so earlier-position edits stay
     //! valid through later applications. Drops edits subsumed by a larger one
-    //! (e.g. STYLE005 inside STYLE017(b)) — outer wins.
+    //! (e.g. STYLE005 inside STYLE017(b)) — outer wins. After writing, attempts
+    //! to recompile; restores the original file if the rewrite broke compile.
     return 0 if (empty(records))
-    let text = fread(file)
-    return 0 if (empty(text))
-    var lines <- text |> split("\n")
+    let original_text = fread(file)
+    return 0 if (empty(original_text))
+    var lines <- original_text |> split("\n")
     // Sort by (end_line desc, end_col desc) — apply from end of file backwards.
     // Daslang has `sort` from daslib/sort_boost; here we just bubble for small N.
     let n0 = length(records)
@@ -1199,6 +1311,13 @@ def apply_edits_to_file(file : string; var records : array<EditRecord>; dry_run 
     if (!dry_run) {
         let new_text = join(lines, "\n")
         fwrite(file, new_text)
+        // Safety net: if the rewritten file no longer compiles, restore the
+        // original. Prevents bulk-pass cascade failures from rewrites that
+        // surface edge cases in span computation.
+        if (!try_compile(file)) {
+            fwrite(file, original_text)
+            return -1
+        }
     }
     return n
 }
@@ -1243,6 +1362,7 @@ def main() : int {
     var total_edits = 0
     var total_files_edited = 0
     var total_files_failed = 0
+    var total_files_reverted = 0
     for (file in files) {
         if (has_expect_directive(file)) {
             print("SKIP {file} (expect-directive test fixture)\n") if (!cfg.quiet)
@@ -1281,12 +1401,21 @@ def main() : int {
         let action = cfg.dry_run ? "WOULD FIX" : "FIX"
         print("{action} {file} ({length(records)} edits:{summary})\n")
         let n = apply_edits_to_file(file, records, cfg.dry_run)
-        total_edits += n
-        total_files_edited++
+        if (n < 0) {
+            total_files_reverted++
+            print("REVERT {file} (post-rewrite compile failed)\n")
+        } else {
+            total_edits += n
+            total_files_edited++
+        }
     }
     print("\n--- Summary ---\n")
     print("{length(files)} files scanned, {total_files_edited} edited, ")
-    print("{total_edits} edits applied, {total_files_failed} failed\n")
+    print("{total_edits} edits applied, {total_files_failed} failed")
+    if (total_files_reverted > 0) {
+        print(", {total_files_reverted} reverted")
+    }
+    print("\n")
     if (cfg.dry_run) {
         print("(dry-run — no files written)\n")
     }
