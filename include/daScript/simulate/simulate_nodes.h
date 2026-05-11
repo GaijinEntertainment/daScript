@@ -2551,7 +2551,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             } else {
                 res = (char *) ptr->iter;
                 if ( !res ) {
-                    context.throw_error_at(debugInfo,"iterator is empty or already consumed%s", errorMessage);
+                    context.throw_error_at(debugInfo,"iterator is empty or already consumed by a prior for-in (use `next(it, value)` + `empty(it)` for step-by-step advance)%s", errorMessage);
                 } else {
                     ptr->iter = nullptr;
                 }

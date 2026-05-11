@@ -546,7 +546,12 @@ def JV(value : auto(TT)) : JsonValue? {
         return _::JV(arr)
     }
     static_if (typeinfo typename(value) == "json::JsonValue?" || typeinfo typename(value) == "json::JsonValue? const") {
-        return value
+        // Pass-through: JsonValue? IS a JsonValue?. Const-strip the pointer
+        // so callers walking const containers (apply on a const struct/tuple
+        // hands fields as const) round-trip cleanly.
+        unsafe {
+            return reinterpret<JsonValue?>(value)
+        }
     } static_elif (typeinfo is_pointer(value)) {
         return value == null ? default<JsonValue?> : _::JV(*value)
     } static_elif (typeinfo is_enum(value)) {
