@@ -292,10 +292,19 @@ Full tool table (including `detect_duplicates`/`judge_duplicates`/`find_dupe`), 
 
 ## MOUSE FIRST (hard rule)
 
-`mouse__ask` is the **first** tool on any "how do I X?" / "what's the right pattern for Y?" / "why does Z behave this way?" question — before Explore, before Grep, before Read, before any agent.
+**The trigger:** the moment you are about to call `Grep`, `Read`, `Explore`, or launch any agent to answer a "how do I X?" / "what's the right pattern for Y?" / "why does Z behave this way?" question. **Stop. Call `mouse__ask` first.** This is not a courtesy and not a fallback — `mouse__ask` is the *first* research tool. Every time.
 
-If you catch yourself mid-research thinking "I should have asked mouse first" — stop, ask now. If the cache had the answer, you just saved minutes; if it didn't, finish the research and `mouse__add` the answer before moving on. Either way the cache gets a little smarter.
+If you find yourself reaching for a research tool with a how/why/pattern-shaped question in mind and you haven't asked mouse, you are violating the rule. The trigger fires every time, not just the first time in a session.
 
-Cache misses you skipped never show up in `mouse log --misses` — the only safety net is the wrap-up curation pass. After every meaningful chunk of work, run `skills/task_wrap_up.md` to sweep both the recorded misses and the un-asked questions you researched the long way.
+**Reject these rationalizations** — they are exactly the failure modes that have demoted past sessions:
 
-The cost of an extra `mouse__ask` is ~50ms; the cost of redoing research that's already cached is minutes. The asymmetry is the whole point. Treat this as a hard rule, not a hint — a session that researches without asking mouse first is a session leaking time.
+- *"I know this codebase, I'll just grep."* — Your model is stale; the cache is current. If mouse has the answer, you should read THAT, not your own re-derivation.
+- *"It's a small/quick question, mouse is overkill."* — 50ms ask vs minutes of grep-then-re-derive when the cache had the answer. The asymmetry is the whole point of the rule. Small questions are exactly when the cost of asking is cheapest.
+- *"I'll mouse__ask if grep doesn't find it."* — Backwards. Mouse short-circuits grep; it doesn't backstop it. By the time grep fails, you've already paid the cost the rule was designed to avoid.
+- *"The mouse MCP just disconnected, I'll skip this round."* — When the MCP reconnects (the system reminder will tell you), re-anchor immediately. Your *next* how/why moment is a `mouse__ask`, not a free pass.
+
+**Mid-stream recovery is non-negotiable.** Two consecutive `Grep` / `Read` / `Glob` / `Agent` calls on the same topic without a `mouse__ask` between them = warning sign. **Stop. Ask mouse now.** Don't promise yourself you'll do it "after this one more grep." The longer you research without asking, the harder sunk-cost makes it to ask.
+
+**Cache-miss discipline.** If `mouse__ask` returns nothing useful, immediately call `mouse__bad` with the `query_id` from the response (signals: BM25 matched on tokens, no real answer in corpus). Finish the research the long way. Then `mouse__add` the answer you found before moving on to the next task. Misses you skip never show up in `mouse log --misses`; the wrap-up curation pass (`skills/task_wrap_up.md`) is the only safety net, and it only fires if you run it.
+
+A session that does research without `mouse__ask` is leaking time *and* losing the chance to make the cache smarter for the next session. Treat this as a load-bearing constraint on every tool call, not a hint to remember at session start.
