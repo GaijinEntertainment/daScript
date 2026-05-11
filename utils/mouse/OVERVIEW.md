@@ -55,10 +55,12 @@ Frontmatter fields: `slug` (stable ID, used for cross-refs), `title` (1-line des
 
 | Operation | CLI | MCP tool | Notes |
 |---|---|---|---|
-| Retrieve | `mouse ask "<q>"` | `mouse__ask` | Top-K BM25 ranked, each annotated with a Jaccard title-similarity. Words OR-joined; `--raw-query` / `rawQuery=true` passes raw FTS5 syntax (phrases, NEAR, explicit AND/OR). |
+| Retrieve | `mouse ask "<q>"` | `mouse__ask` | Top-K BM25 ranked, each annotated with a Jaccard title-similarity. Words OR-joined; `--raw-query` / `rawQuery=true` passes raw FTS5 syntax (phrases, NEAR, explicit AND/OR). Response begins with `query_id:` — capture for `mouse__bad`. |
 | Add Q&A | `mouse add "<q>" --body "..."` | `mouse__add` | Advisory similar list always; hard-blocks only on Jaccard ≥ 0.7. `--force` / `force=true` overrides the block. |
 | Get doc | `mouse get <slug>` | `mouse__get` | Body + frontmatter + reverse-link footer. |
 | Rebuild | `mouse rebuild` | `mouse__rebuild` | Force full rescan + signature reset. Normally not needed — every entry point auto-reindexes via the git-staleness check. |
+| Mark no-match | `mouse bad <id>` | `mouse__bad` | Flags a previous ask as a false-positive hit (BM25 returned cards but none addressed the question). Sets `query_log.useful = 0`. Idempotent. We never write `useful = 1` — implicit positive avoids sycophancy noise. |
+| Recent log | `mouse log [--misses\|--bad\|--review]` | `mouse__log` | Browse the query log. `mode=misses` → zero-result asks (the existing add-candidate queue). `mode=bad` → already-marked false positives. `mode=review` → `match_count > 0 AND useful IS NULL` (the wrap-up rating queue). |
 | Serve MCP | `mouse serve` | (this _is_ the server) | stdio JSON-RPC. |
 
 **Dupe-on-add gate.** `add` always runs a Jaccard-scored similarity check against the corpus and surfaces the top matches (whether it created or not). With `force=false` (default), it hard-blocks only when the top match scores ≥ 0.7 — a near-paraphrase. Below that threshold, the add proceeds and the similar list is shown for awareness. The caller (LLM or human) is the actual decider; the threshold just stops obvious near-paraphrases from sneaking in. Below 0.5 nothing is surfaced unless content overlap is genuine.
@@ -79,6 +81,7 @@ The SQLite schema (managed via `[sql_migration]` from `sqlite/sqlite_migrate`):
 - `links` — composite-PK pair `(from_slug, to_slug)` for cross-refs.
 - `search_idx` — FTS5 virtual table; per-doc concatenation of title + question aliases + body. BM25 ranks via the `@sql_fts_rank` column.
 - `index_meta` — `(key, value)` k/v table. Currently stores the staleness signature; future-proof for other persistent metadata.
+- `query_log` — append-only log of every ask: `id` (PK), `asked_at`, `question`, `match_count`, `top_slug`, `source` (`cli` / `mcp`), `useful` (nullable: `NULL` = unrated, `0` = caller marked the hit irrelevant). Survives `rebuild` (which only wipes the doc cache). Two signals into curation: `match_count = 0` rows are the canonical miss-candidate queue (`mouse log --misses`); `match_count > 0 AND useful IS NULL` is the rating queue for retrospective review during wrap-up (`mouse log --review`).
 
 Rebuild is whole-corpus delete+repopulate — simple, correct, fast for small corpora. Incremental update (re-index only changed `body_hash`) is a vNext optimization once the corpus is large enough that whole-rebuild matters.
 

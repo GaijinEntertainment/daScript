@@ -12,9 +12,17 @@ bin/daslang utils/mouse/main.das -- log --misses
 
 (On Windows MSVC layout the binary is `bin/Release/daslang.exe` — same args after.)
 
-For each recent miss:
+For each recent miss (`match_count = 0`):
 - **Did this session answer it?** If yes — `mouse__add` (or `mouse add` from CLI). Next session won't redo the work.
 - **Did you _almost_ ask mouse this session but didn't?** Try asking now — misses-you-skipped don't show up in `--misses`. If the work you just did has the answer, add it.
+
+```bash
+bin/daslang utils/mouse/main.das -- log --review
+```
+
+The `--review` queue is hits the agent didn't rate at ask time: `match_count > 0 AND useful IS NULL`. Some are real false positives — BM25 matched on shared tokens but none of the returned cards actually answered the question. For each row, scan the listed top slug against the question:
+- **Did the top slug actually address the question?** If clearly yes — leave it (implicit positive). If clearly no — call `mouse__bad` with the row's id (CLI: `mouse bad <id>`). That row joins the `--bad` queue. If this session has the real answer, also `mouse__add` so next session retrieves the right card instead of the false-positive one.
+- **Unsure?** Skip — better to leave unrated than guess. Only the negative signal carries information; we never mark hits as good.
 
 ```bash
 bin/daslang utils/mouse/main.das -- log

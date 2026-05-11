@@ -814,13 +814,168 @@ def test_recent_queries_filters_misses(t : T?) {
         log_query(db, "alpha", h1, "cli")
         let h2 <- search(db, "zzqxxgibberish", 5)
         log_query(db, "zzqxxgibberish", h2, "cli")
-        let all_rows <- recent_queries(db, 10, false)
-        let miss_rows <- recent_queries(db, 10, true)
+        let all_rows <- recent_queries(db, 10, LogMode.All)
+        let miss_rows <- recent_queries(db, 10, LogMode.Misses)
         n_all = length(all_rows)
         n_misses = length(miss_rows)
     }
     t |> equal(n_all, 2)
     t |> equal(n_misses, 1)
+    cleanup_root(root)
+}
+
+// ─── useful flag (mark_no_match + Bad/Review filters) ────────────────
+
+[test]
+def test_log_query_returns_increasing_ids(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
+    var id1 = -1l
+    var id2 = -1l
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let h1 <- search(db, "alpha", 5)
+        id1 = log_query(db, "alpha", h1, "cli")
+        let h2 <- search(db, "alpha", 5)
+        id2 = log_query(db, "alpha", h2, "cli")
+    }
+    t |> success(id1 > 0l, "first id positive: {id1}")
+    t |> success(id2 > id1, "second id strictly greater than first: {id1} -> {id2}")
+    cleanup_root(root)
+}
+
+[test]
+def test_mark_no_match_sets_useful_zero(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
+    var id = -1l
+    var n_marked = -1
+    var useful_before : Option<int>
+    var useful_after : Option<int>
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let h1 <- search(db, "alpha", 5)
+        id = log_query(db, "alpha", h1, "cli")
+        let row_before <- _sql(db |> select_from(type<QueryLog>) |> _where(_.id == id) |> _first_opt())
+        useful_before = (row_before |> unwrap).useful
+        n_marked = mark_no_match(db, id)
+        let row_after <- _sql(db |> select_from(type<QueryLog>) |> _where(_.id == id) |> _first_opt())
+        useful_after = (row_after |> unwrap).useful
+    }
+    t |> success(useful_before |> is_none, "useful starts NULL on insert")
+    t |> equal(n_marked, 1)
+    t |> success(useful_after |> is_some, "useful is non-NULL after mark")
+    t |> equal(useful_after |> unwrap_or(-1), 0)
+    cleanup_root(root)
+}
+
+[test]
+def test_mark_no_match_nonexistent_id_returns_zero(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    var n_marked = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        n_marked = mark_no_match(db, 99999l)
+    }
+    t |> equal(n_marked, 0)
+    cleanup_root(root)
+}
+
+[test]
+def test_mark_no_match_idempotent(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
+    var n1 = -1
+    var n2 = -1
+    var useful_after : Option<int>
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        let h1 <- search(db, "alpha", 5)
+        let id = log_query(db, "alpha", h1, "cli")
+        n1 = mark_no_match(db, id)
+        n2 = mark_no_match(db, id)
+        let row <- _sql(db |> select_from(type<QueryLog>) |> _where(_.id == id) |> _first_opt())
+        useful_after = (row |> unwrap).useful
+    }
+    t |> equal(n1, 1)
+    t |> equal(n2, 1)  // SQLite UPDATE matches the row even if SET to same value
+    t |> equal(useful_after |> unwrap_or(-1), 0)
+    cleanup_root(root)
+}
+
+[test]
+def test_recent_queries_filters_bad(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
+    var n_bad = -1
+    var n_review = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        // 3 hit rows: mark one bad, leave two unrated → 1 bad, 2 review.
+        let h1 <- search(db, "alpha", 5)
+        let id1 = log_query(db, "alpha", h1, "cli")
+        let h2 <- search(db, "alpha", 5)
+        log_query(db, "alpha 2", h2, "cli")
+        let h3 <- search(db, "alpha", 5)
+        log_query(db, "alpha 3", h3, "cli")
+        // 1 miss row: should NOT show up under bad or review (match_count == 0).
+        let h_miss <- search(db, "zzqxxgibberish", 5)
+        log_query(db, "zzqxxgibberish", h_miss, "cli")
+        mark_no_match(db, id1)
+        let bad_rows <- recent_queries(db, 10, LogMode.Bad)
+        let review_rows <- recent_queries(db, 10, LogMode.Review)
+        n_bad = length(bad_rows)
+        n_review = length(review_rows)
+    }
+    t |> equal(n_bad, 1)
+    t |> equal(n_review, 2)
+    cleanup_root(root)
+}
+
+[test]
+def test_recent_queries_review_excludes_misses(t : T?) {
+    let root = make_temp_root(t)
+    if (empty(root)) {
+        return
+    }
+    let no_links : array<string>
+    let qs <- ["alpha question"]
+    seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
+    var n_review = -1
+    with_index_db(root) $(db) {
+        rebuild(db, root)
+        // Only misses → review queue must be empty (Review needs match_count > 0).
+        let h_miss <- search(db, "zzqxxgibberish", 5)
+        log_query(db, "zzqxxgibberish", h_miss, "cli")
+        let h_miss2 <- search(db, "another gibberish", 5)
+        log_query(db, "another gibberish", h_miss2, "cli")
+        let review_rows <- recent_queries(db, 10, LogMode.Review)
+        n_review = length(review_rows)
+    }
+    t |> equal(n_review, 0)
     cleanup_root(root)
 }
 
