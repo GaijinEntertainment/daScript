@@ -400,16 +400,15 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
     //! Returns null if the expression is not a generated comprehension.
     if (!(expr is ExprInvoke)) return null
     let inv = expr as ExprInvoke
-    if (length(inv.arguments) != 1) return null
-    // The argument should be ExprMakeBlock wrapping the closure
-    if (!(inv.arguments[0] is ExprMakeBlock)) return null
+    // single ExprMakeBlock argument wrapping the closure
+    if (length(inv.arguments) != 1 || !(inv.arguments[0] is ExprMakeBlock)) return null
     let mkblk = inv.arguments[0] as ExprMakeBlock
     let blk = mkblk._block as ExprBlock
-    if (blk == null || length(blk.list) != 3) return null
-    // stmt[0] = ExprLet with __acomp_ variable
-    // stmt[1] = ExprFor
-    // stmt[2] = ExprReturn with fromComprehension=true
-    if (!(blk.list[0] is ExprLet) || !(blk.list[1] is ExprFor) || !(blk.list[2] is ExprReturn)) return null
+    // body: ExprLet (__acomp_ var), ExprFor, ExprReturn (fromComprehension=true)
+    if (blk == null || length(blk.list) != 3
+            || !(blk.list[0] is ExprLet)
+            || !(blk.list[1] is ExprFor)
+            || !(blk.list[2] is ExprReturn)) return null
     let ret = blk.list[2] as ExprReturn
     if (!ret.returnFlags.fromComprehension) return null
     // Detect tableSyntax: return subexpr is to_table_move(...)
@@ -426,7 +425,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
     // Extract subexpr and exprWhere from the for body
     let src_for = blk.list[1] as ExprFor
     let for_body = src_for.body as ExprBlock
-    if (for_body == null || length(for_body.list) == 0) return null
+    if (for_body == null || empty(for_body.list)) return null
     var comp_subexpr : Expression?
     var comp_where : Expression?
     if (for_body.list[0] is ExprIfThenElse) {
@@ -434,7 +433,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
         let ite = for_body.list[0] as ExprIfThenElse
         comp_where = clone_expression(ite.cond)
         let then_blk = ite.if_true as ExprBlock
-        if (then_blk != null && length(then_blk.list) > 0 && then_blk.list[0] is ExprCall) {
+        if (then_blk != null && !empty(then_blk.list) && then_blk.list[0] is ExprCall) {
             let push_call = then_blk.list[0] as ExprCall
             if (length(push_call.arguments) >= 2) {
                 comp_subexpr = clone_expression(push_call.arguments[1])
@@ -520,14 +519,13 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
     //! Compiler-internal fields are populated during compilation but null/zero
     //! in raw patterns from qmacro/quote.
 
-    // Fields on all expressions (inherited from Expression base)
+    // Fields on all expressions: base-class fields + stack/annotation internals
     if (field_name == "_type" || field_name == "flags" || field_name == "genFlags"
-        || field_name == "printFlags" || field_name == "at") return true
-    // Stack/annotation internals
-    if (field_name == "stackTop" || field_name == "stackVarBottom" || field_name == "stackVarTop"
-        || field_name == "annotationDataSid" || field_name == "annotationData"
-        || field_name == "maxLabelIndex" || field_name == "refStackTop"
-        || field_name == "initStackSize" || field_name == "argStackTop") return true
+            || field_name == "printFlags" || field_name == "at"
+            || field_name == "stackTop" || field_name == "stackVarBottom" || field_name == "stackVarTop"
+            || field_name == "annotationDataSid" || field_name == "annotationData"
+            || field_name == "maxLabelIndex" || field_name == "refStackTop"
+            || field_name == "initStackSize" || field_name == "argStackTop") return true
     // ExprVar — resolved variable reference
     if (rtti_name == "ExprVar") {
         if (field_name == "variable" || field_name == "argumentIndex" || field_name == "pBlock"
@@ -551,8 +549,7 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
         || field_name == "doesNotNeedSp" || field_name == "cmresAlias"
         || field_name == "argumentsFailedToInfer") return true
     // ExprReturn
-    if (field_name == "returnInBlock") return true
-    return false
+    return field_name == "returnInBlock"
 }
 
 // ── TypeDecl matching code generation ────────────────────────────────────
@@ -809,7 +806,7 @@ def private get_wildcard_b_tag(pattern : Expression?) : string {
     //! If wildcard has a $b(var) argument, return the variable name. Otherwise "".
     if (!(pattern is ExprCall)) return ""
     let call = pattern as ExprCall
-    if (length(call.arguments) == 0) return ""
+    if (empty(call.arguments)) return ""
     let arg = call.arguments[0]
     if (arg is ExprTag) {
         let tag = arg as ExprTag
@@ -870,8 +867,8 @@ def private is_range_constructor(call_name : string) : bool {
 [macro_function]
 def private const_component_fields(folded_rtti : string) : array<string> {
     if (folded_rtti == "ExprConstRange" || folded_rtti == "ExprConstURange"
-        || folded_rtti == "ExprConstRange64" || folded_rtti == "ExprConstURange64") return <- array<string>("x", "y")
-    if (folded_rtti |> ends_with("2")) return <- array<string>("x", "y");
+            || folded_rtti == "ExprConstRange64" || folded_rtti == "ExprConstURange64"
+            || folded_rtti |> ends_with("2")) return <- array<string>("x", "y")
     if (folded_rtti |> ends_with("3")) return <- array<string>("x", "y", "z");
     if (folded_rtti |> ends_with("4")) return <- array<string>("x", "y", "z", "w");
     return <- array<string>()
@@ -1042,7 +1039,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                         // Clone the wrapped expression so we don't modify the pattern AST
                         var wrapped_clone = clone_expression(tag.value)
                         var wrapped_clone_let = wrapped_clone as ExprLet
-                        if (length(wrapped_clone_let.variables) > 0) {
+                        if (!empty(wrapped_clone_let.variables)) {
                             wrapped_clone_let.variables[0].name := ""
                         }
                         // Generate ExprLet matching for the cloned expression
@@ -1299,12 +1296,12 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var ann = unsafe(reinterpret<BasicStructureAnnotation?> get_expression_annotation(pattern))
         if (ann != null) {
             for_each_field(*ann) $(name, cppName, xtype, offset) {
-                return if (offset == 0xFFFFFFFFu)
-                return if (qm_skip_field(rtti, name))
-                return if (name == "iteratorsTags")
-                return if (name == "iteratorsAt" || name == "iteratorVariables" || name == "iteratorsTupleExpansion" || name == "iteratorsAka")
-                return if (name == "visibility" || name == "allowIteratorOptimization" || name == "canShadow")
-                return if (length(xtype.dim) != 0)
+                return if (offset == 0xFFFFFFFFu
+                        || qm_skip_field(rtti, name)
+                        || name == "iteratorsTags"
+                        || name == "iteratorsAt" || name == "iteratorVariables" || name == "iteratorsTupleExpansion" || name == "iteratorsAka"
+                        || name == "visibility" || name == "allowIteratorOptimization" || name == "canShadow"
+                        || !empty(xtype.dim))
                 var p8 : int8?
                 unsafe {
                     p8 = (reinterpret<int8?> pattern) + int(offset)
@@ -1332,7 +1329,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                             }
                         }
                     }
-                } elif (bt == Type.tPointer && xtype.firstType != null && xtype.firstType.annotation != null && string(xtype.firstType.annotation.name) == "Expression") {
+                } elif (bt == Type.tPointer && xtype.firstType != null && xtype.firstType.annotation != null && xtype.firstType.annotation.name == "Expression") {
                     let inner_ann_name = xtype.firstType != null && xtype.firstType.annotation != null ? string(xtype.firstType.annotation.name) : ""
                     if (inner_ann_name == "TypeDecl") {
                         // skip TypeDecl fields
@@ -1579,9 +1576,8 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     // Field-by-field matching via annotation reflection
     for_each_field(*ann) $(name, cppName, xtype, offset) {
-        return if (offset == 0xFFFFFFFFu)
-        return if (qm_skip_field(rtti, name))
-        if (length(xtype.dim) != 0) {
+        return if (offset == 0xFFFFFFFFu || qm_skip_field(rtti, name))
+        if (!empty(xtype.dim)) {
             panic("qmatch: fixed-size array field '{name}' not supported")
         }
         var p8 : int8?
@@ -1784,7 +1780,7 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
     // Check if pattern is a single fixed statement (possibly with wildcards).
     // If actual is not ExprBlock, try matching the single statement directly.
     // Skip this optimization if pattern has arguments or return type — those require a real block.
-    let has_pat_args = length(pat_block.arguments) > 0
+    let has_pat_args = !empty(pat_block.arguments)
     let has_pat_ret = pat_block.returnType != null && pat_block.returnType.baseType != Type.autoinfer && pat_block.returnType.baseType != Type.tVoid
     let n_fixed = count_fixed_stmts(pat_block)
     if (n_fixed == 1 && !has_pat_args && !has_pat_ret) {

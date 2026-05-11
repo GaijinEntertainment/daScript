@@ -725,9 +725,8 @@ class private LinqUnionByToArray : AstCallMacro_LinqPredII2 {
 def private is_call_or_generic(var expr : Expression?, name, moduleName : string) : ExprCall? {
     if (expr is ExprCall) {
         var call = expr as ExprCall
-        if (call.func.name == name && call.func._module.name == moduleName) {
-            return call
-        } elif (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName) return call
+        if ((call.func.name == name && call.func._module.name == moduleName)
+                || (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName)) return call
     }
     return null
 }
@@ -1121,7 +1120,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
     //!   if expr is not linq call, return null
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
-    if (calls |> length == 0) return null
+    if (empty(calls)) return null
     var topExpr = clone_expression(top)
     var topExprType = clone_type(top._type)
     var topValue = qmacro(source)

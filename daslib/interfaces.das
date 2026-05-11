@@ -282,16 +282,16 @@ class ImplementsMacro : AstStructureAnnotation {
         let missing = build_string() $(var w) {
             for (ifld in iface.fields) {
                 let ifld_name = string(ifld.name)
-                // Skip compiler-generated fields
-                if (ifld_name == "__rtti" || ifld_name == "__finalize") continue
-                if (!ifld._type.isFunction) continue
-                // Methods with a default implementation (init != null) are optional
-                if (ifld.init != null) continue
+                // Skip compiler-generated fields, non-function fields, and
+                // methods with a default implementation (init != null).
+                if (ifld_name == "__rtti" || ifld_name == "__finalize"
+                        || !ifld._type.isFunction
+                        || ifld.init != null) continue
                 // Abstract method — struct must provide {iface_name}`{method_name}
                 let expected = "{iface_name}`{ifld_name}"
                 var found = false
                 for (sfld in st.fields) {
-                    if (string(sfld.name) == expected) {
+                    if (sfld.name == expected) {
                         found = true
                         break
                     }
@@ -317,11 +317,10 @@ def private is_const_interface(st : Structure?) : bool {
     if (st == null) return false
     for (fld in st.fields) {
         let fn = string(fld.name)
-        if (fn == "__rtti" || fn == "__finalize") continue
-        if (!fld._type.isFunction) continue
-        // Check if the first arg (self) is const.
-        // argTypes[0] is self for class methods.
-        if (length(fld._type.argTypes) == 0) continue
+        // argTypes[0] is self for class methods; check that it's const.
+        if (fn == "__rtti" || fn == "__finalize"
+                || !fld._type.isFunction
+                || empty(fld._type.argTypes)) continue
         if (!fld._type.argTypes[0].isConst) return false
     }
     return true
@@ -401,11 +400,9 @@ class InterfaceAsIs : AstVariantMacro {
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType
         for (fld in st.fields) {
-            if (fld.name == getter_field) {
-                // ── Code generation ──
-                // Replace `expr is IFoo` with the literal `true`.
-                return <- quote(true)
-            }
+            // ── Code generation ──
+            // Replace `expr is IFoo` with the literal `true`.
+            if (fld.name == getter_field) return <- quote(true)
         }
         // The struct is valid but doesn't implement this interface → false.
         return <- quote(false)

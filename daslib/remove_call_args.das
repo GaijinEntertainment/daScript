@@ -35,7 +35,7 @@ def get_remove_indices(args : AnnotationArgumentList) {
             indices |> push(arg.iValue)
         }
     }
-    if (length(indices) > 0) {
+    if (!empty(indices)) {
         indices |> sort() <| $(a, b) => a > b
     }
     return <- indices

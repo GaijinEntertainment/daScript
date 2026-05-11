@@ -1144,9 +1144,8 @@ class private DAgent : DapiDebugAgent {
 
     def onPause(var ctx : Context; at : LineInfo; reason, text : string) : void {
         //! Main pause handler that stops execution, sends a stopped event, and waits for DAP client commands.
-        if (at.fileInfo == null) return
-        if (server == null) return
-        if (!waitConnection && (!server.configurationDone || !server.threadsDone)) return
+        if (at.fileInfo == null || server == null
+                || (!waitConnection && (!server.configurationDone || !server.threadsDone))) return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
         self->log("{ctx} `{reason}` breakpoint at {path}:{int(at.line)}\n")
 
@@ -1165,8 +1164,7 @@ class private DAgent : DapiDebugAgent {
 
     def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
-        if (at.fileInfo == null) return
-        if (server == null) return
+        if (at.fileInfo == null || server == null) return
 
         // unsafe
             // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
@@ -1371,9 +1369,9 @@ class private DAgent : DapiDebugAgent {
 
     def invalidateBreakpoints(var ctx : Context) : void {
         //! Re-instruments breakpoints for a context after code changes, updating their verification state.
-        if (!withInstruments) return
-        if (server == null || !server.configurationDone) return
-        if (ctx.category.debug_context || ctx.category.debugger_tick) return
+        if (!withInstruments
+                || server == null || !server.configurationDone
+                || ctx.category.debug_context || ctx.category.debugger_tick) return
 
         for (brs in values(breakpoints)) {
             for (br in brs) {
@@ -1604,8 +1602,7 @@ class private DAServer : Server {
             if (toRead == 0) {
                 push(current_string, uch)
                 let prefix = "Content-Length: "
-                if (length(current_string) <= length(prefix)) continue
-                if (ch != '\n') continue
+                if (length(current_string) <= length(prefix) || ch != '\n') continue
                 let str = string(current_string)
                 if (str |> starts_with(prefix)) {
                     unsafe {

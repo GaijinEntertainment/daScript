@@ -242,6 +242,7 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     var invokeArgs : array<VariablePtr>
     // forward expressions (ExprVar for each arg name)
     var fwdExprs : array<ExpressionPtr>
+    fwdExprs |> reserve(nArgs)
     for (idx in range(nArgs)) {
         let argName = get_arg_name(FuncType, idx)
         invokeArgs |> emplace_new <| new Variable(at = macroArgument.at, name := argName,
@@ -252,6 +253,7 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     // lambda args for wrapper (separate copies)
     var lambdaArgs : array<VariablePtr>
     var lambdaFwd  : array<ExpressionPtr>
+    lambdaFwd |> reserve(nArgs)
     for (idx in range(nArgs)) {
         let argName = get_arg_name(FuncType, idx)
         lambdaArgs |> emplace_new <| new Variable(at = macroArgument.at, name := argName,

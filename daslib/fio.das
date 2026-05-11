@@ -7,6 +7,7 @@ module fio shared
 
 require fio_core public
 require strings
+require math
 
 typedef file = FILE const?
 
@@ -70,8 +71,7 @@ def fload(file : file; size : int; blk : block<(data : array<uint8>) : void>) : 
 def fload(f : file; buf : auto(BufType) -const) {
     var dfh : df_header
     let r1 = _builtin_read(f, dfh, typeinfo sizeof(type<df_header>))
-    if (r1 < 0) return false
-    if (dfh.magic != df_magic) return false
+    if (r1 < 0 || dfh.magic != df_magic) return false
     var loaded = false
     _builtin_load(f, dfh.size) $(data : array<uint8>) {
         if (length(data) != 0) {
@@ -227,8 +227,7 @@ def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<u
                 return false
             }
         } elif (pc == uint8('?')) {
-            return false if (si >= slen)
-            return false if (s[si] == uint8('/'))
+            return false if (si >= slen || s[si] == uint8('/'))
             pi++
             si++
         } elif (pc == uint8('[')) {
@@ -248,8 +247,7 @@ def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<u
             }
             if (scan >= plen) {
                 // No closing `]` — treat the `[` as a literal character.
-                return false if (si >= slen)
-                return false if (s[si] != pc)
+                return false if (si >= slen || s[si] != pc)
                 pi++
                 si++
             } else {
@@ -294,8 +292,7 @@ def private _match_glob_bytes(p : array<uint8> const#; var pi : int; s : array<u
                 si++
             }
         } else {
-            return false if (si >= slen)
-            return false if (s[si] != pc)
+            return false if (si >= slen || s[si] != pc)
             pi++
             si++
         }
@@ -312,10 +309,8 @@ def match_glob(pattern : string; path : string) : bool {
     let slen = length(path)
     return true if (plen == 0 && slen == 0)
     return false if (plen == 0)
-    if (slen == 0) {
-        // Empty path matches a pattern only when every char is `*` (any number of stars or **).
-        return empty(replace(pattern, "*", ""))
-    }
+    // Empty path matches a pattern only when every char is `*` (any number of stars or **).
+    if (slen == 0) return empty(replace(pattern, "*", ""))
     var result = false
     peek_data(pattern) $(parr) {
         peek_data(path) $(sarr) {
@@ -450,7 +445,7 @@ def private _split_literal_prefix(pattern : string) : tuple<string; string> {
     let prefix = slice(pattern, 0, scan_end)
     let sep_fwd = rfind(prefix, "/")
     let sep_back = rfind(prefix, "\\")
-    let sep = sep_fwd >= sep_back ? sep_fwd : sep_back
+    let sep = max(sep_fwd, sep_back)
     if (sep < 0) return "." => pattern
     let raw_dir = slice(pattern, 0, sep)
     let raw_sep = slice(pattern, sep, sep + 1)

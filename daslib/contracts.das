@@ -72,7 +72,7 @@ class IsAnyArrayMacro : IsAnyType {
         for (fna, typ in func.arguments, types) {// note: N^2
             for (argv in decl.arguments) {
                 if (fna.name == argv.name) {
-                    if (!(typ.baseType == Type.tArray || length(typ.dim) != 0 || isYetAnotherVectorTemplate(typ))) {
+                    if (!(typ.baseType == Type.tArray || !empty(typ.dim) || isYetAnotherVectorTemplate(typ))) {
                         errors := "argument {argv.name} is not a vector, array, or [], it is {describe(typ)}"
                         return false
                     }
@@ -90,7 +90,7 @@ class IsAnyEnumMacro : IsAnyType {
         for (fna, typ in func.arguments, types) {// note: N^2
             for (argv in decl.arguments) {
                 if (fna.name == argv.name) {
-                    if (length(typ.dim) != 0 || (typ.baseType != Type.tEnumeration && typ.baseType != Type.tEnumeration8 && typ.baseType != Type.tEnumeration16 && typ.baseType != Type.tEnumeration64)) {
+                    if (!empty(typ.dim) || (typ.baseType != Type.tEnumeration && typ.baseType != Type.tEnumeration8 && typ.baseType != Type.tEnumeration16 && typ.baseType != Type.tEnumeration64)) {
                         errors := "argument {argv.name} is not an enumeration"
                         return false
                     }
@@ -127,7 +127,7 @@ class IsAnyVectorType : IsAnyType {
         for (fna, typ in func.arguments, types) {// note: N^2
             for (argv in decl.arguments) {
                 if (fna.name == argv.name) {
-                    if (length(typ.dim) != 0 || !isVectorType(typ.baseType)) {
+                    if (!empty(typ.dim) || !isVectorType(typ.baseType)) {
                         errors := "argument {argv.name} is not a vector type (int2, float3, range, etc)"
                         return false
                     }

@@ -44,7 +44,7 @@ class UnrollMacro : AstFunctionAnnotation {
         assert(call.arguments[0] is ExprMakeBlock)
         var mblk = unsafe(reinterpret<ExprMakeBlock?>(call.arguments[0]))
         var blk = unsafe(reinterpret<ExprBlock?>(mblk._block))
-        if (blk.finalList |> length != 0) {
+        if (!empty(blk.finalList)) {
             errors := "not expecting finally section in the unroll"
             return null
         }

@@ -205,10 +205,10 @@ def function_label_name(value : FunctionPtr) {
                 break
             }
         }
-        if (is_generic) return "{res}_{value.at.line}"
-        // For class/struct methods, operators like []=, []&&=, []||= collapse
-        // to the same safe name. Disambiguate with line number.
-        if (value.flags.isClassMethod) return "{res}_{value.at.line}"
+        // Disambiguate with line number for: (a) generic instantiations sharing
+        // the same name; (b) class/struct method operators ([]=, []&&=, []||=)
+        // that collapse to the same safe name.
+        if (is_generic || value.flags.isClassMethod) return "{res}_{value.at.line}"
     }
     // Detect label collisions (e.g. smart_ptr<T> vs T? producing same label)
     // and disambiguate with line number. Same function seen twice (TOC + def) is not a collision.
@@ -280,9 +280,9 @@ def describe_type_short(td : TypeDeclPtr) {
     } elif (td.baseType == Type.tFunction || td.baseType == Type.tBlock || td.baseType == Type.tLambda) {
         res = build_string() $(var w) {
             w |> write(td.baseType == Type.tBlock ? "block<" : td.baseType == Type.tFunction ? "function<" : "lambda<")
-            if (td.argTypes |> length != 0) {
+            if (!empty(td.argTypes)) {
                 w |> write("(")
-                if (td.argNames |> length != 0) {
+                if (!empty(td.argNames)) {
                     var first = true
                     for (at, an in td.argTypes, td.argNames) {
                         if (first) {
@@ -365,8 +365,7 @@ def public describe_short(expr : Expression? | Expression?&) {
 def rst_describe_function_short(func : FunctionPtr) {
     var inscope args : array<string>
     for (x in func.arguments) {
-        continue if (x._type.baseType == Type.fakeContext)
-        continue if (x._type.baseType == Type.fakeLineInfo)
+        continue if (x._type.baseType == Type.fakeContext || x._type.baseType == Type.fakeLineInfo)
         let prefix = x._type.flags.removeConstant ? "var " : ""
         if (x.init != null) {
             args |> push("{prefix}{x.name}: {describe_type_short(x._type)} = {describe_short(x.init)}")
@@ -470,9 +469,9 @@ def describe_type(td : TypeDecl?) {
         } elif (baseType == Type.tBlock || baseType == Type.tFunction || baseType == Type.tLambda) {
             write(writer, das_to_string(baseType))
             write(writer, "<")
-            if (td.argTypes |> length != 0) {
+            if (!empty(td.argTypes)) {
                 write(writer, "(")
-                if (td.argNames |> length != 0) {
+                if (!empty(td.argNames)) {
                     var first = true
                     for (at, an in td.argTypes, td.argNames) {
                         if (first) {
@@ -508,8 +507,8 @@ def describe_type(td : TypeDecl?) {
             let delim = baseType == Type.option ? "\\ | " : ";"
             write(writer, das_to_string(baseType))
             write(writer, "<")
-            if (td.argTypes |> length != 0) {
-                if (td.argNames |> length != 0) {
+            if (!empty(td.argTypes)) {
+                if (!empty(td.argNames)) {
                     var first = true
                     for (at, an in td.argTypes, td.argNames) {
                         if (first) {
@@ -1013,9 +1012,7 @@ def document_global_constant(doc_file : file; mod : Module?; value : VariablePtr
 }
 
 def private is_global_constant(value : VariablePtr) {
-    if (value.flags.private_variable) return false
-    if (!value._type.flags.constant) return false
-    if (value.flags.bitfield_constant) return false
+    if (value.flags.private_variable || !value._type.flags.constant || value.flags.bitfield_constant) return false
     // without this condition we supports more types
     // if !value._type.isWorkhorseType
     //     return false
@@ -1307,10 +1304,10 @@ def document_classes(doc_file : file; mods : array<Module?>) {
                     document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
                     return
                 }
-                if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) return
+                if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || empty(func.arguments)) return
                 let fna = string(func.name)
-                if (!fna |> starts_with(".`") || length(fna) <= 2) return
-                if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
+                if (!fna |> starts_with(".`") || length(fna) <= 2
+                        || !is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
                 if (first) {
                     fwrite(doc_file, ":Properties:\n\n")
                     first = false
@@ -1421,10 +1418,9 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
     // Document struct methods (module-level functions with isClassMethod flag).
     // For structs (unlike classes), methods are not stored as struct fields after inference.
     for_each_function(mod, "") $(func) {
-        if (!func.flags.isClassMethod || func.classParent != value) return
-        if (func.flags.generated) return
-        // Skip constructors (handled below)
-        if (func.name == value.name) return
+        if (!func.flags.isClassMethod || func.classParent != value
+                || func.flags.generated
+                || func.name == value.name) return  // skip constructors (handled below)
         // Skip property functions (handled below)
         var isPropertyFunc = false
         peek(func.name) $(fn_name) {
@@ -1432,10 +1428,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
         }
         if (isPropertyFunc) return
         if (!func.moreFlags.isStaticClassMethod) {
-            if (func.name == "{value.name}`{value.name}") {
-                // Foo`Foo == generated ctor
-                return
-            }
+            if (func.name == "{value.name}`{value.name}") return  // Foo`Foo == generated ctor
             for (fld in value.fields) {
                 // exclude instantiated struct fields
                 if (fld.flags.classMethod && fld.flags.implemented && func.name == "{value.name}`{fld.name}") return
@@ -1451,10 +1444,10 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
             document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
             return
         }
-        if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) return
+        if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || empty(func.arguments)) return
         let fna = string(func.name)
-        if (!fna |> starts_with(".`") || length(fna) <= 2) return
-        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
+        if (!fna |> starts_with(".`") || length(fna) <= 2
+                || !is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
         if (first) {
             fwrite(doc_file, ":Properties:\n\n")
             first = false
@@ -1492,11 +1485,10 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     var annT = new TypeDecl(baseType = Type.tHandle,
         annotation = unsafe(reinterpret<TypeAnnotation?> value))
     for_each_function(mod, "") $(func) {
-        if (!func.moreFlags.propertyFunction) return
-        if (func.arguments |> length != 1) return
+        if (!func.moreFlags.propertyFunction || func.arguments |> length != 1) return
         let fna = string(func.name)
-        if (!fna |> starts_with(".`") || length(fna) <= 2) return
-        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
+        if (!fna |> starts_with(".`") || length(fna) <= 2
+                || !is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
         var line : array<string>
         push(line, slice(fna, 2))
         push(line, describe_type(func.result))
@@ -1755,11 +1747,11 @@ def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
 }
 
 def function_needs_documenting(func : FunctionPtr) {
-    if (func.flags.generated) return false
-    if (func.flags.isClassMethod) return false
-    if (func.flags.privateFunction) return false
-    if (func.fromGeneric != null) return false
-    if (func.moreFlags.propertyFunction) return false
+    if (func.flags.generated
+            || func.flags.isClassMethod
+            || func.flags.privateFunction
+            || func.fromGeneric != null
+            || func.moreFlags.propertyFunction) return false
     var isBuiltin = false
     peek(func._module.name) $(name) {
         if (name == "$" || name == "builtin") {
@@ -1841,7 +1833,7 @@ def function_name(func : FunctionPtr) {
                 let op = character_at(safeName, length(safeName) - 2) // nolint:PERF003
                 safeName = "{safeName |> slice(0,-3)} {op.to_char()}="
             }
-            return (length(func.arguments) == 0
+            return (empty(func.arguments)
                 ? safeName
                 : "{func.arguments[0]._type |> describe_type_short()}{safeName}"
             )

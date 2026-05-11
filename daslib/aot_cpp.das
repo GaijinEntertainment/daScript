@@ -168,7 +168,7 @@ def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
         if (Type.tBitfield) { return true; }
         if (Type.tBitfield8) { return true; }
         if (Type.tBitfield16) { return true; }
-        if (Type.tBitfield64) { return true; }
+        if (Type.tBitfield64) { return true; }  // nolint:STYLE017 (match arm chain)
         if (_) { return false; }
     }
 }
@@ -397,7 +397,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             if (typeDecl.firstType != null) {
                 type_name = describeCppTypeEx(typeDecl.firstType, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias)
             }
-            let extra_comma = length(typeDecl.argTypes) != 0 ? "," : "";
+            let extra_comma = !empty(typeDecl.argTypes) ? "," : "";
             let arg_types = (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(redundant_const = true, cross_platform = cfg.cross_platform), useAlias))
                 .to_array()
@@ -692,8 +692,7 @@ class public AotDebugInfoHelper {
                 if (si.fields == null) return ;
                 for (fi in range(si.count)) {
                     let fld & = unsafe(si.fields[fi])
-                    if (fld.annotation_arguments == null) continue;
-                    if (length(*fld.annotation_arguments) == 0) continue;
+                    if (fld.annotation_arguments == null || empty(*fld.annotation_arguments)) continue;
                     write(writer, "    {structInfoName(si)}_field_{fi}.annotation_arguments = &{structInfoName(si)}_field_{fi}_ann;\n")
                 }
             })
@@ -731,7 +730,7 @@ class public AotDebugInfoHelper {
             writeDim(writer, fld, suffix);
             writeArgTypes(writer, fld, suffix);
             writeArgNames(writer, fld, suffix);
-            let prefix = (info.module_name |> length() > 0) ? "{info.module_name}::" : "";
+            let prefix = (info.module_name |> !empty(info.module_name)) ? "{info.module_name}::" : "";
             write(*writer, "VarInfo {structInfoName(info)}_field_{fi} =  \{ {describeCppVarInfo(prefix + info.name, fld,suffix)} \};\n");
             if (fld.annotation_arguments != null) {
                 if (length(*fld.annotation_arguments) > 0) {
@@ -996,7 +995,7 @@ class public BlockVariableCollector : AstVisitor {
     def getFinalBlock() {
         for (i in range(length(stack))) {
             let blk = stack[length(stack) - i - 1];
-            if (length(blk.finalList) != 0) return blk;
+            if (!empty(blk.finalList)) return blk;
             if (blk.blockFlags.isClosure) return null;
         }
         return null;
@@ -1730,10 +1729,10 @@ class public CppAot : AstVisitor {
                 that.right._type.baseType == Type.tBool && that.right._type.isSimpleType);
     }
     def isOpPolicy2(that : ExprOp2?) {
-        if (is_alpha(first_character(that.op))) return true;
-        if (that.op == "/" || that.op == "%") return true;
-        if (that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>=") return true;
-        if (that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
+        if (is_alpha(first_character(that.op))
+                || that.op == "/" || that.op == "%"
+                || that.op == "<<<" || that.op == ">>>" || that.op == "<<<=" || that.op == ">>>="
+                || that.op == "<<" || that.op == ">>" || that.op == "<<=" || that.op == ">>=") return true;
         return that._type.isPolicyType || that.left._type.isPolicyType || that.right._type.isPolicyType;
     }
     def opPolicyBase(that : ExprOp2?) {
@@ -3259,7 +3258,7 @@ class public CppAot : AstVisitor {
         }
     }
     def override canVisitExprLooksLikeCallArgument(call : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) {
-        if (length(call.arguments) >= 1 && call.arguments[0] == arg &&  call is ExprInvoke) {
+        if (!empty(call.arguments) && call.arguments[0] == arg &&  call is ExprInvoke) {
             let inv = call as ExprInvoke;
             if (inv.isInvokeMethod) return false;
         }
@@ -3319,24 +3318,17 @@ class public CppAot : AstVisitor {
         if (!polType.isHandle) {
             if (polType.isVecPolicyType && argType.isVecPolicyType) return false;
         }
-        if (!polType.isPolicyType) return false;
-        return true;
+        return polType.isPolicyType;
     }
     def policyResultNeedCast(polType : TypeDeclPtr; resType : TypeDeclPtr) {
-        if (resType.isVoid) return false;
-        if (!resType.isPolicyType) return false;
+        if (resType.isVoid || !resType.isPolicyType) return false;
         return policyArgNeedCast(polType, resType);
     }
     def isPolicyBasedCall(call : ExprCall?) {
         let bif = call.func as BuiltInFunction;
-        if (call.arguments |> empty() && call.func.result.baseType == Type.tHandle) {
-            // c-tor?
-            return false;
-        } elif (bif.flags.policyBased) {
-            return true;
-        } else {
-            return false;
-        }
+        // empty arg ctor returning handle is NOT policy-based
+        if (call.arguments |> empty() && call.func.result.baseType == Type.tHandle) return false;
+        return bif.flags.policyBased;
     }
     def isPolicyBasedCallFunc(call : ExprCallFunc?) {
         if (call.func.flags.builtIn) {
@@ -3354,12 +3346,10 @@ class public CppAot : AstVisitor {
             if (func.flags.callBased) {
                 panic("we should not be here. call-based calls handled elsewhere");
             }
-            return length(bif.cppName) == 0;
+            return empty(bif.cppName);
         }
-        if (func.flags.noAot) return true;
-        if (func.flags.aotHybrid) return true;
-        if (func._module == program.getThisModule) return false;
-        return true;
+        if (func.flags.noAot || func.flags.aotHybrid) return true;
+        return func._module != program.getThisModule;
     }
     def needsArgPassType(argType : TypeDeclPtr) {
         return !argType.flags.constant && !argType.isGoodBlockType;
@@ -3448,7 +3438,7 @@ class public CppAot : AstVisitor {
                 }
                 assume mangledName = call.func |> get_mangled_name();
                 let hash = call.func.getMangledNameHash;
-                if (length(call.arguments) >= 1) {
+                if (!empty(call.arguments)) {
                     write(*ss, "<");
                     for (arg in call.func.arguments) {
                         write(*ss, "{describeCppType(arg._type,DescribeConfig(cross_platform=cross_platform))}");
@@ -3816,8 +3806,8 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
     fnn.reserve(totalFunctions);
     for (pm in modules) {
         pm |> for_each_module_function($(pfun) {
-            if (!all_modules && pfun._module != this_module) return ;
-            if (pfun.index < 0 || !pfun.flags.used) return ;
+            if ((!all_modules && pfun._module != this_module)
+                    || pfun.index < 0 || !pfun.flags.used) return ;
             if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
             }

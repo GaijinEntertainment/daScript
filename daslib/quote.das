@@ -208,7 +208,7 @@ def private to_array_move_expr(var mkArr : ExprMakeArray?, at : LineInfo) {
 }
 
 def private to_arr_move_args(var args : array<Expression?>; var dst_tp : TypeDeclPtr; at : LineInfo) {
-    assert(args |> length > 0);
+    assert(!empty(args));
     unsafe {
         return to_array_move_expr(new ExprMakeArray(values := args,
                                                        gen2 = true,
@@ -360,9 +360,7 @@ def private convert_quote_expr(mod : Module?; var data : uint8 const?; info : Ty
     } elif (tstr == "ast_core::Structure") {
          assume pdata = unsafe(reinterpret<Structure?>(data));
          // disable support for Structure::Module. If we compile without shared_modules it's impossible
-         if (pdata._module.name == "ast_boost") { // How to check COP.shared_modules = false?
-            return null;
-         }
+         if (pdata._module.name == "ast_boost") return null  // disabled when shared_modules=false (no direct check)
          // It's unnecessary, however there is bug in aot with ternary operator
          var tmp = get_find_in_module_expr("module_find_structure", pdata._module.name, pdata.name, at);
          return tmp;

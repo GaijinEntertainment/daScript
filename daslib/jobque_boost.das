@@ -16,6 +16,7 @@ module jobque_boost shared public
 //! Extends the built-in ``jobque`` module.
 
 require jobque public
+require math
 
 require daslib/rtti
 require daslib/ast
@@ -534,7 +535,7 @@ def _parallel_for(range_begin, range_end : int; num_jobs : int; blk : block<(job
     //! Requires ``with_job_que`` context.
     let total = range_end - range_begin
     if (total <= 0 || num_jobs <= 0) return
-    let actual_jobs = num_jobs < total ? num_jobs : total
+    let actual_jobs = min(num_jobs, total)
     let chunk = total / actual_jobs
     let remainder = total % actual_jobs
     with_wait_group(actual_jobs) $(wg) {
@@ -681,12 +682,11 @@ def public release_capture_jobque_stream(s : Stream?) {
 
 [macro_function]
 def private isPtrToJQ(typ : TypeDeclPtr; jqt : string) : bool {
-    if (!typ.isPointer) return false
-    if (typ.firstType == null) return false
-    if (!typ.firstType.isHandle) return false
-    if (typ.firstType.annotation._module.name != "jobque") return false
-    if (typ.firstType.annotation.name != jqt) return false
-    return true
+    if (!typ.isPointer
+            || typ.firstType == null
+            || !typ.firstType.isHandle
+            || typ.firstType.annotation._module.name != "jobque") return false
+    return typ.firstType.annotation.name == jqt
 }
 
 [capture_macro(name=channel_and_status_capture_macro)]
@@ -727,9 +727,8 @@ class private ChannelAndStatusCapture : AstCaptureMacro {
         //! iteration, not just once at destruction. This means ``Channel``, ``JobStatus``,
         //! ``LockBox``, and ``Stream`` captures inside generators do NOT get automatic release checks.
         //! Users must manually call ``release`` on captured jobque objects inside generators.
-        if (fun.flags._generator) {// generator gets finally section called every single time. nothing we can do
-            return
-        }
+        // generator gets finally section called every single time. nothing we can do
+        if (fun.flags._generator) return
         for (fld in lcs.fields) {
             if (fld._type |> isPtrToJQ("Channel")) {
                 var pCall = make_release_call(fld, "jobque_boost::release_capture_jobque_channel")

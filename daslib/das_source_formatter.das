@@ -544,10 +544,11 @@ def search_token_in_line(var ctx : FormatterCtx; from_index : int; str : string 
     var pc : ParenCounter
     for (j in range(from_index, length(ctx.tokens))) {
         ctx |> update_paren(j, pc)
-        if (j > from_index && ctx |> new_line_before(j) &&
-                (pc.paren <= 0 || pc.square <= 0 || pc.curly <= 0) && !eq(ctx, j - 1, ",")) break
-        if (pc.paren < 0 || pc.square < 0 || pc.curly < 0) break
-        if (ctx |> eq(j, ";") && pc.paren == 0 && pc.square == 0 && pc.curly == 0) break
+        if ((j > from_index && ctx |> new_line_before(j)
+                    && (pc.paren <= 0 || pc.square <= 0 || pc.curly <= 0)
+                    && !eq(ctx, j - 1, ","))
+                || (pc.paren < 0 || pc.square < 0 || pc.curly < 0)
+                || (ctx |> eq(j, ";") && pc.paren == 0 && pc.square == 0 && pc.curly == 0)) break
         if (ctx |> eq(j, str)) return j
     }
     return 0
@@ -635,8 +636,8 @@ def mark_token_context(var ctx : FormatterCtx) {
                 ctx.tokens[j].isInType = true;
             }
             for (j in range(endParams + 1, length(ctx.tokens))) {
-                if (!(ctx |> eq(j, "-", "#", "&", "?") || ctx |> eq(j, "==", "const", "implicit"))) break;
-                if (ctx |> new_line_before(j)) break;
+                if (!(ctx |> eq(j, "-", "#", "&", "?") || ctx |> eq(j, "==", "const", "implicit"))
+                        || (ctx |> new_line_before(j))) break;
                 ctx.tokens[j].isInType = true;
             }
         }
@@ -668,8 +669,7 @@ def mark_token_context(var ctx : FormatterCtx) {
             let ident = ctx.tokens[i].spaces
             for (j in range(i + skip, length(ctx.tokens) - 3)) {
                 if (ctx |> new_line_before(j)) {
-                    if (ctx |> eq(j, "def")) break
-                    if (ctx.tokens[j].spaces <= ident) break
+                    if (ctx |> eq(j, "def") || ctx.tokens[j].spaces <= ident) break
                     let colonPos = ctx |> search_token_in_line(j, ctx |> eq(i, "typedef") ? "=" : ":")
                     if (colonPos > 0) {
                         ctx |> mark_tokens_as_type(colonPos + 1)
@@ -866,9 +866,9 @@ def generate_source(ctx : FormatterCtx) : string {
 
 def need_spaces_around(ctx : FormatterCtx; index : int) : bool {
     assume t = ctx.tokens[index]
-    if (t.tokenType != TokenType.UNKNOWN || t.dontFormat || t.dontAddSpacesAround) return false
-    if (dont_need_space_around |> find_index(t.str) >= 0) return false
-    if (t.isInType && (t.str == ":" || t.str == "<" || t.str == ">" || t.str == ">>" || t.str == ">>>" || empty(t.str))) return false
+    if (t.tokenType != TokenType.UNKNOWN || t.dontFormat || t.dontAddSpacesAround
+            || dont_need_space_around |> find_index(t.str) >= 0
+            || (t.isInType && (t.str == ":" || t.str == "<" || t.str == ">" || t.str == ">>" || t.str == ">>>" || empty(t.str)))) return false
     if (index < length(ctx.tokens) - 1) {
         assume next = ctx.tokens[index + 1]
         if (t.str == "@" && next.tokenType == TokenType.KEYWORD_OR_IDENTIFIER) return false
@@ -879,10 +879,10 @@ def need_spaces_around(ctx : FormatterCtx; index : int) : bool {
 
 def need_space_only_before(ctx : FormatterCtx; index : int) : bool {
     assume t = ctx.tokens[index]
-    if (!t.isInType) return false
-    if (t.tokenType != TokenType.UNKNOWN || t.dontFormat || t.dontAddSpacesAround) return false
-    if (dont_need_space_around |> find_index(t.str) >= 0) return false
-    if (t.str == ">" || t.str == ">>" || t.str == ">>>" || t.str == "<" || empty(t.str)) return false
+    if (!t.isInType
+            || t.tokenType != TokenType.UNKNOWN || t.dontFormat || t.dontAddSpacesAround
+            || dont_need_space_around |> find_index(t.str) >= 0
+            || t.str == ">" || t.str == ">>" || t.str == ">>>" || t.str == "<" || empty(t.str)) return false
     if (index < length(ctx.tokens) - 1) {
         assume next = ctx.tokens[index + 1]
         if (next.str == ">" || next.str == ">>" || next.str == ">>>" || next.str == ";") return true
@@ -908,9 +908,8 @@ let tokens_before_unary <- fixed_array("(", "[", "?[", "\{", "auto", "int", "flo
     );
 
 def is_unary(ctx : FormatterCtx; index : int) : bool {
-    if (ctx |> eq(index, "!") || ctx |> eq(index, "~")) return true
-
-    if (ctx |> eq(index, "*") && index > 0 && ctx.tokens[index - 1].isInType) return true
+    if (ctx |> eq(index, "!") || ctx |> eq(index, "~")
+            || (ctx |> eq(index, "*") && index > 0 && ctx.tokens[index - 1].isInType)) return true
 
     if (ctx |> eq(index, "+") || ctx |> eq(index, "-") || ctx |> eq(index, "*")) {
         var i = index

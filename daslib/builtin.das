@@ -1564,9 +1564,7 @@ def sort(var a : auto(TT)[] | #) {
 }
 
 def sort(var a : array<auto(TT)> | #) {
-    if (length(a) <= 1) {
-        return
-    }
+    if (length(a) <= 1) return
     static_if (typeinfo is_numeric_comparable(type<TT>)) {
         __builtin_array_lock(a)
         unsafe {
@@ -1697,18 +1695,14 @@ def lock_data(a : array<auto(TT)> ==const | #; blk : block<(p : TT const?#; s : 
 
 def find_index(arr : array<auto(TT)> | #; key : TT) {
     for (o, i in arr, range(length(arr))) {
-        if (o == key) {
-            return i
-        }
+        if (o == key) return i
     }
     return -1
 }
 
 def find_index(arr : auto(TT)[] | #; key : TT) {
     for (o, i in arr, range(length(arr))) {
-        if (o == key) {
-            return i
-        }
+        if (o == key) return i
     }
     return -1
 }
@@ -1724,9 +1718,7 @@ def find_index(var arr : iterator<auto(TT)>; key : TT -&) {
 
 def find_index_if(arr : array<auto(TT)> | #; blk : block<(key : TT) : bool>) {
     for (o, i in arr, range(length(arr))) {
-        if (invoke(blk, o)) {
-            return i
-        }
+        if (invoke(blk, o)) return i
     }
     return -1
 }
@@ -1742,9 +1734,7 @@ def find_index_if(arr : auto(TT)[] | #; blk : block<(key : TT) : bool>) {
 
 def find_index_if(var arr : iterator<auto(TT)>; blk : block<(key : TT -&) : bool>) {
     for (o, i in arr, count()) {
-        if (invoke(blk, o)) {
-            return i
-        }
+        if (invoke(blk, o)) return i
     }
     return -1
 }
@@ -1752,9 +1742,7 @@ def find_index_if(var arr : iterator<auto(TT)>; blk : block<(key : TT -&) : bool
 def has_value(a; key) {
     static_if (typeinfo is_iterable(a)) {
         for (t in a) {
-            if (t == key) {
-                return true
-            }
+            if (t == key) return true
         }
         return false
     } else {

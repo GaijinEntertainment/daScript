@@ -24,7 +24,7 @@ def is_temp_safe(expr : ExpressionPtr) : bool {
         return (expr as ExprVar).varFlags.local // local variables are ok
     } elif (expr is ExprAt) {
         let ea = expr as ExprAt
-        if (ea.subexpr._type != null && ea.subexpr._type.dim |> length != 0) return is_temp_safe(ea.subexpr)
+        if (ea.subexpr._type != null && !empty(ea.subexpr._type.dim)) return is_temp_safe(ea.subexpr)
     } elif (expr is ExprField) {
         let ef = expr as ExprField
         if (!(ef.value._type.baseType == Type.tHandle) || (ef.value._type.isLocal)) return is_temp_safe(ef.value)
@@ -68,7 +68,7 @@ def is_local_expr(expr : ExpressionPtr) {
         return (expr as ExprVar).varFlags.local
     } elif (expr is ExprAt) {
         let ea = expr as ExprAt
-        if (ea.subexpr._type != null && ea.subexpr._type.dim |> length != 0) return is_local_expr(ea.subexpr)
+        if (ea.subexpr._type != null && !empty(ea.subexpr._type.dim)) return is_local_expr(ea.subexpr)
     } elif (expr is ExprField) {
         let ef = expr as ExprField
         if (!(ef.value._type.baseType == Type.tHandle) || (ef.value._type.isLocal)) return is_local_expr(ef.value)
@@ -83,7 +83,7 @@ def is_local_or_global_expr(expr : ExpressionPtr) {
         return ev.varFlags.local || !(ev.varFlags.argument || ev.varFlags._block)
     } elif (expr is ExprAt) {
         let ea = expr as ExprAt
-        if (ea.subexpr._type != null && ea.subexpr._type.dim |> length != 0) return is_local_or_global_expr(ea.subexpr)
+        if (ea.subexpr._type != null && !empty(ea.subexpr._type.dim)) return is_local_or_global_expr(ea.subexpr)
     } elif (expr is ExprField) {
         let ef = expr as ExprField
         if (!(ef.value._type.baseType == Type.tHandle) || (ef.value._type.isLocal)) return is_local_or_global_expr(ef.value)
@@ -100,7 +100,7 @@ def is_scope_expr(expr : ExpressionPtr) {
         return true
     } elif (expr is ExprAt) {
         let ea = expr as ExprAt
-        if (ea.subexpr._type != null && ea.subexpr._type.dim |> length != 0) return is_scope_expr(ea.subexpr)
+        if (ea.subexpr._type != null && !empty(ea.subexpr._type.dim)) return is_scope_expr(ea.subexpr)
     } elif (expr is ExprField) {
         let ef = expr as ExprField
         if (!(ef.value._type.baseType == Type.tHandle) || (ef.value._type.isLocal)) return is_scope_expr(ef.value)

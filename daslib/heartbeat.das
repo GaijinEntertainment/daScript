@@ -42,8 +42,8 @@ class AddHeartbeat : AstVisitor {
     astChanged : bool = false
     @do_not_delete func : Function?
     def heartbeatBlock(var body : ExprBlock?) {
-        if (length(body.list) == 0) return
-        if ((body.list[0] is ExprCall) && (body.list[0] as ExprCall).name == "heartbeat") return
+        if (empty(body.list)
+                || ((body.list[0] is ExprCall) && (body.list[0] as ExprCall).name == "heartbeat")) return
         var expr = qmacro(heartbeat())
         body.list |> emplace(expr, 0)
         astChanged = true

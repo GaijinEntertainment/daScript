@@ -45,7 +45,7 @@ class DeferMacro : AstFunctionAnnotation {
             if (!valid) {
                 compiling_program() |> macro_error(call.at, "can't get valid program context")
                 success = false
-            } elif (astc.scopes |> length == 0) {
+            } elif (empty(astc.scopes)) {
                 compiling_program() |> macro_error(call.at, "defer needs to be in the scope")
                 success = false
             } else {
@@ -78,7 +78,7 @@ class DeferDeleteMacro : AstCallMacro {
             if (!valid) {
                 compiling_program() |> macro_error(call.at, "can't get valid program context")
                 success = false
-            } elif (astc.scopes |> length == 0) {
+            } elif (empty(astc.scopes)) {
                 compiling_program() |> macro_error(call.at, "defer_delete needs to be in the scope")
                 success = false
             } else {

@@ -67,7 +67,7 @@ class private CoContinue : AstCallMacro {
     //! That way co_continue() does not distract from the fact that it is a generator<bool>.
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         //! Visits the co_continue macro call and rewrites it to ``yield true``.
-        macro_verify(call.arguments |> length == 0, prog, call.at, "expecting co_continue()")
+        macro_verify(empty(call.arguments), prog, call.at, "expecting co_continue()")
         if (!verify_inside_coroutine(prog, call)) return null
         return qmacro_expr() {
             yield true

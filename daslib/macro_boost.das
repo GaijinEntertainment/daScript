@@ -94,7 +94,7 @@ class ColletFinally : AstVisitor {
     alwaysFor : bool
     def override preVisitExprBlock(blk : ExprBlock?) : void {
         unsafe {
-            if (length(blk.finalList) > 0) {
+            if (!empty(blk.finalList)) {
                 blocks |> insert(reinterpret<ExprBlock?> blk)
             } elif (alwaysFor && blk.blockFlags.forLoop) {
                 blocks |> insert(reinterpret<ExprBlock?> blk)

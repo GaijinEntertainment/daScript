@@ -322,7 +322,7 @@ class private TemplateVisitor : AstVisitor {
     }
     def preVisitAnythingCall(var arguments : dasvector`ptr`Expression) : void {
         //! Visits call arguments and applies variable expression list replacement rules.
-        if (length(rules.var2exprList) == 0) return
+        if (empty(rules.var2exprList)) return
         let nargs = arguments |> length
         if (nargs == 0) return
         for (ai in range(nargs)) {
@@ -332,6 +332,7 @@ class private TemplateVisitor : AstVisitor {
                 let vname = string((arg as ExprVar).name)
                 if (key_exists(rules.var2exprList, vname)) {
                     var new_args : array<Expression?>
+                    new_args |> reserve(length(rules.var2exprList[vname]))
                     for (a in rules.var2exprList[vname]) {
                         new_args |> push(clone_expression(a))
                     }

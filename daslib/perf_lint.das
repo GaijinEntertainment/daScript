@@ -120,14 +120,10 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def is_suppressed(text : string; at : LineInfo) : bool {
-        if (at.fileInfo == null || at.line == 0u) {  //
-            return false
-        }
+        if (at.fileInfo == null || at.line == 0u) return false
         // extract PERFxxx code from warning text (e.g. "PERF003: ...")
         let colon = find(text, ":")
-        if (colon < 0) {  //
-            return false
-        }
+        if (colon < 0) return false
         let code = slice(text, 0, colon)
         var found = false
         get_file_source_line(at.fileInfo, at.line) $(line) {
@@ -143,18 +139,14 @@ class PerfLintVisitor : AstVisitor {
     def perf_warning(text : string; at : LineInfo) : void {
         // Suppress in templates and inside macro-generated functions —
         // the user didn't write that code.
-        if (in_template  //
+        if (in_template
             || (current_function != null && current_function.flags.generated)) return
         // Deduplicate warnings — same source location reported once, regardless of generic instantiations
         let key = self->location_key(at)
-        if (reported_locations |> has_value(key)) {  //
-            return
-        }
+        if (reported_locations |> has_value(key)) return
         reported_locations |> push(key)
         // Check inline suppression: // PERFxxx on the same line
-        if (self->is_suppressed(text, at)) {  //
-            return
-        }
+        if (self->is_suppressed(text, at)) return
         warning_count++
         var msg = text
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {
@@ -178,25 +170,17 @@ class PerfLintVisitor : AstVisitor {
     // --- variable scope helpers ---
 
     def is_loop_variable(v : Variable?) : bool {
-        if (v == null) {  //
-            return false
-        }
+        if (v == null) return false
         for (entry in var_stack) {
-            if (entry.v == v && entry.is_iter) {  //
-                return true
-            }
+            if (entry.v == v && entry.is_iter) return true
         }
         return false
     }
 
     def is_defined_outside_loop(v : Variable?) : bool {
-        if (v == null || loop_depth == 0 || self->is_loop_variable(v)) {  //
-            return false
-        }
+        if (v == null || loop_depth == 0 || self->is_loop_variable(v)) return false
         for (entry in var_stack) {
-            if (entry.v == v) {  //
-                return entry.depth < loop_depth
-            }
+            if (entry.v == v) return entry.depth < loop_depth
         }
         // not on stack — function argument or global — outside any loop
         return true
@@ -207,9 +191,7 @@ class PerfLintVisitor : AstVisitor {
     def is_character_at_zero(expr : ExprCall?) : bool {
         if (length(expr.arguments) >= 2) {
             var idx = expr.arguments[1]
-            if (idx is ExprConstInt && (idx as ExprConstInt).value == 0) {  //
-                return true
-            }
+            if (idx is ExprConstInt && (idx as ExprConstInt).value == 0) return true
         }
         return false
     }
@@ -217,7 +199,7 @@ class PerfLintVisitor : AstVisitor {
     def is_array_func(expr : ExprCall?; fname : string) : bool {
         // Builtin generics (push, reserve, etc.) have fromGeneric set.
         // Verify first argument is an array type.
-        if (expr.func == null || expr.func.fromGeneric == null  //
+        if (expr.func == null || expr.func.fromGeneric == null
             || expr.func.fromGeneric.name != fname || empty(expr.arguments)) return false
         let arg = expr.arguments[0]
         return arg._type != null && arg._type.baseType == Type.tArray
@@ -233,9 +215,7 @@ class PerfLintVisitor : AstVisitor {
             return null if (evar.variable == null)
             return evar.variable
         }
-        if (expr is ExprRef2Value) {  //
-            return self->find_expr_path((expr as ExprRef2Value.subexpr), path)
-        }
+        if (expr is ExprRef2Value) return self->find_expr_path((expr as ExprRef2Value.subexpr), path)
         if (expr is ExprField) {
             var field = expr as ExprField
             path := ".{field.name}{path}"
@@ -290,9 +270,7 @@ class PerfLintVisitor : AstVisitor {
         return null if (inner == null || !(inner is ExprVar))
         var evar = inner as ExprVar
         return null if (evar.variable == null || evar.variable._type == null)
-        if (evar.variable._type.baseType == Type.tString) {  //
-            return evar.variable
-        }
+        if (evar.variable._type.baseType == Type.tString) return evar.variable
         return null
     }
 
@@ -309,13 +287,9 @@ class PerfLintVisitor : AstVisitor {
         var call = inner as ExprCall
         // After inference, string() calls may have FakeContext/FakeLineInfo extra args.
         // Check the function name and first argument type.
-        if (empty(call.arguments) || call.name != "string") {  //
-            return false
-        }
+        if (empty(call.arguments) || call.name != "string") return false
         var arg = call.arguments[0]
-        if (arg._type == null || arg._type.baseType != Type.tHandle) {  //
-            return false
-        }
+        if (arg._type == null || arg._type.baseType != Type.tHandle) return false
         return arg._type.annotation != null && arg._type.annotation.name == "das_string"
     }
 
@@ -323,17 +297,13 @@ class PerfLintVisitor : AstVisitor {
         //! Returns true if expr is a X call where X is a smart_ptr.
         return false if (expr == null || !(expr is ExprCall))
         var call = expr as ExprCall
-        if (call.func == null || call.func.fromGeneric == null) {  //
-            return false
-        }
+        if (call.func == null || call.func.fromGeneric == null) return false
         return call.func.fromGeneric.name == "get_ptr"
     }
 
     def is_get_ptr_vs_null(maybe_get_ptr : Expression?; maybe_null : Expression?) : bool {
         //! Returns true if maybe_get_ptr is get_ptr() and maybe_null is null.
-        if (!self->is_get_ptr_of_smart_ptr(maybe_get_ptr) || maybe_null == null) {  //
-            return false
-        }
+        if (!self->is_get_ptr_of_smart_ptr(maybe_get_ptr) || maybe_null == null) return false
         if (maybe_null is ExprConstPtr) {
             var cptr = maybe_null as ExprConstPtr
             return cptr.value == null
@@ -344,71 +314,33 @@ class PerfLintVisitor : AstVisitor {
     // --- generic constant / structural helpers (PERF013-017) ---
 
     def is_const_zero(expr : Expression? const) : bool {
-        if (expr == null) {  //
-            return false
-        }
-        if (expr is ExprConstInt) {  //
-            return (expr as ExprConstInt).value == 0
-        }
-        if (expr is ExprConstUInt) {  //
-            return (expr as ExprConstUInt).value == 0u
-        }
-        if (expr is ExprConstInt64) {  //
-            return (expr as ExprConstInt64).value == 0l
-        }
-        if (expr is ExprConstUInt64) {  //
-            return (expr as ExprConstUInt64).value == 0ul
-        }
-        if (expr is ExprConstFloat) {  //
-            return (expr as ExprConstFloat).value == 0.0f
-        }
-        if (expr is ExprConstDouble) {  //
-            return (expr as ExprConstDouble).value == 0.0lf
-        }
+        if (expr == null) return false
+        if (expr is ExprConstInt) return (expr as ExprConstInt).value == 0
+        if (expr is ExprConstUInt) return (expr as ExprConstUInt).value == 0u
+        if (expr is ExprConstInt64) return (expr as ExprConstInt64).value == 0l
+        if (expr is ExprConstUInt64) return (expr as ExprConstUInt64).value == 0ul
+        if (expr is ExprConstFloat) return (expr as ExprConstFloat).value == 0.0f
+        if (expr is ExprConstDouble) return (expr as ExprConstDouble).value == 0.0lf
         return false
     }
 
     def is_const_one(expr : Expression? const) : bool {
-        if (expr == null) {  //
-            return false
-        }
-        if (expr is ExprConstInt) {  //
-            return (expr as ExprConstInt).value == 1
-        }
-        if (expr is ExprConstUInt) {  //
-            return (expr as ExprConstUInt).value == 1u
-        }
-        if (expr is ExprConstInt64) {  //
-            return (expr as ExprConstInt64).value == 1l
-        }
-        if (expr is ExprConstUInt64) {  //
-            return (expr as ExprConstUInt64).value == 1ul
-        }
-        if (expr is ExprConstFloat) {  //
-            return (expr as ExprConstFloat).value == 1.0f
-        }
-        if (expr is ExprConstDouble) {  //
-            return (expr as ExprConstDouble).value == 1.0lf
-        }
+        if (expr == null) return false
+        if (expr is ExprConstInt) return (expr as ExprConstInt).value == 1
+        if (expr is ExprConstUInt) return (expr as ExprConstUInt).value == 1u
+        if (expr is ExprConstInt64) return (expr as ExprConstInt64).value == 1l
+        if (expr is ExprConstUInt64) return (expr as ExprConstUInt64).value == 1ul
+        if (expr is ExprConstFloat) return (expr as ExprConstFloat).value == 1.0f
+        if (expr is ExprConstDouble) return (expr as ExprConstDouble).value == 1.0lf
         return false
     }
 
     def is_const_neg_one(expr : Expression? const) : bool {
-        if (expr == null) {  //
-            return false
-        }
-        if (expr is ExprConstInt) {  //
-            return (expr as ExprConstInt).value == -1
-        }
-        if (expr is ExprConstInt64) {  //
-            return (expr as ExprConstInt64).value == -1l
-        }
-        if (expr is ExprConstFloat) {  //
-            return (expr as ExprConstFloat).value == -1.0f
-        }
-        if (expr is ExprConstDouble) {  //
-            return (expr as ExprConstDouble).value == -1.0lf
-        }
+        if (expr == null) return false
+        if (expr is ExprConstInt) return (expr as ExprConstInt).value == -1
+        if (expr is ExprConstInt64) return (expr as ExprConstInt64).value == -1l
+        if (expr is ExprConstFloat) return (expr as ExprConstFloat).value == -1.0f
+        if (expr is ExprConstDouble) return (expr as ExprConstDouble).value == -1.0lf
         return false
     }
 
@@ -417,7 +349,7 @@ class PerfLintVisitor : AstVisitor {
         //! returns false when either side has side effects — protects rules that
         //! suggest collapsing duplicated subexpressions (PERF014/015/016) from
         //! silently changing evaluation count.
-        if ((a == null || b == null)  //
+        if ((a == null || b == null)
             || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) return false
         return describe(a) == describe(b)
     }
@@ -425,9 +357,7 @@ class PerfLintVisitor : AstVisitor {
     def is_workhorse_numeric(t : TypeDecl?) : bool {
         //! True if the type is one of the six numeric workhorse scalars (int, uint,
         //! int64, uint64, float, double). Vectors/bitfields/enums do NOT qualify.
-        if (t == null || !empty(t.dim)) {  //
-            return false
-        }
+        if (t == null || !empty(t.dim)) return false
         let bt = t.baseType
         return (bt == Type.tInt || bt == Type.tUInt
                 || bt == Type.tInt64 || bt == Type.tUInt64
@@ -437,13 +367,9 @@ class PerfLintVisitor : AstVisitor {
     def is_collection_length_call(expr : Expression? const) : bool {
         //! True for length(string) / length(das_string) / length(array) / length(table).
         //! Excludes math::length(float2/3/4) which returns vector magnitude.
-        if (expr == null || !(expr is ExprCall)) {  //
-            return false
-        }
+        if (expr == null || !(expr is ExprCall)) return false
         let call = expr as ExprCall
-        if (call.func == null || call.func.name != "length") {  //
-            return false
-        }
+        if (call.func == null || call.func.name != "length") return false
         let modname = string(call.func._module.name)
         return modname == "strings" || modname == "$" || modname == "builtin"
     }
@@ -546,9 +472,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def is_known_length_source(src : Expression?) : bool {
-        if (src == null || src._type == null) {  //
-            return false
-        }
+        if (src == null || src._type == null) return false
         let bt = src._type.baseType
         // fixed arrays have dim > 0; otherwise we accept any baseType whose
         // length is determined at the start of the loop.
@@ -610,9 +534,7 @@ class PerfLintVisitor : AstVisitor {
         //! Always pushed in preVisitExprFor — keeps the stack in lockstep with
         //! for-loop nesting so visitExprFor can pop unconditionally. Matched/
         //! disqualified status is filled in by the per-source/per-variable hooks.
-        var state = Perf018State()  //
-        state.disqualified = true   // flips false only when source+iter both match
-        state.matched = false
+        var state = Perf018State(disqualified = true, matched = false)
         perf018_stack    |> push(state)
         unsafe {
             perf018_for_exprs |> push(reinterpret<ExprFor?>(expr))
@@ -620,9 +542,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_pop_and_check() : void {
-        if (empty(perf018_stack)) {  //
-            return
-        }
+        if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         let state = perf018_stack[top_idx]
         let owning = perf018_for_exprs[top_idx]
@@ -650,9 +570,7 @@ class PerfLintVisitor : AstVisitor {
         //! Called from preVisitExprForSource. Peels `range(length(<bareVar>))`
         //! (with one optional ExprCast on either layer) and, when matched, stamps
         //! the candidate's arr_var. Iter var arrives via perf018_record_var.
-        if (empty(perf018_stack)) {  //
-            return
-        }
+        if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
         state.sources_seen++
@@ -671,7 +589,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var rng = s as ExprCall
-        if (rng.func == null || string(rng.func.name) != "range"  //
+        if (rng.func == null || rng.func.name != "range"
             || length(rng.arguments) != 1) {
             perf018_stack[top_idx] = state
             return
@@ -685,7 +603,7 @@ class PerfLintVisitor : AstVisitor {
             return
         }
         var len = inner as ExprCall
-        if (len.func == null || string(len.func.name) != "length"  //
+        if (len.func == null || len.func.name != "length"
             || length(len.arguments) != 1) {
             perf018_stack[top_idx] = state
             return
@@ -703,9 +621,7 @@ class PerfLintVisitor : AstVisitor {
         //! Called from preVisitExprForVariable. Stamps iter_var on the top frame.
         //! When a single iter var pairs with a single recognized source, marks
         //! the candidate matched + un-disqualified.
-        if (empty(perf018_stack) || v == null) {  //
-            return
-        }
+        if (empty(perf018_stack) || v == null) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
         state.vars_seen++
@@ -723,9 +639,7 @@ class PerfLintVisitor : AstVisitor {
         //! preVisitExprForSource and preVisitExprForVariable. Flips matched=true
         //! iff the loop had exactly one source we recognized (arr_var set) and
         //! exactly one iter var (iter_var set).
-        if (empty(perf018_stack)) {  //
-            return
-        }
+        if (empty(perf018_stack)) return
         let top_idx = length(perf018_stack) - 1
         var state = perf018_stack[top_idx]
         if (state.sources_seen == 1 && state.vars_seen == 1
@@ -740,16 +654,12 @@ class PerfLintVisitor : AstVisitor {
         //! True when `at.subexpr[at.index]` accesses the frame's arr_var (bare)
         //! and indexes by the frame's iter_var with no arithmetic. Conservative
         //! by design — field paths, casts on the subexpr, etc. don't qualify.
-        if (frame_idx < 0 || frame_idx >= length(perf018_stack)) {  //
-            return false
-        }
+        if (frame_idx < 0 || frame_idx >= length(perf018_stack)) return false
         let state = perf018_stack[frame_idx]
-        if (state.disqualified || !state.matched  //
+        if (state.disqualified || !state.matched
             || state.arr_var == null || state.iter_var == null) return false
         let av = self->perf018_bare_var_of(at.subexpr)
-        if (av != state.arr_var) {  //
-            return false
-        }
+        if (av != state.arr_var) return false
         var idx = at.index
         if (idx is ExprRef2Value) {
             idx = (idx as ExprRef2Value.subexpr)
@@ -775,9 +685,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf018_off_at() : void {
-        if (empty(at_qualifying_pushes)) {  //
-            return
-        }
+        if (empty(at_qualifying_pushes)) return
         let n = at_qualifying_pushes |> back()
         at_qualifying_pushes |> pop()
         in_qualifying_idx -= n
@@ -786,9 +694,7 @@ class PerfLintVisitor : AstVisitor {
     def perf018_on_var(v : Variable?) : void {
         //! Called from preVisitExprVar: a bare iter_var reference outside any
         //! qualifying ExprAt index slot disqualifies the matching frame.
-        if (v == null || empty(perf018_stack) || in_qualifying_idx > 0) {  //
-            return
-        }
+        if (v == null || empty(perf018_stack) || in_qualifying_idx > 0) return
         let n = length(perf018_stack)
         for (i in range(n)) {
             var st = perf018_stack[i]
@@ -950,14 +856,10 @@ class PerfLintVisitor : AstVisitor {
         //! Parse `var <op> const` or `const <op> var` where op is `<=` or `>=`.
         //! Returns true and fills outputs with: the variable expression,
         //! the int bound, and whether this leg expresses an upper bound on var.
-        if (leg == null || !(leg is ExprOp2)) {  //
-            return false
-        }
+        if (leg == null || !(leg is ExprOp2)) return false
         var op2 = leg as ExprOp2
         let opname = string(op2.op)
-        if (opname != "<=" && opname != ">=") {  //
-            return false
-        }
+        if (opname != "<=" && opname != ">=") return false
         if (op2.right is ExprConstInt && op2.left != null) {
             v_out = op2.left
             bound_out = (op2.right as ExprConstInt).value
@@ -990,15 +892,13 @@ class PerfLintVisitor : AstVisitor {
         var hi_b = false
         // Both legs must parse, constrain the SAME expression, and split into
         // one upper / one lower bound.
-        if (!self->parse_range_leg(expr.left, va, bound_a, hi_a)  //
+        if (!self->parse_range_leg(expr.left, va, bound_a, hi_a)
             || !self->parse_range_leg(expr.right, vb, bound_b, hi_b)
             || !self->expr_equal_struct(va, vb)
             || hi_a == hi_b) return
         let lo = hi_a ? bound_b : bound_a
         let hi = hi_a ? bound_a : bound_b
-        if (lo >= hi || !self->is_known_char_class_range(lo, hi)) {  //
-            return
-        }
+        if (lo >= hi || !self->is_known_char_class_range(lo, hi)) return
         // Pick the helper that matches the detected range. Note: is_alpha covers
         // BOTH cases, so for a single-case range ('a'..'z' or 'A'..'Z') it's a
         // broader replacement, not an exact one — call that out so the user
@@ -1015,17 +915,13 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF017: length(collection) <op> 0/1 → empty / !empty ---
 
     def peel_ref2value(e : Expression? const) : Expression? const {
-        if (e != null && e is ExprRef2Value) {  //
-            return (e as ExprRef2Value.subexpr)
-        }
+        if (e != null && e is ExprRef2Value) return (e as ExprRef2Value.subexpr)
         return e
     }
 
     def const_int_value(e : Expression? const; var v : int&) : bool {
         let inner = self->peel_ref2value(e)
-        if (inner == null) {  //
-            return false
-        }
+        if (inner == null) return false
         if (inner is ExprConstInt) {
             v = (inner as ExprConstInt).value
             return true
@@ -1053,9 +949,7 @@ class PerfLintVisitor : AstVisitor {
                 && current_function.fromGeneric.name == "empty"
                 && current_function.fromGeneric._module != null
                 && current_function.fromGeneric._module.name == "builtin")
-            if (direct_match || generic_match) {  //
-                return
-            }
+            if (direct_match || generic_match) return
         }
         let lhs = self->peel_ref2value(expr.left)
         let rhs = self->peel_ref2value(expr.right)
@@ -1069,9 +963,7 @@ class PerfLintVisitor : AstVisitor {
         }
         let const_side = len_on_left ? rhs : lhs
         var k = 0
-        if (!self->const_int_value(const_side, k) || (k != 0 && k != 1)) {  //
-            return
-        }
+        if (!self->const_int_value(const_side, k) || (k != 0 && k != 1)) return
         let opname = string(expr.op)
         // Canonicalize so that length is on the left; flip op if needed.
         var canon_op = opname
@@ -1118,28 +1010,24 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF015 / PERF016: ternary min/max/abs ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        if (in_closure > 0 || expr.op != "?"  //
+        if (in_closure > 0 || expr.op != "?"
             || expr.subexpr == null || !(expr.subexpr is ExprOp2)) return
         var cmp = expr.subexpr as ExprOp2
         let cop = string(cmp.op)
-        if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")  //
+        if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")
             || expr.left == null || expr.right == null) return
         let t_branch = expr.left
         let f_branch = expr.right
         // PERF016 first — a ternary that matches abs may also superficially match
         // min/max if x and -x ever describe-equal, but they can't. So order is fine.
-        if (self->try_perf016_abs(expr, cmp, t_branch, f_branch, cop)) {  //
-            return
-        }
+        if (self->try_perf016_abs(expr, cmp, t_branch, f_branch, cop)) return
         self->try_perf015_minmax(expr, cmp, t_branch, f_branch, cop)
     }
 
     def try_perf015_minmax(expr : ExprOp3?; cmp : ExprOp2?; t_branch, f_branch : Expression? const; cop : string) : bool {
         let cl = cmp.left
         let cr = cmp.right
-        if (cl == null || cr == null) {  //
-            return false
-        }
+        if (cl == null || cr == null) return false
         // ternary branches must be a permutation of (cl, cr)
         let tcl = self->expr_equal_struct(t_branch, cl)
         let tcr = self->expr_equal_struct(t_branch, cr)
@@ -1147,9 +1035,7 @@ class PerfLintVisitor : AstVisitor {
         let fcr = self->expr_equal_struct(f_branch, cr)
         let same_order = tcl && fcr   // T==L, F==R
         let swap_order = tcr && fcl   // T==R, F==L
-        if (!same_order && !swap_order) {  //
-            return false
-        }
+        if (!same_order && !swap_order) return false
         // Mapping
         //   <  / <=  : T==L,F==R → min;  T==R,F==L → max
         //   >  / >=  : T==L,F==R → max;  T==R,F==L → min
@@ -1175,9 +1061,7 @@ class PerfLintVisitor : AstVisitor {
             return false
         }
         let x_expr = x_on_left ? cmp.left : cmp.right
-        if (x_expr == null) {  //
-            return false
-        }
+        if (x_expr == null) return false
         // Identify negated branch (-x) and plain branch (x)
         var neg_then = false
         var ok = false
@@ -1188,9 +1072,7 @@ class PerfLintVisitor : AstVisitor {
             neg_then = false
             ok = true
         }
-        if (!ok) {  //
-            return false
-        }
+        if (!ok) return false
         // Determine canonical sign of x in comparison: x < 0 or x > 0 etc.
         // Reduce to: "is x's value-relation `negative` or `positive`" in the true branch
         // Forms that produce abs:
@@ -1212,40 +1094,30 @@ class PerfLintVisitor : AstVisitor {
                 is_abs = true
             }
         }
-        if (!is_abs) {  //
-            return false
-        }
+        if (!is_abs) return false
         self->perf_warning("PERF016: ternary abs — use 'abs(x)' from math module", expr.at)
         return true
     }
 
     def is_neg_of(maybe_neg : Expression? const; ref : Expression? const) : bool {
         //! True when `maybe_neg` is `-ref` structurally.
-        if (maybe_neg == null || !(maybe_neg is ExprOp1)) {  //
-            return false
-        }
+        if (maybe_neg == null || !(maybe_neg is ExprOp1)) return false
         let op1 = maybe_neg as ExprOp1
-        if (op1.op != "-") {  //
-            return false
-        }
+        if (op1.op != "-") return false
         return self->expr_equal_struct(op1.subexpr, ref)
     }
 
     // --- PERF011: unnecessary get_ptr() for field access ---
 
     def override preVisitExprField(expr : ExprField?) : void {
-        if (in_closure > 0) {  //
-            return
-        }
+        if (in_closure > 0) return
         if (self->is_get_ptr_of_smart_ptr(expr.value)) {
             self->perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
         }
     }
 
     def override preVisitExprSafeField(expr : ExprSafeField?) : void {
-        if (in_closure > 0) {  //
-            return
-        }
+        if (in_closure > 0) return
         if (self->is_get_ptr_of_smart_ptr(expr.value)) {
             self->perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
         }
@@ -1254,9 +1126,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF002 + PERF003: character_at (counter-based) ---
 
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        if (in_closure > 0 || expr.func == null) {  //
-            return
-        }
+        if (in_closure > 0 || expr.func == null) return
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
             var ecall = expr
             // PERF002: start tracking — any loop var inside this call triggers warning
@@ -1272,9 +1142,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
-        if (expr.func == null) {  //
-            return <- expr
-        }
+        if (expr.func == null) return <- expr
         // PERF003: character_at anywhere — fires even inside closures
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
             var ecall = expr
@@ -1335,9 +1203,7 @@ class PerfLintVisitor : AstVisitor {
     // --- PERF004: string builder reassignment in loop (counter-based) ---
 
     def override preVisitExprCopy(expr : ExprCopy?) : void {
-        if (in_closure > 0 || loop_depth == 0) {  //
-            return
-        }
+        if (in_closure > 0 || loop_depth == 0) return
         var v = self->find_string_var_from_expr(expr.left)
         if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
@@ -1350,9 +1216,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def override preVisitExprMove(expr : ExprMove?) : void {
-        if (in_closure > 0 || loop_depth == 0) {  //
-            return
-        }
+        if (in_closure > 0 || loop_depth == 0) return
         var v = self->find_string_var_from_expr(expr.left)
         if (v != null && self->is_defined_outside_loop(v) && expr.right is ExprStringBuilder) {
             string_builder_target_var = v
@@ -1380,9 +1244,7 @@ class PerfLintVisitor : AstVisitor {
     // --- Central ExprVar handler (PERF002, PERF004, PERF005) ---
 
     def override preVisitExprVar(expr : ExprVar?) : void {
-        if (in_closure > 0) {  //
-            return
-        }
+        if (in_closure > 0) return
         let v = expr.variable
         // PERF018: a bare iter_var reference outside a qualifying ExprAt index slot disqualifies the loop.
         self->perf018_on_var(v)
