@@ -987,9 +987,7 @@ def clone_dim(var a; b : auto | #) {
 def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
     let ln = length(b)
     unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
-    if (ln == 0) {
-        return
-    }
+    return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {
         unsafe {
             memcpy(addr(a[0]), addr(b[0]), typeinfo sizeof(a[0]) * ln)
@@ -1004,9 +1002,7 @@ def clone(var a : array<auto(TT)>; b : array<TT> ==const | #) {
 def clone(var a : array<auto(TT)>; var b : array<TT> ==const | #) {
     let ln = length(b)
     unsafe(resize(a, ln))// note: is this safe? do we actaully need to init first???
-    if (ln == 0) {
-        return
-    }
+    return if (ln == 0)
     static_if (typeinfo is_pod(type<TT>)) {
         unsafe {
             memcpy(addr(a[0]), addr(b[0]), typeinfo sizeof(a[0]) * ln)

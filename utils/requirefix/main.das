@@ -1,7 +1,7 @@
 options gen2
 
 require requirefix
-require fio
+require daslib/fio
 
 // This is just a simple CLI demo.
 // The real use case will probably involve integrating the requirefix
@@ -23,7 +23,7 @@ def main() {
         }
         target_files |> push(arg)
     }
-    if (length(target_files) == 0) {
+    if (length(target_files) == 0) {  //
         return
     }
 
@@ -48,10 +48,10 @@ def main() {
                 print("{target}:{mod.required_at}: public\n")
                 continue
             }
-            if (length(mod.refs) > 0) {
+            if (length(mod.refs) > 0) {  //
                 var proxy_requires : array<string>
                 for (ref in mod.refs) {
-                    if (ref.kind != ModuleRefKind.pub_require) {
+                    if (ref.kind != ModuleRefKind.pub_require) {  //
                         break
                     }
                     proxy_requires |> push(ref.key)
@@ -70,7 +70,7 @@ def main() {
 
 def read_file(path : string) : string {
     let f = fopen(path, "r")
-    if (f == null) {
+    if (f == null) {  //
         return ""
     }
     let s = fread(f)
