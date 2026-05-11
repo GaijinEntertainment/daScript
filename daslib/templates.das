@@ -74,9 +74,7 @@ class TemplateMacro : AstFunctionAnnotation {
         let taidx = find_index_if(each(expr.func.annotations)) $(ann) {
             return ann.annotation.name == "template"
         }
-        if (taidx == -1) {
-            return expr
-        }
+        if (taidx == -1) return expr
         var ffunc = expr.func
         // new call
         var newcall = unsafe(reinterpret<ExprCallFunc?> clone_expression(expr))

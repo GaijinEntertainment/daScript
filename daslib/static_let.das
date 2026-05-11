@@ -128,9 +128,7 @@ class StaticLetMacro : AstFunctionAnnotation {
                 }
             }
         }
-        if (!success) {
-            return null
-        }
+        if (!success) return null
         return <- quote() {
             pass
         }

@@ -22,9 +22,7 @@ class QsortMacro : AstCallMacro {
     //! For the handled types like das`vector its replaced with `sort(temp_array(value),block)`.
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         macro_verify(expr.arguments |> length == 2, prog, expr.at, "expecting qsort(value, block)")
-        if (expr.arguments[0]._type == null || expr.arguments[1]._type == null) {
-            return null
-        }
+        if (expr.arguments[0]._type == null || expr.arguments[1]._type == null) return null
         // todo: verify correct block type?
         macro_verify(expr.arguments[1]._type.baseType == Type.tBlock, prog, expr.at, "expecting 2nd argument to be block(<a,b:auto(TT)>:bool))")
         if (expr.arguments[0]._type.dim |> length != 0 || expr.arguments[0]._type.baseType == Type.tArray) {

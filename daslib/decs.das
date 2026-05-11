@@ -101,15 +101,11 @@ def private normalize_file_name(name : string) : string {
     var pos = 0
     while (true) {
         let idx = find(s, "/", pos)
-        if (idx < 0) {
-            break
-        }
+        if (idx < 0) break
         lastSlash = idx
         pos = idx + 1
     }
-    if (lastSlash >= 0) {
-        return slice(s, lastSlash + 1)
-    }
+    if (lastSlash >= 0) return slice(s, lastSlash + 1)
     return s
 }
 
@@ -505,7 +501,7 @@ def private with_archetype(hash : ComponentHash; blk : block<(var arch : Archety
 
 def private create_archetype(var arch : Archetype; cmp : ComponentMap; idx : int) {
     //! Creates archetype from the component map.
-    assert(length(arch.components) == 0)
+    assert(empty(arch.components))
     arch.eidIndex = -1
     for (kv, kvi in cmp, count()) {
         var ct & = unsafe(decsState.componentTypeCheck[kv.name])
@@ -599,31 +595,21 @@ def public has(arch : Archetype; name : string) {
 }
 
 def private can_process_request(var erq : EcsRequest; var arch : Archetype) {
-    if (erq.hash == arch.hash) {
-        return true
-    }
+    if (erq.hash == arch.hash) return true
     for (r in erq.req) {
-        if (!arch |> has(r)) {
-            return false
-        }
+        if (!arch |> has(r)) return false
     }
     for (r in erq.reqn) {
-        if (arch |> has(r)) {
-            return false
-        }
+        if (arch |> has(r)) return false
     }
     return true
 }
 
 def public verify_request(var erq : EcsRequest) : tuple<ok : bool; error : string> {
     //! Verifies ECS request. Returns pair of boolean (true for OK) and error message.
-    if (erq.hash == 0ul || (empty(erq.req) && empty(erq.reqn))) {
-        return (ok = true, error = "")     // this queries just about everything
-    }
+    if (erq.hash == 0ul || (empty(erq.req) && empty(erq.reqn))) return (ok = true, error = "")     // this queries just about everything
     for (N in erq.reqn) {// assuming require_not is typically shorter
-        if (erq.req |> binary_search(N)) {
-            return (ok = false, error = "duplicate req and neq {N}")
-        }
+        if (erq.req |> binary_search(N)) return (ok = false, error = "duplicate req and neq {N}")
     }
     return (ok = true, error = "")
 }
@@ -669,9 +655,7 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
     //! Invokes block for the specific entity id, given request.
     //! Request is returned by a specified function.
     let lookup = decsState.entityLookup[eid.id]
-    if (lookup.generation != eid.generation) {
-        return false
-    }
+    if (lookup.generation != eid.generation) return false
     var qi = -1
     decsState.queryLookup |> get(hash) $(ql) {
         qi = ql - 1
@@ -680,9 +664,7 @@ def public for_eid_archetype(eid : EntityId implicit; hash : ComponentHash; var 
         qi = lookup_request(invoke(erq))
     }
     let aidx = decsState.archetypeLookup[lookup.archetype]
-    if (aidx == 0) {
-        return false
-    }
+    if (aidx == 0) return false
     if (binary_search(decsState.ecsQueries[qi].archetypes, aidx - 1)) {
         var arch & = unsafe(decsState.allArchetypes[aidx - 1])
         assert(arch.size > 0)
@@ -728,9 +710,7 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
         var arch & = unsafe(decsState.allArchetypes[aidx])
         if (arch.size > 0) {
             ++insideQuery; let res = invoke(blk, arch); --insideQuery
-            if (res) {
-                return true
-            }
+            if (res) return true
         }
     }
     return false
@@ -865,9 +845,7 @@ def public get_optional(arch : Archetype; name : string; value : auto(TT)?) : it
 
 def private update_entity_imm(eid : EntityId; blk : lambda<(eid : EntityId; var cmp : ComponentMap) : void>) {
     let lookup = decsState.entityLookup[eid.id]
-    if (lookup.generation != eid.generation) {
-        return
-    }
+    if (lookup.generation != eid.generation) return
     var cmp : ComponentMap
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
     let eidx = decsState.entityLookup[eid.id].index
@@ -964,9 +942,7 @@ def public create_entities(count : int; blk : block<(eid : EntityId; i : int; va
     //!     create_entities(100) $(eid : EntityId; i : int; var cmp : ComponentMap)
     //!         apply_decs_template(cmp, Particle(pos = origin, vel = compute_vel(i)))
     //!
-    if (count <= 0) {
-        return
-    }
+    if (count <= 0) return
     if (insideQuery != 0) {
         panic("decs: can't call `create_entities` from inside query")
     }
@@ -1023,9 +999,7 @@ def public create_entities_from_cmp(count : int; var cmp : ComponentMap;
     //!
     //! Typically called by macro-generated ``create_entities`T`` functions rather than
     //! directly. See `create_entities` for the simpler ComponentMap-based API.
-    if (count <= 0) {
-        return
-    }
+    if (count <= 0) return
     if (insideQuery != 0) {
         panic("decs: can't call `create_entities_from_cmp` from inside query")
     }
@@ -1075,12 +1049,8 @@ def public commit {
 def public is_alive(eid : EntityId) : bool {
     //! Returns true if the entity is alive (exists and has not been deleted).
     //! An entity is alive when its id is within bounds and its generation matches the lookup table.
-    if (eid == INVALID_ENTITY_ID) {
-        return false
-    }
-    if (int(eid.id) >= length(decsState.entityLookup)) {
-        return false
-    }
+    if (eid == INVALID_ENTITY_ID) return false
+    if (int(eid.id) >= length(decsState.entityLookup)) return false
     return decsState.entityLookup[eid.id].generation == eid.generation
 }
 
@@ -1098,9 +1068,7 @@ def public get_component(eid : EntityId; name : string; defval : auto(TT)) : TT 
     //! If the entity is dead or the component is not found, returns ``defval``.
     //! The type of the component is inferred from the type of ``defval``.
     //! Panics if the component exists but its type does not match.
-    if (!is_alive(eid)) {
-        return defval
-    }
+    if (!is_alive(eid)) return defval
     let lookup = decsState.entityLookup[eid.id]
     let arch_index = unsafe(decsState.archetypeLookup[lookup.archetype]) - 1
     var arch & = unsafe(decsState.allArchetypes[arch_index])
@@ -1157,9 +1125,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
         }
     }
     cv.info.dumper = @@(elem : void?) {
-        if (elem == null) {
-            return ""
-        }
+        if (elem == null) return ""
         unsafe {
             static_if (typeinfo is_dim(value)) {
                 var pTT = reinterpret<TT[typeinfo dim(value)] -const -& -#?> elem
@@ -1202,9 +1168,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
         }
     }
     cv.info.clonner = @@(var dst : array<uint8>; src : array<uint8>) {
-        if (length(src) == 0) {
-            return
-        }
+        if (empty(src)) return
         static_if (typeinfo is_dim(value)) {
             let stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
             dst |> resize(length(src))
@@ -1284,7 +1248,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
                 var ssrc : array<TT -const -& -#>
                 let size = length(src) / stride
                 unsafe {
-                    if (length(src) > 0) {
+                    if (!empty(src)) {
                         _builtin_make_temp_array(ssrc, addr(src[0]), size)
                     }
                 }
@@ -1294,9 +1258,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
     }
     static_if (typeinfo can_delete(type<TT -const -& -#>)) {
         cv.info.eraser = @@(var arr : array<uint8>) {
-            if (length(arr) == 0) {
-                return
-            }
+            if (empty(arr)) return
             static_if (typeinfo is_dim(value)) {
                 let stride = typeinfo sizeof(type<TT[typeinfo dim(value)] -const -& -#>)
                 for (i in range(length(arr) / stride)) {
@@ -1360,9 +1322,7 @@ def public find_component_index(arch : Archetype; name : string) : int {
     //! Returns the index of a named component within the archetype's component array.
     //! Used to resolve component locations once, then write many entities via `set_direct_at`.
     for (i in range(length(arch.components))) {
-        if (arch.components[i].name == name) {
-            return i
-        }
+        if (arch.components[i].name == name) return i
     }
     panic("decs: find_component_index — component '{name}' not found in archetype")
     return -1

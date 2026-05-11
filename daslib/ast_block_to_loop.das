@@ -92,15 +92,11 @@ class B2LVisitor : AstVisitor {
         return <- expr
     }
     def override visitExprBreak(var expr : ExprBreak?) : ExpressionPtr {
-        if (inClosure != 0 || inArchetype != 0 || loop_depth |> back != 0) {
-            return <- expr
-        }
+        if (inClosure != 0 || inArchetype != 0 || loop_depth |> back != 0) return <- expr
         return <- make_static_assert_false("break is not allowed inside this macros's block {loop_depth}", expr.at)
     }
     def override visitExprContinue(var expr : ExprContinue?) : ExpressionPtr {
-        if (inClosure != 0 || inArchetype != 0 || loop_depth |> back != 0) {
-            return <- expr
-        }
+        if (inClosure != 0 || inArchetype != 0 || loop_depth |> back != 0) return <- expr
         return <- make_static_assert_false("continue is not allowed inside this macros's block {loop_depth}", expr.at)
     }
 }

@@ -32,9 +32,7 @@ require strings
 def private get_arg_name(funcType : TypeDeclPtr; index : int) : string {
     if (index < length(funcType.argNames)) {
         let n = string(funcType.argNames[index])
-        if (!empty(n)) {
-            return n
-        }
+        if (!empty(n)) return n
     }
     return "_delegate_arg_{index}"
 }
@@ -212,16 +210,12 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
         // try DelegateReturn
         if (is_typemacro_template_instance(passArgument, template_type_ret, extra_template_arguments)) {
             var args_ret <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
-            if (infer_struct_aliases(passArgument.structType, args_ret)) {
-                return infer_template_types(passArgument, args_ret)
-            }
+            if (infer_struct_aliases(passArgument.structType, args_ret)) return infer_template_types(passArgument, args_ret)
         }
         // try DelegateVoid
         if (is_typemacro_template_instance(passArgument, template_type_void, extra_template_arguments)) {
             var args_void <- [TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(FuncType))]
-            if (infer_struct_aliases(passArgument.structType, args_void)) {
-                return infer_template_types(passArgument, args_void)
-            }
+            if (infer_struct_aliases(passArgument.structType, args_void)) return infer_template_types(passArgument, args_void)
         }
         return null
     }
@@ -230,9 +224,7 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
     var template_arguments <- [
         TypeMacroTemplateArgument(name = "DelegateLambda", argument_type = clone_type(lambdaType))
     ]
-    if (!verify_arguments(template_arguments)) {
-        return null
-    }
+    if (!verify_arguments(template_arguments)) return null
 
     // pick template
     var template_struct = is_void ? template_type_void.structType : template_type_ret.structType
@@ -241,9 +233,7 @@ def public delegate(macroArgument, passArgument : TypeDeclPtr; FuncType : TypeDe
 
     // deduplication
     var existing_struct = compiling_program().find_unique_structure(struct_name)
-    if (existing_struct != null) {
-        return new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = macroArgument.at)
-    }
+    if (existing_struct != null) return new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = macroArgument.at)
 
     // ── build reification variables ────────────────────────────────────
     let nArgs = length(FuncType.argTypes)

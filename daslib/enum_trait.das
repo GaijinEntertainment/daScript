@@ -41,9 +41,7 @@ def public to_enum(ent : auto(EnumT), name : string) : EnumT {
     //! converts string to enum value, panics if not found
     //!  usage: let e = to_enum(type<EnumType>,"EnumValueName")
     for (e in type<EnumT>) {
-        if ("{e}" == name) {
-            return e
-        }
+        if ("{e}" == name) return e
     }
     panic("to_enum: enum value '{name}' not found in enum '{typeinfo typename(type<EnumT>)}'")
     return default<EnumT>
@@ -54,9 +52,7 @@ def public to_enum(ent : auto(EnumT), name : string; defaultValue : EnumT) : Enu
     //! converts string to enum value, returns defaultValue if not found
     //!  usage: let e = to_enum(type<EnumType>,"EnumValueName", EnumType.DefaultValue)
     for (e in type<EnumT>) {
-        if ("{e}" == name) {
-            return e
-        }
+        if ("{e}" == name) return e
     }
     return defaultValue
 }

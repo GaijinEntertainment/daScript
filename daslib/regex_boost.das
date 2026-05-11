@@ -60,7 +60,7 @@ class RegexReader : AstReaderMacro {
                     break
                 }
             }
-            if (valid_flags && length(flags_str) > 0) {
+            if (valid_flags && !empty(flags_str)) {
                 pattern = slice(pattern, 0, tilde_pos)
             }
         }

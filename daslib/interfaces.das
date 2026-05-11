@@ -39,9 +39,7 @@ class InterfaceMacro : AstStructureAnnotation {
     //! function-typed fields (no data members). Applied via ``[interface]`` annotation.
     def override finish(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         for (fld in st.fields) {
-            if (fld.name == "__rtti") {
-                continue
-            }
+            if (fld.name == "__rtti") continue
             if (!fld._type.isFunction) {
                 errors := "interface can only define functions. {fld.name} is not a function\n{errors}"
                 return false
@@ -279,24 +277,16 @@ class ImplementsMacro : AstStructureAnnotation {
             return true  // apply already reported this error
         }
         var iface <- compiling_program() |> find_unique_structure(iface_name)
-        if (iface == null) {
-            return true  // apply already reported this error
-        }
+        if (iface == null) return true  // apply already reported this error
         // Check each interface method
         let missing = build_string() $(var w) {
             for (ifld in iface.fields) {
                 let ifld_name = string(ifld.name)
                 // Skip compiler-generated fields
-                if (ifld_name == "__rtti" || ifld_name == "__finalize") {
-                    continue
-                }
-                if (!ifld._type.isFunction) {
-                    continue
-                }
+                if (ifld_name == "__rtti" || ifld_name == "__finalize") continue
+                if (!ifld._type.isFunction) continue
                 // Methods with a default implementation (init != null) are optional
-                if (ifld.init != null) {
-                    continue
-                }
+                if (ifld.init != null) continue
                 // Abstract method — struct must provide {iface_name}`{method_name}
                 let expected = "{iface_name}`{ifld_name}"
                 var found = false
@@ -311,7 +301,7 @@ class ImplementsMacro : AstStructureAnnotation {
                 }
             }
         }
-        if (length(missing) > 0) {
+        if (!empty(missing)) {
             errors := missing
             return false
         }
@@ -324,25 +314,15 @@ class ImplementsMacro : AstStructureAnnotation {
 def private is_const_interface(st : Structure?) : bool {
     //! Returns ``true`` when every function field in the given [interface] struct
     //! has a const ``self`` parameter (i.e. all methods are const).
-    if (st == null) {
-        return false
-    }
+    if (st == null) return false
     for (fld in st.fields) {
         let fn = string(fld.name)
-        if (fn == "__rtti" || fn == "__finalize") {
-            continue
-        }
-        if (!fld._type.isFunction) {
-            continue
-        }
+        if (fn == "__rtti" || fn == "__finalize") continue
+        if (!fld._type.isFunction) continue
         // Check if the first arg (self) is const.
         // argTypes[0] is self for class methods.
-        if (length(fld._type.argTypes) == 0) {
-            continue
-        }
-        if (!fld._type.argTypes[0].isConst) {
-            return false
-        }
+        if (length(fld._type.argTypes) == 0) continue
+        if (!fld._type.argTypes[0].isConst) return false
     }
     return true
 }
@@ -352,13 +332,9 @@ def private is_const_interface(st : Structure?) : bool {
 // [interface] is a user-defined structure_macro, not a built-in flag.
 def private is_interface_struct(st : Structure?) : bool {
     //! Returns ``true`` when the structure carries the ``[interface]`` annotation.
-    if (st == null) {
-        return false
-    }
+    if (st == null) return false
     for (ann in st.annotations) {
-        if (ann.annotation.name == "interface") {
-            return true
-        }
+        if (ann.annotation.name == "interface") return true
     }
     return false
 }
@@ -410,18 +386,14 @@ class InterfaceAsIs : AstVariantMacro {
         // We only handle pointers to user structs.  Anything else (int,
         // float, handled types, etc.) is declined immediately.
         assume vtype = expr.value._type
-        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) {
-            return null
-        }
+        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) return null
         // expr.name is the right-hand side — the interface name (e.g. "IDrawable").
         // Convert from das_string to string for API compatibility, then look up
         // the struct by name in the compiling program.  If it doesn't exist or
         // isn't annotated with [interface], we decline.
         let iname = string(expr.name)
         var tgt = prog |> find_unique_structure(iname)
-        if (tgt == null || !is_interface_struct(tgt)) {
-            return null
-        }
+        if (tgt == null || !is_interface_struct(tgt)) return null
         // ── Field lookup ──
         // ImplementsMacro adds a field named `get`IFoo` (a function pointer
         // to the getter) for each [implements(IFoo)].  If the field exists,
@@ -451,14 +423,10 @@ class InterfaceAsIs : AstVariantMacro {
     def override visitExprAsVariant(prog : ProgramPtr; mod : Module?; expr : ExprAsVariant?) : ExpressionPtr {
         // ── Type guard (same as visitExprIsVariant) ──
         assume vtype = expr.value._type
-        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) {
-            return null
-        }
+        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) return null
         let iname = string(expr.name)
         var tgt = prog |> find_unique_structure(iname)
-        if (tgt == null || !is_interface_struct(tgt)) {
-            return null
-        }
+        if (tgt == null || !is_interface_struct(tgt)) return null
         // ── Field lookup ──
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType
@@ -490,14 +458,10 @@ class InterfaceAsIs : AstVariantMacro {
     def override visitExprSafeAsVariant(prog : ProgramPtr; mod : Module?; expr : ExprSafeAsVariant?) : ExpressionPtr {
         // ── Type guard (same pattern) ──
         assume vtype = expr.value._type
-        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) {
-            return null
-        }
+        if (!(vtype.isPointer && vtype.firstType != null && vtype.firstType.isStructure)) return null
         let iname = string(expr.name)
         var tgt = prog |> find_unique_structure(iname)
-        if (tgt == null || !is_interface_struct(tgt)) {
-            return null
-        }
+        if (tgt == null || !is_interface_struct(tgt)) return null
         // ── Field lookup ──
         let getter_field = "get`{iname}"
         var st = vtype.firstType.structType

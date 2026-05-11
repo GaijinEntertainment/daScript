@@ -34,9 +34,7 @@ def sort_unique(var a : array<auto(TT)>) {
     //! Returns an array of elements from a, sorted and with duplicates removed.
     //! The elements are sorted in ascending order.
     //! The resulting array has only unique elements.
-    if (empty(a)) {
-        return
-    }
+    if (empty(a)) return
     sort(a)
     var b <- unique(a)
     delete a
@@ -432,9 +430,7 @@ def fill(var a; value) {
 def is_sorted(a : array<auto(TT)>) : bool {
     //! Returns true if the array is sorted in non-descending order.
     for (i in range(1, length(a))) {
-        if (a[i] < a[i - 1]) {
-            return false
-        }
+        if (a[i] < a[i - 1]) return false
     }
     return true
 }
@@ -442,9 +438,7 @@ def is_sorted(a : array<auto(TT)>) : bool {
 def is_sorted(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) : bool {
     //! Returns true if the array is sorted according to the provided less function.
     for (i in range(1, length(a))) {
-        if (invoke(less, a[i], a[i - 1])) {
-            return false
-        }
+        if (invoke(less, a[i], a[i - 1])) return false
     }
     return true
 }
@@ -463,9 +457,7 @@ def rotate(var a : array<auto>; mid : int) {
     //! Rotates the array so that the element at index mid becomes the first element.
     //! Elements before mid are moved to the end.
     let l = length(a)
-    if (l == 0 || mid == 0 || mid == l) {
-        return
-    }
+    if (l == 0 || mid == 0 || mid == l) return
     assert(mid > 0 && mid < l, "rotate mid out of range")
     // reverse [0, mid), [mid, l), then reverse all
     let lm1 = l - 1
@@ -494,9 +486,7 @@ def rotate(var a; mid : int) {
 
 def min_element(a : array<auto(TT)>) : int {
     //! Returns the index of the minimum element in the array, or -1 if the array is empty.
-    if (length(a) == 0) {
-        return -1
-    }
+    if (length(a) == 0) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (a[i] < a[best]) {
@@ -508,9 +498,7 @@ def min_element(a : array<auto(TT)>) : int {
 
 def min_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) : int {
     //! Returns the index of the minimum element according to the provided less function, or -1 if the array is empty.
-    if (length(a) == 0) {
-        return -1
-    }
+    if (length(a) == 0) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (invoke(less, a[i], a[best])) {
@@ -522,9 +510,7 @@ def min_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) 
 
 def max_element(a : array<auto(TT)>) : int {
     //! Returns the index of the maximum element in the array, or -1 if the array is empty.
-    if (length(a) == 0) {
-        return -1
-    }
+    if (length(a) == 0) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (a[best] < a[i]) {
@@ -536,9 +522,7 @@ def max_element(a : array<auto(TT)>) : int {
 
 def max_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) : int {
     //! Returns the index of the maximum element according to the provided less function, or -1 if the array is empty.
-    if (length(a) == 0) {
-        return -1
-    }
+    if (length(a) == 0) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (invoke(less, a[best], a[i])) {
@@ -647,13 +631,9 @@ def difference(a, b : table<auto(TT)>) : table<TT> {
 
 def identical(a, b : table<auto(TT)>) : bool {
     //! Returns true if the two sets are identical.
-    if (length(a) != length(b)) {
-        return false
-    }
+    if (length(a) != length(b)) return false
     for (k in keys(a)) {
-        if (!b |> key_exists(k)) {
-            return false
-        }
+        if (!b |> key_exists(k)) return false
     }
     return true
 }
@@ -676,13 +656,9 @@ def symmetric_difference(a, b : table<auto(TT)>) : table<TT> {
 
 def is_subset(a, b : table<auto(TT)>) : bool {
     //! Returns true if all elements of a are contained in b.
-    if (length(a) > length(b)) {
-        return false
-    }
+    if (length(a) > length(b)) return false
     for (k in keys(a)) {
-        if (!b |> key_exists(k)) {
-            return false
-        }
+        if (!b |> key_exists(k)) return false
     }
     return true
 }

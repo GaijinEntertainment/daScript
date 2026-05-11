@@ -517,9 +517,7 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         macro_verify(!srcaType.firstType.isAutoOrAlias, prog, call.at, "first argument element type cannot be auto or alias")
         macro_verify(!srcbType.firstType.isAutoOrAlias, prog, call.at, "second argument element type cannot be auto or alias")
         var parts = parse_equi_join_on(call.arguments[2], prog, call.at)
-        if (!parts.ok) {
-            return null
-        }
+        if (!parts.ok) return null
         var iterTypeA = clone_iterator_type(srcaType)
         var iterTypeB = clone_iterator_type(srcbType)
         let la_fresh = "__la__"
@@ -729,9 +727,7 @@ def private is_call_or_generic(var expr : Expression?, name, moduleName : string
         var call = expr as ExprCall
         if (call.func.name == name && call.func._module.name == moduleName) {
             return call
-        } elif (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName) {
-            return call
-        }
+        } elif (call.func.fromGeneric != null && call.func.fromGeneric.name == name && call.func.fromGeneric._module.name == moduleName) return call
     }
     return null
 }
@@ -895,9 +891,7 @@ def private is_linq_call(var expr : Expression?) : bool {
         }
         if (linqCalls.key_exists(funcName)) {
             let linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
-            if (linqCall.moduleName == call.func._module.name) {
-                return true
-            }
+            if (linqCall.moduleName == call.func._module.name) return true
         }
     }
     return false
@@ -915,13 +909,9 @@ def private flatten_linq(var expr : Expression?)  {
                 topFunc = topFunc.fromGeneric
             }
             let funcName = string(topFunc.name)
-            if (!linqCalls.key_exists(funcName)) {
-                break
-            }
+            if (!linqCalls.key_exists(funcName)) break
             var linqCall & = unsafe(linqCalls?[funcName] ?? default<LinqCall>)
-            if (linqCall.moduleName != topFunc._module.name) {
-                break
-            }
+            if (linqCall.moduleName != topFunc._module.name) break
             if (!linqCall.skip) {
                 calls.push((topCall, unsafe(addr(linqCall))))
             }
@@ -1131,9 +1121,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
     //!   if expr is not linq call, return null
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
-    if (calls |> length == 0) {
-        return null
-    }
+    if (calls |> length == 0) return null
     var topExpr = clone_expression(top)
     var topExprType = clone_type(top._type)
     var topValue = qmacro(source)

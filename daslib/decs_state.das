@@ -52,16 +52,14 @@ class ContextStateAgent : DapiDebugAgent {
     //! Debug agent that exposes DECS state for inspection.
     def override onCollect(var ctx : Context; at : LineInfo) {
         let pState = unsafe(get_context_global_variable(ctx, "decsState"))
-        if (pState == null) {
-            return
-        }
+        if (pState == null) return
         let decsState = unsafe(reinterpret<DecsState? const>(pState))
         for (arch in decsState.allArchetypes) {
             var arq = EcsArchetypeView(hash = arch.hash, size = arch.size)
             arq.components |> reserve(length(arch.components))
             for (c in arch.components) {
                 var cv = EcsComponentView(name = c.name, vtype = c.info.fullName, stride = c.stride)
-                if (length(c.data) > 0) {
+                if (!empty(c.data)) {
                     var tinfo : TypeInfo const?
                     let fnTypeInfo = c.info.mkTypeInfo
                     unsafe {

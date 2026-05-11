@@ -96,9 +96,7 @@ class ConstantExpressionMacro : AstFunctionAnnotation {
         }
         argi |> sort_unique
         argi |> reverse
-        if (empty(argi)) {
-            return null
-        }
+        if (empty(argi)) return null
         var func_copy = clone_function(expr.func)
         let func_name = build_string() $(var w) {
             w |> write("{func_copy.name}`constant_expression")

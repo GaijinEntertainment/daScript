@@ -61,9 +61,7 @@ def private null_coalescing(a : json::JsonValue const?; val : auto(TT)) : TT {
     if (a != null) {
         if (a.value is _number) {
             return TT(a.value as _number)
-        } elif (a.value is _longint) {
-            return TT(a.value as _longint)
-        }
+        } elif (a.value is _longint) return TT(a.value as _longint)
     }
     return val
 }
@@ -75,9 +73,7 @@ def private null_coalescing_with_string(a : json::JsonValue const?; val : auto(T
             return TT(a.value as _number)
         } elif (a.value is _longint) {
             return TT(a.value as _longint)
-        } elif (a.value is _string) {
-            return TT(a.value as _string)
-        }
+        } elif (a.value is _string) return TT(a.value as _string)
     }
     return val
 }
@@ -155,9 +151,7 @@ def operator ?. value(var a : JsonValue? ==const) : JsValue? {
 [macro_function]
 def private is_json_ptr_value(td : TypeDeclPtr) {
     //! Checks if the type is a pointer to json::JsonValue
-    if (td.baseType != Type.tPointer || td.firstType == null || td.firstType.baseType != Type.tStructure) {
-        return false
-    }
+    if (td.baseType != Type.tPointer || td.firstType == null || td.firstType.baseType != Type.tStructure) return false
     let st = td.firstType.structType
     return st.name == "JsonValue" && st._module.name == "json"
 }
@@ -236,9 +230,7 @@ class private JsonReader : AstReaderMacro {
 [expect_any_enum(ent), template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = default<EnumT>) : EnumT {
     //! Parse a JSON value and return the corresponding native value.
-    if (v == null || !((v.value is _string) || (v.value is _number) || (v.value is _longint))) {
-        return defV
-    }
+    if (v == null || !((v.value is _string) || (v.value is _number) || (v.value is _longint))) return defV
     if (v.value is _string) {
         let name = v.value as _string
         var res : auto(EnumTT) = default<EnumT>
@@ -255,9 +247,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(EnumT); defV : EnumT = def
     } else {
         let intValue = (v.value is _number) ? int(v.value as _number) : int(v.value as _longint)
         for (it in defV) {
-            if (intValue == int(it)) {
-                return it
-            }
+            if (intValue == int(it)) return it
         }
         panic("not a valid enumeration {intValue} in {typeinfo typename(type<EnumT>)}")
     }
@@ -383,9 +373,7 @@ def JV(v : auto(VecT)) {
 [expect_any_vector_type(ent), template(ent), unused_argument(ent)]
 def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT()) {
     //! Parse a JSON value and return the corresponding vector value.
-    if (v == null) {
-        return defV
-    }
+    if (v == null) return defV
     assume vo = v
     static_if (typeinfo vector_dim(defV) == 2) {
         return VecT(vo?["x"] ?? defV.x, vo?["y"] ?? defV.y)
@@ -400,9 +388,7 @@ def from_JV(v : JsonValue const explicit?; ent : auto(VecT); defV : VecT = VecT(
 def from_JV(v : JsonValue const explicit?; anything : table< auto(KT); auto(VT) >) {
     //! Parse a JSON value and return the corresponding table value.
     var ret : table<KT; VT>
-    if (v == null || !(v.value is _object)) {
-        return <- ret
-    }
+    if (v == null || !(v.value is _object)) return <- ret
     unsafe {
         let tab & = v.value as _object
         for (k, vv in keys(tab), values(tab)) {
@@ -451,14 +437,10 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
     //! This is the main dispatch function that handles various types.
     static_if (typeinfo is_dim(anything)) {
         var ret : TT[typeinfo dim(anything)]
-        if (v == null || !(v.value is _array)) {
-            return <- ret
-        }
+        if (v == null || !(v.value is _array)) return <- ret
         unsafe {
             let arr & = v.value as _array
-            if (arr |> length != typeinfo dim(anything)) {
-                return <- ret
-            }
+            if (arr |> length != typeinfo dim(anything)) return <- ret
             for (i in 0..typeinfo dim(anything)) {
                 move_to_ref(ret[i], _::from_JV(arr[i], decltype_noref(anything[0])))
             }
@@ -466,9 +448,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         }
     } static_elif (typeinfo is_struct(anything)) {
         var ret <- default<TT -const>
-        if (v == null || !(v.value is _object)) {
-            return <- ret
-        }
+        if (v == null || !(v.value is _object)) return <- ret
         apply(ret) $(name : string; var field; annotations) {
             static_let("{typeinfo typename(type<TT-const-&>)}`{name}") {
                 var fieldState : JsonFieldState
@@ -485,9 +465,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         return <- ret
     } static_elif (typeinfo is_tuple(anything)) {
         var ret <- default<TT -const>
-        if (v == null || !(v.value is _object)) {
-            return <- ret
-        }
+        if (v == null || !(v.value is _object)) return <- ret
         apply(ret) $(name : string; var field) {
             (v as _object) |> get(name) $(val) {
                 move_to_ref(field, _::from_JV(val, decltype_noref(field)))
@@ -496,9 +474,7 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         return <- ret
     } static_elif (typeinfo is_array(anything)) {
         var ret : TT
-        if (v == null || !(v.value is _array)) {
-            return <- ret
-        }
+        if (v == null || !(v.value is _array)) return <- ret
         unsafe {
             let arr & = v.value as _array
             ret |> reserve(arr |> length)
@@ -513,13 +489,9 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         }
     } static_elif (typeinfo is_variant(anything)) {
         var ret : TT
-        if (v == null || !(v.value is _object)) {
-            return <- ret
-        }
+        if (v == null || !(v.value is _object)) return <- ret
         let vv : JsonValue? = (v.value as _object)?["$variant"] ?? default<JsonValue?>
-        if (vv == null || !((vv.value is _number) || (vv.value is _longint))) {
-            return <- ret
-        }
+        if (vv == null || !((vv.value is _number) || (vv.value is _longint))) return <- ret
         let index = (vv.value is _number) ? int(vv.value as _number) : int(vv.value as _longint)
         unsafe {
             set_variant_index(ret, index)
@@ -589,21 +561,21 @@ def JV(value : auto(TT)) : JsonValue? {
                 if (fieldState.optional) {
                     // skip @optional fields at default (zero) value, matching sprint_json behavior
                     static_if (typeinfo is_string(field)) {
-                        if (empty(field)) { return ; }
+                        if (empty(field)) return ;
                     } static_elif (typeinfo is_array(field)) {
-                        if (empty(field)) { return ; }
+                        if (empty(field)) return ;
                     } static_elif (typeinfo is_table(field)) {
-                        if (empty(field)) { return ; }
+                        if (empty(field)) return ;
                     } static_elif (typeinfo is_pointer(field)) {
-                        if (field == null) { return ; }
+                        if (field == null) return ;
                     } else {
                         static_if (typeinfo is_workhorse(field)) {
                             // bool path uses `!field` (avoids STYLE018 on `bool == false` after
                             // generic instantiation); numeric workhorses keep the generic-zero compare.
                             static_if (typeinfo stripped_typename(field) == "bool") {
-                                if (!field) { return ; }
+                                if (!field) return ;
                             } else {
-                                if (field == default<typedecl(field)>) { return ; }
+                                if (field == default<typedecl(field)>) return ;
                             }
                         }
                     }

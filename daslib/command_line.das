@@ -14,9 +14,7 @@ require strings
 //! The directory is preserved, so the correct build configuration (Release, Debug, installed path) is used.
 def get_das_exe() : string {
     let args <- get_command_line_arguments()
-    if (empty(args)) {
-        return ""
-    }
+    if (empty(args)) return ""
     var exe = args[0]
     // Normalize to forward slashes
     exe = replace(exe, "\\", "/")

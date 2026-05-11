@@ -190,9 +190,7 @@ def private _lexer(var stext : string implicit) {
             while (is_white_space(ahead) && next(tin, ahead, line, row)) {
                 pass
             }
-            if (empty(tin)) {
-                return false
-            }
+            if (empty(tin)) return false
             if (ahead == '[' || ahead == ']' || ahead == '{' || ahead == '}' || ahead == ':' || ahead == ',') {
                 yield TokenAt(value = Token(_symbol = ahead), line = line, row = row)
                 next(tin, ahead)
@@ -389,9 +387,7 @@ def private expect_symbol(var itv : iterator<TokenAt>; var ahead : TokenAt; sym 
 def private parse_value(var itv : iterator<TokenAt>; var error : string&) : JsonValue? {
     //! parses a JSON value from the token iterator `itv`.
     var ahead : TokenAt
-    if (!next(itv, ahead)) {
-        return null
-    }
+    if (!next(itv, ahead)) return null
     if (ahead.value is _symbol) {
         let sym = ahead.value as _symbol
         if (sym == ']') {
@@ -403,16 +399,14 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
             while (!empty(itv)) {
                 var value = parse_value(itv, error)
                 if (value == null) {
-                    if (error |> starts_with("unexpected ]") && length(arr) == 0) {
+                    if (error |> starts_with("unexpected ]") && empty(arr)) {
                         error = ""
                         return JV(arr)
                     }
                     return null
                 }
                 push(arr, value)
-                if (!expect_token(itv, ahead, Token_symbol, error)) {
-                    return null
-                }
+                if (!expect_token(itv, ahead, Token_symbol, error)) return null
                 let sepsym = ahead.value as _symbol
                 if (sepsym == ']') {
                     break;
@@ -430,28 +424,22 @@ def private parse_value(var itv : iterator<TokenAt>; var error : string&) : Json
             var tab : table<string; JsonValue?>;
             while (!empty(itv)) {
                 if (!expect_token(itv, ahead, Token_string, error)) {
-                    if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && length(tab) == 0) {
+                    if ((ahead.value is _symbol) && (ahead.value as _symbol) == '}' && empty(tab)) {
                         error = "";
                         return JV(tab);
                     }
                     return null;
                 }
                 let key = ahead.value as _string;
-                if (!expect_symbol(itv, ahead, ':', error)) {
-                    return null;
-                }
+                if (!expect_symbol(itv, ahead, ':', error)) return null;
                 var value = parse_value(itv, error);
-                if (value == null) {
-                    return null;
-                }
+                if (value == null) return null;
                 if (!allow_duplicate_keys && key_exists(tab, key)) {
                     error = "duplicate key {key} at {ahead.line}:{ahead.row}";
                     return null;
                 }
                 tab |> insert(key, value);
-                if (!expect_token(itv, ahead, Token_symbol, error)) {
-                    return null;
-                }
+                if (!expect_token(itv, ahead, Token_symbol, error)) return null;
                 let sepsym = ahead.value as _symbol;
                 if (sepsym == '}') {
                     break;
@@ -577,9 +565,7 @@ def private write_value(var writer : StringBuilderWriter; jsv : JsonValue?; dept
             for (elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)) {
                 if (no_empty_arrays) {
                     if (elemV.value is _array) {
-                        if (length(elemV.value as _array) == 0) {
-                            continue
-                        }
+                        if (length(elemV.value as _array) == 0) continue
                     }
                 }
                 if (first) {

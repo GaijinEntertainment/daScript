@@ -313,9 +313,7 @@ class ApplyMacro : AstCallMacro {
                 }
                 calls |> emplace(call)
             }
-            if (length(calls) == 1) {
-                return <- calls[0]
-            }
+            if (length(calls) == 1) return <- calls[0]
             var callblock = new ExprBlock(at = expr.at)
             unsafe {
                 callblock.list := calls

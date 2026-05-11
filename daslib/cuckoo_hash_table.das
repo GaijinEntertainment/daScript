@@ -132,14 +132,10 @@ struct template TCuckooHashTable {
     def static const key_index(key : KeyType) {
         let firstHash = $c(hashFunction0Name)(key)
         var index = int(firstHash) & mask
-        if (khv[index].hash == firstHash && khv[index].key == key) {
-            return index
-        }
+        if (khv[index].hash == firstHash && khv[index].key == key) return index
         var secondHash = $c(hashFunction1Name)(key)
         index = int(secondHash) & mask
-        if (khv[index].hash == secondHash && khv[index].key == key) {
-            return index
-        }
+        if (khv[index].hash == secondHash && khv[index].key == key) return index
         return -1
     }
 

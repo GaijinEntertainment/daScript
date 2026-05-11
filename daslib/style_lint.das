@@ -267,9 +267,7 @@ class StyleLintVisitor : AstVisitor {
     def check_style020_from_jv(expr : ExprCall?) : void {
         if (expr.func == null || expr.func.name != "from_JV"  //
             || expr.func._module == null || expr.func._module.name != "json_boost"
-            || length(expr.arguments) < 2) {
-            return
-        }
+            || length(expr.arguments) < 2) return
         // Skip lint when current_function is itself a json_boost overload or a generic
         // instantiation of one — the dispatch chain inside JV/from_JV templates calls
         // from_JV recursively on struct fields, which would self-trigger otherwise.
@@ -298,17 +296,13 @@ class StyleLintVisitor : AstVisitor {
         }
         let call = inner as ExprCall
         if (call.func == null || call.func.name != fname  //
-            || call.func._module.name != "math") {
-            return false
-        }
+            || call.func._module.name != "math") return false
         return length(call.arguments) == 2
     }
 
     def check_style019_clamp(expr : ExprCall?) : void {
         if (expr.func == null || expr.func._module.name != "math"  //
-            || length(expr.arguments) != 2) {
-            return
-        }
+            || length(expr.arguments) != 2) return
         let outer_name = string(expr.func.name)
         if (outer_name != "min" && outer_name != "max") {  //
             return
@@ -688,9 +682,7 @@ class StyleLintVisitor : AstVisitor {
             if (v.init != null  //
                 || v.flags.generated || v.flags.inScope
                 || v._type == null || v._type.baseType != Type.tArray
-                || !empty(v._type.dim)) {
-                continue
-            }
+                || !empty(v._type.dim)) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 let stmt = blk.list[j]
@@ -726,9 +718,7 @@ class StyleLintVisitor : AstVisitor {
             // Skip generic-host instantiations and any non-struct or non-default-init local
             if (v.flags.generated || v.flags.inScope  //
                 || v._type == null || v._type.baseType != Type.tStructure
-                || !empty(v._type.dim) || !self->is_default_struct_init(v)) {
-                continue
-            }
+                || !empty(v._type.dim) || !self->is_default_struct_init(v)) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 if (!self->is_field_assign_of(blk.list[j], v)) {  //
@@ -807,9 +797,7 @@ class StyleLintVisitor : AstVisitor {
         //! constant string key. Computed keys disqualify the chain.
         if (call.func == null || call.func.fromGeneric == null  //
             || string(call.func.fromGeneric.name) != "insert"  //
-            || length(call.arguments) < 3) {
-            return false
-        }
+            || length(call.arguments) < 3) return false
         var recv = call.arguments[0]
         if (recv is ExprRef2Value) {
             recv = (recv as ExprRef2Value.subexpr)
@@ -847,9 +835,7 @@ class StyleLintVisitor : AstVisitor {
             // Only flag uninitialized table<string; JsonValue?> locals from user code.
             if (v.init != null  //
                 || v.flags.generated || v.flags.inScope
-                || !self->is_jv_table_type(v._type)) {
-                continue
-            }
+                || !self->is_jv_table_type(v._type)) continue
             var count = 0
             for (j in range(idx + 1, n)) {
                 let stmt = blk.list[j]
@@ -867,9 +853,7 @@ class StyleLintVisitor : AstVisitor {
     def is_push_or_emplace_of(call : ExprCall?; target : Variable?) : bool {
         if (call.func == null || call.func.fromGeneric == null  //
             || (call.func.fromGeneric.name != "push" && call.func.fromGeneric.name != "emplace")
-            || length(call.arguments) < 2) {
-            return false
-        }
+            || length(call.arguments) < 2) return false
         var arg = call.arguments[0]
         if (arg is ExprRef2Value) {
             arg = (arg as ExprRef2Value.subexpr)
@@ -896,9 +880,7 @@ class StyleLintVisitor : AstVisitor {
         for_each_function(mod, "") $(var fn) {
             if (fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u  //
                 || fn.flags.generated || fn.fromGeneric != null
-                || fn._module != mod || fn.moreFlags.isTemplate) {
-                return
-            }
+                || fn._module != mod || fn.moreFlags.isTemplate) return
             let fname = string(fn.at.fileInfo.name)
             let s = fn.at.line
             let e = fn.body.at.last_line
@@ -920,9 +902,7 @@ class StyleLintVisitor : AstVisitor {
         }
         for_each_structure(mod) $(var st) {
             if (st.at.fileInfo == null || st.at.line == 0u  //
-                || st.flags.generated || st._module != mod || st.flags.isTemplate) {
-                return
-            }
+                || st.flags.generated || st._module != mod || st.flags.isTemplate) return
             var is_template_instance = false
             peek(st.name) $(name) {
                 is_template_instance = find(name, "<") >= 0
@@ -1001,9 +981,7 @@ class StyleLintVisitor : AstVisitor {
         var seen : table<string; bool>
         for_each_function(mod, "") $(var fn) {
             if (fn.at.fileInfo == null || fn._module != mod  //
-                || fn.flags.generated || fn.fromGeneric != null || fn.moreFlags.isTemplate) {
-                return
-            }
+                || fn.flags.generated || fn.fromGeneric != null || fn.moreFlags.isTemplate) return
             let fname = string(fn.at.fileInfo.name)
             if ((seen |> key_exists(fname)) || !file_first_decl |> key_exists(fname)) {  //
                 return
@@ -1015,9 +993,7 @@ class StyleLintVisitor : AstVisitor {
         }
         for_each_structure(mod) $(var st) {
             if (st.at.fileInfo == null || st._module != mod  //
-                || st.flags.generated || st.flags.isTemplate) {
-                return
-            }
+                || st.flags.generated || st.flags.isTemplate) return
             var is_template_instance = false
             peek(st.name) $(name) {
                 is_template_instance = find(name, "<") >= 0
@@ -1144,9 +1120,7 @@ class StyleLintVisitor : AstVisitor {
         // (module-leading docstring), or carries an explicit @nolint marker.
         if (line_count <= 1  //
             || block_start < first_decl_line
-            || self->has_nolint_directive(first_line_text)) {
-            return
-        }
+            || self->has_nolint_directive(first_line_text)) return
         var enclosing_priv = false
         var inside_function = false
         var enclosing_size : uint = 0xFFFFFFFFu

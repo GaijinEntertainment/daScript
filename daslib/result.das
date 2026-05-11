@@ -148,9 +148,7 @@ def map_err(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : auto(FF)>) 
 
 //! Monadic bind on the ok side — ``f`` returns the next ``Result``.
 def and_then(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : $Result<auto(UU); EE> >) {
-    if (r._is_ok) {
-        return <- invoke(f, r._value)
-    }
+    if (r._is_ok) return <- invoke(f, r._value)
     var out = default<$Result<UU -const; EE -const> >
     static_if (typeinfo can_copy(out._error)) {
         out._error = r._error
@@ -162,9 +160,7 @@ def and_then(r : $Result < auto(TT); auto(EE) >; f : block<(v : TT) : $Result<au
 
 //! Monadic bind on the err side — ``f`` can recover or re-map the error.
 def or_else(r : $Result < auto(TT); auto(EE) >; f : block<(e : EE) : $Result<TT; auto(FF)> >) {
-    if (!r._is_ok) {
-        return <- invoke(f, r._error)
-    }
+    if (!r._is_ok) return <- invoke(f, r._error)
     var out = default<$Result<TT -const; FF -const> >
     out._is_ok = true
     static_if (typeinfo can_copy(out._value)) {
@@ -328,9 +324,7 @@ def operator ??(r : $Result < auto(TT); auto(EE) >; d : TT) : TT {
 
 //! Structural equality: same tag, and the active payload compares equal.
 def operator ==(a, b : $Result < auto(TT); auto(EE) > implicit) : bool {
-    if (a._is_ok != b._is_ok) {
-        return false
-    }
+    if (a._is_ok != b._is_ok) return false
     return a._is_ok ? a._value == b._value : a._error == b._error
 }
 

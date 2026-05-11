@@ -79,9 +79,7 @@ class SharedAddrMacro : AstFunctionAnnotation {
     //! This macro reports an error if shared_addr is attempted on anything other that shared global variables.
     //! I.e. only global variables are safe to use with shared_addr.
     def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
-        if (is_shared_expr(call.arguments[0])) {
-            return true
-        }
+        if (is_shared_expr(call.arguments[0])) return true
         compiling_program() |> macro_error(call.at, "{call.name} can only be used with shared global variables")
         return false
     }
@@ -107,9 +105,7 @@ def public temp_value(var x : auto(T)& ==const) : T&# {
 class TempValueMacro : AstFunctionAnnotation {
     //! This macro reports an error if temp_value is attempted outside of function arguments.
     def override verifyCall(var call : ExprCallFunc?; args, progArgs : AnnotationArgumentList; var errors : das_string) : bool {
-        if (is_temp_safe(call.arguments[0])) {
-            return true
-        }
+        if (is_temp_safe(call.arguments[0])) return true
         compiling_program() |> macro_error(call.at, "{describe(call.arguments[0])} can't be simply promoted to temp value")
         return false
     }

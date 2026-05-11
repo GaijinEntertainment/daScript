@@ -39,9 +39,7 @@ class AppendCondAnnotation : AstFunctionAnnotation {
 
     for (ann in func.annotations) {
       if (ann.annotation.name == "apply_in_context") {
-        if (!(find_arg(ann.arguments, "patched") is nothing)) {
-          return true
-        }
+        if (!(find_arg(ann.arguments, "patched") is nothing)) return true
       }
     }
 

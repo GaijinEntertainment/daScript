@@ -41,9 +41,7 @@ def aotModuleName(pm : Module?) {
 
 def isSequencialMask(fields : dasvector`uint8) {
     for (i in range(1, length(fields))) {
-        if (int(fields[i - 1]) + 1 != int(fields[i])) {
-            return false;
-        }
+        if (int(fields[i - 1]) + 1 != int(fields[i])) return false;
     }
     return true;
 }
@@ -149,8 +147,8 @@ def das_to_cppCTypeString(t : Type) {
 
 
 def isConstRedundantForCpp(typeDecl : TypeDeclPtr) {
-    if (!empty(typeDecl.dim)) { return false; }
-    if (typeDecl.isVectorType) { return true; }
+    if (!empty(typeDecl.dim)) return false;
+    if (typeDecl.isVectorType) return true;
     match (typeDecl.baseType) {
         if (Type.tBool) { return true; }
         if (Type.tInt8) { return true; }
@@ -415,7 +413,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
             write(writer, ",{typeDecl.dim[dim_count - 1 - i]}>")
         }
 
-        if (cfg.skip_const == false && typeDecl.flags.constant) {
+        if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
         // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
@@ -424,7 +422,7 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         // Keep the * suffix when substitute_ref is requested (e.g. iteration variables),
         // since das_iterator::first(Context*, QQ*&) demands a real pointer regardless.
         let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
-        if (typeDecl.flags.ref && cfg.skip_ref == false) {
+        if (typeDecl.flags.ref && !cfg.skip_ref) {
             if (cfg.substitute_ref) {
                 write(writer, " *");
             } elif (!valueHandle) {
@@ -691,11 +689,11 @@ class public AotDebugInfoHelper {
             write(writer, "        ann.resolveAnnotation();\n")
             write(writer, "    \}\n")
             helper |> debug_helper_iter_structs($(name, si) {
-                if (si.fields == null) { return ; }
+                if (si.fields == null) return ;
                 for (fi in range(si.count)) {
                     let fld & = unsafe(si.fields[fi])
-                    if (fld.annotation_arguments == null) { continue; }
-                    if (length(*fld.annotation_arguments) == 0) { continue; }
+                    if (fld.annotation_arguments == null) continue;
+                    if (length(*fld.annotation_arguments) == 0) continue;
                     write(writer, "    {structInfoName(si)}_field_{fi}.annotation_arguments = &{structInfoName(si)}_field_{fi}_ann;\n")
                 }
             })
@@ -1332,8 +1330,7 @@ class public CppAot : AstVisitor {
 // function
     def override canVisitFunction(fun : Function?) {
         if (fun.flags.noAot) return false;
-        if (fun.moreFlags.isTemplate) return false;
-        return true;
+        return !fun.moreFlags.isTemplate;
     }
     def override preVisitFunction(fn : FunctionPtr) {
         if (!empty(aot_filter_function) && (fn.name == aot_filter_function || aotFuncName(fn) == aot_filter_function)) {
@@ -1686,9 +1683,7 @@ class public CppAot : AstVisitor {
         }
     }
     def isOpPolicy1(that : ExprOp1?) {
-        if (is_alpha(first_character(that.op))) {
-            return true;
-        }
+        if (is_alpha(first_character(that.op))) return true;
         return that.subexpr._type.isPolicyType;
     }
     def override preVisitExprOp1(var that : ExprOp1?) {
@@ -3320,26 +3315,16 @@ class public CppAot : AstVisitor {
     }
 // call
     def policyArgNeedCast(polType : TypeDeclPtr; argType : TypeDeclPtr) {
-        if (argType.isVectorType) {
-            return false;
-        }
+        if (argType.isVectorType) return false;
         if (!polType.isHandle) {
-            if (polType.isVecPolicyType && argType.isVecPolicyType) {
-                return false;
-            }
+            if (polType.isVecPolicyType && argType.isVecPolicyType) return false;
         }
-        if (!polType.isPolicyType) {
-            return false;
-        }
+        if (!polType.isPolicyType) return false;
         return true;
     }
     def policyResultNeedCast(polType : TypeDeclPtr; resType : TypeDeclPtr) {
-        if (resType.isVoid) {
-            return false;
-        }
-        if (!resType.isPolicyType) {
-            return false;
-        }
+        if (resType.isVoid) return false;
+        if (!resType.isPolicyType) return false;
         return policyArgNeedCast(polType, resType);
     }
     def isPolicyBasedCall(call : ExprCall?) {
@@ -3356,9 +3341,7 @@ class public CppAot : AstVisitor {
     def isPolicyBasedCallFunc(call : ExprCallFunc?) {
         if (call.func.flags.builtIn) {
             let bif = call.func as BuiltInFunction;
-            if (bif.flags.policyBased) {
-                return true;
-            }
+            if (bif.flags.policyBased) return true;
         }
         return false;
     }
@@ -3371,10 +3354,7 @@ class public CppAot : AstVisitor {
             if (func.flags.callBased) {
                 panic("we should not be here. call-based calls handled elsewhere");
             }
-            if (length(bif.cppName) == 0) {
-                return true;
-            }
-            return false;
+            return length(bif.cppName) == 0;
         }
         if (func.flags.noAot) return true;
         if (func.flags.aotHybrid) return true;
@@ -3388,9 +3368,7 @@ class public CppAot : AstVisitor {
         if (expr is ExprMakeBlock) {
             let mkblk = expr as ExprMakeBlock;
             let blk = mkblk._block as ExprBlock;
-            if (blk.blockFlags.aotSkipMakeBlock) {
-                return false;
-            }
+            if (blk.blockFlags.aotSkipMakeBlock) return false;
         }
         return needsArgPassType(expr._type);
     }
@@ -3512,9 +3490,7 @@ class public CppAot : AstVisitor {
         if (call.func.moreFlags.propertyFunction) return ;  // property function goes ((arg0).name()). we do nothing here
         var argIndex = 0;
         for (it in range(length(call.arguments))) {
-            if (call.arguments[it] == arg) {
-                break;
-            }
+            if (call.arguments[it] == arg) break;
             argIndex++;
         }
         assert(argIndex != length(call.arguments));
@@ -3555,9 +3531,7 @@ class public CppAot : AstVisitor {
         if (call.func.moreFlags.propertyFunction) return ;  // property function goes ((arg0).name()). we do nothing here
         var argIndex = 0;
         for (it in range(length(call.arguments))) {
-            if (call.arguments[it] == arg) {
-                break;
-            }
+            if (call.arguments[it] == arg) break;
             argIndex++;
         }
 
@@ -3670,9 +3644,7 @@ class public CppAot : AstVisitor {
         write(*ss, "{tabs()}");
     }
     def isCountOrUCount(expr : ExpressionPtr) {
-        if (!(isExprCallFunc(expr))) {
-            return false;
-        }
+        if (!(isExprCallFunc(expr))) return false;
         assume call = unsafe(reinterpret<ExprCallFunc?>(expr));
         return call.func != null && call.func.flags.builtIn && call.func._module.name == "$" && (call.name == "count" || call.name == "ucount");
     }
@@ -3680,9 +3652,7 @@ class public CppAot : AstVisitor {
         var idx = 0;
         let idxs = length(ffor.sources);
         for (id in range(idxs)) {
-            if (ffor.sources[id] == that) {
-                break;
-            }
+            if (ffor.sources[id] == that) break;
             idx++
         }
         assume src = ffor.sources[idx];
@@ -3699,9 +3669,7 @@ class public CppAot : AstVisitor {
         var idx = 0;
         let idxs = length(ffor.sources);
         for (id in range(idxs)) {
-            if (ffor.sources[id] == that) {
-                break;
-            }
+            if (ffor.sources[id] == that) break;
             idx++
         }
         assume src = ffor.sources[idx];
@@ -3749,17 +3717,13 @@ def public dumpDependencies(program : ProgramPtr; var aotVisitor : CppAot?) {
     }
     let remUS = program._options  |> find_arg("remove_unused_symbols") ?as tBool ?? true;
     program.get_ptr() |> for_each_module_no_order($(pm) {
-        if (pm.moduleFlags.fromExtraDependency) {
-            return ;
-        }
+        if (pm.moduleFlags.fromExtraDependency) return ;
         pm |> for_each_structure($(ps) {
             write(*aotVisitor.ss, "namespace {aotModuleName(ps._module)} \{ struct {aotStructName(ps)}; \};\n");
         });
     });
     program.get_ptr() |> for_each_module_no_order($(pm) {
-        if (pm == program.getThisModule || pm.moduleFlags.fromExtraDependency) {
-            return ;
-        }
+        if (pm == program.getThisModule || pm.moduleFlags.fromExtraDependency) return ;
         pm |> for_each_enumeration($(penum) {
             if (!remUS || utm.useEnums |> key_exists(penum)) {
                 program |> visit_enumeration(penum, aotVisitor.adapter)
@@ -3788,8 +3752,7 @@ class ArgsConverter : AstVisitor {
 
     def override canVisitFunction(fun : Function?) {
         if (fun.flags.noAot) return false;
-        if (fun.moreFlags.isTemplate) return false;
-        return true;
+        return !fun.moreFlags.isTemplate;
     }
 
     def override preVisitFunction(fn : FunctionPtr) {
@@ -3853,9 +3816,7 @@ def collectUsedFunctions(modules : array<Module?>; totalFunctions : int; this_mo
     fnn.reserve(totalFunctions);
     for (pm in modules) {
         pm |> for_each_module_function($(pfun) {
-            if (!all_modules && pfun._module != this_module) {
-                return ;
-            }
+            if (!all_modules && pfun._module != this_module) return ;
             if (pfun.index < 0 || !pfun.flags.used) return ;
             if (!is_all) {
                 if (pfun.flags.builtIn || pfun.flags.noAot) return ;
@@ -4111,9 +4072,7 @@ def public run_aot_function(prog : Program?; var pctx : Context?; cop : CodeOfPo
     let program <- unsafe(reinterpret<ProgramPtr>(prog));
     return build_string() $(writer) {
         let (modules_str, noAotModule) = getRequiredModulesFor(program)
-        if ((program._options |> find_arg("no_aot") ?as tBool ?? false) || noAotModule) {
-            return
-        }
+        if ((program._options |> find_arg("no_aot") ?as tBool ?? false) || noAotModule) return
         build_string() $(tmp_writer) {
             let marker_vis = new NoAotMarker();
             make_visitor(*marker_vis) $(adapter_marker) {

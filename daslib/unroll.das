@@ -39,9 +39,7 @@ class UnrollMacro : AstFunctionAnnotation {
             // In lint mode, skip unrolling — return the inner for loop as-is
             var mblk = unsafe(reinterpret<ExprMakeBlock?>(call.arguments[0]))
             var blk = unsafe(reinterpret<ExprBlock?>(mblk._block))
-            if (blk.list |> length == 1 && blk.list[0] is ExprFor) {
-                return <- clone_expression(blk.list[0])
-            }
+            if (blk.list |> length == 1 && blk.list[0] is ExprFor) return <- clone_expression(blk.list[0])
         }
         assert(call.arguments[0] is ExprMakeBlock)
         var mblk = unsafe(reinterpret<ExprMakeBlock?>(call.arguments[0]))

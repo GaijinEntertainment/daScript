@@ -124,7 +124,7 @@ struct BoolArray {
             } else {
                 bits[offs] &= ~mask
             }
-            real_size += 1u
+            real_size++
         }
     }
     [hint(unsafe_range_check, noalias=self)]

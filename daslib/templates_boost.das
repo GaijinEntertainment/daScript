@@ -283,9 +283,7 @@ class private TemplateVisitor : AstVisitor {
     }
     def override preVisitExprBlock(var blk : ExprBlock?) {
         //! Visits block expression and applies block argument renaming and replacement rules, as well as annotation argument replacement rules.
-        if (!blk.blockFlags.isClosure) {
-            return
-        }
+        if (!blk.blockFlags.isClosure) return
         for (arg in blk.arguments) {
             let vn = "{arg.name}"
             if (key_exists(rules.blockArgName, vn)) {
@@ -324,13 +322,9 @@ class private TemplateVisitor : AstVisitor {
     }
     def preVisitAnythingCall(var arguments : dasvector`ptr`Expression) : void {
         //! Visits call arguments and applies variable expression list replacement rules.
-        if (length(rules.var2exprList) == 0) {
-            return
-        }
+        if (length(rules.var2exprList) == 0) return
         let nargs = arguments |> length
-        if (nargs == 0) {
-            return
-        }
+        if (nargs == 0) return
         for (ai in range(nargs)) {
             let rai = nargs - ai - 1
             assume arg = arguments[rai]
@@ -590,9 +584,7 @@ class private RemoveDerefVisitor : AstVisitor {
         //! Visits reference-to-value expression and removes dereference if it matches the variable name.
         if (expr.subexpr is ExprVar) {
             let vvar = expr.subexpr as ExprVar
-            if ("{vvar.name}" == vname) {
-                return clone_expression(expr.subexpr)
-            }
+            if ("{vvar.name}" == vname) return clone_expression(expr.subexpr)
         }
         return expr
     }
@@ -1116,9 +1108,7 @@ class private AstQCallMacro : AstCallMacro {
         }
         var qclone = clone_expression(call.arguments[0])
         var qblk = apply_qrules(qclone)
-        if (qblk == null) {
-            return null
-        }
+        if (qblk == null) return null
         var acall = new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<Expression?>(
@@ -1219,9 +1209,7 @@ class private AstQNamedMacro : AstCallMacro {
         }
         var qclone = clone_expression(call.arguments[1])
         var qblk = apply_qrules(qclone)
-        if (qblk == null) {
-            return null
-        }
+        if (qblk == null) return null
         return new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<Expression?>(
@@ -1269,9 +1257,7 @@ class private AstQNamedClassMacro : AstCallMacro {
         }
         var qclone = clone_expression(call.arguments[2])
         var qblk = apply_qrules(qclone)
-        if (qblk == null) {
-            return null
-        }
+        if (qblk == null) return null
         return new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<Expression?>(
@@ -1352,7 +1338,7 @@ def public apply_qmacro_template_class(instance_name : string; var template_type
             func_clone.result  = apply_template(rules, func.at, clone_type(func.result))
             // expand $a() argument lists in function parameters (blkArg rules)
             // preVisitFunctionArgument collects $a tags from function arguments.
-            if (length(rules.blkArg) > 0) {
+            if (!empty(rules.blkArg)) {
                 let nfargs = func_clone.arguments |> length
                 for (ai in range(nfargs)) {
                     let rai = nfargs - ai - 1
@@ -1493,9 +1479,7 @@ class private AstQNamedTemplateClassMacro : AstCallMacro {
         }
         var qclone = clone_expression(call.arguments[1])
         var qblk = apply_template_qrules(prog, (qclone as ExprTypeDecl).typeexpr.structType)
-        if (qblk == null) {
-            return null
-        }
+        if (qblk == null) return null
         return new ExprCall(at = call.at,
             name := apply_call,
             arguments := array<Expression?>(

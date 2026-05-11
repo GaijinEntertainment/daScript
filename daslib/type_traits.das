@@ -50,9 +50,7 @@ class TypeInfoHasProperty : AstTypeInfoMacro {
             let propName = ".`{expr.subtrait}"
             var res = false
             get_ptr(compiling_program()) |> for_each_module() $(mod) {
-                if (res) {
-                    return
-                }
+                if (res) return
                 mod |> for_each_function(propName) $(fn) {
                     if (fn.moreFlags.propertyFunction && expr.typeexpr |> is_same_type(fn.arguments[0]._type, RefMatters.yes, ConstMatters.no, TemporaryMatters.no)) {
                         res = true
@@ -86,9 +84,7 @@ class IsSubclassOf : AstCallMacro {
         }
         var cptr = classType.structType
         while (cptr != null) {
-            if (cptr == typeExpr.structType) {
-                return <- quote(true)
-            }
+            if (cptr == typeExpr.structType) return <- quote(true)
             cptr = cptr.parent
         }
         return <- quote(false)

@@ -79,40 +79,28 @@ def private get_int_arg(args : array<string>; name : string; def_val : int) : in
 
 def private ends_with_separator(str : string) : bool {
     for (c in "\\/") {
-        if (ends_with(str, to_char(c))) {
-            return true
-        }
+        if (ends_with(str, to_char(c))) return true
     }
     return false
 }
 
 def private starts_with_separator(str : string) : bool {
     for (c in "\\/") {
-        if (starts_with(str, to_char(c))) {
-            return true
-        }
+        if (starts_with(str, to_char(c))) return true
     }
     return false
 }
 
 def private trim_path(path : string) : string {
-    if (path == ".") {
-        return ""
-    }
-    if (path |> starts_with("./") || path |> starts_with(".\\")) {
-        return path |> slice(2)
-    }
+    if (path == ".") return ""
+    if (path |> starts_with("./") || path |> starts_with(".\\")) return path |> slice(2)
     return path
 }
 
 def private join_path(a, path_b : string) : string {
     let b = trim_path(path_b)
-    if (length(a) == 0) {
-        return fix_path(b)
-    }
-    if (length(b) == 0) {
-        return fix_path(a)
-    }
+    if (empty(a)) return fix_path(b)
+    if (empty(b)) return fix_path(a)
     let res = build_string() $(builder) {
         builder |> write(a)
         let ends = ends_with_separator(a)
@@ -134,22 +122,16 @@ def private fix_path(path : string) : string {
 }
 
 def private resolve_path(path : string; paths : array<string>) : string {
-    if (path |> empty()) {
-        return path
-    }
+    if (path |> empty()) return path
     for (it in paths) {
         let newPath = it |> join_path(path)
-        if (stat(newPath).is_valid) {
-            return newPath
-        }
+        if (stat(newPath).is_valid) return newPath
     }
     return fix_path(path)
 }
 
 def private resolve_path(path : string; paths : array<string>; aliases : table<string; string>) : string {
-    if (path |> empty()) {
-        return path
-    }
+    if (path |> empty()) return path
     for (k, v in keys(aliases), values(aliases)) {
         if (path |> starts_with(k)) {
             let fixedPath = v |> join_path <| slice(path, length(k))
@@ -160,21 +142,15 @@ def private resolve_path(path : string; paths : array<string>; aliases : table<s
 }
 
 def private resolve_path_cache(path : string; paths : array<string>; aliases : table<string; string>; var cache : table<string; string>) : string {
-    if (cache |> key_exists(path)) {
-        return cache?[path] ?? ""
-    }
+    if (cache |> key_exists(path)) return cache?[path] ?? ""
     let absPath = resolve_path(path, paths, aliases)
     cache |> insert(path, absPath)
     return absPath
 }
 
 def private bytes_hr(value : uint64) {
-    if (value > uint64(1024 * 1024)) {
-        return "{float(value) / (1024f * 1024f)}mb ({int(value)})"
-    }
-    if (value > uint64(1024)) {
-        return "{float(value) / 1024f}kb ({int(value)})"
-    }
+    if (value > uint64(1024 * 1024)) return "{float(value) / (1024f * 1024f)}mb ({int(value)})"
+    if (value > uint64(1024)) return "{float(value) / 1024f}kb ({int(value)})"
     return "{int(value)} b"
 }
 
@@ -548,9 +524,7 @@ def find_child_var(val : DAVariable; id : uint64; cb : block<(res : DAVariable) 
     }
     if (val.children != null) {
         for (c in *val.children) {
-            if (c |> find_child_var(id, cb)) {
-                return true
-            }
+            if (c |> find_child_var(id, cb)) return true
         }
     }
     return false
@@ -559,9 +533,7 @@ def find_child_var(val : DAVariable; id : uint64; cb : block<(res : DAVariable) 
 def find_child_var(val : array<DAVariable>; cb : block<(res : DAVariable) : bool>) {
     //! Searches an array of DAVariable trees using a predicate callback.
     for (v in val) {
-        if (v |> find_child_var(cb)) {
-            return true
-        }
+        if (v |> find_child_var(cb)) return true
     }
     return false
 }
@@ -569,14 +541,10 @@ def find_child_var(val : array<DAVariable>; cb : block<(res : DAVariable) : bool
 
 def find_child_var(val : DAVariable; cb : block<(res : DAVariable) : bool>) {
     //! Recursively searches the variable tree using a predicate callback.
-    if (cb |> invoke(val)) {
-        return true
-    }
+    if (cb |> invoke(val)) return true
     if (val.children != null) {
         for (c in *val.children) {
-            if (c |> find_child_var(cb)) {
-                return true
-            }
+            if (c |> find_child_var(cb)) return true
         }
     }
     return false
@@ -604,25 +572,17 @@ struct private DAStackFrame {
 def find_child_var(stack : DAStackFrame; id : uint64; cb : block<(res : DAVariable) : void>) {
     //! Finds a variable by uid across all scopes (locals, arguments, globals, state) of a stack frame.
     for (c in stack.variables) {
-        if (c |> find_child_var(id, cb)) {
-            return
-        }
+        if (c |> find_child_var(id, cb)) return
     }
     for (c in stack.arguments) {
-        if (c |> find_child_var(id, cb)) {
-            return
-        }
+        if (c |> find_child_var(id, cb)) return
     }
     for (c in stack.globals) {
-        if (c |> find_child_var(id, cb)) {
-            return
-        }
+        if (c |> find_child_var(id, cb)) return
     }
     for (c in stack.state) {
         for (v in c.vars) {
-            if (v |> find_child_var(id, cb)) {
-                return
-            }
+            if (v |> find_child_var(id, cb)) return
         }
     }
 }
@@ -631,25 +591,17 @@ def find_child_var(stack : DAStackFrame; id : uint64; cb : block<(res : DAVariab
 def find_child_var(stack : DAStackFrame; cb : block<(res : DAVariable; idx : uint64) : bool>) : bool {
     //! Searches all stack frame scopes with a predicate, passing the scope category for each variable.
     for (c in stack.variables) {
-        if (cb |> invoke(c, LOCAL_VARS)) {
-            return true
-        }
+        if (cb |> invoke(c, LOCAL_VARS)) return true
     }
     for (c in stack.arguments) {
-        if (cb |> invoke(c, ARGUMENT_VARS)) {
-            return true
-        }
+        if (cb |> invoke(c, ARGUMENT_VARS)) return true
     }
     for (c in stack.globals) {
-        if (cb |> invoke(c, GLOBAL_VARS)) {
-            return true
-        }
+        if (cb |> invoke(c, GLOBAL_VARS)) return true
     }
     for (idx, c in iter_range(stack.state), stack.state) {
         for (v in c.vars) {
-            if (cb |> invoke(v, STATE_VARS + uint64(idx))) {
-                return true
-            }
+            if (cb |> invoke(v, STATE_VARS + uint64(idx))) return true
         }
     }
     return false
@@ -728,23 +680,17 @@ class private DAStackWalker : DapiStackWalker {
 
     def collectGlobals() {
         //! Collects all global variables from the debugged context into the top stack frame.
-        if (wasGlobalsCollected) {
-            return
-        }
+        if (wasGlobalsCollected) return
         wasGlobalsCollected = true
         let stackLen = length(ctx.stack)
-        if (stackLen == 0) {
-            return
-        }
+        if (stackLen == 0) return
 
         var frame & = unsafe(ctx.stack[stackLen - 1])
 
         if (collectAllGlobals) {
             for (i in range(get_total_variables(*ctx.ctx))) {
                 let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
-                if (vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require") {
-                    continue
-                }
+                if (vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require") continue
                 collectGlobalAt(vinfo, frame)
             }
             return
@@ -753,9 +699,7 @@ class private DAStackWalker : DapiStackWalker {
         if (frame.func != null) {
             for (i in range(frame.func.globalCount)) {
                 let vinfo = unsafe(frame.func.globals[i])
-                if (vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require") {
-                    continue
-                }
+                if (vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require") continue
                 // if vinfo.scope == frame.func
                 collectGlobalAt(*vinfo, frame)
             }
@@ -820,9 +764,7 @@ class private DAStackWalker : DapiStackWalker {
 
     def override onVariable(inf : FuncInfo; vinfo : LocalVariableInfo; arg : void?; inScope : bool) : void {
         //! Collects a local variable from the current stack frame into the debug variable list.
-        if (!inScope) {
-            return
-        }
+        if (!inScope) return
         let stackLen = length(ctx.stack)
         if (stackLen > 0) {
             var frame & = unsafe(ctx.stack[stackLen - 1])
@@ -946,9 +888,7 @@ def private to_string(ctx : DAContext) {
 
 
 def private compare_path(p1, p2 : string) {
-    if (p1 == p2) {
-        return true
-    }
+    if (p1 == p2) return true
     return to_lower(p1) == to_lower(p2)
 }
 
@@ -1116,28 +1056,22 @@ class private DAgent : DapiDebugAgent {
                     source = ini.source,
                     line = b.line
                 ))
-                breakpointId += 1ul
+                breakpointId++
             }
             breakpoints[path] <- breaks
         }
 
-        if (!withInstruments) {
-            return <- res
-        }
+        if (!withInstruments) return <- res
 
         for (resBr in res.breakpoints) {
             resBr.message = "{path}: instrumentation wasn't initined"
         }
 
         for (ctx in contexts) {
-            if (ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.dead) {
-                continue
-            }
+            if (ctx.ctx.category.debug_context || ctx.ctx.category.debugger_tick || ctx.ctx.category.dead) continue
             *ctx.ctx |> clear_instruments()
             *ctx.ctx |> instrument_node(true) $(ati) {
-                if (ati.fileInfo == null) {
-                    return false
-                }
+                if (ati.fileInfo == null) return false
                 let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
                 let currentPath = compare_path(file, path)
                 if (currentPath) {
@@ -1210,15 +1144,9 @@ class private DAgent : DapiDebugAgent {
 
     def onPause(var ctx : Context; at : LineInfo; reason, text : string) : void {
         //! Main pause handler that stops execution, sends a stopped event, and waits for DAP client commands.
-        if (at.fileInfo == null) {
-            return
-        }
-        if (server == null) {
-            return
-        }
-        if (!waitConnection && (!server.configurationDone || !server.threadsDone)) {
-            return
-        }
+        if (at.fileInfo == null) return
+        if (server == null) return
+        if (!waitConnection && (!server.configurationDone || !server.threadsDone)) return
         let path = "{at.fileInfo.name}" |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
         self->log("{ctx} `{reason}` breakpoint at {path}:{int(at.line)}\n")
 
@@ -1237,12 +1165,8 @@ class private DAgent : DapiDebugAgent {
 
     def override onSingleStep(var ctx : Context; at : LineInfo) : void {
         //! Handles single-step events, processing pause, step-in, step-over requests, and breakpoint checks.
-        if (at.fileInfo == null) {
-            return
-        }
-        if (server == null) {
-            return
-        }
+        if (at.fileInfo == null) return
+        if (server == null) return
 
         // unsafe
             // self->log("{double(ctx_at(ctx))} step at {string(at.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)}:{int(at.line)}\n")
@@ -1285,9 +1209,7 @@ class private DAgent : DapiDebugAgent {
             }
 
             if (ctxData.stepRequestedStack > 0) {
-                if (stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack) {
-                    return
-                }
+                if (stack_depth(*ctxData.ctx) > ctxData.stepRequestedStack) return
                 ctxData.stepRequestedStack = 0
                 self->sendStopped(ctx, ctxData, file, at, "step", "", -1ul)
                 while (!ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0) {
@@ -1311,18 +1233,14 @@ class private DAgent : DapiDebugAgent {
                         break
                     }
                 }
-                i += 1
-                if (!compare_path(fileBr, file)) {
-                    continue
-                }
+                i++
+                if (!compare_path(fileBr, file)) continue
                 breakpoints |> get(file) $(brs) {
                     var brIdx = 0
                     while (brIdx < length(brs)) {
                         let br & = unsafe((brs)[brIdx++])
                         // self->log("search break `{file}` {brs} in {file}\n")
-                        if (br.line != uint(at.line)) {
-                            continue
-                        }
+                        if (br.line != uint(at.line)) continue
                         self->sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
 
                         ctxData.continueRequested = false
@@ -1350,7 +1268,7 @@ class private DAgent : DapiDebugAgent {
         make_stack_walker(walker) $(adapter) {
             adapter |> walk_stack(ctx, at)
         }
-        if (length(ctxData.stack) > 0) {
+        if (!empty(ctxData.stack)) {
             for (i in range(1, length(ctxData.stack))) {
                 let j = length(ctxData.stack) - i
                 let q = j - 1
@@ -1453,15 +1371,9 @@ class private DAgent : DapiDebugAgent {
 
     def invalidateBreakpoints(var ctx : Context) : void {
         //! Re-instruments breakpoints for a context after code changes, updating their verification state.
-        if (!withInstruments) {
-            return
-        }
-        if (server == null || !server.configurationDone) {
-            return
-        }
-        if (ctx.category.debug_context || ctx.category.debugger_tick) {
-            return
-        }
+        if (!withInstruments) return
+        if (server == null || !server.configurationDone) return
+        if (ctx.category.debug_context || ctx.category.debugger_tick) return
 
         for (brs in values(breakpoints)) {
             for (br in brs) {
@@ -1472,9 +1384,7 @@ class private DAgent : DapiDebugAgent {
         let found = self->getContextDataFor(ctx, $(var ctxData : DAContext) {// TODO: speedup getContextDataFor
             *ctxData.ctx |> clear_instruments()
             *ctxData.ctx |> instrument_node(true) $(ati) {
-                if (ati.fileInfo == null) {
-                    return false
-                }
+                if (ati.fileInfo == null) return false
                 let file = string(ati.fileInfo.name) |> resolve_path_cache(workingPaths, pathAliases, pathsCache)
                 for (fileBr, brs in keys(breakpoints), values(breakpoints)) {
                     if (compare_path(fileBr, file)) {
@@ -1573,9 +1483,7 @@ class private DAgent : DapiDebugAgent {
         //! Returns the index of the given Context in the contexts array, or -1 if not found.
         let ctxAt = ctx_at(ctx)
         for (idx in iter_range(contexts)) {
-            if (contexts[idx].at == ctxAt) {
-                return idx
-            }
+            if (contexts[idx].at == ctxAt) return idx
         }
         return -1
     }
@@ -1585,13 +1493,11 @@ class private DAgent : DapiDebugAgent {
         // unsafe
         //     print("dap: add context {intptr(addr(ctx))}")
         let idx = self->getContextIdx(ctx)
-        if (idx >= 0) {
-            return false
-        }
+        if (idx >= 0) return false
         unsafe {
             contexts |> emplace(DAContext(at = ctx_at(ctx), id = contextId, ctx = addr(ctx)), 0)
         }
-        contextId += 1ul
+        contextId++
         contexts |> sort() $(a, b : DAContext) {
             let aid = uint(a.ctx.category)
             let bid = uint(b.ctx.category)
@@ -1658,7 +1564,7 @@ class private DAServer : Server {
 
     def override onDisconnect() {
         //! Handles client disconnection, flushing any pending output data.
-        if (length(current_string) > 0) {
+        if (!empty(current_string)) {
             print(string(current_string))
             current_string |> clear()
         }
@@ -1680,7 +1586,7 @@ class private DAServer : Server {
         //! Ticks the server and sends the DAP initialized event after a countdown delay.
         Server`tick(self)
         if (initialized > 0) {
-            initialized -= 1
+            initialized--
             if (initialized == 0) {
                 self->sendEvent("initialized", null)
             }
@@ -1698,12 +1604,8 @@ class private DAServer : Server {
             if (toRead == 0) {
                 push(current_string, uch)
                 let prefix = "Content-Length: "
-                if (length(current_string) <= length(prefix)) {
-                    continue
-                }
-                if (ch != '\n') {
-                    continue
-                }
+                if (length(current_string) <= length(prefix)) continue
+                if (ch != '\n') continue
                 let str = string(current_string)
                 if (str |> starts_with(prefix)) {
                     unsafe {
@@ -1714,13 +1616,9 @@ class private DAServer : Server {
                 }
                 continue
             }
-            if (ch == '\n' || ch == '\r') {
-                continue
-            }
+            if (ch == '\n' || ch == '\r') continue
             push(current_string, uch)
-            if (length(current_string) < toRead) {
-                continue
-            }
+            if (length(current_string) < toRead) continue
             toRead = 0
             var error : string
             var msg = json::read_json(current_string, error)
@@ -2038,19 +1936,19 @@ class private DAServer : Server {
                     let line & = unsafe(ctxData.stack[idx])
                     if (first || line.spAddr == spAddr) {
                         globs += length(line.globals)
-                        if (length(line.variables) > 0) {
+                        if (!empty(line.variables)) {
                             res.scopes |> emplace(Scope(
                                 name = first ? "Locals" : "Locals ({line.name})",
                                 variablesReference = double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + LOCAL_VARS)
                             ))
                         }
-                        if (length(line.arguments) > 0) {
+                        if (!empty(line.arguments)) {
                             res.scopes |> emplace(Scope(
                                 name = first ? "Arguments" : "Arguments ({line.name})",
                                 variablesReference = double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + ARGUMENT_VARS)
                             ))
                         }
-                        if (length(line.state) > 0) {
+                        if (!empty(line.state)) {
                             for (i, state in iter_range(line.state), line.state) {
                                 res.scopes |> emplace(Scope(
                                     name = state.name,
@@ -2060,7 +1958,7 @@ class private DAServer : Server {
                         }
                         first = false
                     }
-                    idx += 1
+                    idx++
                 }
                 if (globs > 0) {
                     res.scopes |> emplace(Scope(
@@ -2267,7 +2165,7 @@ class private DAServer : Server {
                     let stackLen = length(ctxData.stack)
                     // collect all vars from all blocks till the function frame
                     while (frame < stackLen && ctxData.stack[frame].isBlock) {
-                        frame += 1
+                        frame++
                     }
                     if (frame >= stackLen) {
                         frame = stackLen - 1
@@ -2471,25 +2369,17 @@ def private start_agent(force : bool = false) {
 def init_stepping_debugger() {
     //! Initializes the stepping debugger by enabling single-step mode on the current context at module load time.
     if (use_instruments() || !wait_debugger() || (is_in_aot() && loads_itself()) ||
-        is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) {
-        return
-    }
+        is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) return
     let args <- get_command_line_arguments()
-    if (has_value(args, "--no-das-debug")) {
-        return
-    }
+    if (has_value(args, "--no-das-debug")) return
     set_single_step(this_context(), true)
 }
 
 [_macro]
 def private auto_start_debug() {
-    if ((is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) {
-        return
-    }
+    if ((is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) return
     let args <- get_command_line_arguments()
-    if (has_value(args, "--no-das-debug")) {
-        return
-    }
+    if (has_value(args, "--no-das-debug")) return
     this_context().category |= context_category_flags.debugger_attached
     set_single_step(this_context(), !use_instruments() || wait_debugger())
     if (!has_debug_agent_context("~debug")) {
@@ -2526,16 +2416,12 @@ def private wait_debugger() : bool {
 def private loads_itself() : bool {
     let args <- get_command_line_arguments()
     for (i in range(1, length(args))) {
-        if (args[i] |> ends_with("daslib\\debug.das") || args[i] |> ends_with("daslib/debug.das")) {
-            return true
-        }
+        if (args[i] |> ends_with("daslib\\debug.das") || args[i] |> ends_with("daslib/debug.das")) return true
     }
     return false
 }
 
 def private sprint_data_fast(data : void? | float4; info : TypeInfo const?; flags : print_flags) : string {
-    if (info.basicType == Type.tArray || info.basicType == Type.tTable) {
-        return ""
-    }
+    if (info.basicType == Type.tArray || info.basicType == Type.tTable) return ""
     return sprint_data(data, info, flags)
 }

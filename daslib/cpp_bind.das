@@ -78,9 +78,7 @@ def log_cpp_class_adapter(cpp_file : file; name : string; var cinfo : TypeDeclPt
     var methods : array<tuple<name : string; index : int>>
     var types : array<TypeDeclPtr>
     for (fld, idx in cinfo.structType.fields, count()) {
-        if (!fld._type.isFunction || fld.name == "__finalize" || fld.init != null) {
-            continue
-        }
+        if (!fld._type.isFunction || fld.name == "__finalize" || fld.init != null) continue
         push(methods, (name = "{fld.name}", index = idx))
         push_clone(types, fld._type)
     }

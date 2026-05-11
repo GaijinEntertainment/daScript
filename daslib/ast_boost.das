@@ -100,9 +100,7 @@ def is_same_or_inherited(parent, child : Structure const?) {
     //! Returns true if `child` structure is the same as or inherits from `parent`.
     var ch = child
     while (ch != null) {
-        if (parent == ch) {
-            return true
-        }
+        if (parent == ch) return true
         ch = ch.parent
     }
     return false
@@ -110,25 +108,12 @@ def is_same_or_inherited(parent, child : Structure const?) {
 
 def is_class_method(cinfo : StructurePtr; finfo : TypeDeclPtr) {
     //! Returns true if the function type declaration is a method of the given class structure.
-    if (finfo.baseType != Type.tFunction) {
-        return false
-    }
-    if (finfo.dim |> length != 0) {
-        return false
-    }
-    if (finfo.argTypes |> length == 0) {
-        return false
-    }
-    if (finfo.argTypes[0].baseType != Type.tStructure) {
-        return false
-    }
-    if (finfo.argTypes[0].dim |> length != 0) {
-        return false
-    }
-    if (!is_same_or_inherited(finfo.argTypes[0].structType, cinfo)) {
-        return false
-    }
-    return true
+    if (finfo.baseType != Type.tFunction) return false
+    if (finfo.dim |> length != 0) return false
+    if (finfo.argTypes |> length == 0) return false
+    if (finfo.argTypes[0].baseType != Type.tStructure) return false
+    if (finfo.argTypes[0].dim |> length != 0) return false
+    return !!is_same_or_inherited(finfo.argTypes[0].structType, cinfo)
 }
 
 def emplace_new(var vec : dasvector`ptr`Expression; var ptr : Expression?) {
@@ -247,9 +232,7 @@ def private for_each_tag_function(mod : Module?; tag : string; blk : block<(var 
 def find_arg(argn : string; args : AnnotationArgumentList) : RttiValue {
     //! Finds an annotation argument value by name. Deprecated in favor of find_arg(args, argn).
     for (a in args) {
-        if (a.name == argn) {
-            return get_annotation_argument_value(a)
-        }
+        if (a.name == argn) return get_annotation_argument_value(a)
     }
     return RttiValue_nothing()
 }
@@ -257,9 +240,7 @@ def find_arg(argn : string; args : AnnotationArgumentList) : RttiValue {
 def find_arg(args : AnnotationArgumentList; argn : string) : RttiValue {
     //! Finds an annotation argument value by name in the argument list.
     for (a in args) {
-        if (a.name == argn) {
-            return get_annotation_argument_value(a)
-        }
+        if (a.name == argn) return get_annotation_argument_value(a)
     }
     return RttiValue_nothing()
 }
@@ -608,16 +589,12 @@ class BetterRttiVisitor : AstVariantMacro {
     }
     def override visitExprAsVariant(prog : ProgramPtr; mod : Module?; expr : ExprAsVariant?) : Expression? {
         //! Replaces `as` variant casts on AST expression types with __rtti-guarded reinterpret casts.
-        if (isExpression(expr.value._type)) {
-            return makeAsOrSafeAs(expr, new ExprCall(at = expr.at, name := "panic_expr_as"))
-        }
+        if (isExpression(expr.value._type)) return makeAsOrSafeAs(expr, new ExprCall(at = expr.at, name := "panic_expr_as"))
         return null
     }
     def override visitExprSafeAsVariant(prog : ProgramPtr; mod : Module?; expr : ExprSafeAsVariant?) : Expression? {
         //! Replaces safe `as` variant casts on AST expression types with __rtti-guarded casts returning null on mismatch.
-        if (isExpression(expr.value._type)) {
-            return makeAsOrSafeAs(expr, new ExprConstPtr(at = expr.at))
-        }
+        if (isExpression(expr.value._type)) return makeAsOrSafeAs(expr, new ExprConstPtr(at = expr.at))
         return null
     }
 }
@@ -931,9 +908,7 @@ def convert_to_expression(value : auto ==const) {
 def find_annotation(mod_name, ann_name : string) : Annotation const? {
     //! Finds an annotation by module name and annotation name in the compiling program.
     var mod = find_compiling_module(mod_name)
-    if (mod == null) {
-        return null
-    }
+    if (mod == null) return null
     var ann : Annotation const?
     module_for_each_annotation(mod) $(value) {
         if (value.name == ann_name) {
@@ -1079,9 +1054,7 @@ def add_annotation_argument(var arguments : AnnotationArgumentList; ann : rtti::
 def get_for_source_index(expr : ExprFor?; svar : VariablePtr) {
     //! Returns the index of an iterator variable in a for-loop expression, or -1 if not found.
     for (v, t in expr.iteratorVariables, count()) {
-        if (v == svar) {
-            return t
-        }
+        if (v == svar) return t
     }
     return -1
 }
@@ -1089,9 +1062,7 @@ def get_for_source_index(expr : ExprFor?; svar : VariablePtr) {
 def get_for_source_index(expr : ExprFor?; source : Expression?) {
     //! Returns the index of a source expression in a for-loop expression, or -1 if not found.
     for (s, t in expr.sources, count()) {
-        if (s == source) {
-            return t
-        }
+        if (s == source) return t
     }
     return -1
 }
@@ -1194,9 +1165,7 @@ def public get_workhorse_types {
 def public find_argument_index(typ : TypeDeclPtr; name : string) {
     //! Returns the index of a named argument in a type declaration, or -1 if not found.
     for (a, ai in typ.argNames, count()) {
-        if (a == name) {
-            return ai
-        }
+        if (a == name) return ai
     }
     return -1
 }

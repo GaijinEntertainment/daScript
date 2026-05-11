@@ -21,9 +21,7 @@ def private isConsumeArgument(expr : Expression?) : bool {
         if (func.fromGeneric != null) {
             func = func.fromGeneric
         }
-        if (func.name == "consume_argument" && func._module.name == "builtin") {
-            return true
-        }
+        if (func.name == "consume_argument" && func._module.name == "builtin") return true
     }
     return false
 }

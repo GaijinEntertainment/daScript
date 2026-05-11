@@ -144,9 +144,7 @@ class PerfLintVisitor : AstVisitor {
         // Suppress in templates and inside macro-generated functions —
         // the user didn't write that code.
         if (in_template  //
-            || (current_function != null && current_function.flags.generated)) {
-            return
-        }
+            || (current_function != null && current_function.flags.generated)) return
         // Deduplicate warnings — same source location reported once, regardless of generic instantiations
         let key = self->location_key(at)
         if (reported_locations |> has_value(key)) {  //
@@ -220,9 +218,7 @@ class PerfLintVisitor : AstVisitor {
         // Builtin generics (push, reserve, etc.) have fromGeneric set.
         // Verify first argument is an array type.
         if (expr.func == null || expr.func.fromGeneric == null  //
-            || expr.func.fromGeneric.name != fname || empty(expr.arguments)) {
-            return false
-        }
+            || expr.func.fromGeneric.name != fname || empty(expr.arguments)) return false
         let arg = expr.arguments[0]
         return arg._type != null && arg._type.baseType == Type.tArray
     }
@@ -422,9 +418,7 @@ class PerfLintVisitor : AstVisitor {
         //! suggest collapsing duplicated subexpressions (PERF014/015/016) from
         //! silently changing evaluation count.
         if ((a == null || b == null)  //
-            || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) {
-            return false
-        }
+            || (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects))) return false
         return describe(a) == describe(b)
     }
 
@@ -751,9 +745,7 @@ class PerfLintVisitor : AstVisitor {
         }
         let state = perf018_stack[frame_idx]
         if (state.disqualified || !state.matched  //
-            || state.arr_var == null || state.iter_var == null) {
-            return false
-        }
+            || state.arr_var == null || state.iter_var == null) return false
         let av = self->perf018_bare_var_of(at.subexpr)
         if (av != state.arr_var) {  //
             return false
@@ -1001,9 +993,7 @@ class PerfLintVisitor : AstVisitor {
         if (!self->parse_range_leg(expr.left, va, bound_a, hi_a)  //
             || !self->parse_range_leg(expr.right, vb, bound_b, hi_b)
             || !self->expr_equal_struct(va, vb)
-            || hi_a == hi_b) {
-            return
-        }
+            || hi_a == hi_b) return
         let lo = hi_a ? bound_b : bound_a
         let hi = hi_a ? bound_a : bound_b
         if (lo >= hi || !self->is_known_char_class_range(lo, hi)) {  //
@@ -1129,15 +1119,11 @@ class PerfLintVisitor : AstVisitor {
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
         if (in_closure > 0 || expr.op != "?"  //
-            || expr.subexpr == null || !(expr.subexpr is ExprOp2)) {
-            return
-        }
+            || expr.subexpr == null || !(expr.subexpr is ExprOp2)) return
         var cmp = expr.subexpr as ExprOp2
         let cop = string(cmp.op)
         if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")  //
-            || expr.left == null || expr.right == null) {
-            return
-        }
+            || expr.left == null || expr.right == null) return
         let t_branch = expr.left
         let f_branch = expr.right
         // PERF016 first — a ternary that matches abs may also superficially match

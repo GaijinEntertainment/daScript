@@ -280,9 +280,7 @@ class SpoofInstanceReader : AstReaderMacro {
                 vptr := vars[0]
             }
         }
-        if (vptr == null) {
-            return ""
-        }
+        if (vptr == null) return ""
         if (vptr.init == null) {
             prog |> macro_error(info, "variable {iargs.varName} has no initializer")
             return ""
