@@ -61,7 +61,7 @@ def bad_continue_in_loop(arr : array<int>) {
 }
 
 def bad_braced_one_liner(x : int) {
-    if (x > 0) { return; }   // one-line braced form — still bad
+    if (x > 0) { return ; }  // one-line braced form — still bad
 }
 
 // --- Good: braceless and postfix forms ---
