@@ -1425,17 +1425,18 @@ def edits_overlap(a : EditRecord; b : EditRecord) : bool {
 }
 
 def try_compile(file : string) : bool {
-    //! Best-effort post-rewrite verification. Compiles the file with the same
-    //! settings used during edit collection. Returns true if compile is clean.
+    //! Best-effort post-rewrite verification. Compiles the file as bin/daslang
+    //! would — full shared-module loading, optimizations and const-folding on —
+    //! so dependent modules' macros (e.g. dastest's UnrollMacro, which needs
+    //! `range(const)`) see the same shape they saw during edit collection.
+    //! Stricter settings produced false-positive reverts on files that
+    //! transitively require dastest, sqlite_boost, etc.
     var ok_out = false
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
-            cop.ignore_shared_modules = true
             cop.export_all = true
             cop.lint_check = false
-            cop.no_optimizations = true
-            cop.no_infer_time_folding = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 ok_out = ok
             }
