@@ -59,9 +59,7 @@ def test_extract_status_path_short(t : T?) {
 [test]
 def test_filesystem_signature_deterministic(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     t |> success(fwrite("{root}/a.md", "alpha"))
     t |> success(fwrite("{root}/b.md", "beta"))
     t |> success(fwrite("{root}/c.md", "gamma"))
@@ -78,9 +76,7 @@ def test_filesystem_signature_deterministic(t : T?) {
 def test_filesystem_signature_predicate_filters(t : T?) {
     let root_a = make_temp_root(t)
     let root_b = make_temp_root(t)
-    if (empty(root_a) || empty(root_b)) {
-        return
-    }
+    if (empty(root_a) || empty(root_b)) return
     // root_a: just .md files. root_b: same .md files plus .txt that should
     // be filtered by the predicate. Signatures must be equal.
     t |> success(fwrite("{root_a}/a.md", "alpha"))
@@ -119,9 +115,7 @@ def test_filesystem_signature_returns_empty_when_dirs_missing(t : T?) {
 [test]
 def test_compute_signature_returns_non_empty(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     t |> success(fwrite("{root}/a.md", "alpha"))
     t |> run("returns a non-empty signature with either git: or fs: prefix") <| @(t : T?) {
         let sig = compute_signature(root, @(p : string) => md_predicate(p), [root])
@@ -139,9 +133,7 @@ def test_compute_signature_no_git_falls_back(t : T?) {
     // /var/folders/... on macOS, /tmp on Linux), which is not inside a
     // git checkout. compute_signature should fall back to filesystem-only.
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     t |> success(fwrite("{root}/a.md", "alpha"))
     t |> run("system temp dir (not in git) -> fs: prefix") <| @(t : T?) {
         let sig = compute_signature(root, @(p : string) => md_predicate(p), [root])

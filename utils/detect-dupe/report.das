@@ -33,9 +33,7 @@ def public write_json_report(report : Report; path : string) : bool {
     let body = sprint_json(report, true)
     var ok = false
     fopen(path, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
+        if (fw == null) return
         ok = true
         fw |> fprint(body)
     }
@@ -126,14 +124,10 @@ def public build_per_candidate_report(report : Report;
     for (c in report.exact_clusters) {
         for (m in c.members) {
             let k = member_key(m)
-            if (!key_exists(cand_keys, k)) {
-                continue
-            }
+            if (!key_exists(cand_keys, k)) continue
             let idx = cand_keys[k]
             for (other in c.members) {
-                if (member_key(other) == k) {
-                    continue
-                }
+                if (member_key(other) == k) continue
                 rollups[idx].exact_matches |> emplace(make_match(other, 1.0f))
             }
         }
@@ -188,25 +182,23 @@ def public print_per_candidate_summary(report : Report;
     to_log(LOG_INFO, "candidates scanned: {length(pcr.candidates)}\n")
     var n_with_hits = 0
     for (r in pcr.candidates) {
-        if (length(r.exact_matches) > 0 || length(r.fuzzy_matches) > 0) {
+        if (!empty(r.exact_matches) || !empty(r.fuzzy_matches)) {
             n_with_hits++
         }
     }
     to_log(LOG_INFO, "candidates with matches: {n_with_hits}\n")
     for (r in pcr.candidates) {
-        if (length(r.exact_matches) == 0 && length(r.fuzzy_matches) == 0) {
-            continue
-        }
+        if (empty(r.exact_matches) && empty(r.fuzzy_matches)) continue
         let header = r.is_lambda ? "<lambda> ({r.name})" : r.name
         to_log(LOG_INFO, "\n* {r.file}:{r.line}  {header}\n")
-        if (length(r.exact_matches) > 0) {
+        if (!empty(r.exact_matches)) {
             to_log(LOG_INFO, "  exact:\n")
             for (m in r.exact_matches) {
                 let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name
                 to_log(LOG_INFO, "    - {m.file}:{m.line}  {mhdr}\n")
             }
         }
-        if (length(r.fuzzy_matches) > 0) {
+        if (!empty(r.fuzzy_matches)) {
             to_log(LOG_INFO, "  fuzzy:\n")
             for (m in r.fuzzy_matches) {
                 let mhdr = m.is_lambda ? "<lambda> ({m.name})" : m.name

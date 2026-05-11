@@ -23,7 +23,7 @@ def main() {
         }
         target_files |> push(arg)
     }
-    if (length(target_files) == 0) {  //
+    if (empty(target_files)) {  //
         return
     }
 
@@ -48,7 +48,7 @@ def main() {
                 print("{target}:{mod.required_at}: public\n")
                 continue
             }
-            if (length(mod.refs) > 0) {  //
+            if (!empty(mod.refs)) {  //
                 var proxy_requires : array<string>
                 for (ref in mod.refs) {
                     if (ref.kind != ModuleRefKind.pub_require) {  //

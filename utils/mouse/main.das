@@ -79,12 +79,8 @@ struct MouseArgs {
 }
 
 def resolve_root(arg_root : string) : string {
-    if (!empty(arg_root)) {
-        return arg_root
-    }
-    if (has_env_variable("MOUSE_ROOT")) {
-        return get_env_variable("MOUSE_ROOT")
-    }
+    if (!empty(arg_root)) return arg_root
+    if (has_env_variable("MOUSE_ROOT")) return get_env_variable("MOUSE_ROOT")
     return "./mouse-data"
 }
 
@@ -239,9 +235,7 @@ def resolve_log_mode(args : MouseArgs) : LogMode {
 }
 
 def fmt_log_row(r : QueryLog) : string {
-    if (r.match_count == 0) {
-        return "[id {r.id}] [{r.asked_at}] ({r.source}) {r.question} -> MISS\n"
-    }
+    if (r.match_count == 0) return "[id {r.id}] [{r.asked_at}] ({r.source}) {r.question} -> MISS\n"
     let useful_tag = r.useful |> is_some && r.useful |> unwrap_or(-1) == 0 ? " [BAD]" : ""
     return "[id {r.id}] [{r.asked_at}] ({r.source}) {r.question} -> {r.match_count} hit(s) (top: {r.top_slug}){useful_tag}\n"
 }
@@ -329,9 +323,7 @@ def jsonrpc_error(id : string; code : int; msg : string) : string {
 }
 
 def jsonvalue_id_to_string(id : JsonValue?) : string {
-    if (id == null) {
-        return "null"
-    }
+    if (id == null) return "null"
     return write_json(id)
 }
 
@@ -372,9 +364,7 @@ let HINT_HIT = "\nHint: if any answer above is stale or wrong, edit the .md at t
 
 def tool_ask(args : JsonValue?) : string {
     let question : string = args?["question"] ?? ""
-    if (empty(question)) {
-        return make_tool_result("missing 'question' argument", true)
-    }
+    if (empty(question)) return make_tool_result("missing 'question' argument", true)
     let k : int = args?["k"] ?? 5
     let raw_query : bool = args?["rawQuery"] ?? false
     let root = resolve_root(args?["root"] ?? "")
@@ -403,13 +393,9 @@ def tool_ask(args : JsonValue?) : string {
 
 def tool_add(args : JsonValue?) : string {
     let question : string = args?["question"] ?? ""
-    if (empty(question)) {
-        return make_tool_result("missing 'question' argument", true)
-    }
+    if (empty(question)) return make_tool_result("missing 'question' argument", true)
     let body : string = args?["body"] ?? ""
-    if (empty(body)) {
-        return make_tool_result("missing 'body' argument", true)
-    }
+    if (empty(body)) return make_tool_result("missing 'body' argument", true)
     let slug_hint : string = args?["slug"] ?? ""
     let force : bool = args?["force"] ?? false
     let root = resolve_root(args?["root"] ?? "")
@@ -452,15 +438,11 @@ def tool_add(args : JsonValue?) : string {
 
 def tool_get(args : JsonValue?) : string {
     let raw_slug : string = args?["slug"] ?? ""
-    if (empty(raw_slug)) {
-        return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar')", true)
-    }
+    if (empty(raw_slug)) return make_tool_result("missing 'slug' argument — pass the slug shown next to the `BM25`/`sim` scores in mouse__ask output (the bare-token form, e.g. 'how-do-i-foo-bar')", true)
     let slug = normalize_slug_input(raw_slug)
     let was_normalized = slug != raw_slug
     if (!is_valid_slug(slug)) {
-        if (was_normalized) {
-            return make_tool_result("invalid slug '{slug}' (normalized from '{raw_slug}') — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
-        }
+        if (was_normalized) return make_tool_result("invalid slug '{slug}' (normalized from '{raw_slug}') — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
         return make_tool_result("invalid slug '{slug}' — pass the bare-token slug shown next to the `BM25`/`sim` scores in mouse__ask output (e.g. 'how-do-i-foo-bar')", true)
     }
     let root = resolve_root(args?["root"] ?? "")
@@ -531,9 +513,7 @@ def tool_rebuild(args : JsonValue?) : string {
 
 def tool_bad(args : JsonValue?) : string {
     let qid : int64 = args?["queryId"] ?? 0l
-    if (qid <= 0l) {
-        return make_tool_result("missing or invalid 'queryId' (positive int64 required) — pass the value shown next to `query_id:` in the mouse__ask response", true)
-    }
+    if (qid <= 0l) return make_tool_result("missing or invalid 'queryId' (positive int64 required) — pass the value shown next to `query_id:` in the mouse__ask response", true)
     let root = resolve_root(args?["root"] ?? "")
     var output : string
     var is_error = false
@@ -598,13 +578,9 @@ def tool_log(args : JsonValue?) : string {
 }
 
 def handle_tools_call(id : string; params : JsonValue?) : string {
-    if (params == null) {
-        return jsonrpc_error(id, -32602, "missing params")
-    }
+    if (params == null) return jsonrpc_error(id, -32602, "missing params")
     let name_v = params?.name
-    if (name_v == null || !(name_v.value is _string)) {
-        return jsonrpc_error(id, -32602, "missing tool name")
-    }
+    if (name_v == null || !(name_v.value is _string)) return jsonrpc_error(id, -32602, "missing tool name")
     let name = name_v.value as _string
     let args = params?.arguments
     var result : string
@@ -629,9 +605,7 @@ def handle_tools_call(id : string; params : JsonValue?) : string {
 def dispatch_jsonrpc(body : string) : string {
     var err : string
     var parsed = read_json(body, err)
-    if (parsed == null) {
-        return jsonrpc_error("null", -32700, "parse error: {err}")
-    }
+    if (parsed == null) return jsonrpc_error("null", -32700, "parse error: {err}")
     let id = jsonvalue_id_to_string(parsed?.id)
     let method_v = parsed?.method
     if (method_v == null || !(method_v.value is _string)) {
@@ -674,9 +648,7 @@ def cmd_serve(args : MouseArgs) {
             while (!feof(sin)) {
                 let chunk = fgets(sin)
                 let n = length(chunk)
-                if (n == 0) {
-                    break
-                }
+                if (n == 0) break
                 if (character_at(chunk, n - 1) == '\n') {  // nolint:PERF003
                     if (n > 1 && character_at(chunk, n - 2) == '\r') {  // nolint:PERF003
                         w |> write(slice(chunk, 0, n - 2))
@@ -688,9 +660,7 @@ def cmd_serve(args : MouseArgs) {
                 w |> write(chunk)
             }
         }
-        if (empty(msg)) {
-            continue
-        }
+        if (empty(msg)) continue
         let response = dispatch_jsonrpc(msg)
         if (!empty(response)) {
             fprint(sout, response)

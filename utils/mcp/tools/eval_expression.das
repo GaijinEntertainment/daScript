@@ -13,14 +13,10 @@ def private extract_missing_prerequisites(output : string) : array<string> {
     var pos = 0
     while (true) {
         let i = find(output, marker, pos)
-        if (i < 0) {
-            break
-        }
+        if (i < 0) break
         let start = i + length(marker)
         let endq = find(output, "'", start)
-        if (endq < 0) {
-            break
-        }
+        if (endq < 0) break
         names |> push(slice(output, start, endq))
         pos = endq + 1
     }
@@ -29,9 +25,7 @@ def private extract_missing_prerequisites(output : string) : array<string> {
 
 def private contains_string(arr : array<string>; value : string) : bool {
     for (s in arr) {
-        if (s == value) {
-            return true
-        }
+        if (s == value) return true
     }
     return false
 }
@@ -45,9 +39,7 @@ def private rewrite_modules_in_set(req_modules : string; missing : array<string>
     var out_parts : array<string>
     for (r in req_list) {
         let trimmed = strip(r)
-        if (empty(trimmed)) {
-            continue
-        }
+        if (empty(trimmed)) continue
         if (!is_qualified_module_name(trimmed) && contains_string(missing, trimmed)) {
             out_parts |> push("daslib/{trimmed}")
             rewritten = true
@@ -79,9 +71,7 @@ def private try_eval_expression(exe, expression, req_modules : string; var outpu
     }
     var write_ok = false
     fopen(stub_path, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
+        if (fw == null) return
         write_ok = true
         fw |> fwrite(script)
     }
@@ -97,23 +87,15 @@ def private try_eval_expression(exe, expression, req_modules : string; var outpu
 }
 
 def do_eval_expression(expression, req_modules : string) : string {
-    if (empty(expression)) {
-        return make_tool_result("missing 'expression' argument", true)
-    }
+    if (empty(expression)) return make_tool_result("missing 'expression' argument", true)
     let exe = get_daslang_exe()
-    if (empty(exe)) {
-        return make_tool_result("Cannot determine daslang executable path", true)
-    }
+    if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     var output : string
     let exit_code = try_eval_expression(exe, expression, req_modules, output)
-    if (exit_code == 0) {
-        return make_tool_result(strip(output))
-    }
+    if (exit_code == 0) return make_tool_result(strip(output))
     // exit_code < 0 means try_eval_expression failed before invoking the daslang subprocess
     // (e.g. couldn't write the temp file). Surface the message directly — no retry would help.
-    if (exit_code < 0) {
-        return make_tool_result(output, true)
-    }
+    if (exit_code < 0) return make_tool_result(output, true)
     // Only retry under daslib/ when at least one unqualified token in `req_modules` was reported
     // by the compiler as `missing prerequisite '<X>'`. Builtin tokens that resolved (e.g. `math`)
     // stay verbatim, and qualified missing names (e.g. transitive `daslib/foo`) don't trigger a
@@ -126,12 +108,8 @@ def do_eval_expression(expression, req_modules : string) : string {
         if (did_rewrite) {
             var output2 : string
             let exit_code2 = try_eval_expression(exe, expression, new_modules, output2)
-            if (exit_code2 == 0) {
-                return make_tool_result("[resolved unqualified modules under daslib/: {new_modules}]\n{strip(output2)}")
-            }
-            if (exit_code2 < 0) {
-                return make_tool_result(output2, true)
-            }
+            if (exit_code2 == 0) return make_tool_result("[resolved unqualified modules under daslib/: {new_modules}]\n{strip(output2)}")
+            if (exit_code2 < 0) return make_tool_result(output2, true)
             // Retry also failed at the daslang level — surface the retry's output, since the rewrite
             // addressed the module-resolution side and any remaining error is downstream of that.
             return make_tool_result("Evaluation failed (exit code {exit_code2}) — also retried with require '{new_modules}':\n{output2}", true)

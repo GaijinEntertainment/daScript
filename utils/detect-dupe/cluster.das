@@ -55,9 +55,7 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
                          filter_candidates : bool = false) : array<Cluster> {
     var buckets : table<string; array<int>>
     for (i in range(length(records))) {
-        if (records[i].token_count < min_tokens) {
-            continue
-        }
+        if (records[i].token_count < min_tokens) continue
         let key = records[i].canonical
         if (key_exists(buckets, key)) {
             buckets[key] |> push(i)
@@ -70,9 +68,7 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
     var out : array<Cluster>
     var cluster_idx = 0
     for (idxs in values(buckets)) {
-        if (length(idxs) < 2) {
-            continue
-        }
+        if (length(idxs) < 2) continue
         var c = Cluster()
         c.canonical_sample := records[idxs[0]].canonical
         c.token_count = records[idxs[0]].token_count
@@ -94,9 +90,7 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
         // would silently fall back to legacy mode in baseline runs
         // where genuinely zero records are new (e.g. CI on an unchanged
         // branch), which is the wrong default for a CI gate.
-        if (filter_candidates && !cluster_has_candidate) {
-            continue
-        }
+        if (filter_candidates && !cluster_has_candidate) continue
         out |> emplace(c)
     }
     return <- out
@@ -118,25 +112,17 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
 def fuzzy_emit_if_match(records : array<FuncRecord>; lo : int; hi : int;
                         threshold : float; min_tokens : int;
                         var out : array<FuzzyPair>) {
-    if (records[lo].token_count < min_tokens || records[hi].token_count < min_tokens) {
-        return
-    }
-    if (records[lo].cluster_id != -1 && records[lo].cluster_id == records[hi].cluster_id) {
-        return
-    }
+    if (records[lo].token_count < min_tokens || records[hi].token_count < min_tokens) return
+    if (records[lo].cluster_id != -1 && records[lo].cluster_id == records[hi].cluster_id) return
     // Same canonical text would already be in the exact-cluster set
     // (caught above when both have a cluster_id). Compare on the string
     // itself rather than the 64-bit hash to dodge any theoretical
     // collision.
-    if (records[lo].canonical == records[hi].canonical) {
-        return
-    }
+    if (records[lo].canonical == records[hi].canonical) return
     let tl = float(records[lo].token_count)
     let th = float(records[hi].token_count)
     let len_ratio = tl < th ? tl / th : th / tl
-    if (len_ratio < threshold) {
-        return
-    }
+    if (len_ratio < threshold) return
     let s = jaccard_estimate(records[lo].sig, records[hi].sig)
     // Geometric mean of MinHash similarity and length similarity:
     // periodic code with very different lengths drops out.
@@ -180,14 +166,10 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
     }
     for (i in candidate_indices) {
         for (j in range(n)) {
-            if (j == i) {
-                continue
-            }
-            if (records[j].is_candidate && j < i) {
-                continue
-            }
-            let lo = i < j ? i : j
-            let hi = i < j ? j : i
+            if (j == i) continue
+            if (records[j].is_candidate && j < i) continue
+            let lo = min(i, j)
+            let hi = max(i, j)
             fuzzy_emit_if_match(records, lo, hi, threshold, min_tokens, out)
         }
     }
@@ -208,18 +190,10 @@ def public sort_clusters(var clusters : array<Cluster>) {
     sort(clusters) $(a, b) {
         let na = length(a.members)
         let nb = length(b.members)
-        if (na != nb) {
-            return na > nb
-        }
-        if (a.token_count != b.token_count) {
-            return a.token_count > b.token_count
-        }
-        if (a.canonical_sample != b.canonical_sample) {
-            return a.canonical_sample < b.canonical_sample
-        }
-        if (na == 0) {
-            return false
-        }
+        if (na != nb) return na > nb
+        if (a.token_count != b.token_count) return a.token_count > b.token_count
+        if (a.canonical_sample != b.canonical_sample) return a.canonical_sample < b.canonical_sample
+        if (na == 0) return false
         return member_key(a.members[0]) < member_key(b.members[0])
     }
 }
@@ -229,14 +203,10 @@ def public sort_clusters(var clusters : array<Cluster>) {
 // member locations so pair ordering is reproducible across runs.
 def public sort_pairs(var pairs : array<FuzzyPair>) {
     sort(pairs) $(a, b) {
-        if (a.similarity != b.similarity) {
-            return a.similarity > b.similarity
-        }
+        if (a.similarity != b.similarity) return a.similarity > b.similarity
         let ka = member_key(a.a)
         let kb = member_key(b.a)
-        if (ka != kb) {
-            return ka < kb
-        }
+        if (ka != kb) return ka < kb
         return member_key(a.b) < member_key(b.b)
     }
 }

@@ -18,12 +18,8 @@ struct RequiresResult {
 }
 
 def module_kind(mod : Module?) : string {
-    if (mod == null) {
-        return "missing"
-    }
-    if (!empty(mod.fileName)) {
-        return string(mod.fileName)
-    }
+    if (mod == null) return "missing"
+    if (!empty(mod.fileName)) return string(mod.fileName)
     return "builtin"
 }
 

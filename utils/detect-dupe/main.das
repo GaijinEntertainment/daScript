@@ -143,9 +143,7 @@ def mark_records_as_candidates(var records : array<FuncRecord>;
 def tag_baseline_new_members(var records : array<FuncRecord>;
                              baseline_members : table<string; void?>) {
     for (r in records) {
-        if (r.is_candidate) {
-            continue
-        }
+        if (r.is_candidate) continue
         // Path-normalize so a Windows-recorded baseline (`a\b.das`) and a
         // Unix-runner record (`a/b.das`) collide instead of mass-tagging
         // every file as new.
@@ -165,9 +163,7 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
     var kept : array<Cluster>
     kept |> reserve(length(clusters))
     for (c in clusters) {
-        if (key_exists(baseline_canonicals, c.canonical_sample)) {
-            continue
-        }
+        if (key_exists(baseline_canonicals, c.canonical_sample)) continue
         kept |> push_clone(c)
     }
     clusters <- kept
@@ -183,9 +179,7 @@ let PARALLEL_THRESHOLD = 16
 
 
 def should_parallelize(n_files : int; workers_setting : int) : bool {
-    if (workers_setting == 1) {
-        return false
-    }
+    if (workers_setting == 1) return false
     return n_files >= PARALLEL_THRESHOLD
 }
 
@@ -260,9 +254,7 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         let sp = shard_path_for(cfg.export_functions, tag, "shard", k) + ".json"
         var write_ok = false
         fopen(cp, "wb") $(fw) {
-            if (fw == null) {
-                return
-            }
+            if (fw == null) return
             write_ok = true
             for (entry in chunks[k]) {
                 fw |> fprint("{entry}\n")
@@ -406,9 +398,9 @@ def main() {
     }
     let importing = !empty(cfg.import_functions)
     let exporting = !empty(cfg.export_functions)
-    let has_against = length(cfg.against) > 0 || cfg.against_from_stdin
+    let has_against = !empty(cfg.against) || cfg.against_from_stdin
     let has_baseline = !empty(cfg.baseline)
-    let has_paths_input = (length(cfg.path) > 0
+    let has_paths_input = (!empty(cfg.path)
         || !empty(cfg.paths_from)
         || cfg.paths_stdin)
     if (importing && has_paths_input) {
@@ -469,7 +461,7 @@ def main() {
     var against_files : table<string; void?>
     if (has_against) {
         resolve_against_files(cfg.against, cfg.against_from_stdin, against_files)
-        if (length(against_files) == 0) {
+        if (empty(against_files)) {
             to_log(LOG_ERROR, "error: --against (or stdin) yielded no .das files\n")
             return
         }
@@ -514,7 +506,7 @@ def main() {
         for (p in seeds) {
             scan_das_files(p, files, cache)
         }
-        if (length(files) == 0 && !has_against) {
+        if (empty(files) && !has_against) {
             to_log(LOG_ERROR, "error: no .das files found under given paths\n")
             return
         }
@@ -553,7 +545,7 @@ def main() {
         // entirely. Workers see the pre-filtered list, so they don't
         // waste startup cost on fixtures.
         if (exporting && should_parallelize(length(compile_files), cfg.workers)) {
-            if (length(compile_files) == 0) {
+            if (empty(compile_files)) {
                 to_log(LOG_ERROR, "error: every input file contains an `expect` directive; nothing to export\n")
                 panic("detect-dupe export failed: no compilable files")
             }
@@ -561,7 +553,7 @@ def main() {
             return
         }
 
-        if (length(compile_files) > 0) {
+        if (!empty(compile_files)) {
             to_log(LOG_INFO, "scanning {length(compile_files)} file(s)...\n")
         }
 
@@ -628,9 +620,7 @@ def main() {
                     break
                 }
             }
-            if (already_have) {
-                continue
-            }
+            if (already_have) continue
             if (has_expect_directive(af)) {
                 n_against_skipped++
                 continue
@@ -686,7 +676,7 @@ def main() {
         }
     }
     let skip_counts <- apply_pattern_filter(records, kept_set, keep_all, cfg.verbose)
-    if (length(skip_counts) > 0) {
+    if (!empty(skip_counts)) {
         var skip_pairs : array<tuple<string; int>>
         skip_pairs |> reserve(length(skip_counts))
         for (k, v in keys(skip_counts), values(skip_counts)) {
@@ -748,9 +738,7 @@ def main() {
             let cand_refs <- collect_candidate_refs(records)
             let body = write_per_candidate_report(rep, cand_refs, top)
             fopen(cfg.json, "wb") $(fw) {
-                if (fw == null) {
-                    return
-                }
+                if (fw == null) return
                 json_ok = true
                 fw |> fprint(body)
             }
@@ -764,7 +752,7 @@ def main() {
         }
     }
 
-    if (cfg.check && (length(rep.exact_clusters) > 0 || length(rep.fuzzy_pairs) > 0)) {
+    if (cfg.check && (!empty(rep.exact_clusters) || !empty(rep.fuzzy_pairs))) {
         // --check turns the post-filter report into a CI gate. Use
         // `panic` to surface a non-zero exit code (same pattern as the
         // export-failure path above).

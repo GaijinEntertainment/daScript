@@ -55,9 +55,7 @@ def cpp_rule_id_to_kind(rule_id : string) : string {
         return "typedef"
     } elif (find(rule_id, "namespaces") >= 0) {
         return "namespace"
-    } elif (find(rule_id, "macros") >= 0) {
-        return "macro"
-    }
+    } elif (find(rule_id, "macros") >= 0) return "macro"
     return "unknown"
 }
 
@@ -86,9 +84,7 @@ def find_open_paren(line : string) : int {
             if (depth > 0) {
                 depth--
             }
-        } elif (ch == '(' && depth == 0) {
-            return i
-        }
+        } elif (ch == '(' && depth == 0) return i
     }
     return -1
 }
@@ -130,9 +126,7 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
             // skip optional API macros (any UPPER_SNAKE token before the name)
             while (!empty(rest) && (first_character(rest) >= 'A' && first_character(rest) <= 'Z')) { // nolint:PERF014
                 let first_space = find(rest, " ")
-                if (first_space < 0) {
-                    break
-                }
+                if (first_space < 0) break
                 let head = slice(rest, 0, first_space)
                 // Heuristic: if the head is all uppercase/underscore and ≥ 3 chars, treat it as macro.
                 var all_upper = true
@@ -143,17 +137,13 @@ def cpp_extract_name_pair(text : string; kind : string) : tuple<string; string> 
                         break
                     }
                 }
-                if (!all_upper || length(head) < 3) {
-                    break
-                }
+                if (!all_upper || length(head) < 3) break
                 // Don't skip when the next token isn't another identifier — that would mean
                 // `head` is the actual class name (e.g. `class DAS_API LOG : public ...` —
                 // we already skipped DAS_API; LOG looks like a macro by shape, but the
                 // following `:` proves it's the class name).
                 let after = strip(slice(rest, first_space + 1))
-                if (empty(after) || first_character(after) == ':' || first_character(after) == '<' || first_character(after) == '{' || first_character(after) == ';') {
-                    break
-                }
+                if (empty(after) || first_character(after) == ':' || first_character(after) == '<' || first_character(after) == '{' || first_character(after) == ';') break
                 rest = strip(slice(rest, first_space + 1))
             }
             // name ends at '{', ':', '<', whitespace, or ';'
@@ -285,9 +275,7 @@ def cpp_collapse_whitespace(s : string) : string {
         while (i < n && (character_at(s, i) == ' ' || character_at(s, i) == '\t' || character_at(s, i) == '\n' || character_at(s, i) == '\r')) { // nolint:PERF002,PERF003
             i++
         }
-        if (i >= n) {
-            break
-        }
+        if (i >= n) break
         let start = i
         while (i < n && character_at(s, i) != ' ' && character_at(s, i) != '\t' && character_at(s, i) != '\n' && character_at(s, i) != '\r') { // nolint:PERF002,PERF003
             i++
@@ -301,13 +289,9 @@ def cpp_collapse_whitespace(s : string) : string {
 // qualifiers (const/noexcept/override/final). Multi-line input is collapsed to a single line.
 // Returns "" for non-functions or when the text doesn't look parsable.
 def cpp_extract_signature(full_text : string; kind : string) : string {
-    if (kind != "function") {
-        return ""
-    }
+    if (kind != "function") return ""
     let paren_open = find_open_paren(full_text)
-    if (paren_open <= 0) {
-        return ""
-    }
+    if (paren_open <= 0) return ""
     // Walk balanced parens forward to find matching ')'.
     var depth = 1
     var i = paren_open + 1
@@ -321,9 +305,7 @@ def cpp_extract_signature(full_text : string; kind : string) : string {
         }
         i++
     }
-    if (depth != 0) {
-        return ""
-    }
+    if (depth != 0) return ""
     let paren_close = i - 1
     // Walk back from '(' over whitespace, then over operator chars + identifier chars
     // to find the start of the function name.
@@ -342,9 +324,7 @@ def cpp_extract_signature(full_text : string; kind : string) : string {
     var ret_start = name_start
     while (ret_start > 0) {
         let prev = character_at(full_text, ret_start - 1) // nolint:PERF002,PERF003
-        if (prev == '{' || prev == '}' || prev == ';') {
-            break
-        }
+        if (prev == '{' || prev == '}' || prev == ';') break
         ret_start--
     }
     // Skip leading whitespace in return type.
@@ -375,17 +355,13 @@ def cpp_extract_signature(full_text : string; kind : string) : string {
 // Extract template specialization args ("<float>" / "<T*>") for a struct/class/union
 // or function template specialization. Returns empty when there are no args.
 def cpp_extract_template_args(full_text : string; kind : string; name : string) : string {
-    if (empty(name)) {
-        return ""
-    }
+    if (empty(name)) return ""
     var search_name = name
     let last_sep = rfind(search_name, "::")
     if (last_sep >= 0) {
         search_name = slice(search_name, last_sep + 2)
     }
-    if (starts_with(search_name, "operator")) {
-        return ""  // operator<< / operator< would false-match
-    }
+    if (starts_with(search_name, "operator")) return ""  // operator<< / operator< would false-match
     let n = length(full_text)
     // Bound the search to the declaration prefix.
     var bound = n
@@ -407,9 +383,7 @@ def cpp_extract_template_args(full_text : string; kind : string; name : string) 
     }
     let needle = "{search_name}<"
     let pos = find(full_text, needle)
-    if (pos < 0 || pos >= bound) {
-        return ""
-    }
+    if (pos < 0 || pos >= bound) return ""
     // 'pos' is start of name; '<' is at pos + length(name).
     let lt = pos + length(search_name)
     var depth = 1
@@ -423,9 +397,7 @@ def cpp_extract_template_args(full_text : string; kind : string; name : string) 
         }
         i2++
     }
-    if (depth != 0) {
-        return ""
-    }
+    if (depth != 0) return ""
     return slice(full_text, lt, i2)
 }
 
@@ -521,19 +493,13 @@ def cpp_collect_git_excludes(search_dirs : array<string>; overrides : array<stri
         // is documented (repo-relative generic paths).
         let sd_rel = to_generic_path(make_relative_path(sd, das_root))
         dir_rec(sd) $(filename, is_dir) {
-            if (base_name(filename) != ".git") {
-                return
-            }
+            if (base_name(filename) != ".git") return
             let inner_repo = dir_name(filename)  // ".daspkg_cache/index"
             let rel = empty(inner_repo) ? sd_rel : "{sd_rel}/{to_generic_path(inner_repo)}"
-            if (key_exists(seen, rel)) {
-                return
-            }
+            if (key_exists(seen, rel)) return
             seen[rel] = true
             for (ov in overrides) {
-                if (ov == rel) {
-                    return
-                }
+                if (ov == rel) return
             }
             excl |> push("!**/{rel}/**")
         }
@@ -602,9 +568,7 @@ def cpp_run_scan(search_dirs : array<string>; glob_filter : string; var err_mess
         err_message := "sg scan failed (exit {rc})"
         return <- entries
     }
-    if (empty(raw) || raw == "[]") {
-        return <- entries
-    }
+    if (empty(raw) || raw == "[]") return <- entries
     // Parse-first: on Windows, sg sometimes exits non-zero while still emitting
     // valid JSON to stdout (warnings on stderr get merged in by run_and_capture).
     // Try to parse; only fail if parse itself fails, and enrich the message with
@@ -682,17 +646,11 @@ def cpp_extend_class_ranges(var entries : array<CppMatch>) {
         }
     }
     for (e in entries) {
-        if (e.kind != "function") {
-            continue
-        }
+        if (e.kind != "function") continue
         let key = "{e.file}:{e.line}"
-        if (!key_exists(class_idx_at, key)) {
-            continue
-        }
+        if (!key_exists(class_idx_at, key)) continue
         let stripped = strip(e.text)
-        if (!starts_with(stripped, "class ") && !starts_with(stripped, "struct ")) {
-            continue
-        }
+        if (!starts_with(stripped, "class ") && !starts_with(stripped, "struct ")) continue
         let cls_idx = class_idx_at[key]
         if (entries[cls_idx].end_line < e.end_line) {
             entries[cls_idx].end_line = e.end_line
@@ -748,9 +706,7 @@ def cpp_filter_entries(var entries : array<CppMatch>) : array<CppMatch> {
 // Empty -> default cpp dirs. Otherwise a single absolute or repo-relative path.
 def cpp_resolve_search_dirs(directory : string) : array<string> {
     var dirs : array<string>
-    if (empty(directory)) {
-        return <- cpp_default_search_dirs()
-    }
+    if (empty(directory)) return <- cpp_default_search_dirs()
     dirs |> push(resolve_path(directory))
     return <- dirs
 }
@@ -782,9 +738,7 @@ def private ends_with_any(path : string; suffix_globs : array<string>) : bool {
     for (g in suffix_globs) {
         // strip leading "*" if present (e.g. "*.cpp" -> ".cpp")
         let suffix = starts_with(g, "*") ? slice(g, 1) : g
-        if (ends_with(path, suffix)) {
-            return true
-        }
+        if (ends_with(path, suffix)) return true
     }
     return false
 }
@@ -806,9 +760,7 @@ def private collect_prune_prefixes(search_dirs : array<string>) : array<string> 
 
 def private is_pruned(path : string; prune_dirs : array<string>) : bool {
     for (pr in prune_dirs) {
-        if (starts_with(path, "{pr}/")) {
-            return true
-        }
+        if (starts_with(path, "{pr}/")) return true
     }
     return false
 }
@@ -826,9 +778,7 @@ def ensure_cpp_index() {
                                  unsafe(@ capture(& prune_dirs) (p : string) => ends_with_any(p, CPP_SEARCH_INCLUDE_GLOBS) && !is_pruned(p, prune_dirs)),
                                  cpp_default_search_dirs())
     let sig = empty(core) ? "" : "{cfg_sig}:{core}"
-    if (!empty(sig) && sig == cpp_index_signature) {
-        return  // cache hit
-    }
+    if (!empty(sig) && sig == cpp_index_signature) return  // cache hit
     // rebuild from scratch
     cpp_index |> clear()
     cpp_index_entries |> clear()
@@ -841,9 +791,7 @@ def ensure_cpp_index() {
     }
     for (i in range(length(entries))) {
         let e & = unsafe(entries[i])
-        if (empty(e.name)) {
-            continue
-        }
+        if (empty(e.name)) continue
         cpp_index_entries |> push(e)
         let new_idx = length(cpp_index_entries) - 1
         cpp_index[e.name] |> push(new_idx) // nolint:PERF006
@@ -868,9 +816,7 @@ def cpp_index_status() : string {
 // fills `match` with the FIRST stored match. Tries the name as given first,
 // then strips ::-qualifiers and tries the unqualified suffix.
 def cpp_lookup_by_name(cppName : string; var match : CppMatch&) : bool {
-    if (empty(cppName)) {
-        return false
-    }
+    if (empty(cppName)) return false
     ensure_cpp_index()
     if (key_exists(cpp_index, cppName)) {
         let idx = cpp_index[cppName][0]
@@ -898,30 +844,22 @@ def cpp_lookup_by_name(cppName : string; var match : CppMatch&) : bool {
 // (e.g. find_symbol) should call cpp_run_scan once and use
 // cpp_lookup_by_name_in_entries below to avoid N rescans of the same dirs.
 def cpp_lookup_by_name_scoped(cppName : string; dirs : array<string>; var match : CppMatch&) : bool {
-    if (empty(cppName) || empty(dirs)) {
-        return false
-    }
+    if (empty(cppName) || empty(dirs)) return false
     var err : string
     let entries <- cpp_run_scan(dirs, "", err)
-    if (!empty(err)) {
-        return false
-    }
+    if (!empty(err)) return false
     return cpp_lookup_by_name_in_entries(cppName, entries, match)
 }
 
 // Lookup by name against a pre-scanned entry list. Use when one tool call
 // resolves N symbols against the same dirs — scan once, look up N times.
 def cpp_lookup_by_name_in_entries(cppName : string; entries : array<CppMatch>; var match : CppMatch&) : bool {
-    if (empty(cppName)) {
-        return false
-    }
+    if (empty(cppName)) return false
     let last_sep = rfind(cppName, "::")
     let unq = last_sep >= 0 ? slice(cppName, last_sep + 2) : ""
     for (i in range(length(entries))) {
         let e & = unsafe(entries[i])
-        if (empty(e.name)) {
-            continue
-        }
+        if (empty(e.name)) continue
         if (e.name == cppName || e.qualified == cppName || (!empty(unq) && e.name == unq)) {
             match = entries[i]
             return true
@@ -935,9 +873,7 @@ def cpp_lookup_by_name_in_entries(cppName : string; entries : array<CppMatch>; v
 // holds copies (not references) so callers can sort freely.
 def cpp_lookup_all_by_name(name : string) : array<CppMatch> {
     var out : array<CppMatch>
-    if (empty(name)) {
-        return <- out
-    }
+    if (empty(name)) return <- out
     ensure_cpp_index()
     var indices : array<int>
     if (key_exists(cpp_index, name)) {

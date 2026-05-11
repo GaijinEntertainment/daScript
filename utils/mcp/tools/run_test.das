@@ -7,9 +7,7 @@ require daslib/fio
 
 def do_run_test(file : string; project : string = ""; timeout_str : string = ""; json : bool = false; failures_only : bool = false) : string {
     let exe = get_daslang_exe()
-    if (empty(exe)) {
-        return make_tool_result("Cannot determine daslang executable path", true)
-    }
+    if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let test_file = resolve_path(file)
     let dastest_main = "{get_das_root()}/dastest/dastest.das"
     var argv <- [exe, dastest_main, "--", "--test", test_file]
@@ -28,9 +26,7 @@ def do_run_test(file : string; project : string = ""; timeout_str : string = "";
         argv |> push(string(json_path))
         var output : string
         let exit_code = run_and_capture(argv, output, timeout_sec)
-        if (exit_code == popen_timed_out) {
-            return make_tool_result("\{\"file\":\"{file}\",\"success\":false,\"output\":\"Timed out after {timeout_sec}s\"}", true)
-        }
+        if (exit_code == popen_timed_out) return make_tool_result("\{\"file\":\"{file}\",\"success\":false,\"output\":\"Timed out after {timeout_sec}s\"}", true)
         // Read the JSON file written by dastest
         var json_content = ""
         fopen(json_path, "rb") $(f) {
@@ -49,11 +45,7 @@ def do_run_test(file : string; project : string = ""; timeout_str : string = "";
     // Text mode
     var output : string
     let exit_code = run_and_capture(argv, output, timeout_sec)
-    if (exit_code == popen_timed_out) {
-        return make_tool_result("Tests timed out after {timeout_sec}s:\n{output}", true)
-    }
-    if (exit_code != 0) {
-        return make_tool_result("Tests FAILED (exit code {exit_code}):\n{output}", true)
-    }
+    if (exit_code == popen_timed_out) return make_tool_result("Tests timed out after {timeout_sec}s:\n{output}", true)
+    if (exit_code != 0) return make_tool_result("Tests FAILED (exit code {exit_code}):\n{output}", true)
     return make_tool_result(output)
 }

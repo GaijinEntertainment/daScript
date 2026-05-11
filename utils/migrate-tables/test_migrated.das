@@ -32,10 +32,10 @@ def test_simple_table {
     tab[key] /= val
 
     // ++ pattern (add 1)
-    tab[key] += 1
+    tab[key]++
 
     // -- pattern (sub 1)
-    tab[key] -= 1
+    tab[key]--
 
     // reversed operand order: expr OP get_value
     tab[key] += val
@@ -64,7 +64,7 @@ def test_indexed_table {
     tabtab[idx][scoreSrc] *= score
 
     // increment
-    tabtab[idx][scoreSrc] += 1
+    tabtab[idx][scoreSrc]++
 }
 
 // --- double-indexed: tab[i][j].insert(key, tab[i][j].get_value(key) OP expr) ---
@@ -78,7 +78,7 @@ def test_double_indexed {
     var delta = 3
 
     deep[i][j][key] += delta
-    deep[i][j][key] -= 1
+    deep[i][j][key]--
 }
 
 // --- complex expression as table source ---

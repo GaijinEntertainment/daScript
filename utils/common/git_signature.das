@@ -24,9 +24,7 @@ def private to_relative(path, base : string) : string {
 // Strip `git status --porcelain` 3-char status prefix; return the new
 // name on rename lines (`R  old -> new`).
 def public extract_status_path(line : string) : string {
-    if (length(line) <= 3) {
-        return ""
-    }
+    if (length(line) <= 3) return ""
     var path = slice(line, 3)
     let arrow = find(path, " -> ")
     if (arrow >= 0) {
@@ -64,29 +62,21 @@ def public compute_filesystem_signature(
     var collected : array<tuple<string; int64>>
     var any_dir = false
     for (sd in search_dirs_abs) {
-        if (!is_directory(sd)) {
-            continue
-        }
+        if (!is_directory(sd)) continue
         any_dir = true
         var sd_rel = to_relative(sd, root)
         if (sd_rel == ".") {
             sd_rel = ""
         }
         dir_rec(sd) $(filename, is_dir) {
-            if (is_dir) {
-                return
-            }
+            if (is_dir) return
             let leaf = to_generic_path(filename)
             let rel = empty(sd_rel) ? leaf : "{sd_rel}/{leaf}"
-            if (!invoke(predicate, rel)) {
-                return
-            }
+            if (!invoke(predicate, rel)) return
             collected |> push((rel, stat_mtime_or_zero(path_join(sd, filename))))
         }
     }
-    if (!any_dir) {
-        return ""
-    }
+    if (!any_dir) return ""
     sort(collected) <| $(a, b) => a._0 < b._0
     let combined = build_string() $(var w) {
         for (item in collected) {
@@ -130,9 +120,7 @@ def public compute_signature(
                              ) : string {
     var top_buf : string
     if (run_and_capture(["git", "-C", root, "rev-parse", "--show-toplevel"], top_buf, 5.0) != 0
-        || empty(strip(top_buf))) {
-        return compute_filesystem_signature(root, predicate, search_dirs_abs)
-    }
+        || empty(strip(top_buf))) return compute_filesystem_signature(root, predicate, search_dirs_abs)
     let toplevel = strip(top_buf)
 
     var dirs_rel : array<string>
@@ -164,9 +152,7 @@ def public compute_signature(
 
     var status_buf : string
     if (run_and_capture(["git", "-C", toplevel, "status", "--porcelain", "--untracked-files=normal"],
-                        status_buf, 5.0) != 0) {
-        return compute_filesystem_signature(root, predicate, search_dirs_abs)
-    }
+                        status_buf, 5.0) != 0) return compute_filesystem_signature(root, predicate, search_dirs_abs)
     let lines <- split(status_buf, "\n")
     let combined = build_string() $(var w) {
         for (t in tree_parts) {
@@ -174,9 +160,7 @@ def public compute_signature(
         }
         for (line in lines) {
             let p = extract_status_path(line)
-            if (empty(p)) {
-                continue
-            }
+            if (empty(p)) continue
             var under = false
             for (rel in dirs_rel) {
                 if (empty(rel) || p == rel || starts_with(p, "{rel}/")) {
@@ -184,9 +168,7 @@ def public compute_signature(
                     break
                 }
             }
-            if (!under || !invoke(predicate, p)) {
-                continue
-            }
+            if (!under || !invoke(predicate, p)) continue
             w |> write("{line}:{stat_mtime_or_zero(path_join(toplevel, p))}\n")
         }
     }

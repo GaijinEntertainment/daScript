@@ -7,29 +7,21 @@ require daslib/ast_boost
 
 def do_ast_dump_expression(expression : string) : string {
     let exe = get_daslang_exe()
-    if (empty(exe)) {
-        return make_tool_result("Cannot determine daslang executable path", true)
-    }
+    if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let script_path = make_temp_das_file()
     let code = "options gen2\noptions rtti\nrequire daslib/ast\nrequire daslib/ast_boost\n\n[export]\ndef main() \{\n    var ed <- quote({expression})\n    print(\"\{debug_expression(ed)\}\n\")\n\}\n"
     var write_ok = false
     fopen(script_path, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
+        if (fw == null) return
         write_ok = true
         fw |> fprint(code)
     }
-    if (!write_ok) {
-        return make_tool_result("Cannot write temp file", true)
-    }
+    if (!write_ok) return make_tool_result("Cannot write temp file", true)
     var output : string
     let argv <- [exe, script_path]
     let exit_code = run_and_capture(argv, output)
     remove(script_path)
-    if (exit_code != 0) {
-        return make_tool_result("AST dump failed (exit code {exit_code}):\n{output}", true)
-    }
+    if (exit_code != 0) return make_tool_result("AST dump failed (exit code {exit_code}):\n{output}", true)
     return make_tool_result(output)
 }
 
@@ -51,19 +43,13 @@ def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : b
         var result = ""
         var found = false
         for_each_function(thisMod, "") $(func) {
-            if (func.flags.builtIn || func.flags._lambda || func.flags.generated) {
-                return
-            }
-            if (!empty(func_name) && string(func.name) != func_name) {
-                return
-            }
+            if (func.flags.builtIn || func.flags._lambda || func.flags.generated) return
+            if (!empty(func_name) && string(func.name) != func_name) return
             found = true
             result += "def {func.name}"
             var has_args = false
             for (i in range(length(func.arguments))) {
-                if (!arg_needs_documenting(func.arguments[i]._type)) {
-                    continue
-                }
+                if (!arg_needs_documenting(func.arguments[i]._type)) continue
                 if (!has_args) {
                     result += "("
                     has_args = true
@@ -83,9 +69,7 @@ def do_ast_dump_file(file, func_name : string; use_source_mode, use_lineinfo : b
             result += "\n\n"
         }
         if (!found) {
-            if (!empty(func_name)) {
-                return "Function '{func_name}' not found in {file}"
-            }
+            if (!empty(func_name)) return "Function '{func_name}' not found in {file}"
             return "No user functions found in {file}"
         }
         if (!empty(issues)) {

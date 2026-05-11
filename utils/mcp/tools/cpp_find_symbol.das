@@ -19,36 +19,22 @@ require strings public
 //     report partial names. Specializations are NOT separately listed (primary only).
 //   - Macro-expanded declarations (e.g. `DAS_BIND_FN(foo)`) are invisible to ast-grep.
 def do_cpp_find_symbol(query : string; kind : string = ""; directory : string = ""; glob_filter : string = "") : string {
-    if (empty(query)) {
-        return make_tool_result("'query' argument is required", true)
-    }
+    if (empty(query)) return make_tool_result("'query' argument is required", true)
     let search_dirs <- cpp_resolve_search_dirs(directory)
     var err : string
     var entries <- cpp_run_scan(search_dirs, glob_filter, err)
-    if (!empty(err)) {
-        return make_tool_result(err, true)
-    }
+    if (!empty(err)) return make_tool_result(err, true)
     var matched : array<int>
     for (i in range(length(entries))) {
         let e & = unsafe(entries[i])
-        if (empty(e.name)) {
-            continue
-        }
-        if (!empty(kind) && e.kind != kind) {
-            continue
-        }
+        if (empty(e.name)) continue
+        if (!empty(kind) && e.kind != kind) continue
         // try matching against both unqualified and qualified forms
-        if (!symbol_matches(e.name, query) && !symbol_matches(e.qualified, query)) {
-            continue
-        }
+        if (!symbol_matches(e.name, query) && !symbol_matches(e.qualified, query)) continue
         matched |> push(i)
-        if (length(matched) >= CPP_MAX_FIND_RESULTS) {
-            break
-        }
+        if (length(matched) >= CPP_MAX_FIND_RESULTS) break
     }
-    if (empty(matched)) {
-        return make_tool_result("No matches for '{query}'" + (empty(kind) ? "" : " (kind={kind})"))
-    }
+    if (empty(matched)) return make_tool_result("No matches for '{query}'" + (empty(kind) ? "" : " (kind={kind})"))
     let truncated = length(matched) >= CPP_MAX_FIND_RESULTS
     let output = build_string() $(var w) {
         let header_kind = empty(kind) ? "" : " (kind={kind})"

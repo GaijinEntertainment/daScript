@@ -62,7 +62,7 @@ def case_swizzle(v : float4) : float2 {
 def case_while_loop(start : int) : int {
     var x = start
     while (x > 0) {
-        x -= 1
+        x--
     }
     return x
 }

@@ -41,9 +41,7 @@ def main() {
             while (!feof(sin)) {
                 let chunk = fgets(sin)
                 let len = length(chunk)
-                if (len == 0) {
-                    break
-                }
+                if (len == 0) break
                 if (character_at(chunk, len - 1) == '\n') { // nolint:PERF003
                     // got full line — append without the trailing newline
                     if (len > 1 && character_at(chunk, len - 2) == '\r') { // nolint:PERF003
@@ -59,9 +57,7 @@ def main() {
             }
         }
 
-        if (empty(msg)) {
-            continue
-        }
+        if (empty(msg)) continue
 
         let response = dispatch_jsonrpc(msg)
         if (!empty(response)) {

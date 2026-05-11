@@ -40,9 +40,7 @@ def private parse_inline_list(value : string) : array<string> {
         return <- out
     }
     let inner = slice(trimmed, 1, length(trimmed) - 1)
-    if (empty(strip(inner))) {
-        return <- out
-    }
+    if (empty(strip(inner))) return <- out
     for (item in split(inner, ",")) {
         let cleaned = strip(item)
         if (!empty(cleaned)) {
@@ -54,9 +52,7 @@ def private parse_inline_list(value : string) : array<string> {
 
 def private parse_kv_line(line : string; var key : string&; var value : string&) : bool {
     let colon = find(line, ":")
-    if (colon < 0) {
-        return false
-    }
+    if (colon < 0) return false
     key = strip(slice(line, 0, colon))
     value = strip(slice(line, colon + 1))
     return true
@@ -67,12 +63,8 @@ def private parse_kv_line(line : string; var key : string&; var value : string&)
 // closing fence, returns whole input with parse_error set.
 def parse_frontmatter_text(text : string; var fm : Frontmatter) : tuple<body : string; parse_error : string> {
     let lines <- split(text, "\n")
-    if (empty(lines)) {
-        return (body = "", parse_error = "")
-    }
-    if (strip(lines[0]) != "---") {
-        return (body = text, parse_error = "")
-    }
+    if (empty(lines)) return (body = "", parse_error = "")
+    if (strip(lines[0]) != "---") return (body = text, parse_error = "")
     var close_idx = -1
     for (i in range(1, length(lines))) {
         if (strip(lines[i]) == "---") {
@@ -80,19 +72,13 @@ def parse_frontmatter_text(text : string; var fm : Frontmatter) : tuple<body : s
             break
         }
     }
-    if (close_idx < 0) {
-        return (body = text, parse_error = "missing closing frontmatter fence")
-    }
+    if (close_idx < 0) return (body = text, parse_error = "missing closing frontmatter fence")
     for (i in range(1, close_idx)) {
         let stripped = strip(lines[i])
-        if (empty(stripped)) {
-            continue
-        }
+        if (empty(stripped)) continue
         var key : string
         var value : string
-        if (!parse_kv_line(stripped, key, value)) {
-            continue
-        }
+        if (!parse_kv_line(stripped, key, value)) continue
         if (key == "slug") {
             fm.slug = value
         } elif (key == "title") {
@@ -130,9 +116,7 @@ def parse_questions(body : string) : array<string> {
             }
             continue
         }
-        if (starts_with(stripped, "#")) {
-            break
-        }
+        if (starts_with(stripped, "#")) break
         if (starts_with(stripped, "- ")) {
             let q = strip(slice(stripped, 2))
             if (!empty(q)) {
@@ -190,9 +174,7 @@ def slug_from_title(title : string) : string {
 // caller should still run `is_valid_slug` to catch anything weirder.
 def normalize_slug_input(raw : string) : string {
     var s = trim(raw)
-    if (empty(s)) {
-        return s
-    }
+    if (empty(s)) return s
     // to_generic_path first so backslashes count as separators on POSIX too —
     // LLM/MCP callers paste Windows-style paths regardless of host.
     let bn = base_name(to_generic_path(s))
@@ -211,9 +193,7 @@ def normalize_slug_input(raw : string) : string {
 // underscore; must start with alnum; capped at MAX_SLUG_LEN chars.
 def is_valid_slug(s : string) : bool {
     let n = length(s)
-    if (n == 0 || n > MAX_SLUG_LEN) {
-        return false
-    }
+    if (n == 0 || n > MAX_SLUG_LEN) return false
     var ok = true
     peek_data(s) $(bytes) {
         // Slugs must be lowercase-only — using is_alnum here would silently allow
@@ -243,30 +223,20 @@ def is_valid_slug(s : string) : bool {
 // valid hint with `_` keeps its `_`. On collision, truncates `base` only
 // as much as needed to fit the suffix within MAX_SLUG_LEN.
 def dedupe_slug(base : string; existing : table<string>) : string {
-    if (empty(base)) {
-        return ""
-    }
-    if (!key_exists(existing, base)) {
-        return base
-    }
+    if (empty(base)) return ""
+    if (!key_exists(existing, base)) return base
     // Suffix is at most `-99999` (6 chars). Cap base to leave room.
     let max_base = MAX_SLUG_LEN - 6
     var capped = length(base) > max_base ? slice(base, 0, max_base) : base
     while (!empty(capped) && character_at(capped, length(capped) - 1) == '-') {  // nolint:PERF003
         capped = slice(capped, 0, length(capped) - 1)
     }
-    if (empty(capped)) {
-        return ""
-    }
-    if (capped != base && !key_exists(existing, capped)) {
-        return capped
-    }
+    if (empty(capped)) return ""
+    if (capped != base && !key_exists(existing, capped)) return capped
     var n = 2
     while (n < 100000) {
         let candidate = "{capped}-{n}"
-        if (!key_exists(existing, candidate)) {
-            return candidate
-        }
+        if (!key_exists(existing, candidate)) return candidate
         n++
     }
     panic("slug collision overflow for {capped}")
@@ -327,9 +297,7 @@ def read_doc_text(path : string; var error : string&) : string {
     var content : string
     var ok = false
     fopen(path, "rb") $(f) {
-        if (f == null) {
-            return
-        }
+        if (f == null) return
         content := unsafe(fread_to_eof(f))
         ok = true
     }
@@ -342,9 +310,7 @@ def read_doc_text(path : string; var error : string&) : string {
 def read_doc(path : string; var doc : ParsedDoc; var error : string&) : bool {
     error = ""
     let text = read_doc_text(path, error)
-    if (!empty(error)) {
-        return false
-    }
+    if (!empty(error)) return false
     doc <- parse_doc_text(text)
     return true
 }
@@ -385,9 +351,7 @@ def write_doc(path : string; fm : Frontmatter; body : string; var error : string
     let text = serialize_doc(fm, body)
     var ok = false
     fopen(path, "wb") $(f) {
-        if (f == null) {
-            return
-        }
+        if (f == null) return
         f |> fprint(text)
         ok = true
     }
