@@ -49,16 +49,12 @@ def identify_target(hit : CursorHit) : RefTarget {
     // ExprCall → function
     if (expr is ExprCall) {
         let c = expr as ExprCall
-        if (c.func != null) {
-            return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(c.func), name = string(c.func.name))
-        }
+        if (c.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(c.func), name = string(c.func.name))
     }
     // ExprAddr → function pointer
     if (expr is ExprAddr) {
         let a = expr as ExprAddr
-        if (a.func != null) {
-            return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(a.func), name = string(a.func.name))
-        }
+        if (a.func != null) return RefTarget(kind = RefTargetKind.func, target_ptr = to_void(a.func), name = string(a.func.name))
     }
     // ExprInvoke → resolve the callable (first argument)
     if (expr is ExprInvoke) {
@@ -81,14 +77,12 @@ def identify_target(hit : CursorHit) : RefTarget {
                     if (vt.structType == null && vt.firstType != null) {
                         vt = vt.firstType
                     }
-                    if (vt.structType != null) {
-                        return RefTarget(
+                    if (vt.structType != null) return RefTarget(
                             kind = RefTargetKind.field,
                             field_struct_ptr = to_void(vt.structType),
                             field_name = string(f.name),
                             name = "{vt.structType.name}.{f.name}"
                         )
-                    }
                 }
             }
         }
@@ -122,47 +116,35 @@ def identify_target(hit : CursorHit) : RefTarget {
         if (value_type != null && value_type.structType == null && value_type.firstType != null) {
             value_type = value_type.firstType
         }
-        if (value_type != null && value_type.structType != null) {
-            return RefTarget(
+        if (value_type != null && value_type.structType != null) return RefTarget(
                 kind = RefTargetKind.field,
                 field_struct_ptr = to_void(value_type.structType),
                 field_name = fname,
                 name = "{value_type.structType.name}.{fname}"
             )
-        }
     }
     // ExprConstEnumeration → enum
     if (expr is ExprConstEnumeration) {
         let e = expr as ExprConstEnumeration
-        if (e.enumType != null) {
-            return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e.enumType), name = string(e.enumType.name))
-        }
+        if (e.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e.enumType), name = string(e.enumType.name))
     }
     // ExprConstBitfield → alias (bitfield type)
     if (expr is ExprConstBitfield) {
         if (expr._type != null) {
             let td = expr._type
-            if (!empty(td.alias)) {
-                return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
-            }
+            if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
         }
     }
     // Type alias reference (typedef, bitfield, variant, tuple)
     if (expr._type != null) {
         let td = expr._type
-        if (!empty(td.alias)) {
-            return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
-        }
+        if (!empty(td.alias)) return RefTarget(kind = RefTargetKind.alias, alias_name = string(td.alias), name = string(td.alias))
     }
     // Fallback: type reference
     if (expr._type != null) {
         let td = expr._type
-        if (td.structType != null) {
-            return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
-        }
-        if (td.enumType != null) {
-            return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name))
-        }
+        if (td.structType != null) return RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(td.structType), name = string(td.structType.name))
+        if (td.enumType != null) return RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(td.enumType), name = string(td.enumType.name))
     }
     return RefTarget()
 }
@@ -181,15 +163,11 @@ class RefVisitor : AstVisitor {
     }
 
     def add_ref(at : LineInfo; context : string) : void {
-        if (int(at.line) == 0) {
-            return
-        }
+        if (int(at.line) == 0) return
         // file filter
         if (!empty(file_filter) && at.fileInfo != null) {
             let fname = string(at.fileInfo.name)
-            if (find(fname, file_filter) < 0) {
-                return
-            }
+            if (find(fname, file_filter) < 0) return
         }
         refs |> emplace(Reference(
             file = at.fileInfo != null ? string(at.fileInfo.name) : "",
@@ -328,9 +306,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
     var result : RefTarget
     // check function declarations
     ast::for_each_function(thisMod, "") $(var func : FunctionPtr) {
-        if (result.kind != RefTargetKind.none) {
-            return
-        }
+        if (result.kind != RefTargetKind.none) return
         let f = func
         if (int(f.at.line) == line && f.at.fileInfo != null) {
             if (find(string(f.at.fileInfo.name), file) >= 0) {
@@ -338,14 +314,10 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
             }
         }
     }
-    if (result.kind != RefTargetKind.none) {
-        return result
-    }
+    if (result.kind != RefTargetKind.none) return result
     // check structure declarations
     ast::for_each_structure(thisMod) $(var st : StructurePtr) {
-        if (result.kind != RefTargetKind.none) {
-            return
-        }
+        if (result.kind != RefTargetKind.none) return
         let s = st
         if (int(s.at.line) == line && s.at.fileInfo != null) {
             if (find(string(s.at.fileInfo.name), file) >= 0) {
@@ -353,14 +325,10 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
             }
         }
     }
-    if (result.kind != RefTargetKind.none) {
-        return result
-    }
+    if (result.kind != RefTargetKind.none) return result
     // check enumeration declarations
     ast::for_each_enumeration(thisMod) $(var en : EnumerationPtr) {
-        if (result.kind != RefTargetKind.none) {
-            return
-        }
+        if (result.kind != RefTargetKind.none) return
         let e = en
         if (int(e.at.line) == line && e.at.fileInfo != null) {
             if (find(string(e.at.fileInfo.name), file) >= 0) {
@@ -368,14 +336,10 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
             }
         }
     }
-    if (result.kind != RefTargetKind.none) {
-        return result
-    }
+    if (result.kind != RefTargetKind.none) return result
     // check typedef declarations (typedef, bitfield, variant, tuple)
     ast::for_each_typedef(thisMod) $(name : string#; var value : TypeDeclPtr) {
-        if (result.kind != RefTargetKind.none) {
-            return
-        }
+        if (result.kind != RefTargetKind.none) return
         let td = value
         if (int(td.at.line) == line && td.at.fileInfo != null) {
             if (find(string(td.at.fileInfo.name), file) >= 0) {
@@ -383,14 +347,10 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
             }
         }
     }
-    if (result.kind != RefTargetKind.none) {
-        return result
-    }
+    if (result.kind != RefTargetKind.none) return result
     // check global variable declarations
     ast::for_each_global(thisMod) $(var value : VariablePtr) {
-        if (result.kind != RefTargetKind.none) {
-            return
-        }
+        if (result.kind != RefTargetKind.none) return
         let v = value
         if (int(v.at.line) == line && v.at.fileInfo != null) {
             if (find(string(v.at.fileInfo.name), file) >= 0) {
@@ -408,9 +368,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str : stri
 def public do_find_references(file : string; line_str, col_str, scope_str, no_opt_str : string; project : string = "") : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
-    if (line <= 0 || col <= 0) {
-        return make_tool_result("Invalid line or column (must be >= 1)", true)
-    }
+    if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let all_modules = scope_str == "all"
     let no_opt = no_opt_str == "true"
     return compile_program(file, true, no_opt, project) $(program; issues) {
@@ -420,9 +378,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
         if (!empty(hits)) {
             for (hit in hits) {
                 target = identify_target(hit)
-                if (target.kind != RefTargetKind.none) {
-                    break
-                }
+                if (target.kind != RefTargetKind.none) break
             }
         }
         // Step 1b: if no expression found, try declaration-based lookup
@@ -430,9 +386,7 @@ def public do_find_references(file : string; line_str, col_str, scope_str, no_op
             target = identify_declaration_target(program, file, line)
         }
         if (target.kind == RefTargetKind.none) {
-            if (empty(hits)) {
-                return "No expression or declaration found at {file}:{line}:{col}"
-            }
+            if (empty(hits)) return "No expression or declaration found at {file}:{line}:{col}"
             return build_string() $(var w) {
                 write(w, "Could not identify a referenceable symbol at {file}:{line}:{col}\n")
                 write(w, "Found expressions:\n")

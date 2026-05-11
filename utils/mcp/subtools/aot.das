@@ -21,17 +21,13 @@ def collect_aot_functions(program : smart_ptr<Program>) : array<AotFuncInfo> {
     var result : array<AotFuncInfo>
     let this_mod = program.getThisModule
     this_mod |> for_each_module_function($(fn) {
-        if (fn.flags.noAot || fn.moreFlags.isTemplate || !fn.flags.used || fn.flags.builtIn || fn.flags.generated) {
-            return
-        }
+        if (fn.flags.noAot || fn.moreFlags.isTemplate || !fn.flags.used || fn.flags.builtIn || fn.flags.generated) return
         let sig = build_string() $(var w) {
             write(w, fn.name)
             write(w, "(")
             var first = true
             for (i in range(length(fn.arguments))) {
-                if (fn.arguments[i]._type.baseType == Type.fakeContext || fn.arguments[i]._type.baseType == Type.fakeLineInfo) {
-                    continue
-                }
+                if (fn.arguments[i]._type.baseType == Type.fakeContext || fn.arguments[i]._type.baseType == Type.fakeLineInfo) continue
                 if (!first) {
                     write(w, "; ")
                 }
@@ -53,9 +49,7 @@ def collect_aot_functions(program : smart_ptr<Program>) : array<AotFuncInfo> {
 }
 
 def match_function_name(fn_name, query : string) : bool {
-    if (fn_name == query) {
-        return true
-    }
+    if (fn_name == query) return true
     let bt = find(fn_name, "`")
     return bt >= 0 && slice(fn_name, bt + 1) == query
 }
@@ -64,9 +58,7 @@ def match_function_generic(fn_name, query : string; program : smart_ptr<Program>
     var found = false
     let this_mod = program.getThisModule
     this_mod |> for_each_module_function($(fn) {
-        if (found || fn.name != fn_name) {
-            return
-        }
+        if (found || fn.name != fn_name) return
         if (fn.fromGeneric != null && match_function_name(string(fn.fromGeneric.name), query)) {
             found = true
         }
@@ -75,11 +67,8 @@ def match_function_generic(fn_name, query : string; program : smart_ptr<Program>
 }
 
 def run_aot(file, func_name : string; project : string = "") : string {
-    if (empty(file)) {
-        return make_tool_result("missing 'file' argument", true)
-    }
-    if (empty(func_name)) {
-        return compile_and_simulate_ctx(file, project) $(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) {
+    if (empty(file)) return make_tool_result("missing 'file' argument", true)
+    if (empty(func_name)) return compile_and_simulate_ctx(file, project) $(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) {
             var warnings = ""
             if (!empty(issues)) {
                 warnings = "Warnings:\n{issues}\n"
@@ -92,7 +81,6 @@ def run_aot(file, func_name : string; project : string = "") : string {
             }
             return result
         }
-    }
     return compile_and_simulate_ctx(file, project) $(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) {
         let all_funcs <- collect_aot_functions(program)
         var matches : array<int>
@@ -130,9 +118,7 @@ def run_aot(file, func_name : string; project : string = "") : string {
                 cop.aot_module = true
                 result = run_aot_function(program.get_ptr(), ctx.get_ptr(), cop, matched_name)
             }
-            if (empty(result)) {
-                return "Function '{matched_name}' produced no AOT output (marked noAot or no_aot)."
-            }
+            if (empty(result)) return "Function '{matched_name}' produced no AOT output (marked noAot or no_aot)."
             return result
         }
         var lines : array<string>

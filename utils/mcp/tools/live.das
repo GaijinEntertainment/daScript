@@ -24,9 +24,7 @@ def live_get(path, port : string) : string {
             }
         }
     }
-    if (empty(result) && !is_error) {
-        return make_tool_result("Failed to connect to daslang-live on port {p}. Is it running?", true)
-    }
+    if (empty(result) && !is_error) return make_tool_result("Failed to connect to daslang-live on port {p}. Is it running?", true)
     return make_tool_result(result, is_error)
 }
 
@@ -50,9 +48,7 @@ def live_post(path, port : string; body : string = "") : string {
             }
         }
     }
-    if (empty(result) && !is_error) {
-        return make_tool_result("Failed to connect to daslang-live on port {p}. Is it running?", true)
-    }
+    if (empty(result) && !is_error) return make_tool_result("Failed to connect to daslang-live on port {p}. Is it running?", true)
     return make_tool_result(result, is_error)
 }
 
@@ -122,9 +118,7 @@ def do_live_launch(file, project, port : string) : string {
     if (!stat(live_exe).is_valid) {
         live_exe = "{root}/bin/{exe_name}"
     }
-    if (!stat(live_exe).is_valid) {
-        return make_tool_result("daslang-live not found in {root}/bin/Release/ or {root}/bin/", true)
-    }
+    if (!stat(live_exe).is_valid) return make_tool_result("daslang-live not found in {root}/bin/Release/ or {root}/bin/", true)
     // Build launch command — daslang-live -cwd handles working directory
     var launch_exe = clone_string(live_exe)
     var launch_file = clone_string(file)
@@ -151,9 +145,7 @@ def do_live_launch(file, project, port : string) : string {
             exit_code = system("powershell -NoProfile -ExecutionPolicy Bypass -File \"{ps1}\"")
         }
         remove(ps1)
-        if (exit_code != 0) {
-            return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
-        }
+        if (exit_code != 0) return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
     } else {
         let sh = "{launcher}.sh"
         fopen(sh, "wt") $(f) {
@@ -166,9 +158,7 @@ def do_live_launch(file, project, port : string) : string {
             exit_code = system("chmod +x {sh} && {sh}")
         }
         remove(sh)
-        if (exit_code != 0) {
-            return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
-        }
+        if (exit_code != 0) return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
     }
     // Poll for startup (up to 10 seconds)
     for (i in range(20)) {

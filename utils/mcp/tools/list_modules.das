@@ -15,17 +15,13 @@ def do_list_modules(json : bool = false) : string {
     var builtin_mods : array<string>
     program_for_each_registered_module() $(mod) {
         let mname = string(mod.name)
-        if (mname == "$" || mname == "__main__" || empty(mname)) {
-            return
-        }
+        if (mname == "$" || mname == "__main__" || empty(mname)) return
         builtin_mods |> push(mname)
     }
     sort(builtin_mods)
     var daslib_mods : array<string>
     dir("daslib") $(fname) {
-        if (!ends_with(fname, ".das")) {
-            return
-        }
+        if (!ends_with(fname, ".das")) return
         daslib_mods |> push(slice(fname, 0, length(fname) - 4))
     }
     sort(daslib_mods)

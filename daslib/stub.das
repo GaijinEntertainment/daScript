@@ -21,9 +21,7 @@ class TemplateMacro : AstFunctionAnnotation {
         for (arg in func.arguments) {
             arg.flags |= VariableFlags.marked_used
         }
-        if (func.result.baseType == Type.tVoid) {
-            return true
-        }
+        if (func.result.baseType == Type.tVoid) return true
         var resType = clone_type(func.result)
         if (!resType.flags.ref) {
             resType.flags &= ~TypeDeclFlags.constant

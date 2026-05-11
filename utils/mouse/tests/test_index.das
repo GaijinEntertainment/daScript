@@ -62,9 +62,7 @@ def seed_doc(t : T?; root : string;
 [test]
 def test_rebuild_empty(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var n = -1
     with_index_db(root) $(db) {
         n = rebuild(db, root)
@@ -76,9 +74,7 @@ def test_rebuild_empty(t : T?) {
 [test]
 def test_rebuild_picks_up_files(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs1 <- ["one a", "one b"]
     let qs2 <- ["two a"]
@@ -101,9 +97,7 @@ def test_rebuild_picks_up_files(t : T?) {
 [test]
 def test_rebuild_idempotent(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["q one"]
     seed_doc(t, root, "alpha", "Alpha title", "alpha body", no_links, qs)
@@ -125,9 +119,7 @@ def test_rebuild_idempotent(t : T?) {
 [test]
 def test_rebuild_removes_deleted(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs1 <- ["a"]
     let qs2 <- ["b"]
@@ -164,9 +156,7 @@ def test_rebuild_removes_deleted(t : T?) {
 [test]
 def test_search_returns_top_match(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs1 <- ["how do typefunction macros work"]
     let qs2 <- ["how do I install daspkg"]
@@ -190,9 +180,7 @@ def test_search_returns_top_match(t : T?) {
 [test]
 def test_search_empty_corpus(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var n_results = -1
     with_index_db(root) $(db) {
         rebuild(db, root)
@@ -206,9 +194,7 @@ def test_search_empty_corpus(t : T?) {
 [test]
 def test_search_no_match(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["the canonical question"]
     seed_doc(t, root, "doc-a", "Some title", "some body", no_links, qs)
@@ -225,9 +211,7 @@ def test_search_no_match(t : T?) {
 [test]
 def test_search_respects_k(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     for (i in range(5)) {
         let qs <- ["foo bar question {i}"]
@@ -248,9 +232,7 @@ def test_search_respects_k(t : T?) {
 [test]
 def test_search_k_zero_returns_empty(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["foo question"]
     seed_doc(t, root, "alpha", "Foo title", "foo body", no_links, qs)
@@ -274,9 +256,7 @@ def test_search_k_zero_returns_empty(t : T?) {
 [test]
 def test_search_handles_tab_in_query(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["sample"]
     seed_doc(t, root, "alpha", "Tab Match", "alpha gamma sample body", no_links, qs)
@@ -300,9 +280,7 @@ def test_search_handles_tab_in_query(t : T?) {
 [test]
 def test_links_table_populated(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let links_a <- ["other-slug"]
     let no_q : array<string>
     seed_doc(t, root, "doc-a", "Title A", "body A", links_a, no_q)
@@ -325,9 +303,7 @@ def test_links_table_populated(t : T?) {
 [test]
 def test_reverse_index(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let links_a <- ["target"]
     let links_b <- ["target"]
     let no_q : array<string>
@@ -351,9 +327,7 @@ def test_reverse_index(t : T?) {
 [test]
 def test_dupe_check_finds_similar(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to write typefunction macros"]
     seed_doc(t, root, "doc-a", "Writing typefunction macros", "details", no_links, qs)
@@ -379,9 +353,7 @@ def test_dupe_check_finds_similar(t : T?) {
 [test]
 def test_dupe_check_no_match(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "doc-a", "Alpha", "alpha body", no_links, qs)
@@ -398,9 +370,7 @@ def test_dupe_check_no_match(t : T?) {
 [test]
 def test_add_dupe_gate_blocks_high_similarity(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to write typefunction macros"]
     // Title and incoming question share 5 of 6 content tokens after stop-word
@@ -431,9 +401,7 @@ def test_add_dupe_gate_blocks_high_similarity(t : T?) {
 [test]
 def test_add_dupe_gate_allows_low_similarity(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to typefunction"]
     seed_doc(t, root, "doc-a", "Typefunction", "typefunction body", no_links, qs)
@@ -467,9 +435,7 @@ def test_add_dupe_gate_allows_low_similarity(t : T?) {
 [test]
 def test_dupe_check_jaccard_filters_common_words(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to write tests"]
     seed_doc(t, root, "doc-a", "how do I write tests", "body", no_links, qs)
@@ -494,9 +460,7 @@ def test_dupe_check_jaccard_filters_common_words(t : T?) {
 [test]
 def test_add_doc_rejects_traversal_slug_hint(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var created = false
     var produced_slug : string
     var written_under_docs = false
@@ -523,9 +487,7 @@ def test_add_doc_rejects_traversal_slug_hint(t : T?) {
 [test]
 def test_add_doc_sanitizes_question_newlines(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var written_path : string
     var produced_slug : string
     with_index_db(root) $(db) {
@@ -548,9 +510,7 @@ def test_add_doc_sanitizes_question_newlines(t : T?) {
 [test]
 def test_add_doc_rejects_blank_question(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var created = false
     var error : string
     var n_files_after = -1
@@ -573,9 +533,7 @@ def test_add_doc_rejects_blank_question(t : T?) {
 [test]
 def test_rebuild_dedupes_duplicate_links(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let dup_links <- ["target", "target", "target"]
     let no_q : array<string>
     seed_doc(t, root, "alpha", "Alpha", "alpha body", dup_links, no_q)
@@ -601,9 +559,7 @@ def test_rebuild_dedupes_duplicate_links(t : T?) {
 [test]
 def test_rebuild_skips_basename_slug_mismatch(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let no_q : array<string>
     seed_doc(t, root, "good", "Good", "good body", no_links, no_q)
@@ -641,9 +597,7 @@ def test_rebuild_skips_basename_slug_mismatch(t : T?) {
 [test]
 def test_search_handles_uppercase_fts_keywords(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha"]
     seed_doc(t, root, "alpha", "Alpha title", "alpha bravo body", no_links, qs)
@@ -669,9 +623,7 @@ def test_search_handles_uppercase_fts_keywords(t : T?) {
 [test]
 def test_rebuild_skips_invalid_frontmatter_slug(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let no_q : array<string>
     seed_doc(t, root, "good", "Good", "good body", no_links, no_q)
@@ -704,9 +656,7 @@ def test_rebuild_skips_invalid_frontmatter_slug(t : T?) {
 [test]
 def test_add_doc_accepts_valid_slug_hint(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var produced_slug : string
     with_index_db(root) $(db) {
         rebuild(db, root)
@@ -722,9 +672,7 @@ def test_add_doc_accepts_valid_slug_hint(t : T?) {
 [test]
 def test_log_query_records_hit(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to typefunction"]
     seed_doc(t, root, "alpha", "Typefunction macros", "alpha body", no_links, qs)
@@ -749,9 +697,7 @@ def test_log_query_records_hit(t : T?) {
 [test]
 def test_log_query_records_miss(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -774,9 +720,7 @@ def test_log_query_records_miss(t : T?) {
 [test]
 def test_rebuild_preserves_log(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -800,9 +744,7 @@ def test_rebuild_preserves_log(t : T?) {
 [test]
 def test_recent_queries_filters_misses(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -829,9 +771,7 @@ def test_recent_queries_filters_misses(t : T?) {
 [test]
 def test_log_query_returns_increasing_ids(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -852,9 +792,7 @@ def test_log_query_returns_increasing_ids(t : T?) {
 [test]
 def test_mark_no_match_sets_useful_zero(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -882,9 +820,7 @@ def test_mark_no_match_sets_useful_zero(t : T?) {
 [test]
 def test_mark_no_match_nonexistent_id_returns_zero(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     var n_marked = -1
     with_index_db(root) $(db) {
         rebuild(db, root)
@@ -897,9 +833,7 @@ def test_mark_no_match_nonexistent_id_returns_zero(t : T?) {
 [test]
 def test_mark_no_match_idempotent(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -924,9 +858,7 @@ def test_mark_no_match_idempotent(t : T?) {
 [test]
 def test_recent_queries_filters_bad(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -958,9 +890,7 @@ def test_recent_queries_filters_bad(t : T?) {
 [test]
 def test_recent_queries_review_excludes_misses(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha", "alpha body", no_links, qs)
@@ -982,9 +912,7 @@ def test_recent_queries_review_excludes_misses(t : T?) {
 [test]
 def test_add_dupe_gate_force(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["how to typefunction"]
     seed_doc(t, root, "doc-a", "Typefunction", "typefunction body", no_links, qs)
@@ -1015,9 +943,7 @@ def test_add_dupe_gate_force(t : T?) {
 [test]
 def test_ensure_index_fresh_picks_up_new_md(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs1 <- ["alpha question"]
     seed_doc(t, root, "alpha", "Alpha title", "alpha body", no_links, qs1)
@@ -1050,9 +976,7 @@ def test_ensure_index_fresh_picks_up_new_md(t : T?) {
 [test]
 def test_ensure_index_fresh_noop_when_unchanged(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["alpha q"]
     seed_doc(t, root, "alpha", "Alpha", "body", no_links, qs)
@@ -1078,9 +1002,7 @@ def test_ensure_index_fresh_noop_when_unchanged(t : T?) {
 [test]
 def test_search_raw_query(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs1 <- ["title alpha question"]
     let qs2 <- ["title bravo question"]
@@ -1108,9 +1030,7 @@ def test_search_raw_query(t : T?) {
 [test]
 def test_search_raw_query_phrase(t : T?) {
     let root = make_temp_root(t)
-    if (empty(root)) {
-        return
-    }
+    if (empty(root)) return
     let no_links : array<string>
     let qs <- ["the alpha bravo charlie sequence"]
     seed_doc(t, root, "alpha", "alpha bravo charlie", "the order matters: alpha bravo charlie", no_links, qs)

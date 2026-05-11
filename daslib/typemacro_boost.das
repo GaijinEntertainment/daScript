@@ -39,16 +39,10 @@ def append_expressions(var blk : ExprBlock?; var eblk : ExpressionPtr) {
 
 [macro_function]
 def is_typedecl_ptr(t : TypeDeclPtr) {
-    if (t.baseType != Type.tPointer) {
-        return false
-    }
+    if (t.baseType != Type.tPointer) return false
     assume pt = t.firstType
-    if (pt == null) {
-        return false
-    }
-    if (pt.baseType != Type.tHandle || pt.annotation.name != "TypeDecl" || pt.annotation._module.name != "ast_core") {
-        return false
-    }
+    if (pt == null) return false
+    if (pt.baseType != Type.tHandle || pt.annotation.name != "TypeDecl" || pt.annotation._module.name != "ast_core") return false
     return true
 }
 
@@ -57,9 +51,7 @@ def public get_string_const(expr : ExpressionPtr) : string {
     //! Extracts a string constant value or function address name from an expression.
     if (expr is ExprConstString) {
         return string((expr as ExprConstString).value)
-    } elif (expr is ExprAddr) {
-        return string((expr as ExprAddr).target)
-    }
+    } elif (expr is ExprAddr) return string((expr as ExprAddr).target)
     macro_error(compiling_program(), expr.at, "expecting string constant or function address")
     return ""
 }
@@ -163,9 +155,7 @@ class TypeMacroMacro : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_function") {
-                if (!(find_arg(ann.arguments, "patched") is nothing)) {
-                    return true
-                }
+                if (!(find_arg(ann.arguments, "patched") is nothing)) return true
             }
         }
         // we expect at least 2 arguments
@@ -258,9 +248,7 @@ def public make_typemacro_template_instance(instance_type, template_type : Struc
 [macro_function]
 def public is_typemacro_template_instance(passArgument, templateType : TypeDeclPtr; extra : array<tuple<string, string>> = array<tuple<string, string>>()) : bool {
     //! template instance is determined by having parent == template.parent
-    if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) {
-        return false
-    }
+    if (passArgument == null || passArgument.baseType != Type.tStructure || passArgument.structType == null) return false
     if (!templateType.isStructure) {
         panic("macro implementation error. templateType {describe(templateType)} is not a structure")
         return false
@@ -293,9 +281,7 @@ def public infer_struct_aliases(structType : Structure?; var args : array<TypeMa
     //! Infers structure alias types for all template arguments from a structure definition.
     for (arg in args) {
         arg.inferred_type  = get_structure_alias(structType, arg.name)
-        if (arg.inferred_type == null) {
-            return false
-        }
+        if (arg.inferred_type == null) return false
     }
     return true
 }
@@ -406,9 +392,7 @@ class TemplateTypeMacroMacro : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for (ann in func.annotations) {
             if (ann.annotation.name == "typemacro_template_function") {
-                if (!(find_arg(ann.arguments, "patched") is nothing)) {
-                    return true
-                }
+                if (!(find_arg(ann.arguments, "patched") is nothing)) return true
             }
         }
         // lets get the template type name
@@ -688,9 +672,7 @@ def public is_custom_work_done(structType : Structure?) : bool {
     //! Returns true if custom work has already been performed on the template structure.
     for (ann in structType.annotations) {
         if (ann.annotation.name == "template_structure") {
-            if (!(find_arg(ann.arguments, "custom_work_done") is nothing)) {
-                return true
-            }
+            if (!(find_arg(ann.arguments, "custom_work_done") is nothing)) return true
         }
     }
     return false

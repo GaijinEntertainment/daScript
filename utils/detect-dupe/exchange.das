@@ -76,9 +76,7 @@ def public write_export(records : array<FuncRecord>; path : string) : bool {
     let body = sprint_json(env, true)
     var ok = false
     fopen(path, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
+        if (fw == null) return
         ok = true
         fw |> fprint(body)
     }
@@ -121,9 +119,7 @@ def public merge_envelope_files(shard_paths : array<string>; out_path : string;
     let body = sprint_json(merged, true)
     var ok = false
     fopen(out_path, "wb") $(fw) {
-        if (fw == null) {
-            return
-        }
+        if (fw == null) return
         ok = true
         fw |> fprint(body)
     }
@@ -211,9 +207,7 @@ def public load_baseline_canonicals(path : string;
         return false
     }
     for (ef in env.functions) {
-        if (empty(ef.canonical)) {
-            continue
-        }
+        if (empty(ef.canonical)) continue
         if (!key_exists(canonicals, ef.canonical)) {
             canonicals |> insert(ef.canonical, null)
         }

@@ -20,7 +20,7 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE001 | `foo() <| $(a) { ... }` | Remove `<|` pipe; use `foo() $(a) { ... }` |
 | STYLE002 | `foo() <| $() { ... }` | Remove pipe and `$()`; use `foo() { ... }` |
 | STYLE003 | `foo() $() { ... }` | Remove redundant `$()`; use `foo() { ... }` |
-| STYLE005 | `if (cond) { return val }` | Use `return val if (cond)` (configurable, off by default) |
+| STYLE005 | `if (cond) { return val }` (and `{ break }` / `{ continue }`) | Use braceless `if (cond) return val` or postfix `return val if (cond)`. Always-on (no opt-in flag). Discriminator: `blk.at != inner.at` ⇔ user-written braces (synthetic blocks share LineInfo with the inner stmt). |
 | STYLE006 | `string(x.__rtti) == "ExprFoo"` | Use `x is ExprFoo` |
 | STYLE010 | `if (true) { ... }` | Use a bare block `{ ... }` |
 | STYLE011 | `var x : int; x = 5` | Combine into `var x = 5` (or `:=` / `<-`) |
@@ -32,6 +32,8 @@ The `style_lint` module detects non-idiomatic patterns in daslang code at compil
 | STYLE017 | `if (cond) return true; else return false` (and the inverse) | Use `return cond` / `return !cond`. Two AST shapes: if-else with bool-literal returns, and `if (cond) { return b1 }` followed immediately by `return b2` (b1 != b2). |
 | STYLE018 | `b == true` / `b == false` / `b != true` / `b != false` (and Yoda forms) | Use `b` / `!b` directly. Skipped when both sides are bool literals (e.g. `true == true`). |
 | STYLE019 | `min(max(x, lo), hi)` (and the `max(min(x, hi), lo)` mirror) | Use `clamp(x, lo, hi)` from math module. Inner/outer must resolve to math::min/max specifically, not user overloads. |
+| STYLE020 | `from_JV(v, type<T>, defV)` resolving to a json_boost scalar overload | Use `v ?? defV`. Detection walks `expr.func.fromGeneric` to the root (two levels for json_boost's `[template(ent)]` generics) and matches root.name/root._module against `from_JV` / `json_boost`. Uses `expr._type` for the supported-scalar check (robust under pre- and post-instantiation arg shapes). Vector/table/struct/enum/bitfield overloads stay silent — no matching `??`. |
+| STYLE021 | `var v : table<string; JsonValue?>` followed by ≥ 2 contiguous `v \|> insert(<const string>, ...)` | Use the named-tuple JV form: `var v = JV((k1=val1, k2=val2, ...))` (`daslib/json_boost.das:638`). Computed keys disqualify the whole chain. |
 
 Note: `get_ptr()` related patterns (null comparison, field access) are in `perf_lint` as PERF010/PERF011 since they have performance implications.
 
@@ -95,11 +97,14 @@ Individual warnings can be suppressed with `// nolint:STYLExxx` on the same line
 
 ```das
 // Compile-time mode: reports warnings during compilation
-def public style_lint(prog : ProgramPtr; compile_time_errors : bool; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int
+def public style_lint(prog : ProgramPtr; compile_time_errors : bool; comment_hygiene : bool = false) : int
 
 // Collection mode: appends warnings to array
-def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; postfix_conditionals : bool = false; comment_hygiene : bool = false) : int
+def public style_lint_collect(prog : ProgramPtr; var warnings : array<string>; comment_hygiene : bool = false) : int
 ```
+
+The `postfix_conditionals` parameter was removed when STYLE005 became
+always-on; check sites no longer need to pass it.
 
 ## MCP Integration
 

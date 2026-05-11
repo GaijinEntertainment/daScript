@@ -94,9 +94,7 @@ def reset_str() : string {
 
 def private has_value(args : array<string>; val : string) : bool {
     for (a in args) {
-        if (a == val) {
-            return true
-        }
+        if (a == val) return true
     }
     return false
 }

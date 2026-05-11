@@ -27,13 +27,9 @@ struct DefinitionResult {
 
 // Read a few lines from a file around a given line number
 def read_source_snippet(file_path : string; line : int; context_lines : int = 3) : string {
-    if (empty(file_path) || line <= 0) {
-        return ""
-    }
+    if (empty(file_path) || line <= 0) return ""
     var f = fopen(file_path, "r")
-    if (f == null) {
-        return ""
-    }
+    if (f == null) return ""
     var lines : array<string>
     while (!feof(f)) {
         var ln = fgets(f)
@@ -49,9 +45,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
         lines |> push(ln)
     }
     fclose(f)
-    if (empty(lines)) {
-        return ""
-    }
+    if (empty(lines)) return ""
     let first = max(0, line - 1 - context_lines)
     let last = min(length(lines) - 1, line - 1 + context_lines)
     return build_string() $(var w) {
@@ -63,9 +57,7 @@ def read_source_snippet(file_path : string; line : int; context_lines : int = 3)
 
 // Get file path from LineInfo
 def lineinfo_file(at : LineInfo) : string {
-    if (at.fileInfo != null) {
-        return string(at.fileInfo.name)
-    }
+    if (at.fileInfo != null) return string(at.fileInfo.name)
     return ""
 }
 
@@ -290,9 +282,7 @@ def format_result(defn : DefinitionResult; hit : CursorHit; with_cpp_source : bo
 def public do_goto_definition(file : string; line_str, col_str : string; no_opt_str : string = ""; project : string = ""; with_cpp_source : bool = false; cpp_dirs : string = "") : string {
     let line = to_int(line_str)
     let col = to_int(col_str)
-    if (line <= 0 || col <= 0) {
-        return make_tool_result("Invalid line or column (must be >= 1)", true)
-    }
+    if (line <= 0 || col <= 0) return make_tool_result("Invalid line or column (must be >= 1)", true)
     let no_opt = no_opt_str == "true"
     var cpp_dirs_arr : array<string>
     if (!empty(cpp_dirs)) {
@@ -305,15 +295,11 @@ def public do_goto_definition(file : string; line_str, col_str : string; no_opt_
     }
     return compile_program(file, true, no_opt, project) $(program; issues) {
         var hits <- find_at_cursor(program, file, line, col)
-        if (empty(hits)) {
-            return "No expression found at {file}:{line}:{col}"
-        }
+        if (empty(hits)) return "No expression found at {file}:{line}:{col}"
         // try each hit from innermost outward until we resolve a definition
         for (hit in hits) {
             let defn = resolve_definition(hit)
-            if (defn.found) {
-                return format_result(defn, hit, with_cpp_source, cpp_dirs_arr)
-            }
+            if (defn.found) return format_result(defn, hit, with_cpp_source, cpp_dirs_arr)
         }
         // nothing resolved — show what we found at cursor
         return build_string() $(var w) {

@@ -92,7 +92,7 @@ def cmd_list(root : string; json : bool = false; is_global : bool = false) {
         }
         return 0
     }
-    if (length(lf.packages) == 0) {
+    if (empty(lf.packages)) {
         if (json) {
             print("[]\n")
         } else {
@@ -209,9 +209,7 @@ def install_local(root, pkg_name, source : string; var lf : LockFile; var visiti
 // Local paths and git URLs are returned as-is.
 // Returns empty string on index-lookup failure.
 def resolve_dep_source(root, source : string) : string {
-    if (is_local_path(source)) {
-        return source
-    }
+    if (is_local_path(source)) return source
     if (is_index_name(source)) {
         let url = resolve_from_index(root, source)
         if (empty(url)) {
@@ -354,9 +352,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
     // step 1: shallow clone default branch
     let git_url = "https://{source}.git"
     log("Cloning {git_url}...\n")
-    if (!git_clone(git_url, tmp_dir)) {
-        return 1
-    }
+    if (!git_clone(git_url, tmp_dir)) return 1
 
     // step 2: resolve version via .das_package (if present)
     log_debug("resolving version for '{pkg_name}' (requested: '{version}' branch: '{branch}')")
@@ -384,9 +380,7 @@ def install_git(root, pkg_name, source, version : string; var lf : LockFile; var
                 force_rmdir(tmp_dir)
                 actual_source = res.source
                 let redirect_url = "https://{res.source}.git"
-                if (!git_clone(redirect_url, tmp_dir)) {
-                    return 1
-                }
+                if (!git_clone(redirect_url, tmp_dir)) return 1
                 // checkout the ref from the redirect
                 if (!empty(res.tag)) {
                     log("Fetching tag {res.tag}...\n")
@@ -608,9 +602,7 @@ def cmd_install(root, spec : string; force : bool; is_global : bool = false; ver
             // version mismatch
             to_log(LOG_ERROR, "Error: global '{pkg_name}' is {ge.tag}, but project requires {constraint}\n")
             log("  Use --force to install locally, or: daspkg install --global {source}@{constraint}\n")
-            if (!force) {
-                return 1
-            }
+            if (!force) return 1
             // --force: fall through to local install
         }
     }
@@ -641,7 +633,7 @@ def cmd_install_all(root : string; force : bool; is_global : bool = false) {
         return 1
     }
     var pkg_deps : array<PackageDependency>
-    if (!run_das_package_deps(das_package, "", pkg_deps) || length(pkg_deps) == 0) {
+    if (!run_das_package_deps(das_package, "", pkg_deps) || empty(pkg_deps)) {
         to_log(LOG_ERROR, "No dependencies listed in .das_package\n")
         return 1
     }
@@ -814,9 +806,7 @@ def private resolve_latest(source : string; var res : ResolveResult) : bool {
         force_rmdir(tmp_dir)
     }
     let git_url = "https://{source}.git"
-    if (!git_clone(git_url, tmp_dir)) {
-        return false
-    }
+    if (!git_clone(git_url, tmp_dir)) return false
     let das_package = "{tmp_dir}/.das_package"
     var ok = false
     if (fexist(das_package)) {
@@ -891,22 +881,16 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
     let modules_dir = is_global ? "{get_das_root()}/modules" : "{root}/modules"
     let pkg_dir = "{modules_dir}/{pkg_name}"
     let das_package = "{pkg_dir}/.das_package"
-    if (!fexist(das_package)) {
-        return
-    }
+    if (!fexist(das_package)) return
     var pkg_deps : array<PackageDependency>
-    if (!run_das_package_deps(das_package, "", pkg_deps)) {
-        return
-    }
+    if (!run_das_package_deps(das_package, "", pkg_deps)) return
     for (d in pkg_deps) {
         let dep_name = package_name_from_source(d.source)
         if (!has_package(lf, dep_name)) {
             // new dependency — install it
             log("  Installing new dependency: {dep_name}...\n")
             let dep_source = resolve_dep_source(root, d.source)
-            if (empty(dep_source)) {
-                continue
-            }
+            if (empty(dep_source)) continue
             var visiting : table<string; bool>
             let drc = install_git(root, dep_name, dep_source, "", lf, visiting, [is_root = false, is_global = is_global])
             if (drc != 0) {
@@ -915,9 +899,7 @@ def upgrade_dependencies(root, pkg_name : string; var lf : LockFile; is_global :
             continue
         }
         // check if installed version satisfies constraint
-        if (empty(d.version_constraint)) {
-            continue
-        }
+        if (empty(d.version_constraint)) continue
         let dep_entry = get_package(lf, dep_name)
         let dep_version = dep_entry.tag
         if (!satisfies_constraint(dep_version, d.version_constraint)) {
@@ -947,7 +929,7 @@ def cmd_upgrade_all(root : string; is_global : bool = false) {
             names |> push_clone(entry.name)
         }
     }
-    if (length(names) == 0) {
+    if (empty(names)) {
         print("No upgradeable packages\n")
         return 0
     }
@@ -1020,9 +1002,7 @@ def cmd_build(root : string; is_global : bool = false) {
     var built = 0
     var failed = 0
     dir(modules_dir) $(name) {
-        if (name == "." || name == ".." || starts_with(name, ".")) {
-            return
-        }
+        if (name == "." || name == ".." || starts_with(name, ".")) return
         let pkg_dir = "{modules_dir}/{name}"
         if (fexist("{pkg_dir}/CMakeLists.txt")) {
             log("Building '{name}'...\n")
@@ -1038,9 +1018,7 @@ def cmd_build(root : string; is_global : bool = false) {
     } else {
         print("Build complete: {built} succeeded, {failed} failed\n")
     }
-    if (failed > 0) {
-        return 1
-    }
+    if (failed > 0) return 1
     return 0
 }
 
@@ -1209,16 +1187,9 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
 }
 
 def private is_safe_pkg_name(name : string) : bool {
-    if (empty(name)) {
-        return false
-    }
-    if (name == "." || name == "..") {
-        return false
-    }
-    if (find(name, "/") >= 0 || find(name, "\\") >= 0) {
-        return false
-    }
-    return true
+    if (empty(name)) return false
+    if (name == "." || name == "..") return false
+    return !(find(name, "/") >= 0 || find(name, "\\") >= 0)
 }
 
 def cmd_cleanup(root : string; force : bool; is_global : bool = false) : int {
@@ -1329,9 +1300,7 @@ struct private ReleaseDeps {
 }
 
 def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
-    if (!fexist(path)) {
-        return false
-    }
+    if (!fexist(path)) return false
     var content : string
     fopen(path, "rb") $(f) {
         if (f != null) {
@@ -1427,16 +1396,10 @@ def private build_info_plist(name, exe, bundle_id : string) : string {
 // on copy failure (missing release() is NOT an error — dep just contributes nothing).
 def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     let dep_pkg_file = "{pkg_dir}/.das_package"
-    if (!fexist(dep_pkg_file)) {
-        return 0
-    }
+    if (!fexist(dep_pkg_file)) return 0
     var dep_spec : PackageReleaseInfo
-    if (!run_das_package_release(dep_pkg_file, dep_spec)) {
-        return 0
-    }
-    if (empty(dep_spec.include_globs) && empty(dep_spec.native_dlls)) {
-        return 0
-    }
+    if (!run_das_package_release(dep_pkg_file, dep_spec)) return 0
+    if (empty(dep_spec.include_globs) && empty(dep_spec.native_dlls)) return 0
     let dep_name = base_name(pkg_dir)
     let dep_dst_dir = "{bundle_modules_dir}/{dep_name}"
     var dep_files : array<string>
@@ -1460,9 +1423,7 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     }
     if (!empty(dep_spec.native_dlls)) {
         let rc = ship_native_dlls(dep_name, dep_dst_dir, dep_spec.native_dlls)
-        if (rc != 0) {
-            return rc
-        }
+        if (rc != 0) return rc
     }
     return 0
 }
@@ -1533,9 +1494,7 @@ def private ship_native_dlls(dep_name, dst_dir : string; native_dlls : array<str
 // (works whether daspkg runs interpreted or as a future standalone exe).
 def private get_daslang_path() : string {
     let args <- get_command_line_arguments()
-    if (empty(args)) {
-        return ""
-    }
+    if (empty(args)) return ""
     var exe = replace(args[0], "\\", "/")
     if (find(exe, ":") < 0 && first_character(exe) != '/') {
         exe = "{get_das_root()}/{exe}"
@@ -1697,9 +1656,7 @@ def cmd_release(root : string; out_dir : string) : int {
     var runtime_copy_failed = false
     var runtime_copies = 0
     glob(runtime_lib_dir, runtime_glob) $(rel_path, is_dir) {
-        if (is_dir) {
-            return
-        }
+        if (is_dir) return
         let src = path_join(runtime_lib_dir, rel_path)
         let dst = path_join(bundle_dir, base_name(rel_path))
         var err : string
@@ -1708,12 +1665,10 @@ def cmd_release(root : string; out_dir : string) : int {
             runtime_copy_failed = true
             return
         }
-        runtime_copies += 1
+        runtime_copies++
         log("  ship runtime: {base_name(rel_path)}\n")
     }
-    if (runtime_copy_failed) {
-        return 1
-    }
+    if (runtime_copy_failed) return 1
     if (runtime_copies == 0) {
         to_log(LOG_ERROR, "release: no daslang runtime libs matched `{runtime_glob}` under `{runtime_lib_dir}`; bundle would not load on a relocated machine\n")
         return 1
@@ -1728,14 +1683,10 @@ def cmd_release(root : string; out_dir : string) : int {
     let bundle_modules_dir = path_join(bundle_dir, "modules")
     for (dm in deps.das_modules) {
         let pkg_abs = get_full_file_name(dm.package_dir)
-        if (key_exists(seen_pkg_dirs, pkg_abs)) {
-            continue
-        }
+        if (key_exists(seen_pkg_dirs, pkg_abs)) continue
         seen_pkg_dirs[pkg_abs] = true
         let rc2 = ship_dep_assets(pkg_abs, bundle_modules_dir)
-        if (rc2 != 0) {
-            return rc2
-        }
+        if (rc2 != 0) return rc2
     }
 
     // 4. Glob the project's own assets per spec, copy preserving relative paths.
@@ -1762,9 +1713,7 @@ def cmd_release(root : string; out_dir : string) : int {
     // .shared_module to colocate with — its deps are loaded directly by the exe).
     if (!empty(spec.native_dlls)) {
         let rc3 = ship_native_dlls(bundle_name, bundle_dir, spec.native_dlls)
-        if (rc3 != 0) {
-            return rc3
-        }
+        if (rc3 != 0) return rc3
     }
 
     // 5. macOS .app: write Contents/Info.plist. Bundle ID source priority:

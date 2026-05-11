@@ -217,12 +217,8 @@ class CollectAndReplaceIteratorFields : AstVisitor {
 
 
     def override visitExprYield(var expr : ExprYield?) : ExpressionPtr {
-        if (voidRoutine) {
-            return <- expr
-        }
-        if (expr._type != null && expr._type |> is_same_type(retType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
-            return <- expr
-        }
+        if (voidRoutine) return <- expr
+        if (expr._type != null && expr._type |> is_same_type(retType, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return <- expr
         if (!retType.argTypes[0].canCopy) {
             var res = qmacro_expr(${ yield <- variant type<$t(retType)>(res <- $e(expr.subexpr)); })
             res |> force_at(expr.at)
@@ -271,9 +267,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
     }
 
     def override visitExprLet(var expr : ExprLet?) : ExpressionPtr {
-        if (length(expr.variables) != 1) {
-            return <- expr
-        }
+        if (length(expr.variables) != 1) return <- expr
         for (v in expr.variables) {
             if (v.init != null && v.init is ExprCall) {
                 var call = v.init as ExprCall
@@ -366,9 +360,7 @@ def public async_run_all(var a : array<iterator<auto>>) {
     //! This function runs all async function until they are finished (in parallel, starting from the last one).
     while (true) {
         var i = length(a)
-        if (i == 0) {
-            break
-        }
+        if (i == 0) break
         while (i > 0) {
             i --
             var t : bool
@@ -389,9 +381,7 @@ def public async_timeout(var a : iterator<auto>; max_frames : int) : bool {
     var frames = 0
     for (_t in a) {
         frames ++
-        if (frames >= max_frames) {
-            return false
-        }
+        if (frames >= max_frames) return false
     }
     return true
 }
@@ -403,12 +393,8 @@ def public async_race(var a : iterator<auto>; var b : iterator<auto>) : int {
     var ta : bool
     var tb : bool
     while (true) {
-        if (!next(a, ta) || empty(a)) {
-            return 0
-        }
-        if (!next(b, tb) || empty(b)) {
-            return 1
-        }
+        if (!next(a, ta) || empty(a)) return 0
+        if (!next(b, tb) || empty(b)) return 1
     }
     return -1
 }

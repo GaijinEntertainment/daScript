@@ -19,9 +19,7 @@ require daslib/contracts
 
 [macro_function]
 def check_recursive(at : LineInfo; var fun : Function?; var call_graph : array<Function?>; var visited : table<Function?>) {
-    if (fun.flags.builtIn) {
-        return
-    }
+    if (fun.flags.builtIn) return
     if (call_graph |> find_index(fun) >= 0) {
         let sb = build_string() $(writer) {
             writer |> write("recursive calls are not allowed")
@@ -52,12 +50,8 @@ def check_recursive(at : LineInfo; var fun : Function?) {
 
 [macro_function]
 def collect_call_tree(fun : Function?; var visited : table<Function?>) {
-    if (fun.flags.builtIn) {
-        return
-    }
-    if (visited |> key_exists(fun)) {
-        return
-    }
+    if (fun.flags.builtIn) return
+    if (visited |> key_exists(fun)) return
     visited |> insert(fun)
     unsafe(reinterpret<FunctionPtr> fun) |> get_use_functions() $(f) {
         collect_call_tree(f, visited)
@@ -98,9 +92,7 @@ class ValidateCompletionVisitor : AstVisitor {
         macro_error(compiling_program(), expr.at, "we can't tell if this `while` loop ever finishes")
     }
     def override preVisitExprCall(var expr : ExprCall?) : void {
-        if (expr.func.flags.builtIn) {
-            return
-        }
+        if (expr.func.flags.builtIn) return
         if (expr.func == thisFunc) {
             macro_error(compiling_program(), expr.at, "recursive calls are not allowed")
         } else {

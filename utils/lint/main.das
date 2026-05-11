@@ -16,6 +16,7 @@ struct LintResult {
     errors : array<string>
     failed : bool
     compile_errors : string
+    missing_prereq : bool
 }
 
 [CommandLineArgs]
@@ -23,9 +24,6 @@ struct Config {
     @clarg_short = "q"
     @clarg_doc = "Suppress PASS lines and progress messages"
     quiet : bool
-
-    @clarg_doc = "Enable STYLE005 postfix-conditional check"
-    postfix_conditionals : bool
 
     @clarg_doc = "Enable STYLE014/STYLE015 comment-length checks"
     comment_hygiene : bool
@@ -78,24 +76,18 @@ def has_expect_directive(file : string) : bool {
     // for dastest. Lint cannot evaluate them — the program never reaches
     // the AST stage paranoid/perf/style passes need. Skip them.
     let text = fread(file)
-    if (empty(text)) {
-        return false
-    }
+    return false if (empty(text))
     let lines <- text |> split("\n")
     for (line in lines) {
         let trimmed = line |> strip
-        if (trimmed |> starts_with("expect ")) {
-            return true
-        }
+        return true if (trimmed |> starts_with("expect "))
     }
     return false
 }
 
 def scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
     let st = stat(path)
-    if (!st.is_valid) {
-        return
-    }
+    return if (!st.is_valid)
     if (st.is_reg) {
         if (path |> ends_with(".das") && !cache |> key_exists(path)) {
             // extract filename from path
@@ -108,18 +100,12 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
         }
         return
     }
-    if (!st.is_dir) {
-        return
-    }
+    return if (!st.is_dir)
     fio::dir(path) $(name) {
-        if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name)) {
-            return
-        }
+        return if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name))
         let full = "{path}/{name}"
         let fst = stat(full)
-        if (!fst.is_valid) {
-            return
-        }
+        return if (!fst.is_valid)
         if (fst.is_dir) {
             scan_das_files(full, files, cache)
         } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(name) && !cache |> key_exists(full)) {
@@ -129,7 +115,7 @@ def scan_das_files(path : string; var files : array<string>; var cache : table<s
     }
 }
 
-def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditionals, comment_hygiene : bool) : LintResult {
+def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene : bool) : LintResult {
     var result = LintResult(file = file)
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
@@ -141,8 +127,16 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditio
             cop.no_infer_time_folding = true
             compile_file(file, access, unsafe(addr(mg)), cop) $(ok; program; issues) {
                 if (!ok) {
+                    let issue_str = string(issues)
+                    // Files that can't resolve a require (e.g. daspkg-installed `anthropic/anthropic`)
+                    // are out-of-tree as far as a stock daslang build can tell — treat as skip, not fail.
+                    if (find(issue_str, "missing prerequisite") >= 0) {  //
+                        result.missing_prereq = true
+                        result.compile_errors = issue_str
+                        return
+                    }
                     result.failed = true
-                    result.compile_errors = string(issues)
+                    result.compile_errors = issue_str
                     return
                 }
                 if (run_paranoid) {
@@ -161,7 +155,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, postfix_conditio
                 }
                 if (run_style) {
                     var style_issues : array<string>
-                    result.count += style_lint_collect(program, style_issues, postfix_conditionals, comment_hygiene)
+                    result.count += style_lint_collect(program, style_issues, comment_hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
@@ -231,7 +225,14 @@ def main() : int {
             }
             continue
         }
-        let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.postfix_conditionals, cfg.comment_hygiene)
+        let result = lint_file(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene)
+        if (result.missing_prereq) {
+            total_skipped++
+            if (!cfg.quiet) {
+                print("SKIP {file} (missing prerequisite — install daspkg deps to lint)\n")
+            }
+            continue
+        }
         if (result.failed) {
             total_errors++
             print("FAIL {file}\n")

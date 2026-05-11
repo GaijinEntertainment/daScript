@@ -13,19 +13,13 @@ def do_program_log(file, func_name : string; project : string = "") : string {
             var result = ""
             var found = false
             for_each_function(thisMod, "") $(func) {
-                if (func.flags.builtIn || func.flags._lambda || func.flags.generated) {
-                    return
-                }
-                if (string(func.name) != func_name) {
-                    return
-                }
+                if (func.flags.builtIn || func.flags._lambda || func.flags.generated) return
+                if (string(func.name) != func_name) return
                 found = true
                 result += describe_function(func)
                 result += "\n"
             }
-            if (!found) {
-                return "Function '{func_name}' not found in {file}"
-            }
+            if (!found) return "Function '{func_name}' not found in {file}"
             return result
         }
     }

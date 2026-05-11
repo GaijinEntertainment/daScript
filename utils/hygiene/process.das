@@ -26,23 +26,13 @@ struct public ProcessResult {
 
 def public process_path(path : string; check : bool) : ProcessResult {
     let st = stat(path)
-    if (!st.is_valid) {
-        return ProcessResult(kind = ProcessResultKind.missing_file)
-    }
-    if (!st.is_reg) {
-        return ProcessResult(kind = ProcessResultKind.not_a_file)
-    }
+    if (!st.is_valid) return ProcessResult(kind = ProcessResultKind.missing_file)
+    if (!st.is_reg) return ProcessResult(kind = ProcessResultKind.not_a_file)
     let original = fread(path)
     let trimmed = apply_all_rules(original)
-    if (original == trimmed) {
-        return ProcessResult(kind = ProcessResultKind.no_change)
-    }
-    if (check) {
-        return ProcessResult(kind = ProcessResultKind.would_change)
-    }
-    if (!fwrite(path, trimmed)) {
-        return ProcessResult(kind = ProcessResultKind.write_failed)
-    }
+    if (original == trimmed) return ProcessResult(kind = ProcessResultKind.no_change)
+    if (check) return ProcessResult(kind = ProcessResultKind.would_change)
+    if (!fwrite(path, trimmed)) return ProcessResult(kind = ProcessResultKind.write_failed)
     let removed = length(split(original, "\n")) - length(split(trimmed, "\n"))
     return ProcessResult(kind = ProcessResultKind.changed, lines_removed = removed)
 }

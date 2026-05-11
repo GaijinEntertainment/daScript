@@ -143,9 +143,7 @@ struct RpcError {
 // ── JSON-RPC envelope (built as string since id is dynamic) ──────────
 
 def json_value_to_string(v : JsonValue?) : string {
-    if (v == null) {
-        return "null"
-    }
+    if (v == null) return "null"
     return write_json(v)
 }
 
@@ -606,19 +604,11 @@ struct ToolMessage {
 }
 
 def get_string_arg(args : JsonValue?; name : string) : string {
-    if (args == null || !(args.value is _object)) {
-        return ""
-    }
+    if (args == null || !(args.value is _object)) return ""
     let v = (args.value as _object)?[name] ?? null
-    if (v == null) {
-        return ""
-    }
-    if (v.value is _string) {
-        return v.value as _string
-    }
-    if (v.value is _bool) {
-        return v.value as _bool ? "true" : "false"
-    }
+    if (v == null) return ""
+    if (v.value is _string) return v.value as _string
+    if (v.value is _bool) return v.value as _bool ? "true" : "false"
     return ""
 }
 
@@ -733,53 +723,37 @@ def run_tool(tool_name, arg1, arg2, arg3, arg4, arg5, arg6, project : string) : 
 def handle_tools_call(id_json : string; params : JsonValue?) : string {
     let tool_name_val = params?.name
     let args = params?.arguments
-    if (tool_name_val == null) {
-        return json_rpc_error(id_json, -32602, "missing tool name")
-    }
+    if (tool_name_val == null) return json_rpc_error(id_json, -32602, "missing tool name")
     let name = tool_name_val.value as _string
     var arg1, arg2, arg3, arg4, arg5, arg6 : string
     let project = get_string_arg(args, "project")
     if (name == "compile_check") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "json")
     } elif (name == "list_functions" || name == "list_types") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
     } elif (name == "format_file") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
     } elif (name == "list_requires") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "json")
     } elif (name == "run_test") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "timeout")
         arg3 = get_string_arg(args, "json")
         arg4 = get_string_arg(args, "failures_only")
     } elif (name == "convert_to_gen2") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "inplace")
     } elif (name == "goto_definition") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
         arg4 = get_string_arg(args, "no_opt")
@@ -787,17 +761,13 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg6 = get_string_arg(args, "cpp_dirs")
     } elif (name == "type_of") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
         arg4 = get_string_arg(args, "no_opt")
     } elif (name == "find_references") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
         arg4 = get_string_arg(args, "scope")
@@ -809,15 +779,11 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg4 = get_string_arg(args, "track_allocations")
     } elif (name == "eval_expression") {
         arg1 = get_string_arg(args, "expression")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'expression' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'expression' argument")
         arg2 = get_string_arg(args, "require")
     } elif (name == "describe_type") {
         arg1 = get_string_arg(args, "name")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'name' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'name' argument")
         arg2 = get_string_arg(args, "module")
     } elif (name == "ast_dump") {
         arg1 = get_string_arg(args, "expression")
@@ -827,54 +793,40 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg5 = get_string_arg(args, "lineinfo")
     } elif (name == "find_symbol") {
         arg1 = get_string_arg(args, "query")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'query' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'query' argument")
         arg2 = get_string_arg(args, "kind")
         arg3 = get_string_arg(args, "file")
         arg4 = get_string_arg(args, "with_cpp_source")
         arg5 = get_string_arg(args, "cpp_dirs")
     } elif (name == "list_module_api") {
         arg1 = get_string_arg(args, "module")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'module' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'module' argument")
         arg2 = get_string_arg(args, "filter")
         arg3 = get_string_arg(args, "section")
         arg4 = get_string_arg(args, "compact")
     } elif (name == "program_log") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "function")
     } elif (name == "grep_usage") {
         arg1 = get_string_arg(args, "symbol")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
         arg2 = get_string_arg(args, "directory")
         arg3 = get_string_arg(args, "context_lines")
         arg4 = get_string_arg(args, "glob")
     } elif (name == "outline") {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "glob")
-        if (empty(arg1) && empty(arg2)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
-        }
+        if (empty(arg1) && empty(arg2)) return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
     } elif (name == "cpp_grep_usage") {
         arg1 = get_string_arg(args, "symbol")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'symbol' argument")
         arg2 = get_string_arg(args, "directory")
         arg3 = get_string_arg(args, "context_lines")
         arg4 = get_string_arg(args, "glob")
     } elif (name == "cpp_find_symbol") {
         arg1 = get_string_arg(args, "query")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'query' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'query' argument")
         arg2 = get_string_arg(args, "kind")
         arg3 = get_string_arg(args, "directory")
         arg4 = get_string_arg(args, "glob")
@@ -882,38 +834,26 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg1 = get_string_arg(args, "file")
         arg2 = get_string_arg(args, "glob")
         arg3 = get_string_arg(args, "mode")
-        if (empty(arg1) && empty(arg2)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
-        }
+        if (empty(arg1) && empty(arg2)) return json_rpc_error(id_json, -32602, "missing 'file' or 'glob' argument")
     } elif (name == "cpp_goto_definition") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "line")
         arg3 = get_string_arg(args, "column")
     } elif (name == "list_modules") {
         arg1 = get_string_arg(args, "json")
     } elif (name == "aot") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "function")
     } elif (name == "lint") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
     } elif (name == "detect_duplicates") {
         arg1 = get_string_arg(args, "paths")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'paths' argument")
         arg2 = get_string_arg(args, "corpus")
-        if (empty(arg2)) {
-            return json_rpc_error(id_json, -32602, "missing 'corpus' argument")
-        }
+        if (empty(arg2)) return json_rpc_error(id_json, -32602, "missing 'corpus' argument")
         arg3 = get_string_arg(args, "threshold")
         arg4 = get_string_arg(args, "min_tokens")
         arg5 = get_string_arg(args, "top")
@@ -921,20 +861,14 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
     } elif (name == "export_corpus") {
         arg1 = get_string_arg(args, "paths")
         arg2 = get_string_arg(args, "paths_file")
-        if (empty(arg1) && empty(arg2)) {
-            return json_rpc_error(id_json, -32602, "missing input — provide 'paths' and/or 'paths_file'")
-        }
+        if (empty(arg1) && empty(arg2)) return json_rpc_error(id_json, -32602, "missing input — provide 'paths' and/or 'paths_file'")
         arg3 = get_string_arg(args, "out")
-        if (empty(arg3)) {
-            return json_rpc_error(id_json, -32602, "missing 'out' argument")
-        }
+        if (empty(arg3)) return json_rpc_error(id_json, -32602, "missing 'out' argument")
         arg4 = get_string_arg(args, "min_tokens")
         arg5 = get_string_arg(args, "workers")
     } elif (name == "judge_duplicates") {
         arg1 = get_string_arg(args, "input")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'input' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'input' argument")
         arg2 = get_string_arg(args, "out")
         arg3 = get_string_arg(args, "model")
         arg4 = get_string_arg(args, "max_clusters")
@@ -942,9 +876,7 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg6 = get_string_arg(args, "dry_run")
     } elif (name == "find_dupe") {
         arg1 = get_string_arg(args, "paths")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'paths' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'paths' argument")
         arg2 = get_string_arg(args, "out")
         arg3 = get_string_arg(args, "model")
         arg4 = get_string_arg(args, "threshold")
@@ -959,24 +891,18 @@ def handle_tools_call(id_json : string; params : JsonValue?) : string {
         arg2 = get_string_arg(args, "port")
     } elif (name == "live_pause") {
         arg1 = get_string_arg(args, "paused")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'paused' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'paused' argument")
         arg2 = get_string_arg(args, "port")
     } elif (name == "live_command") {
         arg1 = get_string_arg(args, "name")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'name' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'name' argument")
         arg2 = get_string_arg(args, "args")
         arg3 = get_string_arg(args, "port")
     } elif (name == "live_shutdown") {
         arg1 = get_string_arg(args, "port")
     } elif (name == "live_launch") {
         arg1 = get_string_arg(args, "file")
-        if (empty(arg1)) {
-            return json_rpc_error(id_json, -32602, "missing 'file' argument")
-        }
+        if (empty(arg1)) return json_rpc_error(id_json, -32602, "missing 'file' argument")
         arg2 = get_string_arg(args, "project")
         arg3 = get_string_arg(args, "port")
     } elif (name == "shutdown") {

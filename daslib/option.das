@@ -94,9 +94,7 @@ def map(o : $Option < auto(TT) >; f : block<(v : TT) : auto(UU)>) {
 
 //! Monadic bind — ``f`` returns the next ``Option``; chains only when ``some``.
 def and_then(o : $Option < auto(TT) >; f : block<(v : TT) : $Option<auto(UU)> >) {
-    if (o._has_value) {
-        return invoke(f, o._value)
-    }
+    if (o._has_value) return invoke(f, o._value)
     return default<$Option<UU -const> >
 }
 
@@ -245,9 +243,7 @@ def operator ??(o : $Option < auto(TT) >; d : TT) : TT {
 
 //! Structural equality: same tag, and when ``some``, equal payloads.
 def operator ==(a, b : $Option < auto(TT) > implicit) : bool {
-    if (a._has_value != b._has_value) {
-        return false
-    }
+    if (a._has_value != b._has_value) return false
     return !a._has_value || a._value == b._value
 }
 

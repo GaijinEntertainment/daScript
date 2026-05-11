@@ -187,6 +187,7 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 - `try/recover` — NOT `try/catch` (`recover` is the keyword)
 - `panic("message")`, `assert(condition)`, `verify(condition)` (stays in release)
 - **Postfix conditional:** `return expr if (cond)`, `break if (cond)`, `continue if (cond)` — early-exit guard on one line
+- **Braceless early-exit:** prefer `if (cond) return X` (or postfix `return X if (cond)`) over `if (cond) { return X }` — STYLE005 flags the braced single-terminator form as noise
 
 ### Generic function dispatch
 
@@ -258,6 +259,10 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 | `if (true) { ... }` | `{ ... }` | bare blocks create lexical scope in gen2 |
 | `var inscope r <- expr; return <- r` | `return <- expr` | direct return avoids intermediate |
 | `unsafe { (reinterpret<ExprBlock?> blk).list }` / `unsafe(reinterpret<T?> x)` | make param `var` + plain `x.list` | `var` param gives non-const field access without reinterpret |
+| `if (cond) { return X }` (or `{ break }` / `{ continue }`) | `if (cond) return X` or postfix `return X if (cond)` | STYLE005: braces around a single-statement early-exit are noise |
+| `for (i in range(length(arr))) { ... arr[i] ... }` where `i` is used only as `arr[i]` | `for (c in arr) { ... c ... }` | PERF018: direct iteration drops the index variable |
+| `from_JV(v, type<int>, 13)` | `v ?? 13` | STYLE020: json_boost provides `operator ??` for every scalar `from_JV` overload |
+| `var args : table<string; JsonValue?>; args \|> insert("k1", JV(v1)); args \|> insert("k2", JV(v2))` | `var args = JV((k1=v1, k2=v2))` | STYLE021: named-tuple JV form (json_boost.das:638) is one line instead of N |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 

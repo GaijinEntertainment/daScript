@@ -26,9 +26,7 @@ class CanonicalVisitor : AstVisitor {
 
     def assign_var(name : das_string) : string {
         let key = string(name)
-        if (key_exists(rename, key)) {
-            return rename[key]
-        }
+        if (key_exists(rename, key)) return rename[key]
         let placeholder = "<var_{next_var}>"
         rename |> insert(key, placeholder)
         next_var++
@@ -37,9 +35,7 @@ class CanonicalVisitor : AstVisitor {
 
     def lookup_var(name : das_string) : string {
         let key = string(name)
-        if (key_exists(rename, key)) {
-            return rename[key]
-        }
+        if (key_exists(rename, key)) return rename[key]
         return "<sym>"
     }
 

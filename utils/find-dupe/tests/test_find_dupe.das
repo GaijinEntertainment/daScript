@@ -261,9 +261,7 @@ def make_temp_input_file(t : T?; body : string) : string {
 def test_read_input_report_basic(t : T?) {
     let json_text = "\{\"summary\":\{\"files_scanned\":1,\"functions_analyzed\":3,\"exact_clusters\":1,\"fuzzy_pairs\":0,\"threshold\":0.7,\"min_tokens\":8\},\"exact_clusters\":[\{\"canonical_sample\":\"\",\"token_count\":12,\"members\":[\{\"file\":\"a.das\",\"name\":\"foo\",\"line\":1,\"end_line\":5,\"is_lambda\":false\},\{\"file\":\"b.das\",\"name\":\"bar\",\"line\":10,\"end_line\":15,\"is_lambda\":false\}]\}],\"fuzzy_pairs\":[]\}"
     let path = make_temp_input_file(t, json_text)
-    if (empty(path)) {
-        return
-    }
+    if (empty(path)) return
     var report : InputReport
     var error : string
     let ok = read_input_report(path, report, error)
@@ -283,9 +281,7 @@ def test_read_input_report_missing_file(t : T?) {
     // works on Windows where `/tmp` doesn't exist. Same pattern as
     // utils/mcp/test_tools.das `test_detect_duplicates_corpus_not_found`.
     let bogus = make_temp_input_file(t, "")
-    if (empty(bogus)) {
-        return
-    }
+    if (empty(bogus)) return
     remove(bogus)
     var report : InputReport
     var error : string

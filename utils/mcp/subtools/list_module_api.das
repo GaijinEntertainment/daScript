@@ -24,9 +24,7 @@ def want_section(section : string; name : string) : bool {
 def write_compact_func_signature(var w : StringBuilderWriter; func) {
     var has_args = false
     for (i in range(length(func.arguments))) {
-        if (!arg_needs_documenting(func.arguments[i]._type)) {
-            continue
-        }
+        if (!arg_needs_documenting(func.arguments[i]._type)) continue
         if (!has_args) {
             write(w, "(")
             has_args = true
@@ -62,13 +60,9 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     var type_macros : array<string>
     if (want_section(section, "functions") || want_section(section, "operators")) {
         for_each_function(mod, "") $(func) {
-            if (func.flags.privateFunction || func.flags._lambda || func.flags.generated) {
-                return
-            }
+            if (func.flags.privateFunction || func.flags._lambda || func.flags.generated) return
             let fname = string(func.name)
-            if (!name_matches_filter(fname, filter)) {
-                return
-            }
+            if (!name_matches_filter(fname, filter)) return
             let entry = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 if (compact) {
@@ -90,9 +84,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
                 return
             }
             let fname = string(func.name)
-            if (!name_matches_filter(fname, filter)) {
-                return
-            }
+            if (!name_matches_filter(fname, filter)) return
             let entry = build_string() $(var w) {
                 write(w, "  def {func.name}")
                 if (compact) {
@@ -111,9 +103,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     if (want_section(section, "structs")) {
         for_each_structure(mod) $(value) {
             if (value.flags.isLambda || value.flags._generator || value.flags.generated || value.flags.privateStructure ||
-                    !name_matches_filter(string(value.name), filter)) {
-                return
-            }
+                    !name_matches_filter(string(value.name), filter)) return
             let entry = build_string() $(var w) {
                 if (value.flags.isClass) {
                     write(w, "  class {value.name}")
@@ -138,9 +128,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     }
     if (want_section(section, "handled")) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isBasicStructureAnnotation || !name_matches_filter(string(value.name), filter)) {
-                return
-            }
+            if (!value.isBasicStructureAnnotation || !name_matches_filter(string(value.name), filter)) return
             let entry = build_string() $(var w) {
                 if (compact) {
                     write(w, "  handled {value.name}\n")
@@ -153,9 +141,7 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     }
     if (want_section(section, "enums")) {
         for_each_enumeration(mod) $(value) {
-            if (value.isPrivate || !name_matches_filter(string(value.name), filter)) {
-                return
-            }
+            if (value.isPrivate || !name_matches_filter(string(value.name), filter)) return
             let entry = build_string() $(var w) {
                 write(w, "  enum {value.name}")
                 if (!compact && int(value.at.line) > 0) {
@@ -173,13 +159,9 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     }
     if (want_section(section, "annotations")) {
         module_for_each_annotation(mod) $(value) {
-            if (value.isBasicStructureAnnotation || value.isEnumerationAnnotation) {
-                return
-            }
+            if (value.isBasicStructureAnnotation || value.isEnumerationAnnotation) return
             let aname = string(value.name)
-            if (!name_matches_filter(aname, filter)) {
-                return
-            }
+            if (!name_matches_filter(aname, filter)) return
             if (value.isFunctionAnnotation) {
                 func_annotations |> push("  [{aname}]\n")
             } elif (!value.isTypeAnnotation) {
@@ -190,62 +172,48 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     if (want_section(section, "annotations")) {
         for_each_call_macro(mod) $(value) {
             let mname = string(value)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             call_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "annotations")) {
         for_each_reader_macro(mod) $(value) {
             let mname = string(value)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             reader_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "annotations")) {
         for_each_variant_macro(mod) $(value) {
             let mname = string(value.name)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             variant_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "annotations")) {
         for_each_typeinfo_macro(mod) $(value) {
             let mname = string(value.name)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             typeinfo_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "annotations")) {
         for_each_for_loop_macro(mod) $(value) {
             let mname = string(value.name)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             for_loop_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "annotations")) {
         for_each_typemacro(mod) $(value) {
             let mname = string(value.name)
-            if (!name_matches_filter(mname, filter)) {
-                return
-            }
+            if (!name_matches_filter(mname, filter)) return
             type_macros |> push("  {mname}\n")
         }
     }
     if (want_section(section, "globals")) {
         for_each_global(mod) $(value) {
-            if (value.flags.private_variable || !name_matches_filter(string(value.name), filter)) {
-                return
-            }
+            if (value.flags.private_variable || !name_matches_filter(string(value.name), filter)) return
             var line = "  {value.name} : {describe(value._type)}"
             if (int(value.at.line) > 0) {
                 line = "{line}  // line {int(value.at.line)}"
@@ -368,9 +336,7 @@ def private try_list_module_api(name : string; preamble : string; filter : strin
                 target_mod = mod
             }
         }
-        if (target_mod == null) {
-            return "Module '{name}' not found after compilation"
-        }
+        if (target_mod == null) return "Module '{name}' not found after compilation"
         let res = build_string() $(var writer) {
             if (!empty(preamble)) {
                 write(writer, preamble)
@@ -387,15 +353,11 @@ def private try_list_module_api(name : string; preamble : string; filter : strin
 def run_list_module_api(module_name : string; filter : string = ""; section : string = ""; compact_str : string = ""; project : string = "") : string {
     let compact = compact_str == "true"
     let first = try_list_module_api(module_name, "", filter, section, compact, project)
-    if (first.ok || !first.retryable || is_qualified_module_name(module_name)) {
-        return first.text
-    }
+    if (first.ok || !first.retryable || is_qualified_module_name(module_name)) return first.text
     let resolved = "daslib/{module_name}"
     let preamble = "[resolved '{module_name}' as '{resolved}']\n"
     let second = try_list_module_api(resolved, preamble, filter, section, compact, project)
-    if (second.ok) {
-        return second.text
-    }
+    if (second.ok) return second.text
     return first.text
 }
 

@@ -43,13 +43,9 @@ def ensure_root(root : string) {
 def list_doc_files(root : string) : array<string> {
     var out : array<string>
     let dd = docs_dir(root)
-    if (!is_directory_path(dd)) {
-        return <- out
-    }
+    if (!is_directory_path(dd)) return <- out
     dir(dd) $(filename) {
-        if (filename == "." || filename == "..") {
-            return
-        }
+        if (filename == "." || filename == "..") return
         if (ends_with(filename, ".md")) {
             out |> push(path_join(dd, filename))
         }
@@ -251,9 +247,7 @@ def get_index_signature(db : SqlRunner) : string {
     let opt <- _sql(db |> select_from(type<IndexMeta>)
                        |> _where(_.key == SIGNATURE_KEY)
                        |> _first_opt())
-    if (opt |> is_some) {
-        return (opt |> unwrap).value
-    }
+    if (opt |> is_some) return (opt |> unwrap).value
     return ""
 }
 
@@ -280,17 +274,11 @@ def public compute_docs_signature(root : string) : string {
 // output and filesystem walks to paths under `search_dirs_abs = [docs_dir]`.
 def ensure_index_fresh(db : SqlRunner; root : string) : int {
     let docs_abs = docs_dir(root)
-    if (!is_directory_path(docs_abs)) {
-        return 0
-    }
+    if (!is_directory_path(docs_abs)) return 0
     let sig = compute_docs_signature(root)
-    if (empty(sig)) {
-        return 0
-    }
+    if (empty(sig)) return 0
     let stored = get_index_signature(db)
-    if (sig == stored) {
-        return 0
-    }
+    if (sig == stored) return 0
     let n = rebuild(db, root)
     set_index_signature(db, sig)
     return n
@@ -325,27 +313,21 @@ let MAX_SEARCH_K = 50
 
 def search(db : SqlRunner; query : string; k : int; raw_query : bool = false) : array<SearchHit> {
     var out : array<SearchHit>
-    if (k <= 0) {
-        return <- out
-    }
+    if (k <= 0) return <- out
     let kk = min(k, MAX_SEARCH_K)
     var fts_query : string
     if (raw_query) {
         // Power-user path: pass the user's string straight to FTS5. Bad
         // syntax surfaces via _try_sql + LOG_WARNING below.
         fts_query = strip(query)
-        if (empty(fts_query)) {
-            return <- out
-        }
+        if (empty(fts_query)) return <- out
     } else {
         // to_lower: FTS5 keywords (OR/AND/NOT/NEAR) are uppercase-only operators.
         // A user query like "foo OR bar" would tokenize to [foo, OR, bar] and
         // OR-join to `foo OR OR OR bar` — invalid FTS syntax → empty result.
         // Downcasing every token makes user-typed keywords inert.
         let cleaned = to_lower(strip(sanitize_fts5_query(query)))
-        if (empty(cleaned)) {
-            return <- out
-        }
+        if (empty(cleaned)) return <- out
         // Free-form queries → OR-joined so BM25 ranks docs by how many of the
         // user's words appear, rather than failing when one word is missing.
         // FTS5 default is whitespace-AND, which is wrong for a "find related"
@@ -358,9 +340,7 @@ def search(db : SqlRunner; query : string; k : int; raw_query : bool = false) : 
                 meaningful |> push(w)
             }
         }
-        if (empty(meaningful)) {
-            return <- out
-        }
+        if (empty(meaningful)) return <- out
         fts_query = meaningful |> join(" OR ")
     }
     let raw_hits <- _try_sql(db |> select_from(type<SearchRow>)
@@ -375,9 +355,7 @@ def search(db : SqlRunner; query : string; k : int; raw_query : bool = false) : 
         let drow_opt <- _sql(db |> select_from(type<DocRow>)
                                |> _where(_.slug == h.Slug)
                                |> _first_opt())
-        if (!(drow_opt |> is_some)) {
-            continue
-        }
+        if (!(drow_opt |> is_some)) continue
         let drow = drow_opt |> unwrap
         out |> push(SearchHit(
             slug = drow.slug,
@@ -413,9 +391,7 @@ let STOP_WORDS : table<string> <- {
 def tokenize_for_jaccard(s : string) : table<string> {
     var out : table<string>
     let cleaned = to_lower(strip(sanitize_fts5_query(s)))
-    if (empty(cleaned)) {
-        return <- out
-    }
+    if (empty(cleaned)) return <- out
     let parts <- split(cleaned, " ")
     for (w in parts) {
         if (length(w) >= 2 && !key_exists(STOP_WORDS, w)) {

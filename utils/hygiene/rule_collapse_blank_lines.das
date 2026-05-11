@@ -21,9 +21,7 @@ def public collapse_blank_lines(src : string) : string {
     for (raw_line in lines) {
         let line = ends_with(raw_line, "\r") ? slice(raw_line, 0, length(raw_line) - 1) : raw_line
         let is_blank = empty(strip(line))
-        if (is_blank && prev_blank) {
-            continue
-        }
+        if (is_blank && prev_blank) continue
         out |> push(line)
         prev_blank = is_blank
     }

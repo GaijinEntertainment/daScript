@@ -68,9 +68,7 @@ struct public ParsedArgs {
 
 def public parse_benchctl_args(argv : array<string>) : ParsedArgs {
     var parse_r <- parse_args(type<BenchctlArgs>, argv)
-    if (parse_r |> is_err) {
-        return ParsedArgs(ok = false, err = parse_r |> unwrap_err)
-    }
+    if (parse_r |> is_err) return ParsedArgs(ok = false, err = parse_r |> unwrap_err)
     var parsed <- parse_r |> move_unwrap
     return <- ParsedArgs(
         ok = true,

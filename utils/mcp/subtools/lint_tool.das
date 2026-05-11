@@ -15,23 +15,17 @@ require strings
 
 def has_expect_directive(file : string) : bool {
     let text = fread(file)
-    if (empty(text)) {
-        return false
-    }
+    return false if (empty(text))
     let lines <- text |> split("\n")
     for (line in lines) {
         let trimmed = line |> strip
-        if (trimmed |> starts_with("expect ")) {
-            return true
-        }
+        return true if (trimmed |> starts_with("expect "))
     }
     return false
 }
 
 def lint_single(file : string; project : string = "") : string {
-    if (has_expect_directive(file)) {
-        return "SKIP {file} (intentional compile errors via `expect`)"
-    }
+    return "SKIP {file} (intentional compile errors via `expect`)" if (has_expect_directive(file))
     return compile_only(file, true, true, project, true) $(program; issues) {
         var compile_warnings = ""
         if (!empty(issues)) {
@@ -46,13 +40,11 @@ def lint_single(file : string; project : string = "") : string {
         }
         var style_issues : array<string>
         let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-        count += style_lint_collect(program, style_issues, false, hygiene)
+        count += style_lint_collect(program, style_issues, hygiene)
         for (w in style_issues) {
             all_issues |> push(w)
         }
-        if (count == 0) {
-            return "{compile_warnings}No lint issues."
-        }
+        return "{compile_warnings}No lint issues." if (count == 0)
         return build_string() $(var w) {
             if (!empty(compile_warnings)) {
                 w |> write(compile_warnings)
@@ -97,7 +89,7 @@ def lint_file(file : string; project : string = "") : LintFileResult {
                     }
                     var style_issues : array<string>
                     let hygiene = program._options |> find_arg("_comment_hygiene") ?as tBool ?? false
-                    result.count += style_lint_collect(program, style_issues, false, hygiene)
+                    result.count += style_lint_collect(program, style_issues, hygiene)
                     for (w in style_issues) {
                         result.errors |> push(w)
                     }
@@ -110,17 +102,11 @@ def lint_file(file : string; project : string = "") : LintFileResult {
 
 def run_lint(file : string; project : string = "") : string {
     let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        return make_tool_result(proj_err, true)
-    }
+    return make_tool_result(proj_err, true) if (!empty(proj_err))
     var files : array<string>
     parse_file_list(file, files)
-    if (empty(files)) {
-        return make_tool_result("no files matched: {file}", true)
-    }
-    if (length(files) == 1) {
-        return lint_single(files[0], project)
-    }
+    return make_tool_result("no files matched: {file}", true) if (empty(files))
+    return lint_single(files[0], project) if (length(files) == 1)
     var total_issues = 0
     var total_errors = 0
     var total_skipped = 0

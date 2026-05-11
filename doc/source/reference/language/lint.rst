@@ -42,7 +42,6 @@ A unified utility runs all three passes on files and directories::
 Options:
 
 - ``--quiet`` — suppress PASS lines and progress messages
-- ``--postfix-conditionals`` — enable STYLE005 check
 - ``--comment-hygiene`` — enable STYLE014/STYLE015 comment-length checks
 - ``--paranoid-only`` — only run paranoid lint
 - ``--perf-only`` — only run performance lint
@@ -606,6 +605,32 @@ flagged — different semantics, no ``empty`` for vectors.
     if (empty(s))   { ... }
     if (!empty(arr)) { ... }
 
+PERF018 — ``for (i in range(length(arr)))`` should iterate directly
+=====================================================================
+
+When the loop variable ``i`` is used only as ``arr[i]`` against the same
+array, the index is pure overhead — iterate the array directly.
+
+Detection peels at most one ``ExprCast`` between ``range`` and ``length``
+(to allow ``range(uint(length(arr)))``) and resolves both the loop's
+target and the indexed receiver via the existing ``find_expr_path`` chain
+walker. Every use of ``i`` in the body must be the bare index of
+``arr[i]`` against the same path; any arithmetic on ``i``
+(``arr[i+1]`` / sliding window), use of ``i`` outside an indexing
+expression, or indexing a different array disqualifies the loop.
+
+.. code-block:: das
+
+    // Bad — i used only as arr[i]
+    for (i in range(length(arr))) {             // PERF018
+        process(arr[i])
+    }
+
+    // Good — direct iteration
+    for (c in arr) {
+        process(c)
+    }
+
 .. _style_lint:
 
 -----------
@@ -669,29 +694,36 @@ without a pipe. Use a bare trailing block.
         print("done\n")
     }
 
-STYLE005 — single-statement ``if`` can use postfix form (configurable)
-========================================================================
+STYLE005 — braces around a single-statement early exit
+========================================================
 
-.. note::
+A single-statement braced ``if`` whose body is just a ``return`` / ``break``
+/ ``continue`` is noise. Use either the braceless form ``if (cond) return X``
+or postfix ``return X if (cond)``. Always-on (no opt-in flag).
 
-    This rule is **off by default**. Enable with ``--postfix-conditionals``
-    in the standalone utility.
-
-A single-statement ``if`` without an ``else`` branch that contains only
-``return``, ``break``, or ``continue`` can be written more concisely as a
-postfix conditional.
+The discriminator is AST-only: the parser shares ``LineInfo`` between a
+synthesized block and its inner terminator for both braceless ``if (c)
+return`` and postfix-desugared ``return X if (c)``, so a real
+user-written ``{...}`` is detectable as ``blk.at != inner.at``.
 
 .. code-block:: das
 
-    // Suggestion — can use postfix form
-    if (x > 0) {
-        return x                                // STYLE005
+    // Bad — braces around a single terminator
+    if (x > 0) {                                // STYLE005
+        return x
     }
     return -x
 
-    // Postfix form
+    // Good — braceless
+    if (x > 0) return x
+    return -x
+
+    // Good — postfix
     return x if (x > 0)
     return -x
+
+The auto-fixer at ``utils/fix-lint-errors/`` rewrites STYLE005 hits to the
+braceless form. Suppress per-line with ``// nolint:STYLE005``.
 
 STYLE006 — ``string(__rtti)`` comparison should use ``is``
 ============================================================
@@ -946,6 +978,58 @@ user overload.
 
     // Good
     let bounded = clamp(x, lo, hi)
+
+STYLE020 — scalar ``from_JV`` should be ``v ?? defV``
+=======================================================
+
+``daslib/json_boost`` provides ``operator ??`` overloads for every
+supported scalar ``JsonValue → primitive`` conversion (int, uint, int8/16/64,
+uint8/16/64, float, double, bool, string). The three-arg
+``from_JV(v, type<T>, defV)`` form is redundant for scalars — ``v ?? defV``
+is one fewer call, reads better, and uses the operator that's already
+there. Vector / table / struct / enum / bitfield overloads have no
+matching ``??`` and stay silent.
+
+Detection walks ``expr.func.fromGeneric`` to the root of the template-
+instantiation chain (two levels deep for json_boost's
+``[template(ent)]`` generics) and matches the root's name/module against
+``from_JV`` / ``json_boost``. The result-type check uses ``expr._type``,
+which is robust under both pre- and post-instantiation argument shapes.
+
+.. code-block:: das
+
+    // Bad
+    let n = from_JV(jv, type<int>, 13)          // STYLE020
+    let s = from_JV(jv, type<string>, "x")      // STYLE020
+
+    // Good
+    let n = jv ?? 13
+    let s = jv ?? "x"
+
+STYLE021 — repeated ``table<string; JsonValue?>`` inserts → named-tuple ``JV``
+================================================================================
+
+Building a JSON object by declaring an empty
+``var args : table<string; JsonValue?>`` followed by ``args |> insert("k",
+JV(v))`` calls is verbose. The named-tuple ``JV`` overload
+(``daslib/json_boost.das:638``) builds the same object in one line.
+
+Detection requires the variable's static type to be exactly
+``table<string; JsonValue?>``, zero initial value, and a contiguous run
+of ≥ 2 ``insert`` calls whose key is an ``ExprConstString`` and whose
+receiver resolves to the same variable. Computed keys disqualify the
+chain.
+
+.. code-block:: das
+
+    // Bad
+    var args : table<string; JsonValue?>
+    args |> insert("target", JV(target))        // STYLE021
+    args |> insert("dx", JV(dx))
+    args |> insert("dy", JV(dy))
+
+    // Good
+    var args = JV((target = target, dx = dx, dy = dy))
 
 -----
 Tests

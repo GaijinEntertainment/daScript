@@ -111,9 +111,7 @@ class LpipeMacro : AstCallMacro {
             blk.list[eidx] = null
             success = true
         }
-        if (!success) {
-            return null
-        }
+        if (!success) return null
         return quote() {
             pass
         }

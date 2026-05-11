@@ -26,9 +26,7 @@ struct ToolResult {
 
 // query matching: case-insensitive substring by default, "=foo" for exact case-sensitive
 def symbol_matches(name, query : string) : bool {
-    if (!empty(query) && first_character(query) == '=') {
-        return name == slice(query, 1)
-    }
+    if (!empty(query) && first_character(query) == '=') return name == slice(query, 1)
     return find(to_lower(name), to_lower(query)) >= 0
 }
 
@@ -61,22 +59,12 @@ def make_tool_result(text : string; is_error : bool = false) : string {
 // failure mode where callers pass a directory or a non-project file and the
 // underlying compile_file() surfaces a misleading "missing prerequisite".
 def validate_project_arg(project : string) : string {
-    if (empty(project)) {
-        return ""
-    }
-    if (!ends_with(project, ".das_project")) {
-        return "invalid 'project' argument: '{project}' — expected a path to a .das_project file"
-    }
+    if (empty(project)) return ""
+    if (!ends_with(project, ".das_project")) return "invalid 'project' argument: '{project}' — expected a path to a .das_project file"
     let st = stat(project)
-    if (!st.is_valid) {
-        return "'project' file not found: '{project}'"
-    }
-    if (st.is_dir) {
-        return "'project' is a directory, not a .das_project file: '{project}'"
-    }
-    if (!st.is_reg) {
-        return "'project' is not a regular file: '{project}'"
-    }
+    if (!st.is_valid) return "'project' file not found: '{project}'"
+    if (st.is_dir) return "'project' is a directory, not a .das_project file: '{project}'"
+    if (!st.is_reg) return "'project' is not a regular file: '{project}'"
     return ""
 }
 
@@ -107,9 +95,7 @@ def compile_and_simulate(file : string; project : string = ""; blk : block<(prog
 
 def compile_and_simulate_ctx(file : string; project : string = ""; blk : block<(program : smart_ptr<Program>; var ctx : smart_ptr<Context>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        return make_tool_result(proj_err, true)
-    }
+    if (!empty(proj_err)) return make_tool_result(proj_err, true)
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
@@ -143,9 +129,7 @@ def compile_program(file : string; _export_all : bool; blk : block<(program : sm
 
 def compile_program(file : string; _export_all : bool; _no_opt : bool; project : string = ""; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        return make_tool_result(proj_err, true)
-    }
+    if (!empty(proj_err)) return make_tool_result(proj_err, true)
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
@@ -186,9 +170,7 @@ def compile_only(file : string; _export_all : bool; project : string = ""; blk :
 
 def compile_only(file : string; _export_all : bool; _no_opt : bool; project : string = ""; _lint : bool = false; blk : block<(program : smart_ptr<Program>; issues : string) : string>) : string {
     let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        return make_tool_result(proj_err, true)
-    }
+    if (!empty(proj_err)) return make_tool_result(proj_err, true)
     var inscope access <- make_file_access(project)
     var result : string
     var had_error = false
@@ -226,9 +208,7 @@ def arg_needs_documenting(tt) : bool {
 def write_func_signature(var w : StringBuilderWriter; func) {
     var has_args = false
     for (i in range(length(func.arguments))) {
-        if (!arg_needs_documenting(func.arguments[i]._type)) {
-            continue
-        }
+        if (!arg_needs_documenting(func.arguments[i]._type)) continue
         if (!has_args) {
             write(w, "(")
             has_args = true
@@ -273,13 +253,9 @@ def write_function_list(var writer : StringBuilderWriter; program : smart_ptr<Pr
     var generic_instances : array<string>
     var class_methods : array<string>
     for_each_function(thisMod, "") $(func) {
-        if (func.flags.builtIn) {
-            return
-        }
+        if (func.flags.builtIn) return
         var line = ""
-        if (func.flags._lambda) {
-            return
-        }
+        if (func.flags._lambda) return
         if (func.fromGeneric != null) {
             line = build_string() $(var w) {
                 write(w, "  def {func.fromGeneric.name}")
@@ -373,9 +349,7 @@ def subtool_user_args(args : array<string>) : array<string> {
 
 def run_mcp_subtool(subtool_name : string; args : array<string>; timeout_sec : float = 120.0) : string {
     let exe = get_daslang_exe()
-    if (empty(exe)) {
-        return make_tool_result("Cannot determine daslang executable path", true)
-    }
+    if (empty(exe)) return make_tool_result("Cannot determine daslang executable path", true)
     let subtool_path = path_join(get_das_root(), "utils/mcp/subtools/{subtool_name}.das")
     // `--` is critical: without it, daslang treats positional argv as extra
     // .das files to load AND auto-runs each. With `--`, daslang stops parsing
@@ -387,12 +361,8 @@ def run_mcp_subtool(subtool_name : string; args : array<string>; timeout_sec : f
     }
     var output : string
     let exit_code = run_and_capture(argv, output, timeout_sec)
-    if (exit_code == popen_timed_out) {
-        return make_tool_result("MCP subtool '{subtool_name}' timed out after {timeout_sec}s:\n{output}", true)
-    }
-    if (exit_code != 0) {
-        return make_tool_result("MCP subtool '{subtool_name}' failed (exit {exit_code}):\n{output}", true)
-    }
+    if (exit_code == popen_timed_out) return make_tool_result("MCP subtool '{subtool_name}' timed out after {timeout_sec}s:\n{output}", true)
+    if (exit_code != 0) return make_tool_result("MCP subtool '{subtool_name}' failed (exit {exit_code}):\n{output}", true)
     return output
 }
 
@@ -406,15 +376,11 @@ def make_temp_das_file() : string {
 // ── File path utilities ──────────────────────────────────────────────
 
 def resolve_path(path : string) : string {
-    if (empty(path)) {
-        return get_das_root()
-    }
+    if (empty(path)) return get_das_root()
     // `find(path, ":") == 1` preserves Windows drive-relative paths (`C:foo`):
     // std::filesystem doesn't classify them as absolute (no trailing separator),
     // so they'd otherwise be joined under das_root and produce an invalid path.
-    if (is_absolute(path) || find(path, ":") == 1) {
-        return path
-    }
+    if (is_absolute(path) || find(path, ":") == 1) return path
     return path_join(get_das_root(), path)
 }
 

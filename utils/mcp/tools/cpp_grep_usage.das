@@ -22,20 +22,14 @@ require strings public
 // `context_lines_str`: reserved (currently unused; ast-grep already returns the matched line).
 // `glob_filter`: optional --globs filter (gitignore syntax; `!pattern` for exclusion).
 def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : string {
-    if (empty(symbol)) {
-        return make_tool_result("'symbol' argument is required", true)
-    }
+    if (empty(symbol)) return make_tool_result("'symbol' argument is required", true)
     let sg = get_ast_grep_cmd()
-    if (empty(sg)) {
-        return make_tool_result("ast-grep not available", true)
-    }
+    if (empty(sg)) return make_tool_result("ast-grep not available", true)
     let das_root = get_das_root()
     let search_dirs <- cpp_resolve_search_dirs(directory)
     var rule_err : string
     let rule_path = cpp_write_grep_rule_file(symbol, rule_err)
-    if (empty(rule_path)) {
-        return make_tool_result(rule_err, true)
-    }
+    if (empty(rule_path)) return make_tool_result(rule_err, true)
     var args <- [sg, "scan", "-r", rule_path, "--json"]
     cpp_push_glob_args(args, search_dirs, glob_filter)
     args |> reserve(length(args) + length(search_dirs))
@@ -44,12 +38,8 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
     }
     var raw_json : string
     let rc = run_and_capture(args, raw_json, 60.0)
-    if (rc != 0 && empty(raw_json)) {
-        return make_tool_result("ast-grep failed (exit {rc})", true)
-    }
-    if (empty(raw_json) || raw_json == "[]") {
-        return make_tool_result("No matches found for '{symbol}'")
-    }
+    if (rc != 0 && empty(raw_json)) return make_tool_result("ast-grep failed (exit {rc})", true)
+    if (empty(raw_json) || raw_json == "[]") return make_tool_result("No matches found for '{symbol}'")
     // Parse-first: on Windows, sg sometimes exits non-zero while still emitting
     // valid JSON to stdout (warnings on stderr get merged in by run_and_capture).
     // Try to parse; only fail if parse itself fails, and enrich the message with
@@ -58,9 +48,7 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
     var parsed = read_json(raw_json, parse_err)
     if (parsed == null) {
         let truncated = length(raw_json) > 500 ? slice(raw_json, 0, 500) : raw_json
-        if (rc != 0) {
-            return make_tool_result("ast-grep failed (exit {rc}): {truncated}", true)
-        }
+        if (rc != 0) return make_tool_result("ast-grep failed (exit {rc}): {truncated}", true)
         return make_tool_result("Failed to parse ast-grep output: {parse_err}\nRaw: {truncated}", true)
     }
     if (!(parsed.value is _array)) {
@@ -78,16 +66,12 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
         let matches & = parsed.value as _array
         for (m in matches) {
             let file_path = get_json_string(m, "file")
-            if (empty(file_path)) {
-                continue
-            }
+            if (empty(file_path)) continue
             let rng = (m.value as _object)?["range"] ?? null
             let start = rng != null ? ((rng.value as _object)?["start"] ?? null) : null
             let line_num = start != null ? get_json_int(start, "line") + 1 : 0
             let dedup_key = "{file_path}:{line_num}"
-            if (key_exists(seen, dedup_key)) {
-                continue
-            }
+            if (key_exists(seen, dedup_key)) continue
             seen[dedup_key] = true
             let lines_val = (m.value as _object)?["lines"] ?? null
             var context = ""
@@ -108,9 +92,7 @@ def do_cpp_grep_usage(symbol, directory, context_lines_str, glob_filter : string
         match_count += length(by_file[fp])
     }
     let total = length(by_file)
-    if (match_count == 0) {
-        return make_tool_result("No matches found for '{symbol}'")
-    }
+    if (match_count == 0) return make_tool_result("No matches found for '{symbol}'")
     let output = build_string() $(var w) {
         w |> write("Found {match_count} match")
         if (match_count != 1) {

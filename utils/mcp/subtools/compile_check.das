@@ -71,21 +71,15 @@ def private compile_check_single_json(file : string; project : string = "") : Co
 
 def run_compile_check(file : string; project : string = ""; json : bool = false) : string {
     let proj_err = validate_project_arg(project)
-    if (!empty(proj_err)) {
-        return make_tool_result(proj_err, true)
-    }
+    if (!empty(proj_err)) return make_tool_result(proj_err, true)
     var files : array<string>
     parse_file_list(file, files)
     if (empty(files)) {
-        if (json) {
-            return make_tool_result("[]", true)
-        }
+        if (json) return make_tool_result("[]", true)
         return make_tool_result("no files matched: {file}", true)
     }
     if (!json) {
-        if (length(files) == 1) {
-            return compile_check_single(files[0], project)
-        }
+        if (length(files) == 1) return compile_check_single(files[0], project)
         var passed = 0
         var failed = 0
         let output = build_string() $(var w) {

@@ -28,9 +28,7 @@ class TypeVisitor : AstVisitor {
     }
     def collect(typ : TypeDeclPtr) {
         if (typ.baseType == Type.tStructure) {
-            if (usedTypes.st |> key_exists(typ.structType)) {
-                return
-            }
+            if (usedTypes.st |> key_exists(typ.structType)) return
         }
         if (typ.structType != null) {
             insert(usedTypes.st, typ.structType)

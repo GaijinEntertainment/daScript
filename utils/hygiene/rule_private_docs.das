@@ -66,9 +66,7 @@ def private count_braces(s : string; var block_depth : int&) : tuple<int; int> {
                 prev_star = false
                 continue
             }
-            if (prev_slash && b == uint8('/')) {
-                return  // `//` line comment — rest of line is comment text
-            }
+            if (prev_slash && b == uint8('/')) return  // `//` line comment — rest of line is comment text
             if (prev_slash && b == uint8('*')) {
                 block_depth = 1
                 prev_slash = false
@@ -95,13 +93,9 @@ def private is_private_decl_start(line : string) : bool {
 
 def private strip_trailing_doc(line : string) : string {
     let pos = regex_search(TRAILING_RE, line)
-    if (pos.x < 0) {
-        return line
-    }
+    if (pos.x < 0) return line
     let new_body = slice(line, 0, pos.x)
-    if (empty(strip(new_body))) {
-        return ""
-    }
+    if (empty(strip(new_body))) return ""
     return new_body
 }
 
@@ -162,13 +156,9 @@ def public trim_private_docstrings(src : string) : string {
         }
         // state == 2 (inside a private declaration body)
         let stripped = strip(line)
-        if (starts_with(stripped, "//!")) {
-            continue
-        }
+        if (starts_with(stripped, "//!")) continue
         let new_line = strip_trailing_doc(line)
-        if (empty(new_line)) {
-            continue
-        }
+        if (empty(new_line)) continue
         let braces = count_braces(new_line, block_depth)
         body_depth += braces._0 - braces._1
         out |> push(new_line)

@@ -68,7 +68,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
         let function_declaration = build_string() $(writer) {
             writer |> write("def ")
             writer |> write(call_name)
-            if (length(captured) != 0) {
+            if (!empty(captured)) {
                 writer |> write(" ( ")
                 var first = true
                 for (v in captured) {
@@ -94,7 +94,7 @@ class ExtractMethodMacro : AstFunctionAnnotation {
         let call_expression = build_string() $(writer) {
             writer |> write(call_name)
             writer |> write("(")
-            if (length(captured) != 0) {
+            if (!empty(captured)) {
                 var first = true
                 for (v in captured) {
                     if (first) {

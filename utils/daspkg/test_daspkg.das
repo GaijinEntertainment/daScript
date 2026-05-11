@@ -276,7 +276,7 @@ def private write_passing_pkg(src_dir, pkg_name : string; deps : array<string>) 
         w |> write("options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"")
         w |> write(pkg_name)
         w |> write("\")\n\}\n")
-        if (length(deps) > 0) {
+        if (!empty(deps)) {
             w |> write("[export]\ndef dependencies(version : string) \{\n")
             for (d in deps) {
                 w |> write("    require_package(\"")

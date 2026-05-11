@@ -27,12 +27,8 @@ def public classify(name : string; canonical : string) : PatternHit {
     // the dispatch contract, not by the algorithm. Check first so that
     // a visitor whose body happens to match `dispatch`/`emit` is still
     // classified under the more semantic `visitor` bucket.
-    if (try_visitor(name, hit)) {
-        return hit
-    }
-    if (try_dispatch(canonical, hit)) {
-        return hit
-    }
+    if (try_visitor(name, hit)) return hit
+    if (try_dispatch(canonical, hit)) return hit
     // Single-statement dastest test wrappers:
     //   def test_xxx(t : T?) { t |> run("desc") @(t : T?) { ... } }
     // The canonicalizer collapses the lambda body to ADDR, so every
@@ -41,12 +37,8 @@ def public classify(name : string; canonical : string) : PatternHit {
     // hence this name-tagged single-statement variant. Check before
     // `emit` because `emit` is the more general "small N trivial calls"
     // shape; `test_wrapper` is the more specific name+shape match.
-    if (try_test_wrapper(name, canonical, hit)) {
-        return hit
-    }
-    if (try_emit(canonical, hit)) {
-        return hit
-    }
+    if (try_test_wrapper(name, canonical, hit)) return hit
+    if (try_emit(canonical, hit)) return hit
     return hit
 }
 
@@ -63,9 +55,7 @@ def public classify(name : string; canonical : string) : PatternHit {
 // `--keep visitor` to include them.
 def try_visitor(name : string; var hit : PatternHit) : bool {
     let bt = find(name, "`")
-    if (bt < 0) {
-        return false
-    }
+    if (bt < 0) return false
     let method = slice(name, bt + 1)
     if (method |> starts_with("preVisit")
             || method |> starts_with("postVisit")
@@ -89,13 +79,9 @@ def try_visitor(name : string; var hit : PatternHit) : bool {
 // structure beyond "this many calls".
 def try_dispatch(canonical : string; var hit : PatternHit) : bool {
     let stmts <- split_top_level_stmts(canonical)
-    if (length(stmts) < 2) {
-        return false
-    }
+    if (length(stmts) < 2) return false
     for (i in range(1, length(stmts))) {
-        if (stmts[i] != stmts[0]) {
-            return false
-        }
+        if (stmts[i] != stmts[0]) return false
     }
     hit.name := "dispatch"
     hit.note := "{length(stmts)}x repeated"
@@ -111,32 +97,20 @@ def try_dispatch(canonical : string; var hit : PatternHit) : bool {
 // the same canonical regardless of what the lambda actually does. This
 // pattern catches them; users opt back in via `--keep test_wrapper`.
 def try_test_wrapper(name : string; canonical : string; var hit : PatternHit) : bool {
-    if (!(name |> starts_with("test_"))) {
-        return false
-    }
+    if (!(name |> starts_with("test_"))) return false
     let stmts <- split_top_level_stmts(canonical)
-    if (length(stmts) != 1) {
-        return false
-    }
+    if (length(stmts) != 1) return false
     let toks <- tokenize_canonical(stmts[0])
-    if (length(toks) < 2) {
-        return false
-    }
-    if (toks[0] != "STMT" && toks[0] != "FIN_STMT") {
-        return false
-    }
-    if (toks[1] != "CALL:run") {
-        return false
-    }
+    if (length(toks) < 2) return false
+    if (toks[0] != "STMT" && toks[0] != "FIN_STMT") return false
+    if (toks[1] != "CALL:run") return false
     var addr_count = 0
     for (i in range(2, length(toks))) {
         if (toks[i] == "ADDR") {
             addr_count++
         }
     }
-    if (addr_count == 0) {
-        return false
-    }
+    if (addr_count == 0) return false
     hit.name := "test_wrapper"
     hit.note := "single t |> run(...) body"
     return true
@@ -155,39 +129,27 @@ def try_test_wrapper(name : string; canonical : string; var hit : PatternHit) : 
 // is structurally required and not actionable.
 def try_emit(canonical : string; var hit : PatternHit) : bool {
     let stmts <- split_top_level_stmts(canonical)
-    if (length(stmts) == 0 || length(stmts) > 6) {
-        return false
-    }
+    if (empty(stmts) || length(stmts) > 6) return false
     var emit_count = 0
     for (stmt in stmts) {
         let toks <- tokenize_canonical(stmt)
-        if (length(toks) < 2) {
-            return false
-        }
-        if (toks[0] != "STMT" && toks[0] != "FIN_STMT") {
-            return false
-        }
+        if (length(toks) < 2) return false
+        if (toks[0] != "STMT" && toks[0] != "FIN_STMT") return false
         let head = toks[1]
         if (head == "RET") {
             // Plain return of a var/null/literal — accept.
-            if (!emit_args_trivial(toks, 2, length(toks))) {
-                return false
-            }
+            if (!emit_args_trivial(toks, 2, length(toks))) return false
             continue
         }
         if (head |> starts_with("CALL:")) {
             // A single top-level call with only trivial args.
-            if (!emit_args_trivial(toks, 2, length(toks))) {
-                return false
-            }
+            if (!emit_args_trivial(toks, 2, length(toks))) return false
             emit_count++
             continue
         }
         return false
     }
-    if (emit_count == 0) {
-        return false
-    }
+    if (emit_count == 0) return false
     hit.name := "emit"
     hit.note := "{emit_count} trivial-call stmt(s)"
     return true
@@ -202,14 +164,10 @@ def try_emit(canonical : string; var hit : PatternHit) : bool {
 def emit_args_trivial(toks : array<string>; lo, hi : int) : bool {
     for (i in range(lo, hi)) {
         let tok = toks[i]
-        if (tok |> starts_with("<var_") || tok == "<sym>") {
-            continue
-        }
+        if (tok |> starts_with("<var_") || tok == "<sym>") continue
         if (tok == ".FLD" || tok == "P2R" || tok == "LIT" || tok == "MK_STR"
                 || tok == "SBLD" || tok == "ENDSBLD"
-                || tok |> starts_with("OP1:")) {
-            continue
-        }
+                || tok |> starts_with("OP1:")) continue
         return false
     }
     return true
@@ -235,9 +193,7 @@ def public split_top_level_stmts(canonical : string) : array<string> {
     while (i + 1 < n && !(toks[i] == "BODY" && toks[i + 1] == "BLK")) {
         i++
     }
-    if (i + 1 >= n) {
-        return <- out
-    }
+    if (i + 1 >= n) return <- out
     i += 2
     var depth = 0
     var cur_start = -1

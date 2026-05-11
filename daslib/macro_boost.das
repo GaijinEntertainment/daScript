@@ -47,9 +47,7 @@ class CaptureBlock : AstVisitor {
     @do_not_delete scope : table<Variable?>
     @do_not_delete captured : table<Variable?; ExprVar?>
     def override preVisitExprVar(expr : ExprVar?) : void {
-        if (!(expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block)) {
-            return
-        }
+        if (!(expr.varFlags.local || expr.varFlags.argument || expr.varFlags._block)) return
         let vptr = expr.variable
         if (!(scope |> key_exists(vptr))) {
             unsafe {

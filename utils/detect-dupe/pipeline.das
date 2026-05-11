@@ -31,17 +31,11 @@ require patterns
 // than main.das) so the unit tests can exercise it directly without
 // shelling out to a subprocess.
 def public read_path_lines(f : FILE const?; var paths : array<string>) {
-    if (f == null) {
-        return
-    }
+    if (f == null) return
     while (!feof(f)) {
         let line = fgets(f) |> strip
-        if (empty(line)) {
-            continue
-        }
-        if (line |> starts_with("#")) {
-            continue
-        }
+        if (empty(line)) continue
+        if (line |> starts_with("#")) continue
         paths |> push(line)
     }
 }
@@ -55,9 +49,7 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
                                      var error : string&) : bool {
     var ok = false
     fopen(path, "rb") $(f) {
-        if (f == null) {
-            return
-        }
+        if (f == null) return
         ok = true
         read_path_lines(f, paths)
     }
@@ -77,9 +69,7 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
 def public chunk_files(files : array<string>; n_chunks : int) : array<array<string>> {
     var out : array<array<string>>
     let total = length(files)
-    if (total == 0) {
-        return <- out
-    }
+    if (total == 0) return <- out
     var n = n_chunks
     if (n < 1) {
         n = 1
@@ -90,9 +80,7 @@ def public chunk_files(files : array<string>; n_chunks : int) : array<array<stri
     let per_chunk = (total + n - 1) / n
     for (k in range(n)) {
         let start_idx = k * per_chunk
-        if (start_idx >= total) {
-            break
-        }
+        if (start_idx >= total) break
         let end_excl = min((k + 1) * per_chunk, total)
         var chunk : array<string>
         chunk |> reserve(end_excl - start_idx)
@@ -117,9 +105,7 @@ def public is_daslib_skip(path : string; basename : string) : bool {
 
 
 def public is_skip_file(path : string; basename : string) : bool {
-    if (basename == "builtin.das") {
-        return true
-    }
+    if (basename == "builtin.das") return true
     return (is_daslib_skip(path, "debugger.das")
         || is_daslib_skip(path, "profiler.das"))
 }
@@ -136,15 +122,11 @@ def public is_skip_dir(name : string) : bool {
 // supposed to compile.
 def public has_expect_directive(file : string) : bool {
     let text = fread(file)
-    if (empty(text)) {
-        return false
-    }
+    if (empty(text)) return false
     let lines <- text |> split("\n")
     for (line in lines) {
         let trimmed = line |> strip
-        if (trimmed |> starts_with("expect ")) {
-            return true
-        }
+        if (trimmed |> starts_with("expect ")) return true
     }
     return false
 }
@@ -152,9 +134,7 @@ def public has_expect_directive(file : string) : bool {
 
 def public scan_das_files(path : string; var files : array<string>; var cache : table<string; void?>) {
     let st = stat(path)
-    if (!st.is_valid) {
-        return
-    }
+    if (!st.is_valid) return
     if (st.is_reg) {
         if (path |> ends_with(".das")) {
             // Normalize before keying/pushing so seeds spelled differently
@@ -171,21 +151,13 @@ def public scan_das_files(path : string; var files : array<string>; var cache : 
         }
         return
     }
-    if (!st.is_dir) {
-        return
-    }
+    if (!st.is_dir) return
     fio::dir(path) $(name) {
-        if (name == "." || name == "..") {
-            return
-        }
-        if (name |> starts_with("_") || is_skip_dir(name)) {
-            return
-        }
+        if (name == "." || name == "..") return
+        if (name |> starts_with("_") || is_skip_dir(name)) return
         let full = path_join(path, name)
         let fst = stat(full)
-        if (!fst.is_valid) {
-            return
-        }
+        if (!fst.is_valid) return
         if (fst.is_dir) {
             scan_das_files(full, files, cache)
         } elif (fst.is_reg && name |> ends_with(".das") && !is_skip_file(full, name)) {
@@ -219,39 +191,27 @@ def private collect_one_function(var func : FunctionPtr;
                                  lambdas_only : bool;
                                  want_sigs : bool;
                                  min_tokens : int) {
-    if (func.flags.builtIn) {
-        return
-    }
+    if (func.flags.builtIn) return
     // Lambdas are emitted as `generated` synthesized functions
     // (`__lambda_function_at_line_xxx`). Default mode skips them via
     // the generated filter (the dispatcher already references them
     // via ADDR). Lambda-only mode lets them through and drops the
     // top-level functions instead.
     if (lambdas_only) {
-        if (!func.flags._lambda) {
-            return
-        }
+        if (!func.flags._lambda) return
     } else {
-        if (func.flags.generated) {
-            return
-        }
+        if (func.flags.generated) return
     }
     let fn_file = (func.at.fileInfo != null) ? string(func.at.fileInfo.name) : ""
     // Normalize slash direction — Windows runners can mix `\` and
     // `/`, and a literal mismatch silently drops every function
     // from a file that compiled fine.
-    if (normalize_path(fn_file) != source_norm) {
-        return
-    }
+    if (normalize_path(fn_file) != source_norm) return
     let loc = "{fn_file}:{int(func.at.line)}"
-    if (key_exists(seen_loc, loc)) {
-        return
-    }
+    if (key_exists(seen_loc, loc)) return
     seen_loc |> insert(loc, null)
     let canon = canonicalize_function(func)
-    if (empty(canon)) {
-        return
-    }
+    if (empty(canon)) return
     var rec = FuncRecord()
     rec.ref.file = fn_file
     rec.ref.name = string(func.name)
@@ -339,9 +299,7 @@ def public apply_pattern_filter(var records : array<FuncRecord>;
                                 keep_all : bool;
                                 verbose : bool) : table<string; int> {
     var skip_counts : table<string; int>
-    if (keep_all) {
-        return <- skip_counts
-    }
+    if (keep_all) return <- skip_counts
     var kept_records : array<FuncRecord>
     kept_records |> reserve(length(records))
     for (r in records) {

@@ -152,9 +152,7 @@ def private decs_prefix(arg : AnnotationArgumentList) {
 
 [macro_function]
 def private is_decs_template(v : VariablePtr) {
-    if (v._type.baseType != Type.tStructure) {
-        return ItCheck(no = true)
-    }
+    if (v._type.baseType != Type.tStructure) return ItCheck(no = true)
     var p = v.annotation |> decs_prefix
     if (p is no) {
         for (ann in v._type.structType.annotations) {
@@ -251,9 +249,7 @@ def private append_iterator(arch_name : string; var qloop : ExprFor?; a; prefix,
     qloop.iteratorsAt |> push(a.at)
     qloop.iteratorsTags |> resize(qli + 1)
     let getter = getter_name(a, const_parent, can_be_optional)
-    if (empty(getter)) {
-        return false
-    }
+    if (empty(getter)) return false
     if (getter == "get_default_ro") {
         qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), $e(a.init)))
     } else {
@@ -270,9 +266,7 @@ def private append_iterator(arch_name : string; var qloop : ExprFor?; a; prefix,
 [macro_function]
 def private append_index_lookup(arch_name : string; var qblock : ExprBlock?; a; prefix, suffix : string; const_parent : bool = false; can_be_optional : bool = true) {
     let getter = getter_name(a, const_parent, can_be_optional)
-    if (empty(getter)) {
-        return false
-    }
+    if (empty(getter)) return false
     var iget : ExpressionPtr
     if (getter == "get_default_ro") {
         iget = clone_expression(a.init)
@@ -372,13 +366,9 @@ class DecsQueryMacro : AstCallMacro {
     //!             apply_decs_template(cmp, [[Particle pos=float3(i), vel=float3(i+1)]])
     def override preVisit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : void {
         let totalArgs = length(expr.arguments)
-        if (totalArgs != 1 && totalArgs != 2) {
-            return
-        }
+        if (totalArgs != 1 && totalArgs != 2) return
         let block_arg_index = totalArgs - 1
-        if (!(expr.arguments[block_arg_index] is ExprMakeBlock)) {
-            return
-        }
+        if (!(expr.arguments[block_arg_index] is ExprMakeBlock)) return
         var mblk = expr.arguments[block_arg_index] as ExprMakeBlock
         var qblk = mblk._block as ExprBlock
         for (arg in qblk.arguments) {
@@ -423,14 +413,10 @@ class DecsQueryMacro : AstCallMacro {
                 if (detp is yes) {
                     kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
                     for (f in a._type.structType.fields) {
-                        if (!append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) {
-                            return null
-                        }
+                        if (!append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
                     }
                 } else {
-                    if (!append_index_lookup(arch_name, qlbody, a, "", "")) {
-                        return null
-                    }
+                    if (!append_index_lookup(arch_name, qlbody, a, "", "")) return null
                 }
             }
             for (l in qblk.list) {
@@ -451,14 +437,10 @@ class DecsQueryMacro : AstCallMacro {
                 if (detp is yes) {
                     kaboom |> push <| (string(a.name), detp as yes, "_{a.name}")
                     for (f in a._type.structType.fields) {
-                        if (!append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) {
-                            return null
-                        }
+                        if (!append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)) return null
                     }
                 } else {
-                    if (!append_iterator(arch_name, qloop, a, "", "")) {
-                        return null
-                    }
+                    if (!append_iterator(arch_name, qloop, a, "", "")) return null
                 }
             }
             var qlbody = new ExprBlock(at = qblk.at)
@@ -481,7 +463,7 @@ class DecsQueryMacro : AstCallMacro {
                 rules |> kaboomVarField(kb._0, kb._1, kb._2)
             }
         }
-        if (length(kaboom) > 0) {
+        if (!empty(kaboom)) {
             apply_template(qtop) $(rules) {
                 for (kb in kaboom) {
                     rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)

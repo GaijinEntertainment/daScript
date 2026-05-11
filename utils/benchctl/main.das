@@ -72,56 +72,40 @@ def main : int {
 
 def run_subcommand(parsed : ParsedArgs) : string {
     let cmd = parsed.command
-    if (cmd != "reset" && cmd != "insert" && cmd != "query" && cmd != "compare") {
-        return "unknown subcommand: {cmd}"
-    }
+    if (cmd != "reset" && cmd != "insert" && cmd != "query" && cmd != "compare") return "unknown subcommand: {cmd}"
     let need_init = !file_exists(parsed.db) && (cmd == "insert" || cmd == "query" || cmd == "compare")
     var open_r <- try_open_sqlite(parsed.db)
-    if (open_r |> is_err) {
-        return "open database: {open_r |> unwrap_err}"
-    }
+    if (open_r |> is_err) return "open database: {open_r |> unwrap_err}"
     var inscope db <- open_r._value
 
     if (need_init) {
         let init_err = run_reset_cmd(db)
-        if (init_err != "") {
-            return init_err
-        }
+        if (init_err != "") return init_err
     }
 
     if (cmd == "reset") {
         return run_reset_cmd(db)
     } elif (cmd == "insert") {
         return run_insert_cmd(db, parsed)
-    } elif (cmd == "query") {
-        return run_query_cmd(db, parsed)
-    }
+    } elif (cmd == "query") return run_query_cmd(db, parsed)
     return run_compare_cmd(db, parsed)
 }
 
 def validate_tag_chars(t : string) : string {
-    if (find(t, "[") != -1 || find(t, "]") != -1) {
-        return "tag '{t}' contains illegal character '[' or ']'"
-    }
+    if (find(t, "[") != -1 || find(t, "]") != -1) return "tag '{t}' contains illegal character '[' or ']'"
     return ""
 }
 
 def run_reset_cmd(db : SqlRunner) : string {
     let drop_err = db |> try_drop_table_if_exists(type<Benchmark>)
-    if (drop_err |> is_some) {
-        return "drop table: {drop_err |> unwrap}"
-    }
+    if (drop_err |> is_some) return "drop table: {drop_err |> unwrap}"
     let create_err = db |> try_create_table(type<Benchmark>)
-    if (create_err |> is_some) {
-        return "create table: {create_err |> unwrap}"
-    }
+    if (create_err |> is_some) return "create table: {create_err |> unwrap}"
     return ""
 }
 
 def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
-    if (length(parsed.files) == 0) {
-        return "missing targets to insert"
-    }
+    if (empty(parsed.files)) return "missing targets to insert"
 
     var commit_hash = parsed.commit
     if (commit_hash == "") {
@@ -130,13 +114,9 @@ def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
 
     var tag_string = ""
     for (t in parsed.tags) {
-        if (t == "") {
-            continue
-        }
+        if (t == "") continue
         let tag_err = validate_tag_chars(t)
-        if (tag_err != "") {
-            return tag_err
-        }
+        if (tag_err != "") return tag_err
         tag_string += "[{t}]"  // nolint:PERF001 — typically 0-2 tags, not a hot path
     }
 
@@ -170,9 +150,7 @@ def run_insert_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
             ))
         }
         let txn_err = db |> try_insert(rows)
-        if (txn_err |> is_err) {
-            return "insert {filename}: {txn_err |> unwrap_err}"
-        }
+        if (txn_err |> is_err) return "insert {filename}: {txn_err |> unwrap_err}"
         print("{filename}: added {length(rows)} samples\n")
     }
     return ""
@@ -186,16 +164,12 @@ def query_benchmarks(db : SqlRunner; commit_filter : string; tag_filter : string
 }
 
 def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
-    if (length(parsed.tags) > 1) {
-        return "--tag may only be specified once for query"
-    }
-    let tag_filter = length(parsed.tags) > 0 ? parsed.tags[0] : ""
+    if (length(parsed.tags) > 1) return "--tag may only be specified once for query"
+    let tag_filter = !empty(parsed.tags) ? parsed.tags[0] : ""
     let tag_err = validate_tag_chars(tag_filter)
-    if (tag_err != "") {
-        return tag_err
-    }
+    if (tag_err != "") return tag_err
     let entries <- query_benchmarks(db, parsed.commit, tag_filter)
-    if (length(entries) == 0) {
+    if (empty(entries)) {
         print("no results\n")
         return ""
     }
@@ -224,13 +198,9 @@ def run_query_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
 
 def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     let old_tag_err = validate_tag_chars(parsed.old_tag)
-    if (old_tag_err != "") {
-        return old_tag_err
-    }
+    if (old_tag_err != "") return old_tag_err
     let new_tag_err = validate_tag_chars(parsed.new_tag)
-    if (new_tag_err != "") {
-        return new_tag_err
-    }
+    if (new_tag_err != "") return new_tag_err
 
     let old_entries <- query_benchmarks(db, parsed.old_commit, parsed.old_tag)
 
@@ -248,21 +218,15 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         |> _where(new_want_tag == "" || _.tags |> contains(new_want_tag))
         |> _where(_.id._not_in(old_ids)))
 
-    if (length(old_entries) == 0) {
-        return "no rows match --old-commit / --old-tag"
-    }
-    if (length(new_entries) == 0) {
-        return "no rows match --new-commit / --new-tag (after excluding rows already in --old)"
-    }
+    if (empty(old_entries)) return "no rows match --old-commit / --old-tag"
+    if (empty(new_entries)) return "no rows match --new-commit / --new-tag (after excluding rows already in --old)"
 
     var key_map = @(x : string) : string {
         return x
     }
     if (parsed.s != "") {
         let parts <- split(parsed.s, "=>")
-        if (length(parts) != 2) {
-            return "invalid -s argument, expected 'from=>to' format"
-        }
+        if (length(parts) != 2) return "invalid -s argument, expected 'from=>to' format"
         var re <- regex_compile(parts[0])
         key_map = @capture(:= re, := parts) (x : string) : string {
             return regex_replace(re, x, parts[1])
@@ -311,18 +275,12 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     let fmt_variation <- @(variation : double) : string {
         let percent = variation * 100.0lf
         let s = "{percent:.0f}"
-        if (percent < 5.0lf) {
-            return "±{s}%"
-        }
+        if (percent < 5.0lf) return "±{s}%"
         return "±{yellow_str(s)}%"
     }
     let fmt_delta <- @(old_v, new_v : double) : string {
-        if (old_v > 0.0lf && new_v <= 0.01lf) {
-            return green_str("-100%")
-        }
-        if (old_v == 0.0lf && new_v >= 1.0lf) {
-            return red_str("+inf%")
-        }
+        if (old_v > 0.0lf && new_v <= 0.01lf) return green_str("-100%")
+        if (old_v == 0.0lf && new_v >= 1.0lf) return red_str("+inf%")
         let delta_percent = (new_v - old_v) / old_v * 100.0lf
         let sign = delta_percent >= 0.0lf ? "+" : ""
         let delta_fmt = "{sign}{delta_percent:.2f}%"
@@ -337,9 +295,7 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     for (k in bench_order) {
         var s_old = unsafe(old_samples[k])
         // The stats are null if an error occured when analyzing it.
-        if (s_old.stats == null) {
-            continue
-        }
+        if (s_old.stats == null) continue
         let mapped_k = key_map(k)
         if (!key_exists(new_samples, mapped_k)) {
             if (k != mapped_k) {
@@ -351,9 +307,7 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         }
 
         var s_new = unsafe(new_samples[mapped_k])
-        if (s_new.stats == null) {
-            continue
-        }
+        if (s_new.stats == null) continue
 
         if (k != mapped_k) {
             print("{blue_str(k)} vs {blue_str(mapped_k)}\n")
@@ -362,15 +316,9 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         }
         var table_rows : array<TableRow?>
         for (stat_old, stat_new in as_list(s_old.stats), as_list(s_new.stats)) {
-            if (stat_old.metric.is_alloc && stat_old.mean_avg == 0.0lf && stat_new.mean_avg == 0.0lf) {
-                continue
-            }
-            if (stat_old.metric.is_alloc && abs(stat_old.mean_avg - stat_new.mean_avg) < 1.0lf) {
-                continue
-            }
-            if (length(stat_old.values) == 0 || length(stat_new.values) == 0) {
-                continue
-            }
+            if (stat_old.metric.is_alloc && stat_old.mean_avg == 0.0lf && stat_new.mean_avg == 0.0lf) continue
+            if (stat_old.metric.is_alloc && abs(stat_old.mean_avg - stat_new.mean_avg) < 1.0lf) continue
+            if (empty(stat_old.values) || empty(stat_new.values)) continue
 
             old_total_values[stat_old.metric.name] |> push(stat_old.mean_avg)
             new_total_values[stat_new.metric.name] |> push(stat_new.mean_avg)
@@ -416,9 +364,7 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
     var table_rows : array<TableRow?>
     for (k, old_values in keys(old_total_values), values(old_total_values)) {
         let new_values & = unsafe(new_total_values[k])
-        if (length(old_values) == 0 && length(new_values) == 0) {
-            continue
-        }
+        if (empty(old_values) && empty(new_values)) continue
         let gm_old = geomean(old_values)
         let gm_new = geomean(new_values)
         let gm_old_s = "{gm_old:.1f}"
@@ -429,7 +375,7 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
             fmt_delta(gm_old, gm_new),
         ]))
     }
-    if (length(table_rows) > 0) {
+    if (!empty(table_rows)) {
         print("\n")
         print("GEOMEAN:\n\n")
         var tabspec = new TableData(

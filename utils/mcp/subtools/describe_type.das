@@ -34,15 +34,11 @@ def write_struct_detail(var w : StringBuilderWriter; value; mod : Module?) {
     }
     var methods : array<string>
     for_each_function(mod, "") $(func) {
-        if (!func.flags.isClassMethod || empty(func.arguments)) {
-            return
-        }
+        if (!func.flags.isClassMethod || empty(func.arguments)) return
         let self_type = func.arguments[0]._type
         if (self_type == null || self_type.structType == null ||
                 self_type.structType.name != value.name ||
-                (func.flags.generated && func.fromGeneric == null)) {
-            return
-        }
+                (func.flags.generated && func.fromGeneric == null)) return
         let entry = build_string() $(var ew) {
             write(ew, "  def {func.name}")
             write_func_signature(ew, func)
@@ -82,13 +78,9 @@ def write_handled_type_detail(var w : StringBuilderWriter; value : Annotation co
     }
     var methods : array<string>
     for_each_function(mod, "") $(func) {
-        if (func.flags.privateFunction || func.flags._lambda || func.flags.generated || empty(func.arguments)) {
-            return
-        }
+        if (func.flags.privateFunction || func.flags._lambda || func.flags.generated || empty(func.arguments)) return
         let first_type = func.arguments[0]._type
-        if (first_type == null) {
-            return
-        }
+        if (first_type == null) return
         if (first_type.baseType == Type.tHandle) {
             if (first_type.annotation != null && first_type.annotation.name == value.name) {
                 let entry = build_string() $(var ew) {
@@ -178,23 +170,17 @@ def private try_describe_type(name, module_name, preamble, project : string) : T
         ok = true
         var result = ""
         program_for_each_module(program) $(mod) {
-            if (!empty(result)) {
-                return
-            }
+            if (!empty(result)) return
             for_each_structure(mod) $(value) {
                 if (!empty(result) || value.name != name ||
-                        value.flags.isLambda || value.flags._generator || value.flags.generated) {
-                    return
-                }
+                        value.flags.isLambda || value.flags._generator || value.flags.generated) return
                 result = build_string() $(var w) {
                     write_struct_detail(w, value, mod)
                 }
             }
             if (empty(result)) {
                 module_for_each_annotation(mod) $(value) {
-                    if (!empty(result) || !value.isBasicStructureAnnotation || value.name != name) {
-                        return
-                    }
+                    if (!empty(result) || !value.isBasicStructureAnnotation || value.name != name) return
                     result = build_string() $(var w) {
                         write_handled_type_detail(w, value, mod)
                     }
@@ -202,9 +188,7 @@ def private try_describe_type(name, module_name, preamble, project : string) : T
             }
             if (empty(result)) {
                 for_each_enumeration(mod) $(value) {
-                    if (!empty(result) || value.name != name) {
-                        return
-                    }
+                    if (!empty(result) || value.name != name) return
                     result = build_string() $(var w) {
                         write_enum_detail(w, value, mod)
                     }
@@ -212,18 +196,14 @@ def private try_describe_type(name, module_name, preamble, project : string) : T
             }
             if (empty(result)) {
                 for_each_typedef(mod) $(tname, td) {
-                    if (!empty(result) || tname != name) {
-                        return
-                    }
+                    if (!empty(result) || tname != name) return
                     result = build_string() $(var w) {
                         write_typedef_detail(w, string(tname), td, mod)
                     }
                 }
             }
         }
-        if (empty(result)) {
-            return "{preamble}Type '{name}' not found"
-        }
+        if (empty(result)) return "{preamble}Type '{name}' not found"
         return "{preamble}{result}"
     }
     remove(stub_path)
@@ -231,19 +211,13 @@ def private try_describe_type(name, module_name, preamble, project : string) : T
 }
 
 def run_describe_type(name, module_name : string; project : string = "") : string {
-    if (empty(name)) {
-        return make_tool_result("missing 'name' argument", true)
-    }
+    if (empty(name)) return make_tool_result("missing 'name' argument", true)
     let first = try_describe_type(name, module_name, "", project)
-    if (first.ok || !first.retryable || empty(module_name) || is_qualified_module_name(module_name)) {
-        return first.text
-    }
+    if (first.ok || !first.retryable || empty(module_name) || is_qualified_module_name(module_name)) return first.text
     let resolved = "daslib/{module_name}"
     let preamble = "[resolved '{module_name}' as '{resolved}']\n"
     let second = try_describe_type(name, resolved, preamble, project)
-    if (second.ok) {
-        return second.text
-    }
+    if (second.ok) return second.text
     return first.text
 }
 

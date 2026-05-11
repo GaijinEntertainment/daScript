@@ -77,9 +77,7 @@ def qm_peel_ref2value(var e : Expression?&) : void {
 
 def qm_run_function(var func : FunctionPtr&; blk : block<(var body : Expression?; var func_ptr : Function?) : QMatchResult>) : QMatchResult {
     //! Run matching block on a function, passing both body and Function pointer.
-    if (func == null) {
-        return qm_fail_null()
-    }
+    if (func == null) return qm_fail_null()
     return invoke(blk, func.body, func)
 }
 
@@ -209,9 +207,7 @@ def qm_extract_name(var expr : Expression?) : string {
         return string((expr as ExprField).name)
     } elif (expr is ExprCall) {
         return string((expr as ExprCall).name)
-    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) {
-        return string((expr as ExprIsVariant).name)
-    }
+    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) return string((expr as ExprIsVariant).name)
     return ""
 }
 
@@ -237,13 +233,9 @@ def qm_real_arg_index(args : dasvector`ptr`Variable; logical_idx : int) : int {
     for (arg, phys in args, range(length(args))) {
         if (arg._type != null) {
             let bt = arg._type.baseType
-            if (bt == Type.fakeContext || bt == Type.fakeLineInfo) {
-                continue
-            }
+            if (bt == Type.fakeContext || bt == Type.fakeLineInfo) continue
         }
-        if (logical == logical_idx) {
-            return phys
-        }
+        if (logical == logical_idx) return phys
         logical ++
     }
     return -1
@@ -255,9 +247,7 @@ def qm_extract_remaining_args(args : dasvector`ptr`Variable; from_logical : int;
     for (arg in args) {
         if (arg._type != null) {
             let bt = arg._type.baseType
-            if (bt == Type.fakeContext || bt == Type.fakeLineInfo) {
-                continue
-            }
+            if (bt == Type.fakeContext || bt == Type.fakeLineInfo) continue
         }
         if (logical >= from_logical) {
             {
@@ -293,12 +283,8 @@ def qm_real_call_arg_index(args : dasvector`ptr`Expression; logical_idx : int) :
     //! Map logical call argument index (skipping fake args) to physical index.
     var logical = 0
     for (arg, phys in args, range(length(args))) {
-        if (qm_is_fake_arg(arg)) {
-            continue
-        }
-        if (logical == logical_idx) {
-            return phys
-        }
+        if (qm_is_fake_arg(arg)) continue
+        if (logical == logical_idx) return phys
         logical ++
     }
     return -1
@@ -321,12 +307,8 @@ def qm_call_name_matches(call : ExprCall?; expected_name : string) : bool {
     //! When a generic function is instantiated, the call name is mangled
     //! (e.g. ``generic_add`123456``). This checks the mangled name first,
     //! then falls back to the ``fromGeneric`` original name.
-    if (call.name == expected_name) {
-        return true
-    }
-    if (call.func != null && call.func.fromGeneric != null) {
-        return call.func.fromGeneric.name == expected_name
-    }
+    if (call.name == expected_name) return true
+    if (call.func != null && call.func.fromGeneric != null) return call.func.fromGeneric.name == expected_name
     return false
 }
 
@@ -335,9 +317,7 @@ def qm_extract_call_name(var expr : Expression?) : string {
     //! returns the original generic name (before mangling).
     if (expr is ExprCall) {
         let call = expr as ExprCall
-        if (call.func != null && call.func.fromGeneric != null) {
-            return string(call.func.fromGeneric.name)
-        }
+        if (call.func != null && call.func.fromGeneric != null) return string(call.func.fromGeneric.name)
         return string(call.name)
     }
     return ""
@@ -347,17 +327,13 @@ def qm_extract_field_name(var expr : Expression?) : string {
     //! Extract field name from ExprField, ExprSafeField, or variant expressions.
     if (expr is ExprField || expr is ExprSafeField) {
         return string((expr as ExprField).name)
-    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) {
-        return string((expr as ExprIsVariant).name)
-    }
+    } elif (expr is ExprIsVariant || expr is ExprAsVariant || expr is ExprSafeAsVariant) return string((expr as ExprIsVariant).name)
     return ""
 }
 
 def qm_extract_type(var expr : Expression?; var out_type : TypeDeclPtr&) : QMatchResult {
     //! Extract TypeDeclPtr from ExprTypeDecl.
-    if (!(expr is ExprTypeDecl)) {
-        return qm_fail_type(expr)
-    }
+    if (!(expr is ExprTypeDecl)) return qm_fail_type(expr)
     out_type  = clone_type((expr as ExprTypeDecl).typeexpr)
     return qm_ok()
 }
@@ -377,29 +353,21 @@ def qm_make_zero_const(call_name : string) : Expression? {
         return new ExprConstUInt(value = 0u)
     } elif (call_name == "range64") {
         return new ExprConstInt64(value = 0l)
-    } elif (call_name == "urange64") {
-        return new ExprConstUInt64(value = 0ul)
-    }
+    } elif (call_name == "urange64") return new ExprConstUInt64(value = 0ul)
     return null
 }
 
 def qm_convert_local_function(var expr : Expression?) : Expression? {
     //! Reverse generateLocalFunction: ExprAddr → ExprMakeBlock(isLocalFunction=true).
     //! Returns null if the expression is not a generated local function.
-    if (!(expr is ExprAddr)) {
-        return null
-    }
+    if (!(expr is ExprAddr)) return null
     let ea = expr as ExprAddr
-    if (ea.func == null || !ea.func.flags.generated) {
-        return null
-    }
+    if (ea.func == null || !ea.func.flags.generated) return null
     var found_function = false
     peek(ea.func.name) $(fn) {
         found_function = find(fn, "`function") >= 0
     }
-    if (!found_function) {
-        return null
-    }
+    if (!found_function) return null
     let fn = ea.func
     // Reconstruct ExprBlock with args + return type + body
     var blk = new ExprBlock(at = fn.at)
@@ -422,9 +390,7 @@ def qm_convert_local_function(var expr : Expression?) : Expression? {
 def qm_resolve_local_function(var expr : Expression?) : Expression? {
     //! If expr is ExprMakeBlock, clone it. If ExprAddr (post-inference local function),
     //! convert back to ExprMakeBlock. Returns null if neither works.
-    if (expr is ExprMakeBlock) {
-        return clone_to_move(expr)
-    }
+    if (expr is ExprMakeBlock) return clone_to_move(expr)
     return qm_convert_local_function(expr)
 }
 
@@ -432,32 +398,20 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
     //! Reverse generateComprehension: ExprInvoke(invoke, ExprMakeBlock(closure)) → ExprArrayComprehension.
     //! Detects the pattern by checking ExprReturn.fromComprehension flag.
     //! Returns null if the expression is not a generated comprehension.
-    if (!(expr is ExprInvoke)) {
-        return null
-    }
+    if (!(expr is ExprInvoke)) return null
     let inv = expr as ExprInvoke
-    if (length(inv.arguments) != 1) {
-        return null
-    }
+    if (length(inv.arguments) != 1) return null
     // The argument should be ExprMakeBlock wrapping the closure
-    if (!(inv.arguments[0] is ExprMakeBlock)) {
-        return null
-    }
+    if (!(inv.arguments[0] is ExprMakeBlock)) return null
     let mkblk = inv.arguments[0] as ExprMakeBlock
     let blk = mkblk._block as ExprBlock
-    if (blk == null || length(blk.list) != 3) {
-        return null
-    }
+    if (blk == null || length(blk.list) != 3) return null
     // stmt[0] = ExprLet with __acomp_ variable
     // stmt[1] = ExprFor
     // stmt[2] = ExprReturn with fromComprehension=true
-    if (!(blk.list[0] is ExprLet) || !(blk.list[1] is ExprFor) || !(blk.list[2] is ExprReturn)) {
-        return null
-    }
+    if (!(blk.list[0] is ExprLet) || !(blk.list[1] is ExprFor) || !(blk.list[2] is ExprReturn)) return null
     let ret = blk.list[2] as ExprReturn
-    if (!ret.returnFlags.fromComprehension) {
-        return null
-    }
+    if (!ret.returnFlags.fromComprehension) return null
     // Detect tableSyntax: return subexpr is to_table_move(...)
     var is_table = false
     if (ret.subexpr is ExprCall) {
@@ -472,9 +426,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
     // Extract subexpr and exprWhere from the for body
     let src_for = blk.list[1] as ExprFor
     let for_body = src_for.body as ExprBlock
-    if (for_body == null || length(for_body.list) == 0) {
-        return null
-    }
+    if (for_body == null || length(for_body.list) == 0) return null
     var comp_subexpr : Expression?
     var comp_where : Expression?
     if (for_body.list[0] is ExprIfThenElse) {
@@ -495,9 +447,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
             comp_subexpr = clone_expression(push_call.arguments[1])
         }
     }
-    if (comp_subexpr == null) {
-        return null
-    }
+    if (comp_subexpr == null) return null
     // Reconstruct ExprArrayComprehension
     var result = new ExprArrayComprehension(at = expr.at)
     result.exprFor = clone_expression(comp_for)
@@ -513,9 +463,7 @@ def qm_convert_comprehension(var expr : Expression?) : Expression? {
 def qm_resolve_comprehension(var expr : Expression?) : Expression? {
     //! If expr is ExprArrayComprehension, shallow-clone it. If ExprInvoke (post-inference
     //! comprehension), reconstruct ExprArrayComprehension. Returns null if neither works.
-    if (expr is ExprArrayComprehension) {
-        return clone_to_move(expr)
-    }
+    if (expr is ExprArrayComprehension) return clone_to_move(expr)
     return qm_convert_comprehension(expr)
 }
 
@@ -574,22 +522,16 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
 
     // Fields on all expressions (inherited from Expression base)
     if (field_name == "_type" || field_name == "flags" || field_name == "genFlags"
-        || field_name == "printFlags" || field_name == "at") {
-        return true
-    }
+        || field_name == "printFlags" || field_name == "at") return true
     // Stack/annotation internals
     if (field_name == "stackTop" || field_name == "stackVarBottom" || field_name == "stackVarTop"
         || field_name == "annotationDataSid" || field_name == "annotationData"
         || field_name == "maxLabelIndex" || field_name == "refStackTop"
-        || field_name == "initStackSize" || field_name == "argStackTop") {
-        return true
-    }
+        || field_name == "initStackSize" || field_name == "argStackTop") return true
     // ExprVar — resolved variable reference
     if (rtti_name == "ExprVar") {
         if (field_name == "variable" || field_name == "argumentIndex" || field_name == "pBlock"
-            || field_name == "varFlags") {
-            return true
-        }
+            || field_name == "varFlags") return true
     }
     // ExprField / ExprSafeField / ExprIsVariant / ExprAsVariant / ExprSafeAsVariant —
     // typer-resolved field metadata. The .name string carries the user-visible field
@@ -602,20 +544,14 @@ def private qm_skip_field(rtti_name : string; field_name : string) : bool {
             || rtti_name == "ExprSafeAsVariant") {
         if (field_name == "fieldIndex" || field_name == "fieldRef"
                 || field_name == "annotation" || field_name == "atField"
-                || field_name == "derefFlags" || field_name == "fieldFlags") {
-            return true
-        }
+                || field_name == "derefFlags" || field_name == "fieldFlags") return true
     }
     // ExprCall/ExprOp*/ExprLooksLikeCall — resolved function reference
     if (field_name == "func" || field_name == "atEnclosure" || field_name == "stackTop"
         || field_name == "doesNotNeedSp" || field_name == "cmresAlias"
-        || field_name == "argumentsFailedToInfer") {
-        return true
-    }
+        || field_name == "argumentsFailedToInfer") return true
     // ExprReturn
-    if (field_name == "returnInBlock") {
-        return true
-    }
+    if (field_name == "returnInBlock") return true
     return false
 }
 
@@ -638,9 +574,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     //! expr_var — name of the ExpressionPtr variable for error reporting
     //! pat_type — compile-time pattern TypeDecl
 
-    if (pat_type == null) {
-        return
-    }
+    if (pat_type == null) return
 
     // ── $t tag — capture TypeDeclPtr ────────────────────────
     if (pat_type.baseType == Type.alias && pat_type.flags.isTag) {
@@ -656,9 +590,7 @@ def private generate_type_match(pat_type : TypeDecl?; td_var : string; expr_var 
     }
 
     // ── auto — match any type (wildcard) ─────────────────────
-    if (pat_type.baseType == Type.autoinfer) {
-        return
-    }
+    if (pat_type.baseType == Type.autoinfer) return
 
     // ── baseType ────────────────────────────────────────────
     let bt_int = int(pat_type.baseType)
@@ -867,9 +799,7 @@ def private generate_pattern_args_match(var pat_block : ExprBlock?; target_var :
 
 [macro_function]
 def private is_wildcard_call(pattern : Expression?) : bool {
-    if (!(pattern is ExprCall)) {
-        return false
-    }
+    if (!(pattern is ExprCall)) return false
     let call = pattern as ExprCall
     return call.name == "_wildcard" || call.name == "_wildcard1" || call.name == "_optional" || call.name == "_any"
 }
@@ -877,21 +807,15 @@ def private is_wildcard_call(pattern : Expression?) : bool {
 [macro_function]
 def private get_wildcard_b_tag(pattern : Expression?) : string {
     //! If wildcard has a $b(var) argument, return the variable name. Otherwise "".
-    if (!(pattern is ExprCall)) {
-        return ""
-    }
+    if (!(pattern is ExprCall)) return ""
     let call = pattern as ExprCall
-    if (length(call.arguments) == 0) {
-        return ""
-    }
+    if (length(call.arguments) == 0) return ""
     let arg = call.arguments[0]
     if (arg is ExprTag) {
         let tag = arg as ExprTag
         if (tag.name == "b") {
             let var_expr = tag.subexpr as ExprVar
-            if (var_expr != null) {
-                return string(var_expr.name)
-            }
+            if (var_expr != null) return string(var_expr.name)
         }
     }
     return ""
@@ -905,19 +829,19 @@ def private get_wildcard_b_tag(pattern : Expression?) : string {
 // Returns "" if the call is not a known constant constructor.
 [macro_function]
 def private const_constructor_rtti(call_name : string) : string {
-    if (call_name == "range") { return "ExprConstRange"; }
-    if (call_name == "urange") { return "ExprConstURange"; }
-    if (call_name == "range64") { return "ExprConstRange64"; }
-    if (call_name == "urange64") { return "ExprConstURange64"; }
-    if (call_name == "int2") { return "ExprConstInt2"; }
-    if (call_name == "int3") { return "ExprConstInt3"; }
-    if (call_name == "int4") { return "ExprConstInt4"; }
-    if (call_name == "uint2") { return "ExprConstUInt2"; }
-    if (call_name == "uint3") { return "ExprConstUInt3"; }
-    if (call_name == "uint4") { return "ExprConstUInt4"; }
-    if (call_name == "float2") { return "ExprConstFloat2"; }
-    if (call_name == "float3") { return "ExprConstFloat3"; }
-    if (call_name == "float4") { return "ExprConstFloat4"; }
+    if (call_name == "range") return "ExprConstRange";
+    if (call_name == "urange") return "ExprConstURange";
+    if (call_name == "range64") return "ExprConstRange64";
+    if (call_name == "urange64") return "ExprConstURange64";
+    if (call_name == "int2") return "ExprConstInt2";
+    if (call_name == "int3") return "ExprConstInt3";
+    if (call_name == "int4") return "ExprConstInt4";
+    if (call_name == "uint2") return "ExprConstUInt2";
+    if (call_name == "uint3") return "ExprConstUInt3";
+    if (call_name == "uint4") return "ExprConstUInt4";
+    if (call_name == "float2") return "ExprConstFloat2";
+    if (call_name == "float3") return "ExprConstFloat3";
+    if (call_name == "float4") return "ExprConstFloat4";
     return ""
 }
 
@@ -925,19 +849,13 @@ def private const_constructor_rtti(call_name : string) : string {
 [macro_function]
 def private const_component_expr_rtti(folded_rtti : string) : string {
     if (folded_rtti == "ExprConstRange" || folded_rtti == "ExprConstInt2"
-        || folded_rtti == "ExprConstInt3" || folded_rtti == "ExprConstInt4") {
-        return "ExprConstInt"
-    }
+        || folded_rtti == "ExprConstInt3" || folded_rtti == "ExprConstInt4") return "ExprConstInt"
     if (folded_rtti == "ExprConstURange" || folded_rtti == "ExprConstUInt2"
-        || folded_rtti == "ExprConstUInt3" || folded_rtti == "ExprConstUInt4") {
-        return "ExprConstUInt"
-    }
-    if (folded_rtti == "ExprConstRange64") { return "ExprConstInt64"; }
-    if (folded_rtti == "ExprConstURange64") { return "ExprConstUInt64"; }
+        || folded_rtti == "ExprConstUInt3" || folded_rtti == "ExprConstUInt4") return "ExprConstUInt"
+    if (folded_rtti == "ExprConstRange64") return "ExprConstInt64";
+    if (folded_rtti == "ExprConstURange64") return "ExprConstUInt64";
     if (folded_rtti == "ExprConstFloat2" || folded_rtti == "ExprConstFloat3"
-        || folded_rtti == "ExprConstFloat4") {
-        return "ExprConstFloat"
-    }
+        || folded_rtti == "ExprConstFloat4") return "ExprConstFloat"
     return ""
 }
 
@@ -952,12 +870,10 @@ def private is_range_constructor(call_name : string) : bool {
 [macro_function]
 def private const_component_fields(folded_rtti : string) : array<string> {
     if (folded_rtti == "ExprConstRange" || folded_rtti == "ExprConstURange"
-        || folded_rtti == "ExprConstRange64" || folded_rtti == "ExprConstURange64") {
-        return <- array<string>("x", "y")
-    }
-    if (folded_rtti |> ends_with("2")) { return <- array<string>("x", "y"); }
-    if (folded_rtti |> ends_with("3")) { return <- array<string>("x", "y", "z"); }
-    if (folded_rtti |> ends_with("4")) { return <- array<string>("x", "y", "z", "w"); }
+        || folded_rtti == "ExprConstRange64" || folded_rtti == "ExprConstURange64") return <- array<string>("x", "y")
+    if (folded_rtti |> ends_with("2")) return <- array<string>("x", "y");
+    if (folded_rtti |> ends_with("3")) return <- array<string>("x", "y", "z");
+    if (folded_rtti |> ends_with("4")) return <- array<string>("x", "y", "z", "w");
     return <- array<string>()
 }
 
@@ -968,9 +884,7 @@ def private has_tags_in_args(call : ExprCall?) : bool {
     // would prevent constant folding, so the call stays as ExprCall and hits the
     // normal matching path instead of reaching here.
     for (arg in call.arguments) {
-        if (arg != null && arg is ExprTag) {
-            return true
-        }
+        if (arg != null && arg is ExprTag) return true
     }
     return false
 }
@@ -1023,9 +937,7 @@ def private generate_const_constructor_match(call : ExprCall?; folded_rtti : str
         var inscope fields <- const_component_fields(folded_rtti)
         for (arg, field_name in call.arguments, fields) {
             let child = arg
-            if (child == null) {
-                continue
-            }
+            if (child == null) continue
             let synth_var = next_var(index)
             generate_synth_component(comp_rtti, synth_var, cast_var, field_name, body, at)
             generate_match(child, synth_var, body, index, at)
@@ -1080,9 +992,7 @@ def private generate_const_match(pattern : Expression?; rtti : string; actual_va
 
 [macro_function]
 def private generate_match(pattern : Expression?; actual_var : string; var body : array<Expression?>&; var index : int&; at : LineInfo) {
-    if (pattern == null) {
-        return
-    }
+    if (pattern == null) return
 
     // Pattern-side peel: ExprRef2Value is a typer artifact, not user-visible.
     // Descend into the wrapped expression and discard the wrapper. Recursive
@@ -1205,9 +1115,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     }
 
     // ── _any() wildcard ────────────────────────────────────────
-    if (is_wildcard_call(pattern)) {
-        return
-    }
+    if (is_wildcard_call(pattern)) return
 
     // ── ExprTypeDecl — type matching with generate_type_match ──
     if (pattern is ExprTypeDecl) {
@@ -1535,9 +1443,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                 let is_range = is_range_constructor(call_name)
                 for (arg, i in call.arguments, range(n_pat_args)) {
                     let child_pattern = arg
-                    if (child_pattern == null) {
-                        continue
-                    }
+                    if (child_pattern == null) continue
                     let child_var = next_var(index)
                     if (is_range && i == 0) {
                         // Range first component: full form uses actual arg[0], one-value form uses 0
@@ -1669,9 +1575,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 
     // Iterate fields via annotation reflection
     var ann = unsafe(reinterpret<BasicStructureAnnotation?> get_expression_annotation(pattern))
-    if (ann == null) {
-        return
-    }
+    if (ann == null) return
 
     // Field-by-field matching via annotation reflection
     for_each_field(*ann) $(name, cppName, xtype, offset) {
@@ -1842,13 +1746,9 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
 [macro_function]
 def private get_wildcard_name(pattern : Expression?) : string {
     //! Get the wildcard type name, or "" if not a wildcard.
-    if (!(pattern is ExprCall)) {
-        return ""
-    }
+    if (!(pattern is ExprCall)) return ""
     let call = pattern as ExprCall
-    if (call.name == "_wildcard" || call.name == "_wildcard1" || call.name == "_optional" || call.name == "_any") {
-        return string(call.name)
-    }
+    if (call.name == "_wildcard" || call.name == "_wildcard1" || call.name == "_optional" || call.name == "_any") return string(call.name)
     return ""
 }
 
@@ -1869,9 +1769,7 @@ def private get_single_fixed_stmt(var pat_block : ExprBlock?) : Expression? {
     //! If pattern has exactly one non-wildcard statement (possibly surrounded by wildcards),
     //! return it. Otherwise return null.
     for (stmt in pat_block.list) {
-        if (empty(get_wildcard_name(stmt))) {
-            return stmt
-        }
+        if (empty(get_wildcard_name(stmt))) return stmt
     }
     return null
 }
@@ -2166,9 +2064,7 @@ class private QMatch : AstCallMacro {
         blk.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
 
         var expr_arg : Expression?
-        if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) {
-            return null
-        }
+        if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) return null
 
         var mkblk = new ExprMakeBlock(at = at, _block = blk)
         return new ExprCall(at = at,
@@ -2224,9 +2120,7 @@ class private QMatchBlock : AstCallMacro {
         blk.list |> emplace_new <| qmacro_expr(${return qm_ok(); })
 
         var expr_arg : Expression?
-        if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) {
-            return null
-        }
+        if (!qm_validate_expr_arg(prog, call.arguments[0], at, expr_arg)) return null
 
         var mkblk = new ExprMakeBlock(at = at, _block = blk)
         return new ExprCall(at = at,

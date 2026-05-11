@@ -25,9 +25,7 @@ def collect_files(args : array<string>) : array<string> {
     // a separate-token value, so this filter is unambiguous.
     var files : array<string>
     for (a in args) {
-        if (starts_with(a, "-")) {
-            continue
-        }
+        if (starts_with(a, "-")) continue
         files |> push(a)
     }
     return <- files
@@ -71,9 +69,7 @@ def main() : int {
             to_log(LOG_ERROR, "error: failed to write {f}\n")
             return 2
         }
-        if (r.kind == ProcessResultKind.no_change) {
-            continue
-        }
+        if (r.kind == ProcessResultKind.no_change) continue
         any_changed = true
         if (r.kind == ProcessResultKind.would_change) {
             to_log(LOG_INFO, "would trim: {f}\n")
@@ -81,11 +77,7 @@ def main() : int {
             to_log(LOG_INFO, "trimmed {f} ({r.lines_removed} lines removed)\n")
         }
     }
-    if (any_missing) {
-        return 2
-    }
-    if (cfg.check && any_changed) {
-        return 1
-    }
+    if (any_missing) return 2
+    if (cfg.check && any_changed) return 1
     return 0
 }

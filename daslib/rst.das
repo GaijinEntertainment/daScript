@@ -59,9 +59,7 @@ let module_name_replacements = [
 def module_name(mod) {
     let mn = string(mod.name)
     for ((src, dst) in module_name_replacements) {
-        if (mn == src) {
-            return dst
-        }
+        if (mn == src) return dst
     }
     return mn
 }
@@ -120,9 +118,7 @@ def public function_label_file(value : FunctionPtr; drop_args : int = 0) {
         w |> write(value.name)
         var drop = drop_args
         for (arg in value.arguments) {
-            if (drop-- > 0) {
-                continue
-            }
+            if (drop-- > 0) continue
             let prefix = arg._type.flags.removeConstant ? "var " : ""
             if (arg._type.baseType == Type.autoinfer && arg.init != null) {
                 // During rst_comment (pre-inference), auto-inferred default arg types
@@ -170,9 +166,7 @@ def public function_label_file(name; value : TypeDecl?&; drop_args : int = 0) {
         w |> write(name)
         var drop = drop_args
         for (arg in value.argTypes) {
-            if (drop-- > 0) {
-                continue
-            }
+            if (drop-- > 0) continue
             let prefix = arg.flags.removeConstant ? "var " : ""
             w |> write("{prefix}{describe_type_short(arg)}")
         }
@@ -188,9 +182,7 @@ def function_short_mangled_name(value : FunctionPtr) {
         }
         w |> write(value.name)
         for (arg in value.arguments) {
-            if (arg._type.baseType == Type.fakeContext || arg._type.baseType == Type.fakeLineInfo) {
-                continue
-            }
+            if (arg._type.baseType == Type.fakeContext || arg._type.baseType == Type.fakeLineInfo) continue
             w |> write("_")
             if (arg._type.flags.removeConstant && arg._type.flags.explicitConst) {
                 w |> write("_")
@@ -213,22 +205,16 @@ def function_label_name(value : FunctionPtr) {
                 break
             }
         }
-        if (is_generic) {
-            return "{res}_{value.at.line}"
-        }
+        if (is_generic) return "{res}_{value.at.line}"
         // For class/struct methods, operators like []=, []&&=, []||= collapse
         // to the same safe name. Disambiguate with line number.
-        if (value.flags.isClassMethod) {
-            return "{res}_{value.at.line}"
-        }
+        if (value.flags.isClassMethod) return "{res}_{value.at.line}"
     }
     // Detect label collisions (e.g. smart_ptr<T> vs T? producing same label)
     // and disambiguate with line number. Same function seen twice (TOC + def) is not a collision.
     let lower_res = to_lower(res)
     if (key_exists(seen_function_labels, lower_res)) {
-        if (seen_function_labels[lower_res] != value.at.line) {
-            return "{res}_{value.at.line}"
-        }
+        if (seen_function_labels[lower_res] != value.at.line) return "{res}_{value.at.line}"
     }
     seen_function_labels[lower_res] = value.at.line
     return res
@@ -277,9 +263,7 @@ def describe_type_short(td : TypeDeclPtr) {
     if (td == null) {
         PANIC("describe_type_short: null type")
     }
-    if (!empty(td.alias) && !td.isAuto && !td.isAlias) {
-        return string(td.alias)
-    }
+    if (!empty(td.alias) && !td.isAuto && !td.isAlias) return string(td.alias)
     var res : string
     if (td.baseType == Type.tArray) {
         if (td.firstType == null) {
@@ -733,9 +717,7 @@ def is_handmade(mod : Module?) {
         "rst"
     ]
     for (name in builtins) {
-        if (mod.name == name) {
-            return true
-        }
+        if (mod.name == name) return true
     }
     return mod.moduleFlags.builtIn && !mod.moduleFlags.promoted
 }
@@ -845,7 +827,7 @@ def document_topic(header : string; doc_file : file; topic, content : string imp
         txt |> replace("\r\n", "\n") |> split("\n") $(lines) {
             var got = length(lines)
             while (got > 0 && trim(lines[got - 1]) == "") {
-                got -= 1
+                got--
             }
             let expected = length(tab) - 1
             if (got < expected) {
@@ -1006,25 +988,17 @@ def document_typedef(doc_file : file; mod : Module?; name : string implicit; val
 def document_typedefs(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_typedef(mod) $(name, value) {
-            if (value.flags.isPrivateAlias) {
-                return
-            }
+            if (value.flags.isPrivateAlias) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Type aliases"))
     for (mod in mods) {
         for_each_typedef(mod) $(name, value) {
-            if (value.flags.isPrivateAlias) {
-                return
-            }
+            if (value.flags.isPrivateAlias) return
             document_typedef(doc_file, mod, name, value)
         }
     }
@@ -1039,39 +1013,26 @@ def document_global_constant(doc_file : file; mod : Module?; value : VariablePtr
 }
 
 def private is_global_constant(value : VariablePtr) {
-    if (value.flags.private_variable) {
-        return false
-    }
-    if (!value._type.flags.constant) {
-        return false
-    }
-    if (value.flags.bitfield_constant) {
-        return false
-    }
+    if (value.flags.private_variable) return false
+    if (!value._type.flags.constant) return false
+    if (value.flags.bitfield_constant) return false
     // without this condition we supports more types
     // if !value._type.isWorkhorseType
     //     return false
-    if (value.init == null) {
-        return false
-    }
-    return true
+    return !(value.init == null)
 }
 
 def document_global_constants(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_global(mod) $(value) {
             if (!any && is_global_constant(value)) {
                 any = true
             }
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Constants"))
     for (mod in mods) {
         for_each_global(mod) $(value) {
@@ -1084,9 +1045,7 @@ def document_global_constants(doc_file : file; mods : array<Module?>) {
 
 
 def short_enum_value(value : string) : string {
-    if (value.ends_with("u8")) {
-        return value.slice(0, -2)
-    }
+    if (value.ends_with("u8")) return value.slice(0, -2)
     return value
 }
 
@@ -1111,25 +1070,17 @@ def public document_enumerations(doc_file : file; mods : array<Module?>) : bool 
     //! Writes RST documentation for all public enumerations across the given modules.
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_enumeration(mod) $(value) {
-            if (any || value.isPrivate) {
-                return
-            }
+            if (any || value.isPrivate) return
             any = true
         }
     }
-    if (!any) {
-        return false
-    }
+    if (!any) return false
     fwrite(doc_file, make_group("Enumerations"))
     for (mod in mods) {
         for_each_enumeration(mod) $(value) {
-            if (value.isPrivate) {
-                return
-            }
+            if (value.isPrivate) return
             document_enumeration(doc_file, mod, value)
         }
     }
@@ -1137,13 +1088,8 @@ def public document_enumerations(doc_file : file; mods : array<Module?>) : bool 
 }
 
 def argument_needs_documenting(tt) {
-    if (tt.baseType == Type.fakeContext) {
-        return false
-    }
-    if (tt.baseType == Type.fakeLineInfo) {
-        return false
-    }
-    return true
+    if (tt.baseType == Type.fakeContext) return false
+    return !(tt.baseType == Type.fakeLineInfo)
 }
 
 def document_function_declaration(doc_file : file; domain, func_name : string;
@@ -1187,22 +1133,16 @@ def document_function_arguments(doc_file : file; argNames : array<string>; argTy
 }
 
 def extract_func(var expr : ExpressionPtr) : ast::Function? {
-    if (expr == null) {
-        return null
-    }
+    if (expr == null) return null
     if (expr is ExprAddr) {
         return (expr as ExprAddr).func
-    } elif (expr is ExprCast) {
-        return extract_func((expr as ExprCast).subexpr)
-    }
+    } elif (expr is ExprCast) return extract_func((expr as ExprCast).subexpr)
     return null
 }
 
 def document_class_method(doc_file : file; mod : Module?; value; var fld) {
     var func = extract_func(fld.init)
-    if (func == null) {
-        return
-    }
+    if (func == null) return
 
     fwrite(doc_file, make_label(function_label_name(func)))
 
@@ -1253,9 +1193,7 @@ def document_struct_method(doc_file : file; mod : Module?; value; var func) {
         w |> write(fname)
         var drop = hash_drop
         for (arg in func.arguments) {
-            if (drop-- > 0) {
-                continue
-            }
+            if (drop-- > 0) continue
             let prefix = arg._type.flags.removeConstant ? "var " : ""
             w |> write("{prefix}{describe_type_short(arg._type)}")
         }
@@ -1274,22 +1212,16 @@ def make_requirements_list(value : ast::Structure?) {
         }
     }
     let compsCount = length(requiredComps)
-    if (compsCount == 0) {
-        return ""
-    }
+    if (compsCount == 0) return ""
     return ".. note:: {join(requiredComps) <| ","}  component{compsCount > 1 ? "s": ""} {compsCount > 1 ? "are" : "is"} automatically added to the node if {compsCount > 1 ? "they are": "it is"} not already present\n\n"
 }
 
 def is_trivial_ctor(func : FunctionPtr) {
-    if (func.body == null) {
-        return true
-    }
+    if (func.body == null) return true
 
     if (func.body is ExprBlock) {
         var blk = func.body as ExprBlock
-        if (length(blk.list) == 1) {
-            return blk.list[0] is ExprReturn
-        }
+        if (length(blk.list) == 1) return blk.list[0] is ExprReturn
     }
 
     return false
@@ -1303,24 +1235,18 @@ def is_class_method(value; fld : FieldDeclaration&) {
 def document_classes(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_structure(mod) $(value) {
             if (!any && value.flags.isClass && !value.flags.privateStructure) {
                 any = true
             }
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Classes"))
     for (mod in mods) {
         for_each_structure(mod) $(value) {
-            if (!value.flags.isClass || value.flags.privateStructure) {
-                return
-            }
+            if (!value.flags.isClass || value.flags.privateStructure) return
             fwrite(doc_file, make_label(struct_label_name(value)))
             fwrite(doc_file, make_domain("das:attribute"))
             fwrite(doc_file, string(value.name))
@@ -1381,16 +1307,10 @@ def document_classes(doc_file : file; mods : array<Module?>) {
                     document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
                     return
                 }
-                if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) {
-                    return
-                }
+                if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) return
                 let fna = string(func.name)
-                if (!fna |> starts_with(".`") || length(fna) <= 2) {
-                    return
-                }
-                if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
-                    return
-                }
+                if (!fna |> starts_with(".`") || length(fna) <= 2) return
+                if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
                 if (first) {
                     fwrite(doc_file, ":Properties:\n\n")
                     first = false
@@ -1443,25 +1363,17 @@ def document_typemacro(doc_file : file; mod : Module?; value) {
 def document_typemacros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_structure(mod) $(value) {
-            if (any || value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") {
-                return
-            }
+            if (any || value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Type macros"))
     for (mod in mods) {
         for_each_structure(mod) $(value) {
-            if (value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") {
-                return
-            }
+            if (value.parent == null ||  value.parent.name != "AstTypeMacro" || value.parent._module.name != "ast_core") return
             document_typemacro(doc_file, mod, value)
         }
     }
@@ -1509,24 +1421,16 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
     // Document struct methods (module-level functions with isClassMethod flag).
     // For structs (unlike classes), methods are not stored as struct fields after inference.
     for_each_function(mod, "") $(func) {
-        if (!func.flags.isClassMethod || func.classParent != value) {
-            return
-        }
-        if (func.flags.generated) {
-            return
-        }
+        if (!func.flags.isClassMethod || func.classParent != value) return
+        if (func.flags.generated) return
         // Skip constructors (handled below)
-        if (func.name == value.name) {
-            return
-        }
+        if (func.name == value.name) return
         // Skip property functions (handled below)
         var isPropertyFunc = false
         peek(func.name) $(fn_name) {
             isPropertyFunc = fn_name |> starts_with(".`")
         }
-        if (isPropertyFunc) {
-            return
-        }
+        if (isPropertyFunc) return
         if (!func.moreFlags.isStaticClassMethod) {
             if (func.name == "{value.name}`{value.name}") {
                 // Foo`Foo == generated ctor
@@ -1534,9 +1438,7 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
             }
             for (fld in value.fields) {
                 // exclude instantiated struct fields
-                if (fld.flags.classMethod && fld.flags.implemented && func.name == "{value.name}`{fld.name}") {
-                    return
-                }
+                if (fld.flags.classMethod && fld.flags.implemented && func.name == "{value.name}`{fld.name}") return
             }
         }
         document_struct_method(doc_file, mod, value, func)
@@ -1549,16 +1451,10 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
             document_function(doc_file, mod, func, /*drop first arg*/0, "{value.name}-", "das:function")
             return
         }
-        if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) {
-            return
-        }
+        if (!(func.moreFlags.propertyFunction || func.flags.isClassMethod) || func.arguments |> length == 0) return
         let fna = string(func.name)
-        if (!fna |> starts_with(".`") || length(fna) <= 2) {
-            return
-        }
-        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
-            return
-        }
+        if (!fna |> starts_with(".`") || length(fna) <= 2) return
+        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
         if (first) {
             fwrite(doc_file, ":Properties:\n\n")
             first = false
@@ -1570,25 +1466,17 @@ def document_structure(doc_file : file; mod : Module?; var value : StructurePtr)
 def document_structures(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_structure(mod) $(value) {
-            if (any || value.flags.isClass || value.flags.generated || value.flags.privateStructure) {
-                return
-            }
+            if (any || value.flags.isClass || value.flags.generated || value.flags.privateStructure) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Structures"))
     for (mod in mods) {
         for_each_structure(mod) $(value) {
-            if (value.flags.isClass || value.flags.generated || value.flags.privateStructure) {
-                return
-            }
+            if (value.flags.isClass || value.flags.generated || value.flags.privateStructure) return
             document_structure(doc_file, mod, value)
         }
     }
@@ -1604,19 +1492,11 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
     var annT = new TypeDecl(baseType = Type.tHandle,
         annotation = unsafe(reinterpret<TypeAnnotation?> value))
     for_each_function(mod, "") $(func) {
-        if (!func.moreFlags.propertyFunction) {
-            return
-        }
-        if (func.arguments |> length != 1) {
-            return
-        }
+        if (!func.moreFlags.propertyFunction) return
+        if (func.arguments |> length != 1) return
         let fna = string(func.name)
-        if (!fna |> starts_with(".`") || length(fna) <= 2) {
-            return
-        }
-        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
-            return
-        }
+        if (!fna |> starts_with(".`") || length(fna) <= 2) return
+        if (!is_same_type(func.arguments[0]._type, annT, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return
         var line : array<string>
         push(line, slice(fna, 2))
         push(line, describe_type(func.result))
@@ -1652,25 +1532,17 @@ def document_structure_annotation(doc_file : file; mod : Module?; value) {
 def document_structure_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (any || !value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (any || !value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Handled structures"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (!value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             document_structure_annotation(doc_file, mod, value)
         }
     }
@@ -1686,25 +1558,17 @@ def document_enumeration_annotation(doc_file : file; mod : Module?; value) {
 def document_enumeration_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (!value.isEnumerationAnnotation) {
-                return
-            }
+            if (!value.isEnumerationAnnotation) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Handled enumerations"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isEnumerationAnnotation) {
-                return
-            }
+            if (!value.isEnumerationAnnotation) return
             document_enumeration_annotation(doc_file, mod, value)
         }
     }
@@ -1721,25 +1585,17 @@ def document_function_annotation(doc_file : file; mod : Module?; value) {
 def document_function_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (any || !value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (any || !value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Function annotations"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (!value.isFunctionAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             document_function_annotation(doc_file, mod, value)
         }
     }
@@ -1755,32 +1611,22 @@ def document_annotation(doc_file : file; mod : Module?; value) {
 def document_annotations(doc_file : file; mods : array<Module?>; var hook = DocsHook()) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (any || !value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (any || !value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Handled types"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (!value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) {
-                return
-            }
+            if (!value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || (hook.annotationFilter != null && !hook.annotationFilter |> invoke(value))) return
             var isDasVector = false
             peek(value.name) $(val_name) {
                 isDasVector = val_name |> starts_with("dasvector`")
             }
-            if (isDasVector) {
-                return
-            }
+            if (isDasVector) return
             document_annotation(doc_file, mod, value)
         }
     }
@@ -1796,25 +1642,17 @@ def document_structure_macro(doc_file : file; mod : Module?; value) {
 def document_structure_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         module_for_each_annotation(mod) $(value) {
-            if (any || value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
-                return
-            }
+            if (any || value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) return
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Structure macros"))
     for (mod in mods) {
         module_for_each_annotation(mod) $(value) {
-            if (value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) {
-                return
-            }
+            if (value.isTypeAnnotation || value.isEnumerationAnnotation || value.isBasicStructureAnnotation || value.isFunctionAnnotation) return
             document_structure_macro(doc_file, mod, value)
         }
     }
@@ -1830,16 +1668,12 @@ def document_call_macro(doc_file : file; mod : Module?; value : string implicit)
 def document_call_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_call_macro(mod) $(value) {
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Call macros"))
     for (mod in mods) {
         for_each_call_macro(mod) $(value) {
@@ -1858,16 +1692,12 @@ def document_reader_macro(doc_file : file; mod : Module?; value : string implici
 def document_reader_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_reader_macro(mod) $(value) {
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Reader macros"))
     for (mod in mods) {
         for_each_reader_macro(mod) $(value) {
@@ -1886,16 +1716,12 @@ def document_variant_macro(doc_file : file; mod : Module?; value : string implic
 def document_variant_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_variant_macro(mod) $(value) {
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Variant macros"))
     for (mod in mods) {
         for_each_variant_macro(mod) $(value) {
@@ -1914,16 +1740,12 @@ def document_typeinfo_macro(doc_file : file; mod : Module?; value : string impli
 def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
     var any = false
     for (mod in mods) {
-        if (any) {
-            break
-        }
+        if (any) break
         for_each_typeinfo_macro(mod) $(value) {
             any = true
         }
     }
-    if (!any) {
-        return
-    }
+    if (!any) return
     fwrite(doc_file, make_group("Typeinfo macros"))
     for (mod in mods) {
         for_each_typeinfo_macro(mod) $(value) {
@@ -1933,21 +1755,11 @@ def document_typeinfo_macros(doc_file : file; mods : array<Module?>) {
 }
 
 def function_needs_documenting(func : FunctionPtr) {
-    if (func.flags.generated) {
-        return false
-    }
-    if (func.flags.isClassMethod) {
-        return false
-    }
-    if (func.flags.privateFunction) {
-        return false
-    }
-    if (func.fromGeneric != null) {
-        return false
-    }
-    if (func.moreFlags.propertyFunction) {
-        return false
-    }
+    if (func.flags.generated) return false
+    if (func.flags.isClassMethod) return false
+    if (func.flags.privateFunction) return false
+    if (func.fromGeneric != null) return false
+    if (func.moreFlags.propertyFunction) return false
     var isBuiltin = false
     peek(func._module.name) $(name) {
         if (name == "$" || name == "builtin") {
@@ -1964,9 +1776,7 @@ def function_needs_documenting(func : FunctionPtr) {
             }
         }
     }
-    if (isOperator) {
-        return false
-    }
+    if (isOperator) return false
     // skip builtin type c'tors
     var isTypeConstructor = false
     if (isBuiltin) {
@@ -1979,9 +1789,7 @@ def function_needs_documenting(func : FunctionPtr) {
             }
         }
     }
-    if (isTypeConstructor) {
-        return false
-    }
+    if (isTypeConstructor) return false
     // skip ones starting with _builtin or __builtin
     var isBuiltinName = false
     peek(func.name) $(name) {
@@ -1989,10 +1797,7 @@ def function_needs_documenting(func : FunctionPtr) {
             isBuiltinName = true
         }
     }
-    if (isBuiltinName) {
-        return false
-    }
-    return true
+    return !isBuiltinName
 }
 
 def document_warning(doc_file : file; issue : string) {
@@ -2007,14 +1812,14 @@ def function_name(func : FunctionPtr) {
         if (ch != '_' && !is_alpha(ch)) {
             var safeName = name
             // `is`NAME / `as`NAME → "operator is NAME" / "operator as NAME"
-            if (safeName |> starts_with("`is`")) { return "operator is {safeName |> slice(4)}"; }
-            if (safeName |> starts_with("`as`")) { return "operator as {safeName |> slice(4)}"; }
+            if (safeName |> starts_with("`is`")) return "operator is {safeName |> slice(4)}";
+            if (safeName |> starts_with("`as`")) return "operator as {safeName |> slice(4)}";
             // bare `is / `as → "operator is" / "operator as"
-            if (safeName == "`is") { return "operator is"; }
-            if (safeName == "`as") { return "operator as"; }
+            if (safeName == "`is") return "operator is";
+            if (safeName == "`as") return "operator as";
             // ?as`NAME → "operator ?as NAME"; bare ?as → "operator ?as"
-            if (safeName |> starts_with("?as`")) { return "operator ?as {safeName |> slice(4)}"; }
-            if (safeName == "?as") { return "operator ?as"; }
+            if (safeName |> starts_with("?as`")) return "operator ?as {safeName |> slice(4)}";
+            if (safeName == "?as") return "operator ?as";
             // ?.`NAME → Type?.name (safe navigation property)
             if (safeName |> starts_with("?.`")) { safeName = "?.{safeName |> slice(3)}"; }
             // .`NAME → Type.name (property accessor)
@@ -2053,9 +1858,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr; dr
     let funcSafeName = function_name(func)
     (document_function_declaration(doc_file, objType, funcSafeName,
         argNames, argTypes, argInits, func.result, drop_args))
-    if (skip_body) {
-        return
-    }
+    if (skip_body) return
     // if func.result != null && !func.result.isVoid
     //     fwrite(doc_file,"``{funcSafeName}`` returns {describe_type(func.result)}\n\n")
     if (func.flags.unsafeOperation) {
@@ -2073,7 +1876,7 @@ def document_function(doc_file : file; mod : Module?; var func : FunctionPtr; dr
 def document_functions(doc_file : file; mods : array<Module?>; var groups : array<DocGroup>) {
     var tab : table<Function?>
     for (grp in groups) {
-        if (length(grp.func) != 0) {
+        if (!empty(grp.func)) {
             if (!show_hidden_groups && grp.hidden) {
                 for (func in grp.func) {
                     tab.insert(func.fn)
@@ -2101,7 +1904,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                         if (!tab.key_exists(func.fn)) {
                             let cur_name = function_name(func.fn)
                             if (cur_name == prev_count_name) {
-                                count_run += 1
+                                count_run++
                                 if (count_run == 2) {
                                     multi_overload |> insert(cur_name)
                                 }
@@ -2114,9 +1917,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                     var prev_func_name = ""
                     var prev_was_overload_group = false
                     for (func in grp.func) {
-                        if (tab.key_exists(func.fn)) {
-                            continue
-                        }
+                        if (tab.key_exists(func.fn)) continue
                         tab.insert(func.fn)
                         let cur_name = function_name(func.fn)
                         let is_overload = cur_name == prev_func_name
@@ -2137,9 +1938,7 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
                 } else {
                     // !group_function_overloads
                     for (func in grp.func) {
-                        if (tab.key_exists(func.fn)) {
-                            continue
-                        }
+                        if (tab.key_exists(func.fn)) continue
                         tab.insert(func.fn)
                         document_function(doc_file, func.mod, func.fn)
                     }
@@ -2150,13 +1949,9 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
     var first_function = true
     for (mod in mods) {
         for_each_function(mod, "") $(func) {
-            if (!function_needs_documenting(func)) {
-                return
-            }
+            if (!function_needs_documenting(func)) return
             var pfunc = func
-            if (tab.key_exists(pfunc)) {
-                return
-            }
+            if (tab.key_exists(pfunc)) return
             tab.insert(pfunc)
             if (first_function) {
                 fwrite(doc_file, make_group("Uncategorized"))
@@ -2165,13 +1960,9 @@ def document_functions(doc_file : file; mods : array<Module?>; var groups : arra
             document_function(doc_file, mod, func)
         }
         for_each_generic(mod) $(func) {
-            if (!function_needs_documenting(func)) {
-                return
-            }
+            if (!function_needs_documenting(func)) return
             var pfunc = func
-            if (tab.key_exists(pfunc)) {
-                return
-            }
+            if (tab.key_exists(pfunc)) return
             tab.insert(pfunc)
             if (first_function) {
                 fwrite(doc_file, make_group("Uncategorized"))
@@ -2333,7 +2124,7 @@ def public documents(name : string; mods : array<Module?>; fname : string; var g
     static_if (log_documentation) {
         print("Documenting {name} into {fname}\n")
     }
-    if (length(mods) == 0) {
+    if (empty(mods)) {
         PANIC("missing module {name}")
     }
     let path = "{topic_root}/{fname}"

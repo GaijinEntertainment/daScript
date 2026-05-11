@@ -28,9 +28,7 @@ def private collect_diff(before, after : string) : tuple<differ : bool; log : st
     let normalized_after = normalize_line_endings(after)
 
     // If identical after normalization, no differences
-    if (normalized_before == normalized_after) {
-        return (differ = false, log = "")
-    }
+    if (normalized_before == normalized_after) return (differ = false, log = "")
 
     // Split into lines for line-by-line comparison
     let lines_before = split(normalized_before, "\n")
@@ -135,7 +133,7 @@ def main() {
     var verified = true
 
     with_job_que <| $() {
-        while (length(files) > 0) {
+        while (!empty(files)) {
             let batchNum = min(length(files), threadsNum)
             with_job_status(batchNum) <| $(status) {
                 for (i in range(batchNum)) {

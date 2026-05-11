@@ -37,9 +37,7 @@ def make_record(name : string; canonical : string; line : int; want_sigs : bool)
 
 def find_canonical_by_name(records : array<FuncRecord>; name : string) : string {
     for (rec in records) {
-        if (rec.ref.name == name) {
-            return rec.canonical
-        }
+        if (rec.ref.name == name) return rec.canonical
     }
     return ""
 }
@@ -47,9 +45,7 @@ def find_canonical_by_name(records : array<FuncRecord>; name : string) : string 
 
 def find_record_by_name(records : array<FuncRecord>; name : string) : int {
     for (i in range(length(records))) {
-        if (records[i].ref.name == name) {
-            return i
-        }
+        if (records[i].ref.name == name) return i
     }
     return -1
 }
@@ -57,9 +53,7 @@ def find_record_by_name(records : array<FuncRecord>; name : string) : int {
 
 def cluster_has_member(c : Cluster; name : string) : bool {
     for (m in c.members) {
-        if (m.name == name) {
-            return true
-        }
+        if (m.name == name) return true
     }
     return false
 }
@@ -67,9 +61,7 @@ def cluster_has_member(c : Cluster; name : string) : bool {
 
 def find_cluster_with_member(clusters : array<Cluster>; name : string) : int {
     for (i in range(length(clusters))) {
-        if (cluster_has_member(clusters[i], name)) {
-            return i
-        }
+        if (cluster_has_member(clusters[i], name)) return i
     }
     return -1
 }
@@ -82,7 +74,7 @@ def compile_fixture(file : string; var records : array<FuncRecord>; lambdas_only
 
 
 def fabs_f(x : float) : float {
-    return x < 0.0f ? -x : x
+    return abs(x)
 }
 
 
@@ -653,9 +645,7 @@ def test_scan_das_files_dedup(t : T?) {
     scan_das_files(SCAN_FIXTURE_DIR, files1, cache1)
     let n1 = length(files1)
     t |> success(n1 > 0, "fixture dir scan picked up at least one file")
-    if (n1 == 0) {
-        return
-    }
+    if (n1 == 0) return
     // Re-scan the same dir using the same cache — must yield zero new entries.
     let before = length(files1)
     scan_das_files(SCAN_FIXTURE_DIR, files1, cache1)
@@ -1157,7 +1147,7 @@ def test_candidate_filter_fuzzy_skips_pure_corpus(t : T?) {
 
     // Sanity: without the filter, x/y/z would produce pairs.
     let legacy <- fuzzy_pairs(records, 0.7f, 0)
-    t |> success(length(legacy) >= 1, "legacy mode: at least one corpus pair: got {length(legacy)}")
+    t |> success(!empty(legacy), "legacy mode: at least one corpus pair: got {length(legacy)}")
 
     let filtered <- fuzzy_pairs(records, 0.7f, 0, true)
     t |> equal(length(filtered), 0)
@@ -1566,9 +1556,7 @@ def test_generics_mono_baseline_visible(t : T?) {
     var records : array<FuncRecord>
     let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
     t |> success(ok, "generics_cases.das compiled")
-    if (!ok) {
-        return
-    }
+    if (!ok) return
     let canon = find_canonical_by_name(records, "case_mono_baseline")
     t |> success(!empty(canon), "non-generic baseline visible")
 }
@@ -1584,9 +1572,7 @@ def test_generics_called_visible(t : T?) {
     var records : array<FuncRecord>
     let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
     t |> success(ok, "generics_cases.das compiled")
-    if (!ok) {
-        return
-    }
+    if (!ok) return
     let canon = find_canonical_by_name(records, "case_generic_called")
     t |> success(!empty(canon),
         "called generic must be findable by source-level name")
@@ -1611,9 +1597,7 @@ def test_generics_uncalled_visible(t : T?) {
     var records : array<FuncRecord>
     let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
     t |> success(ok, "generics_cases.das compiled")
-    if (!ok) {
-        return
-    }
+    if (!ok) return
     let canon = find_canonical_by_name(records, "case_generic_uncalled")
     t |> success(!empty(canon),
         "uncalled generic must be visible — for_each_generic must be walked alongside for_each_function")
@@ -1630,9 +1614,7 @@ def test_generics_called_and_uncalled_canonicalize_equal(t : T?) {
     var records : array<FuncRecord>
     let ok = compile_fixture(GENERICS_FIXTURE, records, false, false)
     t |> success(ok, "generics_cases.das compiled")
-    if (!ok) {
-        return
-    }
+    if (!ok) return
     let a = find_canonical_required(t, records, "case_generic_called")
     let b = find_canonical_required(t, records, "case_generic_uncalled")
     t |> equal(a, b)

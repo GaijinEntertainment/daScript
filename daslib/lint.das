@@ -50,13 +50,9 @@ class LintVisitor : AstVisitor {
         pass
     }
     def is_suppressed(text : string; at : LineInfo) : bool {
-        if (at.fileInfo == null || at.line == 0u) {
-            return false
-        }
+        if (at.fileInfo == null || at.line == 0u) return false
         let colon = find(text, ":")
-        if (colon < 0) {
-            return false
-        }
+        if (colon < 0) return false
         let code = slice(text, 0, colon)
         var found = false
         get_file_source_line(at.fileInfo, at.line) $(line) {
@@ -68,12 +64,8 @@ class LintVisitor : AstVisitor {
         return found
     }
     def lint_error(text : string; at : LineInfo) : void {
-        if (noLint) {
-            return
-        }
-        if (self->is_suppressed(text, at)) {
-            return
-        }
+        if (noLint) return
+        if (self->is_suppressed(text, at)) return
         if (compile_time_errors) {
             compiling_program() |> macro_error(at, text)
         } elif (collect_errors) {
@@ -109,7 +101,7 @@ class LintVisitor : AstVisitor {
         exprForTerminator |> push(0ul)
     }
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
-        if (length(exprForTerminator) > 0) {
+        if (!empty(exprForTerminator)) {
             exprForTerminator |> pop()
         }
         return <- blk
@@ -125,23 +117,21 @@ class LintVisitor : AstVisitor {
         return <- expr
     }
     def override preVisitExprLabel(expr : ExprLabel?) : void {
-        if (length(exprForTerminator) > 0) {
+        if (!empty(exprForTerminator)) {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(0ul)
     }
     def override preVisitExprReturn(expr : ExprReturn?) : void {
-        if (length(exprForTerminator) > 0) {
+        if (!empty(exprForTerminator)) {
             exprForTerminator |> pop()
         }
         exprForTerminator |> push(intptr(expr))
     }
     def override preVisitExprCall(expr : ExprCall?) : void {
-        if (expr.func == null) {
-            return
-        }
+        if (expr.func == null) return
         if (expr.name |> eq <| "panic" && expr.func._module.name |> eq <| "builtin") {
-            if (length(exprForTerminator) > 0) {
+            if (!empty(exprForTerminator)) {
                 exprForTerminator |> pop()
             }
             exprForTerminator |> push(intptr(expr))
@@ -150,34 +140,22 @@ class LintVisitor : AstVisitor {
     // --- LINT005: redundant reinterpret cast ---
 
     def override preVisitExprCast(expr : ExprCast?) : void {
-        if (noLint || genericDepth > 0) {
-            return
-        }
-        if (!expr.castFlags.reinterpretCast) {
-            return
-        }
-        if (expr.subexpr == null || expr.subexpr._type == null || expr.castType == null) {
-            return
-        }
-        if (expr.castType.isVoidPointer != expr.subexpr._type.isVoidPointer) {
-            return
-        }
+        if (noLint || genericDepth > 0) return
+        if (!expr.castFlags.reinterpretCast) return
+        if (expr.subexpr == null || expr.subexpr._type == null || expr.castType == null) return
+        if (expr.castType.isVoidPointer != expr.subexpr._type.isVoidPointer) return
         if (is_same_type(expr.castType, expr.subexpr._type, false, true, true, false)) {
             self->lint_error("LINT005: redundant reinterpret cast; target type is the same as source type", expr.at)
         }
     }
 
     def override preVisitExprForVariable(expr : ExprFor?; v : VariablePtr; last : bool) : void {
-        if (expr.canShadow) {
-            return
-        }
+        if (expr.canShadow) return
         validate_var(v, false)
     }
 
     def validate_var(v : VariablePtr; can_make_const : bool) {
-        if (v.flags.generated) {
-            return
-        }
+        if (v.flags.generated) return
         let name = string(v.name)
         if (name |> starts_with("__")) {// system variables
             return
@@ -216,9 +194,7 @@ class LintVisitor : AstVisitor {
             }
             return
         }
-        if (can_make_const && v.flags.inScope) {
-            return // inscope variables can't be const — delete/finalize at scope exit requires mutability
-        }
+        if (can_make_const && v.flags.inScope) return // inscope variables can't be const — delete/finalize at scope exit requires mutability
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {// && !v._type.flags.smartPtr
             self->lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
             return
@@ -238,37 +214,19 @@ class LintVisitor : AstVisitor {
     // --- LINT006: division by zero, LINT007: same operands ---
 
     def is_const_zero(expr : ExpressionPtr) : bool {
-        if (expr == null) {
-            return false
-        }
-        if (expr is ExprConstInt) {
-            return (expr as ExprConstInt).value == 0
-        }
-        if (expr is ExprConstUInt) {
-            return (expr as ExprConstUInt).value == 0u
-        }
-        if (expr is ExprConstInt64) {
-            return (expr as ExprConstInt64).value == 0l
-        }
-        if (expr is ExprConstUInt64) {
-            return (expr as ExprConstUInt64).value == 0ul
-        }
-        if (expr is ExprConstFloat) {
-            return (expr as ExprConstFloat).value == 0.0f
-        }
-        if (expr is ExprConstDouble) {
-            return (expr as ExprConstDouble).value == 0.0lf
-        }
+        if (expr == null) return false
+        if (expr is ExprConstInt) return (expr as ExprConstInt).value == 0
+        if (expr is ExprConstUInt) return (expr as ExprConstUInt).value == 0u
+        if (expr is ExprConstInt64) return (expr as ExprConstInt64).value == 0l
+        if (expr is ExprConstUInt64) return (expr as ExprConstUInt64).value == 0ul
+        if (expr is ExprConstFloat) return (expr as ExprConstFloat).value == 0.0f
+        if (expr is ExprConstDouble) return (expr as ExprConstDouble).value == 0.0lf
         return false
     }
 
     def expr_equal(a : ExpressionPtr; b : ExpressionPtr; require_pure : bool = true) : bool {
-        if (a == null || b == null) {
-            return false
-        }
-        if (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects)) {
-            return false
-        }
+        if (a == null || b == null) return false
+        if (require_pure && (!a.flags.noSideEffects || !b.flags.noSideEffects)) return false
         // daslang AST nodes are not shared — each Expression has exactly one parent, so
         // pointer-equality between sibling operands (left vs right) is effectively never
         // true. Structural compare via describe() is the only correct option here.
@@ -276,9 +234,7 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
-        if (noLint || genericDepth > 0) {
-            return
-        }
+        if (noLint || genericDepth > 0) return
         let op = string(expr.op)
         if ((op == "/" || op == "%" || op == "/=" || op == "%=") && is_const_zero(expr.right)) {
             self->lint_error("LINT006: division by zero ({op})", expr.at)
@@ -301,9 +257,7 @@ class LintVisitor : AstVisitor {
     // --- LINT008: ternary both branches equal ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        if (noLint || genericDepth > 0) {
-            return
-        }
+        if (noLint || genericDepth > 0) return
         if (expr_equal(expr.left, expr.right, false)) {
             self->lint_error("LINT008: both branches of ternary '?:' are equivalent", expr.at)
         }
@@ -312,9 +266,7 @@ class LintVisitor : AstVisitor {
     // --- LINT009: if-then-else branches equal ---
 
     def override preVisitExprIfThenElse(expr : ExprIfThenElse?) : void {
-        if (noLint || genericDepth > 0) {
-            return
-        }
+        if (noLint || genericDepth > 0) return
         if (expr.if_false != null && expr_equal(expr.if_true, expr.if_false, false)) {
             self->lint_error("LINT009: 'then' branch is equivalent to 'else' branch", expr.at)
         }

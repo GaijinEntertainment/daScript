@@ -16,9 +16,7 @@ struct TableRow {
 }
 
 def format_table(tab : TableData?) : string {
-    if (length(tab.rows) == 0) {
-        return ""
-    }
+    if (length(tab.rows) == 0) return ""
 
     return build_string() $(var w) {
         var col_widths : array<int>

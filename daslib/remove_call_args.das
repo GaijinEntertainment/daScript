@@ -21,9 +21,7 @@ require daslib/templates_boost
 [macro_function]
 def get_remove_indices(func) {
     for (ann in func.annotations) {
-        if (ann.annotation.name == "remove_call_args") {
-            return <- get_remove_indices(ann.arguments)
-        }
+        if (ann.annotation.name == "remove_call_args") return <- get_remove_indices(ann.arguments)
     }
     return <- array<int>()
 }
@@ -49,9 +47,7 @@ class RemoveCallArgsMacro : AstFunctionAnnotation {
     //! This macro removes all arguments by given indices [remove_call_args(arg=(1,2,3))]
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         var removeIndices <- get_remove_indices(args)
-        if (length(removeIndices) == 0) {
-            return true
-        }
+        if (empty(removeIndices)) return true
 
         for (arg in func.arguments) {
             arg.flags |= VariableFlags.marked_used // to disable errors: unused function argument
@@ -77,9 +73,7 @@ class RemoveCallArgsMacro : AstFunctionAnnotation {
     def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         var removeIndices <- get_remove_indices(call.func)
 
-        if (length(removeIndices) == 0) {
-            return null
-        }
+        if (empty(removeIndices)) return null
 
         var newCall = clone_expression(call)
         var ncall = newCall as ExprCall

@@ -599,9 +599,7 @@ def unique_to_array(a : iterator<auto(TT)>) : array<TT -const -&> {
 
 def unique_inplace(var a : array<auto(TT)>) {
     //! remove duplicate elements from sorted array in place
-    if (length(a) <= 1) {
-        return
-    }
+    if (length(a) <= 1) return
     var write_index = 1
     for (from_index in 1 .. length(a)) {
         if (_::unique_key(a[from_index]) != _::unique_key(a[write_index - 1])) {
@@ -634,9 +632,7 @@ def unique_by_to_array(a : iterator<auto(TT)>; key : block<(arg : TT -&) : auto>
 
 def unique_by_inplace(var a : array<auto(TT)>; key : block<(arg : TT -&) : auto>) {
     //! remove duplicate elements from an array based on a key in place
-    if (length(a) <= 1) {
-        return
-    }
+    if (length(a) <= 1) return
     var write_index = 1
     for (from_index in 1 .. length(a)) {
         if (key(a[from_index]) != key(a[write_index - 1])) {
@@ -748,9 +744,7 @@ def skip(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
     //! Yields all but the first `total` elements
     let len = length(arr)
     let remaining = len - total
-    if (remaining <= 0) {
-        return <- default<array<TT -& -const>>
-    }
+    if (remaining <= 0) return <- default<array<TT -& -const>>
     return <- subarray(arr, total..len)
 }
 
@@ -862,9 +856,7 @@ def private take_impl(var src; tt : auto(TT); var total : int) : iterator<TT -& 
     //! Yields only the first `total` elements
     return <- generator<TT -& -const> capture(<- src) {
         for (x in src) {
-            if (total <= 0) {
-                break
-            }
+            if (total <= 0) break
             total --
             static_if (typeinfo can_copy(x)) {
                 yield x
@@ -885,9 +877,7 @@ def take_to_array(var src : iterator<auto(TT)>; var total : int) : array<TT -& -
     //! Yields only the first `total` elements and returns an array
     var buffer : array<TT -& -const>
     for (x in src) {
-        if (total <= 0) {
-            break
-        }
+        if (total <= 0) break
         total --
         buffer.push_clone(x)
     }
@@ -900,9 +890,7 @@ def take(var src : iterator<auto(TT)>; from : range) : iterator<TT -& -const> {
         var index = 0
         for (x in src) {
             if (index >= from.x) {
-                if (index >= from.y) {
-                    break
-                }
+                if (index >= from.y) break
                 static_if (typeinfo can_copy(x)) {
                     yield x
                 } else {
@@ -932,9 +920,7 @@ def take_to_array(var src : iterator<auto(TT)>; from : range) : array<TT -& -con
     var index = 0
     for (x in src) {
         if (index >= from.x) {
-            if (index >= from.y) {
-                break
-            }
+            if (index >= from.y) break
             buffer.push_clone(x)
         }
         index ++
@@ -1930,9 +1916,7 @@ def any(var src : iterator<auto(TT)>) : bool {
 [unused_argument(tt)]
 def private any_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
     for (it in src) {
-        if (predicate(it)) {
-            return true
-        }
+        if (predicate(it)) return true
     }
     return false
 }
@@ -1955,9 +1939,7 @@ def any(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
 [unused_argument(tt)]
 def private all_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
     for (it in src) {
-        if (!predicate(it)) {
-            return false
-        }
+        if (!predicate(it)) return false
     }
     return true
 }
@@ -1993,9 +1975,7 @@ def none(var src : iterator<auto(TT)>) : bool {
 [unused_argument(tt)]
 def private none_impl(var src; tt : auto(TT); predicate : block<(arg : auto(TT) -&) : bool>) : bool {
     for (it in src) {
-        if (predicate(it)) {
-            return false
-        }
+        if (predicate(it)) return false
     }
     return true
 }
@@ -2170,9 +2150,7 @@ def intersect_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg 
 [unused_argument(tt)]
 def private contains_impl(var src; tt : auto(TT); element : TT -&) : bool {
     for (it in src) {
-        if (it == element) {
-            return true
-        }
+        if (it == element) return true
     }
     return false
 }
@@ -2251,27 +2229,17 @@ def private sequence_equal_impl(var first, second; tt : auto(TT)) : bool {
         while (true) {
             let has_f = next(first, f)
             let has_s = next(second, s)
-            if (has_f != has_s) {
-                return false
-            }
-            if (!has_f) {
-                return true
-            }
-            if (f != s) {
-                return false
-            }
+            if (has_f != has_s) return false
+            if (!has_f) return true
+            if (f != s) return false
         }
         return true
     } else {
         var inscope arr_first <- to_array(first)
         var inscope arr_second <- to_array(second)
-        if (length(arr_first) != length(arr_second)) {
-            return false
-        }
+        if (length(arr_first) != length(arr_second)) return false
         for (f, s in arr_first, arr_second) {
-            if (f != s) {
-                return false
-            }
+            if (f != s) return false
         }
         return true
     }
@@ -2279,13 +2247,9 @@ def private sequence_equal_impl(var first, second; tt : auto(TT)) : bool {
 
 [unused_argument(tt)]
 def private sequence_equal_impl_const(first : auto(ARGT); second : auto(ARGTS); tt : auto(TT)) : bool {
-    if (length(first) != length(second)) {
-        return false
-    }
+    if (length(first) != length(second)) return false
     for (f, s in first, second) {
-        if (f != s) {
-            return false
-        }
+        if (f != s) return false
     }
     return true
 }
@@ -2308,27 +2272,17 @@ def private sequence_equal_by_impl(var first, second; tt : auto(TT); key : block
         while (true) {
             let has_f = next(first, f)
             let has_s = next(second, s)
-            if (has_f != has_s) {
-                return false
-            }
-            if (!has_f) {
-                return true
-            }
-            if (key(f) != key(s)) {
-                return false
-            }
+            if (has_f != has_s) return false
+            if (!has_f) return true
+            if (key(f) != key(s)) return false
         }
         return true
     } else {
         var inscope arr_first <- to_array(first)
         var inscope arr_second <- to_array(second)
-        if (length(arr_first) != length(arr_second)) {
-            return false
-        }
+        if (length(arr_first) != length(arr_second)) return false
         for (f, s in arr_first, arr_second) {
-            if (key(f) != key(s)) {
-                return false
-            }
+            if (key(f) != key(s)) return false
         }
         return true
     }
@@ -2336,13 +2290,9 @@ def private sequence_equal_by_impl(var first, second; tt : auto(TT); key : block
 
 [unused_argument(tt)]
 def private sequence_equal_by_impl_const(first : auto(ARGT); second : auto(ARGTS); tt : auto(TT); key : block<(arg : TT -&) : auto>) : bool {
-    if (length(first) != length(second)) {
-        return false
-    }
+    if (length(first) != length(second)) return false
     for (f, s in first, second) {
-        if (key(f) != key(s)) {
-            return false
-        }
+        if (key(f) != key(s)) return false
     }
     return true
 }

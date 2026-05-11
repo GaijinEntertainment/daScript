@@ -73,9 +73,7 @@ def private _skip_ws(var st : ParseState) {
 }
 
 def private _peek(var st : ParseState) : uint {
-    if (st.pos >= length(st.src)) {
-        return 0u
-    }
+    if (st.pos >= length(st.src)) return 0u
     return st.src[st.pos]
 }
 
@@ -99,20 +97,13 @@ def private _peek_keyword(var st : ParseState; kw : string) : bool {
     let n = length(st.src)
     let kw_codepoints = utf8_decode(kw)
     let m = length(kw_codepoints)
-    if (st.pos + m > n) {
-        return false
-    }
+    if (st.pos + m > n) return false
     for (i in range(m)) {
-        if (st.src[st.pos + i] != kw_codepoints[i]) {
-            return false
-        }
+        if (st.src[st.pos + i] != kw_codepoints[i]) return false
     }
     // Boundary: kw must be followed by non-word char or EOF.
     let after = st.pos + m
-    if (after < n && _is_word_cp(st.src[after])) {
-        return false
-    }
-    return true
+    return !(after < n && _is_word_cp(st.src[after]))
 }
 
 def private _consume_keyword(var st : ParseState; kw : string) {
@@ -133,9 +124,7 @@ def private _parse_phrase(var st : ParseState) : int {
     let len = length(st.src)
     while (st.pos < len) {
         _skip_ws(st)
-        if (st.pos >= len) {
-            break
-        }
+        if (st.pos >= len) break
         let cp = st.src[st.pos]
         if (cp == uint('"')) {
             st.pos++
@@ -184,9 +173,7 @@ def private _parse_near(var st : ParseState) : int {
             var any_digit = false
             while (st.pos < len) {
                 let dc = st.src[st.pos]
-                if (dc < uint('0') || dc > uint('9')) {
-                    break
-                }
+                if (dc < uint('0') || dc > uint('9')) break
                 k = k * 10 + int(dc - uint('0'))
                 any_digit = true
                 st.pos++
@@ -263,9 +250,7 @@ def private _parse_col_filter_inner(var st : ParseState; var columns : array<str
     }
     st.pos++
     let inner = _parse_unary(st)
-    if (inner == -1) {
-        return -1
-    }
+    if (inner == -1) return -1
     var n = Fts5Node(kind = Fts5NodeKind.ColFilter, left = inner)
     n.columns <- columns
     return _push_node(st, n)
@@ -292,9 +277,7 @@ def private _parse_unary(var st : ParseState) : int {
         return inner
     }
     // Quoted phrase
-    if (cp == uint('"')) {
-        return _parse_phrase(st)
-    }
+    if (cp == uint('"')) return _parse_phrase(st)
     // Column-set filter: { col1 col2 ... } : expr
     if (cp == uint('{')) {
         st.pos++
@@ -315,9 +298,7 @@ def private _parse_unary(var st : ParseState) : int {
         return _parse_col_filter_inner(st, cols)
     }
     // NEAR keyword
-    if (_peek_keyword(st, "NEAR")) {
-        return _parse_near(st)
-    }
+    if (_peek_keyword(st, "NEAR")) return _parse_near(st)
     // Bare name — term, operator keyword (caller's job), or "name : expr" (single-column filter).
     if (!_is_word_cp(cp)) {
         _set_err(st, "unexpected character")
@@ -338,34 +319,24 @@ def private _parse_unary(var st : ParseState) : int {
 
 def private _at_expr_terminator(var st : ParseState) : bool {
     _skip_ws(st)
-    if (st.pos >= length(st.src)) {
-        return true
-    }
+    if (st.pos >= length(st.src)) return true
     let cp = _peek(st)
     return cp == uint(')') || cp == uint('}') || cp == uint(',')
 }
 
 def private _parse_and_expr(var st : ParseState) : int {
     var left = _parse_unary(st)
-    if (left == -1 || !empty(st.err)) {
-        return left
-    }
+    if (left == -1 || !empty(st.err)) return left
     while (true) {
-        if (_at_expr_terminator(st)) {
-            break
-        }
-        if (_peek_keyword(st, "OR") || _peek_keyword(st, "NOT")) {
-            break
-        }
+        if (_at_expr_terminator(st)) break
+        if (_peek_keyword(st, "OR") || _peek_keyword(st, "NOT")) break
         let had_explicit_and = _peek_keyword(st, "AND")
         if (had_explicit_and) {
             _consume_keyword(st, "AND")
             _skip_ws(st)
         }
         let right = _parse_unary(st)
-        if (right == -1 || !empty(st.err)) {
-            return -1
-        }
+        if (right == -1 || !empty(st.err)) return -1
         var n = Fts5Node(kind = Fts5NodeKind.AndOp, left = left, right = right)
         left = _push_node(st, n)
     }
@@ -374,34 +345,24 @@ def private _parse_and_expr(var st : ParseState) : int {
 
 def private _parse_not_expr(var st : ParseState) : int {
     let left = _parse_and_expr(st)
-    if (left == -1 || !empty(st.err)) {
-        return left
-    }
-    if (!_peek_keyword(st, "NOT")) {
-        return left
-    }
+    if (left == -1 || !empty(st.err)) return left
+    if (!_peek_keyword(st, "NOT")) return left
     _consume_keyword(st, "NOT")
     _skip_ws(st)
     let right = _parse_and_expr(st)
-    if (right == -1 || !empty(st.err)) {
-        return -1
-    }
+    if (right == -1 || !empty(st.err)) return -1
     var n = Fts5Node(kind = Fts5NodeKind.NotOp, left = left, right = right)
     return _push_node(st, n)
 }
 
 def private _parse_or_expr(var st : ParseState) : int {
     var left = _parse_not_expr(st)
-    if (left == -1 || !empty(st.err)) {
-        return left
-    }
+    if (left == -1 || !empty(st.err)) return left
     while (_peek_keyword(st, "OR")) {
         _consume_keyword(st, "OR")
         _skip_ws(st)
         let right = _parse_not_expr(st)
-        if (right == -1 || !empty(st.err)) {
-            return -1
-        }
+        if (right == -1 || !empty(st.err)) return -1
         var n = Fts5Node(kind = Fts5NodeKind.OrOp, left = left, right = right)
         left = _push_node(st, n)
     }
@@ -417,17 +378,11 @@ def public try_compile_text_match(query : string) : Result<Fts5Query; string> {
     var st = default<ParseState>
     st.src <- utf8_decode(query)
     _skip_ws(st)
-    if (st.pos >= length(st.src)) {
-        return ok(default<Fts5Query>, type<string>)
-    }
+    if (st.pos >= length(st.src)) return ok(default<Fts5Query>, type<string>)
     let root_idx = _parse_or_expr(st)
-    if (!empty(st.err)) {
-        return err(st.err, type<Fts5Query>)
-    }
+    if (!empty(st.err)) return err(st.err, type<Fts5Query>)
     _skip_ws(st)
-    if (st.pos < length(st.src)) {
-        return err("trailing input at position {st.pos}", type<Fts5Query>)
-    }
+    if (st.pos < length(st.src)) return err("trailing input at position {st.pos}", type<Fts5Query>)
     var q <- Fts5Query(nodes <- st.nodes, root = root_idx) // nolint:LINT003
     return move_ok(q, type<string>)
 }
@@ -444,28 +399,20 @@ def public compile_text_match(query : string) : Fts5Query {
 // ===== Evaluator =====
 
 def private _term_matches_token(term : string; is_prefix : bool; tok : string) : bool {
-    if (is_prefix) {
-        return tok |> starts_with(term)
-    }
+    if (is_prefix) return tok |> starts_with(term)
     return tok == term
 }
 
 def private _phrase_match_pos(words : array<string>; is_prefix : bool;
                               tokens : array<string>; start : int) : bool {
     let m = length(words)
-    if (start + m > length(tokens)) {
-        return false
-    }
+    if (start + m > length(tokens)) return false
     for (i in range(m)) {
         let last = (i == m - 1)
         if (last && is_prefix) {
-            if (!(tokens[start + i] |> starts_with(words[i]))) {
-                return false
-            }
+            if (!(tokens[start + i] |> starts_with(words[i]))) return false
         } else {
-            if (tokens[start + i] != words[i]) {
-                return false
-            }
+            if (tokens[start + i] != words[i]) return false
         }
     }
     return true
@@ -473,14 +420,10 @@ def private _phrase_match_pos(words : array<string>; is_prefix : bool;
 
 def private _phrase_match(words : array<string>; is_prefix : bool;
                           tokens : array<string>) : bool {
-    if (length(words) == 0) {
-        return true
-    }
+    if (empty(words)) return true
     let n = length(tokens)
     for (i in range(n)) {
-        if (_phrase_match_pos(words, is_prefix, tokens, i)) {
-            return true
-        }
+        if (_phrase_match_pos(words, is_prefix, tokens, i)) return true
     }
     return false
 }
@@ -488,9 +431,7 @@ def private _phrase_match(words : array<string>; is_prefix : bool;
 def private _near_match(words : array<string>; k : int; tokens : array<string>) : bool {
     // FTS5 NEAR: every word appears within k tokens of every other.
     let m = length(words)
-    if (m == 0) {
-        return true
-    }
+    if (m == 0) return true
     var positions : array<array<int>>
     positions |> resize(m)
     for (i in range(m)) {
@@ -499,9 +440,7 @@ def private _near_match(words : array<string>; k : int; tokens : array<string>) 
                 positions[i] |> push(j)
             }
         }
-        if (empty(positions[i])) {
-            return false
-        }
+        if (empty(positions[i])) return false
     }
     for (p0 in positions[0]) {
         var lo = p0
@@ -526,57 +465,35 @@ def private _near_match(words : array<string>; k : int; tokens : array<string>) 
             lo = min(lo, best)
             hi = max(hi, best)
         }
-        if (ok) {
-            return true
-        }
+        if (ok) return true
     }
     return false
 }
 
 def private _eval(q : Fts5Query; idx : int; tokens : array<string>) : bool {
-    if (idx < 0) {
-        return true
-    }
+    if (idx < 0) return true
     let kind = q.nodes[idx].kind
     if (kind == Fts5NodeKind.Term) {
         let w = q.nodes[idx].words[0]
         let is_prefix = q.nodes[idx].is_prefix
-        if (empty(w)) {
-            return true
-        }
+        if (empty(w)) return true
         for (tok in tokens) {
-            if (_term_matches_token(w, is_prefix, tok)) {
-                return true
-            }
+            if (_term_matches_token(w, is_prefix, tok)) return true
         }
         return false
     }
-    if (kind == Fts5NodeKind.Phrase) {
-        return _phrase_match(q.nodes[idx].words, q.nodes[idx].is_prefix, tokens)
-    }
-    if (kind == Fts5NodeKind.AndOp) {
-        return _eval(q, q.nodes[idx].left, tokens) && _eval(q, q.nodes[idx].right, tokens)
-    }
-    if (kind == Fts5NodeKind.OrOp) {
-        return _eval(q, q.nodes[idx].left, tokens) || _eval(q, q.nodes[idx].right, tokens)
-    }
-    if (kind == Fts5NodeKind.NotOp) {
-        return _eval(q, q.nodes[idx].left, tokens) && !_eval(q, q.nodes[idx].right, tokens)
-    }
-    if (kind == Fts5NodeKind.NearOp) {
-        return _near_match(q.nodes[idx].words, q.nodes[idx].near_k, tokens)
-    }
-    if (kind == Fts5NodeKind.ColFilter) {
-        return _eval(q, q.nodes[idx].left, tokens)
-    }
+    if (kind == Fts5NodeKind.Phrase) return _phrase_match(q.nodes[idx].words, q.nodes[idx].is_prefix, tokens)
+    if (kind == Fts5NodeKind.AndOp) return _eval(q, q.nodes[idx].left, tokens) && _eval(q, q.nodes[idx].right, tokens)
+    if (kind == Fts5NodeKind.OrOp) return _eval(q, q.nodes[idx].left, tokens) || _eval(q, q.nodes[idx].right, tokens)
+    if (kind == Fts5NodeKind.NotOp) return _eval(q, q.nodes[idx].left, tokens) && !_eval(q, q.nodes[idx].right, tokens)
+    if (kind == Fts5NodeKind.NearOp) return _near_match(q.nodes[idx].words, q.nodes[idx].near_k, tokens)
+    if (kind == Fts5NodeKind.ColFilter) return _eval(q, q.nodes[idx].left, tokens)
     return false
 }
 
 def public text_match(text : string; q : Fts5Query) : bool {
     //! Match `text` against a precompiled `Fts5Query`.
-    if (q.root < 0) {
-        return true
-    }
+    if (q.root < 0) return true
     var tokens : array<string>
     each_word(text, tokens)
     return _eval(q, q.root, tokens)

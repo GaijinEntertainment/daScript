@@ -155,17 +155,13 @@ def getPD(var st : TokenStream; result : Result; offset : int = 0) : void? {
             data = addr(result.value)
             if (result.tinfo.flags.refType) {
                 let pdata = reinterpret<void ??> data
-                if (pdata == null) {
-                    return null
-                }
+                if (pdata == null) return null
                 data = *pdata
             }
         }
         if (result.tinfo.flags.ref) {
             let pdata = reinterpret<void ??> data
-            if (pdata == null) {
-                return null
-            }
+            if (pdata == null) return null
             data = *pdata
         }
         return (reinterpret<uint8 const?> data) + offset
@@ -193,9 +189,7 @@ def getI(var st : TokenStream; result : Result) : int64 {
 }
 
 def getT(var st : TokenStream; result : Result) : string {
-    if (!empty(result.error)) {
-        return ""
-    }
+    if (!empty(result.error)) return ""
     if (result.data != null) {
         return sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags.singleLine)
     } else {
@@ -247,27 +241,19 @@ def expr_value(var st : TokenStream) : Result {
             if (ntoken ?as punkt ?? 0 == '(') {
                 let arg = expr(st);
                 ntoken = token(st);
-                if (ntoken ?as punkt ?? 0 != ')') {
-                    return st |> error("expecting )")
-                }
+                if (ntoken ?as punkt ?? 0 != ')') return st |> error("expecting )")
                 return func_call(st, name, arg)
             }
             unput(st, ntoken)
             if (name == "true") {
                 return <- Result(true)
-            } elif (name == "false") {
-                return <- Result(false)
-            }
-            if (st.names |> key_exists(name)) {
-                return st.names |> get_value(name)
-            }
+            } elif (name == "false") return <- Result(false)
+            if (st.names |> key_exists(name)) return st.names |> get_value(name)
             return st |> error("unknown variable {name}")
         }
         if (Token(punkt = '(')) {// '(' expr ')
             var res = expr(st);
-            if (token(st) ?as punkt ?? 0 != ')') {
-                return st |> error("expecting )")
-            }
+            if (token(st) ?as punkt ?? 0 != ')') return st |> error("expecting )")
             return <- res
         }
         if (Token(punkt = $v(any))) {
@@ -284,9 +270,7 @@ def getStructFieldOffset(var st : TokenStream; ident : string; var result : Resu
         unsafe {
             tinfo = reinterpret<TypeInfo?>(unsafe(addr(field)))
         }
-        if (field.name == ident) {
-            return (offset = size, tinfo = *tinfo)
-        }
+        if (field.name == ident) return (offset = size, tinfo = *tinfo)
         let al = get_type_align(tinfo) - 1
         size = (size + al) & ~al
         size += get_type_size(tinfo)
@@ -298,9 +282,7 @@ def getTupleFieldOffset(var st : TokenStream; ident : string; var result : Resul
     var size = 0
     for (cnt in range(result.tinfo.argCount)) {
         let tinfo = unsafe(result.tinfo.argTypes[cnt])
-        if (ident == "_{cnt}") {
-            return (offset = size, tinfo = *tinfo)
-        }
+        if (ident == "_{cnt}") return (offset = size, tinfo = *tinfo)
         let al = get_type_align(tinfo) - 1
         size = (size + al) & ~al
         size += get_type_size(tinfo)
@@ -322,13 +304,9 @@ def getVectorOffset(var st : TokenStream; ident : string; var result : Result) :
 def getHandleFieldOffset(var st : TokenStream; ident : string; var result : Result) : tuple<offset : int; tinfo : TypeInfo> {
     unsafe {
         var ann = unsafe(reinterpret<TypeAnnotation?> result.tinfo.annotation)
-        if (ann == null) {
-            return (offset = -1, tinfo = TypeInfo(uninitialized))
-        }
+        if (ann == null) return (offset = -1, tinfo = TypeInfo(uninitialized))
         let ofs  = int(get_handled_type_field_offset(ann, ident))
-        if (ofs == -1) {
-            return (offset = -1, tinfo = TypeInfo(uninitialized))
-        }
+        if (ofs == -1) return (offset = -1, tinfo = TypeInfo(uninitialized))
         let tinfo = get_handled_type_field_type(ann, ident)
         return (offset = ofs, tinfo = *tinfo)
     }
@@ -359,9 +337,7 @@ def expr_field(var st : TokenStream) : Result {
                     oti = getHandleFieldOffset(st, field as ident, result)
                 }
             }
-            if (oti.offset < 0) {
-                return st |> error("unknown field {field} in type {result.tinfo.basicType}")
-            }
+            if (oti.offset < 0) return st |> error("unknown field {field} in type {result.tinfo.basicType}")
             let newData = getPD(st, result, oti.offset)
             result.data = newData
             result.tinfo = oti.tinfo
@@ -377,9 +353,7 @@ def expr_field(var st : TokenStream) : Result {
 
 def opDim(var st : TokenStream; index : int64; var result : Result) {
     let dim = result.tinfo |> get_dim(int(result.tinfo.dimSize - 1u))
-    if (index < 0l || index >= int64(dim)) {
-        return st |> error("index out of range")
-    }
+    if (index < 0l || index >= int64(dim)) return st |> error("index out of range")
     result.tinfo.dimSize--
     let elemSize = get_type_size(unsafe(addr(result.tinfo)))
     result.data = st |> getPD(result, int(index) * elemSize)
@@ -396,22 +370,16 @@ def opDimString(var st : TokenStream; index : int64; var result : Result) {
         }
     }
     let len = length(str)
-    if (index >= int64(len)) {
-        return st |> error("index out of range {index} of {len} (string too short)")
-    }
+    if (index >= int64(len)) return st |> error("index out of range {index} of {len} (string too short)")
     return Result(int64(character_at(str, int(index)))) // nolint:PERF003 single indexed access, not a loop
 }
 
 def opArray(var st : TokenStream; index : int64; var result : Result) {
     unsafe {
         let pArray = reinterpret<DapiArray?> getPD(st, result)
-        if (pArray == null) {
-            return st |> error("null pointer")
-        }
+        if (pArray == null) return st |> error("null pointer")
         let dim = pArray.size
-        if (index < 0l || index >= int64(dim)) {
-            return st |> error("index out of range")
-        }
+        if (index < 0l || index >= int64(dim)) return st |> error("index out of range")
         let pData = reinterpret<int8?> pArray.data
         let elemSize = get_type_size(result.tinfo.firstType)
         let offset = int(index) * elemSize
@@ -424,20 +392,14 @@ def opArray(var st : TokenStream; index : int64; var result : Result) {
 def opTable(var st : TokenStream; index : Result; var result : Result) {
     unsafe {
         let pTable = reinterpret<DapiTable?> getPD(st, result)
-        if (pTable == null) {
-            return st |> error("table - null pointer")
-        }
+        if (pTable == null) return st |> error("table - null pointer")
         let pKey = reinterpret<float4?>(getPD(st, index))
-        if (pKey == null) {
-            return st |> error("key - null pointer")
-        }
+        if (pKey == null) return st |> error("key - null pointer")
         let key = *pKey
         let keyBaseType = result.tinfo.firstType.basicType
         let valueTypeSize = get_type_size(result.tinfo.secondType)
         let elementIndex = get_table_key_index(pTable, key, keyBaseType, valueTypeSize)
-        if (elementIndex == -1) {
-            return st |> error("key not found")
-        }
+        if (elementIndex == -1) return st |> error("key not found")
         let pValue = (reinterpret<uint8?> pTable.data) + elementIndex * valueTypeSize
         result.data = pValue
         result.tinfo = *result.tinfo.secondType
@@ -450,9 +412,7 @@ def expr_at(var st : TokenStream) : Result {
     var token = token(st)
     while (token ?as punkt ?? 0 == '[') {
         let eindex = expr(st);
-        if (token(st) ?as punkt ?? 0 != ']') {
-            return st |> error("expecting ]")
-        }
+        if (token(st) ?as punkt ?? 0 != ']') return st |> error("expecting ]")
         var nresult : Result
         match (result.tinfo) {
             if (TypeInfo(basicType = Type.tString, dimSize = 0u)) {
@@ -507,9 +467,7 @@ def expr_mul_div(var st : TokenStream) : Result {
         }
         if (Token(punkt = '/')) {
             let rightValue = st |> getI(expr_mul_div(st))
-            if (rightValue == 0l) {
-                return st |> error("runtime error, division by 0")
-            }
+            if (rightValue == 0l) return st |> error("runtime error, division by 0")
             return Result(st |> getI(leftValue) * rightValue)
         }
         if (_) {
@@ -624,12 +582,8 @@ def public debug_eval(context : table<string; Result>; expr : string) : Result {
     st.names := context
     var result = expr(st)
     let token = token(st)
-    if (!(token is eos)) {
-        return Result(error = "unexpected token {token}")
-    }
-    if (!empty(st.errors)) {
-        return Result(error = st.errors[0])
-    }
+    if (!(token is eos)) return Result(error = "unexpected token {token}")
+    if (!empty(st.errors)) return Result(error = st.errors[0])
     return <- result
 }
 

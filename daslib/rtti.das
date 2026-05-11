@@ -117,9 +117,7 @@ def arg_names(info : VarInfo) {
 
 def public class_info(cl) : StructInfo const? {
     static_if (typeinfo is_pointer(cl)) {
-        if (cl == null) {
-            return null
-        }
+        if (cl == null) return null
         static_if (typeinfo is_class(*cl)) {
             unsafe {
                 return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>((*cl).__rtti)).structType)
@@ -135,9 +133,7 @@ def public class_info(cl) : StructInfo const? {
     } static_elif (typeinfo is_lambda(cl)) {
         unsafe {
             var l = reinterpret<int8 ??> addr(cl)
-            if (l == null) {
-                return null
-            }
+            if (l == null) return null
             var pti = reinterpret<TypeInfo const ??>(l[0] - 16)
             return (*pti).structType
         }
@@ -149,9 +145,7 @@ def public class_info(cl) : StructInfo const? {
 
 def public type_info(cl) : TypeInfo const? {
     static_if (typeinfo is_pointer(cl)) {
-        if (cl == null) {
-            return null
-        }
+        if (cl == null) return null
         static_if (typeinfo is_class(*cl)) {
             unsafe {
                 return (reinterpret<TypeInfo const?>((*cl).__rtti))
@@ -167,9 +161,7 @@ def public type_info(cl) : TypeInfo const? {
     } static_elif (typeinfo is_lambda(cl)) {
         unsafe {
             var l = reinterpret<int8 ??> addr(cl)
-            if (l == null) {
-                return null
-            }
+            if (l == null) return null
             return reinterpret<TypeInfo const ??>(l[0] - 16)
         }
     } else {

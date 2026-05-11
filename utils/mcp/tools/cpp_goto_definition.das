@@ -17,23 +17,17 @@ require math
 // usage searches, prefer `cpp_grep_usage`. For precise resolution, wait for the
 // clangd-backed v2.
 def do_cpp_goto_definition(file, line_str, column_str : string) : string {
-    if (empty(file) || empty(line_str) || empty(column_str)) {
-        return make_tool_result("'file', 'line', and 'column' are all required", true)
-    }
+    if (empty(file) || empty(line_str) || empty(column_str)) return make_tool_result("'file', 'line', and 'column' are all required", true)
     let line_num = to_int(line_str)
     let col_num = to_int(column_str)
-    if (line_num <= 0 || col_num <= 0) {
-        return make_tool_result("'line' and 'column' must be positive integers (1-based)", true)
-    }
+    if (line_num <= 0 || col_num <= 0) return make_tool_result("'line' and 'column' must be positive integers (1-based)", true)
     let abs_path = resolve_path(file)
     var f = fopen(abs_path, "r")
-    if (f == null) {
-        return make_tool_result("Failed to open '{file}'", true)
-    }
+    if (f == null) return make_tool_result("Failed to open '{file}'", true)
     var lines : array<string>
     while (!feof(f)) {
         var ln = fgets(f)
-        while (length(ln) > 0) {
+        while (!empty(ln)) {
             let last_ch = character_at(ln, length(ln) - 1) // nolint:PERF003
             if (last_ch == '\n' || last_ch == '\r') {
                 ln = slice(ln, 0, length(ln) - 1)
@@ -44,19 +38,13 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
         lines |> push(ln)
     }
     fclose(f)
-    if (line_num > length(lines)) {
-        return make_tool_result("Line {line_num} is past the end of '{file}' ({length(lines)} lines)", true)
-    }
+    if (line_num > length(lines)) return make_tool_result("Line {line_num} is past the end of '{file}' ({length(lines)} lines)", true)
     let cursor_line = lines[line_num - 1]
     let line_len = length(cursor_line)
     // Allow col == line_len + 1 (cursor positioned just past the last character —
     // common IDE convention). Clamp the index used for identifier extraction.
-    if (col_num > line_len + 1) {
-        return make_tool_result("Column {col_num} is past the end of line {line_num}", true)
-    }
-    if (line_len == 0) {
-        return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
-    }
+    if (col_num > line_len + 1) return make_tool_result("Column {col_num} is past the end of line {line_num}", true)
+    if (line_len == 0) return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
     // Walk left and right from cursor over [A-Za-z0-9_] to extract identifier.
     var start = min(col_num - 1, line_len - 1)
     var endx = start
@@ -79,9 +67,7 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
         }
         ident = slice(cursor_line, start, endx + 1)
     }
-    if (empty(ident) || !is_cpp_ident_start_char(int(first_character(ident)))) {
-        return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
-    }
+    if (empty(ident) || !is_cpp_ident_start_char(int(first_character(ident)))) return make_tool_result("No identifier at cursor (line {line_num}, col {col_num})", true)
     // Look up definitions in the lazily-built C++ index. Shared with the
     // with_cpp_source redirect on find_symbol/goto_definition — pays the ~2s
     // scan cost once per server lifetime, then O(1) per goto.
@@ -100,14 +86,10 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
     sort(candidates) $(a, b) {
         let af = a.file == cursor_rel ? 0 : 1
         let bf = b.file == cursor_rel ? 0 : 1
-        if (af != bf) {
-            return af < bf
-        }
+        if (af != bf) return af < bf
         let ad = dir_name(a.file) == cursor_dir ? 0 : 1
         let bd = dir_name(b.file) == cursor_dir ? 0 : 1
-        if (ad != bd) {
-            return ad < bd
-        }
+        if (ad != bd) return ad < bd
         return length(a.file) < length(b.file)
     }
     let max_show = min(CPP_MAX_GOTO_CANDIDATES, length(candidates))
