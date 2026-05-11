@@ -75,15 +75,16 @@ def fixture_path(name : string) : string {
 // Guard for tests that go through ast-grep (grep_usage / outline / cpp_*).
 // Windows CI doesn't always have @ast-grep/cli installed; without this guard
 // every dependent assertion fails with `envelope: ast-grep not available`.
-// Returns true if available; otherwise emits one SKIPPED sub-test and returns
-// false so the caller can early-out of the whole `[test]` body.
+// Returns true if available; otherwise logs a single notice and returns false
+// so the caller can early-out of the whole `[test]` body. The test then
+// completes with zero sub-asserts and is reported as PASS — the alternative
+// (`t->skip()`) would panic across the invoke_in_context boundary and resurface
+// in the parent test as a failure.
 def private require_ast_grep(t : T?) : bool {
     if (!empty(get_ast_grep_cmd())) {
         return true
     }
-    t |> run("ast-grep not available, skipping") <| @(t : T?) {
-        t->skip("ast-grep not installed — install @ast-grep/cli to run this test")
-    }
+    t->log("ast-grep not installed — skipping test (install @ast-grep/cli to enable)")
     return false
 }
 
