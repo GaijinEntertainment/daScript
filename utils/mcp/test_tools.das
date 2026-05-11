@@ -72,6 +72,21 @@ def fixture_path(name : string) : string {
     return "utils/mcp/tests/{name}"
 }
 
+// Guard for tests that go through ast-grep (grep_usage / outline / cpp_*).
+// Windows CI doesn't always have @ast-grep/cli installed; without this guard
+// every dependent assertion fails with `envelope: ast-grep not available`.
+// Returns true if available; otherwise emits one SKIPPED sub-test and returns
+// false so the caller can early-out of the whole `[test]` body.
+def private require_ast_grep(t : T?) : bool {
+    if (!empty(get_ast_grep_cmd())) {
+        return true
+    }
+    t |> run("ast-grep not available, skipping") <| @(t : T?) {
+        t->skip("ast-grep not installed — install @ast-grep/cli to run this test")
+    }
+    return false
+}
+
 // ── compile_check ────────────────────────────────────────────────────
 
 [test]
@@ -1085,6 +1100,9 @@ def test_describe_type(t : T?) {
 
 [test]
 def test_grep_usage(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("finds symbol in directory") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1117,6 +1135,9 @@ def test_grep_usage(t : T?) {
 
 [test]
 def test_grep_usage_parse_aware(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("skips comments and strings") <| @(t : T?) {
         // search for 'compile_program' in tools — should only find code references,
         // not occurrences inside comments or strings
@@ -1131,6 +1152,9 @@ def test_grep_usage_parse_aware(t : T?) {
 
 [test]
 def test_grep_usage_glob_exclude(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("exclude glob filters out files") <| @(t : T?) {
         // compile_program is defined in common.das — exclude it
         var text : string
@@ -1152,6 +1176,9 @@ def test_grep_usage_glob_exclude(t : T?) {
 
 [test]
 def test_outline(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("lists functions and structs") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1202,6 +1229,9 @@ def test_outline(t : T?) {
 
 [test]
 def test_outline_glob(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("glob scans multiple files") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1214,6 +1244,9 @@ def test_outline_glob(t : T?) {
 
 [test]
 def test_grep_usage_detect(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("detects ast-grep") <| @(t : T?) {
         let sg = detect_ast_grep()
         t |> success(!empty(sg), "ast-grep should be detected in test environment")
@@ -1923,6 +1956,9 @@ def private cpp_diag(text : string) : string {
 
 [test]
 def test_cpp_grep_usage(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("finds known C++ symbol in src/ast") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1954,6 +1990,9 @@ def test_cpp_grep_usage(t : T?) {
 
 [test]
 def test_cpp_grep_usage_type_position(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("finds Outer used as a return type") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -1988,6 +2027,9 @@ def test_cpp_grep_usage_type_position(t : T?) {
 
 [test]
 def test_cpp_grep_usage_dedup(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("a single source line appears at most once even if multiple AST nodes match") <| @(t : T?) {
         // The destructor signature `TextWriter::~TextWriter()` produces both a
         // namespace_identifier and a type_identifier hit; the line should
@@ -2016,6 +2058,9 @@ def test_cpp_grep_usage_dedup(t : T?) {
 
 [test]
 def test_cpp_find_symbol(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("finds class in src/ast") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -2059,6 +2104,9 @@ def test_cpp_find_symbol(t : T?) {
 
 [test]
 def test_cpp_outline(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("lists declarations in a known file") <| @(t : T?) {
         var text : string
         var is_error = false
@@ -2093,6 +2141,9 @@ def cpp_outline_text(mode : string) : string {
 
 [test]
 def test_cpp_outline_signatures(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("multi-line function declaration collapsed into a single signature") <| @(t : T?) {
         let text = cpp_outline_text("")
         // describe() is declared across 5 lines in the fixture; the renderer
@@ -2109,6 +2160,9 @@ def test_cpp_outline_signatures(t : T?) {
 
 [test]
 def test_cpp_outline_class_misparse_filtered(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("class with macro prefix is reported as the class, not as a function") <| @(t : T?) {
         let text = cpp_outline_text("")
         // The fixture has `class MY_EXPORT Outer { ... }`. tree-sitter-cpp emits
@@ -2125,6 +2179,9 @@ def test_cpp_outline_class_misparse_filtered(t : T?) {
 
 [test]
 def test_cpp_outline_anonymous_filtered(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("anonymous union/struct/enum entries are dropped") <| @(t : T?) {
         let text = cpp_outline_text("")
         // The fixture has an anonymous union AND an anonymous enum inside Outer.
@@ -2139,6 +2196,9 @@ def test_cpp_outline_anonymous_filtered(t : T?) {
 
 [test]
 def test_cpp_outline_template_specializations(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("template specializations show distinct args") <| @(t : T?) {
         let text = cpp_outline_text("")
         t |> success(find(text, "[struct] Trait\n") >= 0, "primary Trait should appear")
@@ -2149,6 +2209,9 @@ def test_cpp_outline_template_specializations(t : T?) {
 
 [test]
 def test_cpp_outline_nesting(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("methods nest under their enclosing class in tree mode") <| @(t : T?) {
         let text = cpp_outline_text("tree")
         // Tree mode: Inner is a child of Outer (depth 2 from namespace).
@@ -2166,6 +2229,9 @@ def test_cpp_outline_nesting(t : T?) {
 
 [test]
 def test_cpp_outline_qualified_names(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("flat mode prefixes in-class methods with their ancestor chain") <| @(t : T?) {
         let text = cpp_outline_text("flat")
         // In flat mode the indentation goes away; ancestors must show as :: prefix.
@@ -2275,6 +2341,9 @@ def test_cpp_search_config(t : T?) {
 
 [test]
 def test_cpp_index_signature(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     t |> run("ensure_cpp_index produces a stable signature across consecutive calls (no edits)") <| @(t : T?) {
         ensure_cpp_index()
         let sig1 = cpp_index_signature
@@ -2314,6 +2383,9 @@ def test_cpp_collect_git_excludes(t : T?) {
 
 [test]
 def test_cpp_function_declarations_visible(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     // Regression for Copilot review #1: function declarations in headers
     // (no body, e.g. `void foo();`) must be findable. Without the
     // cpp-outline-functions-decl rule + has:function_declarator constraint,
@@ -2329,6 +2401,9 @@ def test_cpp_function_declarations_visible(t : T?) {
 
 [test]
 def test_cpp_using_alias_visible(t : T?) {
+    if (!require_ast_grep(t)) {
+        return
+    }
     // Regression for Copilot review #2: `using X = Y;` aliases must surface
     // under kind=typedef. Without the cpp-outline-typedefs-using rule, only
     // the legacy `typedef X Y;` form was visible.
