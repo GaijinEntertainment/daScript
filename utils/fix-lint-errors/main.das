@@ -14,13 +14,16 @@ require math
 //
 // Rules supported:
 //   STYLE005  if (cond) { <terminator> }   ->  if (cond) <terminator>
+//   STYLE017  if (c) return true; else return false  ->  return c / !c
 //   STYLE018  b == true / b != false       ->  b ; b == false / b != true -> !b
 //   PERF013   a += 1 / a -= 1              ->  a++ / a--
+//   PERF015   a > b ? a : b                ->  max(a, b) (and min variants)
+//   PERF016   x < 0 ? -x : x               ->  abs(x) (and other ternary abs)
 //   PERF017   length(x) == 0 / != 0        ->  empty(x) / !empty(x)
 //
-// Future rules (STYLE017, PERF014, PERF015, PERF016) layer on the same Edit
-// pipeline — each visitor override pushes an Edit; apply_edits writes them
-// back in reverse-position order.
+// Future rules (PERF014) layer on the same Edit pipeline — each visitor
+// override pushes an Edit; apply_edits writes them back in reverse-position
+// order, with an overlap filter to drop edits subsumed by a larger one.
 //
 // Out of scope: rules that need cross-statement restructuring (STYLE016
 // guard combining, STYLE011/012/013 init patterns, PERF018 for-each).
@@ -270,8 +273,103 @@ class FixerVisitor : AstVisitor {
             hi_col = int(c.atEnclosure.last_column)
             return
         }
+        if (e is ExprOp1) {
+            // `-x` — the right end lives in subexpr (the operand follows `-`).
+            let op1 = e as ExprOp1
+            if (op1.subexpr != null) {
+                self->rightmost_pos_of(op1.subexpr, hi_line, hi_col)
+                return
+            }
+        }
+        if (e is ExprRef2Value) {
+            self->rightmost_pos_of((e as ExprRef2Value).subexpr, hi_line, hi_col)
+            return
+        }
         hi_line = int(e.at.last_line)
         hi_col = int(e.at.last_column)
+    }
+
+    def lo_min(var sl : int&; var sc : int&; o_sl : int; o_sc : int) : void {
+        if (o_sl == 0) {
+            return
+        }
+        if (sl == 0 || o_sl < sl || (o_sl == sl && o_sc < sc)) {
+            sl = o_sl
+            sc = o_sc
+        }
+    }
+
+    def hi_max(var el : int&; var ec : int&; o_el : int; o_ec : int) : void {
+        if (o_el == 0) {
+            return
+        }
+        if (el == 0 || o_el > el || (o_el == el && o_ec > ec)) {
+            el = o_el
+            ec = o_ec
+        }
+    }
+
+    def extract_expr_source(e : Expression? const; fi : FileInfo? const) : string {
+        //! Convenience wrapper: leftmost_pos + rightmost_pos + extract_source_at.
+        //! Falls back to `e.at` span when chain helpers return 0 (unknown shape).
+        return "" if (e == null || fi == null)
+        var lo_l = 0; var lo_c = 0
+        var hi_l = 0; var hi_c = 0
+        self->leftmost_pos_of(e, lo_l, lo_c)
+        self->rightmost_pos_of(e, hi_l, hi_c)
+        if (lo_l == 0) {
+            lo_l = int(e.at.line)
+            lo_c = int(e.at.column)
+        }
+        if (hi_l == 0) {
+            hi_l = int(e.at.last_line)
+            hi_c = int(e.at.last_column)
+        }
+        return self->extract_source_at(lo_l, lo_c, hi_l, hi_c, fi)
+    }
+
+    def is_const_zero(e : Expression? const) : bool {
+        let inner = self->peel_ref2value(e)
+        return false if (inner == null)
+        if (inner is ExprConstInt) {
+            return (inner as ExprConstInt).value == 0
+        }
+        if (inner is ExprConstUInt) {
+            return (inner as ExprConstUInt).value == 0u
+        }
+        if (inner is ExprConstInt64) {
+            return (inner as ExprConstInt64).value == 0l
+        }
+        if (inner is ExprConstUInt64) {
+            return (inner as ExprConstUInt64).value == 0ul
+        }
+        if (inner is ExprConstFloat) {
+            return (inner as ExprConstFloat).value == 0.0f
+        }
+        if (inner is ExprConstDouble) {
+            return (inner as ExprConstDouble).value == 0.0lf
+        }
+        return false
+    }
+
+    def is_neg_of(maybe_neg : Expression? const; ref : Expression? const) : bool {
+        //! True when `maybe_neg` is `-ref` structurally — peel ExprRef2Value, then
+        //! the outer must be ExprOp1 with op `-` whose subexpr describes the same
+        //! as `ref`.
+        let mn = self->peel_ref2value(maybe_neg)
+        let rf = self->peel_ref2value(ref)
+        return false if (mn == null || rf == null)
+        return false if (!(mn is ExprOp1))
+        let op1 = mn as ExprOp1
+        return false if (string(op1.op) != "-" || op1.subexpr == null)
+        return describe(self->peel_ref2value(op1.subexpr)) == describe(rf)
+    }
+
+    def expr_describe_equal(a : Expression? const; b : Expression? const) : bool {
+        let aa = self->peel_ref2value(a)
+        let bb = self->peel_ref2value(b)
+        return false if (aa == null || bb == null)
+        return describe(aa) == describe(bb)
     }
 
     def is_simple_subject(e : Expression? const) : bool {
@@ -636,6 +734,131 @@ class FixerVisitor : AstVisitor {
             }
             self->push_edit_span(start_line, start_col, end_line, end_col, replacement, "STYLE017")
         }
+    }
+
+    // --- PERF015 / PERF016: ternary min/max/abs ---
+
+    def override preVisitExprOp3(expr : ExprOp3?) : void {
+        return if (in_template || in_closure > 0)
+        return if (string(expr.op) != "?" || expr.subexpr == null
+                || !(expr.subexpr is ExprOp2))
+        let cmp = expr.subexpr as ExprOp2
+        let cop = string(cmp.op)
+        return if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")
+                || expr.left == null || expr.right == null)
+        // PERF016 (abs) takes precedence — its pattern is stricter (one side is zero).
+        if (self->try_perf016(expr, cmp, cop)) {
+            return
+        }
+        self->try_perf015(expr, cmp, cop)
+    }
+
+    def try_perf015(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
+        let cl = cmp.left
+        let cr = cmp.right
+        return false if (cl == null || cr == null)
+        let t_branch = expr.left
+        let f_branch = expr.right
+        let tcl = self->expr_describe_equal(t_branch, cl)
+        let tcr = self->expr_describe_equal(t_branch, cr)
+        let fcl = self->expr_describe_equal(f_branch, cl)
+        let fcr = self->expr_describe_equal(f_branch, cr)
+        let same_order = tcl && fcr
+        let swap_order = tcr && fcl
+        return false if (!same_order && !swap_order)
+        var is_min = false
+        if (cop == "<" || cop == "<=") {
+            is_min = same_order
+        } else {
+            is_min = swap_order
+        }
+        let which = is_min ? "min" : "max"
+        // Use cmp.left and cmp.right as canonical args — they're guaranteed
+        // present (no synthetic order shuffling at this point).
+        let a_text = self->extract_expr_source(cl, expr.at.fileInfo)
+        let b_text = self->extract_expr_source(cr, expr.at.fileInfo)
+        return false if (empty(a_text) || empty(b_text))
+        let replacement = "{which}({a_text}, {b_text})"
+        // Span: min(leftmost over {cmp.left, cmp.right}) to rightmost(f_branch).
+        // The typer canonicalizes Yoda comparisons so cmp.left isn't always the
+        // source-left operand.
+        var s_l = 0; var s_c = 0
+        var e_l = 0; var e_c = 0
+        var t_l = 0; var t_c = 0
+        self->leftmost_pos_of(cl, t_l, t_c)
+        self->lo_min(s_l, s_c, t_l, t_c)
+        self->leftmost_pos_of(cr, t_l, t_c)
+        self->lo_min(s_l, s_c, t_l, t_c)
+        self->rightmost_pos_of(t_branch, t_l, t_c)
+        self->hi_max(e_l, e_c, t_l, t_c)
+        self->rightmost_pos_of(f_branch, t_l, t_c)
+        self->hi_max(e_l, e_c, t_l, t_c)
+        if (s_l == 0) {
+            return false
+        }
+        self->push_edit_span(s_l, s_c, e_l, e_c, replacement, "PERF015")
+        return true
+    }
+
+    def try_perf016(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
+        var x_on_left = false
+        if (self->is_const_zero(cmp.right)) {
+            x_on_left = true
+        } elif (self->is_const_zero(cmp.left)) {
+            x_on_left = false
+        } else {
+            return false
+        }
+        let x_expr = x_on_left ? cmp.left : cmp.right
+        return false if (x_expr == null)
+        let t_branch = expr.left
+        let f_branch = expr.right
+        var neg_then = false
+        var ok = false
+        if (self->is_neg_of(t_branch, x_expr) && self->expr_describe_equal(f_branch, x_expr)) {
+            neg_then = true
+            ok = true
+        } elif (self->expr_describe_equal(t_branch, x_expr) && self->is_neg_of(f_branch, x_expr)) {
+            neg_then = false
+            ok = true
+        }
+        return false if (!ok)
+        var is_abs = false
+        if (x_on_left) {
+            if ((cop == "<" || cop == "<=") && neg_then) {
+                is_abs = true
+            } elif ((cop == ">" || cop == ">=") && !neg_then) {
+                is_abs = true
+            }
+        } else {
+            if ((cop == ">" || cop == ">=") && neg_then) {
+                is_abs = true
+            } elif ((cop == "<" || cop == "<=") && !neg_then) {
+                is_abs = true
+            }
+        }
+        return false if (!is_abs)
+        let x_text = self->extract_expr_source(x_expr, expr.at.fileInfo)
+        return false if (empty(x_text))
+        let replacement = "abs({x_text})"
+        // Span: min(leftmost over {cmp.left, cmp.right}) to rightmost over
+        // {t_branch, f_branch}. Typer may have reordered cmp operands.
+        var s_l = 0; var s_c = 0
+        var e_l = 0; var e_c = 0
+        var t_l = 0; var t_c = 0
+        self->leftmost_pos_of(cmp.left, t_l, t_c)
+        self->lo_min(s_l, s_c, t_l, t_c)
+        self->leftmost_pos_of(cmp.right, t_l, t_c)
+        self->lo_min(s_l, s_c, t_l, t_c)
+        self->rightmost_pos_of(t_branch, t_l, t_c)
+        self->hi_max(e_l, e_c, t_l, t_c)
+        self->rightmost_pos_of(f_branch, t_l, t_c)
+        self->hi_max(e_l, e_c, t_l, t_c)
+        if (s_l == 0) {
+            return false
+        }
+        self->push_edit_span(s_l, s_c, e_l, e_c, replacement, "PERF016")
+        return true
     }
 
     def check_style017a(ifte : ExprIfThenElse?) : void {
