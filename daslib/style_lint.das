@@ -264,10 +264,31 @@ class StyleLintVisitor : AstVisitor {
                 || bt == Type.tBool  || bt == Type.tString)
     }
 
+    def root_generic(fn : Function const?) : Function const? {
+        //! Walk fromGeneric chain to its root. Template instantiations of overloaded
+        //! generics produce a 2-level chain: instantiated → mangled-overload → root.
+        var cur = fn
+        while (cur != null && cur.fromGeneric != null) {
+            cur = cur.fromGeneric
+        }
+        return cur
+    }
+
     def check_style020_from_jv(expr : ExprCall?) : void {
-        if (expr.func == null || expr.func.name != "from_JV"  //
-            || expr.func._module == null || expr.func._module.name != "json_boost"
-            || length(expr.arguments) < 2) return
+        if (expr.func == null || length(expr.arguments) < 2) {  //
+            return
+        }
+        // The user writes `from_JV(jv, type<int>, 13)`. After template
+        // instantiation (the json_boost overloads are `[template(ent)]`), expr.func
+        // is the mangled `template`0x..`json_boost`from_JV`..` and the `ent` witness
+        // is stripped — arguments shrink to `(jv, defV)`. The instantiation chain is
+        // two levels deep: instantiated → mangled-overload → original `from_JV`.
+        let root = self->root_generic(expr.func)
+        let is_from_JV = (root != null && root.name == "from_JV"
+            && root._module != null && root._module.name == "json_boost")
+        if (!is_from_JV) {  //
+            return
+        }
         // Skip lint when current_function is itself a json_boost overload or a generic
         // instantiation of one — the dispatch chain inside JV/from_JV templates calls
         // from_JV recursively on struct fields, which would self-trigger otherwise.
@@ -279,7 +300,10 @@ class StyleLintVisitor : AstVisitor {
                 && current_function.fromGeneric._module.name == "json_boost")
             return if (in_cf || in_fg)
         }
-        if (!self->is_supported_jv_scalar(expr.arguments[1]._type)) {  //
+        // Use the call's result type — it's the scalar (or non-scalar) the user
+        // would write on the RHS of `??`. Robust under both pre- and post-instantiation
+        // argument shapes.
+        if (!self->is_supported_jv_scalar(expr._type)) {  //
             return
         }
         self->style_warning("STYLE020: from_JV(v, type<T>, defV) on a supported scalar — use 'v ?? defV' (operator ?? from json_boost)", expr.at)

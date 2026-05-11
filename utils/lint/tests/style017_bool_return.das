@@ -66,15 +66,11 @@ def good_negated(c : bool) : bool {
 }
 
 def good_same_value(c : bool) : bool {
-    if (c) {
-        return true                                // both true — different rule territory
-    }
+    if (c) return true                             // both true — different rule territory
     return true
 }
 
 def good_compute(c : bool; n : int) : bool {
-    if (c) {
-        return n > 0
-    }
+    if (c) return n > 0
     return false
 }
