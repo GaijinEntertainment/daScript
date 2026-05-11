@@ -10,8 +10,9 @@ Reach for the simplest tool that fits the data. The order of preference is fixed
 |---|---|---|
 | You have a daslang struct/array/value and want a JSON string, or you have a JSON string and a struct to fill | **`sprint_json(v, pretty)` / `sscan_json(json, var v)`** | Zero ceremony, no `JsonValue?` allocation, respects all field annotations (`@rename`, `@optional`, `@embed`, `@unescape`, `@enum_as_int`). Handles structs, classes, arrays, tables, tuples, variants, enums, bitfields, vector types, pointers, all basic types |
 | You're navigating arbitrary JSON whose shape isn't known at compile time, or you need a `JsonValue?` tree to mutate | **`JV(x)` / `from_JV(js, type<T>)` from `daslib/json_boost`** | Generic reflection on structs/tables/arrays/tuples/variants/vectors/enums; safe-access ops `?.`, `?[]`, `??`; `is`/`as` on the underlying variant |
+| Building a one-off JSON object inline (no struct typedef on hand) | **`JV((key1 = val1, key2 = val2, ...))`** — named-tuple JV | Same auto-walker as `JV(struct)`; one expression, no per-key `insert`. See "Inline named-tuple JV" below |
 | The generic `JV` / `from_JV` doesn't know your custom type | **Add a `def JV(x : MyType)` / `def from_JV(...)` overload** | Function-overload dispatch picks it up automatically — no macro, no annotation |
-| Building a JSON object by hand from a `table<string; JsonValue?>` | **Last resort** — only when neither sprint nor JV applies | Verbose; loses field-annotation support; the structure is invisible to types |
+| Building a JSON object by hand from a `table<string; JsonValue?>` | **Last resort** — only when neither sprint nor JV nor named-tuple applies | Verbose; loses field-annotation support; the structure is invisible to types |
 
 If you find yourself reaching for the last row, ask first whether the JSON shape can be modeled as a struct or variant — almost always it can, and `sprint_json` will be cleaner.
 
@@ -173,9 +174,26 @@ defer() { set_no_trailing_zeros(prev) }
 - `set_no_empty_arrays(bool)` — skip empty array fields in objects.
 - `set_allow_duplicate_keys(bool)` — accept duplicate keys in `read_json` (last wins).
 
+## Inline named-tuple JV
+
+When the JSON shape is fixed but you don't want to declare a struct just to build it once, write a named-tuple literal directly inside `JV(...)`:
+
+```das
+return JV((kind = meta.kind, rendered = false, payload = invoke(meta.serializer)))
+// → {"kind": "...", "rendered": false, "payload": {...}}
+```
+
+The named-tuple `(name = value, ...)` constructor produces a `tuple<name:T1; ...>`; `JV(auto)`'s `is_tuple` branch walks the named fields via `apply()` and emits a JSON object with each name as the key. One expression, no per-key `insert`, no intermediate `table<string; JsonValue?>`.
+
+Limits vs `JV(struct)`:
+- **No `@optional` / `@rename` / `@embed`** — field annotations only attach to real struct fields, not named-tuple fields. Every key is always emitted; the JSON key always matches the daslang name.
+- **All-or-nothing**: either every key is unconditionally present, or you fall back to manual `table<string; JsonValue?>` (or declare a struct). Don't try to mix conditional inserts with the named-tuple form.
+
+If you find yourself wanting to skip empty/zero fields, declare a small struct with `@optional` instead — you trade one type declaration for a cleaner emit pipeline.
+
 ## Manual construction (last resort)
 
-When the JSON shape really is dynamic — mixed-type maps, schema decided at runtime — build the tree directly:
+When the JSON shape really is dynamic — mixed-type maps, keys decided at runtime, conditional inserts that don't fit `@optional` — build the tree directly:
 
 ```das
 var inscope tab : table<string; JsonValue?>
@@ -184,7 +202,7 @@ tab |> insert("age",  JV(30))
 var obj = JV(tab)
 ```
 
-Don't reach for this until you've ruled out modeling the data as a struct/variant. Field annotations (`@rename`, `@optional`, etc.) don't apply here — every key is hand-written.
+Don't reach for this until you've ruled out modeling the data as a struct/variant or an inline named-tuple. Field annotations (`@rename`, `@optional`, etc.) don't apply here — every key is hand-written.
 
 ## Common gotchas
 
