@@ -876,6 +876,7 @@ include/daScript/simulate/debug_info.h
 include/daScript/simulate/interop.h
 include/daScript/simulate/runtime_string.h
 include/daScript/simulate/runtime_string_delete.h
+include/daScript/simulate/runtime_iterator.h
 include/daScript/simulate/runtime_array.h
 include/daScript/simulate/runtime_table.h
 include/daScript/simulate/runtime_table_nodes.h
@@ -1355,6 +1356,7 @@ SET(DAS_SIMULATE_INCLUDES
     include/daScript/simulate/interop.h
     include/daScript/simulate/jit_abi.h
     include/daScript/simulate/runtime_array.h
+    include/daScript/simulate/runtime_iterator.h
     include/daScript/simulate/runtime_matrices.h
     include/daScript/simulate/runtime_profile.h
     include/daScript/simulate/runtime_range.h
