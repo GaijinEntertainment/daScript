@@ -232,14 +232,17 @@ def LLVMGetEnumAttributeKindForName(attr_name : string) {
 
 def LLVMGetEnumAttribute(ctx : LLVMContextRef; attr_name : string) : LLVMOpaqueAttributeRef? {
     let attr_id = LLVMGetEnumAttributeKindForName(attr_name)
-    if (attr_id == 0u) {
-        panic("{attr_name} attribute not found")
+    if (attr_id != 0u) {
+        var attr = LLVMCreateEnumAttribute(ctx, attr_id, 0ul)
+        return attr if (attr != null)
     }
-    var attr = LLVMCreateEnumAttribute(ctx, attr_id, 0ul)
-    if (attr == null) {
-        panic("{attr_name} attribute not found")
+    if (attr_name == "nocapture") {
+        let v = "none"
+        return LLVMCreateStringAttribute(ctx, "captures", uint(length("captures")),
+                                              v, uint(length(v)))
     }
-    return attr
+    panic("{attr_name} attribute not found")
+    return null
 }
 
 def LLVMAddAttributeToFunction(ffunc : LLVMOpaqueValue?; attr : LLVMOpaqueAttributeRef?) {
@@ -400,10 +403,6 @@ def LLVMBuildFloat4_xyzw(builder : LLVMOpaqueBuilder?; var types : PrimitiveType
     vres = LLVMBuildInsertElement(builder, vres, y, types.ConstI32(1ul), "")
     vres = LLVMBuildInsertElement(builder, vres, z, types.ConstI32(2ul), "")
     return LLVMBuildInsertElement(builder, vres, w, types.ConstI32(3ul), name)
-}
-
-def LLVMBuildCall(builder : LLVMOpaqueBuilder?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) {
-    return LLVMBuildCall(builder, func, array_data_ptr(args), uint(length(args)), name)
 }
 
 def LLVMBuildCall2(builder : LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func : LLVMOpaqueValue?; var args : LLVMOpaqueValue? []; name : string) {

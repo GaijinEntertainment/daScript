@@ -6,7 +6,6 @@ require llvm/daslib/llvm_targets
 [export]
 def main {
     var ctx = LLVMGetGlobalContext()
-    LLVMContextSetOpaquePointers(ctx, 0)
     var types = new PrimitiveTypes(ctx)
     var mod = LLVMModuleCreateWithNameInContext("my_module", ctx)
     var ret_type = LLVMFunctionType(types.t_int32, fixed_array<LLVMTypeRef>(types.t_int32))

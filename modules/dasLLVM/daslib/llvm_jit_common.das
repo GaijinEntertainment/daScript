@@ -276,7 +276,6 @@ def public init_jit(cg_opt_level : uint) {
     LLVMInitializeAllAsmPrinters()
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
-    LLVMContextSetOpaquePointers(g_ctx, 1)
     if (LLVM_ENABLE_DIAGNOSTIC) {
         set_context_diagnostics_to_log(g_ctx)
     }
