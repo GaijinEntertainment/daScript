@@ -86,7 +86,7 @@ def pre_tick() { ... }      // Called every frame before update() — used by li
 
 ## Helper Modules
 
-### `live/glfw_live` — GLFW Window Lifecycle
+### `live/glfw_live` — GLFW Window Lifecycle + Synthetic Mouse Driver
 
 Manages a GLFW window that persists across reloads. Provides:
 
@@ -96,6 +96,25 @@ Manages a GLFW window that persists across reloads. Provides:
 - `live_begin_frame() : bool` — poll events, return false if window closed
 - `live_end_frame()` — swap buffers
 - `live_get_framebuffer_size(var w, h : int&)` — current framebuffer size
+
+**Synthetic mouse driver.** Events flow through `dasGLFW`'s chain dispatcher (`glfw_chain_add_*` / `glfw_post_*` / `glfw_dispatch_*` C++ bindings), so any listener installed on the window — `ImGui_ImplGlfw`, app callbacks — receives them indistinguishably from real OS input. The visual-aids demo uses this to re-record APNG tours from JSON timelines.
+
+Live commands:
+
+- `mouse_pos` — teleport synthetic cursor. Args: `x`, `y`.
+- `mouse_click` — synthetic button press/release. Args: `button` (0/1/2), `action` (`"press"` | `"release"`).
+- `mouse_scroll` — synthetic scroll. Args: `x`, `y` (offsets).
+- `mouse_move_to` — animated linear move to `(x, y)` over `duration_ms` (default 250). Per-frame lerp posts one cursor event per frame so anything reading mouse position sees smooth motion.
+- `mouse_play` — scripted timeline. Args: `events` array of `{t_ms, kind, x, y, button, action}` where `kind` is `"move"` | `"button"` | `"scroll"`. Between move events the per-frame `[before_update]` tick lerps and posts one cursor event per frame.
+- `mouse_stop` — stop playback, clear the queue.
+- `mouse_status` — `{playing, elapsed_ms, cursor_x, cursor_y, queue_idx, queue_total}`.
+
+Helper:
+
+- `get_synth_cursor() : tuple<bool; float; float>` — `(active, x, y)`. Overlays drawing a cursor sprite or motion trail should consult this — when `active` the synthetic driver owns the position, and `ImGui_ImplGlfw`'s per-frame poll would otherwise overwrite `io.MousePos` with the real OS cursor on focused windows.
+- `synth_click_button` / `synth_click_action` / `synth_click_t` — public vars consumed by visual-aids overlays to flash a click indicator (the OS cursor isn't visible in the GL back buffer, so a real click leaves no trace in APNG recordings).
+
+The OS cursor is **not** warped — it lives outside the GL back buffer (the window manager paints it at display time), so warping has no effect on glReadPixels-driven APNG recordings. The visible proof of motion is the visual-aids trail + cursor sprite, both drawn through ImGui's draw lists.
 
 ### `live/opengl_live` — OpenGL Utilities
 

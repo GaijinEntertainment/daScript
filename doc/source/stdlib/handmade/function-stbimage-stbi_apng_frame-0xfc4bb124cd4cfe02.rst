@@ -1,0 +1,1 @@
+Queue one frame on ``writer``. ``stride_bytes`` is the pixel-row stride (negative means bottom-up). ``delay_ms`` is how long the frame is shown. Returns 1 on success, 0 if the queue is full (oldest frame dropped).

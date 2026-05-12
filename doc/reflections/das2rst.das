@@ -1239,7 +1239,8 @@ def document_module_stbimage(root : string) {
         group_by_regex("File writing", mod, %regex~(stbi_write_png|stbi_write_bmp|stbi_write_tga|stbi_write_jpg|stbi_write_hdr)$%%),
         group_by_regex("Write to memory", mod, %regex~(stbi_write_png_to_memory|stbi_write_bmp_to_memory|stbi_write_tga_to_memory|stbi_write_jpg_to_memory)$%%),
         group_by_regex("Write settings", mod, %regex~(stbi_flip_vertically_on_write|stbi_write_set_.*|stbi_write_get_.*)$%%),
-        group_by_regex("Image resizing", mod, %regex~(stbir_resize|stbir_resize_uint8_srgb|stbir_resize_uint8_linear|stbir_resize_float_linear)$%%)
+        group_by_regex("Image resizing", mod, %regex~(stbir_resize|stbir_resize_uint8_srgb|stbir_resize_uint8_linear|stbir_resize_float_linear)$%%),
+        group_by_regex("Animated PNG (APNG) writer", mod, %regex~stbi_apng_(begin|frame|end|dropped)$%%)
     )
     document("Image loading, writing, and resizing (stb_image)", mod, "stbimage.rst", groups)
 }
@@ -1437,7 +1438,7 @@ def document_module_strudel_scheduler(root : string) {
     var mod = find_module("strudel_scheduler")
     var groups <- array<DocGroup>(
         group_by_regex("Orbit effects", mod, %regex~(init_reverb|init_delay|get_orbit_reverb|get_orbit_delay|get_orbit_chorus)$%%),
-        group_by_regex("Scheduler lifecycle", mod, %regex~(tick|shutdown_scheduler)$%%)
+        group_by_regex("Scheduler lifecycle", mod, %regex~(tick|shutdown_scheduler|finalize)$%%)
     )
     document("Voice allocation, effect bus routing, and per-tick mixing", mod, "strudel_scheduler.rst", groups)
 }
