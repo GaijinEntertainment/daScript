@@ -4,6 +4,23 @@ require daslib/fio
 require daslib/defer
 require daslib/strings_boost
 require daslib/functional
+require daslib/clargs
+
+[CommandLineArgs]
+struct Config {
+    @clarg_short = "i"
+    @clarg_doc = "Path to the llvm-c/ C include tree (default: /usr/lib/llvm-22/include)"
+    input : string = "/usr/lib/llvm-22/include"
+
+    @clarg_short = "o"
+    @clarg_doc = "Output folder for generated bindings (default: <das_root>/modules/dasLLVM/bindings)"
+    output : string = "{get_das_root()}/modules/dasLLVM/bindings"
+
+    @clarg_short = "?"
+    @clarg_name = "show-help"
+    @clarg_doc = "Show this help and exit"
+    help : bool
+}
 
 let private llvm_c_headers <- array<string>(
 // header version
@@ -20,29 +37,17 @@ let private llvm_c_headers <- array<string>(
     "ErrorHandling.h",
     "ExecutionEngine.h",
     "ExternC.h",
-    "Initialization.h",
     "IRReader.h",
     "Linker.h",
     "LLJIT.h",
-    "lto.h",
     "Object.h",
     "Orc.h",
     "OrcEE.h",
-    "Remarks.h",
     "Support.h",
     "Target.h",
     "TargetMachine.h",
     "Types.h",
-// transforms
-    "AggressiveInstCombine.h",
-    "Coroutines.h",
-    "InstCombine.h",
-    "IPO.h",
     "PassBuilder.h",
-    "PassManagerBuilder.h",
-    "Scalar.h",
-    "Utils.h",
-    "Vectorize.h",
 // def version
     "abi-breaking.h",
     "AsmParsers.def",
@@ -146,8 +151,8 @@ class LlvmGenDinamic : DasGenBind {
         let function_name = string(clang_getCursorSpelling(c))
         if (function_name == "LLVMInitializeCore" || // Defined twice in LLVM C API
             function_name |> starts_with("LLVMInitializeAll") || // It's static macro function, implemented on das manually
-            function_name |> starts_with("LLVMInitializeNative") // It's static macro function, implemented on das manually
-            ) {
+            function_name |> starts_with("LLVMInitializeNative")) // It's static macro function, implemented on das manually
+        {
             return true
         }
         let funf = clang_getCursorLocationFileName(c)
@@ -167,38 +172,53 @@ class LlvmGenDinamic : DasGenBind {
         return false
     }
     def override output_dasbind(function_name : string) {
-        fprint(func_decl_file, "[extern(cdecl, name=\"{function_name}\", linux_library=\"libLLVM.so\", windows_library=\"LLVM-C\")]\n")
+        fprint(func_decl_file, "[extern(cdecl, name=\"{function_name}\", library=\"LLVM.dll\")]\n")
     }
 }
 
 [export]
 def main {
+    var r <- parse_args(type<Config>)
+    if (r |> is_err) {
+        print("error: {r |> unwrap_err}\n\n")
+        print_help(get_command_info(type<Config>), "bind_llvm")
+        return
+    }
+    var cfg <- r |> move_unwrap
+    if (cfg.help) {
+        print_help(get_command_info(type<Config>), "bind_llvm")
+        return
+    }
     let is_dynamic = true
-    let clang_i = "C:/Work/win64/include"
+    let clang_i = cfg.input
     let pfn = "cb_dasLLVM.h"
     let pfp = "{get_das_root()}/modules/dasLLVM/src/"
-    let args <- array<string>(
+    var args <- array<string>(
         "-xc++-header",
         "-std=c++1z",
         "-I{get_full_file_name(pfp)}",
-        "-I{clang_i}",
-        "-DWIN32",
-        "-DCINDEX_EXPORTS"
+        "-I{clang_i}"
     )
+    // -DWIN32 only needed when parsing on Windows where some llvm-c headers gate
+    // declarations on it. Skip on POSIX to avoid steering header pickups wrong.
+    if (has_env_variable("OS") || has_env_variable("WINDIR")) {
+        args |> push("-DWIN32")
+    }
+    args |> push("-DCINDEX_EXPORTS")
     if (is_dynamic) {
         // generate
-        let output_name = "{get_das_root()}/modules/dasLLVM/bindings/llvm_func.das"
+        let output_name = "{cfg.output}/llvm_func.das"
         fopen(output_name, "wb") <| $(fdf) {
             fprint(fdf, "require dasbind public\n")
             fprint(fdf, "options gen2\n")
             fprint(fdf, "module llvm_func shared\n")
             fprint(fdf, "require llvm/bindings/llvm_struct\n")
             fprint(fdf, "require llvm/bindings/llvm_enum\n")
-            let output_const_name = "{get_das_root()}/modules/dasLLVM/bindings/llvm_const.das"
+            let output_const_name = "{cfg.output}/llvm_const.das"
             fopen(output_const_name, "wb") <| $(dcf) {
                 var glbind = new LlvmGenDinamic(pfn, pfp, args)
-                var scf = glbind.openFile("{get_das_root()}/modules/dasLLVM/bindings/llvm_struct.das")
-                var ecf = glbind.openFile("{get_das_root()}/modules/dasLLVM/bindings/llvm_enum.das")
+                var scf = glbind.openFile("{cfg.output}/llvm_struct.das")
+                var ecf = glbind.openFile("{cfg.output}/llvm_enum.das")
                 fprint(scf, "options gen2\nmodule llvm_struct shared\n")
                 fprint(ecf, "options gen2\nmodule llvm_enum shared\n")
                 glbind->setFiles(dcf, fdf, scf, ecf)

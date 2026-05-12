@@ -89,6 +89,11 @@ jobs:
             ;;
           linux)
             echo "MARCH=64" >> $GITHUB_ENV
+            # apt.llvm.org provides LLVM 22 packages for Noble (not yet in main archive).
+            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+              | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/llvm.gpg
+            echo 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' \
+              | sudo tee /etc/apt/sources.list.d/llvm.list
             sudo apt-get update -y
             sudo apt-get install --no-install-recommends -y \
               mesa-common-dev \
@@ -102,7 +107,9 @@ jobs:
               libxi-dev \
               libclang-16-dev \
               llvm-16-dev \
-              clang-16
+              clang-16 \
+              libclang-22-dev \
+              llvm-22-dev
             ;;
         esac
 
@@ -226,6 +233,14 @@ jobs:
         $BIN/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path /usr/lib/llvm-16/include/
         git diff --exit-code -- modules/dasClangBind/src/ \
           || (echo "ERROR: dasClangBind generated files are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_clangbind.das -- --clang_path <libclang-include-path>' locally and commit the result." && exit 1)
+
+    - name: "Run self-binder (bind_llvm.das)"
+      if: matrix.target == 'linux'
+      run: |
+        set -eux
+        $BIN/daslang modules/dasClangBind/bind/bind_llvm.das -- --input /usr/lib/llvm-22/include
+        git diff --exit-code -- modules/dasLLVM/bindings/ \
+          || (echo "ERROR: dasLLVM generated bindings are out of date. Run './bin/daslang modules/dasClangBind/bind/bind_llvm.das -- --input <llvm-c-include-path>' locally and commit the result." && exit 1)
 
     - name: "Install dasImgui (daspkg)"
       run: |
