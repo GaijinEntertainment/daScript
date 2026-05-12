@@ -6508,7 +6508,7 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
 }
 
 [macro_function]
-def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint) {
+def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool) {
     return if (is_in_completion() || is_compiling_macros() || is_folding())
     return if (g_failed || !LLVM_ENABLE_OPT_PASS)
     var pbopts = LLVMCreatePassBuilderOptions()
@@ -6523,10 +6523,11 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
     let pipeline = (size_level >= 2u ? "default<Oz>"
                   : (size_level == 1u ? "default<Os>"
                                       : "default<O{opt_level}>"))
-    // Pass user opt_level + host CPU info so TTI cost models match the
-    // machine we'll actually run on (otherwise loop unrolling, inlining,
-    // and vectorization fall back to a generic baseline).
-    with_default_target_machine(opt_level, true) $(targetMachine : LLVMTargetMachineRef) {
+    // use_host_cpu=true for JIT (artifact runs on this host); false for
+    // exe emission so the IR pipeline's TTI cost model stays generic and
+    // produces redistributable shapes (otherwise loop unroll / vectorize
+    // pick host-tuned shapes baked into the emitted object).
+    with_default_target_machine(opt_level, use_host_cpu) $(targetMachine : LLVMTargetMachineRef) {
         let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
         if (err != null) {
             let msg = LLVMGetErrorMessage(err)
