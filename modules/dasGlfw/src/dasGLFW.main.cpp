@@ -250,7 +250,16 @@ namespace das {
 
     void DasGlfw_ChainClear ( GLFWwindow * w ) {
         auto it = g_GlfwChain.find(w);
-        if ( it != g_GlfwChain.end() ) g_GlfwChain.erase(it);
+        if ( it == g_GlfwChain.end() ) return;
+        // Restore the previous GLFW callbacks (e.g. ImGui_ImplGlfw's) before
+        // tearing down the chain state; otherwise the dispatcher stays
+        // installed but early-returns on every real event because the map
+        // entry is gone, silently dropping input.
+        auto & st = it->second;
+        glfwSetCursorPosCallback   (w, st.prev_cursor_pos);
+        glfwSetMouseButtonCallback (w, st.prev_mouse_button);
+        glfwSetScrollCallback      (w, st.prev_scroll);
+        g_GlfwChain.erase(it);
     }
 
     void DasGlfw_PostCursorPos ( GLFWwindow * w, double x, double y ) {

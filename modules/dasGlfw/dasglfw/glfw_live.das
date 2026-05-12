@@ -25,6 +25,7 @@ require daslib/archive
 require daslib/json
 require daslib/json_boost
 require live/live_commands
+require live/mouse_events public
 require live_host
 require math
 
@@ -227,7 +228,14 @@ struct MouseClickArgs {
 def mouse_click(input : JsonValue?) : JsonValue? {
     return JV((error = "no window")) if (live_window == null)
     let args = from_JV(input, type<MouseClickArgs>)
-    let act = args.action == "press" ? 1 : 0
+    var act : int
+    if (args.action == "press") {
+        act = 1
+    } elif (args.action == "release") {
+        act = 0
+    } else {
+        return JV((error = "invalid action; expected \"press\" or \"release\"", action = args.action))
+    }
     synth_mouse_button(args.button, act)
     return JV((button = args.button, action = args.action))
 }
@@ -263,15 +271,6 @@ def mouse_move_to(input : JsonValue?) : JsonValue? {
     return JV((duration_ms = args.duration_ms))
 }
 
-struct MouseEventWire {
-    @optional t_ms   : int    = 0
-    kind             : string = "move"  // "move" | "button" | "scroll"
-    @optional x      : float  = 0.0
-    @optional y      : float  = 0.0
-    @optional button : int    = 0
-    @optional action : string = "press"
-}
-
 struct MousePlayArgs {
     events : array<MouseEventWire>
 }
@@ -279,8 +278,9 @@ struct MousePlayArgs {
 [live_command(description="Play a scripted mouse timeline. Args: events array of (t_ms, kind, x, y, button, action)")]
 def mouse_play(input : JsonValue?) : JsonValue? {
     return JV((error = "no window")) if (live_window == null)
-    let args = from_JV(input, type<MousePlayArgs>)
+    var args = from_JV(input, type<MousePlayArgs>)
     return JV((error = "no events")) if (empty(args.events))
+    sort_play_events(args.events)
     reset_timeline_state()
     timeline |> reserve(length(args.events))
     for (w in args.events) {

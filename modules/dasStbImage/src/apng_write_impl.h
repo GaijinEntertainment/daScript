@@ -150,6 +150,12 @@ fail:
 }
 
 inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_ms) {
+    if (!pixels) return false;
+    size_t row_bytes = (size_t)w * (size_t)channels;
+    // Reject strides that would cause OOB reads: must be positive and at
+    // least row_bytes. Negative stride (bottom-up) is not supported here;
+    // callers should flip in their pixel buffer instead.
+    if (stride_bytes <= 0 || (size_t)stride_bytes < row_bytes) return false;
     std::unique_lock<std::mutex> lk(mu);
     if (errored) return false;
     if ((int)queue.size() >= max_queue) {
@@ -157,7 +163,6 @@ inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_
         drop_count++;
     }
     Frame f;
-    size_t row_bytes = (size_t)w * (size_t)channels;
     f.pixels.resize(row_bytes * (size_t)h);
     const uint8_t *src = (const uint8_t *)pixels;
     if ((size_t)stride_bytes == row_bytes) {

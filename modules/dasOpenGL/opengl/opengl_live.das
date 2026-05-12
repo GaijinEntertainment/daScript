@@ -181,9 +181,10 @@ def record_start(input : JsonValue?) : JsonValue? {
         writer_ptr = stbi_apng_begin(args.file, w, h, 4)
     }
     return JV((error = "could not open file", file = args.file)) if (writer_ptr == null)
+    let effective_fps = max(args.fps, 1.0f)
     recorder.writer           = writer_ptr
-    recorder.fps              = args.fps
-    recorder.frame_interval_s = 1.0f / max(args.fps, 1.0f)
+    recorder.fps              = effective_fps
+    recorder.frame_interval_s = 1.0f / effective_fps
     recorder.max_seconds      = args.max_seconds
     recorder.start_t          = get_uptime()
     recorder.next_capture_t   = recorder.start_t
@@ -194,7 +195,7 @@ def record_start(input : JsonValue?) : JsonValue? {
     recorder_active           = true
     return JV(RecordStartResult(
         file        = args.file,
-        fps         = args.fps,
+        fps         = effective_fps,
         width       = w,
         height      = h,
         max_seconds = args.max_seconds
@@ -273,14 +274,22 @@ def record_tick() {
         return
     }
     return if (now < recorder.next_capture_t)
-    recorder.next_capture_t += recorder.frame_interval_s
+    // Skip-missed scheduling: after a stall (long frame, gc pause, etc.)
+    // resync the deadline to `now + interval` instead of catching up frame
+    // by frame. The catch-up form would burst-capture every tick until it
+    // overtook `now`, which both exceeds the requested fps and produces
+    // wrong playback timing because delay_ms below is a constant. Derive
+    // delay_ms from the actual gap so playback reflects real spacing.
+    let last_capture_t = recorder.next_capture_t - recorder.frame_interval_s
+    let gap_s          = now - last_capture_t
+    recorder.next_capture_t = now + recorder.frame_interval_s
     let row_bytes = recorder.width * 4
     var pixels : array<uint8>
     pixels |> resize(recorder.width * recorder.height * 4)
     unsafe {
         glReadPixels(0, 0, recorder.width, recorder.height, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
     }
-    let delay_ms = int(recorder.frame_interval_s * 1000.0f)
+    let delay_ms = int(gap_s * 1000.0f)
     var ok : int
     unsafe {
         ok = stbi_apng_frame(recorder.writer, addr(pixels[0]), row_bytes, delay_ms)
