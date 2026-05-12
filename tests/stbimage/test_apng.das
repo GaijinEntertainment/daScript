@@ -118,12 +118,12 @@ def test_apng_basic(t : T?) {
         tt |> equal(end_ok, 1)
 
         // Frame 0 decodes as a normal PNG (default-image fallback)
-        var x, y, comp : int
+        var x = 0; var y = 0; var comp = 0
         var loaded = stbi_load(fname, safe_addr(x), safe_addr(y), safe_addr(comp), 4)
         tt |> success(loaded != null, "frame 0 decodes as PNG")
-        tt |> equal(x, W)
-        tt |> equal(y, H)
         if (loaded != null) {
+            tt |> equal(x, W)
+            tt |> equal(y, H)
             stbi_image_free(loaded)
         }
 
@@ -183,8 +183,8 @@ def test_apng_begin_bad_filename(t : T?) {
 }
 
 [test]
-def test_apng_drop_on_overflow(t : T?) {
-    t |> run("APNG: drop counter advances when submitter outruns worker") <| @(tt : T?) {
+def test_apng_drop_accounting(t : T?) {
+    t |> run("APNG: submitted == emitted + dropped (worker race-tolerant invariant)") <| @(tt : T?) {
         let fname = "{get_das_root()}/tests/stbimage/_test_output_overflow.apng"
         // Big-ish frame so deflate takes noticeable time vs. enqueue speed.
         let W = 512; let H = 512
@@ -208,14 +208,16 @@ def test_apng_drop_on_overflow(t : T?) {
         let dropped_before_end = unsafe(stbi_apng_dropped(writer))
         let end_ok = unsafe(stbi_apng_end(writer))
         tt |> equal(end_ok, 1)
-        // We submitted 40; queue cap 4 means at least 36 should have been dropped
-        // OR the worker drained them. We can't pin a number, but the file should be valid.
-        tt |> success(dropped_before_end >= 0, "drop counter readable")
         // File is valid even when many frames dropped — verify chunk parse succeeds.
         let chunks = parse_png_chunks(fname)
         tt |> success(!chunks.bad, "file is valid APNG even after drops")
         tt |> equal(chunks.n_ihdr, 1)
         tt |> equal(chunks.n_iend, 1)
+        // Submitter/worker accounting: every submitted frame either lands as an
+        // fcTL chunk or counts as a drop. drop_count is only updated by enqueue
+        // (no more after the 40th submit completes), and end() drains the queue,
+        // so this invariant is race-free even though the worker is concurrent.
+        tt |> equal(dropped_before_end + chunks.n_fctl, 40)
         // num_frames in acTL must equal n_fctl in file
         tt |> equal(length(chunks.actl_body), 8)
         if (length(chunks.actl_body) == 8) {
@@ -250,17 +252,20 @@ def test_apng_double_writers(t : T?) {
         tt |> equal(ok1, 1)
         tt |> equal(ok2, 1)
         // Both files should be valid APNGs of their respective sizes
-        var x, y, comp : int
+        var x = 0; var y = 0; var comp = 0
         var l1 = stbi_load(path1, safe_addr(x), safe_addr(y), safe_addr(comp), 4)
-        tt |> equal(x, 32)
-        tt |> equal(y, 32)
+        tt |> success(l1 != null, "path1 decodes")
         if (l1 != null) {
+            tt |> equal(x, 32)
+            tt |> equal(y, 32)
             stbi_image_free(l1)
         }
+        x = 0; y = 0; comp = 0
         var l2 = stbi_load(path2, safe_addr(x), safe_addr(y), safe_addr(comp), 4)
-        tt |> equal(x, 64)
-        tt |> equal(y, 64)
+        tt |> success(l2 != null, "path2 decodes")
         if (l2 != null) {
+            tt |> equal(x, 64)
+            tt |> equal(y, 64)
             stbi_image_free(l2)
         }
         remove(path1)

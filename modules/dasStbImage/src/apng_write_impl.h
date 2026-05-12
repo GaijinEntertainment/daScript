@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <array>
+#include <string>
 #include <vector>
 #include <deque>
 #include <thread>
@@ -111,6 +112,7 @@ private:
     bool emit_frame(Frame &f);
 
     FILE *fp = nullptr;
+    std::string filepath;
     int   w  = 0, h = 0, channels = 0;
     stbi__apng_off_t acTL_body_offset = -1;
 
@@ -130,6 +132,7 @@ inline bool ApngWriter::begin(const char *filename, int W, int H, int CH) {
     if (W <= 0 || H <= 0) return false;
     if (CH != 3 && CH != 4) return false;
     w = W; h = H; channels = CH;
+    filepath = filename ? filename : "";
     fp = fopen(filename, "wb");
     if (!fp) return false;
 
@@ -311,6 +314,16 @@ inline bool ApngWriter::end() {
         was_errored = errored;
     }
     bool result = !was_errored;
+
+    // Zero-frame close: the file would otherwise contain only IHDR + acTL + IEND,
+    // which isn't a valid PNG/APNG (no IDAT/fdAT). Treat as failure and remove
+    // the partial file so callers don't end up shipping a corrupt artifact.
+    if (frames_written == 0) {
+        fclose(fp);
+        fp = nullptr;
+        if (!filepath.empty()) remove(filepath.c_str());
+        return false;
+    }
 
     // Backpatch acTL.num_frames + recomputed CRC. Even when errored, we still
     // emit a valid truncated APNG so the partial recording is salvageable.
