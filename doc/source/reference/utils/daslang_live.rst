@@ -345,9 +345,9 @@ Helper modules
    * - Module
      - Description
    * - ``live/glfw_live``
-     - GLFW window that persists across reloads.
+     - GLFW window that persists across reloads + synthetic mouse driver.
    * - ``live/opengl_live``
-     - OpenGL screenshot command.
+     - OpenGL screenshot + APNG video recording commands.
    * - ``live/decs_live``
      - Auto-serialization of DECS entities across reloads.
    * - ``live/live_commands``
@@ -386,6 +386,49 @@ survives reloads.  Key functions:
      - Swap buffers.
    * - ``live_get_framebuffer_size(w, h)``
      - Query framebuffer dimensions.
+
+Synthetic mouse driver
+^^^^^^^^^^^^^^^^^^^^^^
+
+``live/glfw_live`` also provides a synthetic-input timeline driver. Events
+flow through ``dasGLFW``'s chain dispatcher, so any listener installed on
+the window (``ImGui_ImplGlfw``, app callbacks, etc.) receives them
+indistinguishably from real OS input. Used by the visual-aids demo to
+re-record APNG tours from a JSON timeline.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Command
+     - Description
+   * - ``mouse_pos``
+     - Teleport synthetic cursor. Args: ``x``, ``y``.
+   * - ``mouse_click``
+     - Synthetic button press/release. Args: ``button`` (0/1/2),
+       ``action`` (``"press"`` | ``"release"``).
+   * - ``mouse_scroll``
+     - Synthetic scroll. Args: ``x``, ``y`` (offsets).
+   * - ``mouse_move_to``
+     - Animated linear move to ``(x, y)`` over ``duration_ms``
+       (default 250). Per-frame lerp posts one cursor event per frame.
+   * - ``mouse_play``
+     - Play a scripted timeline. Args: ``events`` array of
+       ``{t_ms, kind, x, y, button, action}`` where ``kind`` is
+       ``"move"`` | ``"button"`` | ``"scroll"``. Between move events the
+       per-frame tick lerps and posts one cursor event per frame so any
+       reader (ImGui, overlays) sees smooth motion.
+   * - ``mouse_stop``
+     - Stop playback and clear the queue.
+   * - ``mouse_status``
+     - Playback status: ``playing``, ``elapsed_ms``, ``cursor_x``,
+       ``cursor_y``, ``queue_idx``, ``queue_total``.
+
+``get_synth_cursor() : tuple<bool; float; float>`` returns
+``(active, x, y)``. Overlays that draw a cursor sprite or motion trail
+should consult this — when ``active`` the synthetic driver owns the
+position, and ``ImGui_ImplGlfw``'s per-frame poll would otherwise
+overwrite ``io.MousePos`` with the real OS cursor on focused windows.
 
 ``live/decs_live``
 ------------------

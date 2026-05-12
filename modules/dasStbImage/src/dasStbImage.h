@@ -13,6 +13,14 @@ int  stbi_write_get_force_png_filter ( );
 void stbi_write_set_tga_with_rle ( int rle );
 int  stbi_write_get_tga_with_rle ( );
 
+// APNG (animated PNG) writer — see apng_write_impl.h
+extern "C" {
+    void * stbi_apng_begin ( const char * filename, int w, int h, int channels );
+    int    stbi_apng_frame ( void * writer, const void * pixels, int stride_bytes, int delay_ms );
+    int    stbi_apng_end ( void * writer );
+    int    stbi_apng_dropped ( void * writer );
+}
+
 namespace das {
     // write-to-memory wrappers
     void stbi_write_png_to_memory ( int x, int y, int comp, const void * data, int stride_bytes,

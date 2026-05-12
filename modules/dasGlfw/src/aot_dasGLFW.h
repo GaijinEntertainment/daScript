@@ -16,4 +16,13 @@ namespace das {
     DAS_MOD_API void DasGlfw_Shutdown();
     DAS_MOD_API void DasGlfw_DestroyWindow ( GLFWwindow * window );
     DAS_MOD_API void * DAS_glfwGetNativeWindow ( GLFWwindow* window );
+    // chain + synthetic event API
+    DAS_MOD_API void DasGlfw_ChainAddCursorPos ( GLFWwindow * window, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx );
+    DAS_MOD_API void DasGlfw_ChainAddMouseButton ( GLFWwindow * window, TLambda<void,const GLFWwindow*,int,int,int> func, Context * ctx );
+    DAS_MOD_API void DasGlfw_ChainAddScroll ( GLFWwindow * window, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx );
+    DAS_MOD_API void DasGlfw_ChainClear ( GLFWwindow * window );
+    DAS_MOD_API void DasGlfw_PostCursorPos ( GLFWwindow * window, double x, double y );
+    DAS_MOD_API void DasGlfw_DispatchCursorPos ( GLFWwindow * window, double x, double y );
+    DAS_MOD_API void DasGlfw_PostMouseButton ( GLFWwindow * window, int button, int action, int mods );
+    DAS_MOD_API void DasGlfw_PostScroll ( GLFWwindow * window, double xoff, double yoff );
 }

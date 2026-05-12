@@ -478,11 +478,11 @@ def from_JV(v : JsonValue const explicit?; anything : auto(TT)) {
         unsafe {
             let arr & = v.value as _array
             ret |> reserve(arr |> length)
-            for (i in range(arr |> length)) {
+            for (a in arr) {
                 if (typeinfo can_copy(anything[0])) {
-                    ret |> push_clone <| _::from_JV(arr[i], decltype_noref(anything[0]))
+                    ret |> push_clone <| _::from_JV(a, decltype_noref(anything[0]))
                 } else {
-                    ret |> emplace <| _::from_JV(arr[i], decltype_noref(anything[0]))
+                    ret |> emplace <| _::from_JV(a, decltype_noref(anything[0]))
                 }
             }
             return <- ret
