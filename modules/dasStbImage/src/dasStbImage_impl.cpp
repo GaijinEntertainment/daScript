@@ -21,3 +21,6 @@ void stbi_write_to_vec_callback ( void * context, void * data, int size ) {
     auto * src = (const uint8_t *) data;
     vec->insert(vec->end(), src, src + size);
 }
+
+// APNG (animated PNG) writer — defined here so stb's static helpers are in scope.
+#include "apng_write_impl.h"

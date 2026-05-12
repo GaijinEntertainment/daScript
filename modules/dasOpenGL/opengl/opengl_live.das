@@ -13,6 +13,7 @@ module opengl_live shared public
 
 require opengl/opengl_boost
 require live/glfw_live
+require math
 require stbimage
 require daslib/json
 require daslib/json_boost
@@ -103,9 +104,7 @@ def screenshot(input : JsonValue?) : JsonValue? {
     if (empty(fname)) { fname = "screenshot.png"; }
     var w, h : int
     live_get_framebuffer_size(w, h)
-    if (w <= 0 || h <= 0) {
-        return JV("no framebuffer")
-    }
+    return JV("no framebuffer") if (w <= 0 || h <= 0)
     var pixels : array<uint8>
     pixels |> resize(w * h * 4)
     unsafe {
@@ -128,4 +127,167 @@ def screenshot(input : JsonValue?) : JsonValue? {
         stbi_write_png(fname, w, h, 4, addr(pixels[0]), w * 4)
     }
     return JV(ScreenshotResult(saved = fname, width = w, height = h))
+}
+
+// ============================================================================
+// APNG video recording
+// ============================================================================
+//
+// Three live commands wrap a streaming APNG writer (dasStbImage's
+// stbi_apng_begin/frame/end). Capture runs from a [before_update] hook
+// at an fps throttle, with a max_seconds safety auto-stop. Encode + file I/O
+// happen on a worker thread inside the C++ writer — the render loop only
+// pays the cost of glReadPixels + a memcpy into the bounded queue.
+
+struct RecorderState {
+    writer            : void?    // StbiApngWriter* opaque handle
+    fps               : float
+    frame_interval_s  : float
+    next_capture_t    : float
+    max_seconds       : float
+    start_t           : float
+    frames_written    : int
+    width             : int
+    height            : int
+    file              : string
+}
+
+var private recorder : RecorderState
+var private recorder_active : bool = false
+
+struct RecordStartArgs {
+    @optional file        : string = "record.apng"
+    @optional fps         : float  = 30.0f
+    @optional max_seconds : float  = 60.0f   // 0 = no cap
+}
+
+struct RecordStartResult {
+    file        : string
+    fps         : float
+    width       : int
+    height      : int
+    max_seconds : float
+}
+
+[live_command(description="Begin APNG recording. Args: file, fps, max_seconds.")]
+def record_start(input : JsonValue?) : JsonValue? {
+    return JV((error = "already recording")) if (recorder_active)
+    let args = from_JV(input, type<RecordStartArgs>)
+    var w, h : int
+    live_get_framebuffer_size(w, h)
+    return JV((error = "no framebuffer")) if (w <= 0 || h <= 0)
+    var writer_ptr : void?
+    unsafe {
+        writer_ptr = stbi_apng_begin(args.file, w, h, 4)
+    }
+    return JV((error = "could not open file", file = args.file)) if (writer_ptr == null)
+    recorder.writer           = writer_ptr
+    recorder.fps              = args.fps
+    recorder.frame_interval_s = 1.0f / max(args.fps, 1.0f)
+    recorder.max_seconds      = args.max_seconds
+    recorder.start_t          = get_uptime()
+    recorder.next_capture_t   = recorder.start_t
+    recorder.frames_written   = 0
+    recorder.width            = w
+    recorder.height           = h
+    recorder.file             = args.file
+    recorder_active           = true
+    return JV(RecordStartResult(
+        file        = args.file,
+        fps         = args.fps,
+        width       = w,
+        height      = h,
+        max_seconds = args.max_seconds
+    ))
+}
+
+struct RecordStopResult {
+    saved      : string
+    frames     : int
+    dropped    : int
+    duration_s : float
+    ok         : bool
+}
+
+[live_command(description="Stop APNG recording. Returns saved path + frame count.")]
+def record_stop(input : JsonValue?) : JsonValue? {
+    return JV((error = "not recording")) if (!recorder_active)
+    var dropped : int
+    var ok      : int
+    unsafe {
+        dropped = stbi_apng_dropped(recorder.writer)
+        ok      = stbi_apng_end(recorder.writer)
+    }
+    let elapsed = get_uptime() - recorder.start_t
+    let saved   = recorder.file
+    let frames  = recorder.frames_written
+    recorder.writer = null
+    recorder_active = false
+    return JV(RecordStopResult(
+        saved      = saved,
+        frames     = frames,
+        dropped    = dropped,
+        duration_s = elapsed,
+        ok         = ok != 0
+    ))
+}
+
+struct RecordStatusResult {
+    active        : bool
+    file          : string
+    frames        : int
+    elapsed_s     : float
+    fps           : float
+    width         : int
+    height        : int
+    dropped       : int
+}
+
+[live_command(description="Recording status — active state, frame count, elapsed.")]
+def record_status(input : JsonValue?) : JsonValue? {
+    var dropped = 0
+    if (recorder_active) {
+        unsafe {
+            dropped = stbi_apng_dropped(recorder.writer)
+        }
+    }
+    return JV(RecordStatusResult(
+        active    = recorder_active,
+        file      = recorder.file,
+        frames    = recorder.frames_written,
+        elapsed_s = recorder_active ? get_uptime() - recorder.start_t : 0.0f,
+        fps       = recorder.fps,
+        width     = recorder.width,
+        height    = recorder.height,
+        dropped   = dropped
+    ))
+}
+
+// Capture hook — fires every frame via [before_update]. No-op when not active.
+[before_update]
+def record_tick() {
+    return if (!recorder_active)
+    let now = get_uptime()
+    if (recorder.max_seconds > 0.0f && (now - recorder.start_t) >= recorder.max_seconds) {
+        record_stop(null)
+        return
+    }
+    return if (now < recorder.next_capture_t)
+    recorder.next_capture_t += recorder.frame_interval_s
+    let row_bytes = recorder.width * 4
+    var pixels : array<uint8>
+    pixels |> resize(recorder.width * recorder.height * 4)
+    unsafe {
+        glReadPixels(0, 0, recorder.width, recorder.height, GL_RGBA, GL_UNSIGNED_BYTE, addr(pixels[0]))
+    }
+    let delay_ms = int(recorder.frame_interval_s * 1000.0f)
+    var ok : int
+    unsafe {
+        ok = stbi_apng_frame(recorder.writer, addr(pixels[0]), row_bytes, delay_ms)
+    }
+    if (ok != 0) {
+        recorder.frames_written++
+    } else {
+        record_stop(null)
+    }
 }

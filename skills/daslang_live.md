@@ -99,7 +99,14 @@ Manages a GLFW window that persists across reloads. Provides:
 
 ### `live/opengl_live` — OpenGL Utilities
 
-Provides the `screenshot` live command (captures framebuffer to PNG).
+Provides `screenshot` and `record_*` live commands:
+
+- `screenshot` — captures the current framebuffer to a PNG file. Args: `file` (default `"screenshot.png"`).
+- `record_start` — begin streaming APNG recording. Args: `file` (default `"record.apng"`), `fps` (default `30.0`), `max_seconds` (default `60.0`; `0` disables the cap). Capture runs from a `[before_update]` hook at the fps throttle; encode + file I/O happen on a worker thread inside `dasStbImage`'s APNG writer, so the render loop only pays glReadPixels + a memcpy into a bounded queue. Drops the oldest queued frame and bumps a drop counter if the worker falls behind.
+- `record_stop` — finalize the file (backpatches `acTL.num_frames`, writes `IEND`) and join the worker. Returns `{saved, frames, dropped, duration_s, ok}`. Auto-fires when `max_seconds` elapses.
+- `record_status` — return the recorder's current state (`active`, `frames`, `dropped`, `elapsed_s`, …).
+
+The recorded file is APNG (animated PNG) — single file, lossless, plays natively in Chrome / Firefox / Safari. Default-image fallback means `stbi_load` decodes frame 0 as a regular PNG.
 
 ### `live/decs_live` — DECS Persistence
 
@@ -248,6 +255,7 @@ def cmd_do_thing(input : JsonValue?) : JsonValue? {
 
 **Built-in commands** (from helper modules):
 - `screenshot` — from `live/opengl_live`, captures framebuffer to PNG
+- `record_start` / `record_stop` / `record_status` — from `live/opengl_live`, streaming APNG video recording
 - `help` — built-in, lists all registered commands
 
 **Convention:** Prefix game-specific commands with `cmd_` to distinguish them from built-in commands.
