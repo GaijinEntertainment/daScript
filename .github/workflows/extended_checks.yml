@@ -82,7 +82,8 @@ jobs:
         set -eux
         case "${{ matrix.target }}" in
           darwin15)
-            brew install bison openssl
+            # z3: runtime dep baked into prebuilt LLVM.dll's install_name on macOS arm64.
+            brew install bison openssl z3
             echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/usr/local/opt/bison/lib -L$(brew --prefix openssl)/lib"
             export CPPFLAGS="-I$(brew --prefix openssl)/include"

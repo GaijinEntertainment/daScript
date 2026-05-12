@@ -213,12 +213,15 @@ jobs:
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           darwin15arm64|darwin26arm64)
-            brew install bison
+            # z3 is a runtime dependency of the prebuilt LLVM.dll on macOS arm64:
+            # its install_name hardcodes /opt/homebrew/opt/z3/lib/libz3.4.15.dylib,
+            # so dlopen("LLVM.dll") fails unless homebrew z3 is present.
+            brew install bison z3
             echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/usr/local/opt/bison/lib"
             ;;
           darwin1564|darwin2664)
-            brew install bison
+            brew install bison z3
             echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
             ;;
