@@ -265,6 +265,45 @@ def public LLVMAddFunctionWithType(mod : LLVMModuleRef; name : string; typ : LLV
 }
 
 
+var g_jit_clopts_parsed = false
+
+// LLVM's cost-model thresholds for unroll / partial-unroll / unroll-and-jam
+// are compiled-in cl::opt globals. opt(1) sets them indirectly via
+// cl::ParseCommandLineOptions before parsing the -passes string; daslang's
+// JIT path does not, so the same `default<O3>` pipeline lands different
+// IR shapes (rolled outer loops, no unroll-and-jam) than `opt` produces
+// on the same input.
+//
+// Bisected against the dasProfile benchmark suite (JIT mode, 16 tests):
+//   * spectral-norm 2.77x, native 1.44x, queen 1.39x, sha256 1.17x
+//   * dict/mandelbrot/exp marginal +1-3%
+//   * 8 others within +-2%
+//   * primes -9% (tight `for (i in 2..n) if (n%i==0) return false` loop —
+//     partial unroll bloats the early-exit path without enabling vectorization)
+//
+// The three permission flags (-unroll-allow-partial + the unroll-and-jam
+// pair) are load-bearing for spectral-norm/native. The threshold quartet
+// is what pushes queen from 1.05x to 1.39x.
+[macro_function]
+def public init_jit_clopts() {
+    return if (g_jit_clopts_parsed)
+    g_jit_clopts_parsed = true
+    var argv <- [
+        "daslang-jit",
+        "-unroll-threshold=400",
+        "-unroll-partial-threshold=600",
+        "-unroll-max-count=16",
+        "-unroll-allow-partial=true",
+        "-enable-unroll-and-jam=true",
+        "-allow-unroll-and-jam=true"
+    ]
+    unsafe {
+        LLVMParseCommandLineOptions(length(argv),
+            reinterpret<string const?>(addr(argv[0])),
+            "daslang JIT cl::opts")
+    }
+}
+
 [macro_function]
 def public init_jit(cg_opt_level : uint) {
     return if (is_in_completion() || is_compiling_macros())
@@ -274,6 +313,7 @@ def public init_jit(cg_opt_level : uint) {
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
     LLVMInitializeAllAsmPrinters()
+    init_jit_clopts()
     g_ctx = LLVMContextCreate()
     g_prim_t = new PrimitiveTypes(g_ctx)
     if (LLVM_ENABLE_DIAGNOSTIC) {
