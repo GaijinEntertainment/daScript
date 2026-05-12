@@ -163,6 +163,14 @@ namespace das {
         GLFWscrollfun                   prev_scroll        = nullptr;
         GLFWkeyfun                      prev_key           = nullptr;
         GLFWcharfun                     prev_char          = nullptr;
+        // Per-callback install flags. ChainClear must NOT touch a slot the chain
+        // never installed — otherwise it would clobber a foreign callback (e.g.
+        // ImGui_ImplGlfw_KeyCallback) that was set up independently of us.
+        bool                            installed_cursor_pos   = false;
+        bool                            installed_mouse_button = false;
+        bool                            installed_scroll       = false;
+        bool                            installed_key          = false;
+        bool                            installed_char         = false;
         std::vector<GlfwChainEntry>     cursor_pos_chain;
         std::vector<GlfwChainEntry>     mouse_button_chain;
         std::vector<GlfwChainEntry>     scroll_chain;
@@ -247,6 +255,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainCursorPosDispatch ) {
             st.prev_cursor_pos = previous;
         }
+        st.installed_cursor_pos = true;
     }
     static void ensure_chain_mouse_button_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -254,6 +263,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainMouseButtonDispatch ) {
             st.prev_mouse_button = previous;
         }
+        st.installed_mouse_button = true;
     }
     static void ensure_chain_scroll_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -261,6 +271,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainScrollDispatch ) {
             st.prev_scroll = previous;
         }
+        st.installed_scroll = true;
     }
     static void ensure_chain_key_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -268,6 +279,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainKeyDispatch ) {
             st.prev_key = previous;
         }
+        st.installed_key = true;
     }
     static void ensure_chain_char_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -275,6 +287,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainCharDispatch ) {
             st.prev_char = previous;
         }
+        st.installed_char = true;
     }
 
     void DasGlfw_ChainAddCursorPos ( GLFWwindow * w, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx ) {
@@ -305,16 +318,16 @@ namespace das {
     void DasGlfw_ChainClear ( GLFWwindow * w ) {
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
-        // Restore the previous GLFW callbacks (e.g. ImGui_ImplGlfw's) before
-        // tearing down the chain state; otherwise the dispatcher stays
-        // installed but early-returns on every real event because the map
-        // entry is gone, silently dropping input.
+        // Restore previous GLFW callbacks (e.g. ImGui_ImplGlfw's) only for the
+        // slots we actually installed. Restoring an uninstalled slot would
+        // overwrite a foreign callback set up independently of us with the
+        // default-null prev_*, silently dropping that input.
         auto & st = it->second;
-        glfwSetCursorPosCallback   (w, st.prev_cursor_pos);
-        glfwSetMouseButtonCallback (w, st.prev_mouse_button);
-        glfwSetScrollCallback      (w, st.prev_scroll);
-        glfwSetKeyCallback         (w, st.prev_key);
-        glfwSetCharCallback        (w, st.prev_char);
+        if ( st.installed_cursor_pos   ) glfwSetCursorPosCallback   (w, st.prev_cursor_pos);
+        if ( st.installed_mouse_button ) glfwSetMouseButtonCallback (w, st.prev_mouse_button);
+        if ( st.installed_scroll       ) glfwSetScrollCallback      (w, st.prev_scroll);
+        if ( st.installed_key          ) glfwSetKeyCallback         (w, st.prev_key);
+        if ( st.installed_char         ) glfwSetCharCallback        (w, st.prev_char);
         g_GlfwChain.erase(it);
     }
 

@@ -15,6 +15,9 @@ build-asan/
 build-ubsan/
 build-linux-asan/
 build-linux/
+# daspkg per-package cmake build dirs (utils/daspkg/commands.das:976 -> {pkg_dir}/_build)
+_build/
+modules/**/_build/
 # All build binaries stored here
 bin/
 # JIT stores dll's here

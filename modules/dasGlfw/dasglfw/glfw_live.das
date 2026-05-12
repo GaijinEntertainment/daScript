@@ -24,6 +24,7 @@ require opengl/opengl_cache
 require daslib/archive
 require daslib/json
 require daslib/json_boost
+require daslib/utf8_utils
 require live/live_commands
 require live_host
 require math
@@ -591,23 +592,28 @@ struct KeyTypeArgs {
     @optional per_char_ms      : int    = 60
 }
 
-[live_command(description="Stream text as synthetic key+char events. Args: text, total_duration_s? (preferred) | per_char_ms? (default 60)")]
+[live_command(description="Stream text as synthetic key+char events. Args: text (UTF-8; non-ASCII emits char-only events), total_duration_s? (preferred) | per_char_ms? (default 60)")]
 def key_type(input : JsonValue?) : JsonValue? {
     return JV((error = "no window")) if (live_window == null)
     let args = from_JV(input, type<KeyTypeArgs>)
     return JV((error = "empty text")) if (empty(args.text))
+    // Decode UTF-8 to codepoints so pacing + ASCII auto-shift work per character,
+    // not per byte. Non-ASCII codepoints emit a char-only event (no key press) —
+    // mirrors how GLFW dispatches IME / dead-key composition results to the
+    // char callback without a paired key event.
+    let cps <- utf8_decode(args.text)
+    let n_chars = length(cps)
     var per_char_ms = max(1, args.per_char_ms)
     if (args.total_duration_s > 0.0f) {
-        per_char_ms = max(1, int(args.total_duration_s * 1000.0f) / length(args.text))
+        per_char_ms = max(1, int(args.total_duration_s * 1000.0f) / max(1, n_chars))
     }
     reset_key_timeline_state()
     var t = 0
     // Worst case: 5 events per char (Shift down, key down, char, key up, Shift up).
-    key_timeline |> reserve(length(args.text) * 5)
-    peek_data(args.text) $(arr) {
-        for (b in arr) {
-            let c     = int(b)
-            let cp    = uint(b)
+    key_timeline |> reserve(n_chars * 5)
+    for (cp in cps) {
+        if (cp < 0x80u) {
+            let c     = int(cp)
             let kc    = base_keycode_ascii(c)
             let shift = needs_shift_ascii(c)
             let mods  = shift ? int(GLFW_MOD_SHIFT) : 0
@@ -624,12 +630,14 @@ def key_type(input : JsonValue?) : JsonValue? {
             if (shift) {
                 key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.release, keycode = GLFW_KEY_LEFT_SHIFT))
             }
-            t += per_char_ms
+        } else {
+            key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.char_, codepoint = cp))
         }
+        t += per_char_ms
     }
     key_play_start_t = get_uptime()
     key_playing      = true
-    return JV((queued = length(key_timeline), per_char_ms = per_char_ms))
+    return JV((queued = length(key_timeline), per_char_ms = per_char_ms, chars = n_chars))
 }
 
 struct KeyChordArgs {
@@ -637,7 +645,7 @@ struct KeyChordArgs {
     key  : string = ""
 }
 
-[live_command(description="Synthetic chord. Args: mods (array of \"Ctrl\"|\"Shift\"|\"Alt\"|\"Super\"|\"Cmd\"|\"Meta\"), key (single ASCII char or GLFW key name)")]
+[live_command(description="Synthetic chord. Args: mods (array of \"Ctrl\"|\"Shift\"|\"Alt\"|\"Super\"|\"Cmd\"|\"Meta\"), key (single ASCII character)")]
 def key_chord(input : JsonValue?) : JsonValue? {
     return JV((error = "no window")) if (live_window == null)
     let args = from_JV(input, type<KeyChordArgs>)
