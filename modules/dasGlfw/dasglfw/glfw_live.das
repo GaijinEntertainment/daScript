@@ -197,6 +197,12 @@ def private synth_mouse_button(button, action : int) {
 }
 
 def private release_held_buttons() {
+    // No window = nothing to dispatch to; drop bookkeeping (matches
+    // release_held_keys above).
+    if (live_window == null) {
+        synth_held_buttons |> clear()
+        return
+    }
     // Same snapshot-before-iterate pattern as release_held_keys —
     // synth_mouse_button erases from synth_held_buttons.
     var held : array<int>
@@ -505,6 +511,13 @@ def private reset_key_timeline_state() {
 }
 
 def private release_held_keys() {
+    // No window = nothing to dispatch to; drop bookkeeping and return so
+    // key_stop stays safe to call after live_destroy_window() (or before
+    // live_create_window()) without passing a null GLFWwindow* into C++.
+    if (live_window == null) {
+        synth_held_keys |> clear()
+        return
+    }
     // Snapshot first — synth_key_release erases from synth_held_keys, which
     // would invalidate iteration. Same pattern as the `for (k in keys(t))` /
     // mutate-t fix in feedback_for_keys_table_locked.md.
