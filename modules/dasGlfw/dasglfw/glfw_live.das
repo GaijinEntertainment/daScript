@@ -167,6 +167,9 @@ var private last_move_t  : int = -1
 var public synth_click_button : int = -1
 var public synth_click_action : int = 0   // 1 = press, 0 = release
 var public synth_click_t      : float = -1.0    //! get_uptime() at last click; -1 = no click yet
+// Currently-synth-pressed buttons. Drained by mouse_stop so an interrupted
+// drag/timeline doesn't leave ImGui believing a button is held.
+var private synth_held_buttons : table<int>
 // Synth events go through dasGLFW's chain dispatcher only — ImGui-GLFW (and
 // any other chain listener) sees them via its installed callback. We never
 // glfwSetCursorPos: the OS cursor lives outside the GL back buffer (the
@@ -183,9 +186,27 @@ def private synth_cursor_pos(x, y : float) {
 
 def private synth_mouse_button(button, action : int) {
     glfw_post_mouse_button(live_window, button, action, 0)
+    if (action == 1) {
+        synth_held_buttons |> insert(button)
+    } else {
+        synth_held_buttons |> erase(button)
+    }
     synth_click_button = button
     synth_click_action = action
     synth_click_t      = get_uptime()
+}
+
+def private release_held_buttons() {
+    // Same snapshot-before-iterate pattern as release_held_keys —
+    // synth_mouse_button erases from synth_held_buttons.
+    var held : array<int>
+    held |> reserve(length(synth_held_buttons))
+    for (b in keys(synth_held_buttons)) {
+        held |> push(b)
+    }
+    for (b in held) {
+        synth_mouse_button(b, 0)
+    }
 }
 
 def public get_synth_cursor() : tuple<bool; float; float> {
@@ -336,8 +357,10 @@ def mouse_play(input : JsonValue?) : JsonValue? {
 [live_command(description="Stop synthetic playback and clear the timeline.")]
 def mouse_stop(input : JsonValue?) : JsonValue? {
     let was_playing = playing
+    let released    = length(synth_held_buttons)
+    release_held_buttons()
     reset_timeline_state()
-    return JV((stopped = was_playing))
+    return JV((stopped = was_playing, released = released))
 }
 
 struct MouseStatusResult {
@@ -347,6 +370,7 @@ struct MouseStatusResult {
     cursor_y    : float
     queue_idx   : int
     queue_total : int
+    held_count  : int
 }
 
 [live_command(description="Synthetic-mouse playback status.")]
@@ -358,7 +382,8 @@ def mouse_status(input : JsonValue?) : JsonValue? {
         cursor_x    = cursor_x,
         cursor_y    = cursor_y,
         queue_idx   = play_idx,
-        queue_total = length(timeline)
+        queue_total = length(timeline),
+        held_count  = length(synth_held_buttons)
     ))
 }
 
@@ -477,6 +502,20 @@ def private reset_key_timeline_state() {
     key_timeline |> clear()
     key_play_idx = 0
     key_playing  = false
+}
+
+def private release_held_keys() {
+    // Snapshot first — synth_key_release erases from synth_held_keys, which
+    // would invalidate iteration. Same pattern as the `for (k in keys(t))` /
+    // mutate-t fix in feedback_for_keys_table_locked.md.
+    var held : array<int>
+    held |> reserve(length(synth_held_keys))
+    for (kc in keys(synth_held_keys)) {
+        held |> push(kc)
+    }
+    for (kc in held) {
+        synth_key_release(kc, 0, 0)
+    }
 }
 
 struct KeyPressArgs {
@@ -737,11 +776,13 @@ def key_play(input : JsonValue?) : JsonValue? {
     return JV((queued = length(key_timeline)))
 }
 
-[live_command(description="Stop synthetic key playback and clear the timeline.")]
+[live_command(description="Stop synthetic key playback and clear the timeline. Releases any keys still synth-held (e.g. modifiers from an interrupted key_chord) so ImGui doesn't inherit stuck modifier state.")]
 def key_stop(input : JsonValue?) : JsonValue? {
     let was_playing = key_playing
+    let released    = length(synth_held_keys)
+    release_held_keys()
     reset_key_timeline_state()
-    return JV((stopped = was_playing))
+    return JV((stopped = was_playing, released = released))
 }
 
 struct KeyStatusResult {
