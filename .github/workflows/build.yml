@@ -101,14 +101,6 @@ jobs:
             archive_ext: tar.gz
 
           - target: darwin15
-            architecture: 64
-            release_target: darwin15
-            release_arch: x86_64
-            runner: macos-15-large # Intel x86_64, 12 CPU
-            architecture_string: x86_64
-            archive_ext: tar.gz
-
-          - target: darwin15
             architecture: arm64
             release_target: darwin15
             release_arch: arm64
@@ -173,9 +165,11 @@ jobs:
             architecture_string: x64
 
         exclude:
+          # macOS Intel (darwin15 x86_64) prebuilt LLVM.dll isn't shipped by
+          # llvm-shared-builds v22.1.5 and Apple no longer makes new Intel
+          # macOS runners worth gating on. Drop entirely.
           - target: darwin15
             architecture: 64
-            cmake_preset: Debug
 
           - target: darwin15
             architecture: 32
@@ -213,12 +207,15 @@ jobs:
         set -eux
         case "${{ matrix.target }}${{ matrix.architecture }}" in
           darwin15arm64|darwin26arm64)
-            brew install bison
+            # z3 is a runtime dependency of the prebuilt LLVM.dll on macOS arm64:
+            # its install_name hardcodes /opt/homebrew/opt/z3/lib/libz3.4.15.dylib,
+            # so dlopen("LLVM.dll") fails unless homebrew z3 is present.
+            brew install bison z3
             echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/usr/local/opt/bison/lib"
             ;;
           darwin1564|darwin2664)
-            brew install bison
+            brew install bison z3
             echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
             ;;

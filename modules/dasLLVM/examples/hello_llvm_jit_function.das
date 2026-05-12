@@ -18,7 +18,6 @@ def add_two_ints(a, b : int) : int {
 [export]
 def main {
     var g_prim_t = new PrimitiveTypes(LLVMGetGlobalContext())
-    LLVMContextSetOpaquePointers(LLVMGetGlobalContext(), 0)
     var mod = LLVMModuleCreateWithName("my_module")
     // NOTE: we are making this example compatible with upcomming JIT, i.e. function signature is that of a JIT function
     // Context * context, vec4f * args, void * CMRES

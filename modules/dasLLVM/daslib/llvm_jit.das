@@ -6511,20 +6511,27 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
 def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint) {
     return if (is_in_completion() || is_compiling_macros() || is_folding())
     return if (g_failed || !LLVM_ENABLE_OPT_PASS)
-    var pmb = LLVMPassManagerBuilderCreate()
-
-    LLVMPassManagerBuilderSetOptLevel(pmb, opt_level)
-    LLVMPassManagerBuilderSetSizeLevel(pmb, size_level)
-    LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, inline_threshold)
-
-    var pm = LLVMCreatePassManager()
-    LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
-    // LLVMAddLoopVectorizePass(pm)
-    // LLVMAddSLPVectorizePass(pm)
-    // LLVMPassManagerBuilderPopulateLTOPassManager(pmb, pm, 1, 1)
-    LLVMRunPassManager(pm, g_mod)
-    LLVMDisposePassManager(pm)
-    LLVMPassManagerBuilderDispose(pmb)
+    var pbopts = LLVMCreatePassBuilderOptions()
+    // Ensure pbopts is released even if the pass run fails and we panic.
+    defer() {
+        LLVMDisposePassBuilderOptions(pbopts)
+    }
+    LLVMPassBuilderOptionsSetLoopVectorization(pbopts, 1)
+    LLVMPassBuilderOptionsSetSLPVectorization(pbopts, 1)
+    LLVMPassBuilderOptionsSetLoopUnrolling(pbopts, 1)
+    LLVMPassBuilderOptionsSetInlinerThreshold(pbopts, int(inline_threshold))
+    let pipeline = (size_level >= 2u ? "default<Oz>"
+                  : (size_level == 1u ? "default<Os>"
+                                      : "default<O{opt_level}>"))
+    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
+        let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
+        if (err != null) {
+            let msg = LLVMGetErrorMessage(err)
+            let local_msg = string(msg)
+            LLVMDisposeErrorMessage(msg)
+            panic("LLVM pass run failed: {local_msg}")
+        }
+    }
 }
 
 class public DisableJitVisitor : AstVisitor {
