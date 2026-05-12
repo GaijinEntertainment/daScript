@@ -161,9 +161,21 @@ namespace das {
         GLFWcursorposfun                prev_cursor_pos    = nullptr;
         GLFWmousebuttonfun              prev_mouse_button  = nullptr;
         GLFWscrollfun                   prev_scroll        = nullptr;
+        GLFWkeyfun                      prev_key           = nullptr;
+        GLFWcharfun                     prev_char          = nullptr;
+        // Per-callback install flags. ChainClear must NOT touch a slot the chain
+        // never installed — otherwise it would clobber a foreign callback (e.g.
+        // ImGui_ImplGlfw_KeyCallback) that was set up independently of us.
+        bool                            installed_cursor_pos   = false;
+        bool                            installed_mouse_button = false;
+        bool                            installed_scroll       = false;
+        bool                            installed_key          = false;
+        bool                            installed_char         = false;
         std::vector<GlfwChainEntry>     cursor_pos_chain;
         std::vector<GlfwChainEntry>     mouse_button_chain;
         std::vector<GlfwChainEntry>     scroll_chain;
+        std::vector<GlfwChainEntry>     key_chain;
+        std::vector<GlfwChainEntry>     char_chain;
     };
 
     static thread_local das_map<void *, GlfwChainState> g_GlfwChain;
@@ -207,6 +219,32 @@ namespace das {
         }
     }
 
+    void DasGlfw_ChainKeyDispatch ( GLFWwindow * w, int key, int scancode, int action, int mods ) {
+        auto it = g_GlfwChain.find(w);
+        if ( it == g_GlfwChain.end() ) return;
+        auto & st = it->second;
+        if ( st.prev_key ) st.prev_key(w, key, scancode, action, mods);
+        for ( auto & e : st.key_chain ) {
+            if ( e.context ) {
+                das_invoke_lambda<void>::invoke<GLFWwindow *, int, int, int, int>(
+                    e.context, nullptr, e.lambda, w, key, scancode, action, mods);
+            }
+        }
+    }
+
+    void DasGlfw_ChainCharDispatch ( GLFWwindow * w, unsigned int codepoint ) {
+        auto it = g_GlfwChain.find(w);
+        if ( it == g_GlfwChain.end() ) return;
+        auto & st = it->second;
+        if ( st.prev_char ) st.prev_char(w, codepoint);
+        for ( auto & e : st.char_chain ) {
+            if ( e.context ) {
+                das_invoke_lambda<void>::invoke<GLFWwindow *, unsigned int>(
+                    e.context, nullptr, e.lambda, w, codepoint);
+            }
+        }
+    }
+
     // Idempotent dispatcher install: always re-calls glfwSet*Callback so a
     // non-self previous is captured as the chain's "prev" (preserves whatever
     // ImGui_ImplGlfw or other backend installed). Self-reinstalls are no-ops
@@ -217,6 +255,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainCursorPosDispatch ) {
             st.prev_cursor_pos = previous;
         }
+        st.installed_cursor_pos = true;
     }
     static void ensure_chain_mouse_button_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -224,6 +263,7 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainMouseButtonDispatch ) {
             st.prev_mouse_button = previous;
         }
+        st.installed_mouse_button = true;
     }
     static void ensure_chain_scroll_installed ( GLFWwindow * w ) {
         auto & st = g_GlfwChain[w];
@@ -231,6 +271,23 @@ namespace das {
         if ( previous && previous != &DasGlfw_ChainScrollDispatch ) {
             st.prev_scroll = previous;
         }
+        st.installed_scroll = true;
+    }
+    static void ensure_chain_key_installed ( GLFWwindow * w ) {
+        auto & st = g_GlfwChain[w];
+        auto previous = glfwSetKeyCallback(w, DasGlfw_ChainKeyDispatch);
+        if ( previous && previous != &DasGlfw_ChainKeyDispatch ) {
+            st.prev_key = previous;
+        }
+        st.installed_key = true;
+    }
+    static void ensure_chain_char_installed ( GLFWwindow * w ) {
+        auto & st = g_GlfwChain[w];
+        auto previous = glfwSetCharCallback(w, DasGlfw_ChainCharDispatch);
+        if ( previous && previous != &DasGlfw_ChainCharDispatch ) {
+            st.prev_char = previous;
+        }
+        st.installed_char = true;
     }
 
     void DasGlfw_ChainAddCursorPos ( GLFWwindow * w, TLambda<void,const GLFWwindow*,double,double> func, Context * ctx ) {
@@ -248,17 +305,29 @@ namespace das {
         g_GlfwChain[w].scroll_chain.push_back({ func, ctx });
     }
 
+    void DasGlfw_ChainAddKey ( GLFWwindow * w, TLambda<void,const GLFWwindow*,int,int,int,int> func, Context * ctx ) {
+        ensure_chain_key_installed(w);
+        g_GlfwChain[w].key_chain.push_back({ func, ctx });
+    }
+
+    void DasGlfw_ChainAddChar ( GLFWwindow * w, TLambda<void,const GLFWwindow*,unsigned int> func, Context * ctx ) {
+        ensure_chain_char_installed(w);
+        g_GlfwChain[w].char_chain.push_back({ func, ctx });
+    }
+
     void DasGlfw_ChainClear ( GLFWwindow * w ) {
         auto it = g_GlfwChain.find(w);
         if ( it == g_GlfwChain.end() ) return;
-        // Restore the previous GLFW callbacks (e.g. ImGui_ImplGlfw's) before
-        // tearing down the chain state; otherwise the dispatcher stays
-        // installed but early-returns on every real event because the map
-        // entry is gone, silently dropping input.
+        // Restore previous GLFW callbacks (e.g. ImGui_ImplGlfw's) only for the
+        // slots we actually installed. Restoring an uninstalled slot would
+        // overwrite a foreign callback set up independently of us with the
+        // default-null prev_*, silently dropping that input.
         auto & st = it->second;
-        glfwSetCursorPosCallback   (w, st.prev_cursor_pos);
-        glfwSetMouseButtonCallback (w, st.prev_mouse_button);
-        glfwSetScrollCallback      (w, st.prev_scroll);
+        if ( st.installed_cursor_pos   ) glfwSetCursorPosCallback   (w, st.prev_cursor_pos);
+        if ( st.installed_mouse_button ) glfwSetMouseButtonCallback (w, st.prev_mouse_button);
+        if ( st.installed_scroll       ) glfwSetScrollCallback      (w, st.prev_scroll);
+        if ( st.installed_key          ) glfwSetKeyCallback         (w, st.prev_key);
+        if ( st.installed_char         ) glfwSetCharCallback        (w, st.prev_char);
         g_GlfwChain.erase(it);
     }
 
@@ -286,6 +355,16 @@ namespace das {
     void DasGlfw_PostScroll ( GLFWwindow * w, double xoff, double yoff ) {
         ensure_chain_scroll_installed(w);
         DasGlfw_ChainScrollDispatch(w, xoff, yoff);
+    }
+
+    void DasGlfw_PostKey ( GLFWwindow * w, int key, int scancode, int action, int mods ) {
+        ensure_chain_key_installed(w);
+        DasGlfw_ChainKeyDispatch(w, key, scancode, action, mods);
+    }
+
+    void DasGlfw_PostChar ( GLFWwindow * w, unsigned int codepoint ) {
+        ensure_chain_char_installed(w);
+        DasGlfw_ChainCharDispatch(w, codepoint);
     }
 
     void DasGlfw_DestroyWindow ( GLFWwindow * window ) {
@@ -335,6 +414,14 @@ namespace das {
             SideEffects::worstDefault,"DasGlfw_PostMouseButton");
         addExtern<DAS_BIND_FUN(DasGlfw_PostScroll)>(*this,lib,"glfw_post_scroll",
             SideEffects::worstDefault,"DasGlfw_PostScroll");
+        addExtern<DAS_BIND_FUN(DasGlfw_ChainAddKey)>(*this,lib,"glfw_chain_add_key",
+            SideEffects::worstDefault,"DasGlfw_ChainAddKey");
+        addExtern<DAS_BIND_FUN(DasGlfw_ChainAddChar)>(*this,lib,"glfw_chain_add_char",
+            SideEffects::worstDefault,"DasGlfw_ChainAddChar");
+        addExtern<DAS_BIND_FUN(DasGlfw_PostKey)>(*this,lib,"glfw_post_key",
+            SideEffects::worstDefault,"DasGlfw_PostKey");
+        addExtern<DAS_BIND_FUN(DasGlfw_PostChar)>(*this,lib,"glfw_post_char",
+            SideEffects::worstDefault,"DasGlfw_PostChar");
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeWindow)>(*this, lib, "glfwGetNativeWindow",SideEffects::worstDefault, "DAS_glfwGetNativeWindow")
             ->args({"window"});
         addExtern<DAS_BIND_FUN(DAS_glfwGetNativeDisplay)>(*this, lib, "glfwGetNativeDisplay",SideEffects::worstDefault, "DAS_glfwGetNativeDisplay");
