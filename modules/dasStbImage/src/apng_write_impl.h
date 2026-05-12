@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <climits>
 #include <array>
 #include <string>
 #include <vector>
@@ -184,6 +185,9 @@ inline bool ApngWriter::enqueue(const void *pixels, int stride_bytes, int delay_
     // least row_bytes. Negative stride (bottom-up) is not supported here;
     // callers should flip in their pixel buffer instead.
     if (stride_bytes <= 0 || (size_t)stride_bytes < row_bytes) return false;
+    // Guard size_t multiply: row_bytes * h would wrap on 32-bit hosts for
+    // very large frames; under-allocation here means OOB writes below.
+    if ((size_t)h != 0 && row_bytes > SIZE_MAX / (size_t)h) return false;
     std::unique_lock<std::mutex> lk(mu);
     if (errored) return false;
     if ((int)queue.size() >= max_queue) {
@@ -243,8 +247,16 @@ inline bool ApngWriter::emit_frame(Frame &f) {
         }
     }
 
-    // Build deflate input: [filter=0x00 || row] per scanline.
-    std::vector<uint8_t> in((row_bytes + 1) * (size_t)h);
+    // Build deflate input: [filter=0x00 || row] per scanline. Guard the size_t
+    // multiply and the int cast going into stbi_zlib_compress -- enqueue() has
+    // already rejected dimensions that can't form a row, but the per-frame
+    // buffer adds one byte per row and feeds an int-sized API.
+    size_t row_plus_filter = row_bytes + 1;
+    if (row_plus_filter < row_bytes) return false;
+    if ((size_t)h != 0 && row_plus_filter > SIZE_MAX / (size_t)h) return false;
+    size_t in_size = row_plus_filter * (size_t)h;
+    if (in_size > (size_t)INT_MAX) return false;
+    std::vector<uint8_t> in(in_size);
     {
         uint8_t *p = in.data();
         for (int y = 0; y < h; y++) {

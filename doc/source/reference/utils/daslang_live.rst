@@ -347,7 +347,7 @@ Helper modules
    * - ``live/glfw_live``
      - GLFW window that persists across reloads + synthetic mouse driver.
    * - ``live/opengl_live``
-     - OpenGL screenshot command.
+     - OpenGL screenshot + APNG video recording commands.
    * - ``live/decs_live``
      - Auto-serialization of DECS entities across reloads.
    * - ``live/live_commands``
