@@ -631,33 +631,52 @@ def public build_block_type {
     ]
 }
 
+// opt_level: 0..3 — picks LLVMCodeGenOptLevel for codegen-side passes
+// use_host_cpu: when true, plumb the host CPU name + feature set into the
+//   TargetMachine. Without this, TargetTransformInfo returns a generic
+//   baseline cost model, which throttles loop unrolling, register-pressure
+//   estimation, and vectorization decisions for the IR-level pipeline
+//   driven by LLVMRunPasses. Use true for JIT and JIT-DLL-cache emission
+//   (the artifact only ever runs on this host); use false for redistributable
+//   exe/dll emission where the binary must run on any compatible CPU.
 [macro_function]
-def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void>) {
+def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
+                                       blk : block<(LLVMTargetMachineRef) : void>) {
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
     LLVMInitializeAllTargetMCs()
     LLVMInitializeAllAsmPrinters()
 
-    // let triple = "x86_64-pc-linux-gnu"
     let triple = LLVMGetDefaultTargetTriple()
 
-    // Find the target using the triple
     var target : LLVMTarget?
     let error : string?
     LLVMGetTargetFromTriple(triple, unsafe(addr(target)), error)
 
+    let cpu = use_host_cpu ? LLVMGetHostCPUName() : ""
+    let features = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
+    let cg_level = (
+        (opt_level >= 3u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelAggressive
+      : (opt_level >= 2u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelDefault
+      : (opt_level >= 1u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelLess
+                          : LLVMCodeGenOptLevel.LLVMCodeGenLevelNone)
+
     let targetMachine = LLVMCreateTargetMachine(
         target,
         triple,
-        "", // CPU
-        "", // Features
-        LLVMCodeGenOptLevel.LLVMCodeGenLevelDefault,
+        cpu,
+        features,
+        cg_level,
         LLVMRelocMode.LLVMRelocPIC, // PIC in order to have shared object
         LLVMCodeModel.Default
     )
 
     invoke(blk, targetMachine)
 
+    if (use_host_cpu) {
+        LLVMDisposeMessage(cpu)
+        LLVMDisposeMessage(features)
+    }
     LLVMDisposeMessage(triple)
     LLVMDisposeTargetMachine(targetMachine)
 }
@@ -668,7 +687,8 @@ def public with_default_target_machine(blk : block<(LLVMTargetMachineRef) : void
 // @path_to_linker - path to clang-cl on Windows. By default we'll use clang-cl from LLVM package
 // on Windows, default otherwise.
 def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string; link_whole_lib : bool) {
-    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
+    // JIT DLL cache: emitted artifact only ever runs on this host.
+    with_default_target_machine(3u, true) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
@@ -678,7 +698,8 @@ def public write_dll(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
 }
 
 def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascript_lib, path_to_linker : string; link_whole_lib : bool) {
-    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
+    // Standalone exe: must run on any compatible CPU, keep generic.
+    with_default_target_machine(3u, false) $(targetMachine : LLVMTargetMachineRef) {
         let error : string?
         let file = add_obj_extension(out_path)
         let filetype = LLVMCodeGenFileType.LLVMObjectFile

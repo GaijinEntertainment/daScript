@@ -6523,7 +6523,10 @@ def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_thre
     let pipeline = (size_level >= 2u ? "default<Oz>"
                   : (size_level == 1u ? "default<Os>"
                                       : "default<O{opt_level}>"))
-    with_default_target_machine() $(targetMachine : LLVMTargetMachineRef) {
+    // Pass user opt_level + host CPU info so TTI cost models match the
+    // machine we'll actually run on (otherwise loop unrolling, inlining,
+    // and vectorization fall back to a generic baseline).
+    with_default_target_machine(opt_level, true) $(targetMachine : LLVMTargetMachineRef) {
         let err = LLVMRunPasses(g_mod, pipeline, targetMachine, pbopts)
         if (err != null) {
             let msg = LLVMGetErrorMessage(err)
