@@ -6,6 +6,35 @@ require daslib/strings_boost
 require daslib/functional
 require daslib/clargs
 
+// Per-target initializer suffixes we have to consider — these are the
+// LLVMInitialize<X>{Suffix} families that LLVM-C emits in Target.h /
+// TargetMachine.h / Disassembler.h via .def expansion.
+let private per_target_init_suffixes <- array<string>(
+    "TargetInfo", "Target", "TargetMC", "AsmPrinter", "AsmParser", "Disassembler"
+)
+
+// Targets whose Initialize* symbols are guaranteed to exist in every shipping
+// prebuilt LLVM.dll (linux x86_64, linux arm64, mac arm64, windows x86_64).
+// Anything else is filtered out at regen time to keep the binding loadable.
+let private universal_targets <- array<string>(
+    "X86", "AArch64", "ARM"
+)
+
+def private skip_per_target_initializer(function_name : string) : bool {
+    return false if (!(function_name |> starts_with("LLVMInitialize")))
+    for (suffix in per_target_init_suffixes) {
+        if (function_name |> ends_with(suffix)) {
+            // Strip "LLVMInitialize" prefix + the suffix, leaves the target name.
+            let target = function_name |> slice(length("LLVMInitialize"), length(function_name) - length(suffix))
+            for (t in universal_targets) {
+                return false if (target == t)
+            }
+            return true
+        }
+    }
+    return false
+}
+
 [CommandLineArgs]
 struct Config {
     @clarg_short = "i"
@@ -151,8 +180,16 @@ class LlvmGenDinamic : DasGenBind {
         let function_name = string(clang_getCursorSpelling(c))
         if (function_name == "LLVMInitializeCore" || // Defined twice in LLVM C API
             function_name |> starts_with("LLVMInitializeAll") || // It's static macro function, implemented on das manually
-            function_name |> starts_with("LLVMInitializeNative")) // It's static macro function, implemented on das manually
-        {
+            function_name |> starts_with("LLVMInitializeNative") || // It's static macro function, implemented on das manually
+            // Per-target LLVMInitialize<X><Suffix> bindings — only X86 / AArch64 / ARM
+            // are universally exported by prebuilt LLVM.dll across all the platforms
+            // we ship (linux x86_64 / linux arm64 / macOS arm64 / windows x86_64).
+            // The Windows build of LLVM.dll omits {SystemZ,M68k,VE,Xtensa,XCore,Sparc}
+            // (Disassembler+AsmPrinter) and macOS builds vary similarly. daslib JIT
+            // only needs the host target, so skipping every per-target initializer
+            // outside the X86/AArch64/ARM set keeps the binding loadable everywhere.
+            skip_per_target_initializer(function_name)
+            ) {
             return true
         }
         let funf = clang_getCursorLocationFileName(c)
