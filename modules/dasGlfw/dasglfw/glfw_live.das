@@ -156,6 +156,12 @@ var private play_idx     : int = 0
 var private playing      : bool = false
 var private cursor_x     : float = 0.0
 var private cursor_y     : float = 0.0
+// Sticky: true once *any* synth event has fired (cursor move OR button).
+// Overlays trust the last-known synth position for the entire session once
+// flipped — without this, after the timeline drains `effective_cursor_pos`
+// falls back to GetMousePos() (real OS cursor), and the recording's cursor
+// sprite jumps off-screen whenever the user's physical mouse is elsewhere.
+var private synth_cursor_owned : bool = false
 // Cached waypoint for between-move interpolation. -1 = no prior move consumed.
 var private last_move_x  : float = 0.0
 var private last_move_y  : float = 0.0
@@ -181,6 +187,7 @@ var private synth_held_buttons : table<int>
 def private synth_cursor_pos(x, y : float) {
     cursor_x = x
     cursor_y = y
+    synth_cursor_owned = true
     glfw_dispatch_cursor_pos(live_window, double(x), double(y))
 }
 
@@ -191,9 +198,10 @@ def private synth_mouse_button(button, action : int) {
     } else {
         synth_held_buttons |> erase(button)
     }
-    synth_click_button = button
-    synth_click_action = action
-    synth_click_t      = get_uptime()
+    synth_click_button  = button
+    synth_click_action  = action
+    synth_click_t       = get_uptime()
+    synth_cursor_owned  = true
 }
 
 def private release_held_buttons() {
@@ -216,13 +224,17 @@ def private release_held_buttons() {
 }
 
 def public get_synth_cursor() : tuple<bool; float; float> {
-    //! (active, x, y). When active=true the synthetic driver owns the cursor
-    //! position — overlays (mouse_trail, cursor_sprite in imgui_visual_aids)
-    //! should render against (x, y) instead of GetMousePos() since the
-    //! per-frame ImGui_ImplGlfw polling will otherwise overwrite io.MousePos
-    //! with the real OS cursor on focused windows. Active during mouse_play
-    //! and mouse_move_to playback.
-    return (playing, cursor_x, cursor_y)
+    //! (owned, x, y). When owned=true the synthetic driver has fired at least
+    //! one event during this session — overlays (mouse_trail, cursor_sprite in
+    //! imgui_visual_aids) should render against (x, y) instead of GetMousePos()
+    //! since the per-frame ImGui_ImplGlfw polling will otherwise overwrite
+    //! io.MousePos with the real OS cursor on focused windows.
+    //!
+    //! Sticky once flipped — without that, after a mouse_play timeline drains
+    //! the cursor sprite would jump to GetMousePos() (the real OS cursor),
+    //! and any APNG recording would lose the cursor whenever the user's
+    //! physical mouse is over another window.
+    return (synth_cursor_owned, cursor_x, cursor_y)
 }
 
 def private reset_timeline_state() {
@@ -370,26 +382,28 @@ def mouse_stop(input : JsonValue?) : JsonValue? {
 }
 
 struct MouseStatusResult {
-    playing     : bool
-    elapsed_ms  : int
-    cursor_x    : float
-    cursor_y    : float
-    queue_idx   : int
-    queue_total : int
-    held_count  : int
+    playing       : bool
+    elapsed_ms    : int
+    cursor_x      : float
+    cursor_y      : float
+    queue_idx     : int
+    queue_total   : int
+    held_count    : int
+    cursor_owned  : bool
 }
 
 [live_command(description="Synthetic-mouse playback status.")]
 def mouse_status(input : JsonValue?) : JsonValue? {
     let elapsed = playing ? int((get_uptime() - play_start_t) * 1000.0) : 0
     return JV(MouseStatusResult(
-        playing     = playing,
-        elapsed_ms  = elapsed,
-        cursor_x    = cursor_x,
-        cursor_y    = cursor_y,
-        queue_idx   = play_idx,
-        queue_total = length(timeline),
-        held_count  = length(synth_held_buttons)
+        playing       = playing,
+        elapsed_ms    = elapsed,
+        cursor_x      = cursor_x,
+        cursor_y      = cursor_y,
+        queue_idx     = play_idx,
+        queue_total   = length(timeline),
+        held_count    = length(synth_held_buttons),
+        cursor_owned  = synth_cursor_owned
     ))
 }
 
