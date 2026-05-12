@@ -2,9 +2,10 @@
 //
 // This header MUST be #included from a translation unit that has
 //   #define STB_IMAGE_WRITE_IMPLEMENTATION
-// already in effect, because we reuse stb's internal helpers
-// (stbiw__crc32) and externally-linkable stbi_zlib_compress, plus
-// the stbi_write_png_compression_level global.
+// already in effect, because we reuse stb's externally-linkable
+// stbi_zlib_compress and the stbi_write_png_compression_level global.
+// CRC32 is a small internal byte-table impl (apng_crc32_update) so the
+// chunk body can be folded into the digest without an extra heap copy.
 //
 // Public C API (also forward-declared in dasStbImage.cpp for binding):
 //   void * stbi_apng_begin(const char *filename, int w, int h, int channels);
@@ -21,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <array>
 #include <vector>
 #include <deque>
 #include <thread>
@@ -56,18 +58,41 @@ static inline void put_be_u16(uint8_t *p, uint16_t v) {
     p[1] = (uint8_t)( v       & 0xFFu);
 }
 
+// Standard PNG CRC32: poly 0xedb88320, init 0xffffffff, final xor 0xffffffff.
+// Byte-table form so we can fold the chunk type and body in two calls without
+// allocating a contiguous copy of the body.
+static inline const uint32_t * apng_crc_table() {
+    static const auto t = []() {
+        std::array<uint32_t, 256> arr{};
+        for (uint32_t i = 0; i < 256; i++) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; k++)
+                c = (c & 1u) ? (0xedb88320u ^ (c >> 1)) : (c >> 1);
+            arr[i] = c;
+        }
+        return arr;
+    }();
+    return t.data();
+}
+static inline uint32_t apng_crc32_update(uint32_t crc, const uint8_t *buf, size_t len) {
+    const uint32_t * t = apng_crc_table();
+    for (size_t i = 0; i < len; i++)
+        crc = t[(crc ^ buf[i]) & 0xffu] ^ (crc >> 8);
+    return crc;
+}
+
 // Write one PNG chunk: [length:u32][type:4][body:length][crc:u32].
-// CRC covers type+body. Returns 1 on success.
+// CRC covers type+body, computed incrementally (no body copy). Returns 1 on success.
 static int write_chunk(FILE *fp, const char *type, const uint8_t *body, uint32_t body_len) {
     uint8_t hdr[8];
     put_be_u32(hdr, body_len);
     memcpy(hdr + 4, type, 4);
     if (fwrite(hdr, 1, 8, fp) != 8) return 0;
     if (body_len && fwrite(body, 1, body_len, fp) != body_len) return 0;
-    std::vector<uint8_t> crcbuf((size_t)4 + (size_t)body_len);
-    memcpy(crcbuf.data(), type, 4);
-    if (body_len) memcpy(crcbuf.data() + 4, body, body_len);
-    uint32_t crc = stbiw__crc32(crcbuf.data(), 4 + (int)body_len);
+    uint32_t crc = 0xffffffffu;
+    crc = apng_crc32_update(crc, (const uint8_t *)type, 4);
+    if (body_len) crc = apng_crc32_update(crc, body, body_len);
+    crc ^= 0xffffffffu;
     uint8_t crcbe[4];
     put_be_u32(crcbe, crc);
     if (fwrite(crcbe, 1, 4, fp) != 4) return 0;
@@ -293,10 +318,10 @@ inline bool ApngWriter::end() {
         uint8_t newbody[8];
         put_be_u32(newbody + 0, (uint32_t)frames_written);
         put_be_u32(newbody + 4, 0);  // num_plays unchanged
-        uint8_t crcbuf[12];
-        memcpy(crcbuf,     "acTL", 4);
-        memcpy(crcbuf + 4, newbody, 8);
-        uint32_t crc = stbiw__crc32(crcbuf, 12);
+        uint32_t crc = 0xffffffffu;
+        crc = apng_crc32_update(crc, (const uint8_t *)"acTL", 4);
+        crc = apng_crc32_update(crc, newbody, 8);
+        crc ^= 0xffffffffu;
         uint8_t patch[12];
         memcpy(patch, newbody, 8);
         put_be_u32(patch + 8, crc);

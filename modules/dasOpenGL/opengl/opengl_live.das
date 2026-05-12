@@ -294,6 +294,9 @@ def record_tick() {
     unsafe {
         ok = stbi_apng_frame(recorder.writer, addr(pixels[0]), row_bytes, delay_ms)
     }
+    // Local `var array<T>` doesn't finalize on scope exit (no smart_ptr). Explicit
+    // delete avoids growing the heap by width*height*4 bytes per captured frame.
+    delete pixels
     if (ok != 0) {
         recorder.frames_written++
     } else {

@@ -25,7 +25,6 @@ require daslib/archive
 require daslib/json
 require daslib/json_boost
 require live/live_commands
-require live/mouse_events public
 require live_host
 require math
 
@@ -271,8 +270,27 @@ def mouse_move_to(input : JsonValue?) : JsonValue? {
     return JV((duration_ms = args.duration_ms))
 }
 
+struct MouseEventWire {
+    @optional t_ms   : int    = 0
+    kind             : string = "move"  // "move" | "button" | "scroll"
+    @optional x      : float  = 0.0
+    @optional y      : float  = 0.0
+    @optional button : int    = 0
+    @optional action : string = "press"
+}
+
 struct MousePlayArgs {
     events : array<MouseEventWire>
+}
+
+def public sort_play_events(var events : array<MouseEventWire>) {
+    //! Sort a mouse_play timeline by ``t_ms`` ascending. mouse_play only walks
+    //! the queue forward, so out-of-order input would silently drop earlier
+    //! events; sort first. Equal-``t_ms`` ordering is unspecified (the
+    //! underlying ``sort()`` is qsort, not stable).
+    events |> sort() $(a, b : MouseEventWire) {
+        return a.t_ms < b.t_ms
+    }
 }
 
 [live_command(description="Play a scripted mouse timeline. Args: events array of (t_ms, kind, x, y, button, action)")]
@@ -292,7 +310,13 @@ def mouse_play(input : JsonValue?) : JsonValue? {
         } elif (w.kind == "button") {
             ev.kind = MEKind.button
             ev.button = w.button
-            ev.action = w.action == "press" ? 1 : 0
+            if (w.action == "press") {
+                ev.action = 1
+            } elif (w.action == "release") {
+                ev.action = 0
+            } else {
+                return JV((error = "invalid button action; expected \"press\" or \"release\"", action = w.action))
+            }
         } elif (w.kind == "scroll") {
             ev.kind = MEKind.scroll
             ev.x = w.x
