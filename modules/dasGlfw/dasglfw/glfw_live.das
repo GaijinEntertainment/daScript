@@ -27,6 +27,7 @@ require daslib/json_boost
 require live/live_commands
 require live_host
 require math
+require strings
 
 var public live_window : GLFWwindow?
 
@@ -402,5 +403,380 @@ def mouse_tick() {
                 synth_cursor_pos(x, y)
             }
         }
+    }
+}
+
+// ============================================================================
+// Synthetic keyboard driver
+// ============================================================================
+//
+// Mirrors the mouse driver: one-shot helpers (`key_press`/`key_release`/`key_char`),
+// chord sugar (`key_chord`), text streaming (`key_type`), and scripted timeline
+// playback (`key_play`). Synth events go through dasGLFW's key/char chain
+// dispatchers — ImGui_ImplGlfw_KeyCallback / _CharCallback receive them via the
+// chain, so widgets see them as real input. No `apply_synth_io_override` is
+// needed for keys: ImGui_ImplGlfw_NewFrame does not poll glfwGetKey per frame
+// (key state is event-driven), so a single chain dispatch suffices.
+
+enum private KEKind {
+    press
+    release
+    char_
+}
+
+struct private KeyEvent {
+    t_ms      : int    = 0
+    kind      : KEKind = KEKind.press
+    keycode   : int    = 0
+    scancode  : int    = 0
+    mods      : int    = 0
+    codepoint : uint   = 0u
+}
+
+var private key_timeline     : array<KeyEvent>
+var private key_play_start_t : float = 0.0
+var private key_play_idx     : int   = 0
+var private key_playing      : bool  = false
+
+// Public state read by visual_aids for the keycap HUD.
+var public synth_held_keys           : table<int>       //! set of currently-held GLFW keycodes
+var public synth_last_keycode        : int   = 0        //! last GLFW keycode synth-pressed; 0 = none
+var public synth_last_keycode_t      : float = -1.0     //! get_uptime() at last keycode press; -1 = none
+var public synth_last_codepoint      : uint  = 0u       //! last Unicode codepoint synth-typed; 0 = none
+var public synth_last_codepoint_t    : float = -1.0     //! get_uptime() at last codepoint event; -1 = none
+
+def private synth_key_press(keycode, scancode, mods : int) {
+    glfw_post_key(live_window, keycode, scancode, 1, mods)
+    synth_held_keys |> insert(keycode)
+    synth_last_keycode   = keycode
+    synth_last_keycode_t = get_uptime()
+}
+
+def private synth_key_release(keycode, scancode, mods : int) {
+    glfw_post_key(live_window, keycode, scancode, 0, mods)
+    synth_held_keys |> erase(keycode)
+}
+
+def private synth_char(codepoint : uint) {
+    glfw_post_char(live_window, codepoint)
+    synth_last_codepoint   = codepoint
+    synth_last_codepoint_t = get_uptime()
+}
+
+def public get_synth_keys() : tuple<bool; uint; float> {
+    //! (active, last_codepoint, last_codepoint_t). Visual aids read this each
+    //! frame to detect "a new codepoint just landed" (push a keycap into the
+    //! HUD when last_codepoint_t advances). Modifier-strip lights from
+    //! `IsKeyDown(ImGuiKey_*)` direct — ImGui already reflects synth events
+    //! via the chain, no separate plumbing needed.
+    return (key_playing, synth_last_codepoint, synth_last_codepoint_t)
+}
+
+def private reset_key_timeline_state() {
+    key_timeline |> clear()
+    key_play_idx = 0
+    key_playing  = false
+}
+
+struct KeyPressArgs {
+    keycode           : int = 0
+    @optional scancode : int = 0
+    @optional mods    : int = 0
+}
+
+[live_command(description="Synthetic key press. Args: keycode (GLFW_KEY_*), scancode?, mods?")]
+def key_press(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    let args = from_JV(input, type<KeyPressArgs>)
+    return JV((error = "missing keycode")) if (args.keycode == 0)
+    synth_key_press(args.keycode, args.scancode, args.mods)
+    return JV((keycode = args.keycode, action = "press"))
+}
+
+[live_command(description="Synthetic key release. Args: keycode (GLFW_KEY_*), scancode?, mods?")]
+def key_release(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    let args = from_JV(input, type<KeyPressArgs>)
+    return JV((error = "missing keycode")) if (args.keycode == 0)
+    synth_key_release(args.keycode, args.scancode, args.mods)
+    return JV((keycode = args.keycode, action = "release"))
+}
+
+struct KeyCharArgs {
+    codepoint : uint = 0u
+}
+
+[live_command(description="Synthetic Unicode char (no paired key event). Args: codepoint")]
+def key_char(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    let args = from_JV(input, type<KeyCharArgs>)
+    return JV((error = "missing codepoint")) if (args.codepoint == 0u)
+    synth_char(args.codepoint)
+    return JV((codepoint = args.codepoint))
+}
+
+// --- ASCII translation tables for key_type / key_chord ---
+
+def private mod_name_to_keycode(name : string) : int {
+    if (name == "Ctrl" || name == "Control") return GLFW_KEY_LEFT_CONTROL
+    if (name == "Shift") return GLFW_KEY_LEFT_SHIFT
+    if (name == "Alt") return GLFW_KEY_LEFT_ALT
+    if (name == "Super" || name == "Cmd" || name == "Meta") return GLFW_KEY_LEFT_SUPER
+    return 0
+}
+
+def private mod_name_to_bit(name : string) : int {
+    if (name == "Ctrl" || name == "Control") return int(GLFW_MOD_CONTROL)
+    if (name == "Shift") return int(GLFW_MOD_SHIFT)
+    if (name == "Alt") return int(GLFW_MOD_ALT)
+    if (name == "Super" || name == "Cmd" || name == "Meta") return int(GLFW_MOD_SUPER)
+    return 0
+}
+
+// Letters and digits map directly; printable punctuation is a small fixed table.
+// Capitals + shifted punctuation get an explicit Shift press/release around the
+// char in key_type. Everything else falls through as a codepoint-only `char_`
+// event with `keycode == 0` (text-input widgets still receive it via
+// CharCallback).
+def private needs_shift_ascii(c : int) : bool {
+    if (c >= int('A') && c <= int('Z')) return true   // nolint:PERF014 (uppercase-only, is_alpha would also match lowercase)
+    // shifted punctuation on a US layout. Listed as char literals (not a single
+    // string) so the parser doesn't treat `{` / `}` as interpolation delimiters.
+    return (c == int('~') || c == int('!') || c == int('@') || c == int('#')
+         || c == int('$') || c == int('%') || c == int('^') || c == int('&')
+         || c == int('*') || c == int('(') || c == int(')') || c == int('_')
+         || c == int('+') || c == int('{') || c == int('}') || c == int('|')
+         || c == int(':') || c == int('"') || c == int('<') || c == int('>')
+         || c == int('?'))
+}
+
+def private base_keycode_ascii(c : int) : int {
+    // letters — distinguishing case to compute the right keycode offset
+    if (c >= int('A') && c <= int('Z')) return GLFW_KEY_A + (c - int('A'))   // nolint:PERF014 (need uppercase-only offset)
+    if (c >= int('a') && c <= int('z')) return GLFW_KEY_A + (c - int('a'))   // nolint:PERF014 (need lowercase-only offset)
+    // digits 0-9 → GLFW_KEY_0..9
+    if (c >= int('0') && c <= int('9')) return GLFW_KEY_0 + (c - int('0'))   // nolint:PERF014 (need digit-only offset)
+    // shifted digit row: ! @ # $ % ^ & * ( )  → keys 1 2 3 4 5 6 7 8 9 0
+    if (c == int('!')) return GLFW_KEY_1
+    if (c == int('@')) return GLFW_KEY_2
+    if (c == int('#')) return GLFW_KEY_3
+    if (c == int('$')) return GLFW_KEY_4
+    if (c == int('%')) return GLFW_KEY_5
+    if (c == int('^')) return GLFW_KEY_6
+    if (c == int('&')) return GLFW_KEY_7
+    if (c == int('*')) return GLFW_KEY_8
+    if (c == int('(')) return GLFW_KEY_9
+    if (c == int(')')) return GLFW_KEY_0
+    // punctuation
+    if (c == int(' ')) return GLFW_KEY_SPACE
+    if (c == int('\n')) return GLFW_KEY_ENTER
+    if (c == int('\t')) return GLFW_KEY_TAB
+    if (c == int(',') || c == int('<')) return GLFW_KEY_COMMA
+    if (c == int('.') || c == int('>')) return GLFW_KEY_PERIOD
+    if (c == int('/') || c == int('?')) return GLFW_KEY_SLASH
+    if (c == int(';') || c == int(':')) return GLFW_KEY_SEMICOLON
+    if (c == int('\'') || c == int('"')) return GLFW_KEY_APOSTROPHE
+    if (c == int('-') || c == int('_')) return GLFW_KEY_MINUS
+    if (c == int('=') || c == int('+')) return GLFW_KEY_EQUAL
+    if (c == int('[') || c == int('{')) return GLFW_KEY_LEFT_BRACKET
+    if (c == int(']') || c == int('}')) return GLFW_KEY_RIGHT_BRACKET
+    if (c == int('\\') || c == int('|')) return GLFW_KEY_BACKSLASH
+    if (c == int('`') || c == int('~')) return GLFW_KEY_GRAVE_ACCENT
+    return 0
+}
+
+struct KeyTypeArgs {
+    text                       : string = ""
+    @optional total_duration_s : float  = 0.0
+    @optional per_char_ms      : int    = 60
+}
+
+[live_command(description="Stream text as synthetic key+char events. Args: text, total_duration_s? (preferred) | per_char_ms? (default 60)")]
+def key_type(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    let args = from_JV(input, type<KeyTypeArgs>)
+    return JV((error = "empty text")) if (empty(args.text))
+    var per_char_ms = max(1, args.per_char_ms)
+    if (args.total_duration_s > 0.0f) {
+        per_char_ms = max(1, int(args.total_duration_s * 1000.0f) / length(args.text))
+    }
+    reset_key_timeline_state()
+    var t = 0
+    // Worst case: 5 events per char (Shift down, key down, char, key up, Shift up).
+    key_timeline |> reserve(length(args.text) * 5)
+    peek_data(args.text) $(arr) {
+        for (b in arr) {
+            let c     = int(b)
+            let cp    = uint(b)
+            let kc    = base_keycode_ascii(c)
+            let shift = needs_shift_ascii(c)
+            let mods  = shift ? int(GLFW_MOD_SHIFT) : 0
+            if (shift) {
+                key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.press,   keycode = GLFW_KEY_LEFT_SHIFT))
+            }
+            if (kc != 0) {
+                key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.press,   keycode = kc, mods = mods))
+            }
+            key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.char_,       codepoint = cp))
+            if (kc != 0) {
+                key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.release, keycode = kc, mods = mods))
+            }
+            if (shift) {
+                key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.release, keycode = GLFW_KEY_LEFT_SHIFT))
+            }
+            t += per_char_ms
+        }
+    }
+    key_play_start_t = get_uptime()
+    key_playing      = true
+    return JV((queued = length(key_timeline), per_char_ms = per_char_ms))
+}
+
+struct KeyChordArgs {
+    mods : array<string>
+    key  : string = ""
+}
+
+[live_command(description="Synthetic chord. Args: mods (array of \"Ctrl\"|\"Shift\"|\"Alt\"|\"Super\"|\"Cmd\"|\"Meta\"), key (single ASCII char or GLFW key name)")]
+def key_chord(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    let args = from_JV(input, type<KeyChordArgs>)
+    return JV((error = "missing key")) if (empty(args.key))
+    // resolve target keycode: prefer a single ASCII char (uppercase letter / digit / symbol).
+    var target_kc = 0
+    if (length(args.key) == 1) {
+        target_kc = base_keycode_ascii(int(first_character(args.key)))
+    }
+    return JV((error = "unsupported chord key", key = args.key)) if (target_kc == 0)
+    var mod_bits = 0
+    for (m in args.mods) {
+        let b = mod_name_to_bit(m)
+        return JV((error = "unknown modifier", modifier = m)) if (b == 0)
+        mod_bits |= b
+    }
+    reset_key_timeline_state()
+    // press(mod)*N + press(key) + release(key) + release(mod)*N
+    key_timeline |> reserve(length(args.mods) * 2 + 2)
+    var t = 0
+    // press modifiers in array order
+    for (m in args.mods) {
+        let mkc = mod_name_to_keycode(m)
+        key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.press, keycode = mkc))
+        t += 8     // tight stamp: ImGui sees these as a combo
+    }
+    key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.press,   keycode = target_kc, mods = mod_bits))
+    t += 16
+    key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.release, keycode = target_kc, mods = mod_bits))
+    t += 8
+    // release modifiers in reverse order
+    var i = length(args.mods) - 1
+    while (i >= 0) {
+        let mkc = mod_name_to_keycode(args.mods[i])
+        key_timeline |> push(KeyEvent(t_ms = t, kind = KEKind.release, keycode = mkc))
+        t += 8
+        i--
+    }
+    key_play_start_t = get_uptime()
+    key_playing      = true
+    return JV((queued = length(key_timeline)))
+}
+
+struct KeyEventWire {
+    @optional t_ms      : int    = 0
+    kind                : string = "press"   // "press" | "release" | "char"
+    @optional keycode   : int    = 0
+    @optional scancode  : int    = 0
+    @optional mods      : int    = 0
+    @optional codepoint : uint   = 0u
+}
+
+struct KeyPlayArgs {
+    events : array<KeyEventWire>
+}
+
+def public sort_key_play_events(var events : array<KeyEventWire>) {
+    //! Sort a key_play timeline by ``t_ms`` ascending. Same rationale as
+    //! ``sort_play_events`` for mouse: the queue is walked forward, so
+    //! out-of-order input would silently drop earlier events.
+    events |> sort() $(a, b : KeyEventWire) {
+        return a.t_ms < b.t_ms
+    }
+}
+
+[live_command(description="Play a scripted key/char timeline. Args: events array of (t_ms, kind, keycode, scancode, mods, codepoint)")]
+def key_play(input : JsonValue?) : JsonValue? {
+    return JV((error = "no window")) if (live_window == null)
+    var args = from_JV(input, type<KeyPlayArgs>)
+    return JV((error = "no events")) if (empty(args.events))
+    sort_key_play_events(args.events)
+    reset_key_timeline_state()
+    key_timeline |> reserve(length(args.events))
+    for (w in args.events) {
+        var ev = KeyEvent(t_ms = w.t_ms, keycode = w.keycode, scancode = w.scancode, mods = w.mods, codepoint = w.codepoint)
+        if (w.kind == "press") {
+            ev.kind = KEKind.press
+        } elif (w.kind == "release") {
+            ev.kind = KEKind.release
+        } elif (w.kind == "char") {
+            ev.kind = KEKind.char_
+        } else {
+            return JV((error = "unknown event kind", kind = w.kind))
+        }
+        key_timeline |> push(ev)
+    }
+    key_play_start_t = get_uptime()
+    key_playing      = true
+    return JV((queued = length(key_timeline)))
+}
+
+[live_command(description="Stop synthetic key playback and clear the timeline.")]
+def key_stop(input : JsonValue?) : JsonValue? {
+    let was_playing = key_playing
+    reset_key_timeline_state()
+    return JV((stopped = was_playing))
+}
+
+struct KeyStatusResult {
+    playing       : bool
+    elapsed_ms    : int
+    queue_idx     : int
+    queue_total   : int
+    held_count    : int
+    last_keycode  : int
+    last_codepoint : uint
+}
+
+[live_command(description="Synthetic-keyboard playback status.")]
+def key_status(input : JsonValue?) : JsonValue? {
+    let elapsed = key_playing ? int((get_uptime() - key_play_start_t) * 1000.0) : 0
+    return JV(KeyStatusResult(
+        playing        = key_playing,
+        elapsed_ms     = elapsed,
+        queue_idx      = key_play_idx,
+        queue_total    = length(key_timeline),
+        held_count     = length(synth_held_keys),
+        last_keycode   = synth_last_keycode,
+        last_codepoint = synth_last_codepoint
+    ))
+}
+
+[before_update]
+def key_tick() {
+    return if (!key_playing || live_window == null)
+    let now_ms = int((get_uptime() - key_play_start_t) * 1000.0)
+    while (key_play_idx < length(key_timeline)) {
+        let ev = key_timeline[key_play_idx]
+        break if (ev.t_ms > now_ms)
+        if (ev.kind == KEKind.press) {
+            synth_key_press(ev.keycode, ev.scancode, ev.mods)
+        } elif (ev.kind == KEKind.release) {
+            synth_key_release(ev.keycode, ev.scancode, ev.mods)
+        } elif (ev.kind == KEKind.char_) {
+            synth_char(ev.codepoint)
+        }
+        key_play_idx++
+    }
+    if (key_play_idx >= length(key_timeline)) {
+        key_playing = false
     }
 }

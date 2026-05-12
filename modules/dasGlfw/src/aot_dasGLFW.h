@@ -25,4 +25,8 @@ namespace das {
     DAS_MOD_API void DasGlfw_DispatchCursorPos ( GLFWwindow * window, double x, double y );
     DAS_MOD_API void DasGlfw_PostMouseButton ( GLFWwindow * window, int button, int action, int mods );
     DAS_MOD_API void DasGlfw_PostScroll ( GLFWwindow * window, double xoff, double yoff );
+    DAS_MOD_API void DasGlfw_ChainAddKey ( GLFWwindow * window, TLambda<void,const GLFWwindow*,int,int,int,int> func, Context * ctx );
+    DAS_MOD_API void DasGlfw_ChainAddChar ( GLFWwindow * window, TLambda<void,const GLFWwindow*,unsigned int> func, Context * ctx );
+    DAS_MOD_API void DasGlfw_PostKey ( GLFWwindow * window, int key, int scancode, int action, int mods );
+    DAS_MOD_API void DasGlfw_PostChar ( GLFWwindow * window, unsigned int codepoint );
 }
