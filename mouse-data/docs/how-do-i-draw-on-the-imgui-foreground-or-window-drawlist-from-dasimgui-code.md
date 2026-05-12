@@ -18,7 +18,7 @@ Use the pipe pattern, **without** wrapping the call in `unsafe { ... }`:
 
 `GetForegroundDrawList()` and `GetWindowDrawList()` return `ImDrawList?`; dereffing with `*` and piping into the bound `Add*` methods works directly. Many examples in `modules/dasImgui/example/imgui_demo.das` (e.g. lines 753, 953, 1674, 2689-2695).
 
-**Do NOT wrap in `unsafe { ... }`.** Even though dereffing a pointer normally needs unsafe, the bound `Add*` shims handle it themselves — wrapping the pipe call in `unsafe` causes it to **silently no-op in interpreted/live mode** (call returns, no exception, draw command never reaches the foreground drawlist's command buffer). Root cause is still under investigation (see project memory `project_dasimgui_unsafe_drawlist_noop`); workaround is just to skip the wrapper.
+No `unsafe { ... }` wrap needed. The bound `Add*` shims accept the deref'd lvalue directly — wrapping is redundant. (An earlier project note claimed the wrap silently no-ops; that was a misattribution, see `project_dasimgui_unsafe_drawlist_noop` — the unsafe form is functionally equivalent. `UnsafeFolding` replaces `ExprUnsafe` with its body before simulate runs, so both forms generate the same SimNodes.)
 
 Coordinate space: ImGui drawlist coords are screen-space pixels. For widget-relative drawing you typically use `GetItemRectMin/Max` or values out of dasImgui's per-frame registry (`widget_rect(target_path)` in `imgui/imgui_boost_runtime`).
 
