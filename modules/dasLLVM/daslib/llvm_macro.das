@@ -290,7 +290,7 @@ class JIT_LLVM : AstSimulateMacro {
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
                 generate_global_ctors_dtors(g_prim_t, !(use_dll || gen_exe))
-                optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD)
+                optimize_llvm_module(opt_level |> uint(), size_level |> uint(), LLVM_INLINE_THRESHOLD, !gen_exe)
                 if (dump_ir) {
                     // Let's remove unused attributes before we print IR.
                     var pmo = LLVMCreatePassBuilderOptions()
