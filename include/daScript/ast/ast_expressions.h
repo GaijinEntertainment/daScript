@@ -1492,6 +1492,7 @@ namespace das
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         bool isKeyValue = false;
         vector <string> recordNames;
+        vector <string> shorthandRecordNames;
     };
 
     struct DAS_API ExprArrayComprehension : Expression {

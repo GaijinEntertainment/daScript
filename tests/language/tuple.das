@@ -63,6 +63,38 @@ def test_tuple(t : T?) {
         t |> equal(mkt._0, 1)
         t |> equal(mkt._1, 2.0)
     }
+    // issue #2641: shorthand named-tuple from bare variable refs
+    t |> run("shorthand named into array of named tuples") @(t : T?) {
+        var arr : array<tuple<eid : int; distSq : float>>
+        let eid = 7
+        let distSq = 2.5
+        arr |> push((eid, distSq))
+        t |> equal(length(arr), 1)
+        t |> equal(arr[0].eid, 7)
+        t |> equal(arr[0].distSq, 2.5)
+    }
+    t |> run("shorthand named via typed var init") @(t : T?) {
+        let eid = 11
+        let distSq = 4.5
+        var tup : tuple<eid : int; distSq : float> = (eid, distSq)
+        t |> equal(tup.eid, 11)
+        t |> equal(tup.distSq, 4.5)
+    }
+    t |> run("unnamed target keeps unnamed (no shorthand)") @(t : T?) {
+        var arr : array<tuple<int; float>>
+        let k = 11
+        let v = 4.5
+        arr |> push((k, v))   // backward compat: target is unnamed, no promotion
+        t |> equal(arr[0]._0, 11)
+        t |> equal(arr[0]._1, 4.5)
+    }
+    t |> run("mixed expression tuple stays unnamed") @(t : T?) {
+        var arr : array<tuple<int; int>>
+        let a = 1
+        arr |> push((a, a + 1))   // 2nd elem not bare ExprVar → never tagged
+        t |> equal(arr[0]._0, 1)
+        t |> equal(arr[0]._1, 2)
+    }
     t |> run("fixed array of tuples") @(t : T?) {
         let mkta = fixed_array<tuple<int; float>>((1, 2.0), (3, 4.0))
         t |> equal(mkta[0]._0, 1)

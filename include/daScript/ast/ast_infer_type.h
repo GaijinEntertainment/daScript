@@ -202,6 +202,8 @@ namespace das {
 
         void findMatchingFunctionsAndGenerics(MatchingFunctions &resultFunctions, MatchingFunctions &resultGenerics, const string &name, const vector<TypeDeclPtr> &types, bool inferBlock = false, bool visCheck = true) const;
 
+        bool trySeedTupleShorthand(ExprLooksLikeCall *expr);
+
         void reportDualFunctionNotFound(const string &name, const string &extra,
                                         const LineInfo &at, const MatchingFunctions &candidateFunctions,
                                         const vector<TypeDeclPtr> &types, const vector<TypeDeclPtr> &types2, bool inferAuto, bool inferBlocks, bool reportDetails,
@@ -500,6 +502,7 @@ namespace das {
 
         virtual void preVisit(ExprLet *expr) override;
         virtual void preVisitLet(ExprLet *expr, const VariablePtr &var, bool last) override;
+        virtual void preVisitLetInit(ExprLet *expr, const VariablePtr &var, Expression *init) override;
         bool isEmptyInit(const VariablePtr &var) const;
         virtual VariablePtr visitLet(ExprLet *expr, const VariablePtr &var, bool last) override;
         ExpressionPtr promoteToCloneToMove(const VariablePtr &var);

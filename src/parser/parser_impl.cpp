@@ -1271,6 +1271,18 @@ namespace das {
         return int(out - buf);
     }
 
+    vector<string> ast_tupleCollectShorthandNames ( const vector<ExpressionPtr> & values ) {
+        vector<string> names;
+        names.reserve(values.size());
+        for ( auto val : values ) {
+            if ( !val || !val->rtti_isVar() ) return {};
+            auto ev = static_cast<ExprVar *>(val);
+            if ( ev->name.find("::") != string::npos ) return {};
+            names.push_back(ev->name);
+        }
+        return names;
+    }
+
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt ) {
         auto mks = new ExprMakeStruct(locAt);
         if ( decl ) {

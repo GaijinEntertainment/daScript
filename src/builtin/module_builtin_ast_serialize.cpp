@@ -1890,7 +1890,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprMakeTuple * expr ) {
         serializeMakeArray(expr);
-        ser << expr->isKeyValue << expr->recordNames;
+        ser << expr->isKeyValue << expr->recordNames << expr->shorthandRecordNames;
     }
 
     void SerializeVisitor::preVisit ( ExprArrayComprehension * expr ) {

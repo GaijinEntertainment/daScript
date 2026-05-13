@@ -1121,6 +1121,23 @@ namespace das {
                 return Visitor::visit(expr);
             }
         }
+        if (expr->recordType && expr->recordType->baseType == Type::tTuple
+            && !expr->shorthandRecordNames.empty()
+            && expr->recordNames.empty()
+            && expr->recordType->argNames.size() == expr->shorthandRecordNames.size()) {
+            bool matches = true;
+            for (size_t i = 0, n = expr->shorthandRecordNames.size(); i != n; ++i) {
+                if (expr->shorthandRecordNames[i] != expr->recordType->argNames[i]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                expr->recordNames = expr->shorthandRecordNames;
+                expr->shorthandRecordNames.clear();
+                reportAstChanged();
+            }
+        }
         if (expr->recordType) {
             if (!expr->recordType->isTuple()) {
                 error("internal error. ExprMakeTuple with non-tuple record type", "", "",

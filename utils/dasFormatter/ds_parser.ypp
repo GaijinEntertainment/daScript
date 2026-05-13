@@ -2349,6 +2349,7 @@ expr2
             if ( $subexpr->rtti_isSequence() ) {
                 auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
                 mkt->values = sequenceToList($subexpr);
+                mkt->shorthandRecordNames = ast_tupleCollectShorthandNames(mkt->values);
                 $$ = mkt;
             } else if ( $comma ) {
                 auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
