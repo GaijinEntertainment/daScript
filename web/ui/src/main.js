@@ -22,7 +22,7 @@ pageInit = function () {
 
 
 
-    code = CodeMirror( editorCode, {
+    code = CodeMirror( editorCode, window.FORGE_PLAYGROUND_OPTS || {
         lineNumbers: true, matchBrackets: true, indentWithTabs: false, styleActiveLine: true,
         theme:'eclipse', mode:"application/javascript",
         tabSize: 4, indentUnit: 4, highlightSelectionMatches: {showToken: /\w/}

@@ -1,0 +1,112 @@
+/* ────────────────────────────────────────────────────────────────
+ * Forge skin for /playground/ — overrides web/ui/src/main.css to
+ * land the playground inside the Forge visual language without
+ * forking web/ui source. Loaded AFTER main.css in playground/index.html.
+ *
+ * Tokens come from ../files/forge.css (shared :root).
+ * ──────────────────────────────────────────────────────────────── */
+
+body {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-sans) !important;
+    font-size: 14px !important;
+    margin: 0 !important;
+}
+
+/* The IDE keeps its own top bar (`.header`) below our Forge nav. */
+.header {
+    background: var(--bg-2) !important;
+    border-bottom: 1px solid var(--rule) !important;
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 13px !important;
+    height: 40px !important;
+    padding: 4px 32px !important;
+}
+.header img { display: none; }
+.header_part { margin: 0 14px !important; }
+.header_part a { color: var(--fg-dim) !important; text-decoration: none; }
+.header_part a:hover { color: var(--amber) !important; }
+.header_part b { color: var(--fg); font-family: var(--font-mono); }
+
+/* Main 2-column workspace */
+.main { background: var(--bg) !important; color: var(--fg) !important; }
+.main_header {
+    padding: 16px 32px !important;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg);
+}
+.main_header_left, .main_header_right {
+    gap: 14px !important;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.main_name {
+    font-family: var(--font-mono) !important;
+    font-size: 14px !important;
+    color: var(--fg) !important;
+}
+
+.button_header {
+    background: var(--amber) !important;
+    color: var(--bg) !important;
+    border: none !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    font-weight: 600;
+    padding: 8px 16px !important;
+    height: 32px !important;
+    cursor: pointer;
+}
+.button_header:hover { background: #f4b04a !important; }
+.button_header:disabled { opacity: 0.5; cursor: default; }
+
+.select_header {
+    background: var(--bg-2) !important;
+    color: var(--fg) !important;
+    border: 1px solid var(--rule) !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12.5px !important;
+    padding: 6px 10px !important;
+    height: 32px !important;
+}
+
+.main_col { padding: 16px 0 !important; }
+.main_col_part {
+    padding: 0 24px !important;
+    max-width: 48vw;
+}
+
+#code, #output {
+    height: 78vh !important;
+    margin-top: 14px !important;
+    border: 1px solid var(--rule) !important;
+    border-radius: 8px;
+    background: var(--bg-2) !important;
+    overflow: hidden;
+}
+#code { padding: 0; }
+#output {
+    background: var(--bg-2) !important;
+    overflow-y: scroll !important;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.output_line {
+    font-family: var(--font-mono) !important;
+    line-height: 1.55;
+    padding: 1px 0;
+    /* web/ui's printOutput sets inline background-color per line — neutralize it
+     * so the dark panel shows through. Color is restored on .output_line_text. */
+    background: transparent !important;
+}
+.output_line_time { color: var(--fg-faint) !important; width: 100px !important; font-size: 11.5px; }
+.output_line_text { color: var(--fg) !important; background: transparent !important; }
+
+footer { color: var(--fg-faint) !important; padding: 24px 32px; background: var(--bg); border-top: 1px solid var(--rule); }
+.footer_p { font-size: 12px !important; font-family: var(--font-mono); }

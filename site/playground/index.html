@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playground — Daslang</title>
+    <meta name="description" content="Run daslang in your browser. Multi-file workspace, sample picker, WebAssembly." />
+
+    <link rel="icon" type="image/svg+xml" href="../files/forge-favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+
+    <!-- Forge first (tokens), then web/ui's main.css (IDE structure),
+         then forge-skin.css (override IDE chrome to match Forge),
+         then CodeMirror + our cm-forge theme + daslang mode. -->
+    <link rel="stylesheet" href="../files/forge.css" />
+    <link rel="stylesheet" href="./main.css" />
+    <link rel="stylesheet" href="../files/cm/codemirror.min.css" />
+    <link rel="stylesheet" href="../files/cm/cm-forge.css" />
+    <link rel="stylesheet" href="./forge-skin.css" />
+</head>
+<body onload="pageInit()">
+
+<!-- ───── Forge nav (overlay on top of the IDE) ───── -->
+<nav class="forge-nav">
+    <div class="forge-container forge-nav__inner">
+        <div class="forge-nav__left">
+            <a class="forge-mark" href="../index.html">
+                <span class="forge-mark__glyph">&gt;</span>
+                <span>daslang</span>
+                <span class="forge-mark__tld">.io</span>
+            </a>
+            <div class="forge-nav__links">
+                <a href="../doc/index.html">docs</a>
+                <a href="../index.html#benchmarks">benchmarks</a>
+                <a href="../downloads.html">downloads</a>
+                <a href="../blog/index.html">blog</a>
+                <a href="https://t.me/daScript">community</a>
+            </div>
+        </div>
+        <div class="forge-nav__right">
+            <span class="forge-nav__version">playground</span>
+            <a class="forge-nav__github" href="https://github.com/GaijinEntertainment/daScript">github ↗</a>
+            <a class="forge-nav__install" href="../index.html#install">install</a>
+        </div>
+    </div>
+</nav>
+
+<!-- ───── IDE (from web/ui — content copied by pages.yml) ───── -->
+<script type="text/javascript" src="./jquery-3.6.0.min.js"></script>
+<script type="text/javascript" src="../files/cm/codemirror.min.js"></script>
+<script type="text/javascript" src="../files/cm/simple-mode.js"></script>
+<script type="text/javascript" src="../files/cm/daslang-keywords.js"></script>
+<script type="text/javascript" src="../files/cm/daslang-mode.js"></script>
+<script type="text/javascript" src="./playground-init.js"></script>
+<script type="text/javascript" src="./main.js"></script>
+
+<div class="main">
+    <div class="main_col">
+        <div class="main_header">
+            <div class="main_header_left">
+                <div class="main_header_part main_name">main.das</div>
+                <div class="main_header_part">
+                    <select id="examples" class="select_header"></select>
+                </div>
+                <div class="main_header_part">
+                    <select id="tests" class="select_header"></select>
+                </div>
+            </div>
+            <div class="main_header_right">
+                <button id="run" class="button_header" onclick="runCode()">▶ run</button>
+            </div>
+        </div>
+        <div class="main_col_part">
+            <div id="code"></div>
+        </div>
+    </div>
+
+    <div class="main_col">
+        <div class="main_header">
+            <div class="main_header_left">
+                <div class="main_header_part main_name">output</div>
+            </div>
+            <div class="main_header_right">
+                <button id="clear" class="button_header" onclick="clearOutput()" style="background: transparent; color: var(--fg-dim); border: 1px solid var(--rule);">clear</button>
+            </div>
+        </div>
+        <div class="main_col_part">
+            <div id="output"></div>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <p class="footer_p">
+        daslang playground · WebAssembly · powered by Emscripten ·
+        <a href="https://github.com/GaijinEntertainment/daScript" style="color: var(--amber); border-bottom: 1px solid var(--amber-dim);">source on GitHub</a>
+    </p>
+</footer>
+
+</body>
+</html>

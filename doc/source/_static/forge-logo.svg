@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60">
+    <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#e8a13a" />
+            <stop offset="100%" stop-color="#a87420" />
+        </linearGradient>
+    </defs>
+    <rect x="4" y="14" width="32" height="32" rx="6" fill="url(#g)" />
+    <text x="20" y="38" text-anchor="middle"
+          font-family="JetBrains Mono, monospace"
+          font-size="22" font-weight="800" fill="#0d0c0a">&gt;</text>
+    <text x="48" y="40"
+          font-family="JetBrains Mono, SF Mono, monospace"
+          font-size="22" font-weight="600" fill="#e8e2d2">daslang</text>
+    <text x="153" y="40"
+          font-family="JetBrains Mono, SF Mono, monospace"
+          font-size="22" font-weight="400" fill="#5b5547">.io</text>
+</svg>

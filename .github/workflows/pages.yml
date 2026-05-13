@@ -26,7 +26,9 @@ jobs:
       uses: actions/checkout@v4
 
     - name: "Install Python dependencies"
-      run: pip install -r doc/requirements.txt
+      run: |
+        pip install -r doc/requirements.txt
+        pip install markdown
 
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
@@ -71,6 +73,26 @@ jobs:
         working_directory: build/latex
         continue_on_error: true
 
+    - name: "Build WASM (Emscripten) for /playground/ + /files/wasm/"
+      run: |
+        set -eux
+        cd web
+        bash step0_emsdk_install.sh
+        # step1 sources emsdk_env.sh — re-export EMSDK for the configure step
+        bash -c "source emsdk/emsdk_env.sh && \
+                 mkdir -p build && cd build && \
+                 cmake -DCMAKE_BUILD_TYPE=Release -G Ninja \
+                       -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../ && \
+                 ninja"
+      continue-on-error: true
+
+    - name: "Fetch dasProfile benchmark JSON"
+      run: |
+        set -eux
+        curl -sSL -o site/files/profile_results.json \
+            https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results.json
+      continue-on-error: true
+
     - name: "Stage site for deployment"
       run: |
         set -eux
@@ -78,6 +100,7 @@ jobs:
 
         # Static landing page and assets
         cp site/index.html _site/
+        cp site/downloads.html _site/
         cp site/robots.txt _site/
         cp -r site/files _site/files
 
@@ -87,6 +110,36 @@ jobs:
         # PDFs (referenced by index.html)
         cp build/latex/daslang.pdf _site/doc/daslang.pdf || echo "WARNING: daslang.pdf not found"
         cp build/latex/daslangstdlib.pdf _site/doc/daslangstdlib.pdf || echo "WARNING: daslangstdlib.pdf not found"
+
+        # Blog + news + changelist (regenerated each publish)
+        python3 site/blog/build_blog.py \
+            --posts site/blog/_posts \
+            --news site/_news \
+            --template site/blog/template.html \
+            --out _site/
+
+        # Playground: vendor web/ui IDE + WASM artifacts
+        if [ -d web/output ]; then
+            mkdir -p _site/playground _site/files/wasm
+            # Copy IDE source files (CodeMirror, jQuery, main.js/css, etc.)
+            cp -r web/ui/src/* _site/playground/
+            # Copy WASM artifacts
+            cp web/output/daslang_static.js _site/playground/ || true
+            cp web/output/daslang_static.wasm _site/playground/ || true
+            cp web/output/daslang_static.js _site/files/wasm/ || true
+            cp web/output/daslang_static.wasm _site/files/wasm/ || true
+            # Copy sample data if present
+            cp -r web/ui/samples _site/playground/samples 2>/dev/null || true
+            # Our Forge-skinned playground/index.html + skin CSS + init shim take precedence.
+            # CodeMirror bundle (codemirror.min.js/css, simple-mode.js, daslang-*.js,
+            # cm-forge.css) is served from /files/cm/ — copied via `cp -r site/files`
+            # earlier, so nothing extra to copy here.
+            cp site/playground/index.html _site/playground/index.html
+            cp site/playground/forge-skin.css _site/playground/
+            cp site/playground/playground-init.js _site/playground/
+        else
+            echo "WARNING: web/output not found — playground will be unavailable"
+        fi
 
         # GitHub Pages control files
         touch _site/.nojekyll

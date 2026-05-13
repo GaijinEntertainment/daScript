@@ -1,0 +1,316 @@
+/* ──────────────────────────────────────────────────────────────────
+ * Forge — daslang.io / docs (Sphinx + sphinx_rtd_theme retoken)
+ *
+ * Colors and fonts match site/files/forge.css. We only restyle —
+ * no template overrides.
+ * ────────────────────────────────────────────────────────────────── */
+
+:root {
+    --bg:        #0d0c0a;
+    --bg-2:      #15130f;
+    --bg-3:      #1c1a14;
+    --fg:        #e8e2d2;
+    --fg-dim:    #9b9281;
+    --fg-faint:  #5b5547;
+    --rule:      #2a2620;
+    --amber:     #e8a13a;
+    --amber-dim: #a87420;
+    --green:     #9bc46a;
+    --red:       #d96d4f;
+    --blue:      #6aa9c4;
+    --font-sans: "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+/* ─── Web font import ───────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* ─── Page-level ──────────────────────────────────────────────── */
+html, body, .wy-body-for-nav {
+    background: var(--bg) !important;
+}
+body, .wy-body-for-nav {
+    font-family: var(--font-sans) !important;
+    color: var(--fg) !important;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────── */
+.wy-nav-side {
+    background: var(--bg-2) !important;
+    border-right: 1px solid var(--rule);
+}
+.wy-side-nav-search {
+    background: var(--bg) !important;
+    border-bottom: 1px solid var(--rule);
+}
+.wy-side-nav-search input[type="text"] {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--rule) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.wy-side-nav-search > a,
+.wy-side-nav-search .wy-dropdown > a {
+    color: var(--fg) !important;
+    font-family: var(--font-mono);
+}
+.wy-side-nav-search .version {
+    color: var(--fg-faint) !important;
+    font-family: var(--font-mono);
+}
+.wy-menu-vertical {
+    font-family: var(--font-sans);
+}
+.wy-menu-vertical p.caption,
+.wy-menu-vertical .caption-text {
+    color: var(--fg-faint) !important;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.3px;
+    text-transform: uppercase;
+}
+.wy-menu-vertical a {
+    color: var(--fg-dim) !important;
+    padding: 0.4045em 1.618em;
+}
+.wy-menu-vertical a:hover {
+    background: var(--bg-3) !important;
+    color: var(--fg) !important;
+}
+/* Expanded current-section subtree — RTD defaults to a light gray block
+ * that we must explicitly redarken at every nesting level. */
+.wy-menu-vertical li.current,
+.wy-menu-vertical li.current > ul,
+.wy-menu-vertical li.current ul,
+.wy-menu-vertical li.toctree-l1.current,
+.wy-menu-vertical li.toctree-l2.current,
+.wy-menu-vertical li.toctree-l3.current,
+.wy-menu-vertical li.toctree-l4.current,
+.wy-menu-vertical li.toctree-l5.current {
+    background: var(--bg-2) !important;
+}
+
+/* All sidebar links, every depth, regardless of state. */
+.wy-menu-vertical a,
+.wy-menu-vertical li.current a,
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.toctree-l1 a,
+.wy-menu-vertical li.toctree-l2 a,
+.wy-menu-vertical li.toctree-l3 a,
+.wy-menu-vertical li.toctree-l4 a,
+.wy-menu-vertical li.toctree-l5 a,
+.wy-menu-vertical li.toctree-l1.current > a,
+.wy-menu-vertical li.toctree-l2.current > a,
+.wy-menu-vertical li.toctree-l3.current > a {
+    background: transparent !important;
+    color: var(--fg-dim) !important;
+    border-right: none !important;
+    border-left: none !important;
+    border-top: none !important;
+    border-bottom: none !important;
+}
+
+/* Active (current page) link gets the amber left-marker. */
+.wy-menu-vertical li.current > a,
+.wy-menu-vertical li.toctree-l1.current > a:first-child {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+    border-left: 2px solid var(--amber) !important;
+}
+
+/* Hover state across all levels. */
+.wy-menu-vertical a:hover,
+.wy-menu-vertical li.current a:hover {
+    background: var(--bg-3) !important;
+    color: var(--fg) !important;
+}
+
+/* ─── Top breadcrumb / nav bar ───────────────────────────────── */
+.wy-nav-top {
+    background: var(--bg) !important;
+    border-bottom: 1px solid var(--rule);
+}
+.wy-nav-top a {
+    color: var(--fg) !important;
+    font-family: var(--font-mono);
+}
+.wy-nav-content-wrap {
+    background: var(--bg) !important;
+}
+.wy-nav-content {
+    background: var(--bg) !important;
+    max-width: 920px;
+}
+
+/* ─── Body / RST content ─────────────────────────────────────── */
+.rst-content {
+    color: var(--fg) !important;
+    font-family: var(--font-sans);
+}
+.rst-content h1, .rst-content h2, .rst-content h3,
+.rst-content h4, .rst-content h5, .rst-content h6 {
+    color: var(--fg) !important;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    border-bottom: none !important;
+}
+.rst-content h1 { font-size: 2.4em; letter-spacing: -0.02em; }
+.rst-content h2 { font-size: 1.7em; margin-top: 1.6em; }
+.rst-content h3 { font-size: 1.3em; margin-top: 1.4em; }
+.rst-content p, .rst-content li {
+    color: var(--fg-dim) !important;
+    line-height: 1.65;
+}
+.rst-content strong, .rst-content b { color: var(--fg) !important; }
+
+/* Links */
+a, a:visited { color: var(--amber) !important; }
+a:hover { color: var(--fg) !important; border-bottom-color: var(--fg) !important; }
+.rst-content a, .rst-content a:visited {
+    color: var(--amber) !important;
+    text-decoration: none;
+    border-bottom: 1px solid var(--amber-dim);
+}
+.rst-content a:hover {
+    color: var(--fg) !important;
+    border-bottom-color: var(--fg);
+}
+
+/* Inline code */
+.rst-content code.literal,
+.rst-content tt.literal,
+.rst-content code.docutils.literal {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--rule) !important;
+    color: var(--amber) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 0.85em;
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+/* Code blocks (pygments output kept; just retoken the chrome) */
+.rst-content pre,
+.rst-content div[class^="highlight"] {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--rule) !important;
+    border-radius: 8px !important;
+}
+.rst-content pre {
+    color: var(--fg);
+    font-family: var(--font-mono) !important;
+    font-size: 13px;
+    line-height: 1.65;
+    padding: 14px 16px;
+}
+.rst-content div[class^="highlight"] pre {
+    background: transparent !important;
+    border: none !important;
+    padding: 14px 16px;
+}
+
+/* Tables */
+.rst-content table.docutils,
+.rst-content table.field-list,
+.wy-table-responsive table {
+    background: transparent !important;
+    border: 1px solid var(--rule) !important;
+}
+.rst-content table.docutils thead,
+.wy-table-responsive table thead {
+    background: var(--bg-2) !important;
+    color: var(--fg);
+}
+.rst-content table.docutils th,
+.rst-content table.docutils td,
+.wy-table-responsive table th,
+.wy-table-responsive table td {
+    background: transparent !important;
+    border: 1px solid var(--rule) !important;
+    color: var(--fg-dim) !important;
+}
+.rst-content table.docutils tbody tr:nth-child(odd) td,
+.wy-table-responsive table tbody tr:nth-child(odd) td {
+    background: rgba(255, 255, 255, 0.015) !important;
+}
+
+/* Admonitions (note / warning / etc.) */
+.rst-content .admonition {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--rule) !important;
+    border-left: 2px solid var(--blue) !important;
+    border-radius: 4px;
+    color: var(--fg-dim);
+}
+.rst-content .admonition.warning,
+.rst-content .admonition.attention,
+.rst-content .admonition.caution {
+    border-left-color: var(--amber) !important;
+}
+.rst-content .admonition.error,
+.rst-content .admonition.danger {
+    border-left-color: var(--red) !important;
+}
+.rst-content .admonition-title {
+    background: transparent !important;
+    color: var(--fg) !important;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+}
+
+/* Domain signatures (function/class/etc. directives) */
+.rst-content dl.py dt,
+.rst-content dl.c dt,
+.rst-content dl.cpp dt,
+.rst-content dl.rst dt {
+    background: var(--bg-2) !important;
+    border: 1px solid var(--rule) !important;
+    border-radius: 4px;
+    color: var(--fg);
+    font-family: var(--font-mono);
+}
+
+/* Footer */
+.rst-footer-buttons .btn {
+    background: transparent !important;
+    color: var(--fg) !important;
+    border: 1px solid var(--rule) !important;
+    font-family: var(--font-mono);
+    border-radius: 4px;
+}
+.rst-footer-buttons .btn:hover {
+    background: var(--bg-2) !important;
+    border-color: var(--amber-dim) !important;
+}
+footer {
+    color: var(--fg-faint) !important;
+}
+footer a { color: var(--fg-dim) !important; }
+
+/* Search results */
+.search { color: var(--fg) !important; }
+.search li a { color: var(--fg) !important; }
+
+/* Pygments token colors — mirror the forge.css mapping so Sphinx-rendered
+ * code blocks share the landing's palette. */
+.highlight                              { background: transparent !important; color: var(--fg); }
+.highlight .k, .highlight .kd, .highlight .kr,
+.highlight .kn, .highlight .kp, .highlight .kt   { color: var(--amber); }
+.highlight .nb, .highlight .nc, .highlight .nt,
+.highlight .nf                                   { color: var(--blue); }
+.highlight .s, .highlight .s1, .highlight .s2,
+.highlight .sb, .highlight .sc, .highlight .sd,
+.highlight .se, .highlight .si, .highlight .sx,
+.highlight .sr, .highlight .ss                    { color: var(--green); }
+.highlight .m, .highlight .mi, .highlight .mf,
+.highlight .mh, .highlight .mo                    { color: #d8a8d8; }
+.highlight .c, .highlight .c1, .highlight .cm,
+.highlight .cs, .highlight .cp                    { color: var(--fg-faint); font-style: italic; }
+.highlight .na, .highlight .nd                    { color: var(--red); }
+.highlight .n                                     { color: var(--fg); }
+.highlight .o, .highlight .p                      { color: var(--fg-dim); }
+.highlight .err                                   { color: var(--red); background: transparent; border: none; }

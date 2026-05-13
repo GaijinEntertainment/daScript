@@ -40,7 +40,11 @@ mouse-data/*.db-wal
 mouse-data/*.db-shm
 
 modules/dasSFML/libsfml/
-site/
+# site/doc/ is the Sphinx HTML output deployed by .github/workflows/pages.yml.
+# Source for site/* (forge.css, blog/_posts/*.md, _news/*.md, etc.) IS tracked;
+# the build-time output (blog/*.html, news/*.html, files/wasm/, etc.) is
+# ignored via site/.gitignore.
+site/doc/
 doc/sphinx-build/
 doc/sphinx-build-latex/
 doc/source/stdlib/generated/
@@ -58,6 +62,7 @@ web/output/daScript.wasm
 web/output/.idea/
 
 yzg.code-workspace
+daScript.code-workspace
 
 examples/wip.das
 examples/wip_macro.das
