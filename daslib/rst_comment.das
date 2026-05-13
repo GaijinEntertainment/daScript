@@ -469,8 +469,14 @@ class RstComment : AstCommentReader {
         if (is_in_completion()) return
         var output : string
         let args = get_command_line_arguments()
+        let detailIds = args |> find_index("--detail_output")
         let outputIds = args |> find_index("--docs_output")
-        if (outputIds >= 0) {
+        if (detailIds >= 0) {
+            // `--detail_output Y` → write to `Y/detail/`. Matches the natural
+            // read path `{topic_root}/detail/...` so the consumer can set
+            // `topic_root = Y` without the `/index/` segment.
+            output = args[detailIds+1] + "/detail/"
+        } elif (outputIds >= 0) {
             output = args[outputIds+1] + "/index/detail/"
         } else {
             output = get_das_root() + "/doc/source/stdlib/generated/detail/"
