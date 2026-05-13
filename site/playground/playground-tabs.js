@@ -94,6 +94,10 @@
         if (!(name in pgState.files)) return;
         pgState.active = name;
         window.code.swapDoc(pgState.files[name]);
+        // Persist the new active tab — without this, a tab click followed by
+        // a page reload restores the prior active file (or main.das if no
+        // content edits have fired the autosave on `change` yet).
+        autosave();
         // Toggle classes in place — rebuilding the tab DOM here breaks
         // dblclick rename (second click lands on a freshly-mounted node).
         if (tabsEl) {
