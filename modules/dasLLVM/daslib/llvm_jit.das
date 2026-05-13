@@ -5266,7 +5266,15 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
         }
         var lblk = loop_stack |> back()
-        LLVMBuildBr(g_builder, lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start)
+        let target = lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start
+        let br = LLVMBuildBr(g_builder, target)
+        // Attach mustprogress to any branch that lands directly on the header.
+        // for-loops route through loop_continue (no metadata needed here, the
+        // continue's terminating br to loop_start carries it); while-loops
+        // have no continue latch, so this branch IS a backedge.
+        if (target == lblk.loop_start) {
+            attach_loop_mustprogress(br)
+        }
     }
 
 // ExprMakeBlock
@@ -5978,14 +5986,17 @@ class public LlvmJitVisitor : AstVisitor {
         let mustprogress_str = LLVMMDStringInContext2(g_ctx, "llvm.loop.mustprogress", 22ul)
         var inner_arr : LLVMOpaqueMetadata? [1]
         inner_arr[0] = mustprogress_str
-        let inner = LLVMMDNodeInContext2(g_ctx, unsafe(addr(inner_arr[0])), 1ul)
+        let inner = LLVMMDNodeInContext2(g_ctx, array_data_ptr(inner_arr), 1ul)
+        // LLVMMetadataReplaceAllUsesWith calls MDNode::deleteTemporary on
+        // `temp` internally, so do NOT also call LLVMDisposeTemporaryMDNode
+        // — that would be a double-free (crashes on Linux/Windows, masked
+        // by Apple's allocator).
         let temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
         var loop_arr : LLVMOpaqueMetadata? [2]
         loop_arr[0] = temp
         loop_arr[1] = inner
-        let loop_md = LLVMMDNodeInContext2(g_ctx, unsafe(addr(loop_arr[0])), 2ul)
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(loop_arr), 2ul)
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)
-        LLVMDisposeTemporaryMDNode(temp)
         let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
         let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)
         LLVMSetMetadata(branch_inst, kind_id, loop_md_val)
