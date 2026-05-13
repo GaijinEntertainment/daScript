@@ -105,13 +105,27 @@ loadSample = function(filesByName) {
     window.__pendingSampleBundle = bundle;
 }
 
+// Names of files we wrote to MEMFS on the previous run. Tracked so each new
+// run can unlink files the user has since deleted or renamed — otherwise
+// `require utils` would resolve stale code from the prior run, and the
+// executed program no longer matches the visible tab state.
+var __lastWrittenFiles = new Set();
+
 runCode = function() {
-    // Multi-file: write every file in pgState (if mounted) to MEMFS, then run
-    // main.das. Falls back to the single-buffer path when pgState isn't up yet.
+    // Multi-file: sync MEMFS with the current pgState (unlink stale, write
+    // current), then run main.das. Falls back to the single-buffer path when
+    // pgState isn't up yet.
     if (window.pgState && typeof FS !== 'undefined') {
+        const current = new Set(Object.keys(window.pgState.files));
+        for (const stale of __lastWrittenFiles) {
+            if (!current.has(stale)) {
+                try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
+            }
+        }
         for (const [name, doc] of Object.entries(window.pgState.files)) {
             FS.writeFile(name, doc.getValue());
         }
+        __lastWrittenFiles = current;
         Module.callMain(['main.das']);
         return;
     }

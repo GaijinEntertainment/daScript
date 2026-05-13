@@ -470,7 +470,7 @@ def main():
     ap.add_argument('--news', type=Path)
     ap.add_argument('--template', required=True, type=Path)
     ap.add_argument('--out', required=True, type=Path)
-    ap.add_argument('--site-url', default='https://dascript.org')
+    ap.add_argument('--site-url', default='https://daslang.io')
     args = ap.parse_args()
 
     tpl = args.template.read_text(encoding='utf-8')

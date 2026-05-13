@@ -57,11 +57,13 @@ jobs:
           # Glob so future playground-*.js additions land automatically.
           cp site/playground/playground-*.js _site/playground/
 
-          # Blog + news (template change validation)
+          # Blog + news (template change validation). Match the production
+          # site-url so feed.xml output matches what pages.yml would emit.
           python3 site/blog/build_blog.py \
               --posts site/blog/_posts \
               --news site/_news \
               --template site/blog/template.html \
+              --site-url https://daslang.io \
               --out _site/
 
           touch _site/.nojekyll

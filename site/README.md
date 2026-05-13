@@ -1,6 +1,6 @@
 # daslang.io — local development
 
-The site published at [dascript.org](https://dascript.org) and deployed by
+The site published at [daslang.io](https://daslang.io) and deployed by
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml). This README is
 the canonical guide for running each surface locally — `pages.yml` references
 the same commands and treats this file as the source of truth.

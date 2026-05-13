@@ -111,11 +111,14 @@ jobs:
         cp build/latex/daslang.pdf _site/doc/daslang.pdf || echo "WARNING: daslang.pdf not found"
         cp build/latex/daslangstdlib.pdf _site/doc/daslangstdlib.pdf || echo "WARNING: daslangstdlib.pdf not found"
 
-        # Blog + news + changelist (regenerated each publish)
+        # Blog + news + changelist (regenerated each publish). Pin --site-url
+        # explicitly so feed.xml entries point at the production domain even
+        # if the default in build_blog.py drifts.
         python3 site/blog/build_blog.py \
             --posts site/blog/_posts \
             --news site/_news \
             --template site/blog/template.html \
+            --site-url https://daslang.io \
             --out _site/
 
         # Playground: vendor web/ui IDE + WASM artifacts
