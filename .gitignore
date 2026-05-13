@@ -124,3 +124,4 @@ modules/dasUnitTest/dasModuleUnitTest_debug.pdb
 build-ubsan/.ninja_log
 doc/sphinx-build-latex/environment.pickle
 opencode.json
+test-results/

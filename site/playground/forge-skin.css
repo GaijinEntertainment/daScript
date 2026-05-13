@@ -62,6 +62,87 @@ body {
 }
 .button_header:hover { background: #f4b04a !important; }
 .button_header:disabled { opacity: 0.5; cursor: default; }
+.button_header--ghost {
+    background: transparent !important;
+    color: var(--fg-dim) !important;
+    border: 1px solid var(--rule) !important;
+}
+.button_header--ghost:hover {
+    background: rgba(232, 161, 58, 0.06) !important;
+    color: var(--amber) !important;
+    border-color: var(--amber-dim) !important;
+}
+
+/* ───── Share popover ───── */
+.pg-share {
+    z-index: 100;
+    width: 460px;
+    max-width: calc(100vw - 16px);
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    padding: 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--fg);
+}
+.pg-share__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--fg-dim);
+}
+.pg-share__close {
+    background: transparent;
+    border: 0;
+    color: var(--fg-faint);
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+}
+.pg-share__close:hover { color: var(--red); }
+.pg-share__row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.pg-share__url {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    outline: none;
+}
+.pg-share__url:focus { border-color: var(--amber-dim); }
+.pg-share__copy,
+.pg-share__shorten {
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pg-share__copy:hover,
+.pg-share__shorten:hover { color: var(--amber); border-color: var(--amber-dim); }
+.pg-share__shorten:disabled { opacity: 0.5; cursor: default; }
+.pg-share__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.pg-share__meta {
+    color: var(--fg-faint);
+    font-size: 11px;
+}
 
 .select_header {
     background: var(--bg-2) !important;
