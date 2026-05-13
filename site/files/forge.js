@@ -394,12 +394,22 @@ def main() {
         }).join('');
     }
 
+    // Mobile shows a static highlighted hero (in index.html, .forge-hero__code).
+    // CSS hides the .forge-editor / sample tabs / run + playground buttons, so
+    // we skip the heavy CM init + sample wiring entirely — keeps the static
+    // block from getting a hidden CodeMirror layered on top of it.
+    function isMobile() {
+        return window.matchMedia('(max-width: 767px)').matches;
+    }
+
     function init() {
-        wireSampleTabs();
-        initHeroEditor();
-        showSample('hello');
-        wireRunButton();
-        wirePlaygroundButton();
+        if (!isMobile()) {
+            wireSampleTabs();
+            initHeroEditor();
+            showSample('hello');
+            wireRunButton();
+            wirePlaygroundButton();
+        }
         wireInstallTabs();
         loadBench();
         loadNews();

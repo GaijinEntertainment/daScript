@@ -105,6 +105,16 @@
                     <button class="forge-sample-tab" data-sample="generic" role="tab">generic.das</button>
                 </div>
                 <div class="forge-editor" id="hero-editor"></div>
+                <!-- Static fallback shown on mobile (no CodeMirror, no run/playground).
+                     highlight.js tokenizes `language-daslang` automatically. -->
+                <pre class="forge-hero__code" id="hero-code-static"><code class="language-daslang">[export]
+def main() {
+    let name = "world"
+    print("hello, {name}\n")
+    for (i in range(3)) {
+        print("  tick {i}\n")
+    }
+}</code></pre>
                 <div class="forge-output" id="hero-output">
                     <div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang run hello.das</div>
                     <div class="forge-output__line forge-output__stdout">hello, world</div>

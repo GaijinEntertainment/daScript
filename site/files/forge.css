@@ -848,6 +848,22 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-nav__links { gap: 18px; }
 }
 
+/* Static hero fallback for mobile (replaces the CodeMirror live demo).
+ * Hidden on desktop; the @media below flips visibility and also hides
+ * the interactive editor + sample tabs + output + run/playground buttons. */
+.forge-hero__code {
+    display: none;
+    margin: 0;
+    padding: 16px 18px;
+    background: transparent;
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.55;
+    overflow-x: auto;
+    white-space: pre;
+}
+
 /* Mobile <768 */
 @media (max-width: 767px) {
     .forge-container { padding: 0 20px; }
@@ -858,8 +874,13 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-btn-primary, .forge-btn-secondary { justify-content: center; }
     .forge-stats { gap: 18px; flex-wrap: wrap; }
     .forge-stat { min-width: 45%; }
-    .forge-editor { height: 240px; }
-    .forge-editor .CodeMirror { font-size: 11px; }
+    /* Hero swaps from interactive CodeMirror to a static highlighted block. */
+    .forge-editor,
+    .forge-output,
+    .forge-sample-tabs,
+    #hero-run,
+    #hero-playground { display: none !important; }
+    .forge-hero__code { display: block; }
     .forge-nav__links { display: none; }
     .forge-section { padding: 56px 0; }
     .forge-h2 { font-size: 26px; }

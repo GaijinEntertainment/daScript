@@ -22,6 +22,25 @@
 </head>
 <body onload="pageInit()">
 
+<!-- Mobile gate: the IDE depends on a real keyboard + a ~5 MB WASM bundle,
+     neither of which is reasonable on a phone. Synchronously tag the root
+     element so CSS can hide the IDE chrome; then on DOMContentLoaded (after
+     the IDE scripts have parsed and defined their own pageInit), override
+     pageInit so the body.onload attribute fires our notice instead of the
+     WASM bootstrap. -->
+<script>
+(function () {
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    document.documentElement.classList.add('is-pg-mobile');
+    document.addEventListener('DOMContentLoaded', function () {
+        window.pageInit = function () {
+            var el = document.getElementById('pg-mobile-notice');
+            if (el) el.hidden = false;
+        };
+    });
+})();
+</script>
+
 <!-- ───── Forge nav (overlay on top of the IDE) ───── -->
 <nav class="forge-nav">
     <div class="forge-container forge-nav__inner">
@@ -46,6 +65,27 @@
         </div>
     </div>
 </nav>
+
+<div id="pg-mobile-notice" hidden>
+    <div class="forge-container">
+        <div class="forge-section-label">
+            <span class="forge-section-label__num">§</span>
+            <span class="forge-section-label__rule"></span>
+            <span>playground</span>
+        </div>
+        <h1 class="pg-mobile-notice__title">Open this on a laptop.</h1>
+        <p class="pg-mobile-notice__lede">
+            The daslang playground runs a 5&nbsp;MB WebAssembly toolchain in
+            your browser and ships an editor built for a keyboard. Both are
+            mediocre experiences on a phone, so we don't even load them
+            here.
+        </p>
+        <div class="pg-mobile-notice__ctas">
+            <a class="pg-mobile-notice__btn" href="../index.html">← back to daslang.io</a>
+            <a class="pg-mobile-notice__btn pg-mobile-notice__btn--ghost" href="../downloads.html">downloads</a>
+        </div>
+    </div>
+</div>
 
 <!-- ───── IDE (from web/ui — content copied by pages.yml) ───── -->
 <script type="text/javascript" src="./jquery-3.6.0.min.js"></script>
