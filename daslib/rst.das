@@ -37,6 +37,7 @@ var public {
     add_empty_topic = true
     strict_struct_fields = true
     group_function_overloads = true
+    property_assignment_operator = ":="
 }
 
 var private seen_function_labels : table<string; uint>
@@ -1818,7 +1819,7 @@ def function_name(func : FunctionPtr) {
             elif (safeName |> starts_with(".`")) { safeName = ".{safeName |> slice(2)}"; }
             // .name`clone → ".name :="  (clone-assign on property)
             if (safeName |> ends_with("`clone")) {
-                safeName = "{safeName |> slice(0,-6)} :="
+                safeName = "{safeName |> slice(0,-6)} {property_assignment_operator}"
             }
             // .name`&&= / `||= / `^^= → ".name &&=" etc (double-char compound assign)
             if (length(safeName) > 4 && safeName |> ends_with("=")) {
