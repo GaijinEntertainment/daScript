@@ -418,6 +418,15 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     color: var(--fg-faint);
 }
 .forge-bench__meta > div { line-height: 1.6; }
+.forge-bench__source {
+    color: var(--amber-dim);
+    border-bottom: 1px solid transparent;
+    transition: color 80ms ease, border-color 80ms ease;
+}
+.forge-bench__source:hover {
+    color: var(--amber);
+    border-bottom-color: var(--amber-dim);
+}
 .forge-bench__panel {
     background: var(--bg);
     border: 1px solid var(--rule);
