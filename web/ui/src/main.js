@@ -60,7 +60,12 @@ pageInit = function () {
              }
          });
 
-         selectSample("examples",0);
+         // Skip the default sample if pgInit already restored state from URL
+         // hash or localStorage autosave (otherwise the async fetch overwrites
+         // the user's work ~200ms after page load).
+         if (!window.pgRestoredFromState) {
+             selectSample("examples", 0);
+         }
 
     });
 
@@ -84,24 +89,40 @@ selectSample = function(type, id) {
     sampleList[type].value = "init";
 }
 
-// Apply a {filename: content} bundle to the editor. Today: surfaces only the
-// main.das (or the first file) in the single CM instance. Phase 3 routes this
-// through pgState + the tab strip so all files are addressable from the UI.
+// Apply a {filename: content} bundle. Once the tab strip is mounted, route
+// through pgLoadFiles so every file gets its own Doc. Before then (during
+// pageInit's initial selectSample call), stash the bundle for pgInit to pick
+// up when it polls in.
+//
+// Single-file samples are normalized to main.das (the entry callMain runs).
+// Multi-file samples are expected to ship a main.das themselves.
 loadSample = function(filesByName) {
     const names = Object.keys(filesByName);
     if (!names.length) return;
-    const active = filesByName['main.das'] !== undefined ? 'main.das' : names[0];
-    code.setValue(filesByName[active]);
-    // Stash the full bundle so phase 3 can pick it up post-tab-strip.
-    window.__pendingSampleBundle = filesByName;
+    let bundle = filesByName;
+    if (names.length === 1 && names[0] !== 'main.das') {
+        bundle = { 'main.das': filesByName[names[0]] };
+    }
+    if (typeof window.pgLoadFiles === 'function') {
+        window.pgLoadFiles(bundle);
+        return;
+    }
+    const active = bundle['main.das'] !== undefined ? 'main.das' : Object.keys(bundle)[0];
+    code.setValue(bundle[active]);
+    window.__pendingSampleBundle = bundle;
 }
 
 runCode = function() {
-
+    // Multi-file: write every file in pgState (if mounted) to MEMFS, then run
+    // main.das. Falls back to the single-buffer path when pgState isn't up yet.
+    if (window.pgState && typeof FS !== 'undefined') {
+        for (const [name, doc] of Object.entries(window.pgState.files)) {
+            FS.writeFile(name, doc.getValue());
+        }
+        Module.callMain(['main.das']);
+        return;
+    }
     runScript(code.getValue());
-
-
-
 }
 
 

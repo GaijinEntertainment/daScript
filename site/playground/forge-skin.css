@@ -74,6 +74,70 @@ body {
     height: 32px !important;
 }
 
+/* ───── Multi-file tab strip ───── */
+.pg-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pg-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg-2);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: color 80ms ease, border-color 80ms ease;
+}
+.pg-tab:hover { color: var(--fg); border-color: var(--fg-dim); }
+.pg-tab.is-active {
+    color: var(--amber);
+    border-color: var(--amber-dim);
+    background: rgba(232, 161, 58, 0.05);
+}
+.pg-tab__name { user-select: none; }
+.pg-tab__close {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.6;
+}
+.pg-tab__close:hover { opacity: 1; color: var(--red); }
+.pg-tab__close:disabled { opacity: 0.2; cursor: default; }
+.pg-tab__close:disabled:hover { color: inherit; }
+.pg-tab__rename {
+    background: var(--bg);
+    border: 1px solid var(--amber-dim);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    padding: 1px 4px;
+    width: 14ch;
+    outline: none;
+}
+.pg-tab__add {
+    background: transparent;
+    border: 1px dashed var(--rule);
+    color: var(--fg-faint);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pg-tab__add:hover { color: var(--amber); border-color: var(--amber-dim); }
+
 .main_col { padding: 16px 0 !important; }
 .main_col_part {
     padding: 0 24px !important;

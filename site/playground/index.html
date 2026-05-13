@@ -55,12 +55,15 @@
 <script type="text/javascript" src="../files/cm/daslang-mode.js"></script>
 <script type="text/javascript" src="./playground-init.js"></script>
 <script type="text/javascript" src="./main.js"></script>
+<script type="text/javascript" src="./playground-tabs.js"></script>
 
 <div class="main">
     <div class="main_col">
         <div class="main_header">
             <div class="main_header_left">
-                <div class="main_header_part main_name">main.das</div>
+                <div class="main_header_part">
+                    <div id="pg-tabs" class="pg-tabs"></div>
+                </div>
                 <div class="main_header_part">
                     <select id="examples" class="select_header" onchange="selectSample('examples')"></select>
                 </div>

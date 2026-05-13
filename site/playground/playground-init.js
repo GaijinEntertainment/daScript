@@ -14,18 +14,35 @@ window.FORGE_PLAYGROUND_OPTS = {
     highlightSelectionMatches: { showToken: /\w/ },
 };
 
-// `#code=<percent-encoded-source>` — the hero's "↗ playground" button sets this
-// when opening the playground. We poll for the CM instance (created later by
-// main.js) and inject the source once it shows up.
+// `#code=<percent-encoded-source>` — single-file share from the landing hero.
+// `#z=<lz-base64>` — multi-file share from the playground's ↗ share button.
+// Both formats hand off to pgLoadFiles once the tab strip is mounted.
 function applySharedCodeFromHash() {
-    if (!window.location.hash || !window.location.hash.startsWith('#code=')) return;
-    let src;
-    try { src = decodeURIComponent(window.location.hash.slice(6)); }
-    catch (e) { return; }
+    const hash = window.location.hash || '';
+    let payload = null;
+    if (hash.startsWith('#code=')) {
+        try {
+            const src = decodeURIComponent(hash.slice(6));
+            payload = { files: { 'main.das': src }, active: 'main.das' };
+        } catch (e) { return; }
+    } else if (hash.startsWith('#z=') && window.LZString) {
+        try {
+            const json = window.LZString.decompressFromEncodedURIComponent(hash.slice(3));
+            const obj = JSON.parse(json);
+            if (obj && obj.files) payload = obj;
+        } catch (e) { return; }
+    } else {
+        return;
+    }
+
+    // Stash bundle immediately so pgInit picks it up even if it polls in
+    // before we do.
+    window.__pendingSampleBundle = payload.files;
     const deadline = Date.now() + 5000;
     (function tryApply() {
-        if (window.code && typeof window.code.setValue === 'function') {
-            window.code.setValue(src);
+        if (typeof window.pgLoadFiles === 'function') {
+            window.__pendingSampleBundle = null;
+            window.pgLoadFiles(payload.files, payload.active);
             return;
         }
         if (Date.now() < deadline) setTimeout(tryApply, 50);
