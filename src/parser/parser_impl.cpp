@@ -1127,7 +1127,8 @@ namespace das {
     }
 
     Expression * ast_forLoop ( yyscan_t,  vector<VariableNameAndPosition> * iters, Expression * srcs,
-        Expression * block, const LineInfo & locAt, const LineInfo & blockAt ) {
+        Expression * block, const LineInfo & locAt, const LineInfo & blockAt,
+        AnnotationArgumentList * annL ) {
         auto pFor = new ExprFor(locAt);
         pFor->visibility = blockAt;
         for ( const auto & np : *iters ) {
@@ -1140,6 +1141,7 @@ namespace das {
         delete iters;
         pFor->sources = sequenceToList(srcs);
         pFor->body = block;
+        if ( annL ) { pFor->annotations = move(*annL); delete annL; }
         ((ExprBlock *)block)->inTheLoop = true;
         return pFor;
     }

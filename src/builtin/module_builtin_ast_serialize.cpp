@@ -1782,7 +1782,7 @@ namespace das {
         serializeBase(expr);
         ser << expr->iterators << expr->iteratorsAka << expr->iteratorsAt << expr->iteratorsTupleExpansion << expr->iteratorsTags
             << expr->iteratorVariables << expr->sources << expr->body << expr->visibility
-            << expr->allowIteratorOptimization << expr->canShadow;
+            << expr->allowIteratorOptimization << expr->canShadow << expr->annotations;
     }
 
     void SerializeVisitor::preVisit ( ExprUnsafe * expr ) {
@@ -1792,7 +1792,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprWhile * expr ) {
         serializeBase(expr);
-        ser << expr->cond << expr->body;
+        ser << expr->cond << expr->body << expr->annotations;
     }
 
     void SerializeVisitor::preVisit ( ExprWith * expr ) {
@@ -2668,9 +2668,8 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        // bumped for ska::flat_hash_map → das::daslang_hash_map switch:
-        // iteration order differs, invalidating any cached serialized AST.
-        static constexpr uint32_t currentVersion = 81;
+        // bumped for per-loop annotations on ExprFor/ExprWhile.
+        static constexpr uint32_t currentVersion = 82;
         return currentVersion;
     }
 

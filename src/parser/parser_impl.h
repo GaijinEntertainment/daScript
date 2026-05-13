@@ -107,7 +107,8 @@ namespace das {
         TypeDecl * result, const LineInfo & nameAt );
     void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName );
     Expression * ast_forLoop ( yyscan_t scanner,  vector<VariableNameAndPosition> * iters, Expression * srcs,
-        Expression * block, const LineInfo & locAt, const LineInfo & blockAt );
+        Expression * block, const LineInfo & locAt, const LineInfo & blockAt,
+        AnnotationArgumentList * annL = nullptr );
     AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t scanner, AnnotationArgumentList * argL, AnnotationArgument * arg );
     AnnotationArgumentList * ast_annotationArgumentListEntry ( yyscan_t, AnnotationArgumentList * argL, AnnotationArgument * arg );
     Expression * ast_lpipe ( yyscan_t scanner, Expression * fncall, Expression * arg, const LineInfo & locAt );

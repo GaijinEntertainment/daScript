@@ -656,6 +656,10 @@ module.exports = grammar({
 
     for_statement: $ => seq(
       'for',
+      optional(field('annotations', choice(
+        seq('[', $.annotation_argument_list, ']'),
+        $.metadata_argument_list,
+      ))),
       '(',
       field('variables', sep1($.for_variable, ',')),
       'in',
@@ -672,6 +676,10 @@ module.exports = grammar({
 
     while_statement: $ => seq(
       'while',
+      optional(field('annotations', choice(
+        seq('[', $.annotation_argument_list, ']'),
+        $.metadata_argument_list,
+      ))),
       '(',
       field('condition', $._expression),
       ')',
