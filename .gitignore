@@ -78,6 +78,11 @@ emsdk/
 daspkg.lock
 .daspkg_global.lock
 .daspkg_standalone
+# dasImgui ships from its own repo (https://github.com/borisbat/dasImgui);
+# the modules/dasImgui/ tree is daspkg-installed locally and must NOT be
+# tracked here, or the root cmake will try to build the daspkg-standalone
+# module in-tree (broken master 2026-05-12 -> 13).
+modules/dasImgui/
 modules/.daspkg_tmp/
 modules/.daspkg_backup/
 modules/.daspkg_cache/
