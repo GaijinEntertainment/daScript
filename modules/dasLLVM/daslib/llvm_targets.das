@@ -34,3 +34,14 @@ def LLVMInitializeAllAsmPrinters() {
     LLVMInitializeARMAsmPrinter()
     LLVMInitializeX86AsmPrinter()
 }
+
+// WebAssembly target — kept separate from LLVMInitializeAll* so the JIT path
+// doesn't pay its static-init cost on every startup. Called lazily by the
+// wasm32 cross-compile entry point.
+def LLVMInitializeWasmTarget() {
+    LLVMInitializeWebAssemblyTargetInfo()
+    LLVMInitializeWebAssemblyTarget()
+    LLVMInitializeWebAssemblyTargetMC()
+    LLVMInitializeWebAssemblyAsmPrinter()
+    LLVMInitializeWebAssemblyAsmParser()
+}

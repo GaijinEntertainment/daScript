@@ -706,22 +706,16 @@ def public build_block_type {
 //   driven by LLVMRunPasses. Use true for JIT and JIT-DLL-cache emission
 //   (the artifact only ever runs on this host); use false for redistributable
 //   exe/dll emission where the binary must run on any compatible CPU.
+// Build a TargetMachine for an arbitrary triple/cpu/features. Caller owns
+// triple/cpu/features (we do not LLVMDisposeMessage them — they are plain
+// das `string`s here, not heap-owned LLVM messages).
 [macro_function]
-def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
-                                       blk : block<(LLVMTargetMachineRef) : void>) {
-    LLVMInitializeAllTargetInfos()
-    LLVMInitializeAllTargets()
-    LLVMInitializeAllTargetMCs()
-    LLVMInitializeAllAsmPrinters()
-
-    let triple = LLVMGetDefaultTargetTriple()
-
+def public with_target_machine(triple, cpu, features : string; opt_level : uint;
+                               blk : block<(LLVMTargetMachineRef) : void>) {
     var target : LLVMTarget?
     let error : string?
     LLVMGetTargetFromTriple(triple, unsafe(addr(target)), error)
 
-    let cpu = use_host_cpu ? LLVMGetHostCPUName() : ""
-    let features = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
     let cg_level = (
         (opt_level >= 3u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelAggressive
       : (opt_level >= 2u) ? LLVMCodeGenOptLevel.LLVMCodeGenLevelDefault
@@ -739,13 +733,28 @@ def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
     )
 
     invoke(blk, targetMachine)
+    LLVMDisposeTargetMachine(targetMachine)
+}
+
+[macro_function]
+def public with_default_target_machine(opt_level : uint; use_host_cpu : bool;
+                                       blk : block<(LLVMTargetMachineRef) : void>) {
+    LLVMInitializeAllTargetInfos()
+    LLVMInitializeAllTargets()
+    LLVMInitializeAllTargetMCs()
+    LLVMInitializeAllAsmPrinters()
+
+    let triple_msg = LLVMGetDefaultTargetTriple()
+    let cpu_msg = use_host_cpu ? LLVMGetHostCPUName() : ""
+    let features_msg = use_host_cpu ? LLVMGetHostCPUFeatures() : ""
+
+    with_target_machine(triple_msg, cpu_msg, features_msg, opt_level, blk)
 
     if (use_host_cpu) {
-        LLVMDisposeMessage(cpu)
-        LLVMDisposeMessage(features)
+        LLVMDisposeMessage(cpu_msg)
+        LLVMDisposeMessage(features_msg)
     }
-    LLVMDisposeMessage(triple)
-    LLVMDisposeTargetMachine(targetMachine)
+    LLVMDisposeMessage(triple_msg)
 }
 
 // @mod - module to dump to dll
@@ -772,6 +781,29 @@ def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
         let filetype = LLVMCodeGenFileType.LLVMObjectFile
         LLVMTargetMachineEmitToFile(targetMachine, mod, file, filetype, error)
         create_shared_library(file, add_exe_extension(out_path), "{path_to_dascript_lib}", "{path_to_linker}", false, link_whole_lib)
+    }
+}
+
+// Cross-compile a module to wasm32 and link to a runnable .wasm via wasm-ld.
+// triple selects the wasm flavor — "wasm32-unknown-unknown" by default.
+// path_to_wasm_ld may be empty; link_wasm falls back to bin/wasm-ld then PATH.
+def public write_wasm(mod : LLVMOpaqueModule?; out_path : string; triple : string; path_to_wasm_ld : string) {
+    LLVMInitializeWasmTarget()
+    let real_triple = (triple |> empty()) ? "wasm32-unknown-unknown" : triple
+    with_target_machine(real_triple, "", "", 2u) $(targetMachine : LLVMTargetMachineRef) {
+        // Pin the module's data layout + triple so codegen sizes pointers as
+        // 32-bit. Without this the module inherits host layout and produces
+        // wrong-sized loads/stores in the emitted wasm.
+        let dl = LLVMCreateTargetDataLayout(targetMachine)
+        LLVMSetModuleDataLayout(mod, dl)
+        LLVMSetTarget(mod, real_triple)
+        LLVMDisposeTargetData(dl)
+
+        let error : string?
+        let obj = add_obj_extension(out_path)
+        let filetype = LLVMCodeGenFileType.LLVMObjectFile
+        LLVMTargetMachineEmitToFile(targetMachine, mod, obj, filetype, error)
+        link_wasm(obj, "{out_path}.wasm", "{path_to_wasm_ld}")
     }
 }
 
