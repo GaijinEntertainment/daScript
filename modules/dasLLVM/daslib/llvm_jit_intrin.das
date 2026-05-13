@@ -113,6 +113,7 @@ let g_intrin_lookup <- {
     "math::ceili" => @@intrinsic_math_float_op1_to_int,
     "math::roundi" => @@intrinsic_math_roundi,
     "math::trunci" => @@intrinsic_math_trunci,
+    "math::length" => @@intrinsic_math_length,
     "math::length_sq" => @@intrinsic_math_length_sq,
     "math::dot" => @@intrinsic_math_dot,
     "math::cross" => @@intrinsic_math_cross,
@@ -711,6 +712,14 @@ def build_frcp(var ctx : JitCtx; v2 : LLVMOpaqueValue?; name : string) : LLVMOpa
     var one = LLVMConstReal(ctx.types.t_float, 1.0lf)
     var fdiv = LLVMBuildFDiv(ctx.builder, one, v2, "")
     return fdiv
+}
+
+def intrinsic_math_length(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(ctx.builder, arguments[0], arguments[0], "")
+    let len_sq = build_fadd(ctx, opType, v2, "")
+    return build_fsqrt(ctx, len_sq, "length")
 }
 
 def intrinsic_math_length_sq(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
