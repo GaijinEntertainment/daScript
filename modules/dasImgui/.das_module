@@ -24,4 +24,6 @@ def initialize(project_path : string) {
     register_native_path("imgui", "imgui_id_builtin", "{project_path}/widgets/imgui_id_builtin.das")
     // §4.7 — style stack helpers (with_style call_macro + push_style_one overloads).
     register_native_path("imgui", "imgui_style_builtin", "{project_path}/widgets/imgui_style_builtin.das")
+    // §4.6 — layout helpers (split_h, split_v, dock_left).
+    register_native_path("imgui", "imgui_layout_builtin", "{project_path}/widgets/imgui_layout_builtin.das")
 }
