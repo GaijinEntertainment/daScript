@@ -1149,9 +1149,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_fixed_loop(count : int; blk : block<(var index : LLVMOpaqueValue?) : void>) {
-        if (count == 0) {
-            pass
-        }
+        return if (count == 0)
         if (count == 1) {
             invoke(blk, types.ConstI32(0ul))
         } else {
