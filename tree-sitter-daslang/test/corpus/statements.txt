@@ -194,3 +194,94 @@ def test() {
           name: (identifier)
           value: (call_expression
             function: (identifier)))))))
+
+================================================================================
+For loop with bracketed annotations
+================================================================================
+
+def test() {
+  for [unroll_count = 4, vectorize] (i in range(10)) {
+    pass
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (for_statement
+        annotations: (annotation_argument_list
+          (annotation_argument
+            name: (identifier)
+            value: (integer_literal))
+          (annotation_argument
+            name: (identifier)))
+        variables: (for_variable
+          (identifier))
+        iterators: (call_expression
+          function: (basic_type)
+          (argument_list
+            (integer_literal)))
+        body: (block
+          (pass_statement))))))
+
+================================================================================
+For loop with metadata annotations
+================================================================================
+
+def test() {
+  for @unroll_full (i in range(10)) {
+    pass
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (for_statement
+        annotations: (metadata_argument_list
+          (annotation_argument
+            name: (identifier)))
+        variables: (for_variable
+          (identifier))
+        iterators: (call_expression
+          function: (basic_type)
+          (argument_list
+            (integer_literal)))
+        body: (block
+          (pass_statement))))))
+
+================================================================================
+While loop with bracketed annotations
+================================================================================
+
+def test() {
+  while [unroll_disable] (false) {
+    pass
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (function_name
+      (identifier))
+    (function_argument_list)
+    body: (block
+      (while_statement
+        annotations: (annotation_argument_list
+          (annotation_argument
+            name: (identifier)))
+        condition: (boolean_literal)
+        body: (block
+          (pass_statement))))))

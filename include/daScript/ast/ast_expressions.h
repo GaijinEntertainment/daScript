@@ -956,6 +956,7 @@ namespace das
         LineInfo                visibility;
         bool                    allowIteratorOptimization = false;  // if enabled, unused source variables can be removed
         bool                    canShadow = false;                  // if enabled, local variables can shadow
+        AnnotationArgumentList  annotations;                        // per-loop LLVM hint metadata (bare arg list, annotation name is implicit)
     };
 
     struct DAS_API ExprUnsafe : Expression {
@@ -982,6 +983,7 @@ namespace das
         virtual void dispatch( Visitor & vis ) override;
         virtual void gc_collect ( gc_root * target, gc_root * from ) override;
         ExpressionPtr   cond = nullptr, body = nullptr;
+        AnnotationArgumentList  annotations;                        // per-loop LLVM hint metadata (bare arg list, annotation name is implicit)
     };
 
     struct DAS_API ExprWith : Expression {

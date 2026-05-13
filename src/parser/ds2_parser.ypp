@@ -411,6 +411,7 @@
 %type <aaList>              metadata_argument_list
 %type <aaList>              annotation_argument_value_list
 %type <aaList>              optional_field_annotation
+%type <aaList>              optional_for_annotations
 %type <fa>                  annotation_declaration_basic
 %type <fa>                  annotation_declaration
 %type <faList>              annotation_list
@@ -1032,9 +1033,9 @@ for_variable_name_with_pos_list
 expression_for_loop
     :   {
         yyextra->das_keyword = true;
-    } DAS_FOR[loc] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' optional_emit_semis expression_block[block] {
+    } DAS_FOR[loc] optional_for_annotations[annL] '(' for_variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ')' optional_emit_semis expression_block[block] {
         yyextra->das_keyword = false;
-        $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
+        $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block),$annL);
     }
     ;
 
@@ -1049,11 +1050,12 @@ expression_unsafe
 expression_while_loop
     :   {
         yyextra->das_keyword = true;
-    } DAS_WHILE[loc] '(' expr[condition] ')' optional_emit_semis expression_block[block] {
+    } DAS_WHILE[loc] optional_for_annotations[annL] '(' expr[condition] ')' optional_emit_semis expression_block[block] {
         yyextra->das_keyword = false;
         auto pWhile = new ExprWhile(tokAt(scanner,@loc));
         pWhile->cond = $condition;
         pWhile->body = $block;
+        if ( $annL ) { pWhile->annotations = move(*$annL); delete $annL; }
         ((ExprBlock *)$block)->inTheLoop = true;
         $$ = pWhile;
     }
@@ -1139,6 +1141,18 @@ metadata_argument_list
     }
     |   metadata_argument_list[argL] '@' annotation_argument[arg] optional_emit_semis {
         $$ = ast_annotationArgumentListEntry(scanner,$argL,$arg);
+    }
+    ;
+
+optional_for_annotations
+    :   /* empty */ {
+        $$ = nullptr;
+    }
+    |   '[' annotation_argument_list[argL] ']' {
+        $$ = $argL;
+    }
+    |   metadata_argument_list[argL] {
+        $$ = $argL;
     }
     ;
 

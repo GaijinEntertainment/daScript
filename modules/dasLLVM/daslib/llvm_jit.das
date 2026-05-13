@@ -66,6 +66,7 @@ struct private LoopBlock {
     loop_end   : LLVMOpaqueBasicBlock?
     loop_continue : LLVMOpaqueBasicBlock?
     need_loop  : LLVMOpaqueValue?
+    parent_while : ExprWhile?   // set in preVisitExprWhile; null for ExprFor — used by preVisitExprContinue
 }
 
 struct SLabel {
@@ -2722,7 +2723,8 @@ class public LlvmJitVisitor : AstVisitor {
         var lblk = LoopBlock(
             loop_start = append_basic_block("while_start"),
             loop_body = append_basic_block("while_body"),
-            loop_end = append_basic_block("while_end")
+            loop_end = append_basic_block("while_end"),
+            parent_while = expr
         )
         loop_stack |> push(lblk)
         LLVMBuildBr(g_builder, lblk.loop_start)
@@ -2740,7 +2742,7 @@ class public LlvmJitVisitor : AstVisitor {
         loop_stack |> pop()
         if (!current_block_terminates()) {
             let backedge = LLVMBuildBr(g_builder, lblk.loop_start)
-            attach_loop_mustprogress(backedge)
+            attach_loop_metadata(backedge, expr.annotations)
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
         return expr
@@ -3139,7 +3141,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         let backedge = LLVMBuildBr(g_builder, lblk.loop_start)
-        attach_loop_mustprogress(backedge)
+        attach_loop_metadata(backedge, expr.annotations)
         /*
         LOOP_END:
             evalFinal(context)
@@ -5266,12 +5268,18 @@ class public LlvmJitVisitor : AstVisitor {
         var lblk = loop_stack |> back()
         let target = lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start
         let br = LLVMBuildBr(g_builder, target)
-        // Attach mustprogress to any branch that lands directly on the header.
+        // Attach loop metadata to any branch that lands directly on the header.
         // for-loops route through loop_continue (no metadata needed here, the
         // continue's terminating br to loop_start carries it); while-loops
-        // have no continue latch, so this branch IS a backedge.
+        // have no continue latch, so this branch IS a backedge. The parent
+        // ExprWhile is stashed on the LoopBlock so we can read its per-loop
+        // annotations here for the while-continue backedge.
         if (target == lblk.loop_start) {
-            attach_loop_mustprogress(br)
+            if (lblk.parent_while != null) {
+                attach_loop_metadata(br, lblk.parent_while.annotations)
+            } else {
+                attach_loop_mustprogress(br)
+            }
         }
     }
 
@@ -5971,33 +5979,96 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
     }
 
-    // Attach `!llvm.loop !N` with `!N = distinct !{!N, !{!"llvm.loop.mustprogress"}}`
+    // Build `!{!"name"}` — a 1-operand MDNode wrapping a metadata string.
+    def make_loop_md_flag(name : string) : LLVMOpaqueMetadata? {
+        var arr : LLVMOpaqueMetadata? [1]
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 1ul)
+    }
+
+    // Build `!{!"name", i32 N}` — a 2-operand MDNode used for LangRef pairs
+    // like `llvm.loop.unroll.count, i32 N`.
+    def make_loop_md_pair_i32(name : string; n : int) : LLVMOpaqueMetadata? {
+        var arr : LLVMOpaqueMetadata? [2]
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        arr[1] = LLVMValueAsMetadata(LLVMConstInt(types.t_int32, uint64(n), 0))
+        return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 2ul)
+    }
+
+    // Build `!{!"name", i1 b}` — for `llvm.loop.vectorize.enable`-style toggles.
+    def make_loop_md_pair_i1(name : string; b : bool) : LLVMOpaqueMetadata? {
+        var arr : LLVMOpaqueMetadata? [2]
+        arr[0] = LLVMMDStringInContext2(g_ctx, name, uint64(length(name)))
+        arr[1] = LLVMValueAsMetadata(LLVMConstInt(types.t_int1, b ? 1ul : 0ul, 0))
+        return LLVMMDNodeInContext2(g_ctx, array_data_ptr(arr), 2ul)
+    }
+
+    // Map per-loop annotation args (the bare list stored on ExprFor/ExprWhile)
+    // to LangRef !llvm.loop.* operand MDNodes.
+    def append_loop_hint_operand(var operands : array<LLVMOpaqueMetadata?>; a : AnnotationArgument) {
+        if (a.name == "unroll") operands |> push <| make_loop_md_flag("llvm.loop.unroll.enable")
+        elif (a.name == "unroll_full") operands |> push <| make_loop_md_flag("llvm.loop.unroll.full")
+        elif (a.name == "unroll_disable") operands |> push <| make_loop_md_flag("llvm.loop.unroll.disable")
+        elif (a.name == "unroll_and_jam") operands |> push <| make_loop_md_flag("llvm.loop.unroll_and_jam.enable")
+        elif (a.name == "unroll_and_jam_disable") operands |> push <| make_loop_md_flag("llvm.loop.unroll_and_jam.disable")
+        elif (a.name == "vectorize") operands |> push <| make_loop_md_pair_i1("llvm.loop.vectorize.enable", true)
+        elif (a.name == "vectorize_disable") operands |> push <| make_loop_md_pair_i1("llvm.loop.vectorize.enable", false)
+        elif (a.name == "vectorize_predicate") operands |> push <| make_loop_md_pair_i1("llvm.loop.vectorize.predicate.enable", true)
+        elif (a.name == "distribute") operands |> push <| make_loop_md_pair_i1("llvm.loop.distribute.enable", true)
+        elif (a.name == "disable_nonforced") operands |> push <| make_loop_md_flag("llvm.loop.disable_nonforced")
+        elif (a.name == "licm_versioning_disable") operands |> push <| make_loop_md_flag("llvm.loop.licm_versioning.disable")
+        elif (a.name == "unroll_count"     && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.unroll.count",     int(a.iValue))
+        elif (a.name == "vectorize_width"  && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.vectorize.width", int(a.iValue))
+        elif (a.name == "interleave_count" && a.basicType == Type.tInt) operands |> push <| make_loop_md_pair_i32("llvm.loop.interleave.count", int(a.iValue))
+        else                                          failed("unknown loop hint '{a.name}'")
+    }
+
+    // Attach `!llvm.loop !N` with `!N = distinct !{!N, !{!"llvm.loop.mustprogress"}, <user-mds...>}`
     // to the given backedge branch. Self-reference is required by LangRef and is
     // what gives the loop its pointer-identity for opt's loop-info bookkeeping.
     //
-    // `mustprogress` tells opt the loop is required to make forward progress
-    // (i.e., side-effect-free infinite loops are UB and can be deleted). This
-    // matches daslang semantics — there's no infinite-loop idiom that opt
-    // shouldn't be allowed to assume terminates — and unblocks transformations
-    // that bail conservatively on potentially-non-progressing loops.
-    def attach_loop_mustprogress(branch_inst : LLVMValueRef) {
-        let mustprogress_str = LLVMMDStringInContext2(g_ctx, "llvm.loop.mustprogress", 22ul)
-        var inner_arr : LLVMOpaqueMetadata? [1]
-        inner_arr[0] = mustprogress_str
-        let inner = LLVMMDNodeInContext2(g_ctx, array_data_ptr(inner_arr), 1ul)
+    // `mustprogress` is always attached: it tells opt the loop must make forward
+    // progress (side-effect-free infinite loops are UB and can be deleted) —
+    // matches daslang semantics and unblocks transformations that bail on
+    // potentially-non-progressing loops.
+    //
+    // Per-loop hints (LangRef !llvm.loop.*) come from the AnnotationArgumentList
+    // stored on the ExprFor / ExprWhile node. See append_loop_hint_operand for
+    // the recognized vocabulary.
+    def attach_loop_metadata(branch_inst : LLVMValueRef; args : AnnotationArgumentList) {
+        var operands : array<LLVMOpaqueMetadata?>
         // LLVMMetadataReplaceAllUsesWith calls MDNode::deleteTemporary on
         // `temp` internally, so do NOT also call LLVMDisposeTemporaryMDNode
         // — that would be a double-free (crashes on Linux/Windows, masked
         // by Apple's allocator).
-        let temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
-        var loop_arr : LLVMOpaqueMetadata? [2]
-        loop_arr[0] = temp
-        loop_arr[1] = inner
-        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(loop_arr), 2ul)
+        var temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
+        operands |> push(temp)
+        var mustprog = make_loop_md_flag("llvm.loop.mustprogress")
+        operands |> push(mustprog)
+        for (a in args) {
+            append_loop_hint_operand(operands, a)
+        }
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(operands), uint64(length(operands)))
         LLVMMetadataReplaceAllUsesWith(temp, loop_md)
         let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
         let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)
         LLVMSetMetadata(branch_inst, kind_id, loop_md_val)
+    }
+
+    // Thin wrapper for callsites without a source AST node (build_fixed_loop
+    // for ExprNew array init): mustprogress only. Inlined rather than calling
+    // attach_loop_metadata to sidestep the "construct empty AnnotationArgumentList"
+    // dance — handled types aren't safely default-constructible from das.
+    def attach_loop_mustprogress(branch_inst : LLVMValueRef) {
+        var temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
+        var loop_arr : LLVMOpaqueMetadata? [2]
+        loop_arr[0] = temp
+        loop_arr[1] = make_loop_md_flag("llvm.loop.mustprogress")
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(loop_arr), 2ul)
+        LLVMMetadataReplaceAllUsesWith(temp, loop_md)
+        LLVMSetMetadata(branch_inst,
+                        LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u),
+                        LLVMMetadataAsValue(g_ctx, loop_md))
     }
 
     def at_function_entry(blk : block) {

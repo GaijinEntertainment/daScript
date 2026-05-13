@@ -2447,6 +2447,7 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->cond = cond->clone();
         cexpr->body = body->clone();
+        cexpr->annotations = annotations;
         return cexpr;
     }
 
@@ -2494,6 +2495,7 @@ namespace das {
         }
         cexpr->allowIteratorOptimization = allowIteratorOptimization;
         cexpr->canShadow = canShadow;
+        cexpr->annotations = annotations;
         return cexpr;
     }
 
