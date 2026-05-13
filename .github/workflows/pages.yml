@@ -136,7 +136,9 @@ jobs:
             # earlier, so nothing extra to copy here.
             cp site/playground/index.html _site/playground/index.html
             cp site/playground/forge-skin.css _site/playground/
-            cp site/playground/playground-init.js _site/playground/
+            # Forge playground scripts (init shim + tabs + share + splitter).
+            # Glob so future playground-*.js additions land automatically.
+            cp site/playground/playground-*.js _site/playground/
         else
             echo "WARNING: web/output not found — playground will be unavailable"
         fi

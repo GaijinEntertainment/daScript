@@ -138,8 +138,12 @@
         if (oldName === ENTRY) return false;
         newName = (newName || '').trim();
         if (!newName) return false;
-        if (!/^[A-Za-z0-9_./-]+\.das$/.test(newName)) {
-            window.alert('Filename must end in .das and contain only [A-Za-z0-9_./-].');
+        // Reject `/` — Emscripten MEMFS's FS.writeFile doesn't auto-create
+        // parent dirs, so a nested name silently breaks Run. Flat namespace
+        // is enough for the playground; users with multi-dir layouts can
+        // copy a single-file daspkg or run locally.
+        if (!/^[A-Za-z0-9_.-]+\.das$/.test(newName)) {
+            window.alert('Filename must end in .das and contain only [A-Za-z0-9_.-] (no path separators).');
             return false;
         }
         if (newName === oldName) return true;

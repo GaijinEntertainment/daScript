@@ -53,7 +53,9 @@ jobs:
           cp -r web/ui/samples _site/playground/samples 2>/dev/null || true
           cp site/playground/index.html _site/playground/index.html
           cp site/playground/forge-skin.css _site/playground/
-          cp site/playground/playground-init.js _site/playground/
+          # Forge playground scripts (init shim + tabs + share + splitter).
+          # Glob so future playground-*.js additions land automatically.
+          cp site/playground/playground-*.js _site/playground/
 
           # Blog + news (template change validation)
           python3 site/blog/build_blog.py \
