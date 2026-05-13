@@ -291,8 +291,10 @@
 
         if (hasHash && window.__pendingSampleBundle) {
             const bundle = window.__pendingSampleBundle;
+            const active = window.__pendingSampleActive;
             window.__pendingSampleBundle = null;
-            pgLoadFiles(bundle);
+            window.__pendingSampleActive = null;
+            pgLoadFiles(bundle, active);
             window.pgRestoredFromState = true;
             return;
         }
@@ -307,8 +309,10 @@
         // No autosave: let the pending default sample (if any) drop in.
         if (window.__pendingSampleBundle) {
             const bundle = window.__pendingSampleBundle;
+            const active = window.__pendingSampleActive;
             window.__pendingSampleBundle = null;
-            pgLoadFiles(bundle);
+            window.__pendingSampleActive = null;
+            pgLoadFiles(bundle, active);
         }
     }
 

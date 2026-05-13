@@ -40,12 +40,19 @@ function applySharedCodeFromHash() {
     // main.js skips its default `selectSample("examples", 0)` — otherwise
     // the async data.json fetch occasionally beats pgLoadFiles and the
     // default hello.das overwrites the hash payload.
+    //
+    // Stash `active` alongside the bundle: when playground-tabs.js's tryInit
+    // consumes the pending bundle before this tryApply loop resolves, it
+    // needs the active filename or it falls back to main.das and the shared
+    // URL's selected tab is silently lost.
     window.__pendingSampleBundle = payload.files;
+    window.__pendingSampleActive = payload.active;
     window.pgRestoredFromState = true;
     const deadline = Date.now() + 5000;
     (function tryApply() {
         if (typeof window.pgLoadFiles === 'function') {
             window.__pendingSampleBundle = null;
+            window.__pendingSampleActive = null;
             window.pgLoadFiles(payload.files, payload.active);
             return;
         }

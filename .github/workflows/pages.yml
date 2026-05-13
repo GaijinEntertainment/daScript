@@ -149,7 +149,14 @@ jobs:
             # Glob so future playground-*.js additions land automatically.
             cp site/playground/playground-*.js _site/playground/
         else
-            echo "WARNING: daslang_static.{js,wasm} missing under web/output — skipping playground stage. Prior /playground/ remains live."
+            # WASM artifacts missing. actions/deploy-pages publishes _site as
+            # a complete snapshot (no layering over the prior deploy), so an
+            # absent _site/playground/ would 404 the route. Stage a
+            # placeholder instead — the URL keeps resolving to something
+            # useful while we re-roll the runtime.
+            echo "WARNING: daslang_static.{js,wasm} missing under web/output — staging placeholder /playground/."
+            mkdir -p _site/playground
+            cp site/playground/placeholder.html _site/playground/index.html
         fi
 
         # GitHub Pages control files
