@@ -33,6 +33,8 @@
 #pragma warning(disable:4714)    // marked as __forceinline not inlined
 #pragma warning(disable:4180)    // qualifier applied to function type has no meaning; ignored
 #pragma warning(disable:4305)    // truncation from 'double' to 'float'
+#pragma warning(disable:4744)    // variable has different type in different TUs (WPO false positive with inline static atomic)
+#pragma warning(disable:4743)    // type has different size in different TUs (WPO false positive with inline static atomic)
 #endif
 
 #ifdef __clang__
