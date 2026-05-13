@@ -119,4 +119,5 @@ namespace das {
     Expression * ast_makeStructToMakeVariant ( MakeStruct * decl, const LineInfo & locAt );
     CaptureEntry * ast_makeCaptureEntry ( yyscan_t scanner, const LineInfo & at, const string & op, const string & name );
     Expression * ast_makeMoveArgument ( yyscan_t scanner, Expression * expr, const LineInfo & at );
+    vector<string> ast_tupleCollectShorthandNames ( const vector<ExpressionPtr> & values );
 }

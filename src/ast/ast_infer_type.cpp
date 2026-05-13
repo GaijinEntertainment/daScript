@@ -389,9 +389,26 @@ namespace das {
             }
         }
     }
+
+    static void seedTupleShorthandFromTargetType(const TypeDeclPtr &targetType, Expression *init) {
+        if (!targetType || !init) return;
+        if (targetType->baseType != Type::tTuple) return;
+        if (!init->rtti_isMakeTuple()) return;
+        auto mkt = static_cast<ExprMakeTuple *>(init);
+        if (mkt->shorthandRecordNames.empty() || mkt->recordType) return;
+        if (targetType->argNames.size() != mkt->shorthandRecordNames.size()) return;
+        for (size_t i = 0, n = targetType->argNames.size(); i != n; ++i) {
+            if (targetType->argNames[i] != mkt->shorthandRecordNames[i]) return;
+        }
+        mkt->recordType = new TypeDecl(*targetType);
+        mkt->recordType->ref = false;
+        mkt->recordType->constant = false;
+    }
+
     void InferTypes::preVisitGlobalLetInit(const VariablePtr &var, Expression *init) {
         Visitor::preVisitGlobalLetInit(var, init);
         globalVar = var;
+        seedTupleShorthandFromTargetType(var->type, init);
     }
     ExpressionPtr InferTypes::visitGlobalLetInit(const VariablePtr &var, Expression *init) {
         globalVar = nullptr;
@@ -4934,6 +4951,10 @@ namespace das {
         if (!var->init) {
             local.push_back(var);
         }
+    }
+    void InferTypes::preVisitLetInit(ExprLet *expr, const VariablePtr &var, Expression *init) {
+        Visitor::preVisitLetInit(expr, var, init);
+        seedTupleShorthandFromTargetType(var->type, init);
     }
     VariablePtr InferTypes::visitLet(ExprLet *expr, const VariablePtr &var, bool last) {
         if (var->type && var->type->isExprType()) {

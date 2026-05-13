@@ -58,6 +58,33 @@ Give a tuple named fields for readability::
   let p = Point2D(x=3.0, y=4.0)
   print("{p.x}, {p.y}\n")
 
+Shorthand: unnamed → named promotion
+====================================
+
+When the target type is a named tuple and every element of a positional literal
+is a bare variable reference whose name matches the field name in order, the
+compiler promotes the literal to the named tuple — no need to repeat the
+field names::
+
+  let eid = 7
+  let distSq = 2.5
+  var hit : tuple<eid:int; distSq:float> = (eid, distSq)   // ok, promoted
+
+  var hits : array<tuple<eid:int; distSq:float>>
+  hits |> push((eid, distSq))                              // ok, promoted
+
+Promotion is fallback-only: if an unnamed-tuple overload already matches, it
+wins. Use the explicit ``(name = value)`` literal to force the named overload::
+
+  def overload_pick(x : tuple<int; float>) { return 1 }
+  def overload_pick(x : tuple<x:int; y:float>) { return 2 }
+  overload_pick((x, y))         // 1 — unnamed overload wins
+  overload_pick((x=x, y=y))     // 2 — explicit named literal
+
+A name mismatch fails compilation (no silent fallback to unnamed). Mixed
+expressions like ``(a, a + 1)`` are not bare variable references and never
+promote.
+
 Destructuring
 =============
 

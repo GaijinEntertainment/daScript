@@ -2869,6 +2869,7 @@ namespace das {
             cexpr->values.push_back(val->clone());
         }
         cexpr->recordNames = recordNames;
+        cexpr->shorthandRecordNames = shorthandRecordNames;
         if ( makeType ) {
             cexpr->makeType = new TypeDecl(*makeType);
         }
