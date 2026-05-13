@@ -1,0 +1,17 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("dasImgui")
+    package_description("Dear ImGui bindings for daslang")
+    package_author("borisbat")
+    package_license("MIT")
+    package_tag("gui")
+    package_tag("imgui")
+}
+
+[export]
+def build() {
+    cmake_build()
+}
