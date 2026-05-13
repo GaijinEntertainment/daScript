@@ -28,3 +28,9 @@ files/wasm/
 # dasProfile snapshot fetched fresh by pages.yml from
 # https://raw.githubusercontent.com/borisbat/dasProfile/main/profile_results.json
 files/profile_results.json
+
+# Playwright e2e suite local artifacts.
+tests/playground/node_modules/
+tests/playground/playwright-report/
+tests/playground/test-results/
+tests/playground/blob-report/

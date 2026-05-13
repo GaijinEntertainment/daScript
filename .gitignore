@@ -75,6 +75,7 @@ src/parser/ds_parser.output
 .mcp.json
 sgconfig.yml
 utils/mcp/mcp_server.log
+.playwright-mcp/
 
 # Emscripten SDK (local install)
 emsdk/
