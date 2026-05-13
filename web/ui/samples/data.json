@@ -12,29 +12,14 @@
     {
       "name" : "Functions",
       "files" : ["examples/func.das"]
-    }
-  ],
-
-  "tests" : [
-    {
-      "name" : "Print",
-      "files" : ["tests/print.das"],
-      "correct_output" : ["4","","Hello world"]
     },
     {
-      "name" : "Simple Math",
-      "files" : ["tests/math_simple.das"],
-      "correct_output" : ["-5","27","30603303"]
-    },
-    {
-      "name" : "Math",
-      "files" : ["tests/math.das"],
-      "correct_output" : []
+      "name" : "Macros (multi-file)",
+      "files" : ["examples/macros/main.das", "examples/macros/for_loop_macro_mod.das"]
     },
     {
       "name" : "Random Sequence",
-      "files" : ["tests/random_sequence.das"],
-      "correct_output" : [["\"dictionary\",", null, "20"]]
+      "files" : ["examples/random_sequence.das"]
     }
   ]
 }

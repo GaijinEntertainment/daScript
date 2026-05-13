@@ -1,0 +1,14 @@
+{
+    "name": "daslang-playground-e2e",
+    "private": true,
+    "description": "End-to-end tests for /playground/ — driven by Playwright.",
+    "scripts": {
+        "test": "playwright test",
+        "test:headed": "playwright test --headed",
+        "test:wasm": "playwright test --grep @wasm",
+        "test:no-wasm": "playwright test --grep-invert @wasm"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.50.0"
+    }
+}

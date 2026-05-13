@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{title}} — Daslang</title>
+    <meta name="description" content="{{description}}" />
+    <link rel="icon" type="image/svg+xml" href="{{root}}files/forge-favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="{{root}}files/forge.css" />
+    <script src="{{root}}files/cm/daslang-keywords.js" defer></script>
+    <script src="{{root}}files/highlight.js" defer></script>
+</head>
+<body>
+<div class="forge-page">
+    <nav class="forge-nav">
+        <div class="forge-container forge-nav__inner">
+            <div class="forge-nav__left">
+                <a class="forge-mark" href="{{root}}index.html">
+                    <span class="forge-mark__glyph">&gt;</span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-nav__links">
+                    <a href="{{root}}doc/index.html">docs</a>
+                    <a href="{{root}}index.html#benchmarks">benchmarks</a>
+                    <a href="{{root}}downloads.html">downloads</a>
+                    <a href="{{root}}blog/index.html">blog</a>
+                    <a href="https://t.me/daScript">community</a>
+                </div>
+            </div>
+            <div class="forge-nav__right">
+                <button class="forge-nav__burger" type="button" aria-label="menu"
+                    onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
+                <span class="forge-nav__version">v0.6.2</span>
+                <a class="forge-nav__github" href="https://github.com/GaijinEntertainment/daScript">github ↗</a>
+                <a class="forge-nav__install" href="{{root}}index.html#install">install</a>
+            </div>
+        </div>
+    </nav>
+
+{{body}}
+
+    <footer class="forge-footer">
+        <div class="forge-container forge-footer__grid">
+            <div>
+                <a class="forge-mark" href="{{root}}index.html">
+                    <span class="forge-mark__glyph">&gt;</span>
+                    <span>daslang</span>
+                    <span class="forge-mark__tld">.io</span>
+                </a>
+                <div class="forge-footer__about">
+                    High-performance scripting for C++.<br />
+                    © 2018–2026 Gaijin Entertainment · BSD 3-Clause
+                </div>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">learn</div>
+                <a class="forge-footer__link" href="{{root}}doc/index.html">introduction</a>
+                <a class="forge-footer__link" href="{{root}}doc/reference/index.html">reference</a>
+                <a class="forge-footer__link" href="{{root}}blog/index.html">blog</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">ecosystem</div>
+                <a class="forge-footer__link" href="{{root}}playground/index.html">playground</a>
+                <a class="forge-footer__link" href="https://edenspark.io">edenspark · games on daslang</a>
+                <a class="forge-footer__link" href="https://github.com/profelis/daScript-plugin">vs code extension</a>
+                <a class="forge-footer__link" href="https://github.com/imp5imp5/dasbox">dasbox · game framework</a>
+            </div>
+            <div>
+                <div class="forge-footer__col-head">community</div>
+                <a class="forge-footer__link" href="https://t.me/daScript">telegram</a>
+                <a class="forge-footer__link" href="https://github.com/GaijinEntertainment/daScript">github</a>
+                <a class="forge-footer__link" href="{{root}}changelist.html">change list</a>
+                <a class="forge-footer__link" href="{{root}}downloads.html">downloads</a>
+            </div>
+        </div>
+    </footer>
+</div>
+</body>
+</html>

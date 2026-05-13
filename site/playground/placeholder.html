@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Playground — Daslang</title>
+    <meta name="description" content="The daslang playground runtime is being rebuilt." />
+    <meta name="robots" content="noindex" />
+
+    <link rel="icon" type="image/svg+xml" href="../files/forge-favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="../files/forge.css" />
+</head>
+<body>
+
+<nav class="forge-nav">
+    <div class="forge-container forge-nav__inner">
+        <div class="forge-nav__left">
+            <a class="forge-mark" href="../index.html">
+                <span class="forge-mark__glyph">&gt;</span>
+                <span>daslang</span>
+                <span class="forge-mark__tld">.io</span>
+            </a>
+            <div class="forge-nav__links">
+                <a href="../doc/index.html">docs</a>
+                <a href="../index.html#benchmarks">benchmarks</a>
+                <a href="../downloads.html">downloads</a>
+                <a href="../blog/index.html">blog</a>
+                <a href="https://t.me/daScript">community</a>
+            </div>
+        </div>
+        <div class="forge-nav__right">
+            <button class="forge-nav__burger" type="button" aria-label="menu"
+                onclick="this.closest('.forge-nav').classList.toggle('is-open')">≡</button>
+            <span class="forge-nav__version">playground</span>
+            <a class="forge-nav__github" href="https://github.com/GaijinEntertainment/daScript">github ↗</a>
+            <a class="forge-nav__install" href="../index.html#install">install</a>
+        </div>
+    </div>
+</nav>
+
+<div class="forge-container" style="padding: 6rem 0 4rem;">
+    <div class="forge-section-label">
+        <span class="forge-section-label__num">§</span>
+        <span class="forge-section-label__rule"></span>
+        <span>playground</span>
+    </div>
+    <h1 class="pg-mobile-notice__title">Runtime rebuild in progress.</h1>
+    <p class="pg-mobile-notice__lede">
+        The daslang playground compiles a WebAssembly build of the compiler
+        and standard library on every site deploy. That build didn't land
+        cleanly this round, so we're holding the IDE back rather than ship
+        an editor whose Run button 404s its runtime. The next merge to
+        master kicks off a fresh build — usually a few minutes.
+    </p>
+    <div class="pg-mobile-notice__ctas">
+        <a class="pg-mobile-notice__btn" href="../index.html">← back to daslang.io</a>
+        <a class="pg-mobile-notice__btn pg-mobile-notice__btn--ghost" href="../downloads.html">downloads</a>
+    </div>
+</div>
+
+</body>
+</html>

@@ -5,7 +5,7 @@ var samplesData;
 
 var code;
 
-var sampleList = {"examples":null, "tests":null};
+var sampleList = {"examples":null};
 
 
 pageInit = function () {
@@ -17,12 +17,11 @@ pageInit = function () {
     editorOutput = document.getElementById("output");
 
     sampleList["examples"] = document.getElementById("examples");
-    sampleList["tests"] = document.getElementById("tests");
 
 
 
 
-    code = CodeMirror( editorCode, {
+    code = CodeMirror( editorCode, window.FORGE_PLAYGROUND_OPTS || {
         lineNumbers: true, matchBrackets: true, indentWithTabs: false, styleActiveLine: true,
         theme:'eclipse', mode:"application/javascript",
         tabSize: 4, indentUnit: 4, highlightSelectionMatches: {showToken: /\w/}
@@ -34,128 +33,103 @@ pageInit = function () {
 
 
 
-         ["example","test"].forEach(function (n) {
-
-             let ll = document.getElementById(n+"s");
-             while (ll.firstChild) {
-                 ll.removeChild(ll.lastChild);
-             }
-
-             for (let i=0;i<samplesData[n+"s"].length+1;i++)
-             {
-                 let newO = document.createElement("option");
-                 if (i===0)
-                 {
-
-                     newO.innerText = "Select "+n;
-                     newO.value = "init";
+         (function populateExamples() {
+             const ll = document.getElementById("examples");
+             if (!ll) return;
+             while (ll.firstChild) ll.removeChild(ll.lastChild);
+             const entries = samplesData["examples"] || [];
+             for (let i = 0; i < entries.length + 1; i++) {
+                 const opt = document.createElement("option");
+                 if (i === 0) {
+                     opt.innerText = "Select example";
+                     opt.value = "init";
+                 } else {
+                     opt.innerText = entries[i - 1].name;
+                     opt.value = i - 1;
                  }
-                 else
-                 {
-                     newO.innerText = samplesData[n+"s"][i-1].name;
-                     newO.value = i-1;
-
-                 }
-                 ll.appendChild(newO);
+                 ll.appendChild(opt);
              }
-         });
+         })();
 
-         selectSample("examples",0);
+         // Skip the default sample if pgInit already restored state from URL
+         // hash or localStorage autosave (otherwise the async fetch overwrites
+         // the user's work ~200ms after page load).
+         if (!window.pgRestoredFromState) {
+             selectSample("examples", 0);
+         }
 
     });
 
 
 }
 
-selectSample = function(type,id) {
-
-
-
-    let vv = id !== undefined ? id : parseInt(sampleList[type].value);
-    if (vv !== NaN)
-    {
-
-
-        $.get('./samples/'+samplesData[type][vv].files[0], function(res) {
-
-            code.setValue(res);
-        }, 'text');
-
-
+selectSample = function(type, id) {
+    const sel = sampleList[type];
+    if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
+    let vv = id !== undefined ? id : parseInt(sel.value);
+    if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
+        // Multi-file samples ship as files[] — load all in parallel, then hand
+        // the bundle to the loader (single editor today, tab strip in phase 3).
+        const files = samplesData[type][vv].files;
+        Promise.all(files.map(f =>
+            $.ajax({ url: './samples/' + f, dataType: 'text' })
+                .then(text => ({ name: f.split('/').pop(), text }))
+        )).then(loaded => {
+            const byName = Object.fromEntries(loaded.map(({ name, text }) => [name, text]));
+            loadSample(byName);
+        });
     }
-
-    sampleList[type].value = "init";
-
-
+    if (sel) sel.value = "init";
 }
+
+// Apply a {filename: content} bundle. Once the tab strip is mounted, route
+// through pgLoadFiles so every file gets its own Doc. Before then (during
+// pageInit's initial selectSample call), stash the bundle for pgInit to pick
+// up when it polls in.
+//
+// Single-file samples are normalized to main.das (the entry callMain runs).
+// Multi-file samples are expected to ship a main.das themselves.
+loadSample = function(filesByName) {
+    const names = Object.keys(filesByName);
+    if (!names.length) return;
+    let bundle = filesByName;
+    if (names.length === 1 && names[0] !== 'main.das') {
+        bundle = { 'main.das': filesByName[names[0]] };
+    }
+    if (typeof window.pgLoadFiles === 'function') {
+        window.pgLoadFiles(bundle);
+        return;
+    }
+    const active = bundle['main.das'] !== undefined ? 'main.das' : Object.keys(bundle)[0];
+    code.setValue(bundle[active]);
+    window.__pendingSampleBundle = bundle;
+}
+
+// Names of files we wrote to MEMFS on the previous run. Tracked so each new
+// run can unlink files the user has since deleted or renamed — otherwise
+// `require utils` would resolve stale code from the prior run, and the
+// executed program no longer matches the visible tab state.
+var __lastWrittenFiles = new Set();
 
 runCode = function() {
-
+    // Multi-file: sync MEMFS with the current pgState (unlink stale, write
+    // current), then run main.das. Falls back to the single-buffer path when
+    // pgState isn't up yet.
+    if (window.pgState && typeof FS !== 'undefined') {
+        const current = new Set(Object.keys(window.pgState.files));
+        for (const stale of __lastWrittenFiles) {
+            if (!current.has(stale)) {
+                try { FS.unlink(stale); } catch (e) { /* ENOENT — ignore */ }
+            }
+        }
+        for (const [name, doc] of Object.entries(window.pgState.files)) {
+            FS.writeFile(name, doc.getValue());
+        }
+        __lastWrittenFiles = current;
+        Module.callMain(['main.das']);
+        return;
+    }
     runScript(code.getValue());
-
-
-
-}
-
-
-runTests = function() {
-
-
-    runTest(0);
-
-}
-
-var outputPool = [];
-
-runTest = function(i) {
-
-    $.get('./samples/'+samplesData["tests"][i].files[0], function(res) {
-
-        printOutput("Running Test "+(i+1)+"/"+samplesData["tests"].length+": "+samplesData["tests"][i].name,"#bec7b6");
-
-        outputPool = [];
-
-        runScript(res,function () {
-
-
-            let ok = true;
-
-
-
-            if (outputPool.length<samplesData["tests"][i].correct_output.length)
-                ok = false;
-            else
-                for (let o=0;o<samplesData["tests"][i].correct_output.length;o++) {
-                    let correct = samplesData["tests"][i].correct_output[o];
-
-                    if (Array.isArray(correct))
-                    {
-                        let outp = outputPool[o].split(' ');
-
-                        if (outp.length<correct.length)
-                            ok = false;
-                        else
-                            for (let k=0;k<correct.length;k++)
-                                if (correct[k] !== null && outp[k] !== correct[k])
-                                    ok = false;
-
-
-                    }
-                    else
-                    {
-                        if (correct !== null && outputPool[o] !== correct)
-                            ok = false;
-                    }
-
-                }
-
-
-            printOutput(samplesData["tests"][i].name+" Test "+(i+1)+"/"+samplesData["tests"].length+": "+(ok ? "SUCCESS" : "FAIL"),ok ? "#89db4a": '#ff9393');
-
-            if (i<samplesData["tests"].length-1)
-                runTest(i+1);
-        });
-    }, 'text');
 }
 
 clearOutput = function() {
@@ -234,8 +208,6 @@ var Module = {
                     text = Array.prototype.slice.call(arguments).join(' ');
                 console.log(text);
                 printOutput(text,'#ffffff');
-
-                outputPool.push(text);
             };
         })(),
     }

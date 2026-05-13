@@ -60,7 +60,7 @@ author = u'Boris Batkin @* Anton Yudintsev'
 # built documents.
 #
 # The short X.Y version.
-version = u'0.6'
+version = u'0.6.2'
 # The full version, including alpha/beta/rc tags.
 release = u'0.6.2'
 
@@ -123,7 +123,13 @@ html_theme = 'sphinx_rtd_theme'
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-#html_theme_options = {}
+html_theme_options = {
+    'style_nav_header_background': '#0d0c0a',
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'navigation_depth': 4,
+    'titles_only': False,
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 #html_theme_path = []
@@ -137,7 +143,7 @@ html_theme = 'sphinx_rtd_theme'
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = 'daslang.png'
+html_logo = '_static/forge-logo.svg'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
@@ -147,7 +153,11 @@ html_favicon = 'daslang.ico'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = []
+html_static_path = ['_static']
+
+# Custom CSS — Forge token overlay on top of sphinx_rtd_theme.
+# See doc/source/_static/custom.css for the retoken rules.
+html_css_files = ['custom.css']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

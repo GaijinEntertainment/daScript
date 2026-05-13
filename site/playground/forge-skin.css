@@ -1,0 +1,377 @@
+/* ────────────────────────────────────────────────────────────────
+ * Forge skin for /playground/ — overrides web/ui/src/main.css to
+ * land the playground inside the Forge visual language without
+ * forking web/ui source. Loaded AFTER main.css in playground/index.html.
+ *
+ * Tokens come from ../files/forge.css (shared :root).
+ * ──────────────────────────────────────────────────────────────── */
+
+body {
+    background: var(--bg) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-sans) !important;
+    font-size: 14px !important;
+    margin: 0 !important;
+}
+
+/* The IDE keeps its own top bar (`.header`) below our Forge nav. */
+.header {
+    background: var(--bg-2) !important;
+    border-bottom: 1px solid var(--rule) !important;
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 13px !important;
+    height: 40px !important;
+    padding: 4px 32px !important;
+}
+.header img { display: none; }
+.header_part { margin: 0 14px !important; }
+.header_part a { color: var(--fg-dim) !important; text-decoration: none; }
+.header_part a:hover { color: var(--amber) !important; }
+.header_part b { color: var(--fg); font-family: var(--font-mono); }
+
+/* Main workspace — one bordered container with a unified top toolbar and
+ * a [code | output] row below split by a draggable handle. */
+.main {
+    color: var(--fg) !important;
+    margin: 16px 32px !important;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--bg-2);
+    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+}
+.main_workspace {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.main_col {
+    padding: 0 !important;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* Higher specificity than upstream's `.main_col { flex: 1 1 50vh; }` so the
+ * splitter's inline `style.flex = ...` can still override us. */
+.main_workspace > .main_col {
+    flex: 1 1 0;
+}
+.main_workspace > .main_col + .main_col {
+    border-left: 1px solid var(--rule);
+}
+.pg-splitter {
+    flex: 0 0 11px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+}
+.pg-splitter::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 5px;
+    width: 1px;
+    background: var(--rule);
+    transition: background 80ms ease, width 80ms ease, left 80ms ease;
+}
+.pg-splitter:hover::before,
+.pg-splitter:active::before,
+.pg-splitter.is-dragging::before {
+    background: var(--amber);
+    width: 2px;
+    left: 4.5px;
+}
+.main_header {
+    padding: 10px 16px !important;
+    border-bottom: 1px solid var(--rule);
+    background: var(--bg-2);
+    flex: 0 0 auto;
+}
+.main_header_left, .main_header_right {
+    gap: 14px !important;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.main_name {
+    font-family: var(--font-mono) !important;
+    font-size: 14px !important;
+    color: var(--fg) !important;
+}
+
+.button_header {
+    background: var(--amber) !important;
+    color: var(--bg) !important;
+    border: none !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    font-weight: 600;
+    padding: 8px 16px !important;
+    height: 32px !important;
+    min-width: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    cursor: pointer;
+}
+.button_header:hover { background: #f4b04a !important; }
+.button_header:disabled { opacity: 0.5; cursor: default; }
+.button_header--ghost {
+    background: transparent !important;
+    color: var(--fg-dim) !important;
+    border: 1px solid var(--rule) !important;
+}
+.button_header--ghost:hover {
+    background: rgba(232, 161, 58, 0.06) !important;
+    color: var(--amber) !important;
+    border-color: var(--amber-dim) !important;
+}
+
+/* ───── Share popover ───── */
+.pg-share {
+    z-index: 100;
+    width: 460px;
+    max-width: calc(100vw - 16px);
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    padding: 14px 16px;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--fg);
+}
+.pg-share__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: var(--fg-dim);
+}
+.pg-share__close {
+    background: transparent;
+    border: 0;
+    color: var(--fg-faint);
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+}
+.pg-share__close:hover { color: var(--red); }
+.pg-share__row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.pg-share__url {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--rule);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    outline: none;
+}
+.pg-share__url:focus { border-color: var(--amber-dim); }
+.pg-share__copy,
+.pg-share__shorten {
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pg-share__copy:hover,
+.pg-share__shorten:hover { color: var(--amber); border-color: var(--amber-dim); }
+.pg-share__shorten:disabled { opacity: 0.5; cursor: default; }
+.pg-share__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.pg-share__meta {
+    color: var(--fg-faint);
+    font-size: 11px;
+}
+
+.select_header {
+    background: var(--bg-2) !important;
+    color: var(--fg) !important;
+    border: 1px solid var(--rule) !important;
+    border-radius: 4px !important;
+    font-family: var(--font-mono) !important;
+    font-size: 12.5px !important;
+    padding: 6px 10px !important;
+    height: 32px !important;
+}
+
+/* ───── Multi-file tab strip ───── */
+.pg-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pg-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 4px 4px 10px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg-2);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: color 80ms ease, border-color 80ms ease;
+}
+.pg-tab:hover { color: var(--fg); border-color: var(--fg-dim); }
+.pg-tab.is-active {
+    color: var(--amber);
+    border-color: var(--amber-dim);
+    background: rgba(232, 161, 58, 0.05);
+}
+.pg-tab__name { user-select: none; }
+.pg-tab__close {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.6;
+}
+.pg-tab__close:hover { opacity: 1; color: var(--red); }
+.pg-tab__close:disabled { opacity: 0.2; cursor: default; }
+.pg-tab__close:disabled:hover { color: inherit; }
+.pg-tab__rename {
+    background: var(--bg);
+    border: 1px solid var(--amber-dim);
+    color: var(--fg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    padding: 1px 4px;
+    width: 14ch;
+    outline: none;
+}
+.pg-tab__add {
+    background: transparent;
+    border: 1px dashed var(--rule);
+    color: var(--fg-faint);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.pg-tab__add:hover { color: var(--amber); border-color: var(--amber-dim); }
+
+.main_col_part {
+    padding: 0 !important;
+    max-width: none !important;
+    flex: 1 1 auto;
+    display: flex;
+    min-height: 0;
+}
+
+#code, #output {
+    flex: 1 1 auto;
+    height: calc(100vh - 220px) !important;
+    min-height: 360px;
+    width: 100%;
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: var(--bg-2) !important;
+    overflow: hidden;
+}
+#code { padding: 0; }
+#output {
+    background: var(--bg-2) !important;
+    overflow-y: scroll !important;
+    padding: 12px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.output_line {
+    font-family: var(--font-mono) !important;
+    line-height: 1.55;
+    padding: 1px 0;
+    /* web/ui's printOutput sets inline background-color per line — neutralize it
+     * so the dark panel shows through. Color is restored on .output_line_text. */
+    background: transparent !important;
+}
+.output_line_time { color: var(--fg-faint) !important; width: 100px !important; font-size: 11.5px; }
+.output_line_text { color: var(--fg) !important; background: transparent !important; }
+
+footer { color: var(--fg-faint) !important; padding: 24px 32px; background: var(--bg); border-top: 1px solid var(--rule); }
+.footer_p { font-size: 12px !important; font-family: var(--font-mono); }
+
+/* ───── Mobile notice — replaces the WASM IDE on narrow viewports ───── */
+html.is-pg-mobile .main,
+html.is-pg-mobile .header,
+html.is-pg-mobile footer,
+html.is-pg-mobile .forge-nav__version { display: none !important; }
+html.is-pg-mobile body { background: var(--bg); }
+
+#pg-mobile-notice {
+    padding: 64px 0 96px;
+    background: var(--bg);
+    color: var(--fg);
+}
+.pg-mobile-notice__title {
+    margin: 18px 0 14px;
+    font-family: var(--font-sans);
+    font-size: 36px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    color: var(--fg);
+}
+.pg-mobile-notice__lede {
+    color: var(--fg-dim);
+    font-size: 15px;
+    line-height: 1.6;
+    max-width: 540px;
+}
+.pg-mobile-notice__ctas {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.pg-mobile-notice__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--amber);
+    color: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 4px;
+    text-decoration: none;
+}
+.pg-mobile-notice__btn:hover { background: #f4b04a; }
+.pg-mobile-notice__btn--ghost {
+    background: transparent;
+    color: var(--fg-dim);
+    border: 1px solid var(--rule);
+}
+.pg-mobile-notice__btn--ghost:hover {
+    color: var(--amber);
+    border-color: var(--amber-dim);
+}

@@ -480,13 +480,13 @@ class DaslangLexer(RegexLexer):
             (r'0[xX][0-9a-fA-F_]+[uU]?[lL]?', Number.Hex),
             (r'[0-9][0-9_]*\.[0-9_]*([eE][+-]?[0-9_]+)?[fFlL]?', Number.Float),
             (r'[0-9][0-9_]*[uU]?[lL]?', Number.Integer),
-            # Keywords
+            # Keywords (sourced from src/parser/ds2_lexer.lpp)
             (words((
                 'struct', 'class', 'let', 'var', 'def', 'while', 'if', 'static_if',
-                'else', 'elif', 'for', 'finally', 'in', 'is', 'as',
+                'else', 'elif', 'static_elif', 'for', 'finally', 'in', 'is', 'as',
                 'where', 'return', 'yield', 'break', 'continue',
                 'pass', 'try', 'recover', 'delete', 'deref',
-                'new', 'typeinfo', 'type', 'array', 'table',
+                'new', 'typeinfo', 'type', 'typedecl', 'array', 'table',
                 'block', 'function', 'lambda', 'generator',
                 'expect', 'override', 'abstract', 'sealed',
                 'require', 'module', 'public', 'private',
@@ -495,10 +495,10 @@ class DaslangLexer(RegexLexer):
                 'assume', 'unsafe', 'addr', 'label', 'goto',
                 'implicit', 'explicit', 'shared', 'smart_ptr', 'inscope',
                 'static', 'fixed_array', 'iterator', 'bitfield',
-                'move_new', 'move',
+                'capture', 'template', 'const', 'default', 'uninitialized',
             ), prefix=r'\b', suffix=r'\b'), Keyword),
             # Boolean / null
-            (words(('true', 'false', 'null', 'nothing'), prefix=r'\b', suffix=r'\b'), Keyword.Constant),
+            (words(('true', 'false', 'null'), prefix=r'\b', suffix=r'\b'), Keyword.Constant),
             # Built-in types
             (words((
                 'void', 'bool', 'string', 'auto',

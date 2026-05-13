@@ -1,0 +1,53 @@
+/* CodeMirror "forge" theme — applied via theme:'forge' on the CM instance.
+ * Token classes inherit colors from forge.css :root. Shared by the hero
+ * editor (site/index.html) and the full playground (site/playground/). */
+
+.CodeMirror,
+.cm-s-forge {
+    background: var(--bg-2) !important;
+    color: var(--fg) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 13px !important;
+    line-height: 1.65 !important;
+    height: 100% !important;
+}
+
+.cm-s-forge .CodeMirror-gutters {
+    background: var(--bg-2) !important;
+    border-right: 1px solid var(--rule) !important;
+}
+.cm-s-forge .CodeMirror-linenumber { color: var(--fg-faint) !important; }
+/* Cursor — the base CM rule (border:0!important + background:#7e7) is the fat
+ * IME cursor; the regular cursor is the inner span. Style both. */
+.cm-s-forge .CodeMirror-cursor,
+.cm-s-forge div.CodeMirror-cursor {
+    border-left: 1px solid var(--amber) !important;
+    border-right: none !important;
+    background: transparent !important;
+}
+.cm-s-forge.CodeMirror-focused .CodeMirror-cursors,
+.cm-s-forge .CodeMirror-focused .CodeMirror-cursors { visibility: visible !important; }
+.cm-s-forge .CodeMirror-activeline-background { background: rgba(232, 161, 58, 0.04) !important; }
+.cm-s-forge .CodeMirror-selected { background: rgba(232, 161, 58, 0.15) !important; }
+.cm-s-forge .CodeMirror-line::selection,
+.cm-s-forge .CodeMirror-line ::selection { background: rgba(232, 161, 58, 0.20) !important; }
+.cm-s-forge .CodeMirror-matchingbracket { color: var(--amber) !important; background: rgba(232, 161, 58, 0.10); }
+
+/* Token coloring */
+.cm-s-forge .cm-keyword,
+.cm-s-forge .cm-builtin       { color: var(--amber) !important; }
+.cm-s-forge .cm-atom,
+.cm-s-forge .cm-def           { color: var(--amber) !important; }
+.cm-s-forge .cm-type,
+.cm-s-forge .cm-variable-2,
+.cm-s-forge .cm-tag           { color: var(--blue) !important; }
+.cm-s-forge .cm-string,
+.cm-s-forge .cm-string-2      { color: var(--green) !important; }
+.cm-s-forge .cm-number        { color: #d8a8d8 !important; }
+.cm-s-forge .cm-comment       { color: var(--fg-faint) !important; font-style: italic; }
+.cm-s-forge .cm-attribute,
+.cm-s-forge .cm-meta          { color: var(--red) !important; }
+.cm-s-forge .cm-variable      { color: var(--fg) !important; }
+.cm-s-forge .cm-operator,
+.cm-s-forge .cm-punctuation   { color: var(--fg-dim) !important; }
+.cm-s-forge .cm-error         { color: var(--red) !important; background: transparent !important; }
