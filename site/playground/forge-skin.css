@@ -30,12 +30,68 @@ body {
 .header_part a:hover { color: var(--amber) !important; }
 .header_part b { color: var(--fg); font-family: var(--font-mono); }
 
-/* Main 2-column workspace */
-.main { background: var(--bg) !important; color: var(--fg) !important; }
+/* Main workspace — one bordered container with a unified top toolbar and
+ * a [code | output] row below split by a draggable handle. */
+.main {
+    color: var(--fg) !important;
+    margin: 16px 32px !important;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--bg-2);
+    overflow: hidden;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+}
+.main_workspace {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.main_col {
+    padding: 0 !important;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+/* Higher specificity than upstream's `.main_col { flex: 1 1 50vh; }` so the
+ * splitter's inline `style.flex = ...` can still override us. */
+.main_workspace > .main_col {
+    flex: 1 1 0;
+}
+.main_workspace > .main_col + .main_col {
+    border-left: 1px solid var(--rule);
+}
+.pg-splitter {
+    flex: 0 0 11px;
+    cursor: col-resize;
+    background: transparent;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+}
+.pg-splitter::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 5px;
+    width: 1px;
+    background: var(--rule);
+    transition: background 80ms ease, width 80ms ease, left 80ms ease;
+}
+.pg-splitter:hover::before,
+.pg-splitter:active::before,
+.pg-splitter.is-dragging::before {
+    background: var(--amber);
+    width: 2px;
+    left: 4.5px;
+}
 .main_header {
-    padding: 16px 32px !important;
+    padding: 10px 16px !important;
     border-bottom: 1px solid var(--rule);
-    background: var(--bg);
+    background: var(--bg-2);
+    flex: 0 0 auto;
 }
 .main_header_left, .main_header_right {
     gap: 14px !important;
@@ -58,6 +114,9 @@ body {
     font-weight: 600;
     padding: 8px 16px !important;
     height: 32px !important;
+    min-width: 0 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
     cursor: pointer;
 }
 .button_header:hover { background: #f4b04a !important; }
@@ -219,17 +278,22 @@ body {
 }
 .pg-tab__add:hover { color: var(--amber); border-color: var(--amber-dim); }
 
-.main_col { padding: 16px 0 !important; }
 .main_col_part {
-    padding: 0 24px !important;
-    max-width: 48vw;
+    padding: 0 !important;
+    max-width: none !important;
+    flex: 1 1 auto;
+    display: flex;
+    min-height: 0;
 }
 
 #code, #output {
-    height: 78vh !important;
-    margin-top: 14px !important;
-    border: 1px solid var(--rule) !important;
-    border-radius: 8px;
+    flex: 1 1 auto;
+    height: calc(100vh - 220px) !important;
+    min-height: 360px;
+    width: 100%;
+    margin-top: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
     background: var(--bg-2) !important;
     overflow: hidden;
 }

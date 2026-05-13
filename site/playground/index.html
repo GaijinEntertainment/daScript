@@ -56,44 +56,40 @@
 <script type="text/javascript" src="../files/lz-string.min.js"></script>
 <script type="text/javascript" src="./playground-init.js"></script>
 <script type="text/javascript" src="./main.js"></script>
-<script type="text/javascript" src="./playground-tabs.js"></script>
-<script type="text/javascript" src="./playground-share.js"></script>
+<script type="text/javascript" src="./playground-tabs.js?v=2"></script>
+<script type="text/javascript" src="./playground-share.js?v=2"></script>
+<script type="text/javascript" src="./playground-splitter.js?v=3"></script>
 
 <div class="main">
-    <div class="main_col">
-        <div class="main_header">
-            <div class="main_header_left">
-                <div class="main_header_part">
-                    <div id="pg-tabs" class="pg-tabs"></div>
-                </div>
-                <div class="main_header_part">
-                    <select id="examples" class="select_header" onchange="selectSample('examples')"></select>
-                </div>
-                <div class="main_header_part">
-                    <select id="tests" class="select_header" onchange="selectSample('tests')"></select>
-                </div>
+    <div class="main_header">
+        <div class="main_header_left">
+            <div class="main_header_part">
+                <div id="pg-tabs" class="pg-tabs"></div>
             </div>
-            <div class="main_header_right">
+            <div class="main_header_part">
+                <select id="examples" class="select_header" onchange="selectSample('examples')"></select>
+            </div>
+            <div class="main_header_part">
                 <button id="share" class="button_header button_header--ghost" type="button">↗ share</button>
+            </div>
+            <div class="main_header_part">
                 <button id="run" class="button_header" onclick="runCode()">▶ run</button>
             </div>
         </div>
-        <div class="main_col_part">
-            <div id="code"></div>
+        <div class="main_header_right">
+            <button id="clear" class="button_header button_header--ghost" onclick="clearOutput()">clear</button>
         </div>
     </div>
-
-    <div class="main_col">
-        <div class="main_header">
-            <div class="main_header_left">
-                <div class="main_header_part main_name">output</div>
-            </div>
-            <div class="main_header_right">
-                <button id="clear" class="button_header" onclick="clearOutput()" style="background: transparent; color: var(--fg-dim); border: 1px solid var(--rule);">clear</button>
+    <div class="main_workspace">
+        <div class="main_col">
+            <div class="main_col_part">
+                <div id="code"></div>
             </div>
         </div>
-        <div class="main_col_part">
-            <div id="output"></div>
+        <div class="main_col">
+            <div class="main_col_part">
+                <div id="output"></div>
+            </div>
         </div>
     </div>
 </div>

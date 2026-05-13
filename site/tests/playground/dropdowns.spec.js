@@ -1,6 +1,7 @@
-// Examples + Tests <select> dropdowns swap the editor buffer.
-// Until phase 2 the change handlers were missing from index.html, so picking
-// an item did nothing. The spec guards against that regression.
+// The Examples <select> swaps the editor buffer. Until phase 2 the change
+// handler was missing from index.html, so picking an item did nothing. The
+// spec guards against that regression. The Tests dropdown was removed in
+// the unified-toolbar pass; Random Sequence now lives under Examples.
 
 const { test, expect } = require('./fixtures.js');
 
@@ -8,8 +9,7 @@ async function waitDropdownsPopulated(page) {
     // selectSample("examples", 0) runs at startup; once samplesData is set the
     // dropdown has > 1 option (the "Select..." sentinel plus the entries).
     await page.waitForFunction(
-        () => document.getElementById('examples').options.length > 1
-            && document.getElementById('tests').options.length > 1,
+        () => document.getElementById('examples').options.length > 1,
         null,
         { timeout: 10_000 }
     );
@@ -33,20 +33,17 @@ test('Examples dropdown loads chosen sample into the editor', async ({ playgroun
         .toMatch(/def\s+\w+/);
 });
 
-test('Tests dropdown swaps the editor too', async ({ playground }) => {
+test('Random Sequence sample is selectable from Examples', async ({ playground }) => {
     await waitDropdownsPopulated(playground);
-
-    // Pick the first available test entry (skipping the "Select test" sentinel).
-    const firstTestLabel = await playground.evaluate(() => {
-        const sel = document.getElementById('tests');
-        return sel.options[1]?.text;
-    });
-    expect(firstTestLabel).toBeTruthy();
-
     const before = await editorText(playground);
-    await playground.locator('#tests').selectOption({ label: firstTestLabel });
+    await playground.locator('#examples').selectOption({ label: 'Random Sequence' });
     await expect.poll(() => editorText(playground), { timeout: 5_000 })
         .not.toBe(before);
+});
+
+test('Tests dropdown is no longer in the DOM', async ({ playground }) => {
+    await waitDropdownsPopulated(playground);
+    expect(await playground.locator('#tests').count()).toBe(0);
 });
 
 test('Dropdown resets to the "Select..." sentinel after a pick', async ({ playground }) => {

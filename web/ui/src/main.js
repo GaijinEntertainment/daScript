@@ -17,7 +17,7 @@ pageInit = function () {
     editorOutput = document.getElementById("output");
 
     sampleList["examples"] = document.getElementById("examples");
-    sampleList["tests"] = document.getElementById("tests");
+    sampleList["tests"] = document.getElementById("tests");  // may be null when the Tests dropdown is removed
 
 
 
@@ -37,11 +37,13 @@ pageInit = function () {
          ["example","test"].forEach(function (n) {
 
              let ll = document.getElementById(n+"s");
+             if (!ll) return;  // the Tests dropdown was removed; skip silently
              while (ll.firstChild) {
                  ll.removeChild(ll.lastChild);
              }
 
-             for (let i=0;i<samplesData[n+"s"].length+1;i++)
+             const entries = samplesData[n+"s"] || [];
+             for (let i=0;i<entries.length+1;i++)
              {
                  let newO = document.createElement("option");
                  if (i===0)
@@ -52,7 +54,7 @@ pageInit = function () {
                  }
                  else
                  {
-                     newO.innerText = samplesData[n+"s"][i-1].name;
+                     newO.innerText = entries[i-1].name;
                      newO.value = i-1;
 
                  }
@@ -73,7 +75,9 @@ pageInit = function () {
 }
 
 selectSample = function(type, id) {
-    let vv = id !== undefined ? id : parseInt(sampleList[type].value);
+    const sel = sampleList[type];
+    if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
+    let vv = id !== undefined ? id : parseInt(sel.value);
     if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
         // Multi-file samples ship as files[] — load all in parallel, then hand
         // the bundle to the loader (single editor today, tab strip in phase 3).
@@ -86,7 +90,7 @@ selectSample = function(type, id) {
             loadSample(byName);
         });
     }
-    sampleList[type].value = "init";
+    if (sel) sel.value = "init";
 }
 
 // Apply a {filename: content} bundle. Once the tab strip is mounted, route
