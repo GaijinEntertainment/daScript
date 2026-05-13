@@ -67,26 +67,33 @@ pageInit = function () {
 
 }
 
-selectSample = function(type,id) {
-
-
-
+selectSample = function(type, id) {
     let vv = id !== undefined ? id : parseInt(sampleList[type].value);
-    if (vv !== NaN)
-    {
-
-
-        $.get('./samples/'+samplesData[type][vv].files[0], function(res) {
-
-            code.setValue(res);
-        }, 'text');
-
-
+    if (!Number.isNaN(vv) && samplesData[type] && samplesData[type][vv]) {
+        // Multi-file samples ship as files[] — load all in parallel, then hand
+        // the bundle to the loader (single editor today, tab strip in phase 3).
+        const files = samplesData[type][vv].files;
+        Promise.all(files.map(f =>
+            $.ajax({ url: './samples/' + f, dataType: 'text' })
+                .then(text => ({ name: f.split('/').pop(), text }))
+        )).then(loaded => {
+            const byName = Object.fromEntries(loaded.map(({ name, text }) => [name, text]));
+            loadSample(byName);
+        });
     }
-
     sampleList[type].value = "init";
+}
 
-
+// Apply a {filename: content} bundle to the editor. Today: surfaces only the
+// main.das (or the first file) in the single CM instance. Phase 3 routes this
+// through pgState + the tab strip so all files are addressable from the UI.
+loadSample = function(filesByName) {
+    const names = Object.keys(filesByName);
+    if (!names.length) return;
+    const active = filesByName['main.das'] !== undefined ? 'main.das' : names[0];
+    code.setValue(filesByName[active]);
+    // Stash the full bundle so phase 3 can pick it up post-tab-strip.
+    window.__pendingSampleBundle = filesByName;
 }
 
 runCode = function() {
