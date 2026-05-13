@@ -1,0 +1,25 @@
+options gen2
+require daslib/fio
+
+[export]
+def initialize(project_path : string) {
+    if (das_is_dll_build()) {
+        register_dynamic_module("{project_path}/dasModuleImgui.shared_module", "Module_dasIMGUI")
+        register_dynamic_module("{project_path}/imguiApp.shared_module", "Module_imgui_app")
+    }
+    register_native_path("imgui", "imgui_boost", "{project_path}/daslib/imgui_boost.das")
+    // Phase 0a — define_widget core. Coexists with v1 imgui_boost; v2 cutover lands in 0b.
+    register_native_path("imgui", "imgui_boost_v2", "{project_path}/widgets/imgui_boost.das")
+    register_native_path("imgui", "imgui_boost_runtime", "{project_path}/widgets/imgui_boost_runtime.das")
+    register_native_path("imgui", "imgui_widgets_builtin", "{project_path}/widgets/imgui_widgets_builtin.das")
+    register_native_path("imgui", "imgui_containers_builtin", "{project_path}/widgets/imgui_containers_builtin.das")
+    // Reload-aware ImGui ctx lifecycle (mirror of live/glfw_live for ImGui).
+    register_native_path("imgui", "imgui_live", "{project_path}/widgets/imgui_live.das")
+    register_native_path("imgui", "imgui_transport", "{project_path}/widgets/imgui_transport.das")
+    // Phase 3 — public playwright module (promoted from tests/integration/live_driver.das).
+    register_native_path("imgui", "imgui_playwright", "{project_path}/widgets/imgui_playwright.das")
+    // Phase 4 — visual aids overlays (highlight, mouse_trail, narrate).
+    register_native_path("imgui", "imgui_visual_aids", "{project_path}/widgets/imgui_visual_aids.das")
+    // §4.8 — explicit ID-stack push (with_id) for scope-based widget addressing.
+    register_native_path("imgui", "imgui_id_builtin", "{project_path}/widgets/imgui_id_builtin.das")
+}
