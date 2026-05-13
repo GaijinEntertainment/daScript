@@ -12,6 +12,10 @@
     {
       "name" : "Functions",
       "files" : ["examples/func.das"]
+    },
+    {
+      "name" : "Macros (multi-file)",
+      "files" : ["examples/macros/main.das", "examples/macros/for_loop_macro_mod.das"]
     }
   ],
 
