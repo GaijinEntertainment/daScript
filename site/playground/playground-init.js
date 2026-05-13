@@ -36,8 +36,12 @@ function applySharedCodeFromHash() {
     }
 
     // Stash bundle immediately so pgInit picks it up even if it polls in
-    // before we do.
+    // before we do. Also flag the page as "restored from URL state" so
+    // main.js skips its default `selectSample("examples", 0)` — otherwise
+    // the async data.json fetch occasionally beats pgLoadFiles and the
+    // default hello.das overwrites the hash payload.
     window.__pendingSampleBundle = payload.files;
+    window.pgRestoredFromState = true;
     const deadline = Date.now() + 5000;
     (function tryApply() {
         if (typeof window.pgLoadFiles === 'function') {

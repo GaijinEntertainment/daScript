@@ -5,6 +5,11 @@
  * no template overrides.
  * ────────────────────────────────────────────────────────────────── */
 
+/* `@import` must precede all other rules (CSS 2.1 §6.3) — keeping this
+ * at the top of the file so browsers actually fetch the web fonts. A
+ * later `@import` after `:root` would be silently dropped. */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 :root {
     --bg:        #0d0c0a;
     --bg-2:      #15130f;
@@ -21,9 +26,6 @@
     --font-sans: "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 }
-
-/* ─── Web font import ───────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 /* ─── Page-level ──────────────────────────────────────────────── */
 html, body, .wy-body-for-nav {

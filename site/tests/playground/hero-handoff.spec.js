@@ -37,9 +37,15 @@ test('hero ↗ playground hands off the current buffer to /playground/', async (
     expect(newPage.url()).toContain('/playground/');
     expect(newPage.url()).toContain('#code=');
 
-    // Playground populates pgState with main.das holding the marker.
+    // Wait for the marker text to actually land in main.das. pgState gets
+    // created before pgLoadFiles applies the hash payload, so checking
+    // structure alone races against the late-arriving content.
     await newPage.waitForFunction(
-        () => !!window.pgState && 'main.das' in window.pgState.files,
+        () => {
+            const s = window.pgState;
+            if (!s || !('main.das' in s.files)) return false;
+            return s.files['main.das'].getValue().includes('HERO-HANDOFF-MARKER');
+        },
         null,
         { timeout: 30_000 }
     );
