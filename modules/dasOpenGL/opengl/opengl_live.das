@@ -168,6 +168,7 @@ struct RecorderState {
     pbos              : array<uint>
     pbo_delays_ms     : array<int>   // parallel ring: delay_ms captured at write time
     pbo_size          : int64
+    prev_png_level    : int      // stb_image_write's global PNG zlib level at record_start; restored at record_stop
 }
 
 var private recorder : RecorderState
@@ -212,37 +213,32 @@ def record_start(input : JsonValue?) : JsonValue? {
     // but we still validate the IDs before proceeding.
     var pbos : array<uint>
     pbos |> resize(n)
-    unsafe {
-        glGenBuffers(n, addr(pbos[0]))
-    }
+    glGenBuffers(n, unsafe(addr(pbos[0])))
     for (id in pbos) {
         if (id == 0u) {
+            glDeleteBuffers(n, unsafe(addr(pbos[0])))
+            delete pbos
             return JV((error = "glGenBuffers failed"))
         }
     }
     for (id in pbos) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, id)
-        unsafe {
-            glBufferData(GL_PIXEL_PACK_BUFFER, pbo_size, null, GL_STREAM_READ)
-        }
+        glBufferData(GL_PIXEL_PACK_BUFFER, pbo_size, null, GL_STREAM_READ)
     }
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
 
     // Probe: stbi's default PNG compression level is 8 (high). That caps the
     // single worker thread to ~25-27 fps at 1280x720. Level 4 is the
     // tutorial-friendly sweet spot: 2-3x faster per frame at minor file-size
-    // cost. If keepers, promote to a record_start arg.
-    unsafe {
-        stbi_write_set_png_compression_level(4)
-    }
-    var writer_ptr : void?
-    unsafe {
-        writer_ptr = stbi_apng_begin(args.file, w, h, 4)
-    }
+    // cost. We capture the previous level and restore it in record_stop so
+    // unrelated PNG writes (screenshot, etc.) aren't affected. If keepers,
+    // promote to a record_start arg.
+    let prev_png_level = stbi_write_get_png_compression_level()
+    stbi_write_set_png_compression_level(4)
+    let writer_ptr = stbi_apng_begin(args.file, w, h, 4)
     if (writer_ptr == null) {
-        unsafe {
-            glDeleteBuffers(n, addr(pbos[0]))
-        }
+        stbi_write_set_png_compression_level(prev_png_level)
+        glDeleteBuffers(n, unsafe(addr(pbos[0])))
         delete pbos
         return JV((error = "could not open file", file = args.file))
     }
@@ -262,6 +258,7 @@ def record_start(input : JsonValue?) : JsonValue? {
     recorder.pbos             <- pbos
     recorder.pbo_size         = pbo_size
     recorder.pbo_delays_ms |> resize(n)
+    recorder.prev_png_level   = prev_png_level
     recorder_active           = true
     return JV(RecordStartResult(
         file        = args.file,
@@ -292,17 +289,13 @@ def private harvest_one_pbo() : bool {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
         return false
     }
-    var ok : int
-    unsafe {
-        ok = stbi_apng_frame(recorder.writer, ptr, recorder.width * 4, recorder.pbo_delays_ms[read_idx])
-    }
-    unsafe {
-        glUnmapBuffer(GL_PIXEL_PACK_BUFFER)
-    }
+    let ok = unsafe(stbi_apng_frame(recorder.writer, ptr, recorder.width * 4, recorder.pbo_delays_ms[read_idx]))
+    // glUnmapBuffer returns GL_FALSE if the driver invalidated the buffer
+    // contents while it was mapped — count it as a harvest failure so the
+    // frame doesn't slip in with junk pixels.
+    let unmap_ok = glUnmapBuffer(GL_PIXEL_PACK_BUFFER)
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
-    if (ok == 0) {
-        return false
-    }
+    return false if (ok == 0 || !unmap_ok)
     recorder.frames_written++
     return true
 }
@@ -312,26 +305,24 @@ def record_stop(input : JsonValue?) : JsonValue? {
     return JV((error = "not recording")) if (!recorder_active)
 
     // Drain any PBOs still in flight (frames seen but not yet read back).
-    // Best effort: a failed apng_frame here is logged via the dropped counter
-    // but doesn't block teardown.
+    // Best effort: a failed harvest here breaks the drain loop and leaves the
+    // remaining in-flight frames unwritten — they don't show up in `dropped`
+    // (that counts encoder queue overflows inside the writer, not GL-side
+    // failures) but the resulting `frames` count reflects what actually made
+    // it to disk.
     while (recorder.frames_written < recorder.frames_seen) {
-        if (!harvest_one_pbo()) {
-            break
-        }
+        break if (!harvest_one_pbo())
     }
 
-    var dropped : int
-    var ok      : int
-    unsafe {
-        dropped = stbi_apng_dropped(recorder.writer)
-        ok      = stbi_apng_end(recorder.writer)
-    }
+    let dropped = stbi_apng_dropped(recorder.writer)
+    let ok      = stbi_apng_end(recorder.writer)
     let n = length(recorder.pbos)
     if (n > 0) {
-        unsafe {
-            glDeleteBuffers(n, addr(recorder.pbos[0]))
-        }
+        glDeleteBuffers(n, unsafe(addr(recorder.pbos[0])))
     }
+    // Restore stb's global PNG zlib level so unrelated PNG writes (screenshot,
+    // etc.) aren't permanently throttled to the tutorial-friendly setting.
+    stbi_write_set_png_compression_level(recorder.prev_png_level)
     let elapsed = get_uptime() - recorder.start_t
     let saved   = recorder.file
     let frames  = recorder.frames_written
@@ -406,9 +397,7 @@ def record_tick() {
     let write_idx = recorder.frames_seen % n
     recorder.pbo_delays_ms[write_idx] = int(gap_s * 1000.0f)
     glBindBuffer(GL_PIXEL_PACK_BUFFER, recorder.pbos[write_idx])
-    unsafe {
-        glReadPixels(0, 0, recorder.width, recorder.height, GL_RGBA, GL_UNSIGNED_BYTE, null)
-    }
+    glReadPixels(0, 0, recorder.width, recorder.height, GL_RGBA, GL_UNSIGNED_BYTE, null)
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0u)
     recorder.frames_seen++
 
