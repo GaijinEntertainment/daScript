@@ -63,6 +63,25 @@ pageInit = function () {
 
 }
 
+// Current sample's JIT-wasm basename (null for multi-file samples or when the
+// .wasm artifact is not present). Drives runJit() and the engine radio's
+// disabled state.
+var currentJitName = null;
+
+function deriveJitName(files) {
+    if (!files || files.length !== 1) return null;
+    return files[0].split('/').pop().replace(/\.das$/, '');
+}
+
+function updateEngineAvailability(name) {
+    const jitRadio = document.querySelector('input[name=engine][value=jit]');
+    if (!jitRadio) return;
+    if (!name) { jitRadio.disabled = true; return; }
+    fetch('./samples/examples/' + name + '.wasm', { method: 'HEAD' })
+        .then(r => { jitRadio.disabled = !r.ok; })
+        .catch(() => { jitRadio.disabled = true; });
+}
+
 selectSample = function(type, id) {
     const sel = sampleList[type];
     if (!sel && id === undefined) return;  // dropdown was removed; nothing to read
@@ -71,6 +90,8 @@ selectSample = function(type, id) {
         // Multi-file samples ship as files[] — load all in parallel, then hand
         // the bundle to the loader (single editor today, tab strip in phase 3).
         const files = samplesData[type][vv].files;
+        currentJitName = deriveJitName(files);
+        updateEngineAvailability(currentJitName);
         Promise.all(files.map(f =>
             $.ajax({ url: './samples/' + f, dataType: 'text' })
                 .then(text => ({ name: f.split('/').pop(), text }))
@@ -179,17 +200,31 @@ function updateButtonStates() {
 // still works without churn — it triggers a full refresh.
 window.updateTestButtonState = updateButtonStates;
 
+function selectedEngine() {
+    const el = document.querySelector('input[name=engine]:checked');
+    return el ? el.value : 'interpreter';
+}
+
 runCode = function() {
+    syncUrlToState();
+    if (selectedEngine() === 'jit') {
+        if (!currentJitName) {
+            printOutput("JIT unavailable: no precompiled .wasm for this sample", '#ff9393');
+            return;
+        }
+        runJit(currentJitName);
+        return;
+    }
+    // Interpreter path. WASM readiness gate first — both Module.callMain and
+    // the single-buffer fallback need FS up.
     if (!isWasmReady()) {
         printOutput('daslang is still loading, please wait…', '#ff9393');
         return;
     }
     if (syncMemFsFromState()) {
-        syncUrlToState();
         Module.callMain(['main.das']);
         return;
     }
-    syncUrlToState();
     runScript(code.getValue());
 }
 
@@ -209,6 +244,130 @@ runTests = function() {
     }
     syncUrlToState();
     Module.callMain(['/dastest/dastest.das', '--', '--test', '/main.das', '--timeout=0']);
+}
+
+// Minimal wasi_snapshot_preview1 shim — daslang STANDALONE_WASM output only
+// touches stdout (fd_write), proc_exit, clock, args/environ stubs, and a few
+// fd_* no-ops emscripten's libc emits at link time. See
+// modules/dasLLVM/README.md "Cross-compilation" for the import surface.
+function makeWasiShim(memoryRef) {
+    let stdoutBuf = '';
+    const decoder = new TextDecoder('utf-8');
+
+    function mem() { return new DataView(memoryRef.buffer); }
+    function u8() { return new Uint8Array(memoryRef.buffer); }
+
+    function flushStdout(force) {
+        // Flush by newline so each printed line gets its own output row.
+        let nl;
+        while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
+            printOutput(stdoutBuf.slice(0, nl), '#ffffff');
+            stdoutBuf = stdoutBuf.slice(nl + 1);
+        }
+        if (force && stdoutBuf.length) {
+            printOutput(stdoutBuf, '#ffffff');
+            stdoutBuf = '';
+        }
+    }
+
+    return {
+        fd_write(fd, iovsPtr, iovsLen, nWrittenPtr) {
+            const dv = mem();
+            let total = 0;
+            for (let i = 0; i < iovsLen; i++) {
+                const off = iovsPtr + i * 8;
+                const bufPtr = dv.getUint32(off, true);
+                const bufLen = dv.getUint32(off + 4, true);
+                const bytes = u8().subarray(bufPtr, bufPtr + bufLen);
+                stdoutBuf += decoder.decode(bytes, { stream: true });
+                total += bufLen;
+            }
+            dv.setUint32(nWrittenPtr, total, true);
+            flushStdout(false);
+            return 0;
+        },
+        fd_read() { return 0; },
+        fd_close() { return 0; },
+        fd_seek(fd, offLo, offHi, whence, newOffPtr) {
+            const dv = mem();
+            dv.setUint32(newOffPtr, 0, true);
+            dv.setUint32(newOffPtr + 4, 0, true);
+            return 0;
+        },
+        fd_fdstat_get() { return 0; },
+        fd_fdstat_set_flags() { return 0; },
+        fd_prestat_get() { return 8; /* BADF — stop probing preopens */ },
+        fd_prestat_dir_name() { return 8; },
+        args_sizes_get(argcPtr, argvBufSizePtr) {
+            const dv = mem();
+            dv.setUint32(argcPtr, 0, true);
+            dv.setUint32(argvBufSizePtr, 0, true);
+            return 0;
+        },
+        args_get() { return 0; },
+        environ_sizes_get(envcPtr, envBufSizePtr) {
+            const dv = mem();
+            dv.setUint32(envcPtr, 0, true);
+            dv.setUint32(envBufSizePtr, 0, true);
+            return 0;
+        },
+        environ_get() { return 0; },
+        clock_time_get(id, precision, timePtr) {
+            const ns = BigInt(Date.now()) * 1000000n;
+            mem().setBigUint64(timePtr, ns, true);
+            return 0;
+        },
+        clock_res_get(id, resPtr) {
+            mem().setBigUint64(resPtr, 1000000n, true);
+            return 0;
+        },
+        random_get(bufPtr, bufLen) {
+            const view = u8().subarray(bufPtr, bufPtr + bufLen);
+            crypto.getRandomValues(view);
+            return 0;
+        },
+        path_open() { return 8; },
+        path_readlink() { return 8; },
+        path_filestat_get() { return 8; },
+        proc_exit(code) {
+            flushStdout(true);
+            throw new WasiExit(code);
+        },
+    };
+}
+
+function WasiExit(code) { this.code = code; }
+
+function runJit(name) {
+    // Shim's DataView is rebuilt per-call from memRef.buffer, so we can
+    // create the shim before instantiation and patch the buffer once memory
+    // is exported.
+    const memRef = { buffer: new ArrayBuffer(0) };
+    const shim = makeWasiShim(memRef);
+    fetch('./samples/examples/' + name + '.wasm')
+        .then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching ' + name + '.wasm');
+            return r.arrayBuffer();
+        })
+        .then(bytes => WebAssembly.instantiate(bytes, {
+            wasi_snapshot_preview1: shim,
+            env: new Proxy({}, { get: (_, name) => name === 'memory' ? undefined : () => -1 }),
+        }))
+        .then(({ instance }) => {
+            memRef.buffer = instance.exports.memory.buffer;
+            const exports = instance.exports;
+            try {
+                if (typeof exports._initialize === 'function') exports._initialize();
+                if (typeof exports._start === 'function') exports._start();
+                else if (typeof exports.main === 'function') exports.main();
+                else printOutput('JIT error: no entry point exported in wasm', '#ff2d2d');
+            } catch (e) {
+                if (!(e instanceof WasiExit)) {
+                    printOutput('JIT error: ' + (e && e.message ? e.message : e), '#ff2d2d');
+                }
+            }
+        })
+        .catch(e => printOutput('JIT load error: ' + (e && e.message ? e.message : e), '#ff2d2d'));
 }
 
 clearOutput = function() {

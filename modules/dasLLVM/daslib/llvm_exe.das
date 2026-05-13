@@ -734,7 +734,8 @@ def private write_release_deps(prog : Program?) {
 // all compiled functions, runs init scripts, then calls the program entry point.
 def public inject_main(program_context : Context?; ctx : LLVMContextRef;
                        prog : Program?; entry_point : string; mod : LLVMOpaqueModule?;
-                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool) : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
+                       var types : PrimitiveTypes?, var uids : UidNodes?; strict : bool;
+                       target_triple : string = "") : tuple<fn : LLVMOpaqueValue?; link_whole_lib : bool> {
 
     let builder = LLVMCreateBuilder()
     defer() {
@@ -798,7 +799,10 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
             types.LLVMVoidPtrType() // argv
         )
     )
-    let main_fn = LLVMAddFunctionWithType(mod, "main", main_fn_type)
+    // wasm32-emscripten: emcc's libstandalonewasm already defines `main`,
+    // emit `__main_argc_argv` instead and let crt1 chain through.
+    let main_sym = (target_triple |> starts_with("wasm32-")) ? "__main_argc_argv" : "main"
+    let main_fn = LLVMAddFunctionWithType(mod, main_sym, main_fn_type)
     let entry = LLVMAppendBasicBlockInContext(ctx, main_fn, "entry")
     LLVMPositionBuilderAtEnd(builder, entry)
 

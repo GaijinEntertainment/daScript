@@ -189,9 +189,16 @@
             return false;
         }
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
+#if defined(_EMSCRIPTEN_VER)
+            // wasm-standalone has no /proc/self/exe; readlink would import
+            // env::__syscall_readlinkat which wasi-only hosts can't satisfy.
+            if (pathNameCapacity > 0) pathName[0] = '\0';
+            return 0;
+#else
             size_t pathNameSize = readlink("/proc/self/exe", pathName, pathNameCapacity - 1);
             pathName[pathNameSize] = '\0';
             return pathNameSize;
+#endif
         }
         void * loadDynamicLibrary ( const char * lib ) {
             // RTLD_GLOBAL so symbols from loaded .shared_module files

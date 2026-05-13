@@ -132,6 +132,17 @@ body {
     border-color: var(--amber-dim) !important;
 }
 
+.engine-toggle {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--fg-dim);
+}
+.engine-toggle label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.engine-toggle input[disabled] + * , .engine-toggle label:has(input[disabled]) { opacity: 0.5; cursor: default; }
+
 /* ───── Share popover ───── */
 .pg-share {
     z-index: 100;

@@ -141,6 +141,14 @@ struct JitCliOptions {
     @clarg_name = "jit-dump"
     @clarg_doc = "JIT: dump generated LLVM IR"
     dump_ir : Option<bool>
+
+    @clarg_name = "jit-target"
+    @clarg_doc = "JIT: cross-compile target triple (use with -exe; e.g. wasm32-unknown-emscripten)"
+    target : Option<string>
+
+    @clarg_name = "jit-runtime-lib"
+    @clarg_doc = "JIT: explicit path to libDaScript_runtime.a (wasm cross-compile); overrides auto-locate under web/output/lib/"
+    runtime_lib : Option<string>
 }
 
 
@@ -179,6 +187,15 @@ class JIT_LLVM : AstSimulateMacro {
         var output_path = config_out_path |> empty() ? ".jitted_scripts/{prog.thisNamespace}" : config_out_path
         assume path_to_shared_lib = string(prog.policies.jit_path_to_shared_lib)
         assume path_to_linker = string(prog.policies.jit_path_to_linker)
+        // Cross-compile triple: --jit-target=<triple> CLI wins over the
+        // script-level `options jit_target = "..."`.
+        let opt_target = (prog._options |> find_arg("jit_target")) ?as tString ?? ""
+        let target_triple = cli_opts.target |> unwrap_or(opt_target)
+        let gen_wasm = gen_exe && (target_triple |> starts_with("wasm"))
+        // Optional CLI override for the wasm runtime archive location. Falls
+        // back to `options jit_runtime_lib = "..."` then write_wasm's
+        // find_runtime_lib() auto-locate under web/output/lib/.
+        let runtime_lib_override = cli_opts.runtime_lib |> unwrap_or((prog._options |> find_arg("jit_runtime_lib")) ?as tString ?? "")
 
         // Set global options
         LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = prog._options |> find_arg("jit_vec3_ldu") ?as tBool ?? LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS_DEFAULT
@@ -251,9 +268,10 @@ class JIT_LLVM : AstSimulateMacro {
                     to_log(LOG_INFO, "LLVM JIT: DLL cache hit {output_path}.dll\n")
                 }
             }
+            var jit_has_externals = false
             if (recompile_prog) {
                 for (fun in funcs) {
-                    generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags)
+                    jit_has_externals = generate_llvm(ctx, g_prim_t, uids, attrs, fun, jit_flags) || jit_has_externals
                     let fnmna = uids.get_dll_fn_name(fun)
                     var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                     var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
@@ -268,7 +286,7 @@ class JIT_LLVM : AstSimulateMacro {
                     }
                 }
                 if (gen_exe) {
-                    let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict)
+                    let res = inject_main(ctx, g_ctx, prog, exe_main, g_mod, g_prim_t, uids, exe_strict, target_triple)
                     LINK_WHOLE_LIB = res.link_whole_lib
                     if (res.fn == null) {
                         finalize_jit(use_dll, gen_exe, g_dynamic_lib_handle)
@@ -308,7 +326,13 @@ class JIT_LLVM : AstSimulateMacro {
                     let fn_names = join([ for (fn in funcs); "{fn.name}" ], ",")
                     panic("Internal jit error. Failed to get IR for functions {fn_names}.\n")
                 }
-                if (gen_exe) {
+                if (gen_wasm) {
+                    mkdir_rec(dir_name(output_path))
+                    // path_to_linker is reused as the optional emcc override
+                    // for the wasm link (mirrors how it's used for clang-cl
+                    // on the host path).
+                    write_wasm(g_mod, output_path, target_triple, path_to_linker, jit_has_externals, runtime_lib_override)
+                } elif (gen_exe) {
                     mkdir_rec(dir_name(output_path))
                     write_exe(g_mod, output_path, path_to_shared_lib, path_to_linker, LINK_WHOLE_LIB)
                 } elif (use_dll) {
