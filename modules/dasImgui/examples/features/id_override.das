@@ -18,7 +18,7 @@ require imgui/imgui_containers_builtin
 require imgui/imgui_id_builtin
 
 // =============================================================================
-// FEATURE: id_override — §4.8 explicit ID-stack scoping via with_id.
+// FEATURE: id_override — §4.8 ID-override surface in full.
 // SHOWS:   - `with_id("section_a") { button(...) }` segments the widget path so
 //            two render sites of the same widget kind (distinct identifiers)
 //            register under "<window>/section_a/<IDENT>" vs ".../section_b/...".
@@ -26,6 +26,14 @@ require imgui/imgui_id_builtin
 //          - The same single-global widget rendered under two distinct with_id
 //            scopes does NOT trip the once-per-frame panic — check_unique_render
 //            keys off the full path, not the bare identifier.
+//          - Per-call `id="x"` named arg: macro wraps the render call in
+//            PushID(x)/PopID. Telemetry path stays the bare identifier; only
+//            the ImGui hash changes (lets the daslang identifier be renamed
+//            without invalidating imgui.ini state or hex_id-based scripts).
+//          - Per-call `path="x"` named arg: macro passes "x" as widget_ident
+//            to the underlying render fn. Both telemetry path AND ImGui hash
+//            adopt "x" (since widget_prelude does PushID(widget_ident)).
+//          - Both can be combined per call.
 // DRIVE:   curl -X POST -d '{"name":"imgui_snapshot"}' localhost:9090/command
 //          # → widgets register under MAIN_WIN/section_a/SAVE_A_BTN etc.
 // STANDALONE: daslang.exe modules/dasImgui/examples/features/id_override.das
@@ -80,6 +88,24 @@ def update() {
                 button(NESTED_BTN, (text = "Nested"))
             }
         }
+
+        Separator()
+        Text("Per-call id= and path= overrides:")
+        // id="hashed_v1" — telemetry path stays "MAIN_WIN/HASHED_BTN"; ImGui's
+        // hash for the button is mangled with "hashed_v1" via PushID/PopID
+        // wrapping. button is bool-returning, but id= wraps in a void block
+        // so we call as a statement (intentional restriction; use with_id for
+        // the bool-return form).
+        button(HASHED_BTN, (text = "Hashed via id=", id = "hashed_v1"))
+
+        // path="rps_v1" — telemetry path becomes "MAIN_WIN/rps_v1"; the bare
+        // identifier RPS_PATH still names the state global (drives daslang
+        // visibility, hot-reload), but the registry path uses "rps_v1".
+        slider_float(RPS_PATH, (text = "Speed (path=)", path = "rps_v1"))
+
+        // Both: distinct hash AND distinct telemetry path.
+        slider_float(RPS_BOTH, (text = "Both (id=+path=)",
+                                id = "rps_a", path = "rps_b"))
     }
 
     end_of_frame()
