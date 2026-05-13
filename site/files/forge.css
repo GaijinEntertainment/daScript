@@ -29,6 +29,9 @@
     /* Type */
     --font-sans: "Inter Tight", "Inter", -apple-system, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+
+    /* Hint embedded widgets (Disqus, GitHub, etc.) to render in dark mode. */
+    color-scheme: dark;
 }
 
 /* ───── Reset / base ───── */
@@ -773,6 +776,38 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
 }
 .forge-post-nav a { color: var(--fg-dim); }
 .forge-post-nav a:hover { color: var(--amber); }
+
+/* ───── Comments (Disqus) ───── */
+
+/* Disqus loads in a sandboxed iframe so we can only style the wrapper —
+ * the comment styling itself comes from the Disqus admin panel
+ * (Appearance → Color scheme: Auto). The `color-scheme: dark` hint on
+ * :root makes Auto resolve to dark. */
+.forge-post__comments {
+    padding: 56px 0 88px;
+    border-top: 1px solid var(--rule);
+    background: var(--bg);
+}
+.forge-post__comments .forge-section-label { margin-bottom: 18px; }
+.forge-post__comments #disqus_thread {
+    margin-top: 20px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 16px 20px;
+    min-height: 80px;
+}
+.forge-post__comments noscript {
+    display: block;
+    margin-top: 16px;
+    color: var(--fg-faint);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+}
+.forge-post__comments noscript a {
+    color: var(--amber);
+    border-bottom: 1px solid var(--amber-dim);
+}
 
 /* Changelist: same layout as blog listing, wider. */
 .forge-changelist { margin-top: 24px; }

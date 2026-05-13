@@ -50,6 +50,13 @@ except ImportError as e:
 
 KEY_RE = re.compile(r'^([a-zA-Z_]+):\s*(.*)$')
 
+# Disqus shortname carried over from the legacy borisbat.github.io/dascf-blog
+# install — the same account, but new threads under daslang.io URLs (Disqus
+# resolves identifier first, then page.url). Old comments stay under the
+# original blog URLs in the Disqus admin and can be migrated via the
+# Disqus URL Mapper if desired.
+DISQUS_SHORTNAME = 'https-borisbat-github-io-dascf-blog'
+
 
 @dataclass
 class Entry:
@@ -248,6 +255,7 @@ def render_post(entry: Entry, prev: Entry | None, next: Entry | None, md, posts_
     else:
         parts.append('<span></span>')
     nav_html = f'<div class="forge-post-nav">{parts[0]}{parts[1]}</div>'
+    comments_html = render_comments(entry)
     return f"""    <article class="forge-post">
         <div class="forge-container">
             <div class="forge-post__meta">
@@ -261,6 +269,37 @@ def render_post(entry: Entry, prev: Entry | None, next: Entry | None, md, posts_
             {nav_html}
         </div>
     </article>
+{comments_html}"""
+
+
+def render_comments(entry: Entry) -> str:
+    """Disqus thread, pinned by post slug as identifier so threads survive
+    URL changes (dev/prod, future renames). The embed script reads
+    `disqus_config` for the URL + identifier."""
+    slug = html.escape(entry.slug, quote=True)
+    return f"""    <section class="forge-post__comments">
+        <div class="forge-container">
+            <div class="forge-section-label">
+                <span class="forge-section-label__num">§</span>
+                <span class="forge-section-label__rule"></span>
+                <span>comments</span>
+            </div>
+            <div id="disqus_thread"></div>
+            <script>
+                var disqus_config = function () {{
+                    this.page.url = window.location.href;
+                    this.page.identifier = "{slug}";
+                }};
+                (function() {{
+                    var d = document, s = d.createElement('script');
+                    s.src = 'https://{DISQUS_SHORTNAME}.disqus.com/embed.js';
+                    s.setAttribute('data-timestamp', +new Date());
+                    (d.head || d.body).appendChild(s);
+                }})();
+            </script>
+            <noscript>Comments require JavaScript — <a href="https://disqus.com/?ref_noscript">comments powered by Disqus</a>.</noscript>
+        </div>
+    </section>
 """
 
 
