@@ -121,16 +121,22 @@ jobs:
             --site-url https://daslang.io \
             --out _site/
 
-        # Playground: vendor web/ui IDE + WASM artifacts
-        if [ -d web/output ]; then
+        # Playground: vendor web/ui IDE + WASM artifacts.
+        # The WASM build step has continue-on-error so docs/blog still publish
+        # when emsdk hiccups. The cost of that resilience is partial state:
+        # web/output may exist without the daslang_static.{js,wasm} artifacts.
+        # Refuse to stage a half-built playground in that case — Pages preserves
+        # the previously-deployed /playground/, so the visible Run button keeps
+        # working instead of 404'ing its runtime.
+        if [ -f web/output/daslang_static.js ] && [ -f web/output/daslang_static.wasm ]; then
             mkdir -p _site/playground _site/files/wasm
             # Copy IDE source files (CodeMirror, jQuery, main.js/css, etc.)
             cp -r web/ui/src/* _site/playground/
-            # Copy WASM artifacts
-            cp web/output/daslang_static.js _site/playground/ || true
-            cp web/output/daslang_static.wasm _site/playground/ || true
-            cp web/output/daslang_static.js _site/files/wasm/ || true
-            cp web/output/daslang_static.wasm _site/files/wasm/ || true
+            # Copy WASM artifacts — known-present after the guard above.
+            cp web/output/daslang_static.js _site/playground/
+            cp web/output/daslang_static.wasm _site/playground/
+            cp web/output/daslang_static.js _site/files/wasm/
+            cp web/output/daslang_static.wasm _site/files/wasm/
             # Copy sample data if present
             cp -r web/ui/samples _site/playground/samples 2>/dev/null || true
             # Our Forge-skinned playground/index.html + skin CSS + init shim take precedence.
@@ -143,7 +149,7 @@ jobs:
             # Glob so future playground-*.js additions land automatically.
             cp site/playground/playground-*.js _site/playground/
         else
-            echo "WARNING: web/output not found — playground will be unavailable"
+            echo "WARNING: daslang_static.{js,wasm} missing under web/output — skipping playground stage. Prior /playground/ remains live."
         fi
 
         # GitHub Pages control files

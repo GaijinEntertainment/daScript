@@ -247,6 +247,10 @@
     // ─── Init ─────────────────────────────────────────────────────────
 
     function tryInit() {
+        // Mobile gate short-circuits pageInit so `window.code` is never created.
+        // Without this guard, the poll loop fires ~33Hz forever on every mobile
+        // tab/background tab — wasted battery for no payoff.
+        if (document.documentElement.classList.contains('is-pg-mobile')) return;
         if (typeof CodeMirror === 'undefined' ||
             typeof window.code === 'undefined' || window.code === null ||
             typeof window.code.swapDoc !== 'function') {
