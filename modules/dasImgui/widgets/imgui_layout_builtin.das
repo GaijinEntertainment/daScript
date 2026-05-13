@@ -9,6 +9,10 @@ require imgui public
 require imgui/imgui_boost_runtime public
 require imgui/imgui_boost_v2 public
 require daslib/json public
+require daslib/ast
+require daslib/ast_boost
+require daslib/templates_boost
+require daslib/macro_boost
 require math
 
 //! §4.6 layout helpers — stateful, draggable.
@@ -204,4 +208,72 @@ def dock_left(var state : SliderStateFloat; blk : block) {
     }
     SameLine(0.0f, 0.0f)
     pending_value_container_finalize(widget_ident, "dock_left", state)
+}
+
+// ===== columns =====
+
+def public columns_open(n : int) {
+    //! Open an N-column block. Thin wrapper around ImGui `Columns(N, null, true)`
+    //! with borders enabled (matches the legacy demo defaults).
+    Columns(n, "", true)
+}
+
+def public next_col() {
+    //! Advance to the next column. Wraps `imgui::NextColumn()`.
+    NextColumn()
+}
+
+def public columns_close() {
+    //! Close a columns block by setting columns back to 1.
+    Columns(1, "", false)
+}
+
+[call_macro(name = "columns")]
+class private ColumnsCallMacro : AstCallMacro {
+    def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
+        //! `columns(N, ${col0}, ${col1}, …)` — first arg is an integer literal,
+        //! the rest are exactly N block literals. Expands to
+        //! `columns_open(N); invoke(b0); next_col(); invoke(b1); …; columns_close()`.
+        let nargs = length(call.arguments)
+        macro_verify(nargs >= 2, prog, call.at,
+                     "columns(N, ...) requires the column count and at least one block")
+        return null if (nargs < 2)
+        let nArg = call.arguments[0]
+        macro_verify(nArg is ExprConstInt, prog, nArg.at,
+                     "columns: first argument must be an integer literal")
+        return null if (!(nArg is ExprConstInt))
+        let nLit = (nArg as ExprConstInt).value
+        macro_verify(nLit > 0, prog, nArg.at,
+                     "columns: column count must be > 0")
+        return null if (nLit <= 0)
+        let blockCount = nargs - 1
+        macro_verify(blockCount == nLit, prog, call.at,
+                     "columns({nLit}, ...): expected {nLit} block args, got {blockCount}")
+        return null if (blockCount != nLit)
+        var bodyStmts : array<ExpressionPtr>
+        bodyStmts |> reserve(blockCount * 2 + 2)
+        bodyStmts |> push <| qmacro_expr(${
+            columns_open($v(nLit))
+        })
+        for (i in range(blockCount)) {
+            let blkArg = call.arguments[i + 1]
+            macro_verify(blkArg is ExprMakeBlock, prog, blkArg.at,
+                         "columns: column argument {i} must be a block literal")
+            return null if (!(blkArg is ExprMakeBlock))
+            bodyStmts |> push <| qmacro_expr(${
+                invoke($e(blkArg))
+            })
+            if (i < blockCount - 1) {
+                bodyStmts |> push <| qmacro_expr(${
+                    next_col()
+                })
+            }
+        }
+        bodyStmts |> push <| qmacro_expr(${
+            columns_close()
+        })
+        return qmacro_block() {
+            $b(bodyStmts)
+        }
+    }
 }
