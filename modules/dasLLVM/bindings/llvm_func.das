@@ -1807,36 +1807,48 @@ def LLVMCreateStringError(ErrMsg : string implicit) : LLVMOpaqueError? {}
 def LLVMInitializeAArch64TargetInfo() : void {}
 [extern(cdecl, name="LLVMInitializeARMTargetInfo", library="LLVM.dll")]
 def LLVMInitializeARMTargetInfo() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyTargetInfo", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyTargetInfo() : void {}
 [extern(cdecl, name="LLVMInitializeX86TargetInfo", library="LLVM.dll")]
 def LLVMInitializeX86TargetInfo() : void {}
 [extern(cdecl, name="LLVMInitializeAArch64Target", library="LLVM.dll")]
 def LLVMInitializeAArch64Target() : void {}
 [extern(cdecl, name="LLVMInitializeARMTarget", library="LLVM.dll")]
 def LLVMInitializeARMTarget() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyTarget", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyTarget() : void {}
 [extern(cdecl, name="LLVMInitializeX86Target", library="LLVM.dll")]
 def LLVMInitializeX86Target() : void {}
 [extern(cdecl, name="LLVMInitializeAArch64TargetMC", library="LLVM.dll")]
 def LLVMInitializeAArch64TargetMC() : void {}
 [extern(cdecl, name="LLVMInitializeARMTargetMC", library="LLVM.dll")]
 def LLVMInitializeARMTargetMC() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyTargetMC", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyTargetMC() : void {}
 [extern(cdecl, name="LLVMInitializeX86TargetMC", library="LLVM.dll")]
 def LLVMInitializeX86TargetMC() : void {}
 [extern(cdecl, name="LLVMInitializeAArch64AsmPrinter", library="LLVM.dll")]
 def LLVMInitializeAArch64AsmPrinter() : void {}
 [extern(cdecl, name="LLVMInitializeARMAsmPrinter", library="LLVM.dll")]
 def LLVMInitializeARMAsmPrinter() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyAsmPrinter", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyAsmPrinter() : void {}
 [extern(cdecl, name="LLVMInitializeX86AsmPrinter", library="LLVM.dll")]
 def LLVMInitializeX86AsmPrinter() : void {}
 [extern(cdecl, name="LLVMInitializeAArch64AsmParser", library="LLVM.dll")]
 def LLVMInitializeAArch64AsmParser() : void {}
 [extern(cdecl, name="LLVMInitializeARMAsmParser", library="LLVM.dll")]
 def LLVMInitializeARMAsmParser() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyAsmParser", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyAsmParser() : void {}
 [extern(cdecl, name="LLVMInitializeX86AsmParser", library="LLVM.dll")]
 def LLVMInitializeX86AsmParser() : void {}
 [extern(cdecl, name="LLVMInitializeAArch64Disassembler", library="LLVM.dll")]
 def LLVMInitializeAArch64Disassembler() : void {}
 [extern(cdecl, name="LLVMInitializeARMDisassembler", library="LLVM.dll")]
 def LLVMInitializeARMDisassembler() : void {}
+[extern(cdecl, name="LLVMInitializeWebAssemblyDisassembler", library="LLVM.dll")]
+def LLVMInitializeWebAssemblyDisassembler() : void {}
 [extern(cdecl, name="LLVMInitializeX86Disassembler", library="LLVM.dll")]
 def LLVMInitializeX86Disassembler() : void {}
 [extern(cdecl, name="LLVMGetModuleDataLayout", library="LLVM.dll")]

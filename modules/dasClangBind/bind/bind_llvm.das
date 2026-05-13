@@ -17,7 +17,7 @@ let private per_target_init_suffixes <- array<string>(
 // prebuilt LLVM.dll (linux x86_64, linux arm64, mac arm64, windows x86_64).
 // Anything else is filtered out at regen time to keep the binding loadable.
 let private universal_targets <- array<string>(
-    "X86", "AArch64", "ARM"
+    "X86", "AArch64", "ARM", "WebAssembly"
 )
 
 def private skip_per_target_initializer(function_name : string) : bool {
