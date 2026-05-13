@@ -864,9 +864,49 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     white-space: pre;
 }
 
+/* Mobile nav: hamburger button toggles a dropdown panel containing the
+ * normally-inline `.forge-nav__links`. Burger is hidden on desktop. The
+ * toggle is a plain inline onclick on the button that flips `.is-open`
+ * on the nav element. */
+.forge-nav { position: relative; }
+.forge-nav__burger {
+    display: none;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--rule);
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 12px;
+    border-radius: 4px;
+    transition: color 80ms ease, border-color 80ms ease;
+}
+.forge-nav__burger:hover {
+    color: var(--amber);
+    border-color: var(--amber-dim);
+}
+
 /* Mobile <768 */
 @media (max-width: 767px) {
     .forge-container { padding: 0 20px; }
+    .forge-nav__burger { display: inline-flex; align-items: center; order: -1; }
+    .forge-nav__links {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-2);
+        border-bottom: 1px solid var(--rule);
+        padding: 16px 24px 20px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        font-size: 14px;
+        z-index: 20;
+    }
+    .forge-nav.is-open .forge-nav__links { display: flex; }
     .forge-hero { padding: 48px 0 64px; }
     .forge-hero h1 { font-size: 38px; }
     .forge-hero__lede { font-size: 15px; }
@@ -881,7 +921,6 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     #hero-run,
     #hero-playground { display: none !important; }
     .forge-hero__code { display: block; }
-    .forge-nav__links { display: none; }
     .forge-section { padding: 56px 0; }
     .forge-h2 { font-size: 26px; }
     .forge-bench__grid,
@@ -897,6 +936,24 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     .forge-news__date { grid-area: date; }
     .forge-news__title { grid-area: title; }
     .forge-news__tag  { grid-area: tag; }
+    /* Blog index + changelist rows: stack date+tag on row 1, body on row 2.
+     * Otherwise the 140px date column squeezes the title into ~94px and
+     * each word wraps to a new line. */
+    .forge-blog-item {
+        grid-template-columns: auto 1fr;
+        grid-template-rows: auto auto;
+        gap: 6px 12px;
+    }
+    .forge-blog-item__date  { grid-row: 1; grid-column: 1; }
+    .forge-blog-item__tag   { grid-row: 1; grid-column: 2; justify-self: end; }
+    .forge-blog-item__title { grid-row: 2; grid-column: 1 / -1; }
+    .forge-blog-item > div:nth-child(3):not([class]) { grid-row: 2; grid-column: 1 / -1; }
+}
+
+/* Very narrow phones: drop the redundant version chip so [github ↗] +
+ * [install] don't collide with it. */
+@media (max-width: 479px) {
+    .forge-nav__version { display: none; }
 }
 
 /* Tablet bench grid adjustment */

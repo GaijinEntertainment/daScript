@@ -5,7 +5,7 @@ var samplesData;
 
 var code;
 
-var sampleList = {"examples":null, "tests":null};
+var sampleList = {"examples":null};
 
 
 pageInit = function () {
@@ -17,7 +17,6 @@ pageInit = function () {
     editorOutput = document.getElementById("output");
 
     sampleList["examples"] = document.getElementById("examples");
-    sampleList["tests"] = document.getElementById("tests");  // may be null when the Tests dropdown is removed
 
 
 
@@ -34,33 +33,23 @@ pageInit = function () {
 
 
 
-         ["example","test"].forEach(function (n) {
-
-             let ll = document.getElementById(n+"s");
-             if (!ll) return;  // the Tests dropdown was removed; skip silently
-             while (ll.firstChild) {
-                 ll.removeChild(ll.lastChild);
-             }
-
-             const entries = samplesData[n+"s"] || [];
-             for (let i=0;i<entries.length+1;i++)
-             {
-                 let newO = document.createElement("option");
-                 if (i===0)
-                 {
-
-                     newO.innerText = "Select "+n;
-                     newO.value = "init";
+         (function populateExamples() {
+             const ll = document.getElementById("examples");
+             if (!ll) return;
+             while (ll.firstChild) ll.removeChild(ll.lastChild);
+             const entries = samplesData["examples"] || [];
+             for (let i = 0; i < entries.length + 1; i++) {
+                 const opt = document.createElement("option");
+                 if (i === 0) {
+                     opt.innerText = "Select example";
+                     opt.value = "init";
+                 } else {
+                     opt.innerText = entries[i - 1].name;
+                     opt.value = i - 1;
                  }
-                 else
-                 {
-                     newO.innerText = entries[i-1].name;
-                     newO.value = i-1;
-
-                 }
-                 ll.appendChild(newO);
+                 ll.appendChild(opt);
              }
-         });
+         })();
 
          // Skip the default sample if pgInit already restored state from URL
          // hash or localStorage autosave (otherwise the async fetch overwrites
@@ -127,67 +116,6 @@ runCode = function() {
         return;
     }
     runScript(code.getValue());
-}
-
-
-runTests = function() {
-
-
-    runTest(0);
-
-}
-
-var outputPool = [];
-
-runTest = function(i) {
-
-    $.get('./samples/'+samplesData["tests"][i].files[0], function(res) {
-
-        printOutput("Running Test "+(i+1)+"/"+samplesData["tests"].length+": "+samplesData["tests"][i].name,"#bec7b6");
-
-        outputPool = [];
-
-        runScript(res,function () {
-
-
-            let ok = true;
-
-
-
-            if (outputPool.length<samplesData["tests"][i].correct_output.length)
-                ok = false;
-            else
-                for (let o=0;o<samplesData["tests"][i].correct_output.length;o++) {
-                    let correct = samplesData["tests"][i].correct_output[o];
-
-                    if (Array.isArray(correct))
-                    {
-                        let outp = outputPool[o].split(' ');
-
-                        if (outp.length<correct.length)
-                            ok = false;
-                        else
-                            for (let k=0;k<correct.length;k++)
-                                if (correct[k] !== null && outp[k] !== correct[k])
-                                    ok = false;
-
-
-                    }
-                    else
-                    {
-                        if (correct !== null && outputPool[o] !== correct)
-                            ok = false;
-                    }
-
-                }
-
-
-            printOutput(samplesData["tests"][i].name+" Test "+(i+1)+"/"+samplesData["tests"].length+": "+(ok ? "SUCCESS" : "FAIL"),ok ? "#89db4a": '#ff9393');
-
-            if (i<samplesData["tests"].length-1)
-                runTest(i+1);
-        });
-    }, 'text');
 }
 
 clearOutput = function() {
@@ -266,8 +194,6 @@ var Module = {
                     text = Array.prototype.slice.call(arguments).join(' ');
                 console.log(text);
                 printOutput(text,'#ffffff');
-
-                outputPool.push(text);
             };
         })(),
     }

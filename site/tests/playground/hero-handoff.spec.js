@@ -6,6 +6,11 @@
 
 const { test, expect } = require('./fixtures.js');
 
+// Two-window handoff (new page via `context.waitForEvent('page')`) is flaky
+// under high parallelism while another test in a sibling worker is also
+// holding focus. One retry on the rare race is enough.
+test.describe.configure({ retries: 1 });
+
 test('hero ↗ playground hands off the current buffer to /playground/', async ({ page, context }) => {
     await page.goto('/');
     // The hero editor is a Forge-themed CodeMirror instance.

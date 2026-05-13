@@ -84,7 +84,7 @@ In this implementation I choose to collect entries, so that they can be later an
         entering : bool     // entering or leaving the function
 
 This structure happens to correspond well with the [Google Chrome Trace Event Format](https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview)
-Open Google Chrome, Press F12, go to performance section, load the log, enjoy the view ![Call tree](/images/call_tree.PNG)
+Open Google Chrome, press F12, go to the performance tab, and load the log — you get the standard Chrome call-tree view.
 There are other tools which accept this format as well.
 
 By default profiler outputs full call graph.

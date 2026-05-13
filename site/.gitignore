@@ -12,9 +12,6 @@ files/news.json
 # CI rebuilds these from source on every publish. To preview locally:
 #   cp web/ui/src/* site/playground/
 #   cp web/output/daslang_static.{js,wasm} site/playground/
-playground/codemirror.css
-playground/codemirror.min.js
-playground/eclipse.css
 playground/jquery-3.6.0.min.js
 playground/main.css
 playground/main.js
