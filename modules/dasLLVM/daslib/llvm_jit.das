@@ -461,6 +461,11 @@ class public LlvmJitVisitor : AstVisitor {
         var noInline = false
         var optNone = false
         var hot = false
+        var cold = false
+        var mustProgress = false
+        var minSize = false
+        var noFree = false
+        var noRecurse = false
         option_no_range_check = false
         option_no_alias = false
         option_no_capture = false
@@ -476,6 +481,16 @@ class public LlvmJitVisitor : AstVisitor {
                         optNone = true
                     } elif (arg.name == "hot") {
                         hot = true
+                    } elif (arg.name == "cold") {
+                        cold = true
+                    } elif (arg.name == "mustprogress") {
+                        mustProgress = true
+                    } elif (arg.name == "minsize") {
+                        minSize = true
+                    } elif (arg.name == "nofree") {
+                        noFree = true
+                    } elif (arg.name == "norecurse") {
+                        noRecurse = true
                     } elif (arg.name == "unsafe_range_check") {
                         option_no_range_check = true
                     } elif (arg.name == "unsafe_alias") {
@@ -501,6 +516,21 @@ class public LlvmJitVisitor : AstVisitor {
         }
         if (hot) {
             LLVMAddAttributeToFunction(ffunc, attributes.hot)
+        }
+        if (cold) {
+            LLVMAddAttributeToFunction(ffunc, attributes.cold)
+        }
+        if (mustProgress) {
+            LLVMAddAttributeToFunction(ffunc, attributes.mustprogress)
+        }
+        if (minSize) {
+            LLVMAddAttributeToFunction(ffunc, attributes.minsize)
+        }
+        if (noFree) {
+            LLVMAddAttributeToFunction(ffunc, attributes.nofree)
+        }
+        if (noRecurse) {
+            LLVMAddAttributeToFunction(ffunc, attributes.norecurse)
         }
         if (optNone) {
             if (alwaysInline) {
@@ -1119,9 +1149,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_fixed_loop(count : int; blk : block<(var index : LLVMOpaqueValue?) : void>) {
-        if (count == 0) {
-            pass
-        }
+        return if (count == 0)
         if (count == 1) {
             invoke(blk, types.ConstI32(0ul))
         } else {
@@ -1134,7 +1162,8 @@ class public LlvmJitVisitor : AstVisitor {
             invoke(blk, LLVMBuildLoad2(g_builder, types.t_int32, loop, ""))
             LLVMBuildStore(g_builder, LLVMBuildAdd(g_builder, LLVMBuildLoad2(g_builder, types.t_int32, loop, ""), types.ConstI32(1ul), ""), loop)
             var loop_cond = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, LLVMBuildLoad2(g_builder, types.t_int32, loop, ""), types.ConstI32(uint64(count)), "")
-            LLVMBuildCondBr(g_builder, loop_cond, loop_bb, loop_end_bb)
+            let backedge = LLVMBuildCondBr(g_builder, loop_cond, loop_bb, loop_end_bb)
+            attach_loop_mustprogress(backedge)
             LLVMPositionBuilderAtEnd(g_builder, loop_end_bb)
         }
     }
@@ -2710,7 +2739,8 @@ class public LlvmJitVisitor : AstVisitor {
         var lblk = loop_stack |> back()
         loop_stack |> pop()
         if (!current_block_terminates()) {
-            LLVMBuildBr(g_builder, lblk.loop_start)
+            let backedge = LLVMBuildBr(g_builder, lblk.loop_start)
+            attach_loop_mustprogress(backedge)
         }
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_end)
         return expr
@@ -3108,7 +3138,8 @@ class public LlvmJitVisitor : AstVisitor {
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
             }
         }
-        LLVMBuildBr(g_builder, lblk.loop_start)
+        let backedge = LLVMBuildBr(g_builder, lblk.loop_start)
+        attach_loop_mustprogress(backedge)
         /*
         LOOP_END:
             evalFinal(context)
@@ -5233,7 +5264,15 @@ class public LlvmJitVisitor : AstVisitor {
             LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
         }
         var lblk = loop_stack |> back()
-        LLVMBuildBr(g_builder, lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start)
+        let target = lblk.loop_continue != null ? lblk.loop_continue : lblk.loop_start
+        let br = LLVMBuildBr(g_builder, target)
+        // Attach mustprogress to any branch that lands directly on the header.
+        // for-loops route through loop_continue (no metadata needed here, the
+        // continue's terminating br to loop_start carries it); while-loops
+        // have no continue latch, so this branch IS a backedge.
+        if (target == lblk.loop_start) {
+            attach_loop_mustprogress(br)
+        }
     }
 
 // ExprMakeBlock
@@ -5930,6 +5969,35 @@ class public LlvmJitVisitor : AstVisitor {
         )
         var typ = g_fn_types[FN_JIT_EXCEPTION]
         LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
+    }
+
+    // Attach `!llvm.loop !N` with `!N = distinct !{!N, !{!"llvm.loop.mustprogress"}}`
+    // to the given backedge branch. Self-reference is required by LangRef and is
+    // what gives the loop its pointer-identity for opt's loop-info bookkeeping.
+    //
+    // `mustprogress` tells opt the loop is required to make forward progress
+    // (i.e., side-effect-free infinite loops are UB and can be deleted). This
+    // matches daslang semantics — there's no infinite-loop idiom that opt
+    // shouldn't be allowed to assume terminates — and unblocks transformations
+    // that bail conservatively on potentially-non-progressing loops.
+    def attach_loop_mustprogress(branch_inst : LLVMValueRef) {
+        let mustprogress_str = LLVMMDStringInContext2(g_ctx, "llvm.loop.mustprogress", 22ul)
+        var inner_arr : LLVMOpaqueMetadata? [1]
+        inner_arr[0] = mustprogress_str
+        let inner = LLVMMDNodeInContext2(g_ctx, array_data_ptr(inner_arr), 1ul)
+        // LLVMMetadataReplaceAllUsesWith calls MDNode::deleteTemporary on
+        // `temp` internally, so do NOT also call LLVMDisposeTemporaryMDNode
+        // — that would be a double-free (crashes on Linux/Windows, masked
+        // by Apple's allocator).
+        let temp = LLVMTemporaryMDNode(g_ctx, null, 0ul)
+        var loop_arr : LLVMOpaqueMetadata? [2]
+        loop_arr[0] = temp
+        loop_arr[1] = inner
+        let loop_md = LLVMMDNodeInContext2(g_ctx, array_data_ptr(loop_arr), 2ul)
+        LLVMMetadataReplaceAllUsesWith(temp, loop_md)
+        let loop_md_val = LLVMMetadataAsValue(g_ctx, loop_md)
+        let kind_id = LLVMGetMDKindIDInContext(g_ctx, "llvm.loop", 9u)
+        LLVMSetMetadata(branch_inst, kind_id, loop_md_val)
     }
 
     def at_function_entry(blk : block) {

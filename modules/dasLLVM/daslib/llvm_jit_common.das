@@ -97,6 +97,11 @@ class public Attributes {
     alwaysinline : LLVMOpaqueAttributeRef?
     noinline : LLVMOpaqueAttributeRef?
     hot : LLVMOpaqueAttributeRef?
+    cold : LLVMOpaqueAttributeRef?
+    mustprogress : LLVMOpaqueAttributeRef?
+    minsize : LLVMOpaqueAttributeRef?
+    nofree : LLVMOpaqueAttributeRef?
+    norecurse : LLVMOpaqueAttributeRef?
     noalias : LLVMOpaqueAttributeRef?
     sext : LLVMOpaqueAttributeRef?
     zext : LLVMOpaqueAttributeRef?
@@ -111,6 +116,11 @@ class public Attributes {
         alwaysinline = ctx |> LLVMGetEnumAttribute("alwaysinline")
         noinline = ctx |> LLVMGetEnumAttribute("noinline")
         hot = ctx |> LLVMGetEnumAttribute("hot")
+        cold = ctx |> LLVMGetEnumAttribute("cold")
+        mustprogress = ctx |> LLVMGetEnumAttribute("mustprogress")
+        minsize = ctx |> LLVMGetEnumAttribute("minsize")
+        nofree = ctx |> LLVMGetEnumAttribute("nofree")
+        norecurse = ctx |> LLVMGetEnumAttribute("norecurse")
         noalias = ctx |> LLVMGetEnumAttribute("noalias")
         sext = ctx |> LLVMGetEnumAttribute("signext")
         zext = ctx |> LLVMGetEnumAttribute("zeroext")
@@ -337,6 +347,7 @@ def public init_jit(cg_opt_level : uint) {
     assume nounwind = attrs.nounwind
     assume willreturn = attrs.willreturn
     assume nocapture = attrs.nocapture
+    assume cold = attrs.cold
     build_jit_types()
 
     // add default functions
@@ -345,6 +356,10 @@ def public init_jit(cg_opt_level : uint) {
             fixed_array<LLVMTypeRef>(g_prim_t.get_type_string(), g_prim_t.LLVMVoidPtrType(), g_prim_t.LLVMVoidPtrType())))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
     LLVMAddAttributeToFunction(jit_exception, noreturn)
+    // 'cold' tells opt that any branch ending in a jit_exception call is
+    // unlikely (panic/assert paths). Pairs with noreturn so block-placement
+    // sinks the failure block and keeps the hot path straight.
+    LLVMAddAttributeToFunction(jit_exception, cold)
     LLVMAddAttributeToFunctionArgumentRange(jit_exception, urange(0, 2), nocapture)
     // jit_call_or_fastcall(func,args *,context *)
     var jit_call_or_fastcall = LLVMAddFunctionWithType(g_mod, FN_JIT_CALL_OR_FASTCALL,
