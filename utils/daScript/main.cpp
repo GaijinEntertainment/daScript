@@ -408,6 +408,7 @@ void print_help() {
     tout
         << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
         << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
+        << "    --version, -version  print daslang version and exit\n"
         << "    -main <fnName> set entry function name (default: main)\n"
         << "    -v2syntax   enable version 2 syntax (uses braces {} for code blocks) [default]\n"
         << "    -v1syntax   enable version 1 syntax (uses Python-style indentation for code blocks)\n"
@@ -490,6 +491,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         return das_aot_main(argc, argv);
     }
     use_utf8();
+    if ( argc==2 && (strcmp(argv[1],"--version")==0 || strcmp(argv[1],"-version")==0) ) {
+        tout << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n";
+        return 0;
+    }
     if ( argc<=1 ) {
         print_help();
         return -1;
