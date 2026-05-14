@@ -4209,8 +4209,20 @@ namespace das {
             if (scopes[i]->isClosure)
                 break;
         }
-        if (expr->subexpr)
+        if (expr->subexpr) {
             markNoDiscard(expr->subexpr);
+            // unnamed -> named tuple shorthand at return position:
+            // seed the makeTuple's recordType from the enclosing return type
+            // (function->result, or innermost block's declared returnType) so
+            // the regular ExprMakeTuple infer path can promote the literal.
+            if (blocks.empty()) {
+                if (func) seedTupleShorthandFromTargetType(func->result, expr->subexpr);
+            } else {
+                auto block = blocks.back();
+                if (block && block->returnType)
+                    seedTupleShorthandFromTargetType(block->returnType, expr->subexpr);
+            }
+        }
     }
     ExpressionPtr InferTypes::visit(ExprReturn *expr) {
         if (blocks.size()) {

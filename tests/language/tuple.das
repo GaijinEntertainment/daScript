@@ -20,6 +20,18 @@ def overload_pick(x : tuple<x : int; y : float>) {
     return 2
 }
 
+// return-position shorthand: positional bare-var tuple promotes to the
+// function's declared named-tuple result type
+def make_hit_return(eid : int; distSq : float) : tuple<eid : int; distSq : float> {
+    return (eid, distSq)
+}
+
+def make_hit_locals() : tuple<eid : int; distSq : float> {
+    let eid = 17
+    let distSq = 4.25
+    return (eid, distSq)
+}
+
 [test]
 def test_tuple(t : T?) {
     t |> run("basic creation and named fields") @(t : T?) {
@@ -122,6 +134,22 @@ def test_tuple(t : T?) {
         arr |> push((a, a + 1))   // 2nd elem not bare ExprVar → never tagged
         t |> equal(arr[0]._0, 1)
         t |> equal(arr[0]._1, 2)
+    }
+    t |> run("shorthand named via return from named-tuple-typed fn") @(t : T?) {
+        let r = make_hit_return(7, 2.5)
+        t |> equal(r.eid, 7)
+        t |> equal(r.distSq, 2.5)
+    }
+    t |> run("shorthand named via return using local bare vars") @(t : T?) {
+        let r = make_hit_locals()
+        t |> equal(r.eid, 17)
+        t |> equal(r.distSq, 4.25)
+    }
+    t |> run("return-promoted tuple pushes into named-tuple array") @(t : T?) {
+        var arr : array<tuple<eid : int; distSq : float>>
+        arr |> push(make_hit_return(3, 1.5))
+        t |> equal(arr[0].eid, 3)
+        t |> equal(arr[0].distSq, 1.5)
     }
     t |> run("fixed array of tuples") @(t : T?) {
         let mkta = fixed_array<tuple<int; float>>((1, 2.0), (3, 4.0))

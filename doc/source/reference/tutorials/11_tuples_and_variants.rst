@@ -73,6 +73,13 @@ field names::
   var hits : array<tuple<eid:int; distSq:float>>
   hits |> push((eid, distSq))                              // ok, promoted
 
+It also fires in return position when the function's declared result is a
+named tuple::
+
+  def make_hit(eid : int; distSq : float) : tuple<eid:int; distSq:float> {
+      return (eid, distSq)                                 // ok, promoted
+  }
+
 Promotion is fallback-only: if an unnamed-tuple overload already matches, it
 wins. Use the explicit ``(name = value)`` literal to force the named overload::
 

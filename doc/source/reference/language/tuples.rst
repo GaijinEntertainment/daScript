@@ -58,6 +58,10 @@ and the variable names match the field names in order:
     var arr : array<tuple<eid:int; distSq:float>>
     arr |> push((eid, distSq))                              // ok, promoted
 
+    def make_hit(eid : int; distSq : float) : tuple<eid:int; distSq:float> {
+        return (eid, distSq)                                // ok, promoted
+    }
+
 Promotion is a fallback: if a matching overload already exists for the unnamed
 tuple type, that overload wins and no promotion happens. If you want the named
 overload, use the explicit named-field literal:

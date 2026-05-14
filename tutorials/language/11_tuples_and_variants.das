@@ -89,6 +89,11 @@ def main {
     // Promotion is fallback-only: if an unnamed overload also matches, it wins.
     // Use the explicit (name = value) literal to force the named overload.
 
+    // Promotion also fires in return position when the function's declared
+    // result is a named tuple — see make_hit() defined below.
+    let made = make_hit(8, 9.5)
+    print("made.eid = {made.eid}, made.distSq = {made.distSq}\n")
+
     // --- Tuple with tuple() constructor ---
     let triple = tuple(1, 2.0, "three")
     print("triple = ({triple._0}, {triple._1}, {triple._2})\n")
@@ -187,6 +192,12 @@ def divmod_tuple(a, b : int) : tuple<int; int> {
     return (a / b, a % b)
 }
 
+// Return-position shorthand: the bare-var positional literal promotes to the
+// declared named-tuple result type when the names match in order.
+def make_hit(eid : int; distSq : float) : tuple<eid : int; distSq : float> {
+    return (eid, distSq)
+}
+
 // output:
 // pair = (42, 3.14)
 // modified pair._0 = 100
@@ -195,6 +206,7 @@ def divmod_tuple(a, b : int) : tuple<int; int> {
 // hit.eid = 7, hit.distSq = 2.5
 // hits[0].eid = 7
 // raw[0] = (1, 2)
+// made.eid = 8, made.distSq = 9.5
 // triple = (1, 2, three)
 // kv = (age, 25)
 //   one => 1
