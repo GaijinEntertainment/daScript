@@ -416,16 +416,15 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
-        // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
-        // even when daslang marks the expression result as ref (stack temp). Skip the
-        // & suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
-        // Keep the * suffix when substitute_ref is requested (e.g. iteration variables),
-        // since das_iterator::first(Context*, QQ*&) demands a real pointer regardless.
-        let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
+        // Reference handling: emit `*` when substitute_ref is requested (iterator
+        // and stack-temp variable emission paths use `T*` storage), otherwise emit
+        // `&` so writable reference parameters (including value-annotation handles
+        // like Handle<T>, EntityId, das::Time used as `var x : T&`) propagate
+        // mutations back to the caller in AOT.
         if (typeDecl.flags.ref && !cfg.skip_ref) {
             if (cfg.substitute_ref) {
                 write(writer, " *");
-            } elif (!valueHandle) {
+            } else {
                 write(writer, " &");
             }
         }
