@@ -308,10 +308,13 @@ jobs:
             ;;
            linux_arm64)
             cd bin
-            # Drop --failures-only on JIT so PASS lines print: when the LLVM ARM64
-            # SelectionDAG hang reoccurs (RC2 release run #25572466058), the most
-            # recent PASS line names the test that ran just before the hung one.
-            [ "${{ env.das_llvm_disabled }}" = "ON" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
+            # Skip JIT tests on the Debug cmake preset — LLVM ARM64 SelectionDAG
+            # hangs reproducibly mid-suite under Debug (different test each run,
+            # ~20 min in). Tracked separately. Release of the same matrix still
+            # runs JIT — keep --failures-only off there so PASS lines print and
+            # name the test running just before the hang if it reoccurs (see
+            # RC2 release run #25572466058).
+            [ "${{ env.das_llvm_disabled }}" = "ON" ] || [ "${{ matrix.cmake_preset }}" = "Debug" ] || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -jit -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --timeout 900 --test ../tests || ./daslang _dasroot_/dastest/dastest.das -- --color --failures-only --isolated-mode --timeout 3600 --test ../tests
             ;;
            *)

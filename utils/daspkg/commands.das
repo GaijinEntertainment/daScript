@@ -1187,8 +1187,7 @@ def cmd_check(root : string; json : bool = false; is_global : bool = false) {
 }
 
 def private is_safe_pkg_name(name : string) : bool {
-    if (empty(name)) return false
-    if (name == "." || name == "..") return false
+    if (empty(name) || name == "." || name == "..") return false
     return !(find(name, "/") >= 0 || find(name, "\\") >= 0)
 }
 
@@ -1335,7 +1334,9 @@ def private sanitize_bundle_id_part(s : string) : string {
         peek_data(lower) $(arr) {
             for (i in range(length(arr))) {
                 let b = int(arr[i])
-                let is_alnum = (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z')
+                // `lower` was lowercased earlier — is_alpha matches both cases,
+                // but no uppercase can reach this branch, so it's equivalent.
+                let is_alnum = is_number(b) || is_alpha(b)
                 if (is_alnum) {
                     write_char(writer, b)
                     prev_dash = false
@@ -1398,8 +1399,8 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
     let dep_pkg_file = "{pkg_dir}/.das_package"
     if (!fexist(dep_pkg_file)) return 0
     var dep_spec : PackageReleaseInfo
-    if (!run_das_package_release(dep_pkg_file, dep_spec)) return 0
-    if (empty(dep_spec.include_globs) && empty(dep_spec.native_dlls)) return 0
+    if (!run_das_package_release(dep_pkg_file, dep_spec) ||
+        (empty(dep_spec.include_globs) && empty(dep_spec.native_dlls))) return 0
     let dep_name = base_name(pkg_dir)
     let dep_dst_dir = "{bundle_modules_dir}/{dep_name}"
     var dep_files : array<string>
@@ -1426,6 +1427,290 @@ def private ship_dep_assets(pkg_dir, bundle_modules_dir : string) : int {
         if (rc != 0) return rc
     }
     return 0
+}
+
+// Cached `patchelf --version` result. -1 = unknown, 0 = missing (warned), 1 = present.
+// Module-global mutable state: reset at the top of cmd_release (the sole
+// entry point that wants a fresh probe per release) so a long-running daspkg
+// process picks up a patchelf install between releases. Adding another caller
+// for `have_patchelf` outside cmd_release? Either reset there too, or fold
+// the reset into `have_patchelf` itself behind a one-shot flag — otherwise
+// the new call site will see whatever value the last cmd_release left.
+// Linux-only; macOS uses install_name_tool (ships with the OS) so no
+// equivalent gate is needed.
+var private patchelf_state : int = -1
+
+def private have_patchelf() : bool {
+    if (patchelf_state >= 0) return patchelf_state == 1
+    // Probe by invoking the binary itself (`--version`) rather than the
+    // `command -v` shell builtin — survives any future `run_cmd` refactor
+    // that bypasses /bin/sh, and tests the same PATH resolution every
+    // subsequent `patchelf` call will use.
+    var out : string
+    if (run_cmd("patchelf --version", out) == 0) {
+        patchelf_state = 1
+        return true
+    }
+    patchelf_state = 0
+    to_log(LOG_WARNING, "release: patchelf not found on PATH; absolute RPATH/RUNPATH entries will be left in shipped binaries (bundle still works if dyld/ld.so resolves dylibs via @loader_path/$ORIGIN, but the build-machine paths are visible in `readelf -d`)\n")
+    return false
+}
+
+// Recreate sibling symlinks at the destination so versioned dylib chains
+// (`libglfw.dylib -> libglfw.3.dylib -> libglfw.3.4.dylib`) survive the bundle
+// copy. dyld/ld.so look up the install_name verbatim, so if the loader asks
+// for `@rpath/libglfw.3.dylib` but the bundle only contains the file named
+// `libglfw.3.4.dylib`, lookup fails. The build dir already has the right
+// symlink chain — daspkg just isn't preserving it.
+//
+// POSIX-only. Windows DLLs don't use this naming scheme.
+//
+// `equivalent()` follows symlinks transitively, so a sibling that links to
+// the leaf file through any number of hops will compare equal to it.
+def private preserve_dylib_symlinks(src_dir, dst_dir, src_name : string) {
+    if (get_platform_name() == "windows") return
+    let src_abs = path_join(src_dir, src_name)
+    dir(src_dir) $(filename) {
+        if (filename == src_name || filename == "." || filename == "..") return
+        let cand = path_join(src_dir, filename)
+        var err : string
+        if (!is_symlink(cand, err)) return
+        var eq_err : string
+        if (!equivalent(cand, src_abs, eq_err)) return
+        let link_path = path_join(dst_dir, filename)
+        // Already shipped (e.g. dual call sites for the same dep) — leave alone.
+        if (fexist(link_path)) return
+        var ln_out : string
+        let ln_rc = run_cmd("ln -s \"{src_name}\" \"{link_path}\"", ln_out)
+        if (ln_rc == 0) {
+            log("  ship symlink: {filename} -> {src_name}\n")
+        } else {
+            to_log(LOG_WARNING, "release: ln -s {src_name} -> {link_path} failed (rc={ln_rc}): {ln_out}\n")
+        }
+    }
+}
+
+//! Parse `otool -l <path>` and return every LC_RPATH entry, in order.
+//! macOS-only. Returns an empty array if otool fails or the binary has no
+//! LC_RPATH blocks. Exported so the audit test in test_daspkg.das can reuse
+//! the same parser the production scrubber uses.
+def list_lc_rpaths(path : string) : array<string> {
+    var rpaths : array<string>
+    if (get_platform_name() != "darwin") return <- rpaths
+    var lst_out : string
+    if (run_cmd("otool -l \"{path}\"", lst_out) != 0) return <- rpaths
+    var in_rpath = false
+    for (line in split(lst_out, "\n")) {
+        let s = strip(line)
+        if (s == "cmd LC_RPATH") {
+            in_rpath = true
+        } elif (in_rpath && starts_with(s, "path ")) {
+            let after = slice(s, 5)
+            let off = find(after, " (offset")
+            let p = (off >= 0 ? slice(after, 0, off) : after)
+            rpaths |> push_clone(p)
+            in_rpath = false
+        } elif (starts_with(s, "Load command ")) {
+            in_rpath = false
+        }
+    }
+    return <- rpaths
+}
+
+//! True when `rp` is NOT a loader-relative path (`@executable_path`,
+//! `@loader_path`, or `@rpath`). Loader-relative entries are bundle-portable;
+//! everything else is a build-tree leak and must be scrubbed before ship.
+def is_external_rpath(rp : string) : bool {
+    return !(starts_with(rp, "@executable_path") ||
+             starts_with(rp, "@loader_path") ||
+             starts_with(rp, "@rpath"))
+}
+
+struct private LinuxRpathTags {
+    has_rpath : bool
+    has_runpath : bool
+    value : string
+}
+
+// Read RPATH / RUNPATH from `readelf -d <path>`. Lines look like:
+//   0x000000000000001d (RUNPATH)            Library runpath: [$ORIGIN/lib:/abs]
+//   0x000000000000000f (RPATH)              Library rpath: [/abs/path]
+// In practice only one of the two appears, and modern toolchains prefer
+// RUNPATH. When both are present (rare; older toolchains), `value`
+// concatenates their bracketed contents with `:` so the downstream
+// filter sees every entry from both tags. When neither is present, all
+// fields are zero/empty.
+def private read_linux_rpath_tags(path : string) : LinuxRpathTags {
+    var tags : LinuxRpathTags
+    var re_out : string
+    if (run_cmd("readelf -d \"{path}\"", re_out) != 0) return tags
+    for (line in split(re_out, "\n")) {
+        let saw_rpath = find(line, "(RPATH)") >= 0
+        let saw_runpath = find(line, "(RUNPATH)") >= 0
+        if (!saw_rpath && !saw_runpath) continue
+        let lb = find(line, "[")
+        let rb = find(line, "]")
+        if (lb < 0 || rb <= lb) continue
+        if (saw_rpath) {
+            tags.has_rpath = true
+        }
+        if (saw_runpath) {
+            tags.has_runpath = true
+        }
+        let val = slice(line, lb + 1, rb)
+        if (empty(tags.value)) {
+            tags.value = val
+        } else {
+            tags.value = "{tags.value}:{val}"
+        }
+    }
+    return tags
+}
+
+// Strip absolute RPATH/LC_RPATH entries from a shipped binary so the bundle
+// can't dyld-fallback through build-machine paths on the recipient.
+//
+//   macOS: list LC_RPATH via `list_lc_rpaths`, drop every entry where
+//          `is_external_rpath` is true via `install_name_tool -delete_rpath`.
+//   Linux: read RPATH AND RUNPATH separately via `readelf -d`, keep only
+//          `$ORIGIN`-relative entries, write back preserving the original
+//          tag (DT_RPATH vs DT_RUNPATH have different lookup semantics —
+//          RPATH is checked before LD_LIBRARY_PATH, RUNPATH after). Skipped
+//          when patchelf isn't on PATH (warned once via `have_patchelf`).
+//   Windows: no-op (PE has no rpath equivalent).
+def private scrub_external_rpaths(path : string) {
+    let platform = get_platform_name()
+    if (platform == "windows") return
+    if (platform == "darwin") {
+        for (rp in list_lc_rpaths(path)) {
+            if (!is_external_rpath(rp)) continue
+            var del_out : string
+            let drc = run_cmd("install_name_tool -delete_rpath \"{rp}\" \"{path}\"", del_out)
+            if (drc != 0) {
+                to_log(LOG_WARNING, "release: install_name_tool -delete_rpath \"{rp}\" \"{path}\" failed (rc={drc}): {del_out}\n")
+            }
+        }
+        return
+    }
+    // Linux
+    if (!have_patchelf()) return
+    let tags = read_linux_rpath_tags(path)
+    if (!tags.has_rpath && !tags.has_runpath) return
+    var kept : array<string>
+    for (entry in split(tags.value, ":")) {
+        let e = strip(entry)
+        if (empty(e)) continue
+        if (starts_with(e, "$ORIGIN")) {
+            kept |> push_clone(e)
+        }
+    }
+    var op_out : string
+    if (empty(kept)) {
+        if (run_cmd("patchelf --remove-rpath \"{path}\"", op_out) != 0) {
+            to_log(LOG_WARNING, "release: patchelf --remove-rpath {path} failed: {op_out}\n")
+        }
+        return
+    }
+    let joined = join(kept, ":")
+    // Escape `$` to `\$` so bash inside the double-quoted `--set-rpath "..."`
+    // arg treats $ORIGIN / $LIB / $PLATFORM as literal dollar-prefixed tokens
+    // instead of shell variable references (which would expand to empty —
+    // wiping the rpath, exactly what made the Linux smoke fail on CI before
+    // this fix).
+    let joined_shell = replace(joined, "$", "\\$")
+    // Preserve which tag was originally set. If the binary had DT_RPATH but
+    // no DT_RUNPATH, patchelf would otherwise write DT_RUNPATH and change
+    // loader semantics (RUNPATH defers to LD_LIBRARY_PATH first). When both
+    // tags are present (rare; modern binutils rejects this since 2.36), or
+    // only RUNPATH, the default `--set-rpath` writes DT_RUNPATH which
+    // matches the original.
+    let force_flag = (tags.has_rpath && !tags.has_runpath) ? "--force-rpath " : ""
+    if (run_cmd("patchelf {force_flag}--set-rpath \"{joined_shell}\" \"{path}\"", op_out) != 0) {
+        to_log(LOG_WARNING, "release: patchelf {force_flag}--set-rpath \"{joined}\" {path} failed: {op_out}\n")
+    }
+}
+
+// Read the dylib's "self-reference name" — install_name on macOS (LC_ID_DYLIB
+// via `otool -D`), SONAME on Linux (DT_SONAME via `patchelf --print-soname`
+// with `readelf -d` as the more-universal fallback). Empty string means
+// unreadable or none present.
+def private read_dylib_self_name(dst : string) : string {
+    let platform = get_platform_name()
+    if (platform == "darwin") {
+        var id_out : string
+        if (run_cmd("otool -D \"{dst}\"", id_out) != 0) return ""
+        // `otool -D` prints:  <filename>:\n<install_name>\n   (two lines)
+        var name = ""
+        for (line in split(id_out, "\n")) {
+            let s = strip(line)
+            if (empty(s) || ends_with(s, ":")) continue
+            name = s
+        }
+        return name
+    }
+    if (platform != "linux") return ""
+    // Try patchelf first (already required for the Linux scrub path).
+    var pe_out : string
+    if (run_cmd("patchelf --print-soname \"{dst}\"", pe_out) == 0) {
+        let soname = strip(pe_out)
+        if (!empty(soname)) return soname
+    }
+    // readelf fallback — universally available via binutils.
+    //   0x000000000000000e (SONAME)             Library soname: [libglfw.so.3]
+    var re_out : string
+    if (run_cmd("readelf -d \"{dst}\"", re_out) != 0) return ""
+    for (line in split(re_out, "\n")) {
+        if (find(line, "SONAME") < 0) continue
+        let lb = find(line, "[")
+        let rb = find(line, "]")
+        if (lb >= 0 && rb > lb) return slice(line, lb + 1, rb)
+    }
+    return ""
+}
+
+// dyld/ld.so looks up dylibs by the self-reference name baked into the
+// loading binary, not by filename — so if libglfw.3.4.dylib's install_name
+// is `@rpath/libglfw.3.dylib`, the bundle must contain a file (or symlink)
+// literally named `libglfw.3.dylib`, no matter what the source file was
+// named. CMake's install step into `<das_root>/lib` doesn't preserve the
+// build dir's versioned-alias chain — so `preserve_dylib_symlinks` finds
+// nothing to copy, and we have to reconstruct the alias from the dylib's
+// own metadata.
+//
+// No-op when basename(self-name) == basename(dst), the alias already exists,
+// or (macOS) the install_name isn't @-relative.
+def private ensure_dylib_alias(dst : string) {
+    let platform = get_platform_name()
+    if (platform != "darwin" && platform != "linux") return
+    let self_name = read_dylib_self_name(dst)
+    // macOS install_names must be @-relative to be portable; absolute paths
+    // shouldn't appear in shipped dylibs and we shouldn't create an alias
+    // for them. Linux SONAMEs are bare basenames — no prefix gate needed.
+    if (empty(self_name) ||
+        (platform == "darwin" &&
+         !(starts_with(self_name, "@rpath/") ||
+           starts_with(self_name, "@executable_path/") ||
+           starts_with(self_name, "@loader_path/")))) return
+    let alias = base_name(self_name)
+    if (alias == base_name(dst)) return
+    let link_path = path_join(dir_name(dst), alias)
+    if (fexist(link_path)) return
+    var ln_out : string
+    let ln_rc = run_cmd("ln -s \"{base_name(dst)}\" \"{link_path}\"", ln_out)
+    if (ln_rc == 0) {
+        log("  ship alias: {alias} -> {base_name(dst)}\n")
+    } else {
+        to_log(LOG_WARNING, "release: ln -s {base_name(dst)} -> {link_path} failed (rc={ln_rc}): {ln_out}\n")
+    }
+}
+
+// One-liner used at every ship site: preserve any sibling symlink chain from
+// the source, materialize the install_name alias if it's still missing
+// (macOS), then strip absolute rpath entries from the copy.
+def private finalize_shipped_binary(src, dst : string) {
+    preserve_dylib_symlinks(dir_name(src), dir_name(dst), base_name(src))
+    ensure_dylib_alias(dst)
+    scrub_external_rpaths(dst)
 }
 
 // Copy each declared native shared library from the daslang install tree
@@ -1464,7 +1749,7 @@ def private ship_native_dlls(dep_name, dst_dir : string; native_dlls : array<str
         }
         // 3. fall through to a recursive glob (handles nested layouts)
         if (empty(found_src)) {
-            glob(search_root, "**/{name}") <| $(rel_path, is_dir) {
+            glob(search_root, "**/{name}") $(rel_path, is_dir) {
                 if (!is_dir && empty(found_src)) {
                     found_src = path_join(search_root, rel_path)
                 }
@@ -1484,6 +1769,7 @@ def private ship_native_dlls(dep_name, dst_dir : string; native_dlls : array<str
             return 1
         }
         log("  ship dep `{dep_name}` native: {name}\n")
+        finalize_shipped_binary(found_src, dst)
     }
     return 0
 }
@@ -1507,6 +1793,9 @@ def private get_daslang_path() : string {
 }
 
 def cmd_release(root : string; out_dir : string) : int {
+    // Reset the patchelf availability cache so a daspkg process that releases
+    // multiple bundles can pick up a patchelf install between calls.
+    patchelf_state = -1
     let das_package = "{root}/.das_package"
     if (!fexist(das_package)) {
         to_log(LOG_ERROR, "release: no .das_package in {root}\n")
@@ -1611,6 +1900,11 @@ def cmd_release(root : string; out_dir : string) : int {
             return 1
         }
     }
+    // Scrub absolute LC_RPATH / RUNPATH entries the daslang build leaks into
+    // the exe (build-tree `<das_root>/lib` etc.). The `@executable_path`/`$ORIGIN`
+    // entries that PR #2588 added are kept — those are what makes the bundle
+    // portable in the first place.
+    scrub_external_rpaths(exe_path)
 
     // 2. Parse deps JSON, ship dylibs at the relative path the exe expects.
     //    The writer has already merged force-included modules into shared_modules,
@@ -1635,6 +1929,7 @@ def cmd_release(root : string; out_dir : string) : int {
             return 1
         }
         log("  ship: {e.rel}\n")
+        finalize_shipped_binary(e.abs, dst)
     }
 
     // 2.5 Ship daslang runtime dylibs next to the exe. Without these the bundle
@@ -1667,6 +1962,7 @@ def cmd_release(root : string; out_dir : string) : int {
         }
         runtime_copies++
         log("  ship runtime: {base_name(rel_path)}\n")
+        finalize_shipped_binary(src, dst)
     }
     if (runtime_copy_failed) return 1
     if (runtime_copies == 0) {

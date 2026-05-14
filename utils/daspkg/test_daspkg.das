@@ -7,6 +7,7 @@ require dastest/testing_boost public
 
 require daslib/fio
 require strings
+require daslib/strings_boost
 
 require daslib/json
 require daslib/json_boost
@@ -1942,6 +1943,143 @@ def test_cmd_release_transitive_dep(t : T?) {
         tt |> success(fexist(exe_path), "parent exe shipped at {exe_path}")
         tt |> success(fexist(path_join(artifacts, "modules/fakedep/data/asset.bin")),
             "dep asset shipped via transitive release()")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+}
+
+// Walk `path` via `commands::list_lc_rpaths` + `commands::is_external_rpath`
+// (the same parser the production scrubber uses) and append every external
+// LC_RPATH entry to `leaks`. Thin wrapper so the test exercises the shared
+// helpers instead of paraphrasing the parser locally.
+def private add_external_lc_rpaths(path : string; var leaks : array<string>) {
+    for (rp in list_lc_rpaths(path)) {
+        if (is_external_rpath(rp)) {
+            leaks |> push_clone("{path}: {rp}")
+        }
+    }
+}
+
+// macOS: a bundle copy is portable only if (1) every dylib's install_name alias
+// resolves to an actual file in the bundle, and (2) no shipped binary carries
+// an absolute LC_RPATH pointing back into the build tree. Without (1) dyld
+// silently falls back through the build-tree LC_RPATH; without (2) the bundle
+// "works" on the build machine and breaks on a clean recipient. Both are the
+// hard-to-diagnose ship blocker — exercise them explicitly.
+//
+// Requires dasGlfw because its dylib's install_name (e.g. `@rpath/libglfw.3.dylib`)
+// differs from the shipped filename (e.g. `libglfw.3.4.dylib`) — that mismatch
+// is what makes the symlink alias load-bearing. The test discovers both names
+// at runtime rather than hardcoding versions, so it survives GLFW bumps.
+[test]
+def test_cmd_release_portable_on_macos(t : T?) {
+    if (get_platform_name() != "darwin") {
+        t |> run("skipped — macOS-only audit (otool/install_name_tool)") @(tt : T?) {
+            tt |> success(true)
+        }
+        return
+    }
+    var dasGlfw_present = false
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
+        if (string(das_name) == "glfw") {
+            dasGlfw_present = true
+        }
+    }
+    if (!dasGlfw_present) {
+        t |> run("skipped — dasGlfw not registered; can't exercise install_name-alias path") @(tt : T?) {
+            to_log(LOG_INFO, "test_cmd_release_portable_on_macos: dasGlfw not loaded; skipping\n")
+            tt |> success(true)
+        }
+        return
+    }
+    t |> run("install_name alias is created and no LC_RPATH points outside the bundle") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_portable_macos"
+        let out_dir = "{get_das_root()}/_test_release_portable_macos_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        mkdir(tmp_root)
+
+        // Smallest valid project that pulls dasGlfw into the bundle. The exe
+        // doesn't run — we only need it on disk to inspect.
+        fopen("{tmp_root}/main.das", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire glfw/glfw_boost\n[export]\ndef main() \{\n    print(\"glfw\\n\")\n\}\n")
+        }
+        fopen("{tmp_root}/.das_package", "wb") $(f) {
+            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"glfwbn\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+        }
+
+        let rc = cmd_release(tmp_root, out_dir)
+        tt |> equal(0, rc, "cmd_release returns 0")
+        let artifacts = bundle_artifacts_dir(out_dir, "glfwbn")
+
+        // Discover the real dylib (a regular file under modules/dasGlfw/)
+        // rather than hardcoding `libglfw.3.4.dylib` — that filename moves
+        // every time GLFW bumps and would break the test silently.
+        //
+        // Asserts exactly one regular `.dylib` entry: if a future dep ever
+        // lands a second dylib under `modules/dasGlfw/`, the test should
+        // fail loudly so we revisit the discovery logic rather than picking
+        // whichever entry the filesystem yields last.
+        let glfw_dir = path_join(artifacts, "modules/dasGlfw")
+        var real_dylib = ""
+        var dylib_count = 0
+        dir(glfw_dir) $(filename) {
+            if (filename == "." || filename == "..") return
+            if (!ends_with(filename, ".dylib")) return
+            let p = path_join(glfw_dir, filename)
+            var sym_err : string
+            if (is_symlink(p, sym_err)) return
+            real_dylib = p
+            dylib_count++
+        }
+        tt |> equal(1, dylib_count, "exactly one real GLFW dylib in {glfw_dir} (got {dylib_count})")
+        var id_out : string
+        let id_rc = run_cmd("otool -D \"{real_dylib}\"", id_out)
+        tt |> equal(0, id_rc, "otool -D runs")
+        var install_name = ""
+        for (line in split(id_out, "\n")) {
+            let s = strip(line)
+            if (empty(s)) continue
+            if (ends_with(s, ":")) continue
+            install_name = s
+        }
+        tt |> success(starts_with(install_name, "@rpath/"),
+            "install_name is @rpath-relative (got: {install_name})")
+        let alias_name = base_name(install_name)
+        let alias_path = path_join(glfw_dir, alias_name)
+        if (alias_name != base_name(real_dylib)) {
+            tt |> success(fexist(alias_path),
+                "install_name alias `{alias_name}` materialized at {alias_path}")
+            var eq_err : string
+            tt |> success(equivalent(alias_path, real_dylib, eq_err),
+                "alias resolves to the real dylib (equivalent => true; err=`{eq_err}`)")
+        }
+
+        // No shipped binary may keep an absolute LC_RPATH — that's the leak
+        // that hides the install_name-alias bug on the build machine. Skip
+        // symlinks during the glob walk so the install_name alias doesn't
+        // get scanned a second time alongside its real-file target (which
+        // would double-report any future leak in the same inode).
+        var leaks : array<string>
+        add_external_lc_rpaths(bundle_exe_path(out_dir, "glfwbn"), leaks)
+        glob(artifacts, "**/*.dylib") $(rel, is_dir) {
+            if (is_dir) return
+            let p = path_join(artifacts, rel)
+            var sym_err : string
+            if (is_symlink(p, sym_err)) return
+            add_external_lc_rpaths(p, leaks)
+        }
+        glob(artifacts, "**/*.shared_module") $(rel, is_dir) {
+            if (is_dir) return
+            let p = path_join(artifacts, rel)
+            var sym_err : string
+            if (is_symlink(p, sym_err)) return
+            add_external_lc_rpaths(p, leaks)
+        }
+        let leaks_msg = join(leaks, "; ")
+        tt |> equal(0, length(leaks),
+            "no absolute LC_RPATH in shipped binaries (leaks: {leaks_msg})")
+
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }
