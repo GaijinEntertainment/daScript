@@ -42,6 +42,52 @@ tuple directly:
 Mixing named and positional fields in the same literal is **not** supported —
 either every field is named or none are.
 
+Shorthand promotion
+-------------------
+
+When every element of a positional tuple literal is a bare variable reference,
+the compiler may promote it to a named tuple by taking the field names from the
+variables. This only fires when the target type is unambiguously a named tuple
+and the variable names match the field names in order:
+
+.. code-block:: das
+
+    let eid = 7
+    let distSq = 2.5
+    var t : tuple<eid:int; distSq:float> = (eid, distSq)   // ok, promoted
+    var arr : array<tuple<eid:int; distSq:float>>
+    arr |> push((eid, distSq))                              // ok, promoted
+
+    def make_hit(eid : int; distSq : float) : tuple<eid:int; distSq:float> {
+        return (eid, distSq)                                // ok, promoted
+    }
+
+Promotion is a fallback: if a matching overload already exists for the unnamed
+tuple type, that overload wins and no promotion happens. If you want the named
+overload, use the explicit named-field literal:
+
+.. code-block:: das
+
+    def overload_pick(x : tuple<int; float>) { return 1 }
+    def overload_pick(x : tuple<x:int; y:float>) { return 2 }
+    let x = 1
+    let y = 2.0
+    overload_pick((x, y))          // returns 1: unnamed overload wins
+    overload_pick((x=x, y=y))      // returns 2: explicit named literal
+
+A name mismatch fails compilation rather than silently constructing the
+unnamed tuple:
+
+.. code-block:: das
+
+    let foo = 1
+    let bar = 1.1
+    var arr : array<tuple<eid:int; distSq:float>>
+    // arr |> push((foo, bar))   // error: function_not_found
+
+Promotion does not fire when any element is not a bare variable reference, e.g.
+``(a, a+1)`` stays unnamed.
+
 Tuple elements can be accessed via nameless fields, i.e. _ followed by the 0 base field index:
 
 .. code-block:: das

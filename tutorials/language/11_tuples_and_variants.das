@@ -66,6 +66,34 @@ def main {
     // Named fields are also accessible via _0, _1
     print("point._0 = {p._0}\n")
 
+    // --- Shorthand: unnamed -> named tuple promotion ---
+    // When the target type is a named tuple and every element of the literal
+    // is a bare variable reference whose name matches the field name in order,
+    // the compiler promotes the unnamed literal to the named tuple.
+    let eid = 7
+    let distSq = 2.5
+    var hit : tuple<eid : int; distSq : float> = (eid, distSq)
+    print("hit.eid = {hit.eid}, hit.distSq = {hit.distSq}\n")
+
+    // Same shorthand works when pushing into an array of named tuples.
+    var hits : array<tuple<eid : int; distSq : float>>
+    hits |> push((eid, distSq))
+    print("hits[0].eid = {hits[0].eid}\n")
+
+    // Mixed expressions never promote — element must be a bare variable.
+    var raw : array<tuple<int; int>>
+    let a = 1
+    raw |> push((a, a + 1))      // stays unnamed; reachable via _0/_1
+    print("raw[0] = ({raw[0]._0}, {raw[0]._1})\n")
+
+    // Promotion is fallback-only: if an unnamed overload also matches, it wins.
+    // Use the explicit (name = value) literal to force the named overload.
+
+    // Promotion also fires in return position when the function's declared
+    // result is a named tuple — see make_hit() defined below.
+    let made = make_hit(8, 9.5)
+    print("made.eid = {made.eid}, made.distSq = {made.distSq}\n")
+
     // --- Tuple with tuple() constructor ---
     let triple = tuple(1, 2.0, "three")
     print("triple = ({triple._0}, {triple._1}, {triple._2})\n")
@@ -164,11 +192,21 @@ def divmod_tuple(a, b : int) : tuple<int; int> {
     return (a / b, a % b)
 }
 
+// Return-position shorthand: the bare-var positional literal promotes to the
+// declared named-tuple result type when the names match in order.
+def make_hit(eid : int; distSq : float) : tuple<eid : int; distSq : float> {
+    return (eid, distSq)
+}
+
 // output:
 // pair = (42, 3.14)
 // modified pair._0 = 100
 // point = (3, 4)
 // point._0 = 3
+// hit.eid = 7, hit.distSq = 2.5
+// hits[0].eid = 7
+// raw[0] = (1, 2)
+// made.eid = 8, made.distSq = 9.5
 // triple = (1, 2, three)
 // kv = (age, 25)
 //   one => 1

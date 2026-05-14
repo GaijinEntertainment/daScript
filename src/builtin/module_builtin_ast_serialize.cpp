@@ -1891,7 +1891,7 @@ namespace das {
 
     void SerializeVisitor::preVisit ( ExprMakeTuple * expr ) {
         serializeMakeArray(expr);
-        ser << expr->isKeyValue << expr->recordNames;
+        ser << expr->isKeyValue << expr->recordNames << expr->shorthandRecordNames;
     }
 
     void SerializeVisitor::preVisit ( ExprArrayComprehension * expr ) {
@@ -2668,8 +2668,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        // bumped for per-loop annotations on ExprFor/ExprWhile.
-        static constexpr uint32_t currentVersion = 82;
+        static constexpr uint32_t currentVersion = 83;
         return currentVersion;
     }
 

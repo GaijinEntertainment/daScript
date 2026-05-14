@@ -1083,6 +1083,42 @@ namespace das {
         int32_t *depth;
     };
 
+    bool InferTypes::trySeedTupleShorthand(ExprLooksLikeCall *expr, bool visCheck) {
+        vector<size_t> shorthandIndices;
+        for (size_t ai = 0, ais = expr->arguments.size(); ai != ais; ++ai) {
+            auto arg = expr->arguments[ai];
+            if (!arg || !arg->rtti_isMakeTuple() || !arg->type) continue;
+            auto mkt = static_cast<ExprMakeTuple*>(arg);
+            if (mkt->shorthandRecordNames.empty() || mkt->recordType) continue;
+            if (mkt->type->baseType != Type::tTuple) continue;
+            if (mkt->type->argTypes.size() != mkt->shorthandRecordNames.size()) continue;
+            if (!mkt->type->argNames.empty()) continue;
+            shorthandIndices.push_back(ai);
+        }
+        if (shorthandIndices.empty()) return false;
+        vector<TypeDeclPtr> hypTypes;
+        hypTypes.reserve(expr->arguments.size());
+        for (auto arg : expr->arguments) hypTypes.push_back(arg ? arg->type : nullptr);
+        for (size_t idx : shorthandIndices) {
+            auto mkt = static_cast<ExprMakeTuple*>(expr->arguments[idx]);
+            auto hyp = new TypeDecl(*mkt->type);
+            hyp->argNames = mkt->shorthandRecordNames;
+            hypTypes[idx] = hyp;
+        }
+        MatchingFunctions hypFns, hypGens;
+        findMatchingFunctionsAndGenerics(hypFns, hypGens, expr->name, hypTypes, true, visCheck);
+        applyLSP(hypTypes, hypFns);
+        if (hypFns.size() + hypGens.size() != 1) return false;
+        for (size_t idx : shorthandIndices) {
+            auto mkt = static_cast<ExprMakeTuple*>(expr->arguments[idx]);
+            mkt->recordType = new TypeDecl(*mkt->type);
+            mkt->recordType->argNames = mkt->shorthandRecordNames;
+            mkt->recordType->ref = false;
+            mkt->recordType->constant = false;
+        }
+        return true;
+    }
+
     FunctionPtr InferTypes::inferFunctionCall(ExprLooksLikeCall *expr, InferCallError cerr, Function *lookupFunction, bool failOnMissingCtor, bool visCheck) {
         if ( inferDepth > 1 ) {
             error("infer expression depth exceeded maximum allowed", "", "",
@@ -1100,6 +1136,11 @@ namespace das {
         if (!lookupFunction) {
             findMatchingFunctionsAndGenerics(functions, generics, expr->name, types, true, visCheck);
             applyLSP(types, functions);
+            if (functions.empty() && generics.empty() && trySeedTupleShorthand(expr, visCheck)) {
+                reportAstChanged();
+                if (func) func->notInferred();
+                return nullptr;
+            }
         } else {
             functions.push_back(lookupFunction);
         }
