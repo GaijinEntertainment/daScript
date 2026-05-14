@@ -864,9 +864,6 @@ namespace das {
                 }
             }
         }
-        bool isValidFunctionName(const string & str) const {
-            return !isCppKeyword(str.c_str());
-        }
         virtual bool canVisitFunction ( Function * fun ) override {
             return !fun->stub && !fun->isTemplate;    // we don't do a thing with templates
         }
@@ -878,10 +875,6 @@ namespace das {
         virtual void preVisit ( Function * fn ) override {
             Visitor::preVisit(fn);
             func = fn;
-            if (!isValidFunctionName(fn->name)) {
-                program->error("invalid function name " + fn->name, "", "",
-                    fn->at, CompilationError::invalid_function_name );
-            }
             if ( !fn->result->isVoid() && !fn->result->isAuto() ) {
                 if ( !exprReturns(fn->body) ) {
                     program->error("not all control paths return value",  "", "",

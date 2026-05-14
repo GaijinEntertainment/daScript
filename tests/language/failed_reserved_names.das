@@ -1,9 +1,9 @@
 // reserved identifier names
 // verifies compiler rejects using reserved words (like 'register', 'do')
-// as enum names, enum values, struct names, struct fields, function names,
+// as enum names, enum values, struct names, struct fields,
 // function args, local variables, and lambda parameters
 options gen2
-expect 30106:3, 30146, 30148, 30152, 30163, 30240, 30282
+expect 30106:3, 30146, 30148, 30152, 30240, 30282
 
 enum do {// 30116: invalid name
     foo
@@ -21,10 +21,6 @@ struct Foo {
 
 struct register {// 30116: invalid name
     foo : int
-}
-
-def do(a : int) {// 30116: invalid name
-    return a
 }
 
 def foo(register : int) {// 30116: invalid name

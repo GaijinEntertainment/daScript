@@ -221,7 +221,7 @@ def hex_char(var Ch : int) {
 }
 
 def aotSuffixNameEx(funcName : das_string; suffix : string) {
-    var prefix = false;
+    var prefix = is_cpp_keyword(string(funcName));
 
     let name = build_string() $(var writer) {
         for (ch in string(funcName)) {
