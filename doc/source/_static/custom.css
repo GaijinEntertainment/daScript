@@ -15,6 +15,7 @@
     --bg-2:      #15130f;
     --bg-3:      #1c1a14;
     --fg:        #e8e2d2;
+    --fg-soft:   #c1baa9;
     --fg-dim:    #9b9281;
     --fg-faint:  #5b5547;
     --rule:      #2a2620;
@@ -264,17 +265,37 @@ a:hover { color: var(--fg) !important; border-bottom-color: var(--fg) !important
     text-transform: uppercase;
 }
 
-/* Domain signatures (function/class/etc. directives) */
-.rst-content dl.py dt,
-.rst-content dl.c dt,
-.rst-content dl.cpp dt,
-.rst-content dl.rst dt {
+/* Domain signatures (function/class/etc. directives).
+ * Sphinx 4+ tags every directive signature dt with `sig sig-object DOMAIN`,
+ * so one selector covers py/c/cpp/rst plus the custom `das` domain. */
+.rst-content dt.sig-object {
     background: var(--bg-2) !important;
     border: 1px solid var(--rule) !important;
     border-radius: 4px;
-    color: var(--fg);
+    color: var(--fg) !important;
     font-family: var(--font-mono);
 }
+/* Signature inner spans — sphinx_rtd_theme paints them dark-blue/black on
+ * white by default, which is unreadable on the dark background. Map them
+ * onto the same palette the code-block highlighter uses. */
+.rst-content dt.sig-object .sig-name,
+.rst-content dt.sig-object .sig-name.descname           { color: var(--amber) !important; }
+.rst-content dt.sig-object .sig-prename,
+.rst-content dt.sig-object .sig-prename.descclassname   { color: var(--fg-dim) !important; }
+.rst-content dt.sig-object .sig-paren,
+.rst-content dt.sig-object .sig-param,
+.rst-content dt.sig-object .sig-param .n,
+.rst-content dt.sig-object .sig-param .pre,
+.rst-content dt.sig-object .sig-return,
+/* daslang return type renders as bare .pre direct-children of dt, outside
+ * any sig-return wrapper — dim those too. */
+.rst-content dt.sig-object > .pre                       { color: var(--fg-dim) !important; }
+
+/* Field lists (Arguments:, Returns:, etc.). The "Arguments:" label and the
+ * bold parameter names sit at full --fg by default, which reads as a wall
+ * of white in long type signatures — recess them one notch toward grey. */
+.rst-content dl.field-list > dt,
+.rst-content dl.field-list strong                        { color: var(--fg-soft) !important; }
 
 /* Footer */
 .rst-footer-buttons .btn {
