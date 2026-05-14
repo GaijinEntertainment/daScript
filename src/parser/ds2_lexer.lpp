@@ -73,6 +73,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 %x cpp_comment
 %x include
 %x reader
+%x eof_done
 
 %%
 
@@ -758,6 +759,18 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 <normal><<EOF>>         {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
+        if ( !yyextra->das_keyword
+             && !yyextra->das_nested_parentheses
+             && !yyextra->das_nested_square_braces ) {
+            // synthesize the trailing newline-emission for files that lack a
+            // final '\n', so top-level statements terminated by SEMICOLON
+            // (options X, require X, expect X, top-level reader macros) parse
+            // even when sitting at EOF. Switching to eof_done makes the next
+            // EOF re-entry a no-op return-0 — same trick gen1 uses via
+            // BEGIN(indent) at ds_lexer.lpp:1106.
+            BEGIN(eof_done);
+            return yyextra->das_indent_char;
+        }
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
         return 0;
     } else {
@@ -767,6 +780,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         yyextra->das_line_no.pop_back();
     }
 }
+<eof_done><<EOF>>       { YYCOLUMN(yyextra->das_yycolumn = 0,"EOF"); return 0; }
 <normal>.                                   return *yytext;
 
 %%
