@@ -416,16 +416,15 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;
         if (!cfg.skip_const && typeDecl.flags.constant) {
             write(writer, " const ");
         }
-        // Value-annotation handles (e.g. Handle<T>) are POD and always passed by value,
-        // even when daslang marks the expression result as ref (stack temp). Skip the
-        // & suffix so "var T* = ...; return T&" mismatches don't break the AOT build.
-        // Keep the * suffix when substitute_ref is requested (e.g. iteration variables),
-        // since das_iterator::first(Context*, QQ*&) demands a real pointer regardless.
-        let valueHandle = baseType == Type.tHandle && !typeDecl.isRefType
+        // Reference handling: emit `*` when substitute_ref is requested (iterator
+        // and stack-temp variable emission paths use `T*` storage), otherwise emit
+        // `&` so writable reference parameters (including value-annotation handles
+        // like Handle<T>, EntityId, das::Time used as `var x : T&`) propagate
+        // mutations back to the caller in AOT.
         if (typeDecl.flags.ref && !cfg.skip_ref) {
             if (cfg.substitute_ref) {
                 write(writer, " *");
-            } elif (!valueHandle) {
+            } else {
                 write(writer, " &");
             }
         }
@@ -436,6 +435,21 @@ def public describeCppType(typeDecl : TypeDeclPtr;
                            cfg : DescribeConfig) {
     //! Returns the C++ type string for a daslang TypeDecl using the given configuration.
     return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
+}
+
+def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
+    if (!expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u) {
+        if (expr is ExprMakeStruct) {
+            let mks = expr as ExprMakeStruct
+            if (mks.makeType.baseType == Type.tHandle &&
+                !mks.makeType.isRefType &&
+                mks.constructor == null) {
+                return false
+            }
+        }
+        return true
+    }
+    return false
 }
 
 class NoAotMarker : AstVisitor {
@@ -1018,7 +1032,7 @@ class public BlockVariableCollector : AstVisitor {
     }
 
     def handleExpr(var expr : ExprMakeLocal?) {
-        let need_insert = !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
+        let need_insert = expectsLocalTemp(expr);
         if (need_insert) {
             let blk = getCurrentBlock();
             localTemps[blk] |> push(expr);
@@ -2863,7 +2877,7 @@ class public CppAot : AstVisitor {
     }
 // make variant
     def needTempSrc(expr : ExprMakeLocal?) {
-        return !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
+        return expectsLocalTemp(expr);
     }
     def mkvName(expr : ExprMakeVariant?) {
         if (needTempSrc(expr)) {
