@@ -111,6 +111,16 @@ loadSample = function(filesByName) {
 // executed program no longer matches the visible tab state.
 var __lastWrittenFiles = new Set();
 
+// Sync the URL hash with the current playground state. Run is the natural
+// "snapshot" moment — the address bar then IS the share link (no need to hunt
+// for the share button), and Back/Forward navigate a real history of code
+// changes (see the popstate listener in playground-init.js).
+function syncUrlToState() {
+    if (!window.pgBuildShareUrl) return;
+    const url = window.pgBuildShareUrl();
+    if (url && url !== location.href) history.pushState(null, '', url);
+}
+
 runCode = function() {
     // Multi-file: sync MEMFS with the current pgState (unlink stale, write
     // current), then run main.das. Falls back to the single-buffer path when
@@ -126,9 +136,11 @@ runCode = function() {
             FS.writeFile(name, doc.getValue());
         }
         __lastWrittenFiles = current;
+        syncUrlToState();
         Module.callMain(['main.das']);
         return;
     }
+    syncUrlToState();
     runScript(code.getValue());
 }
 

@@ -40,6 +40,7 @@
                     <a href="downloads.html">downloads</a>
                     <a href="blog/index.html">blog</a>
                     <a href="https://t.me/daScript">community</a>
+                    <a href="playground/index.html">playground</a>
                 </div>
             </div>
             <div class="forge-nav__right">
@@ -118,7 +119,7 @@ def main() {
     }
 }</code></pre>
                 <div class="forge-output" id="hero-output">
-                    <div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang run hello.das</div>
+                    <div class="forge-output__line"><span class="forge-output__prompt">$</span> daslang hello.das</div>
                     <div class="forge-output__line forge-output__stdout">hello, world</div>
                     <div class="forge-output__line forge-output__hint">  tick 0 · tick 1 · tick 2</div>
                     <div class="forge-output__line forge-output__ok">✓ 0.42 ms · interpreted</div>
@@ -262,7 +263,7 @@ def main() {
                         build straight from the repo. AOT compiles to a single C++ stub
                         you link with your host.
                     </p>
-                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript">github.com/GaijinEntertainment/daScript →</a>
+                    <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript">github.com/GaijinEntertainment/daslang →</a>
                 </div>
                 <div class="forge-install__panel">
                     <div class="forge-install__tabs" role="tablist">
@@ -272,26 +273,26 @@ def main() {
                     <div class="forge-install__body">
                         <div class="forge-install__pane is-active" data-pane="releases">
                             <div class="forge-install__hint"># 1 — grab a pre-built binary</div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> open https://github.com/GaijinEntertainment/daScript/releases</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> open <a class="forge-link-amber" href="https://github.com/GaijinEntertainment/daScript/releases">https://github.com/GaijinEntertainment/daScript/releases</a></div>
                             <div class="forge-install__hint">#     pick the archive for your platform, unzip, add to PATH</div>
                             <div class="forge-install__sp"></div>
                             <div class="forge-install__hint"># 2 — verify it runs</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> daslang --version</div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang run hello.das</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang hello.das</div>
                             <div class="forge-install__sp"></div>
-                            <div class="forge-install__hint"># 3 — (optional) AOT to C++ for native speed</div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang -aot main.das main_aot.cpp</div>
+                            <div class="forge-install__hint"># 3 — (optional) JIT to native via LLVM for max speed</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> daslang -jit hello.das</div>
                         </div>
                         <div class="forge-install__pane" data-pane="source">
                             <div class="forge-install__hint"># requires CMake ≥ 3.15 and a C++17 compiler</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> git clone https://github.com/GaijinEntertainment/daScript.git daslang</div>
                             <div class="forge-install__cmd"><span class="prompt">$</span> cd daslang &amp;&amp; git submodule update --init --recursive</div>
                             <div class="forge-install__sp"></div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> cmake -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo</div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> cmake --build build --target daslang --config RelWithDebInfo</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> cmake -B build -S . -DCMAKE_BUILD_TYPE=Release</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> cmake --build build --config Release -j 8</div>
                             <div class="forge-install__sp"></div>
-                            <div class="forge-install__hint"># the binary lands in ./bin/daslang</div>
-                            <div class="forge-install__cmd"><span class="prompt">$</span> ./bin/daslang run hello.das</div>
+                            <div class="forge-install__hint"># the binary lands in ./build/daslang</div>
+                            <div class="forge-install__cmd"><span class="prompt">$</span> ./build/daslang hello.das</div>
                         </div>
                     </div>
                 </div>

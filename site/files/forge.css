@@ -240,7 +240,7 @@ button { font: inherit; border: 0; background: none; color: inherit; cursor: poi
     font-family: var(--font-mono);
     font-size: 12px;
 }
-.forge-stat__n { color: var(--fg); font-size: 22px; }
+.forge-stat__n { color: var(--fg); font-size: 22px; white-space: nowrap; }
 .forge-stat__l { color: var(--fg-faint); margin-top: 2px; }
 
 /* ───── Terminal / code panel (hero right column) ───── */
