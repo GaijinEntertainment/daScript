@@ -77,8 +77,14 @@ jobs:
       run: |
         set -eux
         cd web
+        # step0 only clones the emsdk wrapper — the toolchain itself
+        # (emsdk/upstream/emscripten/) lands via the install+activate pair
+        # that web/step1_emsdk_activate_linux.sh does locally. Without these,
+        # cmake's -DCMAKE_TOOLCHAIN_FILE points at a path that doesn't
+        # exist yet and the WASM build silently fails under continue-on-error.
         bash step0_emsdk_install.sh
-        # step1 sources emsdk_env.sh — re-export EMSDK for the configure step
+        ./emsdk/emsdk install latest
+        ./emsdk/emsdk activate latest
         bash -c "source emsdk/emsdk_env.sh && \
                  mkdir -p build && cd build && \
                  cmake -DCMAKE_BUILD_TYPE=Release -G Ninja \

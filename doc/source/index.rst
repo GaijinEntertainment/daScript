@@ -9,6 +9,7 @@ Contents:
 
    reference/index.rst
    stdlib/index.rst
+   external_modules/index.rst
 
 
 Indices and tables
