@@ -4044,7 +4044,7 @@ namespace das {
             if (ita.expr->alias == expr->name) {
                 reportAstChanged();
                 auto csub = ita.expr->subexpr->clone();
-                // forceAt(csub, ita.expr->at);
+                forceAt(csub, expr->at);
                 return csub;
             }
         }

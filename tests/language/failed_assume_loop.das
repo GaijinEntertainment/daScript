@@ -1,6 +1,6 @@
 options gen2
 // test for circular assume detection
-expect 30838:4, 31101:2
+expect 30838:3, 31101:2
 
 def test_direct_loop {
     assume x = y + y
