@@ -437,6 +437,21 @@ def public describeCppType(typeDecl : TypeDeclPtr;
     return describeCppTypeEx(typeDecl, cfg, CpptUseAlias.no);
 }
 
+def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
+    if (!expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u) {
+        if (expr is ExprMakeStruct) {
+            let mks = expr as ExprMakeStruct
+            if (mks.makeType.baseType == Type.tHandle &&
+                !mks.makeType.isRefType &&
+                mks.constructor == null) {
+                return false
+            }
+        }
+        return true
+    }
+    return false
+}
+
 class NoAotMarker : AstVisitor {
     //! AST visitor that marks functions containing non-AOT-compatible types as noAot.
     @do_not_delete func : Function? <- null;
@@ -1017,7 +1032,7 @@ class public BlockVariableCollector : AstVisitor {
     }
 
     def handleExpr(var expr : ExprMakeLocal?) {
-        let need_insert = !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
+        let need_insert = expectsLocalTemp(expr);
         if (need_insert) {
             let blk = getCurrentBlock();
             localTemps[blk] |> push(expr);
@@ -2862,7 +2877,7 @@ class public CppAot : AstVisitor {
     }
 // make variant
     def needTempSrc(expr : ExprMakeLocal?) {
-        return !expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u;
+        return expectsLocalTemp(expr);
     }
     def mkvName(expr : ExprMakeVariant?) {
         if (needTempSrc(expr)) {
