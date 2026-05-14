@@ -65,3 +65,7 @@ if (document.readyState === 'loading') {
 } else {
     applySharedCodeFromHash();
 }
+
+// Run (in main.js) pushes a new history entry on each invocation; popstate
+// fires when the user navigates Back/Forward and replays the recorded state.
+window.addEventListener('popstate', applySharedCodeFromHash);
