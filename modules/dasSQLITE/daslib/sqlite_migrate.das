@@ -96,9 +96,7 @@ def private _registry_sorted() : array<MigrationEntry> {
 
 def private _registry_find_description(version : int) : string {
     for (e in _registry) {
-        if (e.version == version) {
-            return e.description
-        }
+        if (e.version == version) return e.description
     }
     return ""
 }
@@ -143,11 +141,9 @@ def private _format_versions_csv(pending : array<MigrationEntry>; applied_count 
     let limit = applied_count + 1
     var i = 0
     for (m in pending) {
-        if (i >= limit) {
-            break
-        }
+        if (i >= limit) break
         parts |> push("v{m.version}")
-        i += 1
+        i++
     }
     return parts |> join(", ")
 }
@@ -172,9 +168,7 @@ def private _log_warn_on_some(err : SqlError) : void {
 def private _migrate_inner(db : SqlRunner) : Result<int, string> {
     // Eager audit table; idempotent across concurrent runners.
     let create_err = db |> try_exec(AUDIT_CREATE_DDL)
-    if (create_err |> is_some) {
-        return err(create_err |> unwrap, type<int>)
-    }
+    if (create_err |> is_some) return err(create_err |> unwrap, type<int>)
     // Was the audit table empty at the start of this call? (Used by Layer-1 + Layer-2.)
     let audit_was_empty_before = _scalar_int_or_zero(db, "SELECT COUNT(*) FROM __schema_version") == 0
     let max_registered = _registry_max_version()
@@ -197,17 +191,13 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
         if (pending[pending_idx].version <= current) {
             pending |> erase(pending_idx)
         } else {
-            pending_idx += 1
+            pending_idx++
         }
     }
-    if (pending |> empty) {
-        return ok(0, type<string>)
-    }
+    if (pending |> empty) return ok(0, type<string>)
     // BEGIN IMMEDIATE — soft-error path (lock contention surfaces here as SQLITE_BUSY).
     let begin_err = db |> try_exec("BEGIN IMMEDIATE")
-    if (begin_err |> is_some) {
-        return err(begin_err |> unwrap, type<int>)
-    }
+    if (begin_err |> is_some) return err(begin_err |> unwrap, type<int>)
     // Concurrent-runner guard (Scenario 8): re-read MAX(version) under the write lock and drop pending entries another runner already applied between our optimistic read and BEGIN IMMEDIATE.
     let current_locked = _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
     if (current_locked != current) {
@@ -216,7 +206,7 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
             if (pending[pending_idx].version <= current_locked) {
                 pending |> erase(pending_idx)
             } else {
-                pending_idx += 1
+                pending_idx++
             }
         }
         if (pending |> empty) {
@@ -243,7 +233,7 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
             if (ins_err |> is_some) {
                 panic(ins_err |> unwrap)        // promote to panic so recover-block ROLLBACK runs
             }
-            applied_count += 1
+            applied_count++
             any_vacuum ||= m.vacuum
             any_analyze ||= m.analyze
         }
@@ -260,12 +250,8 @@ def private _migrate_inner(db : SqlRunner) : Result<int, string> {
         let layer2_hint = audit_was_empty_before && (failed_version == pending[0].version)
         inner_err = _build_enriched_err(failed_version, failed_desc, underlying, rolled_back_str, layer2_hint)
     }
-    if (!empty(commit_err)) {
-        return err(commit_err, type<int>)
-    }
-    if (!empty(inner_err)) {
-        return err(inner_err, type<int>)
-    }
+    if (!empty(commit_err)) return err(commit_err, type<int>)
+    if (!empty(inner_err)) return err(inner_err, type<int>)
     // Post-COMMIT VACUUM/ANALYZE — Scenario 3: failures = LOG_WARNING, never block success.
     if (any_analyze) {
         (db |> try_exec("ANALYZE")) |> _log_warn_on_some
@@ -284,9 +270,7 @@ def private _try_audit_table_exists(db : SqlRunner) : Result<bool, string> {
     // sqlite_master itself never reports "no such table"; transient errors here propagate.
     let r <- db |> try_query_scalar(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='__schema_version'", type<int>)
-    if (r |> is_err) {
-        return err(r |> unwrap_err, type<bool>)
-    }
+    if (r |> is_err) return err(r |> unwrap_err, type<bool>)
     return ok((r |> unwrap) > 0, type<string>)
 }
 
@@ -299,9 +283,7 @@ def private _audit_table_exists(db : SqlRunner) : bool {
 def current_schema_version(db : SqlRunner) : int {
     //! Highest applied migration version, or 0 if no migrations were applied, the audit table is absent, or a transient SQLite error (e.g. ``SQLITE_BUSY``) blocks the read.
     //! Use ``try_current_schema_version`` to distinguish "nothing applied" from "couldn't tell".
-    if (!_audit_table_exists(db)) {
-        return 0
-    }
+    if (!_audit_table_exists(db)) return 0
     return _scalar_int_or_zero(db, "SELECT COALESCE(MAX(version), 0) FROM __schema_version")
 }
 
@@ -309,12 +291,8 @@ def try_current_schema_version(db : SqlRunner) : Result<int, string> {
     //! ``ok(0)`` when the audit table is absent or empty; ``err`` on transient SQLite errors
     //! (lock contention etc.) — including failures of the sqlite_master probe.
     let exists <- _try_audit_table_exists(db)
-    if (exists |> is_err) {
-        return err(exists |> unwrap_err, type<int>)
-    }
-    if (!(exists |> unwrap)) {
-        return ok(0, type<string>)
-    }
+    if (exists |> is_err) return err(exists |> unwrap_err, type<int>)
+    if (!(exists |> unwrap)) return ok(0, type<string>)
     return <- db |> try_query_scalar("SELECT COALESCE(MAX(version), 0) FROM __schema_version", type<int>)
 }
 
@@ -322,9 +300,7 @@ def try_pending_migrations(db : SqlRunner) : Result<array<PendingMigration>, str
     //! Registered migrations whose ``version > current_schema_version(db)``, in ascending order.
     //! Description sourced from the annotation (current code), not the audit table.
     let cv <- db |> try_current_schema_version()
-    if (cv |> is_err) {
-        return err(cv |> unwrap_err, type<array<PendingMigration>>)
-    }
+    if (cv |> is_err) return err(cv |> unwrap_err, type<array<PendingMigration>>)
     let current = cv |> unwrap
     var inscope out : array<PendingMigration>
     let sorted <- _registry_sorted()
@@ -350,12 +326,8 @@ def try_migration_history(db : SqlRunner) : Result<array<MigrationRecord>, strin
     //! frozen-at-apply text from the audit row (NOT the current annotation). ``ok([])`` when the
     //! audit table is absent; ``err`` on transient SQLite errors (incl. the sqlite_master probe).
     let exists <- _try_audit_table_exists(db)
-    if (exists |> is_err) {
-        return err(exists |> unwrap_err, type<array<MigrationRecord>>)
-    }
-    if (!(exists |> unwrap)) {
-        return ok(default<array<MigrationRecord>>, type<string>)
-    }
+    if (exists |> is_err) return err(exists |> unwrap_err, type<array<MigrationRecord>>)
+    if (!(exists |> unwrap)) return ok(default<array<MigrationRecord>>, type<string>)
     return <- try_run_select(db,
         "SELECT version, description, applied_at FROM __schema_version ORDER BY version",
         $(var stmt : sqlite3_stmt?) {},
@@ -406,36 +378,26 @@ def try_baseline(db : SqlRunner; version : int) : Result<int, string> {
     //! Stamps v1..``version`` as already-applied without running their bodies. Idempotent
     //! (versions already in the audit are skipped). Returns ``ok(stamped_count)`` or ``err``.
     //! Rejects ``version > _registry_max_version()`` as almost-certainly a typo.
-    if (version <= 0) {
-        return err("baseline(version={version}) must be a positive integer", type<int>)
-    }
+    if (version <= 0) return err("baseline(version={version}) must be a positive integer", type<int>)
     let max_reg = _registry_max_version()
-    if (version > max_reg) {
-        return err("baseline(version={version}) is above the highest registered migration (v{max_reg}) — looks like a typo", type<int>)
-    }
+    if (version > max_reg) return err("baseline(version={version}) is above the highest registered migration (v{max_reg}) — looks like a typo", type<int>)
     let create_err = db |> try_exec(AUDIT_CREATE_DDL)
-    if (create_err |> is_some) {
-        return err(create_err |> unwrap, type<int>)
-    }
+    if (create_err |> is_some) return err(create_err |> unwrap, type<int>)
     let begin_err = db |> try_exec("BEGIN IMMEDIATE")
-    if (begin_err |> is_some) {
-        return err(begin_err |> unwrap, type<int>)
-    }
+    if (begin_err |> is_some) return err(begin_err |> unwrap, type<int>)
     var stamped = 0
     var inner_err = ""
     var commit_err = ""
     try {
         for (v in range(1, version + 1)) {
-            if (_audit_has_version(db, v)) {
-                continue
-            }
+            if (_audit_has_version(db, v)) continue
             let desc_from_reg = _registry_find_description(v)
             let desc = empty(desc_from_reg) ? "[baseline]" : desc_from_reg
             let ins_err = _audit_insert(db, v, desc)
             if (ins_err |> is_some) {
                 panic(ins_err |> unwrap)        // recover handles ROLLBACK + Err propagation
             }
-            stamped += 1
+            stamped++
         }
         let cerr = db |> try_exec("COMMIT")
         if (cerr |> is_some) {
@@ -447,12 +409,8 @@ def try_baseline(db : SqlRunner; version : int) : Result<int, string> {
         db |> try_exec("ROLLBACK") |> _log_warn_on_some
         inner_err = "baseline(version={version}) failed: {underlying}"
     }
-    if (!empty(commit_err)) {
-        return err(commit_err, type<int>)
-    }
-    if (!empty(inner_err)) {
-        return err(inner_err, type<int>)
-    }
+    if (!empty(commit_err)) return err(commit_err, type<int>)
+    if (!empty(inner_err)) return err(inner_err, type<int>)
     return ok(stamped, type<string>)
 }
 
@@ -491,16 +449,9 @@ def private _collect_registered_migrations(var out : array<RegisteredMigration>)
     prog |> for_each_module_no_order($(mod) {
         mod |> for_each_module_function($(var f : FunctionPtr) {
             for (ann in f.annotations) {
-                if (ann == null) {
-                    continue
-                }
-                if (ann.annotation.name != "sql_migration") {
-                    continue
-                }
+                if (ann == null || ann.annotation.name != "sql_migration") continue
                 let vArg = ann.arguments |> find_arg("version")
-                if (!(vArg is tInt)) {
-                    continue
-                }
+                if (!(vArg is tInt)) continue
                 var entry <- RegisteredMigration(
                     version = vArg as tInt,
                     fn_name = "{f.name}",
@@ -581,12 +532,8 @@ class SqlMigrationMacro : AstFunctionAnnotation {
         var registered : array<RegisteredMigration>
         _collect_registered_migrations(registered)
         for (e in registered) {
-            if (e.version != version) {
-                continue
-            }
-            if (e.fn_name == funcDasName && e.mod_name == modName) {
-                continue                     // self
-            }
+            // skip non-matching versions and self
+            if (e.version != version || (e.fn_name == funcDasName && e.mod_name == modName)) continue
             errors := "duplicate [sql_migration(version={version})]:\n  registered: {e.fn_name} in module '{e.mod_name}'\n  duplicate:  {funcDasName} in module '{modName}'\nhint: pick a different version number for one of them, or merge the bodies"
             return false
         }
@@ -687,13 +634,9 @@ class private OverrideCollector : AstVisitor {
         target_var_name = name
     }
     def record_lhs(lhs : ExpressionPtr) : void {
-        if (lhs == null || !(lhs is ExprField)) {
-            return
-        }
+        if (lhs == null || !(lhs is ExprField)) return
         let f = lhs as ExprField
-        if (f.value == null || !(f.value is ExprVar)) {
-            return
-        }
+        if (f.value == null || !(f.value is ExprVar)) return
         let v = f.value as ExprVar
         if (v.name == target_var_name) {
             overrides |> insert(string(f.name), true)
@@ -729,8 +672,8 @@ def private make_struct_convert_helper(var src_st : StructurePtr; var tgt_st : S
     var fn = qmacro_function(fn_name) $(src : $t(src_st); var tgt : $t(tgt_st)) : void {
         $b(auto_exprs)
     }
-    fn.flags |= FunctionFlags.generated
-    fn.flags |= FunctionFlags.privateFunction
+    fn.flags.generated = true
+    fn.flags.privateFunction = true
     fn.body |> force_at(at)
     return <- fn
 }
@@ -740,7 +683,7 @@ def private make_sct_dispatch(var src_st : StructurePtr; var tgt_st : StructureP
     var fn = qmacro_function("_sct") $(src : $t(src_st); var tgt : $t(tgt_st)) : void {
         $c(user_fn_name)(src, tgt)
     }
-    fn.flags |= FunctionFlags.generated
+    fn.flags.generated = true
     fn.body |> force_at(at)
     return <- fn
 }
@@ -801,13 +744,9 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
         auto_exprs |> reserve(length(tgt_st.fields))
         var failed = false
         for (t_field in tgt_st.fields) {
-            if (failed) {
-                break
-            }
+            if (failed) break
             let tname = string(t_field.name)
-            if (key_exists(overrides, tname)) {
-                continue
-            }
+            if (key_exists(overrides, tname)) continue
             // Honor @sql_renamed_from on T's field — read from old's <OldName> instead of <tname>.
             let renamed_arg = find_arg(t_field.annotation, "sql_renamed_from")
             let renamed_from = renamed_arg is tString ? string(renamed_arg as tString) : ""
@@ -817,9 +756,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
             // Find matching field in S by lookup_name; nested loop because indexed access on handled FieldDeclaration arrays needs unsafe.
             var s_found = false
             for (s_field in src_st.fields) {
-                if (s_field.name != lookup_name) {
-                    continue
-                }
+                if (s_field.name != lookup_name) continue
                 s_found = true
                 // Emit a dispatch call. ``_::`` resolves at the user's module so they can extend the
                 // overload set with their own (S_type, T_type) pairs (custom enums, value-types, etc.).
@@ -828,9 +765,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
                 }))
                 break
             }
-            if (failed) {
-                break
-            }
+            if (failed) break
             if (!s_found) {
                 // Field absent from S — use T's default initializer or none() for Option<T>.
                 if (t_field.init != null) {
@@ -849,9 +784,7 @@ class SqlStructConvertMacro : AstFunctionAnnotation {
                 }
             }
         }
-        if (failed) {
-            return false
-        }
+        if (failed) return false
 
         // Emit the per-(S,T) helper carrying the auto-derived assignments.
         let helper_name = "_struct_convert_helper`{func.name}"

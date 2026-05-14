@@ -254,8 +254,8 @@ def private append_iterator(arch_name : string; var qloop : ExprFor?; a; prefix,
         qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), $e(a.init)))
     } else {
         var ftype = clone_type(a._type)
-        ftype.flags &= ~TypeDeclFlags.constant
-        ftype.flags &= ~TypeDeclFlags.ref
+        ftype.flags.constant = false
+        ftype.flags.ref = false
         var it = qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
         force_generated(it, true)
         qloop.sources |> emplace <| it
@@ -272,25 +272,25 @@ def private append_index_lookup(arch_name : string; var qblock : ExprBlock?; a; 
         iget = clone_expression(a.init)
     } else {
         var ftype = clone_type(a._type)
-        ftype.flags &= ~TypeDeclFlags.constant
-        ftype.flags &= ~TypeDeclFlags.ref
+        ftype.flags.constant = false
+        ftype.flags.ref = false
         var getFn = qmacro($c(getter)($i(arch_name), $v("{prefix}{a.name}"), unsafe(type<$t(ftype)>)))
-        getFn.genFlags |= ExprGenFlags.alwaysSafe
+        getFn.genFlags.alwaysSafe = true
         iget = qmacro($e(getFn)[entity_index])
         force_generated(iget, true)
     }
     var vlet = new ExprLet(at = a.at, atInit = a.at)
-    vlet.genFlags |= ExprGenFlags.alwaysSafe
+    vlet.genFlags.alwaysSafe = true
     var vtype = clone_type(a._type)
     if (getter == "get_default_ro") {
-        vtype.flags |= TypeDeclFlags.constant
+        vtype.flags.constant = true
     } elif (getter == "get_ro") {
-        vtype.flags |= TypeDeclFlags.constant
+        vtype.flags.constant = true
         // if length(a._type.dim)==0
-        vtype.flags |= TypeDeclFlags.ref
+        vtype.flags.ref = true
     } else {
         // if length(a._type.dim)==0
-        vtype.flags |= TypeDeclFlags.ref
+        vtype.flags.ref = true
     }
         // else
         //    macro_error(compiling_program(),a.at,"[] arguments are not supported in eid queries yet")
@@ -374,7 +374,7 @@ class DecsQueryMacro : AstCallMacro {
         for (arg in qblk.arguments) {
             if (arg._type != null) {
                 if (!arg._type.flags.constant) {
-                    arg._type.flags |= TypeDeclFlags.ref
+                    arg._type.flags.ref = true
                 }
             }
         }
@@ -567,13 +567,13 @@ class DecsEcsMacro : AstFunctionAnnotation {
             var reg <- setup_call_list("register`decs`passes", func.at, true, true)
             reg.list |> push(qmacro(decs::register_decs_stage_call($v(passName), @@$c(passFuncName))))
         }
-        func.flags |= FunctionFlags.privateFunction
+        func.flags.privateFunction = true
         blk.list |> push(qmacro($c("_::{func.name}")()))
         var fblk = new ExprBlock(at = func.body.at)                // new function block
         var cqq = make_call(func.at, "query")
         var cquery = cqq as ExprCallMacro
         var qblk = new ExprBlock(at = func.body.at)                // inside the query block
-        qblk.blockFlags |= ExprBlockFlags.isClosure
+        qblk.blockFlags.isClosure = true
         qblk.returnType = new TypeDecl(baseType = Type.tVoid, at = func.at)
         var req, nreq : array<string>
         for (arg in args) {
@@ -662,8 +662,8 @@ class FromDecsMacro : AstCallMacro {
         tupleType.argNames.resize(qblk.arguments.length())
         for (arg, idx in qblk.arguments, count()) {
             tupleType.argTypes |> emplace_new(clone_type(arg._type))
-            tupleType.argTypes[idx].flags &= ~TypeDeclFlags.ref
-            tupleType.argTypes[idx].flags &= ~TypeDeclFlags.constant
+            tupleType.argTypes[idx].flags.ref = false
+            tupleType.argTypes[idx].flags.constant = false
             tupleType.argNames[idx] := arg.name
 
         }
@@ -680,15 +680,15 @@ class FromDecsMacro : AstCallMacro {
         })
         var qba = qblock as ExprMakeBlock
         var qbb = qba._block as ExprBlock
-        qbb.blockFlags |= ExprBlockFlags.isClosure
+        qbb.blockFlags.isClosure = true
         for (arg, idx in qblk.arguments, count()) {
             qbb.arguments |> emplace_new <| new Variable(at = arg.at,
                 name := arg.name,
                 _type = clone_type(arg._type),
                 init = clone_expression(arg.init)
             )
-            qbb.arguments[idx]._type.flags &= ~TypeDeclFlags.ref
-            qbb.arguments[idx]._type.flags |= TypeDeclFlags.constant
+            qbb.arguments[idx]._type.flags.ref = false
+            qbb.arguments[idx]._type.flags.constant = true
         }
         // call macro query
         var callquery = make_call(expr.at, "query")

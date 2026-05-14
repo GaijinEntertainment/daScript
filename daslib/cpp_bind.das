@@ -20,7 +20,7 @@ require daslib/strings_boost
 
 def private log_cpp_class_method(cpp_file : file; name : string; fntype : TypeDeclPtr) {
     var cft = clone_type(fntype.firstType)
-    cft.flags |= TypeDeclFlags.smartPtrNative
+    cft.flags.smartPtrNative = true
     let rettd = describe_cpp(cft)
     fwrite(cpp_file, "{rettd} {name} ( Context * __context__, Func __funcCall__")
     for (argN, argT, argI in fntype.argNames, fntype.argTypes, count()) {

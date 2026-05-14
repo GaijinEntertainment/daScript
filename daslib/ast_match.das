@@ -1943,11 +1943,11 @@ def private generate_block_match(var pat_block : ExprBlock?; actual_var : string
 
                 // Build inner block: $(var elem : Expression?) : QMatchResult { match_code }
                 var inner_blk = new ExprBlock(at = at)
-                inner_blk.blockFlags |= ExprBlockFlags.isClosure
+                inner_blk.blockFlags.isClosure = true
                 inner_blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
                 var inner_arg <- new Variable(at = at, name := elem_var)
                 inner_arg._type  = typeinfo ast_typedecl(type<Expression?>)
-                inner_arg.access_flags |= VariableAccessFlags.access_ref
+                inner_arg.access_flags.access_ref = true
                 inner_blk.arguments |> emplace(inner_arg)
                 for (stmt in match_body) {
                     inner_blk.list |> emplace(stmt)
@@ -2041,11 +2041,11 @@ class private QMatch : AstCallMacro {
 
         // Build block: $(var _qm_arg : Expression?) : QMatchResult { ... }
         var blk = new ExprBlock(at = at)
-        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.blockFlags.isClosure = true
         blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         var arg_var <- new Variable(at = at, name := "_qm_arg")
         arg_var._type  = typeinfo ast_typedecl(type<Expression?>)
-        arg_var.access_flags |= VariableAccessFlags.access_ref
+        arg_var.access_flags.access_ref = true
         blk.arguments |> emplace(arg_var)
 
         // Null check
@@ -2097,11 +2097,11 @@ class private QMatchBlock : AstCallMacro {
 
         // Build block: $(var _qm_arg : Expression?) : QMatchResult { ... }
         var blk = new ExprBlock(at = at)
-        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.blockFlags.isClosure = true
         blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         var arg_var <- new Variable(at = at, name := "_qm_arg")
         arg_var._type  = typeinfo ast_typedecl(type<Expression?>)
-        arg_var.access_flags |= VariableAccessFlags.access_ref
+        arg_var.access_flags.access_ref = true
         blk.arguments |> emplace(arg_var)
 
         // Null check
@@ -2153,12 +2153,12 @@ class private QMatchFunction : AstCallMacro {
 
         // Build block: $(var _qm_arg : ExpressionPtr; _qm_func : Function?) : QMatchResult { ... }
         var blk = new ExprBlock(at = at)
-        blk.blockFlags |= ExprBlockFlags.isClosure
+        blk.blockFlags.isClosure = true
         blk.returnType  = typeinfo ast_typedecl(type<QMatchResult>)
         // First param: body (ExpressionPtr)
         var arg_body <- new Variable(at = at, name := "_qm_arg")
         arg_body._type  = typeinfo ast_typedecl(type<Expression?>)
-        arg_body.access_flags |= VariableAccessFlags.access_ref
+        arg_body.access_flags.access_ref = true
         blk.arguments |> emplace(arg_body)
         // Second param: function pointer (Function?)
         var arg_func <- new Variable(at = at, name := "_qm_func")

@@ -802,7 +802,7 @@ class ArgsMacro : AstStructureAnnotation {
             var x := $v(info)
             return <- x
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         fn.body |> force_at(st.at)
         return <- fn
     }
@@ -811,7 +811,7 @@ class ArgsMacro : AstStructureAnnotation {
         var fn = qmacro_function("parse_args") $(typ : $t(st)) : Result<$t(st), string> {
             return parse_args(default<$t(st)>, get_user_args())
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         fn.body |> force_at(st.at)
         return <- fn
     }
@@ -834,7 +834,7 @@ class ArgsMacro : AstStructureAnnotation {
             dst <- auto_r |> move_unwrap
             return -1
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         fn.body |> force_at(st.at)
         return <- fn
     }
@@ -1001,7 +1001,7 @@ class ArgsMacro : AstStructureAnnotation {
                 }
                 return move_ok(dst, type<string>)
             }
-            fn.flags |= FunctionFlags.generated
+            fn.flags.generated = true
             fn.body |> force_at(st.at)
             return <- fn
         }
@@ -1018,7 +1018,7 @@ class ArgsMacro : AstStructureAnnotation {
                 }
                 return move_ok(dst, type<string>)
             }
-            fn.flags |= FunctionFlags.generated
+            fn.flags.generated = true
             fn.body |> force_at(st.at)
             return <- fn
         }
@@ -1038,7 +1038,7 @@ class ArgsMacro : AstStructureAnnotation {
                 }
                 return move_ok(dst, type<string>)
             }
-            fn.flags |= FunctionFlags.generated
+            fn.flags.generated = true
             fn.body |> force_at(st.at)
             return <- fn
         }
@@ -1053,7 +1053,7 @@ class ArgsMacro : AstStructureAnnotation {
             }
             return move_ok(dst, type<string>)
         }
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         fn.body |> force_at(st.at)
         return <- fn
     }

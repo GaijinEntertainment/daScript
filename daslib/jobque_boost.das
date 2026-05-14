@@ -63,8 +63,8 @@ class private NewJobMacro : AstFunctionAnnotation {
         var stype_ptr = stype
         var sttype = new TypeDecl(at = call.at, baseType = Type.tStructure, structType = stype_ptr)
         for (fld in stype.fields) {// TODO: verify field type here
-            fld._type.flags &= ~(TypeDeclFlags.constant)
-            fld.flags &= ~(FieldDeclarationFlags.capturedConstant)
+            fld._type.flags.constant = false
+            fld.flags.capturedConstant = false
         }
         var pclone = make_clone_structure(stype_ptr)
         let const_clone = pclone.arguments[1]._type.flags.constant
@@ -76,7 +76,7 @@ class private NewJobMacro : AstFunctionAnnotation {
         ftype.argTypes |> emplace_new <| clone_type(sttype)
         ftype.argTypes |> emplace <| sttype
         if (const_clone) {
-            ftype.argTypes[1].flags |= TypeDeclFlags.constant
+            ftype.argTypes[1].flags.constant = true
         }
         // make a new_job_invoke call
         var ncall = new ExprCall(at = call.at, name := "{call.name}_invoke")

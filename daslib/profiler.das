@@ -396,10 +396,10 @@ class PerformanceProfilerAgent : ProfilerBaseAgent {
     def dump_meta(var ctx : Context; tid : uint64) {
         let ctxName = empty(ctx.name) ? "" : " '{ctx.name}'"
         let wasDead = (ctx.category & context_category_flags.dead) == context_category_flags.dead
-        ctx.category &= ~context_category_flags.dead
+        ctx.category.dead = false
         let ctxDesc = "{tid}{ctxName} cat:{ctx.category}" |> escape()
         dump("\{\"args\": \{ \"name\": \"{ctxDesc}\" \}, \"name\": \"thread_name\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
-        if (wasDead) { ctx.category |= context_category_flags.dead; }
+        if (wasDead) { ctx.category.dead = true; }
     }
         // dump("\{\"args\": \{ \"value\" : \"ns\" \}, \"name\": \"displayTimeUnit\", \"cat\": \"__metadata\", \"ph\": \"M\", \"pid\": 0, \"tid\": {int64(tid)}, \"ts\": 0 \}")
     def dump_events(tid : uint64) {

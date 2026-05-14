@@ -81,6 +81,24 @@ namespace das {
         value.value = on ? (value.value | mask.value) : (value.value & ~mask.value);
     }
 
+    // Raw-integer overloads for handle-bound bitfield fields (e.g. Function::flags
+    // is `uint32_t` on the C++ side but `FunctionFlags`/bitfield on the das side).
+    // The infer pass lowers `bitfield.field = bool` to `__bit_set(...)`; without
+    // these overloads, AOT emits `__bit_set(handle->flags, mask, on)` where
+    // `handle->flags` is `uint32_t&`, which doesn't bind to `Bitfield&`.
+    __forceinline void __bit_set ( uint32_t & value, uint32_t mask, bool on ) {
+        value = on ? (value | mask) : (value & ~mask);
+    }
+    __forceinline void __bit_set ( uint8_t & value, uint8_t mask, bool on ) {
+        value = on ? uint8_t(value | mask) : uint8_t(value & ~mask);
+    }
+    __forceinline void __bit_set ( uint16_t & value, uint16_t mask, bool on ) {
+        value = on ? uint16_t(value | mask) : uint16_t(value & ~mask);
+    }
+    __forceinline void __bit_set ( uint64_t & value, uint64_t mask, bool on ) {
+        value = on ? (value | mask) : (value & ~mask);
+    }
+
     // special bitfield8 operations
     __forceinline bool __bitfield8_eq  ( Bitfield8 left, Bitfield8 right ) { return left.value == right.value; }
     __forceinline bool __bitfield8_neq ( Bitfield8 left, Bitfield8 right ) { return left.value != right.value; }

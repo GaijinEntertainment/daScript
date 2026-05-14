@@ -20,8 +20,8 @@ require daslib/macro_boost
 
 def private clone_iterator_type(it : TypeDeclPtr) : TypeDeclPtr {
     var res = clone_type(it.firstType)
-    res.flags &= ~TypeDeclFlags.ref
-    res.flags |= TypeDeclFlags.constant
+    res.flags.ref = false
+    res.flags.constant = true
     return <- res
 }
 
@@ -45,7 +45,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         var res = qmacro($c(predName)($e(arg0), $(_ : $t(iterType)) => $e(call.arguments[1])))
         // allow inner `_` to shadow an outer `_` when chains nest
         // (e.g. `_where(_.x._in(arr |> _select(_.y)))`)
-        (((res as ExprCall).arguments[1] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
+        (((res as ExprCall).arguments[1] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
         res.force_at(call.at)
         return res
     }
@@ -297,7 +297,7 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
         var iterType = clone_iterator_type(call.arguments[0]._type)
         var res = qmacro($c(predName)($e(call.arguments[0]), $e(call.arguments[1]), $(_ : $t(iterType)) => $e(call.arguments[2])))
         // allow inner `_` to shadow an outer `_` when chains nest
-        (((res as ExprCall).arguments[2] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
+        (((res as ExprCall).arguments[2] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
         res.force_at(call.at)
         return res
     }
@@ -977,7 +977,7 @@ def private append_comprehension(argIndex : int; var topValue : Expression?; var
     blk.list |> emplace_new <| qmacro_expr() {
         var $i(newArgName) <- $e(comprehension)
     }
-    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
     if (argIndex != 0) {
         blk.list |> emplace_new <| qmacro_expr() {
             delete $e(topValue)
@@ -1047,7 +1047,7 @@ def private fold_where_count(argIndex : int; var topValue : Expression?; var blk
     blk.list |> emplace_new <| qmacro_expr() {
         var $i(newArgName) = $e(fusedCall)
     }
-    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
     if (argIndex != 0) {
         blk.list |> emplace_new <| qmacro_expr() {
             delete $e(topValue)
@@ -1180,7 +1180,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
                     blk.list |> emplace_new <| qmacro_expr() {
                         var $i(newArgName) = $e(newCall)
                     }
-                    (blk.list.back() as ExprLet).variables[0].flags |= VariableFlags.can_shadow
+                    (blk.list.back() as ExprLet).variables[0].flags.can_shadow = true
                     if (argIndex != 0) {
                         blk.list |> emplace_new <| qmacro_expr() {
                             delete $e(topValue)
@@ -1201,9 +1201,9 @@ def private fold_linq_default(var expr : Expression?) : Expression? {
             return <- $e(topValue)
         }
     }
-    topExpr.genFlags |= ExprGenFlags.alwaysSafe
+    topExpr.genFlags.alwaysSafe = true
     var res = qmacro(invoke($(source : $t(topExprType)) { $e(blk); }, $e(topExpr)))
-    (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags |= VariableFlags.can_shadow
+    (((res as ExprInvoke).arguments[0] as ExprMakeBlock)._block as ExprBlock).arguments[0].flags.can_shadow = true
     res.force_generated(true)
     return res
 }

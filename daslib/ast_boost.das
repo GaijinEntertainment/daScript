@@ -160,8 +160,8 @@ class MacroMacro : AstFunctionAnnotation {
     //! Function annotation that guards the function body with an is_compiling_macros check.
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         //! Wraps function body in an `is_compiling_macros` guard and marks program as needing macro module.
-        compiling_program().flags |= ProgramFlags.needMacroModule
-        func.flags |= FunctionFlags.macroInit
+        compiling_program().flags.needMacroModule = true
+        func.flags.macroInit = true
         var blk = new ExprBlock(at = func.at)
         var ifm = new ExprCall(at = func.at, name := "is_compiling_macros")
         var ife = new ExprIfThenElse(at = func.at, cond = ifm, if_true = func.body)
@@ -323,20 +323,20 @@ def setup_call_list(name : string; at : LineInfo; isInit : bool = false; isPriva
     //! Creates or retrieves a shared init/private function for collecting call expressions.
     return setup_call_list(name, at) $(fn) {
         if (isInit) {
-            fn.flags |= FunctionFlags.init
+            fn.flags.init = true
             if (isLateInit) {
-                fn.moreFlags |= MoreFunctionFlags.lateInit
+                fn.moreFlags.lateInit = true
             }
         }
         if (isPrivate) {
-            fn.flags |= FunctionFlags.privateFunction
+            fn.flags.privateFunction = true
         }
     }
 }
 
 def setup_macro(name : string; at : LineInfo) : ExprBlock? {
     //! Sets up a macro initialization function guarded by `is_compiling_macros_in_module`.
-    compiling_program().flags |= ProgramFlags.needMacroModule
+    compiling_program().flags.needMacroModule = true
     var fn = compiling_module() |> find_unique_function(name)
     if (fn == null) {
         fn = new Function(at = at, atDecl = at, name := "{name}",

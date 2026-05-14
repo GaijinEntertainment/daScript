@@ -220,7 +220,7 @@ def private to_arr_move_args(var args : array<Expression?>; var dst_tp : TypeDec
 def private convert_vec_expr(mod : Module?; field_values : uint8 const?; xtype : TypeDeclPtr, at : LineInfo) : Expression? {
     var src_tp = get_handled_type_index_type_declaration(xtype.annotation,
                              default<Expression?>, default<Expression?>);
-    src_tp.flags &= ~TypeDeclFlags.ref; // vec type has ref, we don't need it
+    src_tp.flags.ref = false; // vec type has ref, we don't need it
     var dst_tp = get_dst_type(clone(src_tp));
     var args : array<Expression?>;
 
@@ -391,7 +391,7 @@ def convert_quote_to_expression(var arg_expr : Expression?; at : LineInfo) : Exp
     let mod = get_module("ast_core");
     assume annotation = mod |> module_find_type_annotation(arg_expr.__rtti);
     var tp = new TypeDecl(baseType = Type.tHandle, annotation = annotation);
-    tp.flags |= TypeDeclFlags.smartPtr;
+    tp.flags.smartPtr = true;
     return new ExprAscend(subexpr = convert_quote_expr(mod, unsafe(reinterpret<uint8 const?>(arg_expr)), tp, at));
 }
 

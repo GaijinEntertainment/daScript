@@ -2313,7 +2313,7 @@ class private EvalWalker : DapiStackWalker {
                     unsafe {
                         let pref = unsafe(reinterpret<void ??> arg)
                         var cvinfo = vinfo
-                        cvinfo.flags &= ~TypeInfoFlags.ref
+                        cvinfo.flags.ref = false
                         *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?> {*pref}ul // already ref\n")
                     }
                 } elif (vinfo.dimSize > 0u) {
@@ -2377,13 +2377,13 @@ def private auto_start_debug() {
     if ((is_in_aot() && loads_itself()) || is_in_debug_agent_creation() || !is_compiling_macros_in_module("debug") || is_in_completion()) return
     let args <- get_command_line_arguments()
     if (has_value(args, "--no-das-debug")) return
-    this_context().category |= context_category_flags.debugger_attached
+    this_context().category.debugger_attached = true
     set_single_step(this_context(), !use_instruments() || wait_debugger())
     if (!has_debug_agent_context("~debug")) {
         if (start_agent()) {
             new_debugger_thread() {
-                this_context().category &= ~context_category_flags.debugger_attached
-                this_context().category |= context_category_flags.debugger_tick
+                this_context().category.debugger_attached = false
+                this_context().category.debugger_tick = true
                 set_single_step(this_context(), false)
                 this_context().name := "tick thread"
                 while (!debugger_stop_requested() && !is_job_que_shutting_down()) {

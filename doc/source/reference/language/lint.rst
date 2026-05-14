@@ -631,6 +631,50 @@ expression, or indexing a different array disqualifies the loop.
         process(c)
     }
 
+PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
+==========================================================================
+
+When ``T`` is a type whose values support ``|`` directly — bitfields
+always do; enums when an ``operator |(T, T) : T`` overload exists —
+``int(T.a) | int(T.b)`` does two casts where one suffices. Write
+``int(T.a | T.b)`` instead: the OR happens on the typed value, then a
+single cast lowers to ``int``.
+
+The detection walks both operands of an ``|`` ``ExprOp2``, peels one
+layer of ``int(...)`` (matched as an ``ExprCall`` whose
+``func.name`` / ``fromGeneric.name`` is ``"int"``), and fires when both
+inner types are the same bitfield, or the same enum that has an
+``operator |`` defined somewhere in the compiling program (probed once
+per enum type via ``program_for_each_module`` + ``for_each_function``,
+result cached on the visitor).
+
+Note on testing: the "canonical" form with two compile-time constants
+(``int(Mode.read) | int(Mode.write)``) is folded by the optimizer to a
+single ``ExprConstInt`` under normal compile policies, so dastest can't
+observe the rule firing on it. The lint runner sets
+``no_optimizations = true`` and ``no_infer_time_folding = true`` on
+``CodeOfPolicies``, which preserves the AST and lets the rule fire.
+Dastest coverage in ``utils/lint/tests/perf019_int_cast_collapse.das``
+uses runtime operands; the constant case is covered by the CI lint gate.
+
+.. code-block:: das
+
+    bitfield Mode { read; write; exec }
+
+    // Bad
+    var mask = int(Mode.read) | int(Mode.write)         // PERF019
+
+    def f(m1, m2 : Mode) : int {
+        return int(m1) | int(m2)                        // PERF019
+    }
+
+    // Good
+    var mask = int(Mode.read | Mode.write)
+
+    def f(m1, m2 : Mode) : int {
+        return int(m1 | m2)
+    }
+
 .. _style_lint:
 
 -----------
@@ -1030,6 +1074,73 @@ chain.
 
     // Good
     var args = JV((target = target, dx = dx, dy = dy))
+
+STYLE022 — bitfield ``|=`` / ``&= ~`` single bit → field assignment
+=====================================================================
+
+When ``foo`` is a bitfield value, ``foo |= BfT.m`` and ``foo &= ~BfT.m``
+are the mask-arithmetic forms of setting and clearing one named bit.
+daslang exposes the same operation as a bool field assignment:
+``foo.m = true`` and ``foo.m = false``. The field form names the bit
+instead of the mask and drops the ``~`` for clears.
+
+The rule fires only when the right-hand side resolves to exactly one
+named bit. Under lint policies the RHS appears as ``ExprField``
+(``ExprField(value = ExprVar(BfT), name = "m")``); under normal compile
+policies the optimizer folds it to ``ExprConstBitfield`` — the rule
+covers both shapes and, for the folded case, maps the single-bit mask
+back to the symbolic bit name via ``TypeDecl.argNames``. Multi-bit
+masks (``Mode.read | Mode.write``) and dynamic RHS are left alone.
+
+The ``&=`` form requires the source pattern ``foo &= ~BfT.m`` — either
+an explicit ``ExprOp1("~", ExprField)`` or a single-bit-complement
+``ExprConstBitfield``. A bare ``foo &= BfT.m`` (no ``~``) is *not* the
+bit-clear idiom; it would mask off every other bit, so it stays silent.
+
+.. code-block:: das
+
+    bitfield Mode { read; write; exec }
+
+    // Bad
+    var f : Mode
+    f |= Mode.read                          // STYLE022 → f.read = true
+    f &= ~Mode.write                        // STYLE022 → f.write = false
+
+    // Good
+    var f : Mode
+    f.read = true
+    f.write = false
+
+STYLE023 — ``int_cast(bf & BfT.m) != 0`` → ``bf.m``
+=====================================================================
+
+Testing a single bit via ``uint(bf & BfT.m) != 0u`` (or any of the
+``int`` / ``uint`` / ``int64`` / ``uint64`` cast forms compared to
+``0``) is the mask-arithmetic counterpart of the boolean field access
+daslang exposes on bitfields. ``bf.m`` already evaluates to a ``bool`` —
+read it directly. ``== 0`` becomes ``!bf.m``.
+
+Detection matches both operand orders (``cast(...) !=/== 0`` and
+``0 !=/== cast(...)``) and accepts all four standard int casts
+(``int``, ``uint``, ``int64``, ``uint64``). The inner expression must be
+``bitfield & SingleBit`` where ``SingleBit`` resolves to a named bit of
+the same bitfield — under lint policies as ``ExprField(BfT, name)``,
+under normal compile as ``ExprConstBitfield`` with a single-bit mask.
+Multi-bit masks (``Mode.read | Mode.write``) are left alone since the
+``!= 0`` semantics differ from any single field read.
+
+.. code-block:: das
+
+    bitfield Mode { read; write; exec }
+    struct Io { flags : Mode }
+
+    // Bad
+    if (uint(io.flags & Mode.read) != 0u) { ... }       // STYLE023 → io.flags.read
+    if (int(io.flags & Mode.write) == 0)  { ... }       // STYLE023 → !io.flags.write
+
+    // Good
+    if (io.flags.read)   { ... }
+    if (!io.flags.write) { ... }
 
 -----
 Tests

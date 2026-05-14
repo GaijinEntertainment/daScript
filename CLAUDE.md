@@ -263,6 +263,9 @@ Full migration table (when reading older docs that say `var inscope` or `<-` for
 | `for (i in range(length(arr))) { ... arr[i] ... }` where `i` is used only as `arr[i]` | `for (c in arr) { ... c ... }` | PERF018: direct iteration drops the index variable |
 | `from_JV(v, type<int>, 13)` | `v ?? 13` | STYLE020: json_boost provides `operator ??` for every scalar `from_JV` overload |
 | `var args : table<string; JsonValue?>; args \|> insert("k1", JV(v1)); args \|> insert("k2", JV(v2))` | `var args = JV((k1=v1, k2=v2))` | STYLE021: named-tuple JV form (json_boost.das:638) is one line instead of N |
+| `int(BfT.a) \| int(BfT.b)` (same bitfield, or enum with `operator \|`) | `int(BfT.a \| BfT.b)` | PERF019: collapse two int casts to one. Const-foldable forms only surface under lint policies |
+| `foo \|= BfT.m` / `foo &= ~BfT.m` (bitfield `foo`, single named bit) | `foo.m = true` / `foo.m = false` | STYLE022: bitfield-as-field assignment reads bit-name-first, drops the `~` for clears |
+| `uint(bf & BfT.m) != 0u` / `int(bf & BfT.m) == 0` (bitfield `bf`, single named bit) | `bf.m` / `!bf.m` | STYLE023: bitfield-as-field read; drop the int cast + `!= 0` / `== 0` compare |
 
 For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/etc.) — see `skills/filesystem.md`. Never hand-roll `rfind("/")` / slice — misses Windows separators.
 

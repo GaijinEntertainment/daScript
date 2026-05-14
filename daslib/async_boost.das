@@ -295,8 +295,8 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                         }
                     } else {
                         var rmConst = clone_type(v._type)
-                        rmConst.flags &= ~TypeDeclFlags.constant
-                        rmConst.flags &= ~TypeDeclFlags.removeConstant
+                        rmConst.flags.constant = false
+                        rmConst.flags.removeConstant = false
                         v._type = rmConst
                     }
 
@@ -329,7 +329,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                     while (idx >= 0) {
                         var parentBlock = blocksStack[idx]
                         if (!parentBlock.blockFlags.isClosure) {
-                            parentBlock.blockFlags |= ExprBlockFlags.needCollapse
+                            parentBlock.blockFlags.needCollapse = true
                             break
                         }
                         idx--

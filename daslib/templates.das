@@ -38,7 +38,7 @@ class DecltypeMacro : AstCallMacro {
         }
         var tt = clone_type(expr.arguments[0]._type)
         if (remove_ref) {
-            tt.flags &= ~TypeDeclFlags.ref
+            tt.flags.ref = false
         }
         var mkt = new ExprTypeDecl(at = expr.at,
             typeexpr <- tt
@@ -81,7 +81,7 @@ class TemplateMacro : AstFunctionAnnotation {
         // new func
         var fclone = clone_function(ffunc)
         fclone.fromGeneric = ffunc
-        fclone.flags |= FunctionFlags.privateFunction
+        fclone.flags.privateFunction = true
         newcall.func = null
         var inscope hashes : array<uint64>
         hashes |> reserve(length(fclone.annotations[taidx].arguments))

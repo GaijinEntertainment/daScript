@@ -445,7 +445,7 @@ class NoAotMarker : AstVisitor {
     // type
     def override preVisitTypeDecl(typeDecl : TypeDeclPtr) {
         if (func != null && !typeDecl.canAot) {
-            func.flags |= FunctionFlags.noAot
+            func.flags.noAot = true
         }
     }
     // function
@@ -460,7 +460,7 @@ class NoAotMarker : AstVisitor {
     // any expression
     def override preVisitExpression(expr : ExpressionPtr) {
         if (func != null && expr._type != null && !expr._type.canAot) {
-            func.flags |= FunctionFlags.noAot
+            func.flags.noAot = true
         }
     }
     // looks like call
@@ -469,7 +469,7 @@ class NoAotMarker : AstVisitor {
             if (!empty(call.arguments) && call.arguments[0] is ExprMakeBlock) {
                 let mkb = call.arguments[0] as ExprMakeBlock;
                 var blk = mkb._block as ExprBlock;
-                blk.blockFlags |= ExprBlockFlags.aotSkipMakeBlock;
+                blk.blockFlags.aotSkipMakeBlock = true;
             }
         }
     }
@@ -492,7 +492,7 @@ class public PrologueMarker : AstVisitor {
         if (func != null && func.flags.hasMakeBlock) {
             let blk = expr._block as ExprBlock;
             if (!blk.blockFlags.aotSkipMakeBlock) {
-                func.flags |= FunctionFlags.aotNeedPrologue;
+                func.flags.aotNeedPrologue = true;
             }
         }
     }
@@ -1410,7 +1410,7 @@ class public CppAot : AstVisitor {
     }
     def override preVisitExprBlock(var blk : ExprBlock?) {
         push(scopes, blk);
-        blk.blockFlags |= ExprBlockFlags.finallyBeforeBody;
+        blk.blockFlags.finallyBeforeBody = true;
         write(*ss, "\{\n");
         tab ++;
         // pre-declare variables
@@ -1461,8 +1461,8 @@ class public CppAot : AstVisitor {
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
         tab --;
         write(*ss, "{tabs()}\}")
-        blk.blockFlags &= ~ExprBlockFlags.finallyBeforeBody
-        blk.blockFlags &= ~ExprBlockFlags.finallyDisabled
+        blk.blockFlags.finallyBeforeBody = false
+        blk.blockFlags.finallyDisabled = false
         scopes |> pop();
         return blk;
     }
@@ -1489,11 +1489,11 @@ class public CppAot : AstVisitor {
         if (variable.init != null && variable.init is ExprMakeBlock) {
             var mkb = variable.init as ExprMakeBlock;
             var blk = mkb._block as ExprBlock;
-            blk.blockFlags |= ExprBlockFlags.aotSkipMakeBlock;
+            blk.blockFlags.aotSkipMakeBlock = true;
             write(*ss, "auto {vname}_TempFunctor = ");
             visit_expression(variable.init, adapter);
             write(*ss, ";\n{tabs()}");
-            blk.blockFlags &= ~ExprBlockFlags.aotSkipMakeBlock;
+            blk.blockFlags.aotSkipMakeBlock = false;
             mkb.aotFunctorName := vname + "_TempFunctor";
         }
         if (!collector.isMoved(variable)) {
