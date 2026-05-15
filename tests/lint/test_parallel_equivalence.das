@@ -28,9 +28,11 @@ def run_argv(args : array<string>; var output : string&) : int {
 
 // Collect tests/lint/parallel_fixtures/_fixture_*.das. fio::dir filters
 // to keep ordering reproducible across filesystems (sorted alphabetical).
+// Paths are absolute (via get_das_root()) so they resolve regardless of
+// CWD — CI runs dastest from the build directory, not the project root.
 def collect_fixtures() : array<string> {
     var out : array<string>
-    let dir = "tests/lint/parallel_fixtures"
+    let dir = "{get_das_root()}/tests/lint/parallel_fixtures"
     fio::dir(dir) $(name) {
         return if (name == "." || name == "..")
         if (name |> ends_with(".das") && name |> starts_with("_fixture_")) {
@@ -43,7 +45,7 @@ def collect_fixtures() : array<string> {
 
 
 def lint_main_path() : string {
-    return "utils/lint/main.das"
+    return "{get_das_root()}/utils/lint/main.das"
 }
 
 
