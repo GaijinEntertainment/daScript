@@ -194,13 +194,16 @@
             return pathNameSize;
         }
         void * loadDynamicLibrary ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            // RTLD_GLOBAL so symbols from loaded .shared_module files
+            // (e.g. live_host_*) are visible to dlsym(RTLD_DEFAULT) in
+            // host executables like daslang-live.
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         void * getFunctionAddress ( void * lib, const char * name ) {
             return lib ? dlsym(lib, name) : nullptr;
         }
         void * getLibraryHandle ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         string getDynamicLibraryError ( void ) {
             const char * e = dlerror();
@@ -479,13 +482,14 @@
             return 0;
         }
         void * loadDynamicLibrary ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            // RTLD_GLOBAL — see Linux note above.
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         void * getFunctionAddress ( void * lib, const char * name ) {
             return lib ? dlsym(lib, name) : nullptr;
         }
         void * getLibraryHandle ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         string getDynamicLibraryError ( void ) {
             const char * e = dlerror();
@@ -529,13 +533,14 @@
             return snprintf(pathName, pathNameCapacity, "%s", executablePath);
         }
         void * loadDynamicLibrary ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            // RTLD_GLOBAL — see Linux note above.
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         void * getFunctionAddress ( void * lib, const char * name ) {
             return lib ? dlsym(lib, name) : nullptr;
         }
         void * getLibraryHandle ( const char * lib ) {
-            return dlopen(lib,RTLD_LAZY);
+            return dlopen(lib,RTLD_LAZY|RTLD_GLOBAL);
         }
         string getDynamicLibraryError ( void ) {
             const char * e = dlerror();
