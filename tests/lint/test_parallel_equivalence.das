@@ -47,8 +47,11 @@ def lint_main_path() : string {
 }
 
 
-def build_argv(workers : int; fixtures : array<string>) : array<string> {
-    var argv <- [das_exe(), lint_main_path(), "--", "-q", "--workers", "{workers}"]
+def build_argv(workers : int; fixtures : array<string>; quiet : bool = true) : array<string> {
+    var argv <- [das_exe(), lint_main_path(), "--", "--workers", "{workers}"]
+    if (quiet) {
+        argv |> push("-q")
+    }
     argv |> reserve(length(argv) + length(fixtures))
     for (f in fixtures) {
         argv |> push(f)
@@ -86,13 +89,16 @@ def test_below_threshold_stays_serial(t : T?) {
         for (i in range(min(4, length(all)))) {
             small |> push(all[i])
         }
-        let argv <- build_argv(8, small)
+        // quiet=false so the banner is emitted; that's what we assert on.
+        let argv <- build_argv(8, small, false)
         var output : string
         let rc = run_argv(argv, output)
         t |> equal(rc, 0, "expected clean PASS for 4 fixtures")
-        // Below threshold => no "across N worker(s)" banner.
+        // Serial banner = "Linting N file(s)...", parallel = "Linting N file(s) across M worker(s)...".
+        t |> success(find(output, "Linting") >= 0,
+            "expected serial banner, got:\n{output}")
         t |> success(find(output, "across") < 0,
-            "expected no parallel banner (below threshold), got:\n{output}")
+            "expected NO parallel banner (below threshold), got:\n{output}")
     }
 }
 
@@ -101,12 +107,13 @@ def test_below_threshold_stays_serial(t : T?) {
 def test_workers_one_explicit_is_serial(t : T?) {
     t |> run("--workers 1 explicit always serial regardless of file count") @(t : T?) {
         let fixtures <- collect_fixtures()
-        let argv <- build_argv(1, fixtures)
+        let argv <- build_argv(1, fixtures, false)
         var output : string
         let rc = run_argv(argv, output)
         t |> equal(rc, 0, "expected clean PASS")
-        // Serial mode uses "Linting N files...", not the parallel banner.
+        t |> success(find(output, "Linting") >= 0,
+            "expected serial banner, got:\n{output}")
         t |> success(find(output, "across") < 0,
-            "expected no parallel banner with --workers 1")
+            "expected NO parallel banner with --workers 1")
     }
 }

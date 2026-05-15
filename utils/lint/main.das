@@ -260,6 +260,12 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
     argvs |> reserve(n_chunks)
     for (k in range(n_chunks)) {
         let cp = "{tmpdir}/lint-paths-{tag}-{k}.txt"
+        // Push the path BEFORE attempting to write so the cleanup loop
+        // sweeps it even on a partial-write or future fopen-semantic
+        // change where fopen creates the file but `fw` becomes null
+        // before our write block runs. Extra remove() of a non-existent
+        // file is a no-op.
+        chunk_paths |> push(cp)
         var write_ok = false
         fopen(cp, "wb") $(fw) {
             if (fw == null) return
@@ -275,7 +281,6 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
             print("error: could not write chunk file {cp}\n")
             return <- results
         }
-        chunk_paths |> push(cp)
         var argv : array<string>
         argv |> reserve(12)
         argv |> push(exe)
