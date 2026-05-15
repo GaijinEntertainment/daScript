@@ -15,6 +15,7 @@ require cluster
 require report
 require exchange
 require pipeline
+require ../common/parallel_workers.das
 
 
 [CommandLineArgs]
@@ -170,56 +171,6 @@ def strict_drop_baseline_clusters(var clusters : array<Cluster>;
 }
 
 
-// Below this many input files, parallel export is a loss — each child
-// pays a daslang startup cost (a few hundred ms), so 16 files split 8
-// ways is slower than running sequentially in one process. Tune by
-// re-timing daslib (~80 files) and tests/language (~600 files) if the
-// startup cost shifts materially.
-let PARALLEL_THRESHOLD = 16
-
-
-def should_parallelize(n_files : int; workers_setting : int) : bool {
-    if (workers_setting == 1) return false
-    return n_files >= PARALLEL_THRESHOLD
-}
-
-
-def compute_worker_count(n_files : int; workers_setting : int) : int {
-    var w = workers_setting
-    if (w == 0) {
-        w = get_total_hw_threads()
-        if (w < 1) {
-            w = 1
-        }
-    }
-    if (w > n_files) {
-        w = n_files
-    }
-    if (w < 1) {
-        w = 1
-    }
-    return w
-}
-
-
-// One pre-built work item per chunk. argv is the full popen_argv
-// vector (including the daslang exe + main.das path) so workers don't
-// have to know anything about the parent's invocation.
-struct ShardInput {
-    index : int
-    chunk_path : string
-    shard_path : string
-    argv : array<string>
-}
-
-
-struct ShardResult {
-    index : int
-    exit_code : int
-    stdout : string
-}
-
-
 // Lay out chunk + shard temp paths next to the user's --export-functions
 // output. Avoids relying on $TMPDIR / %TEMP%, and the path the caller
 // supplied is by definition writable.
@@ -243,12 +194,12 @@ def run_parallel_export(files : array<string>; cfg : Config) {
     let chunks <- chunk_files(files, workers)
     let n_chunks = length(chunks)
 
-    var inputs : array<ShardInput>
-    inputs |> reserve(n_chunks)
     var chunk_paths : array<string>
     chunk_paths |> reserve(n_chunks)
     var shard_paths : array<string>
     shard_paths |> reserve(n_chunks)
+    var argvs : array<array<string>>
+    argvs |> reserve(n_chunks)
     for (k in range(n_chunks)) {
         let cp = shard_path_for(cfg.export_functions, tag, "chunk", k) + ".txt"
         let sp = shard_path_for(cfg.export_functions, tag, "shard", k) + ".json"
@@ -288,60 +239,12 @@ def run_parallel_export(files : array<string>; cfg : Config) {
         if (cfg.no_fuzzy) {
             argv |> push("--no-fuzzy")
         }
-        inputs |> emplace(ShardInput(
-            index = k,
-            chunk_path = cp,
-            shard_path = sp,
-            argv <- argv))
+        argvs |> emplace(argv)
     }
 
     to_log(LOG_INFO, "parallel export: {n_chunks} worker(s) over {total} file(s)\n")
 
-    var results : array<ShardResult>
-    results |> resize(n_chunks)
-    for (i in range(n_chunks)) {
-        results[i].index = i
-        results[i].exit_code = -1
-    }
-
-    with_channel(n_chunks) $(inCh) {
-        with_channel(n_chunks) $(outCh) {
-            with_job_status(n_chunks) $(done) {
-                for (_t in range(n_chunks)) {
-                    new_thread <| @ {
-                        for_each_clone(inCh) $(input : ShardInput#) {
-                            var output : string
-                            let exit_code = unsafe(popen_argv(input.argv, 0.0, $(f) {
-                                if (f != null) {
-                                    output := unsafe(fread_to_eof(f))
-                                }
-                            }))
-                            outCh |> push_clone(ShardResult(
-                                index = input.index,
-                                exit_code = exit_code,
-                                stdout = output))
-                            outCh |> notify()
-                        }
-                        inCh |> release()
-                        outCh |> release()
-                        done |> notify_and_release()
-                    }
-                }
-                for (inp in inputs) {
-                    inCh |> push_clone(inp)
-                    inCh |> notify()
-                }
-                for (r in each_clone(outCh, type<ShardResult>)) {
-                    if (r.index >= 0 && r.index < length(results)) {
-                        results[r.index].index = r.index
-                        results[r.index].exit_code = r.exit_code
-                        results[r.index].stdout := r.stdout
-                    }
-                }
-                done |> join()
-            }
-        }
-    }
+    let results <- run_chunk_workers(argvs)
 
     var any_failed = false
     for (k in range(n_chunks)) {

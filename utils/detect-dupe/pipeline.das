@@ -59,39 +59,6 @@ def public read_path_lines_from_file(path : string; var paths : array<string>;
 }
 
 
-// Split a flat file list into N contiguous chunks for parallel export.
-// Contiguous (not round-robin) so each worker's shard preserves
-// file:line ordering, and so the merged envelope is byte-identical to
-// the sequential one. `n_chunks` is clamped to `[1, length(files)]`.
-// Empty trailing chunks are NOT emitted: when `length(files) <
-// n_chunks` the result has exactly `length(files)` chunks.
-def public chunk_files(files : array<string>; n_chunks : int) : array<array<string>> {
-    var out : array<array<string>>
-    let total = length(files)
-    if (total == 0) return <- out
-    var n = n_chunks
-    if (n < 1) {
-        n = 1
-    }
-    if (n > total) {
-        n = total
-    }
-    let per_chunk = (total + n - 1) / n
-    for (k in range(n)) {
-        let start_idx = k * per_chunk
-        if (start_idx >= total) break
-        let end_excl = min((k + 1) * per_chunk, total)
-        var chunk : array<string>
-        chunk |> reserve(end_excl - start_idx)
-        for (j in range(start_idx, end_excl)) {
-            chunk |> push(files[j])
-        }
-        out |> emplace(chunk)
-    }
-    return <- out
-}
-
-
 // `daslib/debugger.das` and `daslib/profiler.das` install thread-local
 // agents at compile time; the second install in the same process throws
 // and aborts the scan. Match by daslib/ path suffix, not bare basename

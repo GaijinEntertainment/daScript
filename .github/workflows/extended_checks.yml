@@ -248,13 +248,14 @@ jobs:
         set -eux
         $BIN/daslang utils/daspkg/main.das -- install dasImgui --branch master
 
-    - name: "Run self-binder (bind_imgui.das)"
-      if: matrix.target == 'linux'
-      run: |
-        set -eux
-        $BIN/daslang modules/dasImgui/bind/bind_imgui.das
-        cd modules/dasImgui && git diff --exit-code -- src/ \
-          || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
+    # Disabled — dasImgui will land its own self-binder freshness check inside its own repo's CI.
+    # - name: "Run self-binder (bind_imgui.das)"
+    #   if: matrix.target == 'linux'
+    #   run: |
+    #     set -eux
+    #     $BIN/daslang modules/dasImgui/bind/bind_imgui.das
+    #     cd modules/dasImgui && git diff --exit-code -- src/ \
+    #       || (echo "ERROR: dasImgui generated files are out of date. Run './bin/daslang modules/dasImgui/bind/bind_imgui.das' locally and commit the result." && exit 1)
 
     - name: "Coverage"
       if: matrix.target == 'linux'
