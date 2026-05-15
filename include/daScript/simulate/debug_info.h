@@ -116,17 +116,24 @@ namespace das
 
     struct DAS_API FileInfo {
     public:
-        virtual void freeSourceData() { }
+        virtual void freeSourceData() { lineOffsets.clear(); lineIndexBuilt = false; }
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) { src=nullptr; len=0; }
         virtual void serialize ( AstSerializer & ser );
+        // Lazy byte-offset index of line starts. lineOffsets[i] = start of line i+1.
+        // Built on first getLine call via getSourceAndLength. O(N) one-time, O(1) per query.
+        void buildLineIndex();
+        bool getLine ( uint32_t line, const char * & begin, uint32_t & len );
         string                name;
         int32_t               tabSize = 4;
 #if DAS_ENABLE_PROFILER
     public:
         vector<uint64_t>      profileData;
 #endif
+    protected:
+        vector<uint32_t>      lineOffsets;
+        bool                  lineIndexBuilt = false;
     };
     typedef unique_ptr<FileInfo> FileInfoPtr;
 

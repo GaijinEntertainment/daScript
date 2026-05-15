@@ -981,26 +981,13 @@ namespace das {
     }
 
     void get_file_source_line(FileInfo * info, uint32_t line, const TBlock<void,TTemporary<const char *>> & blk, Context * context, LineInfoArg * at) {
-        if ( !info || line == 0 ) return;
-        const char * src = nullptr;
+        if ( !info ) return;
+        const char * begin = nullptr;
         uint32_t len = 0;
-        info->getSourceAndLength(src, len);
-        if ( !src || len == 0 ) return;
-        uint32_t curLine = 1;
-        const char * lineStart = src;
-        const char * srcEnd = src + len;
-        while ( lineStart < srcEnd && curLine < line ) {
-            if ( *lineStart == '\n' ) curLine++;
-            lineStart++;
-        }
-        if ( curLine != line ) return;
-        const char * lineEnd = lineStart;
-        while ( lineEnd < srcEnd && *lineEnd != '\n' && *lineEnd != '\r' ) lineEnd++;
-        // make a temporary null-terminated copy on the stack
-        uint32_t lineLen = uint32_t(lineEnd - lineStart);
-        char * tmp = (char *)alloca(lineLen + 1);
-        memcpy(tmp, lineStart, lineLen);
-        tmp[lineLen] = 0;
+        if ( !info->getLine(line, begin, len) ) return;
+        char * tmp = (char *)alloca(len + 1);
+        memcpy(tmp, begin, len);
+        tmp[len] = 0;
         vec4f args[1];
         args[0] = cast<const char *>::from(tmp);
         context->invoke(blk, args, nullptr, at);

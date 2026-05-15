@@ -5,6 +5,7 @@ options remove_unused_symbols = false
 module rtti shared public
 
 require rtti_core public
+require strings
 
 typedef FileAccessPtr = smart_ptr<FileAccess>
 
@@ -191,4 +192,21 @@ def RttiValue_nothing {
         set_variant_index(t, typeinfo variant_index<nothing>(t))
     }
     return t
+}
+
+//! Returns true when the source line at `at` carries a `// nolint:CODE` (or
+//! `// nolint:CODE1,CODE2,...`) directive listing `code`. Null-safe wrapper
+//! around the C-side scanner; returns false if `at.fileInfo == null` or
+//! `at.line == 0`. Canonical entry point for lint visitors.
+def public is_lint_suppressed(at : LineInfo; code : string) : bool {
+    return false if (at.fileInfo == null || at.line == 0u)
+    return rtti_is_nolint_suppressed(at.fileInfo, at.line, code)
+}
+
+//! Extracts the leading code from a lint message such as "LINT001: foo bar"
+//! (returns "LINT001"). Returns empty string if no colon is present.
+def public extract_lint_code(text : string) : string {
+    let colon = find(text, ":")
+    return "" if (colon < 0)
+    return slice(text, 0, colon)
 }

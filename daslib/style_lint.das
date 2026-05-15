@@ -48,7 +48,7 @@ class StyleLintVisitor : AstVisitor {
     collect_warnings : bool = false
     warnings : array<string>
     // dedup: suppress duplicate warnings from generic instantiations
-    reported_locations : array<uint64>
+    reported_locations : table<uint64>
     // current function (for inferStack reporting)
     @do_not_delete current_function : Function?
     // STYLE011: track uninitialized variables from most recent ExprLet
@@ -63,26 +63,15 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def is_suppressed(text : string; at : LineInfo) : bool {
-        if (at.fileInfo == null || at.line == 0u) return false
-        let colon = find(text, ":")
-        if (colon < 0) return false
-        let code = slice(text, 0, colon)
-        var found = false
-        get_file_source_line(at.fileInfo, at.line) $(line) {
-            let nolint_pos = find(line, "nolint")
-            if (nolint_pos >= 0) {
-                found = find(line, code, nolint_pos) >= 0
-            }
-        }
-        return found
+        return is_lint_suppressed(at, extract_lint_code(text))
     }
 
     def style_warning(text : string; at : LineInfo) : void {
         // Suppress warnings for macro-generated functions — the user didn't write that code.
         if (current_function != null && current_function.flags.generated) return
         let key = self->location_key(at)
-        if (reported_locations |> has_value(key)) return
-        reported_locations |> push(key)
+        if (key_exists(reported_locations, key)) return
+        reported_locations |> insert(key)
         if (self->is_suppressed(text, at)) return
         warning_count++
         var msg = text
