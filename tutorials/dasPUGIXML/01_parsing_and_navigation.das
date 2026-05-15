@@ -90,7 +90,7 @@ def iterating() {
     let xml_str = "<config><setting name=\"width\" value=\"1920\"/><setting name=\"height\" value=\"1080\"/><setting name=\"fullscreen\" value=\"true\"/></config>"
 
     parse_xml(xml_str) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // Block-based — for_each_child with a callback
@@ -136,7 +136,7 @@ def iterating() {
     // Named child iteration — both styles
     let xml2 = "<root><a>1</a><b>2</b><a>3</a><b>4</b></root>"
     parse_xml(xml2) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         print("Only <a> (for_each_child):\n")
@@ -172,7 +172,7 @@ def quick_accessors() {
     let xml_str = "<item id=\"42\" price=\"9.99\" active=\"true\"><name>Widget</name><desc>A useful widget</desc></item>"
 
     parse_xml(xml_str) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // node_text — get child element text by name
@@ -227,7 +227,7 @@ def typed_access() {
     let xml_str = "<point x=\"10\" y=\"20\" label=\"origin\" visible=\"true\"/>"
 
     parse_xml(xml_str) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // operator [] returns xml_attribute
@@ -258,7 +258,7 @@ def typed_access() {
     // Text content is/as
     let xml2 = "<values><count>42</count><ratio>3.14</ratio><flag>true</flag></values>"
     parse_xml(xml2) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         let count_node = child(root, "count")

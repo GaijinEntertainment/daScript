@@ -117,7 +117,7 @@ apply() — pre-inference validation
                errors := "cannot memoize a void function — there is nothing to cache"
                return false
            }
-           if (length(func.arguments) == 0) {
+           if (empty(func.arguments)) {
                errors := "cannot memoize a function with no arguments — there is nothing to hash"
                return false
            }
@@ -142,9 +142,7 @@ The "already processed" guard
                       var errors : das_string; var astChanged : bool&) : bool {
 
        // Guard: already processed?
-       if (find_arg(args, "patched") is tBool) {
-           return true
-       }
+       if (find_arg(args, "patched") is tBool) return true
 
 Because ``patch()`` sets ``astChanged = true``, inference restarts and
 ``patch()`` is called again.  Without this guard, the macro would
@@ -199,8 +197,8 @@ Step 2 — create the cache variable
 .. code-block:: das
 
        var retType = clone_type(fn.result)
-       retType.flags &= ~TypeDeclFlags.constant
-       retType.flags &= ~TypeDeclFlags.ref
+       retType.flags.constant = false
+       retType.flags.ref = false
        var wrapperRetType = clone_type(retType)
 
        var keyType = new TypeDecl(baseType = Type.tUInt64, at = fn.at)

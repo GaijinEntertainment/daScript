@@ -77,9 +77,7 @@ def main {
 
     print("break at 3: ")
     for (i in 0..10) {
-        if (i == 3) {
-            break
-        }
+        if (i == 3) break
         print("{i} ")
     }
     print("\n")
@@ -89,9 +87,7 @@ def main {
 
     print("skip odds: ")
     for (i in 0..8) {
-        if (i % 2 != 0) {
-            continue
-        }
+        if (i % 2 != 0) continue
         print("{i} ")
     }
     print("\n")

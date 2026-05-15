@@ -34,8 +34,7 @@ def public read_path_lines(f : FILE const?; var paths : array<string>) {
     if (f == null) return
     while (!feof(f)) {
         let line = fgets(f) |> strip
-        if (empty(line)) continue
-        if (line |> starts_with("#")) continue
+        if (empty(line) || line |> starts_with("#")) continue
         paths |> push(line)
     }
 }
@@ -153,8 +152,7 @@ def public scan_das_files(path : string; var files : array<string>; var cache : 
     }
     if (!st.is_dir) return
     fio::dir(path) $(name) {
-        if (name == "." || name == "..") return
-        if (name |> starts_with("_") || is_skip_dir(name)) return
+        if (name == "." || name == ".." || name |> starts_with("_") || is_skip_dir(name)) return
         let full = path_join(path, name)
         let fst = stat(full)
         if (!fst.is_valid) return

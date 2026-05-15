@@ -310,14 +310,14 @@ struct BasicState {
 }
 
 def find_line(state : BasicState; target : int) : int {
-    let idx = lower_bound(state.program, target) <| $(a : Line; b : int) {
+    let idx = lower_bound(state.program, target) $(a : Line; b : int) {
         return a.number < b
     }
     return idx < length(state.program) && state.program[idx].number == target ? idx : -1
 }
 
 def store_line(var state : BasicState; var line : Line) {
-    let idx = lower_bound(state.program, line.number) <| $(a : Line; b : int) {
+    let idx = lower_bound(state.program, line.number) $(a : Line; b : int) {
         return a.number < b
     }
     if (idx < length(state.program) && state.program[idx].number == line.number) {
@@ -380,7 +380,7 @@ def exec_stmt(var state : BasicState; stmt : Stmt; var pc : int&) : bool {
         }
         return true
     } elif (stmt is return_stmt) {
-        if (length(state.gosub_stack) == 0) {
+        if (empty(state.gosub_stack)) {
             print("?RETURN WITHOUT GOSUB ERROR\n")
             state.running = false
         } else {
@@ -396,7 +396,7 @@ def exec_stmt(var state : BasicState; stmt : Stmt; var pc : int&) : bool {
         state.for_stack |> push(ForState(var_name = f._0, limit = limit, step = step, return_pc = pc))
     } elif (stmt is next_stmt) {
         let name = stmt as next_stmt
-        if (length(state.for_stack) == 0) {
+        if (empty(state.for_stack)) {
             print("?NEXT WITHOUT FOR ERROR\n")
             state.running = false
             return false
@@ -425,9 +425,7 @@ def run_program(var state : BasicState) {
     while (state.running && pc < length(state.program)) {
         let stmt = state.program[pc].stmt
         pc++
-        if (exec_stmt(state, stmt, pc)) {
-            continue
-        }
+        if (exec_stmt(state, stmt, pc)) continue
     }
 }
 

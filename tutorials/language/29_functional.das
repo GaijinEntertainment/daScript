@@ -159,9 +159,7 @@ def main {
     for (v in powers) {
         print("  {v}")
         cnt ++
-        if (cnt >= 6) {
-            break
-        }
+        if (cnt >= 6) break
     }
     print("\n") // 1 2 4 8 16 32
 
@@ -181,9 +179,7 @@ def main {
     for (v in cyc) {
         print("  {v}")
         cnt ++
-        if (cnt >= 9) {
-            break
-        }
+        if (cnt >= 9) break
     }
     print("\n") // 1 2 3 1 2 3 1 2 3
 

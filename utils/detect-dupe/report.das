@@ -2,6 +2,7 @@ options gen2
 options rtti
 
 require strings
+require math
 require daslib/strings_boost
 require daslib/json_boost
 require daslib/fio
@@ -83,12 +84,12 @@ struct public PerCandidateReport {
 
 
 def make_match(m : MemberRef; similarity : float) : CandidateMatch {
-    var cm = CandidateMatch()
-    cm.name := m.name
-    cm.file := m.file
-    cm.line = m.line
-    cm.is_lambda = m.is_lambda
-    cm.similarity = similarity
+    var cm = CandidateMatch(
+        name = m.name,
+        file = m.file,
+        line = m.line,
+        is_lambda = m.is_lambda,
+        similarity = similarity)
     return <- cm
 }
 
@@ -111,11 +112,11 @@ def public build_per_candidate_report(report : Report;
     var rollups : array<CandidateRollup>
     rollups |> reserve(length(candidate_refs))
     for (cref in candidate_refs) {
-        var r = CandidateRollup()
-        r.name := cref.name
-        r.file := cref.file
-        r.line = cref.line
-        r.is_lambda = cref.is_lambda
+        var r = CandidateRollup(
+            name = cref.name,
+            file = cref.file,
+            line = cref.line,
+            is_lambda = cref.is_lambda)
         rollups |> emplace(r)
     }
     // Exact siblings: walk every cluster the candidate belongs to,
@@ -216,7 +217,7 @@ def public print_summary(report : Report; top : int) {
     to_log(LOG_INFO, "exact clusters    : {length(report.exact_clusters)}\n")
     to_log(LOG_INFO, "fuzzy pairs       : {length(report.fuzzy_pairs)}  (threshold {report.summary.threshold})\n")
     to_log(LOG_INFO, "min tokens        : {report.summary.min_tokens}\n")
-    let n_ex = top < length(report.exact_clusters) ? top : length(report.exact_clusters)
+    let n_ex = min(top, length(report.exact_clusters))
     if (n_ex > 0) {
         to_log(LOG_INFO, "\n--- top {n_ex} exact-clone clusters ---\n")
         for (i in range(n_ex)) {
@@ -229,7 +230,7 @@ def public print_summary(report : Report; top : int) {
             }
         }
     }
-    let n_fz = top < length(report.fuzzy_pairs) ? top : length(report.fuzzy_pairs)
+    let n_fz = min(top, length(report.fuzzy_pairs))
     if (n_fz > 0) {
         to_log(LOG_INFO, "\n--- top {n_fz} fuzzy pairs ---\n")
         for (i in range(n_fz)) {

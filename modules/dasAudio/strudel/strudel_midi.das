@@ -70,9 +70,7 @@ struct MidiFile {
 
 def read_byte(data : array<uint8>; var cursor : int&) : int {
     //! Read a single byte from data at cursor, advancing cursor. Returns -1 on EOF.
-    if (cursor >= length(data)) {
-        return -1
-    }
+    if (cursor >= length(data)) return -1
     let b = int(data[cursor])
     cursor ++
     return b
@@ -82,9 +80,7 @@ def read_u16(data : array<uint8>; var cursor : int&) : int {
     //! Read a big-endian 16-bit unsigned integer. Returns -1 on EOF.
     let hi = read_byte(data, cursor)
     let lo = read_byte(data, cursor)
-    if (hi < 0 || lo < 0) {
-        return -1
-    }
+    if (hi < 0 || lo < 0) return -1
     return (hi << 8) | lo
 }
 
@@ -94,9 +90,7 @@ def read_u32(data : array<uint8>; var cursor : int&) : int {
     let b1 = read_byte(data, cursor)
     let b2 = read_byte(data, cursor)
     let b3 = read_byte(data, cursor)
-    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) {
-        return -1
-    }
+    if (b0 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return -1
     return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
 }
 
@@ -107,13 +101,9 @@ def read_vlq(data : array<uint8>; var cursor : int&) : int {
     var result = 0
     for (_ in range(4)) {
         let b = read_byte(data, cursor)
-        if (b < 0) {
-            return -1
-        }
+        if (b < 0) return -1
         result = (result << 7) | (b & int(0x7F))
-        if ((b & int(0x80)) == 0) {
-            return result
-        }
+        if ((b & int(0x80)) == 0) return result
     }
     return result
 }
@@ -124,34 +114,24 @@ def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack
     //! Parse a single MTrk chunk starting at cursor, returning the track with all events.
     var track : MidiTrack
     // expect "MTrk"
-    if (cursor + 4 > length(data)) {
-        return <- track
-    }
+    if (cursor + 4 > length(data)) return <- track
     let m = int(data[cursor])
     let t = int(data[cursor + 1])
     let r = int(data[cursor + 2])
     let kk = int(data[cursor + 3])
     cursor += 4
-    if (m != 'M' || t != 'T' || r != 'r' || kk != 'k') {
-        return <- track
-    }
+    if (m != 'M' || t != 'T' || r != 'r' || kk != 'k') return <- track
     let trackLen = read_u32(data, cursor)
-    if (trackLen < 0) {
-        return <- track
-    }
+    if (trackLen < 0) return <- track
     let trackEnd = cursor + trackLen
     var absTick = 0
     var runningStatus = 0
     while (cursor < trackEnd && cursor < length(data)) {
         let delta = read_vlq(data, cursor)
-        if (delta < 0) {
-            break
-        }
+        if (delta < 0) break
         absTick += delta
         let firstByte = read_byte(data, cursor)
-        if (firstByte < 0) {
-            break
-        }
+        if (firstByte < 0) break
         var status = firstByte
         if (status < int(0x80)) {
             // running status — reuse previous status byte
@@ -284,19 +264,13 @@ def private parse_midi_track(data : array<uint8>; var cursor : int&) : MidiTrack
 def parse_midi(data : array<uint8>) : MidiFile {
     //! Parse MIDI data from a byte array into a MidiFile structure.
     var result : MidiFile
-    if (length(data) < 14) {
-        return <- result
-    }
+    if (length(data) < 14) return <- result
     var cursor = 0
     // "MThd"
-    if (int(data[0]) != 'M' || int(data[1]) != 'T' || int(data[2]) != 'h' || int(data[3]) != 'd') {
-        return <- result
-    }
+    if (int(data[0]) != 'M' || int(data[1]) != 'T' || int(data[2]) != 'h' || int(data[3]) != 'd') return <- result
     cursor = 4
     let headerLen = read_u32(data, cursor)
-    if (headerLen < 6) {
-        return <- result
-    }
+    if (headerLen < 6) return <- result
     result.format = read_u16(data, cursor)
     let nTracks = read_u16(data, cursor)
     result.ticks_per_qn = read_u16(data, cursor)
@@ -304,9 +278,7 @@ def parse_midi(data : array<uint8>) : MidiFile {
         cursor += headerLen - 6
     }
     for (_ in range(nTracks)) {
-        if (cursor >= length(data)) {
-            break
-        }
+        if (cursor >= length(data)) break
         var trk <- parse_midi_track(data, cursor)
         result.tracks |> emplace <| trk
     }
@@ -351,9 +323,7 @@ def merge_tracks(midi : MidiFile) : array<MidiEvent> {
         }
     }
     sort(merged) $(a, b) {
-        if (a.tick != b.tick) {
-            return a.tick < b.tick
-        }
+        if (a.tick != b.tick) return a.tick < b.tick
         return a.seq < b.seq
     }
     return <- merged

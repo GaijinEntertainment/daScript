@@ -32,7 +32,7 @@ def acquire_resource(n : string; i : int) : Resource {
 
 // === Function returning a non-copyable type ===
 def make_data() : array<int> {
-    var result : array<int>
+    var result : array<int>  // nolint:STYLE012 — tutorial demonstrates push semantics
     result |> push(10)
     result |> push(20)
     result |> push(30)
@@ -103,7 +103,7 @@ def main {
     // 'finally' on a loop body runs at the end of every iteration.
     var counter = 0
     for (_i in range(3)) {
-        counter += 1
+        counter++
     } finally {
         print("  iter done, counter={counter}\n")
     }

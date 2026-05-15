@@ -129,9 +129,7 @@ def main {
 // A helper that iterates until the block returns true
 def find_first(arr : array<string>; predicate : block<(s : string) : bool>) {
     for (s in arr) {
-        if (predicate(s)) {
-            return
-        }
+        if (predicate(s)) return
     }
 }
 

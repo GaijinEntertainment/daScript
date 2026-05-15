@@ -25,15 +25,9 @@ require daslib/fio
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
     var st : FStat
-    if (stat("{dir}/FluidR3_GM.sf2", st)) {
-        return "{dir}/FluidR3_GM.sf2"
-    }
-    if (stat("{dir}/GeneralUser GS v1.471.sf2", st)) {
-        return "{dir}/GeneralUser GS v1.471.sf2"
-    }
-    if (stat("{dir}/Musyng Kite.sf2", st)) {
-        return "{dir}/Musyng Kite.sf2"
-    }
+    if (stat("{dir}/FluidR3_GM.sf2", st)) return "{dir}/FluidR3_GM.sf2"
+    if (stat("{dir}/GeneralUser GS v1.471.sf2", st)) return "{dir}/GeneralUser GS v1.471.sf2"
+    if (stat("{dir}/Musyng Kite.sf2", st)) return "{dir}/Musyng Kite.sf2"
     return ""
 }
 

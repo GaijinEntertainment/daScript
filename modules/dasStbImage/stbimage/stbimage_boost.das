@@ -24,9 +24,7 @@ def private get_pixel_layout(ch : int) : stbir_pixel_layout {
         return stbir_pixel_layout.STBIR_RGBA
     } elif (ch == 3) {
         return stbir_pixel_layout.STBIR_RGB
-    } elif (ch == 2) {
-        return stbir_pixel_layout.STBIR_2CHANNEL
-    }
+    } elif (ch == 2) return stbir_pixel_layout.STBIR_2CHANNEL
     return stbir_pixel_layout.STBIR_1CHANNEL
 }
 
@@ -46,9 +44,7 @@ def private adopt_pixels(var self : Image; pixels : void?; w, h, ch, bytes_per_c
 def private load_from_memory_impl(var self : Image; data : void?; data_length, requested_channels : int) : tuple<bool; string> {
     var w, h, comp : int
     var pixels = stbi_load_from_memory(unsafe(reinterpret<uint8 const?>(data)), data_length, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-    if (pixels == null) {
-        return (false, stbi_failure_reason())
-    }
+    if (pixels == null) return (false, stbi_failure_reason())
     let ch = requested_channels != 0 ? requested_channels : comp
     adopt_pixels(self, pixels, w, h, ch, 1)
     return (true, "")
@@ -57,9 +53,7 @@ def private load_from_memory_impl(var self : Image; data : void?; data_length, r
 def private load_hdr_from_memory_impl(var self : Image; data : void?; data_length, requested_channels : int) : tuple<bool; string> {
     var w, h, comp : int
     var pixels = stbi_loadf_from_memory(unsafe(reinterpret<uint8 const?>(data)), data_length, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-    if (pixels == null) {
-        return (false, stbi_failure_reason())
-    }
+    if (pixels == null) return (false, stbi_failure_reason())
     let ch = requested_channels != 0 ? requested_channels : comp
     adopt_pixels(self, pixels, w, h, ch, 4)
     return (true, "")
@@ -68,9 +62,7 @@ def private load_hdr_from_memory_impl(var self : Image; data : void?; data_lengt
 def private load_16_from_memory_impl(var self : Image; data : void?; data_length, requested_channels : int) : tuple<bool; string> {
     var w, h, comp : int
     var pixels = stbi_load_16_from_memory(unsafe(reinterpret<uint8 const?>(data)), data_length, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-    if (pixels == null) {
-        return (false, stbi_failure_reason())
-    }
+    if (pixels == null) return (false, stbi_failure_reason())
     let ch = requested_channels != 0 ? requested_channels : comp
     adopt_pixels(self, pixels, w, h, ch, 2)
     return (true, "")
@@ -91,7 +83,7 @@ struct public Image {
     [class_method]
     def static const valid() : bool {
         //! Returns true if the image has been loaded successfully.
-        return width > 0 && height > 0 && length(bytes) > 0
+        return width > 0 && height > 0 && !empty(bytes)
     }
 
     [class_method]
@@ -131,9 +123,7 @@ struct public Image {
         //! Load an 8-bit image from file. Sets ``bpc = 1``.
         var w, h, comp : int
         var pixels = stbi_load(path, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-        if (pixels == null) {
-            return (false, stbi_failure_reason())
-        }
+        if (pixels == null) return (false, stbi_failure_reason())
         let ch = requested_channels != 0 ? requested_channels : comp
         adopt_pixels(self, pixels, w, h, ch, 1)
         return (true, "")
@@ -144,9 +134,7 @@ struct public Image {
         //! Load an image as float (HDR) data from file. Sets ``bpc = 4``.
         var w, h, comp : int
         var pixels = stbi_loadf(path, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-        if (pixels == null) {
-            return (false, stbi_failure_reason())
-        }
+        if (pixels == null) return (false, stbi_failure_reason())
         let ch = requested_channels != 0 ? requested_channels : comp
         adopt_pixels(self, pixels, w, h, ch, 4)
         return (true, "")
@@ -157,9 +145,7 @@ struct public Image {
         //! Load an image as 16-bit data from file. Sets ``bpc = 2``.
         var w, h, comp : int
         var pixels = stbi_load_16(path, safe_addr(w), safe_addr(h), safe_addr(comp), requested_channels)
-        if (pixels == null) {
-            return (false, stbi_failure_reason())
-        }
+        if (pixels == null) return (false, stbi_failure_reason())
         let ch = requested_channels != 0 ? requested_channels : comp
         adopt_pixels(self, pixels, w, h, ch, 2)
         return (true, "")
@@ -209,9 +195,7 @@ struct public Image {
     def static const save(path : string; quality : int = 0) : tuple<bool; string> {
         //! Save image to file. Format detected from extension (.png, .bmp, .tga, .jpg/.jpeg, .hdr).
         //! ``quality`` only affects JPEG (0 = default 90).
-        if (!self |> valid()) {
-            return (false, "image is not valid")
-        }
+        if (!self |> valid()) return (false, "image is not valid")
         let ext = to_lower(extension(path))
         var ok = 0
         if (ext == ".png") {
@@ -229,9 +213,7 @@ struct public Image {
         } else {
             return (false, "unsupported format: {ext}")
         }
-        if (ok == 0) {
-            return (false, "write failed")
-        }
+        if (ok == 0) return (false, "write failed")
         return (true, "")
     }
 
@@ -240,9 +222,7 @@ struct public Image {
     [class_method]
     def static const encode(format : string; var out_data : array<uint8>; quality : int = 0) : tuple<bool; string> {
         //! Encode image to memory in the specified format ("png", "bmp", "tga", "jpg").
-        if (!self |> valid()) {
-            return (false, "image is not valid")
-        }
+        if (!self |> valid()) return (false, "image is not valid")
         let fmt = to_lower(format)
         var encoded = false
         if (fmt == "png") {
@@ -269,9 +249,7 @@ struct public Image {
         } else {
             return (false, "unsupported format: {fmt}")
         }
-        if (!encoded) {
-            return (false, "encode failed")
-        }
+        if (!encoded) return (false, "encode failed")
         return (true, "")
     }
 
@@ -365,9 +343,7 @@ struct public Image {
         let y1 = clamp(cy + ch, 0, int(height))
         let rw = x1 - x0
         let rh = y1 - y0
-        if (rw <= 0 || rh <= 0) {
-            return <- Image()
-        }
+        if (rw <= 0 || rh <= 0) return <- Image()
         var result = Image(width = int(rw), height = int(rh), channels = channels, bpc = bpc)
         let px_bytes = channels * bpc
         let src_stride = width * px_bytes
@@ -393,9 +369,7 @@ struct public Image {
         let y0 = max(dst_y, 0)
         let x1 = min(dst_x + src.width, int(width))
         let y1 = min(dst_y + src.height, int(height))
-        if (x0 >= x1 || y0 >= y1) {
-            return
-        }
+        if (x0 >= x1 || y0 >= y1) return
         let cw = x1 - x0
         let rh = y1 - y0
         let sx0 = x0 - dst_x
@@ -434,9 +408,7 @@ struct public Image {
         let cy0 = max(y, 0)
         let cx1 = min(x + w, int(width))
         let cy1 = min(y + h, int(height))
-        if (cx0 >= cx1 || cy0 >= cy1) {
-            return
-        }
+        if (cx0 >= cx1 || cy0 >= cy1) return
         unsafe {
             rast_fill_rect_4(reinterpret<uint?>(addr(bytes[0])), int(width), cx0, cy0, cx1 - cx0, cy1 - cy0, color)
         }
@@ -450,9 +422,7 @@ struct public Image {
         let cy0 = max(y, 0)
         let cx1 = min(x + w, int(width))
         let cy1 = min(y + h, int(height))
-        if (cx0 >= cx1 || cy0 >= cy1) {
-            return
-        }
+        if (cx0 >= cx1 || cy0 >= cy1) return
         unsafe {
             rast_fill_rect_1(addr(bytes[0]), int(width), cx0, cy0, cx1 - cx0, cy1 - cy0, val)
         }
@@ -475,9 +445,7 @@ struct public Image {
         if (cdy < 0) { csy -= cdy; ch += cdy; cdy = 0; }
         if (cdx + cw > int(width)) { cw = int(width) - cdx; }
         if (cdy + ch > int(height)) { ch = int(height) - cdy; }
-        if (cw <= 0 || ch <= 0) {
-            return
-        }
+        if (cw <= 0 || ch <= 0) return
         unsafe {
             rast_blit_alpha(addr(bytes[0]), addr(src.bytes[0]),
                 int(width), int(src.width),
@@ -491,9 +459,7 @@ struct public Image {
         //! Convert image to a different number of channels. Returns a new Image.
         //! Grey conversion uses ITU-R BT.601 luminance (0.299R + 0.587G + 0.114B).
         //! Added alpha is set to max (255 / 65535 / 1.0).
-        if (target_channels == channels) {
-            return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
-        }
+        if (target_channels == channels) return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
         var result = Image(width = width, height = height, channels = target_channels, bpc = bpc)
         let num_pixels = width * height
         result.bytes |> resize(num_pixels * target_channels * bpc)
@@ -514,9 +480,7 @@ struct public Image {
         //! Convert image to a different bytes-per-component. Returns a new Image.
         //! Conversion is linear (no gamma correction).
         //! uint8 range [0,255], uint16 range [0,65535], float range [0.0,1.0].
-        if (target_bpc == bpc) {
-            return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
-        }
+        if (target_bpc == bpc) return <- Image(width = width, height = height, channels = channels, bpc = bpc, bytes <- clone(bytes))
         var result = Image(width = width, height = height, channels = channels, bpc = target_bpc)
         let count = width * height * channels
         result.bytes |> resize(count * target_bpc)

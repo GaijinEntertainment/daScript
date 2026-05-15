@@ -58,26 +58,27 @@ def main() {
         return
     }
 
-    var cases : array<TestCase>
-    // Piano
-    cases |> push(TestCase(preset = 0, bank = 0, name = "piano", key = 36, velocity = 127, duration = 2.0))
-    cases |> push(TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 127, duration = 2.0))
-    cases |> push(TestCase(preset = 0, bank = 0, name = "piano", key = 84, velocity = 127, duration = 2.0))
-    cases |> push(TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 96, duration = 2.0))
-    cases |> push(TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 32, duration = 2.0))
-    // Guitar
-    cases |> push(TestCase(preset = 25, bank = 0, name = "guitar", key = 64, velocity = 127, duration = 2.0))
-    cases |> push(TestCase(preset = 25, bank = 0, name = "guitar", key = 52, velocity = 64, duration = 2.0))
-    // Cello
-    cases |> push(TestCase(preset = 42, bank = 0, name = "cello", key = 48, velocity = 127, duration = 2.0))
-    // Trumpet
-    cases |> push(TestCase(preset = 56, bank = 0, name = "trumpet", key = 60, velocity = 127, duration = 2.0))
-    // Flute
-    cases |> push(TestCase(preset = 73, bank = 0, name = "flute", key = 72, velocity = 127, duration = 2.0))
-    // Drums
-    cases |> push(TestCase(preset = 128, bank = 128, name = "drums", key = 36, velocity = 127, duration = 1.0))
-    cases |> push(TestCase(preset = 128, bank = 128, name = "drums", key = 38, velocity = 127, duration = 1.0))
-    cases |> push(TestCase(preset = 128, bank = 128, name = "drums", key = 42, velocity = 127, duration = 1.0))
+    var cases <- [
+        // Piano
+        TestCase(preset = 0, bank = 0, name = "piano", key = 36, velocity = 127, duration = 2.0),
+        TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 127, duration = 2.0),
+        TestCase(preset = 0, bank = 0, name = "piano", key = 84, velocity = 127, duration = 2.0),
+        TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 96, duration = 2.0),
+        TestCase(preset = 0, bank = 0, name = "piano", key = 60, velocity = 32, duration = 2.0),
+        // Guitar
+        TestCase(preset = 25, bank = 0, name = "guitar", key = 64, velocity = 127, duration = 2.0),
+        TestCase(preset = 25, bank = 0, name = "guitar", key = 52, velocity = 64, duration = 2.0),
+        // Cello
+        TestCase(preset = 42, bank = 0, name = "cello", key = 48, velocity = 127, duration = 2.0),
+        // Trumpet
+        TestCase(preset = 56, bank = 0, name = "trumpet", key = 60, velocity = 127, duration = 2.0),
+        // Flute
+        TestCase(preset = 73, bank = 0, name = "flute", key = 72, velocity = 127, duration = 2.0),
+        // Drums
+        TestCase(preset = 128, bank = 128, name = "drums", key = 36, velocity = 127, duration = 1.0),
+        TestCase(preset = 128, bank = 128, name = "drums", key = 38, velocity = 127, duration = 1.0),
+        TestCase(preset = 128, bank = 128, name = "drums", key = 42, velocity = 127, duration = 1.0)
+    ]
 
     var results : array<CompareResult>
     var total_pass = 0
@@ -102,7 +103,7 @@ def main() {
         // render with our SF2 renderer
         var das_data : array<float>
         render_note(*sf2, tc.bank, tc.preset, tc.key, tc.velocity, tc.duration, ref_rate, das_data)
-        if (length(das_data) == 0) {
+        if (empty(das_data)) {
             print_row(tc.name, tc.preset, tc.key, tc.velocity, -1.0, -1.0, -1.0, "SKIP(voice)")
             continue
         }
@@ -153,12 +154,10 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
     let actual_bank = bank >= 128 ? 128 : 0
     let actual_preset = bank >= 128 ? 0 : preset_num
     let preset_idx = sf2_find_preset(sf2, actual_bank, actual_preset)
-    if (preset_idx < 0) {
-        return
-    }
+    if (preset_idx < 0) return
 
     var zones <- sf2_find_zones(sf2, preset_idx, key, velocity)
-    if (length(zones) == 0) {
+    if (empty(zones)) {
         delete zones
         return
     }
@@ -193,9 +192,7 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
         }
     }
 
-    if (length(voices) == 0) {
-        return
-    }
+    if (empty(voices)) return
 
     output |> resize(total_frames * 2)
     let chunk_size = 512
@@ -204,14 +201,14 @@ def render_note(sf2 : SF2File; bank, preset_num, key, velocity : int; duration :
     while (frame < total_frames) {
         let frames = min(chunk_size, total_frames - frame)
         if (!note_off_sent && frame >= note_off_frame) {
-            for (i in range(length(voices))) {
-                unsafe { ma_sf2_voice_note_off(addr(voices[i])); }
+            for (v in voices) {
+                unsafe { ma_sf2_voice_note_off(addr(v)); }
             }
             note_off_sent = true
         }
-        for (i in range(length(voices))) {
+        for (v in voices) {
             unsafe {
-                ma_sf2_voice_render(addr(voices[i]), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
+                ma_sf2_voice_render(addr(v), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
             }
         }
         frame += frames
@@ -240,9 +237,7 @@ def compute_rms_error(ref_data, das_data : array<float>; n : int) : float {
         let r = double(ref_data[i])
         sum_ref_sq += r * r
     }
-    if (sum_ref_sq < 1e-10lf) {
-        return sum_diff_sq > 1e-10lf ? 1.0 : 0.0
-    }
+    if (sum_ref_sq < 1e-10lf) return sum_diff_sq > 1e-10lf ? 1.0 : 0.0
     return float(sqrt(sum_diff_sq / sum_ref_sq))
 }
 
@@ -259,17 +254,13 @@ def compute_peak_error(ref_data, das_data : array<float>; n : int) : float {
             max_ref = r
         }
     }
-    if (max_ref < 1e-6) {
-        return max_diff > 1e-6 ? 1.0 : 0.0
-    }
+    if (max_ref < 1e-6) return max_diff > 1e-6 ? 1.0 : 0.0
     return max_diff / max_ref
 }
 
 def compute_envelope_correlation(ref_data, das_data : array<float>; n : int; sample_rate : int) : float {
     let window_size = sample_rate / 100 * 2  // 10ms in stereo samples
-    if (window_size <= 0 || n < window_size) {
-        return 0.0
-    }
+    if (window_size <= 0 || n < window_size) return 0.0
     let num_windows = n / window_size
 
     var ref_env : array<float>
@@ -313,8 +304,6 @@ def compute_envelope_correlation(ref_data, das_data : array<float>; n : int; sam
     }
 
     let denom = sqrt(var_ref * var_das)
-    if (denom < 1e-10lf) {
-        return 0.0
-    }
+    if (denom < 1e-10lf) return 0.0
     return float(cov / denom)
 }

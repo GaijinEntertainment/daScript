@@ -82,7 +82,7 @@ finally blocks
 fall-through, ``continue``, ``break``, and ``return``::
 
   for (i in range(3)) {
-      counter += 1
+      counter++
   } finally {
       print("iter done, counter={counter}\n")
   }

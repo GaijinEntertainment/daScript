@@ -76,7 +76,7 @@ def test_string_operations(t : T?) {
 
 [test]
 def test_array_operations(t : T?) {
-    var arr : array<int>
+    var arr : array<int>  // nolint:STYLE012 — tutorial demonstrates push semantics
     arr |> push(10)
     arr |> push(20)
     arr |> push(30)
@@ -93,9 +93,7 @@ def test_array_operations(t : T?) {
 // === Testing with helper functions ===
 
 def factorial(n : int) : int {
-    if (n <= 1) {
-        return 1
-    }
+    if (n <= 1) return 1
     return n * factorial(n - 1)
 }
 

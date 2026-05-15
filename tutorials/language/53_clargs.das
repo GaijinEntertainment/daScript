@@ -108,7 +108,7 @@ def test_enum_flags() {
     print("  level is Warning: {cfg.level == LogLevel.Warning}\n")
 
     // Invalid enum value returns an error
-    var r2 <- parse_args(type<LogConfig>, ["--level", "Verbose"])
+    let r2 <- parse_args(type<LogConfig>, ["--level", "Verbose"])
     print("  unknown enum error: '{r2 |> unwrap_err}'\n")
     // output:
     //   level is Warning: true
@@ -161,7 +161,7 @@ def test_required_flags() {
     print("\n=== Required flags ===\n")
 
     // Missing --token
-    var r1 <- parse_args(type<DeployConfig>, ["--host=prod.example.com"])
+    let r1 <- parse_args(type<DeployConfig>, ["--host=prod.example.com"])
     print("  missing required: {r1 |> is_err ? "error (expected)" : "ok (unexpected)"}\n")
 
     // Both present
@@ -234,7 +234,7 @@ struct TypedConfig {
 
 def test_error_handling() {
     print("\n=== Error handling ===\n")
-    var r <- parse_args(type<TypedConfig>, ["--count", "not_a_number"])
+    let r <- parse_args(type<TypedConfig>, ["--count", "not_a_number"])
     print("  error: '{r |> unwrap_err}'\n")
     // output:
     //   error: '--count: invalid int value 'not_a_number''

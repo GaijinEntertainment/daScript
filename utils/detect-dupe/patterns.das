@@ -27,8 +27,6 @@ def public classify(name : string; canonical : string) : PatternHit {
     // the dispatch contract, not by the algorithm. Check first so that
     // a visitor whose body happens to match `dispatch`/`emit` is still
     // classified under the more semantic `visitor` bucket.
-    if (try_visitor(name, hit)) return hit
-    if (try_dispatch(canonical, hit)) return hit
     // Single-statement dastest test wrappers:
     //   def test_xxx(t : T?) { t |> run("desc") @(t : T?) { ... } }
     // The canonicalizer collapses the lambda body to ADDR, so every
@@ -37,8 +35,8 @@ def public classify(name : string; canonical : string) : PatternHit {
     // hence this name-tagged single-statement variant. Check before
     // `emit` because `emit` is the more general "small N trivial calls"
     // shape; `test_wrapper` is the more specific name+shape match.
-    if (try_test_wrapper(name, canonical, hit)) return hit
-    if (try_emit(canonical, hit)) return hit
+    if (try_visitor(name, hit) || try_dispatch(canonical, hit)
+        || try_test_wrapper(name, canonical, hit) || try_emit(canonical, hit)) return hit
     return hit
 }
 
@@ -101,9 +99,9 @@ def try_test_wrapper(name : string; canonical : string; var hit : PatternHit) : 
     let stmts <- split_top_level_stmts(canonical)
     if (length(stmts) != 1) return false
     let toks <- tokenize_canonical(stmts[0])
-    if (length(toks) < 2) return false
-    if (toks[0] != "STMT" && toks[0] != "FIN_STMT") return false
-    if (toks[1] != "CALL:run") return false
+    if (length(toks) < 2
+        || (toks[0] != "STMT" && toks[0] != "FIN_STMT")
+        || toks[1] != "CALL:run") return false
     var addr_count = 0
     for (i in range(2, length(toks))) {
         if (toks[i] == "ADDR") {
@@ -133,8 +131,7 @@ def try_emit(canonical : string; var hit : PatternHit) : bool {
     var emit_count = 0
     for (stmt in stmts) {
         let toks <- tokenize_canonical(stmt)
-        if (length(toks) < 2) return false
-        if (toks[0] != "STMT" && toks[0] != "FIN_STMT") return false
+        if (length(toks) < 2 || (toks[0] != "STMT" && toks[0] != "FIN_STMT")) return false
         let head = toks[1]
         if (head == "RET") {
             // Plain return of a var/null/literal — accept.
@@ -164,8 +161,8 @@ def try_emit(canonical : string; var hit : PatternHit) : bool {
 def emit_args_trivial(toks : array<string>; lo, hi : int) : bool {
     for (i in range(lo, hi)) {
         let tok = toks[i]
-        if (tok |> starts_with("<var_") || tok == "<sym>") continue
-        if (tok == ".FLD" || tok == "P2R" || tok == "LIT" || tok == "MK_STR"
+        if (tok |> starts_with("<var_") || tok == "<sym>"
+                || tok == ".FLD" || tok == "P2R" || tok == "LIT" || tok == "MK_STR"
                 || tok == "SBLD" || tok == "ENDSBLD"
                 || tok |> starts_with("OP1:")) continue
         return false

@@ -69,7 +69,7 @@ def extract_name_from_text(text, kind : string) : string {
     // e.g. "def foo(x : int) : string {" -> "foo"
     //      "struct Point {" -> "Point"
     //      "[export]\ndef main() {" -> "main" (annotated)
-    var line = strip(skip_annotations(text))
+    let line = strip(skip_annotations(text))
     if (kind == "function") {
         // "def name(" or "def name {" or "def name<"
         let def_pos = find(line, "def ")
@@ -147,7 +147,7 @@ def extract_name_from_text(text, kind : string) : string {
     } elif (kind == "typedef") {
         let kw_pos = find(line, "typedef ")
         if (kw_pos >= 0) {
-            var rest = strip(slice(line, kw_pos + 8))
+            let rest = strip(slice(line, kw_pos + 8))
             return slice(rest, 0, find_earliest(rest, [' ', '=']))
         }
     } elif (kind == "bitfield") {
@@ -278,7 +278,7 @@ def do_outline(file, glob_filter : string) : string {
     }
     // format output
     let multi_file = length(file_order) > 1
-    var output = build_string() $(var w) {
+    let output = build_string() $(var w) {
         for (fp_idx in range(length(file_order))) {
             let fp = file_order[fp_idx]
             if (multi_file) {

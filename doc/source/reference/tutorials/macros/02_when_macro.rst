@@ -137,9 +137,7 @@ return using ``qmacro_block``:
        }
    } else {
        list |> push <| qmacro_block() {
-           if ($i(arg_name) == $e(tupl.values[0])) {
-               return $e(tupl.values[1])
-           }
+           if ($i(arg_name) == $e(tupl.values[0])) return $e(tupl.values[1])
        }
    }
 

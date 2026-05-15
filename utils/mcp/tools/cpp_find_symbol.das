@@ -27,10 +27,10 @@ def do_cpp_find_symbol(query : string; kind : string = ""; directory : string = 
     var matched : array<int>
     for (i in range(length(entries))) {
         let e & = unsafe(entries[i])
-        if (empty(e.name)) continue
-        if (!empty(kind) && e.kind != kind) continue
         // try matching against both unqualified and qualified forms
-        if (!symbol_matches(e.name, query) && !symbol_matches(e.qualified, query)) continue
+        if (empty(e.name)
+            || (!empty(kind) && e.kind != kind)
+            || (!symbol_matches(e.name, query) && !symbol_matches(e.qualified, query))) continue
         matched |> push(i)
         if (length(matched) >= CPP_MAX_FIND_RESULTS) break
     }

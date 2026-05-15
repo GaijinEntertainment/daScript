@@ -73,7 +73,7 @@ def compilation_error_response(resp : HttpResponse?) : http_status {
 
 def live_api_help_json() : string {
     //! Returns JSON help listing all endpoints with descriptions and curl examples.
-    var endpoints : array<JsonValue?>
+    var endpoints : array<JsonValue?>  // nolint:STYLE012 — values reference cmd_desc/cmd_curl defined later; literal would break decl order
     endpoints |> push(JV({ "method" => "GET", "path" => "/status", "description" => "JSON with fps, uptime, paused, dt, has_error", "curl" => "curl http://localhost:{live_api_port}/status" }))
     endpoints |> push(JV({ "method" => "GET", "path" => "/error", "description" => "Last compilation error (plain text, or null)", "curl" => "curl http://localhost:{live_api_port}/error" }))
     endpoints |> push(JV({ "method" => "POST", "path" => "/reload", "description" => "Trigger incremental reload", "curl" => "curl -X POST http://localhost:{live_api_port}/reload" }))
@@ -112,9 +112,7 @@ class LiveApiServer : HvWebServer {
 
         GET("/error") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let err = get_last_error()
-            if (empty(err)) {
-                return resp |> JSON(write_json(JVNull()), http_status.OK)
-            }
+            if (empty(err)) return resp |> JSON(write_json(JVNull()), http_status.OK)
             set_header(resp, "Content-Type", "text/plain")
             resp.body := err
             return http_status.OK
@@ -132,18 +130,14 @@ class LiveApiServer : HvWebServer {
 
         POST("/pause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let guard = compilation_error_response(resp)
-            if (guard != http_status.OK) {
-                return guard
-            }
+            if (guard != http_status.OK) return guard
             set_paused(true)
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
 
         POST("/unpause") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let guard = compilation_error_response(resp)
-            if (guard != http_status.OK) {
-                return guard
-            }
+            if (guard != http_status.OK) return guard
             set_paused(false)
             return resp |> JSON(write_json(JV(true)), http_status.OK)
         }
@@ -155,13 +149,9 @@ class LiveApiServer : HvWebServer {
 
         POST("/command") <| @(var req : HttpRequest?; var resp : HttpResponse?) : http_status {
             let guard = compilation_error_response(resp)
-            if (guard != http_status.OK) {
-                return guard
-            }
+            if (guard != http_status.OK) return guard
             let body = string(req.body)
-            if (empty(body)) {
-                return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
-            }
+            if (empty(body)) return resp |> JSON(write_json(JV("empty body")), http_status.BAD_REQUEST)
             let result = dispatch_command(body)
             return resp |> JSON(result, http_status.OK)
         }

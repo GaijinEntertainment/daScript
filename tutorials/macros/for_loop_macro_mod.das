@@ -16,9 +16,7 @@ require strings
 class TableKVForLoop : AstForLoopMacro {
     //! Transforms  for ((k,v) in tab)  into  for (k, v in keys(tab), values(tab)).
     def override visitExprFor(prog : ProgramPtr; mod : Module?; expr : ExprFor?) : ExpressionPtr {
-        if (is_in_completion()) {
-            return default<ExpressionPtr>
-        }
+        if (is_in_completion()) return default<ExpressionPtr>
         // Find a tuple-expanded iterator whose source is a table
         var tab_index = -1
         for (index, src in count(), expr.sources) {
@@ -29,15 +27,11 @@ class TableKVForLoop : AstForLoopMacro {
                 }
             }
         }
-        if (tab_index == -1) {
-            return default<ExpressionPtr>
-        }
+        if (tab_index == -1) return default<ExpressionPtr>
         // Split the backtick-joined name "k`v" into key_name and val_name
         let joined_name = string(expr.iterators[tab_index])
         let bt = find(joined_name, "`")
-        if (bt < 0 || find(joined_name, "`", bt + 1) >= 0) {
-            return default<ExpressionPtr>  // need exactly 2 parts
-        }
+        if (bt < 0 || find(joined_name, "`", bt + 1) >= 0) return default<ExpressionPtr>  // need exactly 2 parts
         let key_name = slice(joined_name, 0, bt)
         let val_name = slice(joined_name, bt + 1)
         // Clone the for expression

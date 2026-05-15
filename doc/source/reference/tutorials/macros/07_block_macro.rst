@@ -200,9 +200,7 @@ Inside ``finish()``
        for (_s in blk.list) {
            numStmts++
        }
-       if (numStmts > 0) {
-           numStmts -= 1
-       }
+       if (numStmts > 0) numStmts--
 
        print("[traced] \"{lbl}\": {numStmts} statement(s)")
 

@@ -120,24 +120,24 @@ def tokenize(input : string) : array<Token> {
             } elif (ch == '|') {
                 tokens |> push(Token(kind = TokenKind.PIPE, text = "|", pos = i))
                 i ++
-            } elif (ch >= '0' && ch <= '9') {
+            } elif (is_number(ch)) {
                 let start = i
                 while (i < n) {
                     let c = int(data[i])
-                    if ((c >= '0' && c <= '9') || c == '.') {
+                    if (is_number(c) || c == '.') {
                         i ++
                     } else {
                         break
                     }
                 }
                 tokens |> push(Token(kind = TokenKind.NUMBER, text = slice(input, start, i), pos = start))
-            } elif ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_') {
+            } elif (is_alpha(ch) || ch == '_') {
                 let start = i
                 while (i < n) {
                     let c = int(data[i])
                     // Include '#' so note names like "d#3" parse as a single WORD token
                     // (mini-notation treats # as a step char).
-                    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '#') {
+                    if (is_alpha(c) || is_number(c) || c == '_' || c == '#') {
                         i ++
                     } else {
                         break
@@ -202,9 +202,7 @@ def private is_element_start(p : Parser) : bool {
 // parse_pattern → stack_expr
 def private parse_pattern(var p : Parser) : Pattern {
     var first <- parse_seq(p)
-    if (peek(p).kind != TokenKind.COMMA) {
-        return <- first
-    }
+    if (peek(p).kind != TokenKind.COMMA) return <- first
     // comma-separated = stack
     var layers : array<Pattern>
     layers |> emplace <| first
@@ -225,8 +223,8 @@ def private parse_seq(var p : Parser) : Pattern {
         // underscore = elongation: extends previous element's weight
         if (peek(p).kind == TokenKind.WORD && peek(p).text == "_") {
             advance(p)
-            if (length(weights) > 0) {
-                weights[length(weights) - 1] += 1.0
+            if (!empty(weights)) {
+                weights[length(weights) - 1]++
                 has_weights = true
             }
             continue
@@ -244,15 +242,9 @@ def private parse_seq(var p : Parser) : Pattern {
         elements |> emplace <| elem
         weights |> push(w)
     }
-    if (length(elements) == 0) {
-        return <- silence()
-    }
-    if (length(elements) == 1) {
-        return <- elements[0]
-    }
-    if (has_weights) {
-        return <- weighted_fastcat(elements, weights)
-    }
+    if (empty(elements)) return <- silence()
+    if (length(elements) == 1) return <- elements[0]
+    if (has_weights) return <- weighted_fastcat(elements, weights)
     return <- fastcat(elements)
 }
 
@@ -307,9 +299,7 @@ def private parse_atom(var p : Parser) : Pattern {
         advance(p)
         // check if it's a note name like c3, eb4, fs2
         let midi = parse_note_name(tok.text)
-        if (midi >= 0.0) {
-            return <- pure(Event(s = "sine", note = midi, attack = 0.01, release = 0.2))
-        }
+        if (midi >= 0.0) return <- pure(Event(s = "sine", note = midi, attack = 0.01, release = 0.2))
         return <- atom(tok.text)
     } elif (tok.kind == TokenKind.NUMBER) {
         advance(p)
@@ -347,9 +337,7 @@ def parse_note_name(name : string) : float {
     //! number. Returns `-1.0` on miss. Bare letters without an octave return -1 —
     //! this is intentional so `s("a e i")` parses as sound names, not notes.
     let n = length(name)
-    if (n < 2 || n > 3) {
-        return -1.0
-    }
+    if (n < 2 || n > 3) return -1.0
     var result = -1.0
     peek_data(name) $(bytes) {
         let ch = int(bytes[0])
@@ -361,9 +349,7 @@ def parse_note_name(name : string) : float {
         elif (ch == 'g') { semitone = 7; }
         elif (ch == 'a') { semitone = 9; }
         elif (ch == 'b') { semitone = 11; }
-        if (semitone < 0) {
-            return
-        }
+        if (semitone < 0) return
         var octaveIdx = 1
         if (n == 3) {
             let mod = int(bytes[1])
@@ -377,9 +363,7 @@ def parse_note_name(name : string) : float {
             octaveIdx = 2
         }
         let octCh = int(bytes[octaveIdx])
-        if (octCh < '0' || octCh > '9') {
-            return
-        }
+        if (octCh < '0' || octCh > '9') return
         let octave = octCh - int('0')
         result = float((octave + 1) * 12 + semitone)
     }
@@ -390,9 +374,7 @@ def parse_note_name_default(name : string; default_oct : int) : float {
     //! Parse a note name allowing the octave to be omitted (falls back to `default_oct`).
     //! Accepts `"d"`, `"d#"`, `"d#3"`, `"eb"`. Returns `-1.0` on miss.
     let n = length(name)
-    if (n < 1 || n > 3) {
-        return -1.0
-    }
+    if (n < 1 || n > 3) return -1.0
     var result = -1.0
     peek_data(name) $(bytes) {
         let ch = int(bytes[0])
@@ -404,9 +386,7 @@ def parse_note_name_default(name : string; default_oct : int) : float {
         elif (ch == 'g') { semitone = 7; }
         elif (ch == 'a') { semitone = 9; }
         elif (ch == 'b') { semitone = 11; }
-        if (semitone < 0) {
-            return
-        }
+        if (semitone < 0) return
         var octave = default_oct
         var nextIdx = 1
         if (n >= 2) {
@@ -421,9 +401,7 @@ def parse_note_name_default(name : string; default_oct : int) : float {
         }
         if (nextIdx < n) {
             let octCh = int(bytes[nextIdx])
-            if (octCh < '0' || octCh > '9') {
-                return
-            }
+            if (octCh < '0' || octCh > '9') return
             octave = octCh - int('0')
         }
         result = float((octave + 1) * 12 + semitone)
@@ -445,9 +423,7 @@ def private parse_bars(var p : Parser) : Pattern {
             break
         }
     }
-    if (!has_pipes) {
-        return <- parse_pattern(p)
-    }
+    if (!has_pipes) return <- parse_pattern(p)
     // collect bars separated by |
     var bars : array<Pattern>
     while (!at_end(p)) {
@@ -465,12 +441,8 @@ def private parse_bars(var p : Parser) : Pattern {
             break
         }
     }
-    if (length(bars) == 0) {
-        return <- silence()
-    }
-    if (length(bars) == 1) {
-        return <- bars[0]
-    }
+    if (empty(bars)) return <- silence()
+    if (length(bars) == 1) return <- bars[0]
     return <- cat(bars)
 }
 
@@ -537,9 +509,7 @@ def set_s(var pat : Pattern; notation : string) : Pattern {
             break
         }
     }
-    if (!is_pattern) {
-        return set_sound(pat, notation)
-    }
+    if (!is_pattern) return set_sound(pat, notation)
     let sound_pat <- s(notation)
     return set_sound(pat, sound_pat)
 }

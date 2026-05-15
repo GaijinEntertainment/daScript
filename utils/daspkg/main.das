@@ -58,7 +58,7 @@ def main() {
         print_usage()
         return 1
     }
-    var parsed <- parse_r |> move_unwrap
+    let parsed <- parse_r |> move_unwrap
     apply_global_flags(parsed)
 
     let command = parsed.command ?? ""

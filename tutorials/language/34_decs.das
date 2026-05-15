@@ -320,7 +320,7 @@ def template_demo() {
     // Query using the struct type — compiler expands to individual components
     query() $(var p : Particle) {
         p.pos += p.vel
-        p.life -= 1
+        p.life--
     }
 
     print("After update:\n")
@@ -342,7 +342,7 @@ def template_demo() {
 [decs(stage = simulate)]
 def simulate_particles(var p : Particle) {
     p.pos += p.vel
-    p.life -= 1
+    p.life--
 }
 
 def stage_demo() {

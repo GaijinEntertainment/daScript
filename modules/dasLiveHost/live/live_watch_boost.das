@@ -71,13 +71,9 @@ def cmd_watch_signal(input : JsonValue?) : JsonValue? {
 [live_command(description="Touch first watched file to trigger watcher reload")]
 def cmd_watch_touch(input : JsonValue?) : JsonValue? {
     let count = get_watched_file_count()
-    if (count <= 0) {
-        return JV("no watched files")
-    }
+    if (count <= 0) return JV("no watched files")
     let f = get_watched_file(0)
-    if (empty(f)) {
-        return JV("first watched file is empty")
-    }
+    if (empty(f)) return JV("first watched file is empty")
     var ok = false
     fopen(f, "ab") $(fh) {
         if (fh != null) {

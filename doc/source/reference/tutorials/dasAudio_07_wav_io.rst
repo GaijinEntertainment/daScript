@@ -74,8 +74,8 @@ samples.
 
 .. code-block:: das
 
-    for (i in range(length(samples))) {
-        samples[i] *= 0.5   // halve volume
+    for (s in samples) {
+        s *= 0.5   // halve volume
     }
     write_wav("quiet.wav", samples, uint(sample_rate), channels)
 

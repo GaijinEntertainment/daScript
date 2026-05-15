@@ -257,9 +257,7 @@ class ContextStateAgent : DapiDebugAgent {
 
 
     def override onCollect(var ctx : Context; at : LineInfo) {
-        if (!ctx.category.opengl) {
-            return ;
-        }
+        if (!ctx.category.opengl) return ;
         // error
         let err = glGetError();
         let found = opengl_last_error |> get(err) $(pname) {

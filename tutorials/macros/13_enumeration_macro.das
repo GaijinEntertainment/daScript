@@ -34,9 +34,7 @@ def section1() {
     // Iterate all original values using each() from enum_trait.
     // each() yields every value including total, so we stop at total.
     for (d in each(Direction.North)) {
-        if (d == Direction.total) {
-            break
-        }
+        if (d == Direction.total) break
         print("  {d}\n")
     }
 }

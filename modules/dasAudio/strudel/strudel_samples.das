@@ -67,9 +67,7 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
     //! Files are sorted alphabetically so index :0, :1, ... matches strudel's sample indexing.
     var files : array<string>
     dir(path) $(file) {
-        if (file == "." || file == "..") {
-            return
-        }
+        if (file == "." || file == "..") return
         if (is_audio_file(file)) {
             files |> push(file)
         }
@@ -78,11 +76,11 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
     var variations : array<Sample>
     for (file in files) {
         var sample <- load_audio_file("{path}/{file}")
-        if (length(sample.data) > 0) {
+        if (!empty(sample.data)) {
             variations |> emplace <| sample
         }
     }
-    if (length(variations) > 0) {
+    if (!empty(variations)) {
         let soundName = to_lower(name)
         bank.sounds[soundName] <- variations
     } else {
@@ -94,23 +92,19 @@ def load_sound(path : string; name : string; var bank : SampleBank) {
 // Load a Dirt-Samples style directory structure.
 def private load_sample_dir(root : string; var bank : SampleBank) {
     dir(root) $(entry) {
-        if (entry == "." || entry == "..") {
-            return
-        }
+        if (entry == "." || entry == "..") return
         let subdir = "{root}/{entry}"
         var variations : array<Sample>
         dir(subdir) $(file) {
-            if (file == "." || file == "..") {
-                return
-            }
+            if (file == "." || file == "..") return
             if (is_audio_file(file)) {
                 var sample <- load_audio_file("{subdir}/{file}")
-                if (length(sample.data) > 0) {
+                if (!empty(sample.data)) {
                     variations |> emplace <| sample
                 }
             }
         }
-        if (length(variations) > 0) {
+        if (!empty(variations)) {
             let soundName = to_lower(entry)
             bank.sounds[soundName] <- variations
         }
@@ -121,9 +115,7 @@ def load_audio_memory(data : array<uint8>) : Sample {
     //! Decode audio bytes (WAV/MP3/FLAC/OGG) from memory into a Sample.
     //! Uses miniaudio's memory decoder with explicit error checking; returns an empty Sample on failure.
     var result : Sample
-    if (length(data) == 0) {
-        return <- result
-    }
+    if (empty(data)) return <- result
     // decode_audio crashes on invalid data (array index out of range)
     // so we do our own decoding with proper error checking
     var decoder = new ma_decoder
@@ -148,7 +140,7 @@ def load_audio_memory(data : array<uint8>) : Sample {
 def load_sound_memory(data : array<uint8>; name : string; var bank : SampleBank) {
     //! Decode audio bytes and add the result as a single-variation sound in the bank.
     var sample <- load_audio_memory(data)
-    if (length(sample.data) > 0) {
+    if (!empty(sample.data)) {
         let soundName = to_lower(name)
         var variations : array<Sample>
         variations |> emplace <| sample
@@ -163,25 +155,19 @@ def render_sample(bank : SampleBank; name : string; variation : int; speed : flo
     //! speed resamples via miniaudio and mono input is upmixed to stereo. No gain/pan applied.
     var stereo : array<float>
     bank.sounds |> get(name) $(variations) {
-        if (length(variations) == 0) {
-            return
-        }
+        if (empty(variations)) return
         let idx = variation % length(variations)
         let srcChannels = uint(variations[idx].channels)
         let srcLen = length(variations[idx].data)
         let srcFrames = srcLen / int(srcChannels)
-        if (srcFrames == 0) {
-            return
-        }
+        if (srcFrames == 0) return
         // clamp begin/end to [0,1], compute slice frame range
         let b = clamp(begin, 0.0, 1.0)
         let e = clamp(end_pos, 0.0, 1.0)
         let sliceStart = int(b * float(srcFrames))
-        let sliceStop = min(srcFrames, max(sliceStart + 1, int(e * float(srcFrames))))
+        let sliceStop = clamp(int(e * float(srcFrames)), sliceStart + 1, srcFrames)
         let sliceFrames = sliceStop - sliceStart
-        if (sliceFrames <= 0) {
-            return
-        }
+        if (sliceFrames <= 0) return
         // resample: source rate * speed → target rate (MA_SAMPLE_RATE)
         // e.g. speed=2.0 means play at double speed = half the output frames
         let srcRate = variations[idx].sample_rate

@@ -349,7 +349,7 @@ def gen_cube {
     //  | |v7---|-|v4
     //  |/      |/
     //  v2------v3
-    var frag = GeometryFragment()
+    var frag = GeometryFragment()  // nolint:STYLE013 — multi-line array literal + array<int>(...) builder don't flow into constructor
     frag.vertices <- [GeometryPreviewVertex(
         xyz=float3(1, 1, 1), normal=float3(0, 0, 1),  uv=float2(0, 0)), GeometryPreviewVertex(                // v0 (front)
         xyz=float3(-1, 1, 1), normal=float3(0, 0, 1),  uv=float2(1, 0)), GeometryPreviewVertex(               // v1

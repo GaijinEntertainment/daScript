@@ -20,17 +20,11 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
             }
         }
     }
-    if (length(raw) < 44) {
-        return false
-    }
+    if (length(raw) < 44) return false
     var cursor = 0
-    if (read_wav_tag(raw, cursor) != "RIFF") {
-        return false
-    }
+    if (read_wav_tag(raw, cursor) != "RIFF") return false
     cursor += 4
-    if (read_wav_tag(raw, cursor) != "WAVE") {
-        return false
-    }
+    if (read_wav_tag(raw, cursor) != "WAVE") return false
     var fmt_channels = 0
     var fmt_rate = 0
     var fmt_bits = 0
@@ -58,9 +52,7 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
             cursor ++
         }
     }
-    if (data_offset == 0 || fmt_bits != 16) {
-        return false
-    }
+    if (data_offset == 0 || fmt_bits != 16) return false
     sample_rate = fmt_rate
     channels = fmt_channels
     let num_samples = data_size / 2
@@ -80,9 +72,7 @@ def public read_wav(fname : string; var samples : array<float>&; var sample_rate
 }
 
 def read_wav_tag(data : array<uint8>; var cursor : int&) : string {
-    if (cursor + 3 >= length(data)) {
-        return ""
-    }
+    if (cursor + 3 >= length(data)) return ""
     let r = "{to_char(int(data[cursor]))}{to_char(int(data[cursor+1]))}{to_char(int(data[cursor+2]))}{to_char(int(data[cursor+3]))}"
     cursor += 4
     return r
@@ -103,9 +93,7 @@ def read_wav_u32(data : array<uint8>; var cursor : int&) : uint {
 def public write_wav(fname : string; samples : array<float>; sample_rate : uint = 44100u; channels : int = 2) {
     //! Write float samples as a 16-bit PCM WAV file.
     fopen(fname, "wb") $(f) {
-        if (f == null) {
-            return
-        }
+        if (f == null) return
         let numFrames = length(samples) / channels
         let dataSize = uint(numFrames * channels * 2)
         fwrite(f, "RIFF")

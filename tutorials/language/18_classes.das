@@ -75,7 +75,7 @@ class Counter {
     private count : int = 0
 
     def increment {
-        count += 1
+        count++
     }
 
     def get_count : int {
@@ -92,7 +92,7 @@ class Tracker {
     id : int
 
     def Tracker {
-        total += 1
+        total++
         id = total
     }
 

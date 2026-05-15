@@ -60,7 +60,7 @@ def example_decode_and_play() {
         }
     }
 
-    if (length(samples) == 0) {
+    if (empty(samples)) {
         print("  ERROR: Failed to decode audio\n")
         return
     }

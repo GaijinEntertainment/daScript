@@ -19,7 +19,7 @@ require template_type_macro_mod
 // with `first : int` and `second : float`.
 
 def test_concrete() {
-    var p : pair(type<int>, type<float>)
+    var p : pair(type<int>, type<float>)  // nolint:STYLE013 — tutorial demonstrates typefunction-generated struct + field assignment
     p.first = 42
     p.second = 3.14
     print("concrete: first={p.first} second={p.second}\n")
@@ -54,7 +54,7 @@ def main() {
     test_concrete()
 
     // Generic parameter: get_first / get_second.
-    var p : pair(type<int>, type<float>)
+    var p : pair(type<int>, type<float>)  // nolint:STYLE013 — tutorial demonstrates typefunction-generated struct + field assignment
     p.first = 10
     p.second = 2.5
     print("get_first:  {get_first(p)}\n")

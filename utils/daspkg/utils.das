@@ -138,9 +138,9 @@ def package_name_from_source(source : string) : string {
 }
 
 def is_local_path(source : string) : bool {
-    if (starts_with(source, "/") || starts_with(source, "./") || starts_with(source, "../")) return true
-    if (starts_with(source, ".\\") || starts_with(source, "..\\")) return true
-    return length(source) > 2 && character_at(source, 1) == ':'
+    if (starts_with(source, "/") || starts_with(source, "./") || starts_with(source, "../")
+        || starts_with(source, ".\\") || starts_with(source, "..\\")) return true
+    return length(source) > 2 && character_at(source, 1) == ':'  // nolint:PERF003 — single-byte check on short prefix
 }
 
 // --- Version parsing and constraint matching ---

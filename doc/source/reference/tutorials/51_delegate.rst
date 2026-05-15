@@ -199,7 +199,7 @@ Practical example — event system
     def armor_reduction(player : string; damage : int) : int {
         let reduced = damage - 5
         print("armor: {damage} -> {reduced}\n")
-        return reduced > 0 ? reduced : 0
+        return max(reduced, 0)
     }
 
     def log_hit(player : string; damage : int) : int {

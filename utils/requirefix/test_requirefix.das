@@ -154,7 +154,7 @@ def test_err_missing_file(t : T?) {
                 return ""
             },
         )
-        var result = analyze_module_usages(config)
+        let result = analyze_module_usages(config)
         t |> success(result.err != "", "should set error for missing file")
         t |> equal(length(result.modules), 0)
     }

@@ -93,9 +93,7 @@ def public draw_geometry_fragment(frag : OpenGLGeometryFragment) {
 }
 
 def public create_texture(var surf : ImageSurface; kill_pixels : bool = true) {
-    if (length(surf.pixels) == 0) {
-        return 0u
-    }
+    if (empty(surf.pixels)) return 0u
     var tex = 0u
     unsafe {
         tex = load_image_from_bytes(surf.width, surf.height, addr(surf.pixels[0]))

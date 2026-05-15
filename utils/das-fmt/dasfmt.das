@@ -33,25 +33,25 @@ def private collect_diff(before, after : string) : tuple<differ : bool; log : st
     // Split into lines for line-by-line comparison
     let lines_before = split(normalized_before, "\n")
     let lines_after = split(normalized_after, "\n")
-    var diff_output = ""
-
     let len_before = length(lines_before)
     let len_after = length(lines_after)
     let max_lines = max(len_before, len_after)
 
-    for (i in range(max_lines)) {
-        if (i >= len_before) {
-            // Added lines
-            diff_output += green_str("{i+1}a1\n> {lines_after[i]}\n")
-        } elif (i >= len_after) {
-            // Removed lines
-            diff_output += red_str("{i+1}d1\n< {lines_before[i]}\n")
-        } elif (lines_before[i] != lines_after[i]) {
-            // Changed lines
-            diff_output += (blue_str("{i+1}c1\n")
-                        + red_str("< {lines_before[i]}\n")
-                        + "---\n"
-                        + green_str("> {lines_after[i]}\n"))
+    let diff_output = build_string() $(w) {
+        for (i in range(max_lines)) {
+            if (i >= len_before) {
+                // Added lines
+                w |> write(green_str("{i+1}a1\n> {lines_after[i]}\n"))
+            } elif (i >= len_after) {
+                // Removed lines
+                w |> write(red_str("{i+1}d1\n< {lines_before[i]}\n"))
+            } elif (lines_before[i] != lines_after[i]) {
+                // Changed lines
+                w |> write(blue_str("{i+1}c1\n"))
+                w |> write(red_str("< {lines_before[i]}\n"))
+                w |> write("---\n")
+                w |> write(green_str("> {lines_after[i]}\n"))
+            }
         }
     }
 
@@ -132,11 +132,11 @@ def main() {
     let filesNum = length(files)
     var verified = true
 
-    with_job_que <| $() {
+    with_job_que() $ {
         while (!empty(files)) {
             let batchNum = min(length(files), threadsNum)
-            with_job_status(batchNum) <| $(status) {
-                for (i in range(batchNum)) {
+            with_job_status(batchNum) $(status) {
+                for (_ in range(batchNum)) {
                     let file = files[length(files) - 1]
                     files |> pop()
                     unsafe {
@@ -145,9 +145,9 @@ def main() {
                             var before : string
                             var after : string
                             var open = false
-                            fopen(file, "rb") <| $(fr) {
+                            fopen(file, "rb") $(fr) {
                                 if (fr != null) {
-                                    fmap(fr) <| $(data) {
+                                    fmap(fr) $(data) {
                                         open = true
                                         before = string(data)
                                         after = format_source(data)
@@ -169,7 +169,7 @@ def main() {
                                 log::info("-- {file}")
                             } else {
                                 var write = false
-                                fopen(file, "wb") <| $(fw) {
+                                fopen(file, "wb") $(fw) {
                                     if (fw != null) {
                                         fwrite(fw, after)
                                         write = true

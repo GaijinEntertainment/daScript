@@ -52,7 +52,7 @@ A call macro is a class that extends ``AstCallMacro``, annotated with
    class HelloMacro : AstCallMacro {
        def override visit(prog : ProgramPtr; mod : Module?;
                var expr : ExprCallMacro?) : ExpressionPtr {
-           macro_verify(length(expr.arguments) == 0, prog, expr.at,
+           macro_verify(empty(expr.arguments), prog, expr.at,
                "hello() takes no arguments")
            return qmacro(print("hello, call macro!\n"))
        }
@@ -150,7 +150,7 @@ looking for ``(`` ... ``)`` pairs.  For each placeholder it:
    class PrintfMacro : AstCallMacro {
        def override visit(prog : ProgramPtr; mod : Module?;
                var expr : ExprCallMacro?) : ExpressionPtr {
-           macro_verify(length(expr.arguments) >= 1, prog, expr.at,
+           macro_verify(!empty(expr.arguments), prog, expr.at,
                "printf requires at least a format string argument")
            macro_verify(expr.arguments[0] is ExprConstString, prog, expr.at,
                "first argument to printf must be a constant string")

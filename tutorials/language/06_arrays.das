@@ -44,7 +44,7 @@ def main {
     // Dynamic arrays are heap-allocated and can grow.
     // They use move semantics (<-) — they cannot be copied with =.
 
-    var numbers : array<int>
+    var numbers : array<int>  // nolint:STYLE012 — tutorial demonstrates push semantics explicitly
     push(numbers, 10)
     push(numbers, 20)
     push(numbers, 30)

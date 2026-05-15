@@ -6,6 +6,6 @@ def check_box(box : array<AABB>) {}
 
 [export]
 def main() {
-    var b : array<AABB>
+    let b : array<AABB>
     check_box(b)
 }

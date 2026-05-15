@@ -192,9 +192,7 @@ def private init_orbit_reverb(var bus : OrbitBus; roomsize : float = 2.0) {
 // Update reverb decay time on an orbit bus. Only reconfigures if changed.
 def private update_orbit_reverb_roomsize(var bus : OrbitBus; roomsize : float) {
     let rs = clamp(roomsize, 0.1, 10.0)
-    if (abs(rs - bus.current_roomsize) < 0.01) {
-        return
-    }
+    if (abs(rs - bus.current_roomsize) < 0.01) return
     bus.current_roomsize = rs
     // Reinitialize with new decay time
     conv_reverb_uninit(bus.reverb)
@@ -219,9 +217,7 @@ def private init_orbit_delay(var bus : OrbitBus; delaytime : float = 0.5; delayf
 def private update_orbit_delay_params(var bus : OrbitBus; delaytime, delayfeedback : float) {
     let dt = clamp(delaytime, 0.001, 2.0)
     let fb = clamp(delayfeedback, 0.0, 0.98)
-    if (abs(dt - bus.current_delaytime) < 0.0001 && abs(fb - bus.current_delayfeedback) < 0.001) {
-        return
-    }
+    if (abs(dt - bus.current_delaytime) < 0.0001 && abs(fb - bus.current_delayfeedback) < 0.001) return
     bus.current_delaytime = dt
     bus.current_delayfeedback = fb
     delay_set_params(bus.delay_proc, SAMPLE_RATE, dt, fb)
@@ -278,11 +274,9 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
     let note = int(event.note)
     let velocity = clamp(int(event.velocity * 127.0), 1, 127)
     let preset_idx = sf2_find_preset(*sched.sf2, event.sf2_bank, event.sf2_program)
-    if (preset_idx < 0) {
-        return
-    }
+    if (preset_idx < 0) return
     var zones <- sf2_find_zones(*sched.sf2, preset_idx, note, velocity)
-    if (length(zones) == 0) {
+    if (empty(zones)) {
         delete zones
         return
     }
@@ -357,25 +351,19 @@ def private sf2_spawn_voices(var sched : Scheduler; event : Event; durSec : floa
 
 // Get the reverb send buffer for a given orbit. Returns empty array ref if no reverb on that orbit.
 def private get_orbit_reverb_send(var sched : Scheduler; orbit : int) : array<float>? {
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].reverb != null) {
-        return unsafe(addr(sched.orbit_buses[orbit].reverb_send_buf))
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].reverb != null) return unsafe(addr(sched.orbit_buses[orbit].reverb_send_buf))
     return null
 }
 
 // Get the delay send buffer for a given orbit. Returns null if no delay on that orbit.
 def private get_orbit_delay_send(var sched : Scheduler; orbit : int) : array<float>? {
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].delay_proc != null) {
-        return unsafe(addr(sched.orbit_buses[orbit].delay_send_buf))
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].delay_proc != null) return unsafe(addr(sched.orbit_buses[orbit].delay_send_buf))
     return null
 }
 
 // Get the chorus send buffer for a given orbit. Returns null if no chorus on that orbit.
 def private get_orbit_chorus_send(var sched : Scheduler; orbit : int) : array<float>? {
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].chorus != null) {
-        return unsafe(addr(sched.orbit_buses[orbit].chorus_send_buf))
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null && sched.orbit_buses[orbit].chorus != null) return unsafe(addr(sched.orbit_buses[orbit].chorus_send_buf))
     return null
 }
 
@@ -506,9 +494,7 @@ def private osc_render_chunk_routed(
 // reverb/chorus/delay send, and voice cleanup.
 // Reverb, delay, and chorus sends all accumulate into per-orbit bus buffers.
 def private sf2_render_voices(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
-    if (length(sched.sf2_voices) == 0 || sched.sf2 == null) {
-        return
-    }
+    if (empty(sched.sf2_voices) || sched.sf2 == null) return
     var si = length(sched.sf2_voices) - 1
     while (si >= 0) {
         if (sched.sf2_voices[si].finished == 0) {
@@ -825,9 +811,7 @@ def private osc_render_voices(var sched : Scheduler; var output : array<float>; 
 // Prepare orbit bus send buffers for a tick (resize + zero).
 def private prepare_orbit_buses(var sched : Scheduler; chunkSamples : int) {
     for (bus in sched.orbit_buses) {
-        if (bus == null) {
-            continue
-        }
+        if (bus == null) continue
         if (bus.reverb != null) {
             if (length(bus.reverb_send_buf) < chunkSamples) {
                 bus.reverb_send_buf |> resize(chunkSamples)
@@ -862,9 +846,7 @@ def private prepare_orbit_buses(var sched : Scheduler; chunkSamples : int) {
 def private process_orbit_buses(var sched : Scheduler; var output : array<float>; chunkFrames : int) {
     let chunkSamples = chunkFrames * 2
     for (bus in sched.orbit_buses) {
-        if (bus == null) {
-            continue
-        }
+        if (bus == null) continue
         // Always process reverb when it exists — convolver needs continuous input
         if (bus.reverb != null) {
             for (s in range(chunkSamples)) {
@@ -1201,25 +1183,19 @@ def tick(var sched : Scheduler; var pat : Pattern; bank : SampleBank; wall_time 
 
 def get_orbit_reverb(var sched : Scheduler; orbit : int = 0) : ConvolutionReverb? {
     //! Fetch the reverb instance for the given orbit (for inspection or tests). Returns null if no bus or no reverb configured.
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
-        return sched.orbit_buses[orbit].reverb
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) return sched.orbit_buses[orbit].reverb
     return null
 }
 
 def get_orbit_delay(var sched : Scheduler; orbit : int = 0) : ma_delay? {
     //! Fetch the delay instance for the given orbit (for inspection or tests). Returns null if no bus or no delay configured.
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
-        return sched.orbit_buses[orbit].delay_proc
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) return sched.orbit_buses[orbit].delay_proc
     return null
 }
 
 def get_orbit_chorus(var sched : Scheduler; orbit : int = 0) : ma_chorus? {
     //! Fetch the chorus instance for the given orbit (for inspection or tests). Returns null if no bus or no chorus configured.
-    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) {
-        return sched.orbit_buses[orbit].chorus
-    }
+    if (orbit < length(sched.orbit_buses) && sched.orbit_buses[orbit] != null) return sched.orbit_buses[orbit].chorus
     return null
 }
 

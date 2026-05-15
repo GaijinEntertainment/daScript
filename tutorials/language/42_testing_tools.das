@@ -140,9 +140,7 @@ def demo_faker_custom() {
 // Use it to test that your code handles arbitrary input gracefully.
 
 def safe_divide(a, b : int) : int {
-    if (b == 0) {
-        return 0
-    }
+    if (b == 0) return 0
     return a / b
 }
 
@@ -198,12 +196,8 @@ def demo_fuzz_debug() {
 // generate random inputs and verify invariants hold.
 
 def clamp_value(x, lo, hi : int) : int {
-    if (x < lo) {
-        return lo
-    }
-    if (x > hi) {
-        return hi
-    }
+    if (x < lo) return lo
+    if (x > hi) return hi
     return x
 }
 

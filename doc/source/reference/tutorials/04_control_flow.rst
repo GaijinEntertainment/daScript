@@ -75,17 +75,13 @@ break and continue
 iteration::
 
   for (i in 0..10) {
-      if (i == 3) {
-          break
-      }
+      if (i == 3) break
       print("{i} ")
   }
   // 0 1 2
 
   for (i in 0..8) {
-      if (i % 2 != 0) {
-          continue
-      }
+      if (i % 2 != 0) continue
       print("{i} ")
   }
   // 0 2 4 6

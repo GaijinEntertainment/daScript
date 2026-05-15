@@ -152,9 +152,7 @@ def resolve_adsr(attack, decay, sustain, release : float) : tuple<float; float; 
     let d_set = decay >= 0.0
     let s_set = sustain >= 0.0
     let r_set = release >= 0.0
-    if (!a_set && !d_set && !s_set && !r_set) {
-        return (envmin, envmin, envmax, release_min)
-    }
+    if (!a_set && !d_set && !s_set && !r_set) return (envmin, envmin, envmax, release_min)
     let sustain_resolved = s_set ? sustain : (d_set ? envmin : envmax)
     let a_final = max(a_set ? attack : 0.0, envmin)
     let d_final = max(d_set ? decay : 0.0, envmin)
@@ -171,9 +169,7 @@ def resolve_delaytime(delaytime, delaysync, cps : float) : float {
     //! Resolve delay time: use `delaytime` if set (>= 0), otherwise derive from
     //! `delaysync` (in cycles) and the current `cps` so the echo locks to tempo.
     //! The 3/16-cycle default yields a dotted-eighth feel that tracks tempo changes.
-    if (delaytime >= 0.0) {
-        return delaytime
-    }
+    if (delaytime >= 0.0) return delaytime
     let safe_cps = cps > 0.0001 ? cps : 0.5
     return delaysync / safe_cps
 }

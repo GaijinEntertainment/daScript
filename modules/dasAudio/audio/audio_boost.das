@@ -89,9 +89,7 @@ def public compute_attenuation(attn : Attenuation; d : float) {
     //! compute attenuation given distance
     let d2 = d * d
     let denom = attn.D * d2 + attn.E * d + attn.F
-    if (denom == 0.) {
-        return 1.
-    }
+    if (denom == 0.) return 1.
     return clamp((attn.A * d2 + attn.B * d + attn.C) / denom, 0., 1.)
 }
 
@@ -240,9 +238,7 @@ class AudioChannel {
         }
     }
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool {
-        if (!source->ready() || g_pitch == 0.) {
-            return true
-        }
+        if (!source->ready() || g_pitch == 0.) return true
         if (paused) {
             if (status != null) {
                 status |> update() $(var status_channel : AudioChannelStatus#) {
@@ -253,17 +249,13 @@ class AudioChannel {
             }
             return true
         }
-        if (stop && volume_mixer.volume == 0.) {
-            return false
-        }
+        if (stop && volume_mixer.volume == 0.) return false
         let inputRate = uint(float(source.bitrate) * pitch * doppler * g_pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)
         var inputFrames = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputFrames)
         var samples <- source->get_samples(int(inputFrames))
-        if (length(samples) == 0) {
-            return false    // reached end of stream
-        }
+        if (empty(samples)) return false    // reached end of stream
         if (length(samples) < int(inputFrames) * channels) {
             samples |> resize(int(inputFrames) * channels)
         }
@@ -447,7 +439,7 @@ class AudioSourcePCMStream : AudioSource {
         let nsmp = nframes * channels
         data |> resize(nsmp)
         var ofs = 0
-        while (ofs < nsmp && length(chunks) != 0) {
+        while (ofs < nsmp && !empty(chunks)) {
             let ncopy = min(length(chunks[0].samples), nsmp - ofs)
             if (ncopy != 0) {
                 unsafe {
@@ -1022,9 +1014,7 @@ def make_decoder(filename : string; rate, channels : int) : ma_decoder? {
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format.ma_format_f32, uint(channels), uint(rate))
     let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
-    if (result != ma_result.MA_SUCCESS) {
-        return null
-    }
+    if (result != ma_result.MA_SUCCESS) return null
     return decoder
 }
 
@@ -1086,9 +1076,7 @@ def public play_sound_from_file(filename : string; rate, channels : int) {
     //! plays sound from file
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
-    if (decoder == null) {
-        return INVALID_SID
-    }
+    if (decoder == null) return INVALID_SID
     let sid = generate_sound_sid()
     push_cmd(AudioCommand(add_decoder = AudioCommandAddDecoder(sid = sid, decoder = intptr(decoder), rate = rate, channels = channels)))
     return sid
@@ -1098,9 +1086,7 @@ def public play_3d_sound_from_file(filename : string; position : float3; attenua
     //! plays 3D sound from file
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
-    if (decoder == null) {
-        return INVALID_SID
-    }
+    if (decoder == null) return INVALID_SID
     let sid = generate_sound_sid()
     push_cmd(AudioCommand(add_decoder_3d =
         AudioCommandAddDecoder3D(sid = sid, decoder = intptr(decoder), rate = rate, channels = channels, position = position, attenuation = attenuation)))
@@ -1317,9 +1303,7 @@ def public get_audio_command_stream : void ? {
 [unsafe_operation]
 def public set_audio_thread_command_stream(ch : void?) {
     var s = unsafe(reinterpret<Stream?> ch)
-    if (s == g_command_stream) {
-        return
-    }
+    if (s == g_command_stream) return
     if (g_command_stream != null) {
         g_command_stream |> release
     }
@@ -1335,8 +1319,6 @@ def public get_sound_sid : void ? {
 
 def public set_sound_sid(next_sid : void?) {
     var sid = unsafe(reinterpret<Atomic64?> next_sid)
-    if (sid == g_sound_sid) {
-        return
-    }
+    if (sid == g_sound_sid) return
     g_sound_sid = sid
 }

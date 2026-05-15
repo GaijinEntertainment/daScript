@@ -109,7 +109,7 @@ The macro scans for a source where the tuple-expansion flag is set
 
 .. literalinclude:: ../../../../../tutorials/macros/for_loop_macro_mod.das
    :language: das
-   :lines: 23-31
+   :lines: 21-29
 
 
 Step 3 — Split the backtick-joined name
@@ -121,7 +121,7 @@ When the user writes ``(k,v)``,  the parser stores the iterator name as
 
 .. literalinclude:: ../../../../../tutorials/macros/for_loop_macro_mod.das
    :language: das
-   :lines: 36-42
+   :lines: 32-36
 
 
 Step 4 — Clone and rewrite
@@ -139,14 +139,14 @@ The transformation follows the same pattern as the standard library's
 
 .. literalinclude:: ../../../../../tutorials/macros/for_loop_macro_mod.das
    :language: das
-   :lines: 43-72
+   :lines: 37-67
 
 The helper ``make_kv_call`` builds an ``ExprCall`` node for ``keys()``
 or ``values()``:
 
 .. literalinclude:: ../../../../../tutorials/macros/for_loop_macro_mod.das
    :language: das
-   :lines: 77-80
+   :lines: 71-75
 
 
 Using the macro

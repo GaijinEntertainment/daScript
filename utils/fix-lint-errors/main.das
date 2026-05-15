@@ -19,7 +19,7 @@ require math
 //   PERF013   a += 1 / a -= 1              ->  a++ / a--
 //   PERF015   a > b ? a : b                ->  max(a, b) (and min variants)
 //   PERF016   x < 0 ? -x : x               ->  abs(x) (and other ternary abs)
-//   PERF017   length(x) == 0 / != 0        ->  empty(x) / !empty(x)
+//   PERF017   empty(x) / != 0        ->  empty(x) / !empty(x)
 //
 // Future rules (PERF014) layer on the same Edit pipeline — each visitor
 // override pushes an Edit; apply_edits writes them back in reverse-position
@@ -78,7 +78,7 @@ class FixerVisitor : AstVisitor {
         current_function = fn
         // Skip `flags.generated` — synthesized functions from struct
         // annotations like `[CommandLineArgs]` carry the struct's LineInfo
-        // throughout their body, so a `length(args) == 0` check inside the
+        // throughout their body, so a `empty(args)` check inside the
         // generated parse_args would rewrite to a span starting at the struct
         // definition (massive corruption observed on utils/daspkg/commands.das).
         // `isTemplate`/`macroFunction` bodies are user-written daslang code —
@@ -213,8 +213,7 @@ class FixerVisitor : AstVisitor {
         //! length(table). Excludes math::length(float2/3/4).
         return false if (e == null || !(e is ExprCall))
         let call = e as ExprCall
-        return false if (call.func == null || call.func.name != "length")
-        return false if (call.func._module == null)
+        return false if (call.func == null || call.func.name != "length" || call.func._module == null)
         let modname = string(call.func._module.name)
         return modname == "strings" || modname == "$" || modname == "builtin"
     }
@@ -265,7 +264,7 @@ class FixerVisitor : AstVisitor {
                 return
             }
             hi_line = int(fld.at.last_line)
-            hi_col = int(fld.at.last_column) + length(string(fld.name))
+            hi_col = int(fld.at.last_column) + length(fld.name)
             return
         }
         if (e is ExprSafeField) {
@@ -276,7 +275,7 @@ class FixerVisitor : AstVisitor {
                 return
             }
             hi_line = int(fld.at.last_line)
-            hi_col = int(fld.at.last_column) + length(string(fld.name))
+            hi_col = int(fld.at.last_column) + length(fld.name)
             return
         }
         if (e is ExprAt) {
@@ -397,7 +396,7 @@ class FixerVisitor : AstVisitor {
         }
         let text = self->extract_source_at(lo_l, lo_c, hi_l, hi_c, fi)
         return "" if (empty(text))
-        let c0 = character_at(text, 0)
+        let c0 = first_character(text)
         // Identifier start, digit, `!`, `-`, `(`, `*`, `"`, `'` are all legitimate
         // expression openers. Anything else (especially `.`, `]`, `,`) means we
         // landed mid-token.
@@ -423,10 +422,9 @@ class FixerVisitor : AstVisitor {
         //! as `ref`.
         let mn = self->peel_ref2value(maybe_neg)
         let rf = self->peel_ref2value(ref)
-        return false if (mn == null || rf == null)
-        return false if (!(mn is ExprOp1))
+        return false if (mn == null || rf == null || !(mn is ExprOp1))
         let op1 = mn as ExprOp1
-        return false if (string(op1.op) != "-" || op1.subexpr == null)
+        return false if (op1.op != "-" || op1.subexpr == null)
         return describe(self->peel_ref2value(op1.subexpr)) == describe(rf)
     }
 
@@ -456,8 +454,7 @@ class FixerVisitor : AstVisitor {
             let c = e as ExprCall
             // Property-method form: name starts with backtick + dot.
             let nm = string(c.name)
-            return false if (!empty(nm) && (nm |> starts_with(".") || nm |> starts_with("`")))
-            return true
+            return empty(nm) || !(nm |> starts_with(".") || nm |> starts_with("`"))
         }
         if (e is ExprField) return self->is_simple_subject((e as ExprField).value)
         if (e is ExprSafeField) return self->is_simple_subject((e as ExprSafeField).value)
@@ -566,8 +563,8 @@ class FixerVisitor : AstVisitor {
             // the call name (later in source) but arg[0] is BEFORE it. Take the
             // minimum of call.at and arg[0]'s leftmost.
             let c = e as ExprCall
-            var call_l = int(c.at.line)
-            var call_c = int(c.at.column)
+            let call_l = int(c.at.line)
+            let call_c = int(c.at.column)
             if (!empty(c.arguments)) {
                 var a_l = 0; var a_c = 0
                 self->leftmost_pos_of(c.arguments[0], a_l, a_c)
@@ -693,12 +690,12 @@ class FixerVisitor : AstVisitor {
     def push_edit_span(start_line : int; start_col : int;
                        end_line : int; end_col : int;
                        replacement : string; rule : string) : void {
-        var e : SourceEdit
-        e.start_line = start_line
-        e.start_col = start_col
-        e.end_line = end_line
-        e.end_col = end_col
-        e.rule = rule
+        let e = SourceEdit(
+            start_line = start_line,
+            start_col = start_col,
+            end_line = end_line,
+            end_col = end_col,
+            rule = rule)
         edits |> push(e)
         replacements |> push(replacement)
     }
@@ -708,7 +705,7 @@ class FixerVisitor : AstVisitor {
         //! check first — otherwise out-of-file source coordinates leak through.
         return false if (at.fileInfo == null)
         return true if (empty(target_filename))
-        return string(at.fileInfo.name) == target_filename
+        return at.fileInfo.name == target_filename
     }
 
     def source_line_starts_with_if(at : LineInfo) : bool {
@@ -741,24 +738,21 @@ class FixerVisitor : AstVisitor {
         return false if (ee == null)
         if (ee is ExprOp2) {
             let op = ee as ExprOp2
-            if (string(op.op) == "==" || string(op.op) == "!=") {
+            if (op.op == "==" || op.op == "!=") {
                 let lhs = self->peel_ref2value(op.left)
                 if (lhs != null && lhs is ExprField) {
                     let fld = lhs as ExprField
-                    if (string(fld.name) == "__rtti") return true
+                    if (fld.name == "__rtti") return true
                 }
             }
-            if (self->expr_contains_rtti_check(op.left)) {  //
-                return true
-            }
-            return self->expr_contains_rtti_check(op.right)
+            return self->expr_contains_rtti_check(op.left) || self->expr_contains_rtti_check(op.right)
         }
         if (ee is ExprOp1) return self->expr_contains_rtti_check((ee as ExprOp1).subexpr)
         if (ee is ExprOp3) {
             let op3 = ee as ExprOp3
-            if (self->expr_contains_rtti_check(op3.subexpr)) return true
-            if (self->expr_contains_rtti_check(op3.left)) return true
-            return self->expr_contains_rtti_check(op3.right)
+            return (self->expr_contains_rtti_check(op3.subexpr)
+                || self->expr_contains_rtti_check(op3.left)
+                || self->expr_contains_rtti_check(op3.right))
         }
         return false
     }
@@ -766,22 +760,21 @@ class FixerVisitor : AstVisitor {
     // --- STYLE005 / STYLE017: ExprIfThenElse ---
 
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
-        return if (!self->in_target_file(ifte.at))
         // STYLE017(a) is intentionally NOT auto-fixed: match blocks parse as a
         // chain of ExprIfThenElse where the wildcard arm's body becomes the
         // innermost else, making them indistinguishable from a real if/else
         // at the AST level. Auto-fixing them produces broken match code.
         // Hand-fix STYLE017(a) hits flagged by the linter.
-        return if (ifte.if_flags.isStatic || ifte.if_false != null)
-        return if (!(ifte.if_true is ExprBlock))
+        return if (!self->in_target_file(ifte.at) || ifte.if_flags.isStatic
+                || ifte.if_false != null || !(ifte.if_true is ExprBlock))
         let blk = ifte.if_true as ExprBlock
         return if (length(blk.list) != 1 || !empty(blk.finalList))
         let inner = blk.list[0]
-        return if (!(inner is ExprReturn || inner is ExprBreak || inner is ExprContinue))
         // Synthetic Block (braceless / postfix-desugared) shares LineInfo with
         // the inner terminator — that's the AST signal we are NOT looking at
         // user-written braces. Skip.
-        return if (blk.at.line == inner.at.line && blk.at.column == inner.at.column)
+        return if (!(inner is ExprReturn || inner is ExprBreak || inner is ExprContinue)
+                || (blk.at.line == inner.at.line && blk.at.column == inner.at.column))
         let inner_text = self->extract_block_inner(blk.at)
         return if (empty(inner_text))
         // Sanity-check: the extracted source must START with a terminator
@@ -797,8 +790,7 @@ class FixerVisitor : AstVisitor {
     // --- PERF013 / PERF017 / STYLE018 ---
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
-        return if (in_template)
-        return if (!self->in_target_file(expr.at))
+        return if (in_template || !self->in_target_file(expr.at))
         let opname = string(expr.op)
         // PERF013: a += ±1 / a -= ±1 → a++ / a--
         if (opname == "+=" || opname == "-=") {
@@ -853,10 +845,7 @@ class FixerVisitor : AstVisitor {
                 is_nonempty_pattern = true
             }
         }
-        return if (!is_empty_pattern && !is_nonempty_pattern)
-        // Some C++-bound `length` overloads (e.g. strings::length) have a hidden
-        // `context` arg; we only need arg[0], the user-passed collection.
-        return if (empty(len_call.arguments))
+        return if ((!is_empty_pattern && !is_nonempty_pattern) || empty(len_call.arguments))
         let raw_arg = len_call.arguments[0]
         let arg = self->peel_ref2value(raw_arg)
         // Bail on compound / parenthesized / deref args — their source bounds
@@ -891,9 +880,9 @@ class FixerVisitor : AstVisitor {
     def check_perf013(expr : ExprOp2?; opname : string) : void {
         //! a += 1 / a -= 1 / a += -1 / a -= -1 → a++ / a--
         //! Net delta: '+=' with +N has sign of N; '-=' flips the sign.
-        return if (expr.left == null || !self->is_workhorse_numeric(expr.left._type))
         // Bail on compound / parenthesized LHS — their span isn't reliable.
-        return if (!self->is_simple_subject(self->peel_ref2value(expr.left)))
+        return if (expr.left == null || !self->is_workhorse_numeric(expr.left._type)
+                || !self->is_simple_subject(self->peel_ref2value(expr.left)))
         var rhs_sign = 0
         return if (!self->is_const_pm_one(expr.right, rhs_sign))
         let delta = opname == "+=" ? rhs_sign : -rhs_sign
@@ -941,8 +930,7 @@ class FixerVisitor : AstVisitor {
     def check_style017b(blk : ExprBlock?) : void {
         //! Form (b): adjacent `if (cond) return b1` / `return b2` (b1 != b2) →
         //! `return cond` or `return !cond`. Spans both statements.
-        return if (in_template)
-        return if (!self->in_target_file(blk.at))
+        return if (in_template || !self->in_target_file(blk.at))
         let n = length(blk.list)
         return if (n < 2)
         for (i in range(n - 1)) {
@@ -950,26 +938,24 @@ class FixerVisitor : AstVisitor {
             let nxt = blk.list[i + 1]
             continue if (!(cur is ExprIfThenElse))
             let outer_if = cur as ExprIfThenElse
-            continue if (outer_if.if_false != null || outer_if.if_flags.isStatic)
             // Postfix-desugared form: `return X if (cond)` parses into an
             // ExprIfThenElse but the source line does NOT start with `if`.
             // Skip — the span/replacement logic would clobber the leading
             // `return X` token (corruption observed on utils/fix-lint-errors).
-            continue if (!self->source_line_starts_with_if(outer_if.at))
-            // Bail when the condition contains an `is` operator (lowered by the
-            // typer to `__rtti == "..."` with a synthetic ExprConstString whose
-            // `at` no longer covers the source type name). Rightmost computation
-            // is unreliable across this lowering.
-            continue if (self->expr_contains_rtti_check(outer_if.cond))
+            // Also bail when the condition contains an `is` operator (lowered
+            // by the typer to `__rtti == "..."` with a synthetic ExprConstString
+            // whose `at` no longer covers the source type name). Rightmost
+            // computation is unreliable across this lowering.
+            continue if (outer_if.if_false != null || outer_if.if_flags.isStatic
+                || !self->source_line_starts_with_if(outer_if.at)
+                || self->expr_contains_rtti_check(outer_if.cond))
             var b1 = false
             var b2 = false
-            continue if (!self->is_const_bool_return(outer_if.if_true, b1))
-            continue if (!self->is_const_bool_return(nxt, b2))
-            continue if (b1 == b2)
-            continue if (outer_if.cond == null)
+            continue if (!self->is_const_bool_return(outer_if.if_true, b1)
+                || !self->is_const_bool_return(nxt, b2)
+                || b1 == b2 || outer_if.cond == null)
             let cond = self->peel_ref2value(outer_if.cond)
-            continue if (cond == null)
-            continue if (self->cond_uses_property_call(cond))
+            continue if (cond == null || self->cond_uses_property_call(cond))
             var c_lo_l = 0; var c_lo_c = 0
             var c_hi_l = 0; var c_hi_c = 0
             self->leftmost_pos_of(cond, c_lo_l, c_lo_c)
@@ -985,7 +971,7 @@ class FixerVisitor : AstVisitor {
             continue if (empty(cond_text))
             // Sanity-check: if the extracted text starts with punctuation, the
             // chain helper landed mid-token — skip rather than emit corruption.
-            let c0 = character_at(cond_text, 0)
+            let c0 = first_character(cond_text)
             continue if (c0 == '.' || c0 == ']' || c0 == ',' || c0 == ')' || c0 == '}')
             let replacement = (b1
                 ? "return {cond_text}"
@@ -1013,13 +999,12 @@ class FixerVisitor : AstVisitor {
     // --- PERF015 / PERF016: ternary min/max/abs ---
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        return if (in_template)
-        return if (!self->in_target_file(expr.at))
-        return if (string(expr.op) != "?" || expr.subexpr == null
+        return if (in_template || !self->in_target_file(expr.at)
+                || expr.op != "?" || expr.subexpr == null
                 || !(expr.subexpr is ExprOp2))
         let cmp = expr.subexpr as ExprOp2
         let cop = string(cmp.op)
-        return if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")
+        return if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")  // nolint:STYLE016 — next guard has side effect (try_perf016 must run); not safely OR-able
                 || expr.left == null || expr.right == null)
         // PERF016 (abs) takes precedence — its pattern is stricter (one side is zero).
         if (self->try_perf016(expr, cmp, cop)) return
@@ -1033,7 +1018,7 @@ class FixerVisitor : AstVisitor {
         var found = false
         get_file_source_line(fi, line) $(line_text) {
             if (col >= 0 && col < length(line_text)) {
-                found = character_at(line_text, col) == ch
+                found = character_at(line_text, col) == ch  // nolint:PERF003 — cold: invoked per-call from PERF015/016 paren detection
             }
         }
         return found
@@ -1051,8 +1036,7 @@ class FixerVisitor : AstVisitor {
     }
 
     def try_perf015(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
-        return false if (!has_math_require)
-        return false if (self->is_parenthesized_cmp(cmp))
+        return false if (!has_math_require || self->is_parenthesized_cmp(cmp))
         let cl = cmp.left
         let cr = cmp.right
         return false if (cl == null || cr == null)
@@ -1098,8 +1082,7 @@ class FixerVisitor : AstVisitor {
     }
 
     def try_perf016(expr : ExprOp3?; cmp : ExprOp2?; cop : string) : bool {
-        return false if (!has_math_require)
-        return false if (self->is_parenthesized_cmp(cmp))
+        return false if (!has_math_require || self->is_parenthesized_cmp(cmp))
         var x_on_left = false
         if (self->is_const_zero(cmp.right)) {
             x_on_left = true
@@ -1164,11 +1147,9 @@ class FixerVisitor : AstVisitor {
         return if (in_template || ifte.if_false == null)
         var b1 = false
         var b2 = false
-        return if (!self->is_const_bool_return(ifte.if_true, b1))
-        return if (!self->is_const_bool_return(ifte.if_false, b2))
-        return if (b1 == b2)
-        // Extract `cond` source. Bail if non-simple.
-        return if (ifte.cond == null)
+        return if (!self->is_const_bool_return(ifte.if_true, b1)
+                || !self->is_const_bool_return(ifte.if_false, b2)
+                || b1 == b2 || ifte.cond == null)
         let cond = self->peel_ref2value(ifte.cond)
         return if (cond == null)
         // For the `cond` source, find its leftmost/rightmost bounds.
@@ -1195,8 +1176,8 @@ class FixerVisitor : AstVisitor {
         // statement). if_false is an ExprBlock (braces) or bare ExprReturn.
         let start_line = int(ifte.at.line)
         let start_col = int(ifte.at.column)
-        var end_line = int(ifte.if_false.at.last_line)
-        var end_col = int(ifte.if_false.at.last_column)
+        let end_line = int(ifte.if_false.at.last_line)
+        let end_col = int(ifte.if_false.at.last_column)
         self->push_edit_span(start_line, start_col, end_line, end_col, replacement, "STYLE017")
     }
 
@@ -1255,12 +1236,11 @@ class FixerVisitor : AstVisitor {
         //! Safe atoms (no parens): vars, fields, indices, calls, parenthesized exprs,
         //! existing unary ops, constants. Operator-level expressions need parens.
         return false if (e == null)
-        if (e is ExprVar || e is ExprField || e is ExprSafeField
+        return !(e is ExprVar || e is ExprField || e is ExprSafeField
                 || e is ExprAt || e is ExprSafeAt || e is ExprCall
                 || e is ExprConstBool || e is ExprConstInt || e is ExprConstUInt
                 || e is ExprConstFloat || e is ExprConstDouble || e is ExprConstString
-                || e is ExprOp1) return false
-        return true
+                || e is ExprOp1)
     }
 
     def extract_source_at(sl : int; sc : int; el : int; ec : int;
@@ -1409,13 +1389,13 @@ def collect_edits(file : string; var records : array<EditRecord>) : bool {
                 let n = length(astVisitor.edits)
                 records |> reserve(length(records) + n)
                 for (i in range(n)) {
-                    var r : EditRecord
-                    r.start_line = astVisitor.edits[i].start_line
-                    r.start_col = astVisitor.edits[i].start_col
-                    r.end_line = astVisitor.edits[i].end_line
-                    r.end_col = astVisitor.edits[i].end_col
-                    r.replacement := astVisitor.replacements[i]
-                    r.rule := astVisitor.edits[i].rule
+                    var r = EditRecord(
+                        start_line = astVisitor.edits[i].start_line,
+                        start_col = astVisitor.edits[i].start_col,
+                        end_line = astVisitor.edits[i].end_line,
+                        end_col = astVisitor.edits[i].end_col,
+                        replacement = astVisitor.replacements[i],
+                        rule = astVisitor.edits[i].rule)
                     records |> push(<- r)
                 }
                 unsafe {
@@ -1501,6 +1481,7 @@ def apply_edits_to_file(file : string; var records : array<EditRecord>; dry_run 
         }
     }
     records |> clear
+    records |> reserve(length(keep))
     for (r in keep) {
         var clone <- r
         records |> push(<- clone)
@@ -1620,13 +1601,15 @@ def main() : int {
         }
         // Build summary outside the keys() iteration to keep the table unlocked.
         var rule_strs : array<string>
+        rule_strs |> reserve(length(rule_counts))
         for (rule_name in keys(rule_counts)) {
             rule_strs |> push(string(rule_name))
         }
-        var summary = ""
-        for (rule_str in rule_strs) {
-            let cnt = rule_counts[rule_str]
-            summary = "{summary} {rule_str}={cnt}"
+        let summary = build_string() $(w) {
+            for (rule_str in rule_strs) {
+                let cnt = rule_counts[rule_str]
+                w |> write(" {rule_str}={cnt}")
+            }
         }
         let action = cfg.dry_run ? "WOULD FIX" : "FIX"
         print("{action} {file} ({length(records)} edits:{summary})\n")

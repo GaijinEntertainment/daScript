@@ -48,12 +48,7 @@ def jit_gc_stale_dlls(subdir : string; keep_basename : string) {
     // Covers stale `.dll` plus linker artifacts (`.o`, `.lib`, `.exp`, `.pdb`).
     let keep_prefix = "{keep_basename}."
     dir(subdir) $(fname) {
-        if (fname == "." || fname == "..") {
-            return
-        }
-        if (fname |> starts_with(keep_prefix)) {
-            return
-        }
+        if (fname == "." || fname == ".." || fname |> starts_with(keep_prefix)) return
         let full_path = "{subdir}/{fname}"
         var err : string
         let ok = remove(full_path, err)
@@ -157,8 +152,8 @@ class JIT_LLVM : AstSimulateMacro {
         var disabled : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
 
-        var r <- parse_args(type<JitCliOptions>)
-        var cli_opts = r |> unwrap_or_default
+        let r <- parse_args(type<JitCliOptions>)
+        let cli_opts = r |> unwrap_or_default
         assume jit_all_functions = prog.policies.jit_jit_all_functions
         let debug_info = cli_opts.debug_info |> unwrap_or(prog.policies.jit_debug_info)
         let dump_ir = cli_opts.dump_ir |> unwrap_or(false)
@@ -192,13 +187,13 @@ class JIT_LLVM : AstSimulateMacro {
             prog |> for_each_module() $(mod) {
                 mod |> for_each_function("") $(fun) {
                     let rqj = fun.moreFlags.requestJit
-                    fun.moreFlags &= ~MoreFunctionFlags.requestJit
+                    fun.moreFlags.requestJit = false
                     if (fun.flags.used && (jit_all_functions || rqj)) {
                         if (!fun.moreFlags.requestNoJit) {
                             disableJitVisitor.disable = false
                             fun |> visit(disableJitVisitorAdapter)
                             if (!disableJitVisitor.disable) {
-                                fun.moreFlags |= MoreFunctionFlags.requestJit
+                                fun.moreFlags.requestJit = true
                                 funcs |> emplace(fun)
                             } else {
                                 to_log(LOG_INFO, "LLVM JIT: disabled {fun.name}\n")
@@ -262,7 +257,7 @@ class JIT_LLVM : AstSimulateMacro {
                     let fnmna = uids.get_dll_fn_name(fun)
                     var fn_impl = LLVMGetNamedFunction(g_mod, fnmna.impl())
                     var fn = LLVMGetNamedFunction(g_mod, fnmna.publ())
-                    assume maybe_mod = prog.thisModuleName |> length() == 0 ? "" : "in module {prog.thisModuleName}"
+                    assume maybe_mod = empty(prog.thisModuleName) ? "" : "in module {prog.thisModuleName}"
                     if (!LLVMVerifyFunction(fn_impl, LLVMVerifierFailureAction.LLVMPrintMessageAction, false)) {
                         // to_log(LOG_ERROR, "LLVM JIT: {LLVMPrintModuleToString(g_mod)}\n");
                         panic("Internal jit error. Failed to get IR of '{fun.name} implementation' {maybe_mod}.\n")

@@ -146,8 +146,8 @@ def example_amplify(media_path, out_path : string) {
     }
 
     // Halve all sample values
-    for (i in range(length(samples))) {
-        samples[i] *= 0.5
+    for (s in samples) {
+        s *= 0.5
     }
 
     write_wav(out_path, samples, uint(sample_rate), channels)

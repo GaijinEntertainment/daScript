@@ -133,7 +133,7 @@ def do_grep_usage(symbol, directory, context_lines_str, glob_filter : string) : 
             match_count += length(by_file[fp])
         }
     }
-    var output = build_string() $(var w) {
+    let output = build_string() $(var w) {
         write(w, "Found {match_count} match")
         if (match_count != 1) {
             write(w, "es")

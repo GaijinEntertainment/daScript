@@ -41,7 +41,7 @@ def make_inventory() : Inventory {
 }
 
 def make_numbers() : array<int> {
-    var result : array<int>
+    var result : array<int>  // nolint:STYLE012 — tutorial demonstrates push semantics
     result |> push(10)
     result |> push(20)
     result |> push(30)
@@ -81,7 +81,7 @@ def main {
     // === Clone (:=) ===
 
     // Clone creates a deep, independent copy. Both sides remain valid.
-    var original : array<int>
+    var original : array<int>  // nolint:STYLE012 — tutorial demonstrates push semantics
     original |> push(1)
     original |> push(2)
     original |> push(3)
@@ -112,7 +112,7 @@ def main {
     // === Struct field initialization ===
 
     // Each field can use a different mode in construction:
-    var weapons : array<string>
+    var weapons : array<string>  // nolint:STYLE012 — tutorial demonstrates push semantics
     weapons |> push("bow")
     weapons |> push("arrow")
 

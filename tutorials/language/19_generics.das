@@ -119,9 +119,7 @@ def sum_array(arr : array<auto(T)>) : T {
 }
 
 def first_or_default(arr : array<auto(T)>; default_val : T) : T {
-    if (length(arr) > 0) {
-        return arr[0]
-    }
+    if (!empty(arr)) return arr[0]
     return default_val
 }
 

@@ -111,7 +111,7 @@ def example_speed_shift() {
 def example_decode() {
     print("\n=== Section 4: load_audio_file inspection ===\n")
     let sample <- load_audio_file("{MEDIA}/drums/bd/BT0A0A7.wav")
-    if (length(sample.data) == 0) {
+    if (empty(sample.data)) {
         print("  (file not found — skipping)\n")
         return
     }

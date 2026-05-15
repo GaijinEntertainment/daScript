@@ -38,9 +38,7 @@ def describeValue(v : Value) : string {
         return "int({v as i})"
     } elif (v is f) {
         return "float({v as f})"
-    } elif (v is s) {
-        return "string(\"{v as s}\")"
-    }
+    } elif (v is s) return "string(\"{v as s}\")"
     return "unknown"
 }
 
@@ -72,7 +70,7 @@ def main {
     // the compiler promotes the unnamed literal to the named tuple.
     let eid = 7
     let distSq = 2.5
-    var hit : tuple<eid : int; distSq : float> = (eid, distSq)
+    let hit : tuple<eid : int; distSq : float> = (eid, distSq)
     print("hit.eid = {hit.eid}, hit.distSq = {hit.distSq}\n")
 
     // Same shorthand works when pushing into an array of named tuples.

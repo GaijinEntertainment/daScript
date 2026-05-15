@@ -49,7 +49,7 @@ def select_text_demo() {
     print("=== select_text ===\n")
 
     parse_xml(CATALOG_XML) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // Get text of the first product's name
@@ -81,7 +81,7 @@ def select_value_demo() {
     print("\n=== select_value ===\n")
 
     parse_xml(CATALOG_XML) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // Attribute value via XPath
@@ -116,7 +116,7 @@ def for_each_select_demo() {
     print("\n=== for_each_select ===\n")
 
     parse_xml(CATALOG_XML) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // All product names
@@ -167,7 +167,7 @@ def compiled_xpath_demo() {
     print("\n=== Compiled XPath ===\n")
 
     parse_xml(CATALOG_XML) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         with_xpath("product/name") $(query) {
@@ -198,7 +198,7 @@ def low_level_xpath() {
     print("\n=== Low-level XPath ===\n")
 
     parse_xml(CATALOG_XML) $(doc, ok) {
-        if (!ok) { return ; }
+        if (!ok) return ;
         let root = doc.document_element
 
         // select_node — first matching node

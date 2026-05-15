@@ -33,7 +33,7 @@ require daslib/contracts
 // [expect_any_array] — matches array<T>, T[N], or das::vector<T>
 [expect_any_array(arr)]
 def print_first(arr) {
-    if (length(arr) > 0) {
+    if (!empty(arr)) {
         print("  first element: {arr[0]}\n")
     } else {
         print("  empty array\n")

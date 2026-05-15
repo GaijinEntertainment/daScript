@@ -203,7 +203,7 @@ struct GameState {
 
 def demo_nested() {
     print("\n=== nested struct serialization ===\n")
-    var state : GameState
+    var state : GameState  // nolint:STYLE013 — tutorial demonstrates incremental field setup with nested table inserts
     state.player = Player(name = "Knight", hp = 80, x = 10.0, y = 20.0)
     state.level = 3
     state.inventory.items |> push("sword")

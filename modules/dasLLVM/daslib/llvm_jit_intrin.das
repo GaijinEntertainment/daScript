@@ -132,16 +132,11 @@ def public has_intrinsic(expr : ExprCallFunc?) {
     // is not enough and `pfun` can return null sometimes.
     // But we don't have full picture without arguments.
     // Anyway, assertion in lookup_intrinsic guarantees consistency.
-    if (call_name == "$::length" && !argType.isGoodArrayType) {
-        // table<string; json::JsonValue>
-        // $::dasvector`ptr`Variable&
-        return false
-    }
-    if (!expr.arguments |> empty() && argType.isHandle) {
-        // intrinsics can't have handle types:
-        // int64(clock)
-        return false
-    }
+    // First guard: $::length only handles arrays (not table<string; json::JsonValue>
+    // or $::dasvector`ptr`Variable&). Second: intrinsics can't have handle types
+    // (e.g. int64(clock)).
+    if ((call_name == "$::length" && !argType.isGoodArrayType)
+        || (!expr.arguments |> empty() && argType.isHandle)) return false
     g_intrin_lookup |> get(call_name) $(pfun) {
         result = true
     }
@@ -185,9 +180,7 @@ def intrinsic_is_standalone_exe(var ctx : JitCtx; expr : ExprCallFunc?; argument
 
 def intrinsic_builtin_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let intType = base_type_to_llvm_type(expr._type.baseType)
-    if (length(arguments) == 0) {
-        return LLVMConstInt(intType, 0ul, 0)
-    }
+    if (empty(arguments)) return LLVMConstInt(intType, 0ul, 0)
     assume argType = expr.arguments[0]._type
     if (argType.baseType == expr._type.baseType) {
         return arguments[0] // ctor of the same type is the same value, i.e int(a:int) is a
@@ -240,9 +233,7 @@ def any2int(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType :
 def intrinsic_builtin_int_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume resType = expr._type
     assume argType = expr.arguments[0]._type
-    if (length(arguments) == 0) {
-        return build_broadcast_vector(ctx.builder, resType, ctx.types.ConstI32(0ul))
-    }
+    if (empty(arguments)) return build_broadcast_vector(ctx.builder, resType, ctx.types.ConstI32(0ul))
     let outSigned = resType.vectorBaseType == Type.tInt
     // this works around the bug of fp2ui not working correctly for vectors on some values
     let isFloatToUintVec = argType.isVectorType && (argType.vectorBaseType == Type.tFloat) && !outSigned
@@ -286,9 +277,7 @@ def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType
 
 def intrinsic_builtin_float_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     assume resType = expr._type
-    if (length(arguments) == 0) {
-        return build_broadcast_vector(ctx.builder, resType, LLVMConstReal(ctx.types.t_float, 0.0lf))
-    }
+    if (empty(arguments)) return build_broadcast_vector(ctx.builder, resType, LLVMConstReal(ctx.types.t_float, 0.0lf))
     if (length(arguments) == 1) {
         if (expr.arguments[0]._type.isVectorType) {
             let outType = type_to_llvm_type(expr._type)
@@ -320,9 +309,7 @@ def intrinsic_builtin_float_vec(var ctx : JitCtx; expr : ExprCallFunc?; argument
 
 def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let floatType = base_type_to_llvm_type(expr._type.baseType)
-    if (length(arguments) == 0) {
-        return LLVMConstReal(floatType, 0.0lf)
-    }
+    if (empty(arguments)) return LLVMConstReal(floatType, 0.0lf)
     assume argType = expr.arguments[0]._type
     if (argType.baseType == expr._type.baseType) {
         return arguments[0]
@@ -570,7 +557,11 @@ def intrinsic_math_float_op1(var ctx : JitCtx; expr : ExprCallFunc?; arguments :
 }
 
 def intrinsic_math_float_op1_to_int(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    var res = intrinsic_math_any_float_op1(string(expr.name) |> slice(0, -1), ctx.builder, expr, arguments)
+    var op_name = ""
+    peek(expr.name) $(s) {
+        op_name = slice(s, 0, -1)
+    }
+    var res = intrinsic_math_any_float_op1(op_name, ctx.builder, expr, arguments)
     return LLVMBuildFPToSI(ctx.builder, res, type_to_llvm_abi_type(expr._type), "")
 }
 

@@ -49,19 +49,11 @@ def public live_dispatch_command(command_json : string) : string {
     //! calls the handler, and returns the response as a JSON string.
     var parse_error = ""
     var js = read_json(command_json, parse_error)
-    if (js == null) {
-        return write_json(JV("parse error: {parse_error}"))
-    }
+    if (js == null) return write_json(JV("parse error: {parse_error}"))
     let name = js?.name ?? ""
-    if (empty(name)) {
-        return write_json(JV("missing command name"))
-    }
-    if (name == "help") {
-        return live_help_json()
-    }
-    if (!key_exists(live_command_registry, name)) {
-        return write_json(JV("unknown command: {name}"))
-    }
+    if (empty(name)) return write_json(JV("missing command name"))
+    if (name == "help") return live_help_json()
+    if (!key_exists(live_command_registry, name)) return write_json(JV("unknown command: {name}"))
     var args : JsonValue?
     if (js.value is _object) {
         let tab & = unsafe(js.value as _object)
@@ -69,9 +61,7 @@ def public live_dispatch_command(command_json : string) : string {
     }
     let handler = live_command_registry[name]
     var result = invoke(handler, args)
-    if (result != null) {
-        return write_json(result)
-    }
+    if (result != null) return write_json(result)
     return write_json(JV(true))
 }
 

@@ -151,7 +151,7 @@ class BuildDemoMacro : AstCallMacro {
 
         // Build the function body — each statement demonstrates
         // a different reification operator or qmacro variant.
-        var fn_body : array<ExpressionPtr>
+        var fn_body : array<ExpressionPtr>  // nolint:STYLE012 — tutorial walks through reifications one at a time with explanatory comments
 
         // $v — greeting is baked in as a string constant.
         fn_body |> push <| clone_expression(print_greeting)
@@ -181,6 +181,7 @@ class BuildDemoMacro : AstCallMacro {
         fn_body |> push <| clone_expression(block_stmts)
 
         // qmacro_block_to_array — extra statements appended.
+        fn_body |> reserve(length(fn_body) + length(extra))
         for (s in extra) {
             fn_body |> push <| clone_expression(s)
         }
@@ -193,7 +194,7 @@ class BuildDemoMacro : AstCallMacro {
         var demo_fn <- qmacro_function(fn_name) $($a(fn_args)) {
             $b(fn_body)
         }
-        demo_fn.flags |= FunctionFlags.generated
+        demo_fn.flags.generated = true
         add_function(compiling_module(), demo_fn)
 
         // ===============================================================
@@ -223,7 +224,7 @@ class BuildDemoMacro : AstCallMacro {
         var t_value = clone_type(int_type)
         var add_fn <- qmacro_template_function(@@demo_add)
         add_fn.name := "demo_add_int"
-        add_fn.flags |= FunctionFlags.generated
+        add_fn.flags.generated = true
         add_function(compiling_module(), add_fn)
 
         // ===============================================================

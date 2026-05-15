@@ -40,7 +40,7 @@ def main() : int {
         print_help(get_command_info(type<Config>), "hygiene")
         return 1
     }
-    var cfg <- args_r |> move_unwrap
+    let cfg <- args_r |> move_unwrap
     if (cfg.help) {
         print_help(get_command_info(type<Config>), "hygiene")
         return 0

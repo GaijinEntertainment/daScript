@@ -79,7 +79,7 @@ def do_list_requires(file : string; project : string = ""; json : bool = false) 
             sort(transitive_entries) $(a, b : RequireEntry) {
                 return a.name < b.name
             }
-            var result = RequiresResult(direct <- direct_entries, transitive <- transitive_entries)
+            let result = RequiresResult(direct <- direct_entries, transitive <- transitive_entries)
             return sprint_json(result, false)
         }
         sort(transitive_text)

@@ -146,7 +146,7 @@ def main() {
         //     _::sql_extract(sqlite3_column_int64(...), type<OrderStatus>)
         let paid <- _sql(db |> select_from(type<Order>) |> _where(_.Status == OrderStatus.Paid))
         to_log(LOG_INFO, "paid orders: {length(paid)}\n")
-        if (length(paid) > 0) {
+        if (!empty(paid)) {
             to_log(LOG_INFO, "first paid: PlacedAt unix_seconds={paid[0].PlacedAt.unix_seconds}\n")
         }
 

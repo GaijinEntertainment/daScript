@@ -108,7 +108,7 @@ class TracedBlockMacro : AstBlockAnnotation {
             numStmts++
         }
         if (numStmts > 0) {
-            numStmts -= 1
+            numStmts--
         }
 
         // Report

@@ -80,9 +80,8 @@ def write_module_api(var writer : StringBuilderWriter; mod : Module?; filter : s
     }
     if (want_section(section, "generics") || want_section(section, "operators")) {
         for_each_generic(mod) $(func) {
-            if (func.flags.privateFunction || func.flags.generated || string(func.name) |> starts_with("```")) {  // nolint:PERF012
-                return
-            }
+            if (func.flags.privateFunction || func.flags.generated
+                || string(func.name) |> starts_with("```")) return  // nolint:PERF012 — name_starts_with-based prefix check on private/generated filter
             let fname = string(func.name)
             if (!name_matches_filter(fname, filter)) return
             let entry = build_string() $(var w) {

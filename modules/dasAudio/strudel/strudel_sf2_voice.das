@@ -17,12 +17,8 @@ let private SF2_SAMPLE_RATE = 48000.0
 def public sf2_velocity_attenuation(velocity : int) : float {
     //! SF2 default velocity-to-attenuation curve (concave, 960 cB range).
     //! Implements default modulator #1 from SF2 spec section 8.4.2; returns a linear gain.
-    if (velocity <= 0) {
-        return 0.0
-    }
-    if (velocity >= 127) {
-        return 1.0
-    }
+    if (velocity <= 0) return 0.0
+    if (velocity >= 127) return 1.0
     // concave curve: atten_cB = 960 * (-20 / (96 * ln2)) * ln(v/127)
     let v_norm = float(velocity) / 127.0
     let concave = -20.0 / (96.0 * 0.6931472) * log(v_norm)  // 0..1 range, 0 at v=127
@@ -37,22 +33,14 @@ def public sf2_velocity_attenuation(velocity : int) : float {
 let private PEAK_ATTEN = 960.0
 
 def private sf2_concave(val : float) : float {
-    if (val <= 0.0) {
-        return 0.0
-    }
-    if (val >= 127.0) {
-        return 1.0
-    }
+    if (val <= 0.0) return 0.0
+    if (val >= 127.0) return 1.0
     return clamp((-200.0 * 2.0 / PEAK_ATTEN) * log((127.0 - val) / 127.0) / 2.302585, 0.0, 1.0)
 }
 
 def private sf2_convex(val : float) : float {
-    if (val <= 0.0) {
-        return 0.0
-    }
-    if (val >= 127.0) {
-        return 1.0
-    }
+    if (val <= 0.0) return 0.0
+    if (val >= 127.0) return 1.0
     return clamp(1.0 - (-200.0 * 2.0 / PEAK_ATTEN) * log(val / 127.0) / 2.302585, 0.0, 1.0)
 }
 
@@ -62,9 +50,7 @@ def private sf2_convex(val : float) : float {
 // Returns the value and the range (typically 128.0, but 0x4000 for pitch wheel).
 // Returns (value, range) tuple. Range is typically 128.0, but 16384.0 for pitch wheel.
 def private sf2_mod_source_value(src : int; velocity, key : int; cc_values : int[128]) : tuple<float; float> {
-    if (sf2_mod_src_cc(src)) {
-        return float(cc_values[sf2_mod_src_index(src)]) => 128.0
-    }
+    if (sf2_mod_src_cc(src)) return float(cc_values[sf2_mod_src_index(src)]) => 128.0
     let idx = sf2_mod_src_index(src)
     if (idx == 0) {        // NONE — value is range (produces 1.0 after normalization)
         return 128.0 => 128.0
@@ -78,7 +64,7 @@ def private sf2_mod_source_value(src : int; velocity, key : int; cc_values : int
         return 0.0 => 128.0
     } elif (idx == 14) {   // pitchWheel
         return float(cc_values[127]) => 16384.0  // last CC slot as pitchwheel placeholder
-    } elif (idx == 16) {   // pitchWheelSensitivity — default 2 semitones
+    } elif (idx == 16) {   // pitchWheelSensitivity — default 2 semitones — nolint:STYLE005 — last arm of CC index elif chain
         return 2.0 => 128.0
     }
     return 0.0 => 128.0
@@ -89,9 +75,7 @@ def private sf2_mod_source_value(src : int; velocity, key : int; cc_values : int
 // mapping function (linear/concave/convex/switch).
 def private sf2_mod_transform_source(src : int; val, src_range : float) : float {
     let idx = sf2_mod_src_index(src)
-    if (idx == 0 && !sf2_mod_src_cc(src)) {
-        return 1.0  // NONE source always returns 1.0
-    }
+    if (idx == 0 && !sf2_mod_src_cc(src)) return 1.0  // NONE source always returns 1.0
     let val_norm = val / src_range
     let inv_norm = 1.0 - 1.0 / src_range - val_norm
     let is_negative = sf2_mod_src_negative(src)
@@ -161,9 +145,7 @@ def public sf2_mod_identity_match(a, b : SF2Modulator) : bool {
 // Check if any modulator in the zone overrides (has same identity as) a default modulator.
 def private sf2_zone_overrides(zone : SF2Zone; def_mod : SF2Modulator) : bool {
     for (m in zone.modulators) {
-        if (sf2_mod_identity_match(m, def_mod)) {
-            return true
-        }
+        if (sf2_mod_identity_match(m, def_mod)) return true
     }
     return false
 }
@@ -201,9 +183,7 @@ def public sf2_apply_default_modulators(izone : SF2Zone; global_izone : SF2Zone 
     //! Apply the 10 SF2 spec default modulators (8.4.1-8.4.10) that are not overridden by any zone modulator.
     //! Must be called AFTER zone modulators have already been accumulated into `gen_offsets`.
     for (dm in SF2_DEFAULT_MODS) {
-        if (dm.amount == 0) {
-            continue  // disabled default (#2 vel→filter)
-        }
+        if (dm.amount == 0) continue  // disabled default (#2 vel→filter)
         // check if any zone overrides this default
         var overridden = sf2_zone_overrides(izone, dm)
         if (!overridden && global_izone != null) {
@@ -388,7 +368,7 @@ def sf2_env_tick(var env : SF2Envelope&; released : bool; sample_rate : float) :
 
     // check stage transitions
     if (env.stage == SF2EnvStage.env_delay) {
-        env.time_in_stage -= 1.0
+        env.time_in_stage--
         if (env.time_in_stage <= 0.0) {
             sf2_env_next_segment(env, sample_rate)
         }
@@ -401,7 +381,7 @@ def sf2_env_tick(var env : SF2Envelope&; released : bool; sample_rate : float) :
             }
         }
     } elif (env.stage == SF2EnvStage.env_hold) {
-        env.time_in_stage -= 1.0
+        env.time_in_stage--
         if (env.time_in_stage <= 0.0) {
             sf2_env_next_segment(env, sample_rate)
         }
@@ -437,9 +417,7 @@ struct SF2LFO {
 def sf2_lfo_tick(var lfo : SF2LFO&; dt : float) : float {
     //! Advance the LFO by `dt` seconds and return the triangle-wave output in [-1..1] (zero during the delay).
     lfo.elapsed += dt
-    if (lfo.elapsed < lfo.delay_sec) {
-        return 0.0
-    }
+    if (lfo.elapsed < lfo.delay_sec) return 0.0
     // triangle wave: -1 to 1
     lfo.phase += lfo.freq * dt
     if (lfo.phase > 1.0) {
@@ -480,9 +458,7 @@ def private sf2_biquad_setup(var bq : SF2Biquad&; fc_normalized : float) {
 }
 
 def private sf2_biquad_tick(var bq : SF2Biquad&; input : float) : float {
-    if (!bq.active) {
-        return input
-    }
+    if (!bq.active) return input
     let inp = double(input)
     let output = inp * bq.a0 + bq.z1
     bq.z1 = inp * bq.a1 + bq.z2 - bq.b1 * output
@@ -573,9 +549,7 @@ def public sf2_collect_atten_modulators(izone : SF2Zone; global_izone : SF2Zone 
     }
     // default modulators targeting attenuation (#1=velocity, #5=CC7, #7=CC11)
     for (dm in SF2_DEFAULT_MODS) {
-        if (dm.amount == 0 || dm.dest_oper != target) {
-            continue
-        }
+        if (dm.amount == 0 || dm.dest_oper != target) continue
         var overridden = sf2_zone_overrides(izone, dm)
         if (!overridden && global_izone != null) {
             overridden = sf2_zone_overrides(*global_izone, dm)
@@ -623,9 +597,7 @@ def public sf2_create_c_voice(sf2 : SF2File; inst_idx, izone_idx : int;
     let sr = float(SF2_SAMPLE_RATE)
 
     let sid = get_gen(*izone, global_izone, pzone, global_pzone, int(SF2GenOper.sampleID), -1)
-    if (sid < 0 || sid >= length(sf2.samples)) {
-        return false
-    }
+    if (sid < 0 || sid >= length(sf2.samples)) return false
     let shdr = sf2.samples[sid]
 
     unsafe { ma_sf2_voice_init(addr(out_voice), sr); }

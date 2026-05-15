@@ -43,9 +43,7 @@ require daslib/archive
 class LiveVarsLint : AstPassMacro {
     //! Lint pass that checks for @live on constant (let) variables.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
-        if (mod.name == "live_vars") {
-            return false
-        }
+        if (mod.name == "live_vars") return false
         mod |> for_each_global() $(g) {
             if (g.annotation |> find_arg("live") ?as tBool ?? false) {
                 if (g._type.flags.constant) {
@@ -84,17 +82,13 @@ class LiveVarsPass : AstPassMacro {
     //! Infer pass macro that generates serialization for @live globals.
     def override apply(prog : ProgramPtr; mod : Module?) : bool {
         // Skip self
-        if (mod.name == "live_vars") {
-            return false
-        }
+        if (mod.name == "live_vars") return false
         // Idempotency: skip if already generated
         var found = false
         mod |> for_each_function("__before_reload_live_vars") $(fn) {
             found = true
         }
-        if (found) {
-            return false
-        }
+        if (found) return false
         // Each target is either a whole @live global or a single @live field
         // of a non-@live global; whole-struct preservation already covers all
         // fields, so field walks happen only when the global itself is not @live.
@@ -102,9 +96,7 @@ class LiveVarsPass : AstPassMacro {
         var field_targets : array<LiveFieldTarget>
 
         mod |> for_each_global() $(g) {
-            if (g._type.flags.constant) {
-                return  // skip let bindings
-            }
+            if (g._type.flags.constant) return  // skip let bindings
             let varLive = g.annotation |> find_arg("live") ?as tBool ?? false
             if (varLive) {
                 let initHash = g.init != null ? int64(hash(describe(g.init))) : int64(0)
@@ -114,9 +106,7 @@ class LiveVarsPass : AstPassMacro {
                     init_hash = initHash))
             } else {
                 let st = g._type.structType
-                if (st == null) {
-                    return
-                }
+                if (st == null) return
                 // Per-field hash combines the global's initializer (if any) with the
                 // field's own default. A change to either source-level expression
                 // invalidates the persisted value for the field. Without the global
@@ -125,9 +115,7 @@ class LiveVarsPass : AstPassMacro {
                 let gInitPart = g.init != null ? int64(hash(describe(g.init))) : int64(0)
                 for (f in st.fields) {
                     if (f.annotation |> find_arg("live") ?as tBool ?? false) {
-                        if (f._type.flags.constant) {
-                            continue  // lint pass already errored
-                        }
+                        if (f._type.flags.constant) continue  // lint pass already errored
                         let fInitPart = f.init != null ? int64(hash(describe(f.init))) : int64(0)
                         field_targets |> emplace(LiveFieldTarget(
                             var_name = string(g.name),
@@ -138,9 +126,7 @@ class LiveVarsPass : AstPassMacro {
                 }
             }
         }
-        if (empty(var_targets) && empty(field_targets)) {
-            return false
-        }
+        if (empty(var_targets) && empty(field_targets)) return false
         // Ensure archive module is available
         var archiveModule : Module?
         program_for_each_module(prog) $(m) {

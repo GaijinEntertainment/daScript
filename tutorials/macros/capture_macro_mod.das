@@ -55,13 +55,9 @@ def audit_on_finalize(field_name : string) {
 
 [macro_function]
 def private is_audited(typ : TypeDeclPtr) : bool {
-    if (!typ.isStructure || typ.structType == null) {
-        return false
-    }
+    if (!typ.isStructure || typ.structType == null) return false
     for (ann in typ.structType.annotations) {
-        if (ann.annotation.name == "audited") {
-            return true
-        }
+        if (ann.annotation.name == "audited") return true
     }
     return false
 }
@@ -82,12 +78,7 @@ class CaptureAuditMacro : AstCaptureMacro {
     //!   destruction (after the user-written finally{} but before field cleanup).
 
     def override captureExpression(prog : Program?; mod : Module?; expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
-        if (is_in_completion()) {
-            return default<ExpressionPtr>
-        }
-        if (!is_audited(etype)) {
-            return default<ExpressionPtr>
-        }
+        if (is_in_completion() || !is_audited(etype)) return default<ExpressionPtr>
         // Determine the field name from the expression (typically an ExprVar)
         var field_name = "unknown"
         if (expr is ExprVar) {
@@ -102,13 +93,9 @@ class CaptureAuditMacro : AstCaptureMacro {
 
     def override captureFunction(prog : Program?; mod : Module?; var lcs : Structure?; var fun : FunctionPtr) : void {
         // Generators call finally on every iteration — skip them
-        if (fun.flags._generator) {
-            return
-        }
+        if (fun.flags._generator) return
         for (fld in lcs.fields) {
-            if (!is_audited(fld._type)) {
-                continue
-            }
+            if (!is_audited(fld._type)) continue
             // Append: capture_macro_mod::audit_after_invoke("field_name")
             // NOTE: this adds to the lambda FUNCTION's body finalList, so it
             // runs after each invocation — like a per-call finally.  This is
@@ -127,9 +114,7 @@ class CaptureAuditMacro : AstCaptureMacro {
         // runs on DESTRUCTION — after the user-written finally{} block but
         // before the compiler-generated field cleanup (delete *__this).
         for (fld in lcs.fields) {
-            if (!is_audited(fld._type)) {
-                continue
-            }
+            if (!is_audited(fld._type)) continue
             {
                 var pCall = new ExprCall(at = fld.at, name := "capture_macro_mod::audit_on_finalize")
                 pCall.arguments |> emplace_new <| new ExprConstString(at = fld.at, value := string(fld.name))

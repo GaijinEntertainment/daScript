@@ -8,7 +8,7 @@ def check_box(box : AABB) {}
 
 [export]
 def main() {
-    var b : AABB
+    let b : AABB
     check_box(b)
     var b_ptr : AABB?
     check_box_ptr(b_ptr)

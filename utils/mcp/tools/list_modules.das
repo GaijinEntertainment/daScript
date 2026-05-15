@@ -26,7 +26,7 @@ def do_list_modules(json : bool = false) : string {
     }
     sort(daslib_mods)
     if (json) {
-        var result = ModuleList(builtin <- builtin_mods, daslib <- daslib_mods)
+        let result = ModuleList(builtin <- builtin_mods, daslib <- daslib_mods)
         return make_tool_result(sprint_json(result, false))
     }
     return make_tool_result(build_string() $(var writer) {

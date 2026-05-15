@@ -120,13 +120,11 @@ to embed the resulting string array in the AST:
 
    def override visit(prog : ProgramPtr; mod : Module?;
            expr : ExprReader?) : ExpressionPtr {
-       if (is_in_completion()) {
-           return default<ExpressionPtr>
-       }
+       if (is_in_completion()) return default<ExpressionPtr>
        let seq = string(expr.sequence)
        var items <- split(seq, ",")
-       for (i in range(length(items))) {
-           items[i] = strip(items[i])
+       for (item in items) {
+           item = strip(item)
        }
        return convert_to_expression(items, expr.at)
    }

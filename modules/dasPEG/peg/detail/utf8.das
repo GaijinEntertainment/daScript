@@ -27,12 +27,8 @@ def public get_next_character(utf8_string : array<uint8>; var index : int&) : in
 
         state = s_utf8d[256u + state + type_]
 
-        if (state == UTF8_ACCEPT) {
-            return unsafe(reinterpret<int> codepoint)
-        }
-        if (state == 1u) {// UTF8_REJECT
-            return -1
-        }
+        if (state == UTF8_ACCEPT) return unsafe(reinterpret<int> codepoint)
+        if (state == 1u) return -1   // UTF8_REJECT
     }
 
     return 0
@@ -40,9 +36,7 @@ def public get_next_character(utf8_string : array<uint8>; var index : int&) : in
 
 
 def public get_utf8_byte_count(code_point : int) : int {
-    if (code_point == -1) {
-        return 0
-    }
+    if (code_point == -1) return 0
 
     if (code_point <= 0x7F |> int()) {
         return 1
@@ -50,9 +44,7 @@ def public get_utf8_byte_count(code_point : int) : int {
         return 2
     } elif (code_point <= 0xFFFF |> int()) {
         return 3
-    } elif (code_point <= 0x10FFFF |> int()) {
-        return 4
-    }
+    } elif (code_point <= 0x10FFFF |> int()) return 4
 
     panic("Not a unicode symbol")
     return 0

@@ -35,10 +35,8 @@ def do_run_test(file : string; project : string = ""; timeout_str : string = "";
             }
         }
         remove(json_path)
-        if (empty(json_content)) {
-            // dastest crashed before writing JSON — return raw output
-            return make_tool_result("\{\"file\":\"{file}\",\"success\":false,\"output\":\"{output}\"}", true)
-        }
+        // dastest crashed before writing JSON — return raw output
+        if (empty(json_content)) return make_tool_result("\{\"file\":\"{file}\",\"success\":false,\"output\":\"{output}\"}", true)
         let is_error = find(json_content, "\"success\":false") >= 0
         return make_tool_result(json_content, is_error)
     }

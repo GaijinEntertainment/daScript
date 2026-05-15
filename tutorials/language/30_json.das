@@ -225,7 +225,7 @@ def modifying_json() {
     print("built: {write_json(obj)}\n")
 
     // Build an array by hand
-    var items : array<JsonValue?>
+    var items : array<JsonValue?>  // nolint:STYLE012 — tutorial demonstrates push API
     items |> push(JV(1))
     items |> push(JV("two"))
     items |> push(JV(true))

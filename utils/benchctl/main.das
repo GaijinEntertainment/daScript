@@ -316,9 +316,9 @@ def run_compare_cmd(db : SqlRunner; parsed : ParsedArgs) : string {
         }
         var table_rows : array<TableRow?>
         for (stat_old, stat_new in as_list(s_old.stats), as_list(s_new.stats)) {
-            if (stat_old.metric.is_alloc && stat_old.mean_avg == 0.0lf && stat_new.mean_avg == 0.0lf) continue
-            if (stat_old.metric.is_alloc && abs(stat_old.mean_avg - stat_new.mean_avg) < 1.0lf) continue
-            if (empty(stat_old.values) || empty(stat_new.values)) continue
+            if ((stat_old.metric.is_alloc && stat_old.mean_avg == 0.0lf && stat_new.mean_avg == 0.0lf)
+                || (stat_old.metric.is_alloc && abs(stat_old.mean_avg - stat_new.mean_avg) < 1.0lf)
+                || empty(stat_old.values) || empty(stat_new.values)) continue
 
             old_total_values[stat_old.metric.name] |> push(stat_old.mean_avg)
             new_total_values[stat_new.metric.name] |> push(stat_new.mean_avg)

@@ -113,9 +113,7 @@ Use it to test that your code handles arbitrary input gracefully:
 .. code-block:: das
 
     def safe_divide(a, b : int) : int {
-        if (b == 0) {
-            return 0
-        }
+        if (b == 0) return 0
         return a / b
     }
 
@@ -155,12 +153,8 @@ and verify that invariants always hold:
 .. code-block:: das
 
     def clamp_value(x, lo, hi : int) : int {
-        if (x < lo) {
-            return lo
-        }
-        if (x > hi) {
-            return hi
-        }
+        if (x < lo) return lo
+        if (x > hi) return hi
         return x
     }
 

@@ -59,7 +59,7 @@ def identify_target(hit : CursorHit) : RefTarget {
     // ExprInvoke → resolve the callable (first argument)
     if (expr is ExprInvoke) {
         let inv = expr as ExprInvoke
-        if (length(inv.arguments) > 0) {
+        if (!empty(inv.arguments)) {
             let callable = inv.arguments[0]
             // first arg is a variable (function pointer parameter/local)
             if (callable is ExprVar) {
@@ -299,6 +299,14 @@ def format_references(refs : array<Reference>; target : RefTarget) : string {
     }
 }
 
+def private fileinfo_name_contains(name : das_string; needle : string) : bool {
+    var hit = false
+    peek(name) $(s) {
+        hit = find(s, needle) >= 0
+    }
+    return hit
+}
+
 // Try to identify a target from declarations at the cursor line
 // (function defs, struct defs, enum defs — not expressions)
 def identify_declaration_target(program : smart_ptr<Program>; file : string; line : int) : RefTarget {
@@ -309,7 +317,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) return
         let f = func
         if (int(f.at.line) == line && f.at.fileInfo != null) {
-            if (find(string(f.at.fileInfo.name), file) >= 0) {
+            if (fileinfo_name_contains(f.at.fileInfo.name, file)) {
                 result = RefTarget(kind = RefTargetKind.func, target_ptr = to_void(f), name = string(f.name))
             }
         }
@@ -320,7 +328,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) return
         let s = st
         if (int(s.at.line) == line && s.at.fileInfo != null) {
-            if (find(string(s.at.fileInfo.name), file) >= 0) {
+            if (fileinfo_name_contains(s.at.fileInfo.name, file)) {
                 result = RefTarget(kind = RefTargetKind.structure, target_ptr = to_void(s), name = string(s.name))
             }
         }
@@ -331,7 +339,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) return
         let e = en
         if (int(e.at.line) == line && e.at.fileInfo != null) {
-            if (find(string(e.at.fileInfo.name), file) >= 0) {
+            if (fileinfo_name_contains(e.at.fileInfo.name, file)) {
                 result = RefTarget(kind = RefTargetKind.enumeration, target_ptr = to_void(e), name = string(e.name))
             }
         }
@@ -342,7 +350,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) return
         let td = value
         if (int(td.at.line) == line && td.at.fileInfo != null) {
-            if (find(string(td.at.fileInfo.name), file) >= 0) {
+            if (fileinfo_name_contains(td.at.fileInfo.name, file)) {
                 result = RefTarget(kind = RefTargetKind.alias, alias_name = string(name), name = string(name))
             }
         }
@@ -353,7 +361,7 @@ def identify_declaration_target(program : smart_ptr<Program>; file : string; lin
         if (result.kind != RefTargetKind.none) return
         let v = value
         if (int(v.at.line) == line && v.at.fileInfo != null) {
-            if (find(string(v.at.fileInfo.name), file) >= 0) {
+            if (fileinfo_name_contains(v.at.fileInfo.name, file)) {
                 result = RefTarget(kind = RefTargetKind.variable, target_ptr = to_void(v), name = string(v.name))
             }
         }

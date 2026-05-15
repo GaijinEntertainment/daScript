@@ -24,9 +24,7 @@ let private STORE_KEY = "__audio_live_handles"
 def private save_audio_handles() {
     var cmd_ch = unsafe(reinterpret<uint64>(get_audio_command_stream()))
     var sid_ptr = unsafe(reinterpret<uint64>(get_sound_sid()))
-    if (cmd_ch == 0ul && sid_ptr == 0ul) {
-        return
-    }
+    if (cmd_ch == 0ul && sid_ptr == 0ul) return
     var ser = new MemSerializer()
     var arch = Archive(reading = false, stream = ser)
     arch |> serialize(cmd_ch)
@@ -39,7 +37,7 @@ def private save_audio_handles() {
 [after_reload]
 def private restore_audio_handles() {
     var data : array<uint8>
-    if (live_load_bytes(STORE_KEY, data) && length(data) > 0) {
+    if (live_load_bytes(STORE_KEY, data) && !empty(data)) {
         var ser = new MemSerializer(data)
         var arch = Archive(reading = true, stream = ser)
         var cmd_ch : uint64

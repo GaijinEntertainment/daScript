@@ -171,7 +171,7 @@ Step 3 — Generate a stub describe function
    var fn = qmacro_function(funcName) $(obj : $t(st)) {
        $b(bodyExprs)
    }
-   fn.flags |= FunctionFlags.generated
+   fn.flags.generated = true
    fn.body |> force_at(st.at)
    add_function(st._module, fn)
 
@@ -219,9 +219,7 @@ Step 1 — Guard against re-patching
 
 .. code-block:: das
 
-   if (find_arg(args, "patched") is tBool) {
-       return true
-   }
+   if (find_arg(args, "patched") is tBool) return true
 
 Setting ``astChanged`` causes the compiler to re-run inference,
 which calls ``patch()`` again.  Without a guard, this would loop
@@ -263,9 +261,7 @@ Step 4 — Append field-printing statements
 .. code-block:: das
 
        for (fld in st.fields) {
-           if (fld.name == "_version") {
-               continue
-           }
+           if (fld.name == "_version") continue
            if (fld._type.baseType == Type.tLambda ||
                fld._type.baseType == Type.tFunction) {
                continue
@@ -314,9 +310,7 @@ Inside ``finish()``
        var serializable = 0
        var skipped = 0
        for (fld in st.fields) {
-           if (fld.name == "_version") {
-               continue
-           }
+           if (fld.name == "_version") continue
            if (fld._type.baseType == Type.tLambda ||
                fld._type.baseType == Type.tFunction) {
                skipped++

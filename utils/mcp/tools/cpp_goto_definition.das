@@ -74,10 +74,8 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
     var candidates <- cpp_lookup_all_by_name(ident)
     if (empty(candidates)) {
         let why = cpp_index_status()
-        if (!empty(why)) {
-            // Disambiguate "really no matches" from "the index couldn't build".
-            return make_tool_result("No definition found for '{ident}' (cpp index unavailable: {why})", true)
-        }
+        // Disambiguate "really no matches" from "the index couldn't build".
+        if (!empty(why)) return make_tool_result("No definition found for '{ident}' (cpp index unavailable: {why})", true)
         return make_tool_result("No definition found for '{ident}'")
     }
     // Rank: same file > same dir > shorter path
@@ -109,9 +107,9 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string {
 }
 
 def private is_cpp_ident_word_char(ch : int) : bool {
-    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
+    return is_alpha(ch) || is_number(ch) || ch == '_'
 }
 
 def private is_cpp_ident_start_char(ch : int) : bool {
-    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+    return is_alpha(ch) || ch == '_'
 }

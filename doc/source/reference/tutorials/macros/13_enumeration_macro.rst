@@ -123,9 +123,7 @@ Section 1 — enum_total (modifying the enum)
         print("--- Section 1: enum_total ---\n")
         print("Direction.total = {int(Direction.total)}\n")
         for (d in each(Direction.North)) {
-            if (d == Direction.total) {
-                break
-            }
+            if (d == Direction.total) break
             print("  {d}\n")
         }
     }

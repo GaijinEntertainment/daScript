@@ -94,7 +94,7 @@ def blue_str(str : string) {
 }
 
 def time_dt_hr(dt : int) : string {
-    return build_string <| $(str) {
+    return build_string() $(str) {
         str |> write("(")
         str |> fmt(":.6f", double(dt) / 1000000.0lf)
         str |> write("s)")
