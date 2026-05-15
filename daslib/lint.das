@@ -61,18 +61,7 @@ class LintVisitor : AstVisitor {
         pass
     }
     def is_suppressed(text : string; at : LineInfo) : bool {
-        if (at.fileInfo == null || at.line == 0u) return false
-        let colon = find(text, ":")
-        if (colon < 0) return false
-        let code = slice(text, 0, colon)
-        var found = false
-        get_file_source_line(at.fileInfo, at.line) $(line) {
-            let nolint_pos = find(line, "nolint")
-            if (nolint_pos >= 0) {
-                found = find(line, code, nolint_pos) >= 0
-            }
-        }
-        return found
+        return is_lint_suppressed(at, extract_lint_code(text))
     }
     def lint_error(text : string; at : LineInfo) : void {
         if (noLint || self->is_suppressed(text, at)) return

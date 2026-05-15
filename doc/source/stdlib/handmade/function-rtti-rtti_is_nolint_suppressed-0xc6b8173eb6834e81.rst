@@ -1,0 +1,1 @@
+Returns true if the source line at the given FileInfo+line carries a ``// nolint:CODE`` directive listing ``code``. Recognizes single-code, comma-separated lists, repeated ``nolint:`` directives, and directives mid-comment. The canonical low-level entry point behind ``is_lint_suppressed`` for custom lint visitors.

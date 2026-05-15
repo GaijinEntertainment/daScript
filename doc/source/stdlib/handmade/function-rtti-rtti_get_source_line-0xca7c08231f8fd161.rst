@@ -1,0 +1,1 @@
+Returns the source text of a single line (1-based) from a FileInfo as a freshly-allocated string. Uses the lazy line-offset index on FileInfo, so per-call cost is O(1) after the first lookup. Returns null on null FileInfo, line 0, or out-of-range line.

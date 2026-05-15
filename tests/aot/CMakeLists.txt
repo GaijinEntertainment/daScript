@@ -338,6 +338,15 @@ SET(AOT_DASLIB_TEST_FILES
     tests/daslib/clargs_test.das
 )
 
+# AOT for lint test files
+FILE(GLOB AOT_LINT_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/lint/*.das")
+# Exclude _*.das fixture files (consumed at runtime via compile_file, not invoked by dastest)
+list(FILTER AOT_LINT_FILES EXCLUDE REGEX "/_")
+
+# AOT for rtti test files
+FILE(GLOB AOT_RTTI_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/rtti/*.das")
+list(FILTER AOT_RTTI_FILES EXCLUDE REGEX "/_")
+
 # AOT for language test files
 FILE(GLOB AOT_LANGUAGE_TEST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/language/*.das")
 # Exclude expect-error tests and no_aot files
@@ -573,6 +582,14 @@ add_custom_target(test_aot_strings)
 SET(STRINGS_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_STRINGS_FILES}" STRINGS_AOT_GENERATED_SRC test_aot_strings daslang)
 
+add_custom_target(test_aot_lint)
+SET(LINT_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_LINT_FILES}" LINT_AOT_GENERATED_SRC test_aot_lint daslang)
+
+add_custom_target(test_aot_rtti)
+SET(RTTI_AOT_GENERATED_SRC)
+DAS_AOT("${AOT_RTTI_FILES}" RTTI_AOT_GENERATED_SRC test_aot_rtti daslang)
+
 add_custom_target(test_aot_template)
 SET(TEMPLATE_AOT_GENERATED_SRC)
 DAS_AOT("${AOT_TEMPLATE_FILES}" TEMPLATE_AOT_GENERATED_SRC test_aot_template daslang)
@@ -732,6 +749,8 @@ add_executable(test_aot ${DAS_DASCRIPT_MAIN_SRC}
     ${SOA_AOT_GENERATED_SRC}
     ${SPOOF_AOT_GENERATED_SRC}
     ${STRINGS_AOT_GENERATED_SRC}
+    ${LINT_AOT_GENERATED_SRC}
+    ${RTTI_AOT_GENERATED_SRC}
     ${TEMPLATE_AOT_GENERATED_SRC}
     ${TYPE_TRAITS_AOT_GENERATED_SRC}
     ${URI_AOT_GENERATED_SRC}
@@ -775,6 +794,7 @@ ADD_DEPENDENCIES(test_aot libDaScriptAot
     test_aot_option
     test_aot_regex
     test_aot_delegate test_aot_safe_addr test_aot_soa test_aot_spoof test_aot_strings
+    test_aot_lint test_aot_rtti
     test_aot_template test_aot_type_traits test_aot_uri
     test_aot_lpipe
     test_aot_jit

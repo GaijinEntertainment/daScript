@@ -111,7 +111,7 @@ class PerfLintVisitor : AstVisitor {
     collect_warnings : bool = false
     warnings : array<string>
     // dedup: reported (file_hash, line, column) to suppress duplicate warnings from generic instantiations
-    reported_locations : array<uint64>
+    reported_locations : table<uint64>
     // PERF019: cache of enum-types we've probed for an `operator |` overload.
     // Keys are intptr(Enumeration?); vals say "yes, has operator|".
     perf019_enum_or_probed : array<uint64>
@@ -125,20 +125,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def is_suppressed(text : string; at : LineInfo) : bool {
-        if (at.fileInfo == null || at.line == 0u) return false
-        // extract PERFxxx code from warning text (e.g. "PERF003: ...")
-        let colon = find(text, ":")
-        if (colon < 0) return false
-        let code = slice(text, 0, colon)
-        var found = false
-        get_file_source_line(at.fileInfo, at.line) $(line) {
-            // look for "// nolint:PERFxxx" or "// nolint(PERFxxx)" in a comment
-            let nolint_pos = find(line, "nolint")
-            if (nolint_pos >= 0) {
-                found = find(line, code, nolint_pos) >= 0
-            }
-        }
-        return found
+        return is_lint_suppressed(at, extract_lint_code(text))
     }
 
     def perf_warning(text : string; at : LineInfo) : void {
@@ -148,8 +135,8 @@ class PerfLintVisitor : AstVisitor {
             || (current_function != null && current_function.flags.generated)) return
         // Deduplicate warnings — same source location reported once, regardless of generic instantiations
         let key = self->location_key(at)
-        if (reported_locations |> has_value(key)) return
-        reported_locations |> push(key)
+        if (key_exists(reported_locations, key)) return
+        reported_locations |> insert(key)
         // Check inline suppression: // PERFxxx on the same line
         if (self->is_suppressed(text, at)) return
         warning_count++

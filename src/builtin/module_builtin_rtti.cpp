@@ -1603,6 +1603,54 @@ namespace das {
         }
     }
 
+    char * rtti_get_source_line ( FileInfo * info, uint32_t line, Context * context, LineInfoArg * at ) {
+        if ( !info ) return nullptr;
+        const char * begin = nullptr;
+        uint32_t len = 0;
+        if ( !info->getLine(line, begin, len) ) return nullptr;
+        return context->allocateString(begin, len, at);
+    }
+
+    // C-style scanner; no std::regex, no allocation. Matches all of:
+    //   // nolint:CODE                          -> suppresses CODE
+    //   // nolint:CODE1,CODE2,...               -> comma-separated list
+    //   // nolint:CODE1 nolint:CODE2            -> repeated directives, space-separated
+    //   // free-form prose nolint:CODE more     -> directive anywhere after the `//`
+    // After the `//`, we walk the rest of the line looking for `nolint:` occurrences
+    // and parse a comma-list of codes after each one. Any match wins.
+    bool rtti_is_nolint_suppressed ( FileInfo * info, uint32_t line, const char * code, Context * /*context*/, LineInfoArg * /*at*/ ) {
+        if ( !info || !code || !*code ) return false;
+        const char * begin = nullptr;
+        uint32_t len = 0;
+        if ( !info->getLine(line, begin, len) ) return false;
+        const char * end = begin + len;
+        // locate "//"
+        const char * p = begin;
+        while ( p + 1 < end && !(p[0] == '/' && p[1] == '/') ) p++;
+        if ( p + 1 >= end ) return false;
+        p += 2;
+        static const char NOLINT[] = "nolint:";
+        constexpr uint32_t NOLINT_LEN = sizeof(NOLINT) - 1;
+        const uint32_t codeLen = uint32_t(strlen(code));
+        // walk the rest of the line; each `nolint:` opens a comma-list of codes.
+        while ( p + NOLINT_LEN <= end ) {
+            if ( memcmp(p, NOLINT, NOLINT_LEN) != 0 ) { p++; continue; }
+            p += NOLINT_LEN;
+            // comma-list parse
+            while ( p < end ) {
+                while ( p < end && (*p == ' ' || *p == '\t') ) p++;
+                const char * tokStart = p;
+                while ( p < end && *p != ',' && *p != ' ' && *p != '\t' ) p++;
+                uint32_t tokLen = uint32_t(p - tokStart);
+                if ( tokLen == codeLen && memcmp(tokStart, code, codeLen) == 0 ) return true;
+                while ( p < end && (*p == ' ' || *p == '\t') ) p++;
+                if ( p < end && *p == ',' ) { p++; continue; }
+                break;
+            }
+        }
+        return false;
+    }
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -1903,6 +1951,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(each_const_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_EnumInfo")
                     ->args({"info","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_get_source_line)>(*this, lib, "rtti_get_source_line",
+                SideEffects::accessExternal, "rtti_get_source_line")
+                    ->args({"info","line","context","at"});
+            addExtern<DAS_BIND_FUN(rtti_is_nolint_suppressed)>(*this, lib, "rtti_is_nolint_suppressed",
+                SideEffects::accessExternal, "rtti_is_nolint_suppressed")
+                    ->args({"info","line","code","context","at"});
             // lets make sure its all aot ready
             verifyAotReady();
         }
