@@ -20,7 +20,7 @@ rm dasModuleImgui.shared_module.locked   # optional, after MCP restart
 
 - The MCP server (and any other daslang process that did a `require imgui`-chain compile) keeps the old code in its address space. **Fresh daslang subprocesses load the new code** — so `bin/Release/daslang.exe -compile-only path/to/file.das` from a shell sees the new behavior, but `mcp__daslang__compile_check` (in-process to MCP) still sees the old. Restart MCP to refresh.
 - Test by spawning a fresh subprocess first to confirm the rebuild took effect, *then* ask the user to restart MCP — saves a kill cycle if the build actually regressed.
-- Don't try to delete the `.locked` file before MCP restarts. Windows blocks `unlink` of a mapped file via `Get-CimInstance Win32_Process | Where-Object Modules` will show what's holding it.
+- Don't try to delete the `.locked` file before MCP restarts. Windows blocks `rm` of a memory-mapped file until every loader process releases it. To identify which process is holding a given DLL: `Get-Process | Where-Object { $_.Modules.FileName -like "*dasModuleImgui*" }` (uses the `System.Diagnostics.Process.Modules` collection, NOT the `Win32_Process` CIM class — the latter doesn't expose loaded modules).
 
 **Alternative: ask the user to kill MCP first.** Cleaner but ends the session — every subsequent `mcp__*` call fails until they restart. Use the rename trick when you want to keep working while iterating on a C++ change.
 
