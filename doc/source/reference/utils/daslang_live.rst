@@ -13,7 +13,8 @@
 Edit a ``.das`` file, save it, and the running application picks up
 the changes instantly --- preserving windows, GPU state, game entities,
 and everything stored in the persistent byte store.  No restart, no
-lost state.  Applications range from games to REST APIs to MCP plugins.
+lost state.  Applications range from games to REST APIs to stdio
+JSON-RPC integrations and MCP plugins.
 
 .. contents::
    :local:
@@ -164,6 +165,15 @@ and ``daslang.exe`` (standalone).  Under ``daslang.exe`` the ``main()``
 function drives the loop; under ``daslang-live.exe`` the host calls
 ``init()``, ``update()``, and ``shutdown()`` directly.
 
+For a stdin/stdout JSON-RPC transport instead of HTTP, swap one require
+line and use ``examples/daslive/hello_stdio/``::
+
+   require live/live_api_stdio   // instead of live/live_api
+
+User commands (any ``[live_command]``) work identically over both
+transports. The two transports differ in wire protocol and in how
+built-in lifecycle commands are surfaced; see :ref:`stdio_api` below.
+
 
 Mode detection
 ==============
@@ -195,9 +205,9 @@ Lifecycle
 
 **Failed reload:**
 The host reverts to the old context, pauses execution, and stores the
-compilation error.  Retrieve it via ``GET /error`` or
-``get_last_error()``.  The next successful reload unpauses
-automatically.
+compilation error.  Retrieve it via ``GET /error``, the
+``last_error`` stdio command, or ``get_last_error()``.  The next
+successful reload unpauses automatically.
 
 **Runtime exception:**
 The host pauses, clears the persistent store (potentially corrupted),
@@ -271,7 +281,7 @@ Reload annotations
      - Called after recompile, before ``init()``.  Restore state here.
    * - ``[before_update]``
      - Called every frame before ``update()``.  Used internally by
-       ``live_api``.
+       ``live_api``, ``live_api_stdio``, and other transport agents.
 
 The host discovers annotated functions by name prefix
 (``__before_reload_*``, ``__after_reload_*``, ``__before_update_*``).
@@ -351,7 +361,7 @@ Helper modules
    * - ``live/decs_live``
      - Auto-serialization of DECS entities across reloads.
    * - ``live/live_commands``
-     - ``[live_command]`` annotation for REST-callable functions.
+     - ``[live_command]`` annotation for transport-callable functions.
    * - ``live/live_vars``
      - ``@live`` variable macro (auto-persistence).
    * - ``live/live_watch``
@@ -359,8 +369,17 @@ Helper modules
    * - ``live/live_watch_boost``
      - File watcher with diagnostic commands (recommended over
        ``live_watch``).
+   * - ``live/live_api_builtins``
+     - Built-in commands (``status``, ``last_error``, ``reload``,
+       ``reload_full``, ``pause``, ``unpause``, ``shutdown``).  Required
+       transitively by ``live_api_stdio`` so stdio clients can drive
+       lifecycle by name.  The HTTP transport exposes the same
+       operations as REST endpoints (``GET /status``, ``POST /reload``,
+       …) rather than pulling these built-ins in.
    * - ``live/live_api``
-     - REST API server on port 9090.
+     - REST API server on port 9090 (requires ``dasHV``).
+   * - ``live/live_api_stdio``
+     - JSON-RPC 2.0 over stdin/stdout. No ``dasHV`` dependency.
    * - ``live/audio_live``
      - Audio state persistence across reloads.
 
@@ -446,21 +465,43 @@ restored entities:
 ``live/live_commands``
 ----------------------
 
-Functions annotated ``[live_command]`` are callable via
-``POST /command``.  Signature:
-``def cmd_name(input : JsonValue?) : JsonValue?``.
-Convention: prefix with ``cmd_``.  The ``set_color`` command in the
-hello example above demonstrates the pattern.
+Functions annotated ``[live_command]`` are callable via any installed
+transport — HTTP ``POST /command`` or stdio
+``{"method":"name", ...}``.  Signature:
+``def cmd_name(input : JsonValue?) : JsonValue?``.  Convention: prefix
+with ``cmd_``.  The ``set_color`` command in the hello example above
+demonstrates the pattern.
+
+The built-in lifecycle commands (``status``, ``last_error``,
+``reload``, ``reload_full``, ``pause``, ``unpause``, ``shutdown``)
+live in ``live/live_api_builtins``.  They are pulled in by
+``live/live_api_stdio`` so stdio clients can invoke lifecycle
+operations by name.  The HTTP transport exposes the same operations
+as REST endpoints (``GET /status``, ``POST /reload``, …) — see below.
 
 
-REST API
-========
+Transports
+==========
+
+Two transport modules ship in-tree. Pick one — they coexist but the
+typical script requires only one:
+
+* ``live/live_api`` — HTTP REST API on a TCP port. Requires
+  ``dasHV``.  Lifecycle operations are surfaced as REST endpoints;
+  user ``[live_command]`` functions are reached via ``POST /command``.
+* ``live/live_api_stdio`` — JSON-RPC 2.0 over stdin/stdout. No
+  ``dasHV`` dependency; suitable for embedding in host processes that
+  drive the script via pipes.  Lifecycle and user commands are both
+  invoked by name in the ``method`` field.
+
+REST API (``live/live_api``)
+----------------------------
 
 ``require live/live_api`` starts an HTTP server on port 9090.
 Configure the port with ``live_api_set_port()`` before ``init()``.
 
 Endpoints
----------
+^^^^^^^^^
 
 .. list-table::
    :header-rows: 1
@@ -499,7 +540,7 @@ Endpoints
      - JSON help with all endpoints and curl examples.
 
 curl examples
--------------
+^^^^^^^^^^^^^
 
 Check status::
 
@@ -516,6 +557,108 @@ Call a live command::
 
 When using the daslang MCP server, prefer ``live_*`` MCP tools over
 curl (see :ref:`utils_mcp`).
+
+
+.. _stdio_api:
+
+Stdio API (``live/live_api_stdio``)
+-----------------------------------
+
+``require live/live_api_stdio`` installs a debug agent that reads
+newline-delimited JSON-RPC 2.0 messages from ``stdin`` and writes
+responses to ``stdout``.  No HTTP server is started; no port is opened;
+no ``dasHV`` dependency.
+
+The ``method`` field is the live command name — any
+``[live_command]`` function plus the built-ins listed below.
+``params`` is passed verbatim to the command as its input
+``JsonValue?``.
+
+Request / response shape::
+
+   → {"jsonrpc":"2.0","id":1,"method":"status"}
+   ← {"jsonrpc":"2.0","id":1,"result":{"fps":60.0,"uptime":3.2,"paused":false,"dt":0.016,"has_error":false}}
+
+   → {"jsonrpc":"2.0","id":2,"method":"set_color","params":{"r":1.0,"g":0.0,"b":0.0}}
+   ← {"jsonrpc":"2.0","id":2,"result":"{\"r\": 1.0, \"g\": 0.0, \"b\": 0.0}"}
+
+   → {"method":"shutdown"}     ← (no response: notification)
+
+The ``result`` field embeds whatever JSON value the command returned —
+an object when the command returned an object (``status``), a string
+when the command returned a string (``set_color`` in the demo returns a
+``JV(string)`` so the result is a quoted JSON string), and so on.
+
+**Framing guarantee.**  The transport always writes exactly one
+response per line on stdout, with no embedded newlines in the envelope.
+``write_json`` pretty-prints by default, so the dispatch result is
+post-processed by ``compact_json_whitespace`` before being embedded in
+the envelope — whitespace outside string literals is stripped;
+whitespace inside ``"..."`` is preserved verbatim.
+
+**Notifications.**  Per JSON-RPC 2.0 §4.1, a request that omits the
+``id`` field is a *notification*: the server MUST NOT respond.
+``live_api_stdio`` honors this — fire-and-forget commands like
+``{"method":"shutdown"}`` produce no output, useful for clients that
+don't want to bookkeep a response.  An explicit ``"id":null`` is *not*
+a notification; the server responds with ``"id":null``.  Parse errors
+and invalid requests are *not* treated as notifications either — they
+emit ``-32700`` / ``-32600`` responses with ``"id":null`` so a buggy
+client doesn't hang waiting for a reply.
+
+**Permissive JSON-RPC subset.**  Two deviations from strict JSON-RPC 2.0
+to ease integration with real-world clients:
+
+* The ``jsonrpc`` member is **optional**.  Strict compliance would
+  reject ``{"id":1,"method":"status"}`` because the ``"jsonrpc":"2.0"``
+  field is missing — this transport accepts it.  Requests with a
+  different version (``"jsonrpc":"1.0"``) are also accepted.
+* All other JSON-RPC 2.0 rules are enforced: ``method`` is required and
+  must be a string, ``id`` must be string / number / null when present
+  (objects / arrays / booleans are rejected with ``-32600``), and
+  notifications produce no response.
+
+Error envelopes follow JSON-RPC 2.0 codes: ``-32700`` parse error,
+``-32600`` invalid request (missing/non-string ``method``).
+
+Available methods (built-ins from ``live/live_api_builtins``):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - method
+     - Description
+   * - ``status``
+     - JSON: ``fps``, ``uptime``, ``paused``, ``dt``, ``has_error``.
+   * - ``last_error``
+     - Last compilation error string (or JSON ``null`` if none).
+   * - ``reload``
+     - Incremental reload.
+   * - ``reload_full``
+     - Full recompile (clears ``@live`` vars).
+   * - ``pause``
+     - Pause execution.
+   * - ``unpause``
+     - Resume execution.
+   * - ``shutdown``
+     - Graceful shutdown.
+
+Any user-defined ``[live_command]`` is also callable by name.
+
+.. warning::
+
+   ``stdout`` is the response channel. Scripts that use this transport
+   must redirect ``print()`` to ``stderr`` or a log file — calling
+   ``print()`` from the script's main loop will interleave application
+   output with JSON-RPC responses and break clients that parse stdout
+   line-by-line.  ``daslang-live`` itself logs lifecycle messages to
+   ``stdout``; either silence them or have the client tolerate
+   non-JSON lines.
+
+The example at ``examples/daslive/hello_stdio/`` is the HTTP hello
+example with the single ``require`` line swapped — see the same
+``set_color`` command driven over stdio instead of ``POST /command``.
 
 
 CLI reference
@@ -552,6 +695,9 @@ Examples
      - Description
    * - ``examples/daslive/hello/``
      - Minimal GLFW window with background color tuning.
+   * - ``examples/daslive/hello_stdio/``
+     - Minimal stdio (JSON-RPC) variant of the hello example.
+       Same ``set_color`` command, no ``dasHV`` dependency.
    * - ``examples/daslive/triangle/``
      - DECS + OpenGL shaders, rotating triangle.
    * - ``examples/games/arcanoid/``
