@@ -1067,7 +1067,7 @@ def generate_one_alternative(var gen : ParserGenerator; var alt : Alternative; i
 
 def alternative_add_epilogue(var block_contents : array<ExpressionPtr>; var gen : ParserGenerator; var action_block) {
 
-    assert(length(action_block) > 0, "Action block should not be empty")
+    assert(!empty(action_block), "Action block should not be empty")
 
     var return_type = gen.return_types |> get_value_and_clone_type(gen.current_context)
 

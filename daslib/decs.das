@@ -720,7 +720,7 @@ def public for_each_archetype_find(hash : ComponentHash; var erq : function<() :
 [unsafe_operation]
 def decs_array(atype : auto(TT); src : array<uint8>; capacity : int) {
     //! Low level function returns temporary array of component given specific type of component.
-    assert(length(src) > 0)
+    assert(!empty(src))
     static_if (typeinfo is_dim(atype)) {
         var dest : array<TT[typeinfo dim(atype)] -const -& -#>
         unsafe {
@@ -1218,7 +1218,7 @@ def private make_callbacks(var cv : ComponentValue; value : auto(TT)) {
                 var ssrc : array<TT[typeinfo dim(value)] -const -& -#>
                 let size = length(src) / stride
                 unsafe {
-                    if (length(src) > 0) {
+                    if (!empty(src)) {
                         _builtin_make_temp_array(ssrc, addr(src[0]), size)
                     }
                 }

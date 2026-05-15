@@ -125,10 +125,8 @@ def public get_current_char(var parser) : int {
 def public match_decimal_literal(var parser) : tuple<success : bool; value : int; endpos : int> {
     //! Simple lexing of decimal integers, doesn't check for overflow
 
-    if (!parser |> get_current_char |> is_number) {
-        // Can't use typedef in this context, sadly
-        return tuple<success : bool; value : int; endpos : int>()
-    }
+    // Can't use typedef in this context, sadly
+    if (!parser |> get_current_char |> is_number) return tuple<success : bool; value : int; endpos : int>()
 
     var result = 0
 
@@ -175,9 +173,7 @@ def public match_double_literal(var parser) : tuple<success : bool; value : doub
 
     var current_char = parser |> get_current_char
 
-    if (!current_char |> is_number && current_char != '+' && current_char != '-') {
-        return <- (success = false, value = 0.0 |> double())
-    }
+    if (!current_char |> is_number && current_char != '+' && current_char != '-') return <- (success = false, value = 0.0 |> double())
 
     var inscope buffer : array<uint8>
 
