@@ -317,7 +317,12 @@ def run_parallel_lint(files : array<string>; cfg : Config) : array<LintResult> {
         if (cr.exit_code != 0) {
             print("error: worker {cr.index} exited with code {cr.exit_code}\n")
         }
-        let pieces <- cr.stdout |> split(JSON_PREFIX)
+        // Normalize CRLF → LF: on Windows the popen pipe text-mode reader
+        // translates child `\n` to `\r\n`, which prevents `split(JSON_PREFIX)`
+        // (which ends in `\n`) from finding the markers. Strip the trailing
+        // `\r` from each split-on-LF segment, then re-join with LF.
+        let normalized = cr.stdout |> split("\r\n") |> join("\n")
+        let pieces <- normalized |> split(JSON_PREFIX)
         // Stream emits <PREFIX><json><PREFIX> per file. Splitting on the
         // marker yields odd-indexed pieces as JSON, even-indexed as
         // outside-marker text (compile_file chatter, blank). Indexing
