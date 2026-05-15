@@ -476,7 +476,7 @@ class JsonWalker : DapiDataWalker {
     needComma : array<bool>
 
     def comma() {
-        if (length(needComma) > 0 && needComma[length(needComma) - 1]) {
+        if (!empty(needComma) && needComma[length(needComma) - 1]) {
             *writer |> write(",")
         }
     }
@@ -497,7 +497,7 @@ class JsonWalker : DapiDataWalker {
     }
 
     def markComma() {
-        if (length(needComma) > 0) {
+        if (!empty(needComma)) {
             needComma[length(needComma) - 1] = true
         }
     }

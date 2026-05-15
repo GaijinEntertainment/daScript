@@ -74,7 +74,7 @@ class GlslShader : AstFunctionAnnotation {
         pass
     }
     def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
-        func.flags |= FunctionFlags.exports // note: this is temporary, until we are done with dependency collecting etc
+        func.flags.exports = true // note: this is temporary, until we are done with dependency collecting etc
         let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
         if (!add_global_var(compiling_module(), argName, new TypeDecl(at = func.at, baseType = Type.tString), func.at, false)) {
             errors := "can't add global variable {argName}"
@@ -93,7 +93,7 @@ class GlslShader : AstFunctionAnnotation {
     def override patch(var func : FunctionPtr; var group : ModuleGroup; args, progArgs : AnnotationArgumentList; var errors : das_string; var astChanged : bool&) : bool {
         for_each_function(compiling_module(), bind_uniform_function_name(func)) $(bfun) {
             if (bfun.flags.exports) {
-                bfun.flags &= ~FunctionFlags.exports
+                bfun.flags.exports = false
                 self->generate_bind_uniform(func, bfun)
                 astChanged = true
             }
@@ -103,49 +103,49 @@ class GlslShader : AstFunctionAnnotation {
     def buildCaps {
         var caps : ShaderExportCaps
         if (write_version) {
-            caps |= ShaderExportCaps.write_version
+            caps.write_version = true
         }
         if (output_inout) {
-            caps |= ShaderExportCaps.output_inout
+            caps.output_inout = true
         }
         if (output_inout_stub) {
-            caps |= ShaderExportCaps.output_inout_stub
+            caps.output_inout_stub = true
         }
         if (output_inout_decl) {
-            caps |= ShaderExportCaps.output_inout_decl
+            caps.output_inout_decl = true
         }
         if (output_shader_lines) {
-            caps |= ShaderExportCaps.output_shader_lines
+            caps.output_shader_lines = true
         }
         if (replace_hlsl_incompatible_operations) {
-            caps |= ShaderExportCaps.replace_hlsl_incompatible_operations
+            caps.replace_hlsl_incompatible_operations = true
         }
         if (restrict_uniform_types) {
-            caps |= ShaderExportCaps.restrict_uniform_types
+            caps.restrict_uniform_types = true
         }
         if (restrict_vertex_attribute_names) {
-            caps |= ShaderExportCaps.restrict_vertex_attribute_names
+            caps.restrict_vertex_attribute_names = true
         }
         if (restrict_array_as_result) {
-            caps |= ShaderExportCaps.restrict_array_as_result
+            caps.restrict_array_as_result = true
         }
         if (output_unfirom_macro_declarations) {
-            caps |= ShaderExportCaps.output_unfirom_macro_declarations
+            caps.output_unfirom_macro_declarations = true
         }
         if (output_compatibility_constructors) {
-            caps |= ShaderExportCaps.output_compatibility_constructors
+            caps.output_compatibility_constructors = true
         }
         if (output_hlsl_style_compute_layout) {
-            caps |= ShaderExportCaps.output_hlsl_style_compute_layout
+            caps.output_hlsl_style_compute_layout = true
         }
         if (output_structure_initializers) {
-            caps |= ShaderExportCaps.output_structure_initializers
+            caps.output_structure_initializers = true
         }
         if (allow_unitialized_local_arrays) {
-            caps |= ShaderExportCaps.allow_unitialized_local_arrays
+            caps.allow_unitialized_local_arrays = true
         }
         if (resolve_supported_semantics) {
-            caps |= ShaderExportCaps.resolve_supported_semantics
+            caps.resolve_supported_semantics = true
         }
         return caps
     }
@@ -179,7 +179,7 @@ class GlslShader : AstFunctionAnnotation {
                 if (!err |> empty()) {
                     glob.init := null
                 } else {
-                    glob._type.flags |= TypeDeclFlags.constant
+                    glob._type.flags.constant = true
                     if (output_inout_decl) {
                         let decl_name = "{argName}_DECL"
                         var glob_def <- find_variable(compiling_module(), decl_name)
@@ -330,9 +330,7 @@ class GlslExport : AstVisitor {
         errors |> push("\tGLSL: {txt} at {fname}:{int(at.line)}:{int(at.column)}")
     }
     def line(at : LineInfo) {
-        if (!caps.output_shader_lines) {
-            return
-        }
+        if (!caps.output_shader_lines) return
         if (at.fileInfo != null) {
             peek(at.fileInfo.name) $(atname) {
                 if (trackLine != int(at.line) || trackFile != atname) {
@@ -418,7 +416,7 @@ class GlslExport : AstVisitor {
         return st
     }
     def produce_zero(t : TypeDeclPtr) {
-        if (length(t.dim) > 0) {
+        if (!empty(t.dim)) {
             *writer |> write("{self->describe_glsl_type(t)}(")
             var ct <- clone_type(t)
             ct.dim |> pop()
@@ -693,13 +691,8 @@ class GlslExport : AstVisitor {
     }
 // structure
     def override canVisitStructure(str : Structure?) {
-        if (!(depStruct |> key_exists(intptr(str)))) {
-            return false
-        }
-        if (str._module.name == "glsl_common") {
-            return false
-        }
-        return true
+        if (!(depStruct |> key_exists(intptr(str)))) return false
+        return !(str._module.name == "glsl_common")
     }
     def override preVisitStructure(str : StructurePtr) {
         if (str.flags.isClass) {
@@ -756,20 +749,12 @@ class GlslExport : AstVisitor {
     }
 // function
     def override canVisitFunction(arg : Function?) : bool {
-        if (!depFun |> key_exists(intptr(arg))) {
-            return false
-        }
-        if (arg._module.name == "glsl_common") {
-            return false
-        }
-        if (arg._module.name == "math" || arg._module.name == "math_bits") {
-            return false
-        }
-        return true
+        if (!depFun |> key_exists(intptr(arg)) || arg._module.name == "glsl_common") return false
+        return !(arg._module.name == "math" || arg._module.name == "math_bits")
     }
     def override preVisitFunction(fun : FunctionPtr) {
         if (caps.restrict_array_as_result) {
-            if (length(fun.result.dim) > 0) {
+            if (!empty(fun.result.dim)) {
                 self->error("returning arrays is prohibited in this shader model", fun.at)
             }
         }
@@ -864,7 +849,7 @@ class GlslExport : AstVisitor {
             var needZero = true
             if (caps.restrict_array_as_result) {
                 if (caps.allow_unitialized_local_arrays) {
-                    if (length(arg._type.dim) > 0) {
+                    if (!empty(arg._type.dim)) {
                         needZero = false
                     }
                 }
@@ -886,60 +871,36 @@ class GlslExport : AstVisitor {
     }
 // global let
     def override canVisitGlobalVariable(arg : Variable?) : bool {
-        if (!depVar |> key_exists(intptr(arg))) {
-            return false
-        }
-        if ("{arg._module.name}" |> find("glsl_") != -1) {
-            return false
-        }
-        return true
+        if (!depVar |> key_exists(intptr(arg))) return false
+        return !("{arg._module.name}" |> find("glsl_") != -1)
     }
     def checkUniformType(typ : TypeDeclPtr) {
-        if (!caps.restrict_uniform_types) {
-            return
-        }
-        if (typ.baseType == Type.tFloat4) {
-            return
-        }
+        if (!caps.restrict_uniform_types || typ.baseType == Type.tFloat4) return
         if (typ.baseType == Type.tHandle) {
-            if (typ.annotation.name == "float3x3" || typ.annotation.name == "float4x4") {
-                return
-            }
+            if (typ.annotation.name == "float3x3" || typ.annotation.name == "float4x4") return
         }
         if (typ.baseType == Type.tStructure) {
-            if ("{typ.structType.name}" |> find("sampler") != -1) {
-                return
-            }
-            if ("{typ.structType.name}" |> find("image") != -1) {
-                return
-            }
+            if ("{typ.structType.name}" |> find("sampler") != -1
+                || "{typ.structType.name}" |> find("image") != -1) return
         }
         self->error("unsupported uniform type {describe(typ)}", typ.at)
     }
     def getSamplerType(typ : TypeDeclPtr) : string {
         if (typ.baseType == Type.tStructure) {
-            if ("{typ.structType.name}" |> find("sampler") != -1) {
-                return string(typ.structType.name)
-            }
+            if ("{typ.structType.name}" |> find("sampler") != -1) return string(typ.structType.name)
         }
         return ""
     }
     def getImageType(typ : TypeDeclPtr) : string {
         if (typ.baseType == Type.tStructure) {
-            if ("{typ.structType.name}" |> find("image") != -1) {
-                return string(typ.structType.name)
-            }
+            if ("{typ.structType.name}" |> find("image") != -1) return string(typ.structType.name)
         }
         return ""
     }
     def outputSamplerMacro(arg : VariablePtr) : bool {
-        if (!caps.output_unfirom_macro_declarations) {
-            return false
-        }
+        if (!caps.output_unfirom_macro_declarations) return false
         let st = self->getSamplerType(arg._type)
-        if (st == "") {
-            return false
-        }
+        if (st == "") return false
         let stage = arg.annotation |> find_arg("stage") ?as tInt ?? 0
         let sfunc = to_upper(st)
         *writer |> write(sfunc)
@@ -947,13 +908,9 @@ class GlslExport : AstVisitor {
         return true
     }
     def outputImageMacro(arg : VariablePtr) : bool {
-        if (!caps.output_unfirom_macro_declarations) {
-            return false
-        }
+        if (!caps.output_unfirom_macro_declarations) return false
         let st = self->getImageType(arg._type)
-        if (st == "") {
-            return false
-        }
+        if (st == "") return false
         let format =  arg.annotation |> find_arg("format") ?as tString ?? "rgba8"
         let binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
         var suffix = "_RW"
@@ -970,7 +927,7 @@ class GlslExport : AstVisitor {
     def override preVisitGlobalLetVariable(arg : VariablePtr; lastArg : bool) {
         self->line(arg.at)
         if (caps.restrict_array_as_result) {
-            if (length(arg._type.dim) > 0) {
+            if (!empty(arg._type.dim)) {
                 let need_init = arg.annotation |> find_arg("need_init") ?as tBool ?? true
                 let group_shared = arg.annotation |> find_arg("groupshared") ?as tBool ?? false
                 if (need_init && !group_shared) {
@@ -1002,9 +959,7 @@ class GlslExport : AstVisitor {
             if (shaderType == ShaderType.vertex) {
                 if (arg.annotation |> find_arg("uniform") is tBool) {
                     self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg)) {
-                        return
-                    }
+                    if (self->outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 let argLoc = arg.annotation |> find_arg("location")
@@ -1020,9 +975,7 @@ class GlslExport : AstVisitor {
             } elif (shaderType == ShaderType.fragment) {
                 if (arg.annotation |> find_arg("uniform") is tBool) {
                     self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg)) {
-                        return
-                    }
+                    if (self->outputSamplerMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 if (arg.annotation |> find_arg("in") is tBool) {
@@ -1044,12 +997,7 @@ class GlslExport : AstVisitor {
                 }
                 if (arg.annotation |> find_arg("uniform") is tBool) {
                     self->checkUniformType(arg._type)
-                    if (self->outputSamplerMacro(arg)) {
-                        return
-                    }
-                    if (self->outputImageMacro(arg)) {
-                        return
-                    }
+                    if (self->outputSamplerMacro(arg) || self->outputImageMacro(arg)) return
                     *writer |> write("uniform "); needInit = false
                 }
                 if (arg.annotation |> find_arg("in") is tBool) {
@@ -1135,7 +1083,10 @@ class GlslExport : AstVisitor {
             }
             if (caps.resolve_supported_semantics) {
                 if (suffix == "") {
-                    let aname = to_upper(string(arg.name))
+                    var aname = ""
+                    peek(arg.name) $(s) {
+                        aname = to_upper(s)
+                    }
                     if (glsl_supported_semantics |> key_exists(aname)) {
                         suffix = " : {aname}"
                     } else {
@@ -1250,19 +1201,13 @@ class GlslExport : AstVisitor {
     }
 // op2
     def getReplaceOp2(expr : ExprOp2?) : tuple<fun : string; replOp : bool> {
-        if (expr.op == "%" && !expr._type.isInteger) {
-            return (fun = "mod", replOp = true)
-        }
+        if (expr.op == "%" && !expr._type.isInteger) return (fun = "mod", replOp = true)
         if (caps.replace_hlsl_incompatible_operations) {
             if (expr.op == "*") {
-                if (is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)) {
-                    return (fun = "MUL", replOp = true)
-                }
+                if (is_any_matrix(expr.left._type) || is_any_matrix(expr.right._type)) return (fun = "MUL", replOp = true)
             }
             if (expr.op == "==" || expr.op == "!=") {
-                if (is_any_matrix(expr.left._type) || expr.left._type.isVectorType || is_any_matrix(expr.right._type) || expr.right._type.isVectorType) {
-                    return (fun = "all", replOp = false)
-                }
+                if (is_any_matrix(expr.left._type) || expr.left._type.isVectorType || is_any_matrix(expr.right._type) || expr.right._type.isVectorType) return (fun = "all", replOp = false)
             }
         }
         return (fun = "", replOp = false)
@@ -1344,17 +1289,11 @@ class GlslExport : AstVisitor {
     }
 // for
     def isDimFor(svar : ExpressionPtr) {
-        if (length(svar._type.dim) > 0) {
-            return true
-        }
-        return false
+        return !empty(svar._type.dim)
     }
     def isRangeFor(svar : ExpressionPtr) {
         let bt = svar._type.baseType
-        if (bt == Type.tRange || bt == Type.tURange) {
-            return true
-        }
-        return false
+        return bt == Type.tRange || bt == Type.tURange
     }
     def override preVisitExprFor(expr : ExprFor?) {
         for (source in expr.sources) {
@@ -1918,19 +1857,15 @@ def bind_uniform_function_name(fnMain : FunctionPtr) {
 
 [macro_function]
 def is_glsl_structure(arg; name : string) {
-    if (arg._type.baseType == Type.tStructure && length(arg._type.dim) == 0) {
-        if (arg._type.structType._module.name == "glsl_common" && arg._type.structType.name == name) {
-            return true
-        }
+    if (arg._type.baseType == Type.tStructure && empty(arg._type.dim)) {
+        if (arg._type.structType._module.name == "glsl_common" && arg._type.structType.name == name) return true
     }
     return false
 }
 
 [macro_function]
 def is_any_matrix(typ : TypeDeclPtr) {
-    if (typ.baseType != Type.tHandle) {
-        return false
-    }
+    if (typ.baseType != Type.tHandle) return false
     return typ.annotation.name == "float3x3" || typ.annotation.name == "float3x4" || typ.annotation.name == "float4x4"
 }
 
@@ -1951,17 +1886,13 @@ def get_decl_type_from_name(name : string) {
         return Type.tUInt8
     } elif (name == "int16" || name == "INT16" || name == "GL_SHORT") {
         return Type.tInt16
-    } elif (name == "double" || name == "DOUBLE" || name == "GL_DOUBLE") {
-        return Type.tDouble
-    }
+    } elif (name == "double" || name == "DOUBLE" || name == "GL_DOUBLE") return Type.tDouble
     return Type.none
 }
 
 [macro_function]
 def get_decl_info(typ : TypeDeclPtr; arguments : AnnotationArgumentList) : tuple<ok : bool; info : FieldDeclInfo> {
-    if (length(typ.dim) > 0 || !(typ.isNumeric || typ.isVectorType)) {
-        return (ok = false, info = FieldDeclInfo())
-    }
+    if (!empty(typ.dim) || !(typ.isNumeric || typ.isVectorType)) return (ok = false, info = FieldDeclInfo())
     var fdi = FieldDeclInfo(
         sizei = arguments |> find_arg("size") ?as tInt ?? -1,
         typet = get_decl_type_from_name(arguments |> find_arg("type") ?as tString ?? ""),

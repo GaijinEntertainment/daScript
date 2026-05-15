@@ -197,7 +197,7 @@ def demo_conversion() {
     print("\n=== bulk conversion ===\n")
 
     // Build a regular array
-    var arr : array<Vec2>
+    var arr : array<Vec2>  // nolint:STYLE012 — tutorial demonstrates push API
     arr |> push <| Vec2(x = 1.0, y = 2.0)
     arr |> push <| Vec2(x = 3.0, y = 4.0)
     arr |> push <| Vec2(x = 5.0, y = 6.0)

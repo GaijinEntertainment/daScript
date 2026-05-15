@@ -102,7 +102,7 @@ def get_file_info_global(g_builder : LLVMOpaqueBuilder?; types : PrimitiveTypes?
         var zero = LLVMConstInt(types.t_int8, 0 |> uint64(), 0)
         var zeros : array<LLVMValueRef>
         zeros |> reserve(sz)
-        for (i in range(sz)) {
+        for (_ in range(sz)) {
             zeros |> push(zero)
         }
         let zeroInitializer = LLVMConstArray(types.t_int8, array_data_ptr(zeros), sz |> uint())
@@ -248,13 +248,12 @@ def get_function_addr(var ctx : Context?; func : Function?) {
 // Check if a function is a late-bound dasbind function (null builtin address, resolvable at runtime)
 [macro_function]
 def is_dasbind_late(func : Function?) : bool {
-    if (func == null || !func.flags.builtIn) {
-        return false
+    if (func == null || !func.flags.builtIn || func._module.name != "dasbind") return false
+    var hit = false
+    peek(func.name) $(s) {
+        hit = starts_with(s, "__dasbind__")
     }
-    if (string(func._module.name) != "dasbind") {
-        return false
-    }
-    return string(func.name) |> starts_with("__dasbind__")
+    return hit
 }
 
 
@@ -321,8 +320,6 @@ class public LlvmJitVisitor : AstVisitor {
         if (flags.need_di) {
             own_di = true
             g_di_builder = LLVMCreateDIBuilder(g_mod)
-            let producer = "daScript LLVM JIT"
-            let runtime_version = 3u
         }
     }
 
@@ -343,33 +340,19 @@ class public LlvmJitVisitor : AstVisitor {
         if (debug_info_enabled()) {
             clear_builder_location()
             di_function = null
-            return
+            // TODO: re-enable per-function DI subprogram emission once the
+            // function type generation below is correct. Kept as reference.
+            /*
             let unit = get_debug_file_location(fun.at)
             let implName = uid.get_dll_fn_name(fun).impl()
-            var ty = LLVMDIBuilderCreateSubroutineType(     // TODO: generate correct function type
-                g_di_builder,
-                unit,
-                null, // LLVMMetadataRef *ParameterTypes,
-                0u, // unsigned NumParameterTypes,
-                LLVMDIFlags.LLVMDIFlagZero
-            )
-            di_function = LLVMDIBuilderCreateFunction(
-                    g_di_builder,
-                    unit,
-                    implName,
-                    uint64(length(implName)),
-                    "", // LinkageName
-                    0ul,// LinkageNameLen
-                    unit,
-                    fun.at.line,
-                    ty,
-                    0, // IsLocalToUnit
-                    1, // IsDefinition
-                    0u, // ScopeLine
-                    LLVMDIFlags.LLVMDIFlagZero, // Flags
-                    LLVM_ENABLE_OPT_PASS ? 1 : 0
-            )
+            var ty = LLVMDIBuilderCreateSubroutineType(
+                g_di_builder, unit, null, 0u, LLVMDIFlags.LLVMDIFlagZero)
+            di_function = LLVMDIBuilderCreateFunction(g_di_builder, unit,
+                implName, uint64(length(implName)), "", 0ul, unit, fun.at.line,
+                ty, 0, 1, 0u, LLVMDIFlags.LLVMDIFlagZero,
+                LLVM_ENABLE_OPT_PASS ? 1 : 0)
             LLVMSetSubprogram(ffunc, di_function)
+            */
         }
     }
 
@@ -548,7 +531,7 @@ class public LlvmJitVisitor : AstVisitor {
         for (bl in blk) {
             finallyBlocks[bl] = append_basic_block("finally_block_at_{int(bl.at.line)}_")
         }
-        if (length(blk) > 0) {
+        if (!empty(blk)) {
             at_function_entry() {
                 callBlock = LLVMBuildAlloca(g_builder, LLVMPointerType(types.t_int8, 0u), "call_block")
                 LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(types.t_int8, 0u)), callBlock)
@@ -865,12 +848,8 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprBlock
     def add_default_terminator(blk : ExprBlock?) {
-        if (thisBlock == null && thisFunc != null && thisFunc.body != blk) {
-            return
-        }
-        if (thisBlock != null && thisBlock != blk) {
-            return
-        }
+        if ((thisBlock == null && thisFunc != null && thisFunc.body != blk)
+            || (thisBlock != null && thisBlock != blk)) return
         if (!current_block_terminates()) {
             call_all_finally_blocks("default_terminator", false)
             build_exit(blk.at)
@@ -886,32 +865,26 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def hasFinalSection(blk : ExprBlock?) {
-        if (blk == null) {
-            return false
-        }
-        return length(blk.finalList) > 0
+        if (blk == null) return false
+        return !empty(blk.finalList)
     }
 
     def has_any_finally_block(stopAtLoop : bool) {
-        var len = length(block_stack)
+        let len = length(block_stack)
         for (i in range(len)) {
             var blk = block_stack[len - 1 - i]
-            if (stopAtLoop && blk.blockFlags.inTheLoop) {
-                break
-            }
-            if (blk |> hasFinalSection()) {
-                return true
-            }
+            if (stopAtLoop && blk.blockFlags.inTheLoop) break
+            if (blk |> hasFinalSection()) return true
         }
         return false
     }
 
     def call_all_finally_blocks(from_where : string; stopAtLoop : bool) {
-        var len = length(block_stack)
+        let len = length(block_stack)
         var anyFinallyBlocks = false
         for (i in range(len)) {
             var blk = block_stack[len - 1 - i]
-            var atLoopBoundary = stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)
+            let atLoopBoundary = stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)
             if (blk |> hasFinalSection()) {
                 var after = append_basic_block("{from_where}_after_call_finally_block_{int(blk.at.line)}")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after), after)
@@ -928,9 +901,7 @@ class public LlvmJitVisitor : AstVisitor {
             if (!stopAtLoop && blk.blockFlags.forLoop && key_exists(forBodyToExpr, blk)) {
                 emit_iterator_close(forBodyToExpr[blk])
             }
-            if (atLoopBoundary) {
-                break
-            }
+            if (atLoopBoundary) break
         }
         return anyFinallyBlocks
     }
@@ -961,9 +932,9 @@ class public LlvmJitVisitor : AstVisitor {
 
     def jump_to_next_finally(blk : ExprBlock?) {
         afterFinallyBlocks  |> get(blk) $(AfterFinallyBlocks) {
-            if (length(AfterFinallyBlocks) > 0) {
+            if (!empty(AfterFinallyBlocks)) {
                 var cc = LLVMBuildLoad2(g_builder, LLVMPointerType(types.t_int8, 0u), callBlock, "")
-                var needCond = thisFunc.body != blk && thisBlock != blk
+                let needCond = thisFunc.body != blk && thisBlock != blk
                 var do_jump, skip_jump : LLVMOpaqueBasicBlock?
                 if (needCond) {
                     do_jump = append_basic_block("do_jump_blk_line_{int(blk.at.line)}_")
@@ -984,7 +955,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprBlock(var blk : ExprBlock?) : ExpressionPtr {
-        if (length(blk.finalList) == 0) {
+        if (empty(blk.finalList)) {
             add_default_terminator(blk)
         } else {
             jump_to_next_finally(blk)
@@ -1028,8 +999,8 @@ class public LlvmJitVisitor : AstVisitor {
             vptrtype = get_type_pointer(arg._type)
         }
         var v_ptr : LLVMOpaqueValue?
-        var vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
-        var valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
+        let vsize = arg._type.flags.ref ?  typeinfo sizeof(type<void?>) : arg._type.sizeOf
+        let valign = arg._type.flags.ref ?  typeinfo alignof(type<void?>) : arg._type.alignOf
 
         if (arg.flags.aliasCMRES) {
             v_ptr = get_cmres_param()
@@ -1211,9 +1182,7 @@ class public LlvmJitVisitor : AstVisitor {
         assert(typeexpr.isHandle)
         let obj_name = obj_name_hint.publ() |> empty() ? uid.get_new(typeexpr) : obj_name_hint
         let (fn_new_handle, typ) = get_new_handle_function(typeexpr, obj_name)
-        if (fn_new_handle == null) {
-            return LLVMConstNull(types.LLVMVoidPtrType())
-        }
+        if (fn_new_handle == null) return LLVMConstNull(types.LLVMVoidPtrType())
         var params = [get_context_param()]
         var ccall = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "call_{obj_name.publ()}")
 
@@ -1231,7 +1200,7 @@ class public LlvmJitVisitor : AstVisitor {
             new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr), 0u), "")
             setE(expr, new_ptr)
         } else {
-            if (expr.typeexpr.dim |> length > 0) {
+            if (!empty(expr.typeexpr.dim)) {
                 let count = expr.typeexpr.countOf
                 var arr : LLVMOpaqueValue?
                 at_function_entry() {
@@ -1281,9 +1250,7 @@ class public LlvmJitVisitor : AstVisitor {
                 args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(types.LLVMFloat4Type(), 0u), "call_args_ptr")
             }
             for (a, ai in arguments, range(from_ai, 100500)) {
-                if (ai < 0) {
-                    continue
-                }
+                if (ai < 0) continue
                 var arg_ptr = LLVMBuildGEP2(g_builder, types.LLVMFloat4Type(), args, types.ConstI32(uint64(ai)), "call_arg_{ai}_ptr")
                 var arg_val = getE(a)
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
@@ -1352,8 +1319,7 @@ class public LlvmJitVisitor : AstVisitor {
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name.glob())
         if (ofunc == null) {
             var arg_types : array<LLVMOpaqueType?>
-            var res_type : LLVMOpaqueType?
-            res_type = type_to_llvm_type(expr.func.result)
+            var res_type = type_to_llvm_type(expr.func.result)
             if (expr.func.result.flags.ref) {
                 res_type = LLVMPointerType(res_type, 0u)
             }
@@ -1391,9 +1357,7 @@ class public LlvmJitVisitor : AstVisitor {
             ofunc = save_address_global(mangled_name, FUNC_PTR, fn_ptr_type)
             return tuple(ofunc, fn_type)
         } else {
-            if (is_dasbind_late(expr.func)) {
-                return tuple(ofunc, g_fn_types[mangled_name.publ()])
-            }
+            if (is_dasbind_late(expr.func)) return tuple(ofunc, g_fn_types[mangled_name.publ()])
             ofunc = get_address_global(mangled_name, LLVMPointerType(g_fn_types[mangled_name.publ()], 0u))
             return tuple(ofunc, g_fn_types[mangled_name.publ()])
         }
@@ -1417,7 +1381,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def build_call_params(expr : ExprCallFunc?; extern_func : Function? = null) {
-        var params : array<LLVMOpaqueValue?>
+        var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — built incrementally over an arg loop with multiple branches
 
         for (a, ai in expr.arguments, count()) {
             assume funcArg = expr.func.arguments[ai]
@@ -1436,7 +1400,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var ptrValue = LLVMBuildPointerCast(g_builder, src, ptrType, "arg_{funcArg.name}_struct")
                 params |> push(ptrValue)
-            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || a._type.dim |> length != 0) && (extern_func != null)) {
+            } elif ((a._type.baseType == Type.tArray || a._type.baseType == Type.tTable || !empty(a._type.dim)) && (extern_func != null)) {
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var arg = LLVMBuildPointerCast(g_builder, src, ptrType, "any_array_{funcArg.name}_ptr")
                 params |> push(arg)
@@ -1480,9 +1444,7 @@ class public LlvmJitVisitor : AstVisitor {
     def get_address_global(name : DllName; typ : LLVMOpaqueType? = null) : LLVMOpaqueValue? {
         let nonnull_type = typ != null ? typ : types.LLVMVoidPtrType()
         let mb_global = LLVMGetNamedGlobal(g_mod, name.glob())
-        if (mb_global == null) {
-            return null
-        }
+        if (mb_global == null) return null
         return load_local_const(mb_global, nonnull_type)
     }
 
@@ -1670,7 +1632,7 @@ class public LlvmJitVisitor : AstVisitor {
                     var MNH_ADDR = get_function_addr(jit_context, expr.func)
                     glob_fn_ptr = save_address_global(uid.get_dll_fn_name_ptr(expr.func), MNH_ADDR)
                 }
-                var params : array<LLVMOpaqueValue?>
+                var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
                 params |> push(glob_fn_ptr)  // mnh
                 params |> push(args)
                 if (cmresEval != null) {
@@ -1754,9 +1716,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprAt
     def check_range(tidx, maxIdx : LLVMOpaqueValue?; at : LineInfo; message : string) {
-        if (option_no_range_check) {
-            return
-        }
+        if (option_no_range_check) return
         var check_null_ptr = append_basic_block("check_dim_range")
         var check_true = append_basic_block("check_true")
         var check_end = append_basic_block("check_end")
@@ -1844,7 +1804,7 @@ class public LlvmJitVisitor : AstVisitor {
             } else {
                 setE(expr, ptr_idx)
             }
-        } elif (subExprT.dim |> length != 0) {
+        } elif (!empty(subExprT.dim)) {
             var etype = clone_type(subExprT)
             assume vec = etype.dim
             let maxIndex = vec[0]
@@ -1917,7 +1877,7 @@ class public LlvmJitVisitor : AstVisitor {
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         var res : LLVMOpaqueValue?;
-        if (subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)) {
+        if (!empty(subExprT.dim) || (subExprT.isPointer && !empty(subExprT.firstType.dim))) {
             var etype = subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
             assume vec = etype.dim
             let maxIndex = vec[0]
@@ -1926,7 +1886,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
             vec |> resize(vec |> length - 1)
             var resType = LLVMPointerType(type_to_llvm_type(etype), 0u)
-            var if_not_null = subExprT.dim |> length == 0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
+            var if_not_null = empty(subExprT.dim) ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(types.t_int1, 1ul, 0)
             res = build_select(if_not_null, resType) {
                 var maxIdx = types.ConstI32(uint64(maxIndex))
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntULT, tidx, maxIdx, "dim_range")
@@ -2105,11 +2065,10 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def isExprIntNZ(expr : ExpressionPtr) {
-        return true     if ((expr is ExprConstInt) && (expr as ExprConstInt).value != 0)
-        return true     if ((expr is ExprConstUInt) && (expr as ExprConstUInt).value != 0u)
-        return true     if ((expr is ExprConstInt64) && (expr as ExprConstInt64).value != 0l)
-        return true     if ((expr is ExprConstUInt64) && (expr as ExprConstUInt64).value != 0ul)
-        return false
+        return (((expr is ExprConstInt) && (expr as ExprConstInt).value != 0)
+            || ((expr is ExprConstUInt) && (expr as ExprConstUInt).value != 0u)
+            || ((expr is ExprConstInt64) && (expr as ExprConstInt64).value != 0l)
+            || ((expr is ExprConstUInt64) && (expr as ExprConstUInt64).value != 0ul))
     }
 
     def build_str_cmp(a, b : LLVMOpaqueValue?) : LLVMOpaqueValue? {
@@ -2383,7 +2342,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 var args <- [ left, left, right]
                 var argTypes <- [ base_type_to_llvm_type(shiftType.baseType)]
-                var id = LLVMLookupIntrinsicID(fshr_name)
+                let id = LLVMLookupIntrinsicID(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
                 if (decl == null) {
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
@@ -2402,7 +2361,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
                 var args <- [ r2v_left, r2v_left, right]
                 var argTypes <- [ base_type_to_llvm_type(shiftType.baseType)]
-                var id = LLVMLookupIntrinsicID(fshr_name)
+                let id = LLVMLookupIntrinsicID(fshr_name)
                 var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
                 if (decl == null) {
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
@@ -2468,9 +2427,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprOp2Right(expr : ExprOp2?; right : ExpressionPtr) : void {
-        if (isExprOp2_Func(expr)) {
-            return
-        }
+        if (isExprOp2_Func(expr)) return
         if (expr.op == "&&" || expr.op == "&&=" || expr.op == "||" || expr.op == "||=") {
             var monad_true = append_basic_block("monad_true_at_{int(expr.at.line)}_")
             var monad_false = append_basic_block("monad_true_at_{int(expr.at.line)}_")
@@ -2522,7 +2479,6 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprOp3
     def override preVisitExprOp3(expr : ExprOp3?) : void {
-        var res : LLVMOpaqueValue?
         var before_if = append_basic_block("op3_cond_at_{int(expr.at.line)}_")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder, before_if)
@@ -2581,7 +2537,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprCopy
     def build_copy(tdst : LLVMOpaqueValue?; right : ExpressionPtr) {
         var tsrc = getE(right)
-        var ralign = uint(right._type.alignOf)
+        let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             if (right._type.isWorkhorseType) {
                 var temp = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(right._type), tsrc, ralign |> int, "")
@@ -2609,19 +2565,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override isRightFirstExprCopy(expr : ExprCopy?) : bool {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) {
-            return false
-        }
-        if (expr.copy_flags.takeOverRightStack) {
-            return false
-        }
-        return true
+        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) return false
+        return !expr.copy_flags.takeOverRightStack
     }
 
     def override preVisitExprCopyRight(expr : ExprCopy?; right : ExpressionPtr) : void {
-        if (isRightFirstExprCopy(expr)) {
-            return // we do not need to do anything here
-        }
+        if (isRightFirstExprCopy(expr)) return // we do not need to do anything here
         var tdst = getE(expr.left)
         if (make_call_to_cmres(expr.right, tdst)) {
             pass
@@ -2646,7 +2595,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def build_move(tdst : LLVMOpaqueValue?; right : ExpressionPtr; needTest : bool) {
         var tsrc = getE(right)
-        var ralign = uint(right._type.alignOf)
+        let ralign = uint(right._type.alignOf)
         if (right._type.isRef) {
             /*
             if right._type.isWorkhorseType
@@ -2685,19 +2634,12 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override isRightFirstExprMove(expr : ExprMove?) : bool {
-        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) {
-            return false
-        }
-        if (expr.move_flags.takeOverRightStack) {
-            return false
-        }
-        return true
+        if (isCall2CMRES(expr.right) || isInvoke2CMRES(expr.right)) return false
+        return !expr.move_flags.takeOverRightStack
     }
 
     def override preVisitExprMoveRight(expr : ExprMove?; right : ExpressionPtr) : void {
-        if (isRightFirstExprMove(expr)) {
-            return // we do not need to do anything here
-        }
+        if (isRightFirstExprMove(expr)) return // we do not need to do anything here
         var tdst = getE(expr.left)
         if (make_call_to_cmres(expr.right, tdst)) {
             pass
@@ -2896,9 +2838,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def is_count_or_ucount(expr : ExpressionPtr) {
-        if (!(expr is ExprCall)) {
-            return false
-        }
+        if (!(expr is ExprCall)) return false
         var cf = expr as ExprCall
         return cf.func.flags.builtIn && cf.func._module.name == "$" && (cf.func.name == "count" || cf.func.name == "ucount")
     }
@@ -2940,7 +2880,7 @@ class public LlvmJitVisitor : AstVisitor {
             setV(svar, v_ptr)
         }
         // initialize its memory with 0 (should we?)
-        var vsize = svar._type.isRef ?  typeinfo sizeof(type<void?>) : svar._type.sizeOf
+        let vsize = svar._type.isRef ?  typeinfo sizeof(type<void?>) : svar._type.sizeOf
         LLVMBuildMemSet(g_builder, v_ptr, 0ul, uint64(vsize), 16u)
     }
 
@@ -2969,7 +2909,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMPositionBuilderAtEnd(g_builder, okay)
                 range2[ssrc] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
-            } elif (ssrc._type.dim |> length != 0) {// []->first()
+            } elif (!empty(ssrc._type.dim)) {// []->first()
                 var etype = clone_type(ssrc._type)
                 etype.dim |> erase(0)
                 var element_type = type_to_llvm_type(svar._type)
@@ -3079,7 +3019,7 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, lblk.loop_continue)
         for (svar, ssrc in expr.iteratorVariables, expr.sources) {
             if (ssrc._type.isRange) {// range()->next()
-                var isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
+                let isRange64 = ssrc._type.baseType == Type.tRange64 || ssrc._type.baseType == Type.tURange64
                 var svar_v = LLVMBuildLoad2(g_builder, isRange64 ? types.t_int64 : types.t_int32, getV(svar), "")
                 svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(isRange64 ? types.t_int64 : types.t_int32, 1ul, 0), "")
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
@@ -3088,7 +3028,7 @@ class public LlvmJitVisitor : AstVisitor {
                 var nextOk = append_basic_block("for_{svar.name}_next_ok")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder, nextOk)
-            } elif (ssrc._type.dim |> length != 0) {// []->next()
+            } elif (!empty(ssrc._type.dim)) {// []->next()
                 var etype = clone_type(ssrc._type)
                 etype.dim |> erase(0)
                 var svar_v = LLVMBuildLoad2(g_builder, LLVMPointerType(type_to_llvm_type(svar._type), 0u), getV(svar), "")
@@ -3200,7 +3140,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        if (stride != 0 && length(expr.variants) == 0) {
+        if (stride != 0 && empty(expr.variants)) {
             let total = int(expr.variants |> length)
             let bytes = max(total, 1) * stride
             let align = uint(expr.makeType.alignOf)
@@ -3210,7 +3150,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override preVisitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {
-        var field_index = find_argument_index(expr.makeType, string(decl.name))
+        let field_index = find_argument_index(expr.makeType, string(decl.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {decl.name} not found")
             return
@@ -3235,7 +3175,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) : MakeFieldDeclPtr {
-        var field_index = find_argument_index(expr.makeType, string(decl.name))
+        let field_index = find_argument_index(expr.makeType, string(decl.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {decl.name} not found")
             return decl
@@ -3270,9 +3210,10 @@ class public LlvmJitVisitor : AstVisitor {
     def callConstructor(expr : ExprMakeStruct?; cmresEval : LLVMOpaqueValue?) {
         assume expr_func = expr.constructor
         if (expr_func.moreFlags.requestJit) {
-            var params : array<LLVMOpaqueValue?>
-            params |> push(get_context_param())
-            params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
+            var params <- [
+                get_context_param(),
+                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), "")
+            ]
             let fmna = uid.get_dll_fn_name_ptr(expr_func)
             var func = LLVMGetNamedFunction(g_mod, fmna.impl())
             var typ = g_fn_types[fmna.impl()]
@@ -3284,11 +3225,12 @@ class public LlvmJitVisitor : AstVisitor {
                 var MNH_ADDR = get_function_addr(jit_context, expr_func)
                 ctor = save_address_global(name, MNH_ADDR)
             }
-            var params : array<LLVMOpaqueValue?>
-            params |> push(ctor)  // mnh
-            params |> push(LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u))) // args
-            params |> push(LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
-            params |> push(get_context_param())
+            var params <- [
+                ctor,  // mnh
+                LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)), // args
+                LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""),
+                get_context_param()
+            ]
             var func = LLVMGetNamedFunction(g_mod, cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var typ = g_fn_types[cmresEval != null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
@@ -3319,7 +3261,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
         let stride = expr.makeType.stride
-        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && length(expr.structs) == 0
+        let emptyEmbeddedTuple = expr.makeType.baseType == Type.tTuple && empty(expr.structs)
         let partiallyInitStruct = !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields
         if ((partiallyInitStruct || emptyEmbeddedTuple) && stride != 0) {
             let total = int(expr.structs |> length)
@@ -3344,7 +3286,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def override visitMakeStructureBlock(expr : ExprMakeStruct?; blk : ExpressionPtr) : ExpressionPtr {
         if (expr._block != null) {
-            var params : array<LLVMOpaqueValue?>
+            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — built incrementally with intervening builder calls
 
             var block_ptr = getE(expr._block)
             block_ptr = LLVMBuildPointerCast(g_builder, block_ptr, LLVMPointerType(types.t_int8, 0u), "")
@@ -3376,8 +3318,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override preVisitExprMakeStructField(expr : ExprMakeStruct?; index : int; decl : MakeFieldDeclPtr; last : bool) : void {
         var field_offset : int
         if (expr.makeType.isHandle) {
-            var pann = expr.makeType.annotation
-            var ann = unsafe(reinterpret<TypeAnnotation?> pann)
+            var ann = expr.makeType.annotation
             field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
         } else {
             var field = find_structure_field(expr.makeType.structType, string(decl.name))
@@ -3408,8 +3349,7 @@ class public LlvmJitVisitor : AstVisitor {
         var field_offset : int
         var field_type : TypeDeclPtr
         if (expr.makeType.isHandle) {
-            var pann = expr.makeType.annotation
-            var ann = unsafe(reinterpret<TypeAnnotation?> pann)
+            var ann = expr.makeType.annotation
             field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
             field_type = get_handled_type_field_type_declaration(ann, string(decl.name), false)
         } else {
@@ -3579,7 +3519,7 @@ class public LlvmJitVisitor : AstVisitor {
             failed_T(t, "not a tuple {describe(t)}")
             return "!!not_a_tuple!!"
         }
-        return t.argNames |> length != 0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
+        return !empty(t.argNames) ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
     }
 
     def override visitExprMakeTupleIndex(expr : ExprMakeTuple?; index : int; init : ExpressionPtr; last : bool) : ExpressionPtr {
@@ -3908,9 +3848,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def create_enuminfo_global(ei : EnumInfo?) {
-        if (enuminfo_cache |> key_exists <| ei) {
-            return enuminfo_cache[ei]
-        }
+        if (enuminfo_cache |> key_exists <| ei) return enuminfo_cache[ei]
         var ty = get_llvm_type_for_enuminfo(ei.count)
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "enuminfo_{ei.module_name}_{ei.name}")
         set_globalvar_linkage(struct_info_global)
@@ -3927,9 +3865,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def create_struct_global(si : StructInfo?) {
-        if (structinfo_cache |> key_exists <| si) {
-            return structinfo_cache[si]
-        }
+        if (structinfo_cache |> key_exists <| si) return structinfo_cache[si]
         var ty = get_llvm_type_for_structinfo()
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "si_{si.name}")
         set_globalvar_linkage(struct_info_global)
@@ -3966,9 +3902,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def create_argtypes_array(argtypes : TypeInfo ??; len : uint) {
         var array_init : array<LLVMValueRef>
-        if (len == 0u) {
-            return LLVMConstPointerNull(LLVMPointerType(types.t_int8, 0u))
-        }
+        if (len == 0u) return LLVMConstPointerNull(LLVMPointerType(types.t_int8, 0u))
         array_init |> reserve(int(len))
         for (i in range(len)) {
             let evi = unsafe(argtypes[i]) |> create_type_info_global()
@@ -3983,9 +3917,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def create_argnames_array(argnames : string const?; len : uint) {
-        if (len == 0u) {
-            return LLVMConstPointerNull(LLVMPointerType(types.t_int8, 0u))
-        }
+        if (len == 0u) return LLVMConstPointerNull(LLVMPointerType(types.t_int8, 0u))
         var array_init : array<LLVMValueRef>
         array_init |> reserve(int(len))
         var ty = LLVMPointerType(types.t_int8, 0u)
@@ -4067,12 +3999,8 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def create_type_info_global(ti : TypeInfo?) {
-        if (ti == null) {
-            return LLVMConstPointerNull(types.LLVMVoidPtrType())
-        }
-        if (typeinfo_cache |> key_exists <| ti) {
-            return typeinfo_cache[ti]
-        }
+        if (ti == null) return LLVMConstPointerNull(types.LLVMVoidPtrType())
+        if (typeinfo_cache |> key_exists <| ti) return typeinfo_cache[ti]
 
         var type_info_type = get_llvm_type_for_typeinfo()
         let type_info_global = LLVMAddGlobal(g_mod, type_info_type, "ti")
@@ -4080,7 +4008,7 @@ class public LlvmJitVisitor : AstVisitor {
 
         typeinfo_cache[ti] = type_info_global
 
-        var init_values <- get_typeinfo_fields(ti)
+        let init_values <- get_typeinfo_fields(ti)
         var type_info_init = LLVMGetUndef(type_info_type)
         for (i in urange(init_values |> length())) {
             type_info_init = g_builder |> LLVMBuildInsertValue(type_info_init, init_values[i], i, "")
@@ -4123,9 +4051,7 @@ class public LlvmJitVisitor : AstVisitor {
 // ExprInvoke
     def override canVisitExprLooksLikeCallArgument(expr : ExprLooksLikeCall?; arg : ExpressionPtr; last : bool) : bool {
         if (expr is ExprInvoke) {
-            if (length(expr.arguments) >= 1 && expr.arguments[0] == arg && (expr as ExprInvoke).isInvokeMethod) {
-                return false
-            }
+            if (!empty(expr.arguments) && expr.arguments[0] == arg && (expr as ExprInvoke).isInvokeMethod) return false
         }
         return true
     }
@@ -4172,7 +4098,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null method")
-            var params : array<LLVMOpaqueValue?>
+            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
             params |> push(SIMFUNCTION)
             params |> push(args)
             if (cmresEval != null) {
@@ -4196,7 +4122,7 @@ class public LlvmJitVisitor : AstVisitor {
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION.SIM_FUNCTION), "SIMFUNCTION")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
             check_ptr_zero(SIMFUNCTION, expr.at, "invoke null function")
-            var params : array<LLVMOpaqueValue?>
+            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
             params |> push(SIMFUNCTION)
             params |> push(args)
             if (cmresEval != null) {
@@ -4223,7 +4149,7 @@ class public LlvmJitVisitor : AstVisitor {
             LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-            var params : array<LLVMOpaqueValue?>
+            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
             params |> push(SIMFUNCTION)
             params |> push(args)
             if (cmresEval != null) {
@@ -4245,7 +4171,7 @@ class public LlvmJitVisitor : AstVisitor {
             var args = build_array_of_arguments(expr.arguments, true)
             var blk = getE(expr.arguments[0])
             check_ptr_zero(blk, expr.at, "invoke null block")
-            var params : array<LLVMOpaqueValue?>
+            var params : array<LLVMOpaqueValue?>  // nolint:STYLE012 — conditional cmresEval push between fixed args
             params |> push(blk)
             params |> push(args)
             if (cmresEval != null) {
@@ -4421,7 +4347,7 @@ class public LlvmJitVisitor : AstVisitor {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isPointer && (subT.isPointer || subT.isRefType)) {
             res = LLVMBuildPointerCast(g_builder, subE, type_to_llvm_type(ect), "cast_p")
-        } elif (length(ect.dim) != 0 && subT.isPointer) {
+        } elif (!empty(ect.dim) && subT.isPointer) {
             res = LLVMBuildPointerCast(g_builder, subE, LLVMPointerType(type_to_llvm_type(ect), 0u), "")
         } elif (ect.isInteger && (ect.baseType == Type.tInt64 || ect.baseType == Type.tUInt64) && subT.isPointer) {
             res = LLVMBuildPtrToInt(g_builder, subE, type_to_llvm_type(ect), "cast_p_i")
@@ -4470,10 +4396,7 @@ class public LlvmJitVisitor : AstVisitor {
         LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
         var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA.FINALIZER), "FINALIZER")
         SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, types.LLVMVoidPtrType(), "")
-        var params : array<LLVMOpaqueValue?>
-        params |> push(SIMFUNCTION)
-        params |> push(args)
-        params |> push(get_context_param())
+        var params <- [SIMFUNCTION, args, get_context_param()]
         var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
         var typ = g_fn_types[FN_JIT_CALL_OR_FASTCALL]
         LLVMBuildCall2(g_builder, typ, func, params, "delete_lambda")
@@ -4621,9 +4544,7 @@ class public LlvmJitVisitor : AstVisitor {
                 }
             } elif (firstT.isHandle) {
                 let fn_delete_handle = get_delete_handle_function(firstT)
-                if (fn_delete_handle == null) {
-                    return expr
-                }
+                if (fn_delete_handle == null) return expr
                 var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(types.LLVMVoidPtrType(), 0u), "")
                 var ps = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), pps, "delete`handle`{describe(firstT)}")
                 var params = fixed_array(
@@ -4637,7 +4558,7 @@ class public LlvmJitVisitor : AstVisitor {
                 LLVMAddCallSiteAttribute(ccall, 1 |> uint(), attributes.nocapture)
                 LLVMBuildStore(g_builder, LLVMConstNull(types.LLVMVoidPtrType()), pps)
             } elif (firstT.isVariant || firstT.isTuple) {
-                var structSize = firstT.sizeOf
+                let structSize = firstT.sizeOf
                 var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(types.LLVMVoidPtrType(), 0u), "ppData")
                 var ps = LLVMBuildLoad2(g_builder, types.LLVMVoidPtrType(), pps, "pData")
                 var params = fixed_array(
@@ -4758,7 +4679,7 @@ class public LlvmJitVisitor : AstVisitor {
             failed_T(t, "not a variant {describe(t)}")
             return "!!not_a_variant!!"
         }
-        return t.argNames |> length != 0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
+        return !empty(t.argNames) ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
     }
 
     def override visitExprField(expr : ExprField?) : ExpressionPtr {
@@ -4937,7 +4858,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprIsVariant
     def override visitExprIsVariant(expr : ExprIsVariant?) : ExpressionPtr {
-        var field_index = find_argument_index(expr.value._type, string(expr.name))
+        let field_index = find_argument_index(expr.value._type, string(expr.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {expr.name} not found")
             return expr
@@ -4966,7 +4887,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprAsVariant(expr : ExprAsVariant?) : ExpressionPtr {
-        var field_index = find_argument_index(expr.value._type, string(expr.name))
+        let field_index = find_argument_index(expr.value._type, string(expr.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {expr.name} not found")
             return expr
@@ -4990,7 +4911,7 @@ class public LlvmJitVisitor : AstVisitor {
     def override visitExprSafeAsVariant(expr : ExprSafeAsVariant?) : ExpressionPtr {
         assume valueT = expr.value._type
         var vptr = getE(expr.value)
-        var field_index = find_argument_index(valueT.isPointer ? valueT.firstType : valueT, string(expr.name))
+        let field_index = find_argument_index(valueT.isPointer ? valueT.firstType : valueT, string(expr.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {expr.name} not found")
             return expr
@@ -5173,7 +5094,7 @@ class public LlvmJitVisitor : AstVisitor {
             }
         }
 
-        var any_afb =  has_any_finally_block(false)
+        let any_afb =  has_any_finally_block(false)
         if (isCmres && any_afb) {
             var temp_res : LLVMOpaqueValue?
             var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
@@ -5230,10 +5151,6 @@ class public LlvmJitVisitor : AstVisitor {
         } else {
             if (returnType.isPointer && (expr.subexpr is ExprConstPtr)) {// return null
                 LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
-            } elif (returnType.isPointer) {
-                LLVMBuildRet(g_builder, expr_res)
-            } elif (expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType) {
-                LLVMBuildRet(g_builder, expr_res)
             } else {
                 LLVMBuildRet(g_builder, expr_res)
             }
@@ -5356,7 +5273,7 @@ class public LlvmJitVisitor : AstVisitor {
         var blk_fields <- build_block_type()
         blk_fields |> push(LLVMArrayType(types.LLVMFloat4Type(), 10u))
         blk_fields |> reserve(length(blk_fields) + length(captured))
-        var first_field_index = length(blk_fields)
+        let first_field_index = length(blk_fields)
         for (c in captured) {
             blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         }
@@ -5469,7 +5386,7 @@ class public LlvmJitVisitor : AstVisitor {
 
 // ExprConstEnumeration
     def override visitExprConstEnumeration(expr : ExprConstEnumeration?) : ExpressionPtr {
-        var value = find_enum_value(unsafe(reinterpret<EnumerationPtr> expr._type.enumType), string(expr.value))
+        let value = find_enum_value(unsafe(reinterpret<EnumerationPtr> expr._type.enumType), string(expr.value))
         setE(expr, LLVMConstInt(base_type_to_llvm_type(expr._type.enumType.baseType), uint64(value), 0))
         return expr
     }
@@ -5944,7 +5861,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def build_select(cond : LLVMOpaqueValue?; typ : LLVMOpaqueType?; if_true, if_false : block<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
         if (LLVMIsConstant(cond) != 0) {
-            var val = LLVMConstIntGetZExtValue(cond)
+            let val = LLVMConstIntGetZExtValue(cond)
             return val != 0ul ? invoke(if_true) : invoke(if_false)
         }
         var check_true = append_basic_block("check_true")
@@ -6167,8 +6084,7 @@ class public LlvmJitVisitor : AstVisitor {
 def private get_llvm_function_type(func : FunctionPtr; types : PrimitiveTypes?) {
     var arg_types : array<LLVMOpaqueType?>
     arg_types |> reserve(length(func.arguments) + 3)
-    var res_type : LLVMOpaqueType?
-    res_type = type_to_llvm_type(func.result)
+    var res_type = type_to_llvm_type(func.result)
     if (func.result.flags.ref) {
         res_type = LLVMPointerType(res_type, 0u)
     }
@@ -6270,14 +6186,15 @@ class public ResolveExternVisitor : AstVisitor {
     }
 
     def make_call(expr : ExprCallFunc?) {
-        if (expr.func == null) { return ; }
-        if (has_intrinsic(expr)) {
-            return
-        }
+        if (expr.func == null || has_intrinsic(expr)) return
 
         if (expr.func.flags.builtIn) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
-            if (FUNC_PTR == null && find(string(expr.func.name), "__dasbind__") < 0) {
+            var is_dasbind = false
+            peek(expr.func.name) $(s) {
+                is_dasbind = find(s, "__dasbind__") >= 0
+            }
+            if (FUNC_PTR == null && !is_dasbind) {
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {get_mangled_name(expr.func)}")
             }
             dll.set_glob_address(uid.get_dll_fn_name_ptr(expr.func), FUNC_PTR)
@@ -6297,7 +6214,7 @@ class public ResolveExternVisitor : AstVisitor {
             }
             dll.set_glob_address(uid.get_new(expr.typeexpr), new_handle_ptr)
         } else {
-            if (expr.typeexpr.dim |> length > 0) {
+            if (!empty(expr.typeexpr.dim)) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
                     var elemT = clone_type(expr.typeexpr)
                     elemT.dim |> clear() // hack to get correct ptr to ctor
@@ -6405,7 +6322,6 @@ class public ResolveExternVisitor : AstVisitor {
 
     def private get_table_t(subexprT : TypeDeclPtr) {
         assume firstT = subexprT.firstType
-        var keyType : Type
         if (firstT.isWorkhorseType) {
             return firstT.baseType
         } else {
@@ -6506,7 +6422,7 @@ def public generate_llvm(ctx : Context?; types : PrimitiveTypes?; uids : UidNode
             visit(fn, astVisitor.adapter)
         }
     }
-    if (length(g_errors) > 0) {
+    if (!empty(g_errors)) {
         let errors = g_errors |> join("\n")
         delete g_errors
         to_log(LOG_ERROR, "LLVM JIT FAILED:\n{errors}\n")
@@ -6611,9 +6527,7 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
     if (dll_enabled) {
         assert(dll.handle != null)
         code = dll.get_function_address(fmna)
-        if (code != null) {
-            return code
-        }
+        if (code != null) return code
     }
     if (dll_enabled) {
         to_log(LOG_ERROR, "Something wrong! Non dll function used in dll mode {fmna.publ()}\n")
@@ -6634,12 +6548,12 @@ def public generate_llvm_code(var dll : DLLHandle?; fmna : DllName; dll_enabled 
 // object file.
 [macro_function]
 def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool) {
-    var ctor_dtor : array<tuple<LLVMOpaqueValue?, LLVMOpaqueValue?>>
-
-    // FileInfo
-    ctor_dtor |> push(generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode))
-    // VarInfo
-    ctor_dtor |> push(generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode))
+    let ctor_dtor <- [
+        // FileInfo
+        generate_fileinfo_ctor_dtor(*types, active_filenames, jit_mode),
+        // VarInfo
+        generate_annotations_ctor_dtor(*types, annotation_varinfo_list, jit_mode)
+    ]
     ctor_dtor |> add_ctor_dtor_function(types)
 
     active_filenames = table<string>()
@@ -6648,8 +6562,8 @@ def public generate_global_ctors_dtors(types : PrimitiveTypes?; jit_mode : bool)
 
 [macro_function]
 def public optimize_llvm_module(opt_level : uint; size_level : uint; inline_threshold : uint; use_host_cpu : bool) {
-    return if (is_in_completion() || is_compiling_macros() || is_folding())
-    return if (g_failed || !LLVM_ENABLE_OPT_PASS)
+    return if (is_in_completion() || is_compiling_macros() || is_folding()
+            || g_failed || !LLVM_ENABLE_OPT_PASS)
     var pbopts = LLVMCreatePassBuilderOptions()
     // Ensure pbopts is released even if the pass run fails and we panic.
     defer() {
@@ -6693,9 +6607,9 @@ class public DisableJitVisitor : AstVisitor {
     }
 
     def override preVisitExprForBody(expr : ExprFor?) : void {
-        for (svar, ssrc in expr.iteratorVariables, expr.sources) {
+        for (_, ssrc in expr.iteratorVariables, expr.sources) {
             assume ssrc_t = ssrc._type
-            if (ssrc_t.isRange || ssrc_t.dim |> length != 0 ||
+            if (ssrc_t.isRange || !empty(ssrc_t.dim) ||
                 ssrc_t.isGoodArrayType || ssrc_t.isIterator ||
                 ssrc_t.isString) {
             } elif (!disable) {

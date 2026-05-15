@@ -197,7 +197,7 @@ def main() {
         // Wait for connection and welcome message
         wait_for_messages(alice, 1)
         print("  alice received {length(alice.received)} message(s)\n")
-        if (length(alice.received) > 0) {
+        if (!empty(alice.received)) {
             print("  welcome: {alice.received[0]}\n")
         }
 

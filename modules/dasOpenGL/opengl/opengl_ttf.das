@@ -46,9 +46,7 @@ def public upload_font_texture(var font : Font) {
     //! Upload the font atlas bitmap to an OpenGL texture.
     //! Sets ``font.tex`` to the GL texture handle.
     //! Does nothing if the texture is already uploaded.
-    if (font.tex != 0ul) {
-        return
-    }
+    if (font.tex != 0ul) return
     assert(int(font.bitmap.width) > 0, "font bitmap is not valid")
     var tex = 0u
     glGenTextures(1, safe_addr(tex))
@@ -104,9 +102,7 @@ def public create_quads(font : Font; text : string; at : float2 = float2(0.)) {
 
 def public quads_dim(quads : array<FontVertex>) : tuple<vmin : float2; vmax : float2> {
     //! Compute the axis-aligned bounding box of a quad array.
-    if (empty(quads)) {
-        return (vmin = float2(0.), vmax = float2(0.))
-    }
+    if (empty(quads)) return (vmin = float2(0.), vmax = float2(0.))
     var vmin = float2(FLT_MAX, FLT_MAX)
     var vmax = float2(-FLT_MAX, -FLT_MAX)
     for (q in quads) {
@@ -130,9 +126,7 @@ enum public VJust {
 
 def public quads_view(quads : array<FontVertex>; scale : float2; h : HJust = HJust.center; v : VJust = VJust.center) {
     //! Compute a model matrix that scales and justifies the quad text.
-    if (empty(quads)) {
-        return float4x4()
-    }
+    if (empty(quads)) return float4x4()
     let d = quads_dim(quads)
     var o : float2
     if (h == HJust.left) {
@@ -235,9 +229,7 @@ def public draw_quads_2d(font : Font; quads : array<FontVertex>; w, h, x, y : in
 def public draw_quads(font : Font; quads : array<FontVertex>; mvp : float4x4; tint : float3 = float3(1.)) {
     //! Draw text quads with a model-view-projection matrix.
     assert(program != 0u, "missing create_ttf_objects or cache_ttf_objects somewhere in the initialization")
-    if (empty(quads)) {
-        return
-    }
+    if (empty(quads)) return
     // buffer data
     glBindVertexArray(vao)
     glBindBuffer(GL_ARRAY_BUFFER, vbo)

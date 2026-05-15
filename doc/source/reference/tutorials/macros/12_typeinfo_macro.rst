@@ -97,9 +97,7 @@ time:
                 var first = true
                 for (i in iter_range(expr.typeexpr.structType.fields)) {
                     assume fld = expr.typeexpr.structType.fields[i]
-                    if (fld.flags.classMethod) {
-                        continue
-                    }
+                    if (fld.flags.classMethod) continue
                     if (!first) {
                         w |> write(", ")
                     }

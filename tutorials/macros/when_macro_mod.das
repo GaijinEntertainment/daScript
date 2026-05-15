@@ -102,9 +102,9 @@ class WhenMacro : AstCallMacro {
         macro_verify(!cond._type.isAutoOrAlias, prog, expr.at,
             "first argument to when must be fully inferred")
         let blk = ((expr.arguments[1] as ExprMakeBlock)._block as ExprBlock)
-        macro_verify(length(blk.finalList) == 0, prog, expr.at,
+        macro_verify(empty(blk.finalList), prog, expr.at,
             "'when' block cannot have a finally section")
-        macro_verify(length(blk.list) > 0, prog, expr.at,
+        macro_verify(!empty(blk.list), prog, expr.at,
             "'when' block must have at least one case")
         // --- Build the statement list ---
         var list : array<ExpressionPtr>
@@ -130,9 +130,7 @@ class WhenMacro : AstCallMacro {
             } else {
                 // key => value  →  if (arg == key) { return value; }
                 list |> push <| qmacro_block() {
-                    if ($i(arg_name) == $e(tupl.values[0])) {
-                        return $e(tupl.values[1])
-                    }
+                    if ($i(arg_name) == $e(tupl.values[0])) return $e(tupl.values[1])
                 }
             }
         }

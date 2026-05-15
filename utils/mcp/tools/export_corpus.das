@@ -45,8 +45,7 @@ def public do_export_corpus(paths : string; paths_file : string; out : string;
         let body = fread(resolved_pf)
         for (raw in split_by_chars(body, "\n")) {
             let line = strip(raw)
-            if (empty(line)) continue
-            if (line |> starts_with("#")) continue
+            if (empty(line) || line |> starts_with("#")) continue
             seeds |> push(line)
         }
     }

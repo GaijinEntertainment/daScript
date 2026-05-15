@@ -49,8 +49,8 @@ def main() {
         print(coverage::summary_from_lcov_file(args[sep], excludes))
         return
     }
-    var coverage_file = args[sep]
-    var input_file = args[sep + 1]
+    let coverage_file = args[sep]
+    let input_file = args[sep + 1]
     var new_args = array<string>()
     for (i in range(args |> length())) {
         if (i == 1) {

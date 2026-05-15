@@ -113,13 +113,9 @@ struct with the ``[audited]`` annotation:
 
    [macro_function]
    def private is_audited(typ : TypeDeclPtr) : bool {
-       if (!typ.isStructure || typ.structType == null) {
-           return false
-       }
+       if (!typ.isStructure || typ.structType == null) return false
        for (ann in typ.structType.annotations) {
-           if (ann.annotation.name == "audited") {
-               return true
-           }
+           if (ann.annotation.name == "audited") return true
        }
        return false
    }
@@ -137,9 +133,7 @@ capture expression in a call to ``audit_on_capture(value, "name")``:
 
    def override captureExpression(prog : Program?; mod : Module?;
            expr : ExpressionPtr; etype : TypeDeclPtr) : ExpressionPtr {
-       if (!is_audited(etype)) {
-           return default<ExpressionPtr>
-       }
+       if (!is_audited(etype)) return default<ExpressionPtr>
        var field_name = "unknown"
        if (expr is ExprVar) {
            field_name = string((expr as ExprVar).name)
@@ -165,13 +159,9 @@ a print call to the function body's ``finalList``:
 
    def override captureFunction(prog : Program?; mod : Module?;
            var lcs : Structure?; var fun : FunctionPtr) : void {
-       if (fun.flags._generator) {
-           return    // generators run finally on every yield — skip
-       }
+       if (fun.flags._generator) return    // generators run finally on every yield — skip
        for (fld in lcs.fields) {
-           if (!is_audited(fld._type)) {
-               continue
-           }
+           if (!is_audited(fld._type)) continue
            {
                var pCall = new ExprCall(at = fld.at,
                    name := "capture_macro_mod::audit_after_invoke")
@@ -198,9 +188,7 @@ before the compiler-generated ``delete *__this``:
    def override releaseFunction(prog : Program?; mod : Module?;
            var lcs : Structure?; var fun : FunctionPtr) : void {
        for (fld in lcs.fields) {
-           if (!is_audited(fld._type)) {
-               continue
-           }
+           if (!is_audited(fld._type)) continue
            {
                var pCall = new ExprCall(at = fld.at,
                    name := "capture_macro_mod::audit_on_finalize")

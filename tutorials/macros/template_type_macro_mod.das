@@ -71,15 +71,11 @@ def pair(macroArgument, passArgument : TypeDeclPtr; T1, T2 : TypeDeclPtr) : Type
     // is `pair(type<auto(A)>, type<auto(B)>)` and the caller provides
     // a `Pair<int,float>`, passArgument is the Pair<int,float> type.
     if (passArgument != null) {
-        // Verify the concrete type is an instance of our Pair template.
-        if (!is_typemacro_template_instance(passArgument, template_type, extra_template_arguments)) {
-            return <- TypeDeclPtr()
-        }
-        // Read the stored aliases (T1, T2) from the concrete struct
+        // Verify the concrete type is an instance of our Pair template,
+        // then read the stored aliases (T1, T2) from the concrete struct
         // back into template_arguments[i].inferred_type.
-        if (!infer_struct_aliases(passArgument.structType, template_arguments)) {
-            return <- TypeDeclPtr()
-        }
+        if (!is_typemacro_template_instance(passArgument, template_type, extra_template_arguments)
+                || !infer_struct_aliases(passArgument.structType, template_arguments)) return <- TypeDeclPtr()
         // Match the inferred concrete types against the template
         // parameters (which may contain auto(...) patterns) and
         // update the compiler's alias map for further resolution.
@@ -92,18 +88,14 @@ def pair(macroArgument, passArgument : TypeDeclPtr; T1, T2 : TypeDeclPtr) : Type
     // look up) the corresponding structure.
 
     // All type arguments must be fully resolved (no remaining auto).
-    if (!verify_arguments(template_arguments)) {
-        return <- TypeDeclPtr()
-    }
+    if (!verify_arguments(template_arguments)) return <- TypeDeclPtr()
 
     // Build a mangled name like "Pair<int,float>" for deduplication.
     let struct_name = template_structure_name(template_type.structType, template_arguments, extra_template_arguments)
 
     // If this exact instantiation already exists, reuse it.
     var existing_struct = compiling_program().find_unique_structure(struct_name)
-    if (existing_struct != null) {
-        return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = template_type.at)
-    }
+    if (existing_struct != null) return <- new TypeDecl(baseType = Type.tStructure, structType = existing_struct, at = template_type.at)
 
     // Clone the template struct, rename it, clear the template flag,
     // and apply substitution rules so field types resolve correctly.

@@ -69,9 +69,9 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
     var cluster_idx = 0
     for (idxs in values(buckets)) {
         if (length(idxs) < 2) continue
-        var c = Cluster()
-        c.canonical_sample := records[idxs[0]].canonical
-        c.token_count = records[idxs[0]].token_count
+        var c = Cluster(
+            canonical_sample = records[idxs[0]].canonical,
+            token_count = records[idxs[0]].token_count)
         c.members |> reserve(length(idxs))
         var cluster_has_candidate = false
         for (i in idxs) {
@@ -112,13 +112,13 @@ def public exact_buckets(var records : array<FuncRecord>; min_tokens : int;
 def fuzzy_emit_if_match(records : array<FuncRecord>; lo : int; hi : int;
                         threshold : float; min_tokens : int;
                         var out : array<FuzzyPair>) {
-    if (records[lo].token_count < min_tokens || records[hi].token_count < min_tokens) return
-    if (records[lo].cluster_id != -1 && records[lo].cluster_id == records[hi].cluster_id) return
     // Same canonical text would already be in the exact-cluster set
     // (caught above when both have a cluster_id). Compare on the string
     // itself rather than the 64-bit hash to dodge any theoretical
     // collision.
-    if (records[lo].canonical == records[hi].canonical) return
+    if (records[lo].token_count < min_tokens || records[hi].token_count < min_tokens
+        || (records[lo].cluster_id != -1 && records[lo].cluster_id == records[hi].cluster_id)
+        || records[lo].canonical == records[hi].canonical) return
     let tl = float(records[lo].token_count)
     let th = float(records[hi].token_count)
     let len_ratio = tl < th ? tl / th : th / tl
@@ -128,12 +128,12 @@ def fuzzy_emit_if_match(records : array<FuncRecord>; lo : int; hi : int;
     // periodic code with very different lengths drops out.
     let combined = sqrt(s * len_ratio)
     if (combined >= threshold) {
-        var p = FuzzyPair()
-        p.similarity = combined
-        p.a = records[lo].ref
-        p.b = records[hi].ref
-        p.canonical_a := records[lo].canonical
-        p.canonical_b := records[hi].canonical
+        var p = FuzzyPair(
+            similarity = combined,
+            a = records[lo].ref,
+            b = records[hi].ref,
+            canonical_a = records[lo].canonical,
+            canonical_b = records[hi].canonical)
         out |> emplace(p)
     }
 }
@@ -166,8 +166,7 @@ def public fuzzy_pairs(records : array<FuncRecord>; threshold : float; min_token
     }
     for (i in candidate_indices) {
         for (j in range(n)) {
-            if (j == i) continue
-            if (records[j].is_candidate && j < i) continue
+            if (j == i || (records[j].is_candidate && j < i)) continue
             let lo = min(i, j)
             let hi = max(i, j)
             fuzzy_emit_if_match(records, lo, hi, threshold, min_tokens, out)

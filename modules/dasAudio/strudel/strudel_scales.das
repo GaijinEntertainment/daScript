@@ -44,9 +44,7 @@ def private get_scale_intervals(scale_type : string) : array<int> {
         return <- [0, 2, 4, 6, 8, 10]
     } elif (scale_type == "harmonic_minor") {
         return <- [0, 2, 3, 5, 7, 8, 11]
-    } elif (scale_type == "melodic_minor") {
-        return <- [0, 2, 3, 5, 7, 9, 11]
-    }
+    } elif (scale_type == "melodic_minor") return <- [0, 2, 3, 5, 7, 9, 11]
     // default to chromatic if unknown
     return <- [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 }
@@ -56,9 +54,7 @@ def private get_scale_intervals(scale_type : string) : array<int> {
 // Returns MIDI note number. Default octave is 3.
 def private parse_scale_root(root_str : string) : int {
     let n = length(root_str)
-    if (n == 0) {
-        return 48  // default C3
-    }
+    if (n == 0) return 48  // default C3
     var semitone = -1
     peek_data(root_str) $(bytes) {
         let ch = int(bytes[0])
@@ -70,9 +66,7 @@ def private parse_scale_root(root_str : string) : int {
         elif (ch == 'A' || ch == 'a') { semitone = 9; }
         elif (ch == 'B' || ch == 'b') { semitone = 11; }
     }
-    if (semitone < 0) {
-        return 48  // fallback C3
-    }
+    if (semitone < 0) return 48  // fallback C3
     var octave = 3  // default octave
     var idx = 1
     if (n > 1) {
@@ -87,7 +81,7 @@ def private parse_scale_root(root_str : string) : int {
             }
             if (idx < n) {
                 let octCh = int(bytes[idx])
-                if (octCh >= '0' && octCh <= '9') {
+                if (is_number(octCh)) {
                     octave = octCh - int('0')
                 }
             }
@@ -102,9 +96,7 @@ def private normalize_scale_type(raw : string) : string {
     var result = raw
     while (true) {
         let pos = find(result, ":")
-        if (pos < 0) {
-            break
-        }
+        if (pos < 0) break
         result = slice(result, 0, pos) + "_" + slice(result, pos + 1)
     }
     return result
@@ -115,9 +107,7 @@ def private normalize_scale_type(raw : string) : string {
 // If no colon, treats entire string as type with C3 root.
 def private parse_scale_def(scale_def : string) : tuple<int; string> {
     let colon_pos = find(scale_def, ":")
-    if (colon_pos < 0) {
-        return tuple(48, scale_def)
-    }
+    if (colon_pos < 0) return tuple(48, scale_def)
     let root_str = slice(scale_def, 0, colon_pos)
     let type_str = normalize_scale_type(slice(scale_def, colon_pos + 1))
     return tuple(parse_scale_root(root_str), type_str)
@@ -132,9 +122,7 @@ def degree_to_note(degree : int; root_midi : int; intervals : array<int> const) 
     //! wraps at octave boundaries so degree 7 in a major scale = root + 12. Negative
     //! degrees wrap backwards: degree -1 in a 7-note scale is the 7th one octave down.
     let n = length(intervals)
-    if (n == 0) {
-        return float(root_midi)
-    }
+    if (n == 0) return float(root_midi)
     var oct : int
     var step : int
     if (degree >= 0) {

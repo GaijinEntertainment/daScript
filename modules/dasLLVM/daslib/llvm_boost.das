@@ -453,23 +453,13 @@ def describe(blk : LLVMOpaqueBasicBlock?) {
 }
 
 def isExprOp2_Func(expr : ExprOp2?) {
-    if (!expr.func.flags.builtIn) {
-        return true
-    }
-    if (expr.left._type.isHandle || expr.right._type.isHandle) {
-        return true
-    }
-    return false
+    if (!expr.func.flags.builtIn) return true
+    return expr.left._type.isHandle || expr.right._type.isHandle
 }
 
 def isExprOp1_Func(expr : ExprOp1?) {
-    if (!expr.func.flags.builtIn) {
-        return true
-    }
-    if (expr.subexpr._type.isHandle) {
-        return true
-    }
-    return false
+    if (!expr.func.flags.builtIn) return true
+    return expr.subexpr._type.isHandle
 }
 
 def LLVMSetFunctionCallConv(ofunc : LLVMOpaqueValue?; conv : LLVMCallConv) {

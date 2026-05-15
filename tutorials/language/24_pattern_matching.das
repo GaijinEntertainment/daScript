@@ -49,15 +49,9 @@ variant Value {
 
 def describe_number(n : int) : string {
     match (n) {
-        if (0) {
-            return "zero"
-        }
-        if (1) {
-            return "one"
-        }
-        if (2) {
-            return "two"
-        }
+        if (0) return "zero"
+        if (1) return "one"
+        if (2) return "two"
         if (_) {                // wildcard — matches anything
             return "other"
         }
@@ -72,15 +66,9 @@ def color_code(c : Color) : int {
         if (Color.red) {        // gen2 dot syntax for enum values
             return 1
         }
-        if (Color.green) {
-            return 2
-        }
-        if (Color.blue) {
-            return 3
-        }
-        if (_) {
-            return 0
-        }
+        if (Color.green) return 2
+        if (Color.blue) return 3
+        if (_) return 0
     }
     return -1
 }
@@ -109,15 +97,9 @@ def describe_point(p : Point) : string {
 
 def classify_shape(s : Shape) : string {
     match (s) {
-        if (Shape(kind = "circle", size = $v(sz)) && sz > 100) {
-            return "large circle ({sz})"
-        }
-        if (Shape(kind = "circle", size = $v(sz))) {
-            return "small circle ({sz})"
-        }
-        if (Shape(kind = $v(k), size = $v(sz))) {
-            return "{k} of size {sz}"
-        }
+        if (Shape(kind = "circle", size = $v(sz)) && sz > 100) return "large circle ({sz})"
+        if (Shape(kind = "circle", size = $v(sz))) return "small circle ({sz})"
+        if (Shape(kind = $v(k), size = $v(sz))) return "{k} of size {sz}"
     }
     return "unknown"
 }
@@ -126,12 +108,8 @@ def classify_shape(s : Shape) : string {
 
 def is_primary(c : Color) : bool {
     match (c) {
-        if (Color.red || Color.green || Color.blue) {
-            return true
-        }
-        if (_) {
-            return false
-        }
+        if (Color.red || Color.green || Color.blue) return true  // nolint:STYLE017 — match arm, not a guard chain
+        if (_) return false  // nolint:STYLE005 — last arm of match block
     }
     return false
 }
@@ -149,9 +127,7 @@ def classify_pair(t : tuple<int; string>) : string {
         if (($v(n), "hello")) {             // bind first, match second
             return "hello #{n}"
         }
-        if (_) {
-            return "other"
-        }
+        if (_) return "other"
     }
     return "unreachable"
 }
@@ -160,15 +136,9 @@ def classify_pair(t : tuple<int; string>) : string {
 
 def describe_value(v : Value) : string {
     match (v) {
-        if ($v(i) as i) {                   // match variant alternative by name
-            return "integer: {i}"
-        }
-        if ($v(f) as f) {
-            return "float: {f}"
-        }
-        if ($v(s) as s) {
-            return "string: {s}"
-        }
+        if ($v(i) as i) return "integer: {i}"   // match variant alternative by name
+        if ($v(f) as f) return "float: {f}"
+        if ($v(s) as s) return "string: {s}"  // nolint:STYLE005 — last arm of match block
     }
     return "unknown"
 }
@@ -177,15 +147,9 @@ def describe_value(v : Value) : string {
 
 def describe_point_ptr(p : Point?) : string {
     match (p) {
-        if (null) {                         // null check
-            return "null"
-        }
-        if (Point(x = 0, y = 0)) {         // auto-dereferences
-            return "origin"
-        }
-        if (Point(x = $v(x), y = $v(y))) {
-            return "({x}, {y})"
-        }
+        if (null) return "null"                                     // null check
+        if (Point(x = 0, y = 0)) return "origin"                    // auto-dereferences
+        if (Point(x = $v(x), y = $v(y))) return "({x}, {y})"  // nolint:STYLE005 — last arm of match block
     }
     return "unreachable"
 }
@@ -220,18 +184,10 @@ def tag_number(n : int) : string {
 
 def static_type_name(what) : string {
     static_match(what) {
-        if (match_type(type<int>, $v(v))) {
-            return "int({v})"
-        }
-        if (match_type(type<float>, $v(v))) {
-            return "float({v})"
-        }
-        if (match_type(type<string>, $v(v))) {
-            return "string({v})"
-        }
-        if (_) {
-            return "unknown"
-        }
+        if (match_type(type<int>, $v(v))) return "int({v})"
+        if (match_type(type<float>, $v(v))) return "float({v})"
+        if (match_type(type<string>, $v(v))) return "string({v})"
+        if (_) return "unknown"
     }
     return "unreachable"
 }
@@ -248,9 +204,7 @@ def classify_static_arr(a : int[3]) : string {
         if (fixed_array<int>(1, $v(b), $v(c))) { // first is 1, bind rest
             return "1,{b},{c}"
         }
-        if (_) {
-            return "other"
-        }
+        if (_) return "other"
     }
     return "unreachable"
 }
@@ -263,9 +217,7 @@ def classify_dynamic_arr(a : array<int>) : string {
         if (array<int>($v(x), $v(y), ...)) {     // bind first two (any length)
             return "starts with {x},{y}"
         }
-        if (_) {
-            return "other"
-        }
+        if (_) return "other"
     }
     return "unreachable"
 }
@@ -276,12 +228,8 @@ def classify_dynamic_arr(a : array<int>) : string {
 
 def is_consecutive_triple(t : tuple<int; int; int>) : bool {
     match (t) {
-        if (($v(a), match_expr(a + 1), match_expr(a + 2))) {
-            return true
-        }
-        if (_) {
-            return false
-        }
+        if (($v(a), match_expr(a + 1), match_expr(a + 2))) return true  // nolint:STYLE017 — match arm, not a guard chain
+        if (_) return false  // nolint:STYLE005 — last arm of match block
     }
     return false
 }
@@ -290,12 +238,8 @@ def is_consecutive_triple(t : tuple<int; int; int>) : bool {
 
 def describe_bool(b : bool) : string {
     match (b) {
-        if (true) {
-            return "yes"
-        }
-        if (false) {
-            return "no"
-        }
+        if (true) return "yes"  // nolint:STYLE018 — match arm, not a comparison
+        if (false) return "no"  // nolint:STYLE005,STYLE018 — last arm of match block; literal-bool is pattern not comparison
     }
     return "unreachable"
 }

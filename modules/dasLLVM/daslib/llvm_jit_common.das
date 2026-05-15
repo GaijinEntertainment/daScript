@@ -325,8 +325,8 @@ def public init_jit_clopts() {
 
 [macro_function]
 def public init_jit(cg_opt_level : uint) {
-    return if (is_in_completion() || is_compiling_macros())
-    return if (g_mod != null)    // prevent double init
+    // also prevent double init (g_mod != null)
+    return if (is_in_completion() || is_compiling_macros() || g_mod != null)
     LLVMLinkInMCJIT()
     LLVMInitializeAllTargetInfos()
     LLVMInitializeAllTargets()
@@ -776,9 +776,7 @@ def public write_exe(mod : LLVMOpaqueModule?; out_path : string; path_to_dascrip
 }
 
 def public build_string_constant(message : string) {
-    if (g_str2v |> key_exists(message)) {
-        return g_str2v[message]
-    }
+    if (g_str2v |> key_exists(message)) return g_str2v[message]
     let msg_size = uint(length(message))
     var strType = LLVMArrayType(g_prim_t.t_int8, msg_size + 1u)
     // Prefix all string variable names to not intersect with function names.
@@ -809,9 +807,7 @@ def public get_empty_string(builder : LLVMOpaqueBuilder?) {
 }
 
 def public get_string_constant_ptr(builder : LLVMOpaqueBuilder?; message : string) {
-    if (message |> length == 0) {
-        return LLVMConstPointerNull(g_prim_t.get_type_string())
-    }
+    if (empty(message)) return LLVMConstPointerNull(g_prim_t.get_type_string())
     var str = build_string_constant(message)
     return LLVMBuildPointerCast(builder, str, g_prim_t.get_type_string(), "string_constant {message}")
 }
@@ -896,7 +892,7 @@ def public type_to_llvm_abi_type(t : TypeDeclPtr) {
 
 def public type_to_llvm_type(t : TypeDeclPtr) {
     var res : LLVMOpaqueType?
-    if (t.dim |> length != 0) {
+    if (!empty(t.dim)) {
         var ndt = clone_type(t)
         ndt.dim |> clear()
         res = type_to_llvm_type(ndt)
@@ -981,7 +977,7 @@ def public type_to_llvm_type(t : TypeDeclPtr) {
 }
 
 def public dim_element_type_to_llvm_type(typ : TypeDeclPtr) {
-    if (typ.dim |> length == 0) {
+    if (empty(typ.dim)) {
         return type_to_llvm_type(typ)
     } else {
         var ndt = clone_type(typ)

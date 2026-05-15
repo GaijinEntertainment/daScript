@@ -32,9 +32,7 @@ def public stbtt_init(var info : stbtt_fontinfo; var data : array<uint8>; font_i
     //! Initialize a ``stbtt_fontinfo`` from font data. Returns ``true`` on success.
     unsafe {
         let offset = stbtt_GetFontOffsetForIndex(addr(data[0]), font_index)
-        if (offset < 0) {
-            return false
-        }
+        if (offset < 0) return false
         return stbtt_InitFont(addr(info), addr(data[0]), offset) != 0
     }
 }
@@ -141,9 +139,7 @@ def public stbtt_codepoint_bitmap(info : stbtt_fontinfo; codepoint : int; scale_
     var w, h, xoff, yoff : int
     var ptr = stbtt_GetCodepointBitmap(unsafe(addr(info)), scale_x, scale_y, codepoint,
                                        safe_addr(w), safe_addr(h), safe_addr(xoff), safe_addr(yoff))
-    if (ptr == null || w <= 0 || h <= 0) {
-        return (image = Image(), offset = int2(0))
-    }
+    if (ptr == null || w <= 0 || h <= 0) return (image = Image(), offset = int2(0))
     var img = make_image(w, h, 1)
     unsafe {
         memcpy(addr(img.bytes[0]), ptr, w * h)
@@ -158,9 +154,7 @@ def public stbtt_codepoint_bitmap_subpixel(info : stbtt_fontinfo; codepoint : in
     var w, h, xoff, yoff : int
     var ptr = stbtt_GetCodepointBitmapSubpixel(unsafe(addr(info)), scale_x, scale_y, shift_x, shift_y, codepoint,
                                                safe_addr(w), safe_addr(h), safe_addr(xoff), safe_addr(yoff))
-    if (ptr == null || w <= 0 || h <= 0) {
-        return (image = Image(), offset = int2(0))
-    }
+    if (ptr == null || w <= 0 || h <= 0) return (image = Image(), offset = int2(0))
     var img = make_image(w, h, 1)
     unsafe {
         memcpy(addr(img.bytes[0]), ptr, w * h)
@@ -235,9 +229,7 @@ def public load_font(fname : string) : Font {
             }
         }
     }
-    if (empty(font.font_data)) {
-        return <- font
-    }
+    if (empty(font.font_data)) return <- font
     stbtt_init(font.fontinfo, font.font_data)
     return <- font
 }
@@ -249,9 +241,7 @@ def public load_ttf(fname : string; pixel_height : float = 32.0; atlas_dim : int
     //! Returns a Font with bitmap stored as a 1-channel Image.
     //! If loading fails, returns a Font with an invalid bitmap.
     var font <- load_font(fname)
-    if (!is_valid(font)) {
-        return <- font
-    }
+    if (!is_valid(font)) return <- font
     font.pixel_height = pixel_height
     font.char_range = int2(first_char, num_chars)
     font.chardata |> resize(num_chars)

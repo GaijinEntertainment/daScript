@@ -69,7 +69,7 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
     }
 
     var zones <- sf2_find_zones(sf2, preset_idx, key, velocity)
-    if (length(zones) == 0) {
+    if (empty(zones)) {
         delete zones
         print("  no zones for preset={program} key={key} vel={velocity}\n")
         return
@@ -105,7 +105,7 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
         }
     }
 
-    if (length(voices) == 0) {
+    if (empty(voices)) {
         print("  no voices created for preset={program} key={key}\n")
         return
     }
@@ -118,14 +118,14 @@ def render_note(sf2 : SF2File; bank, program, key, velocity : int; duration : fl
     while (frame < total_frames) {
         let frames = min(chunk_size, total_frames - frame)
         if (!note_off_sent && frame >= note_off_frame) {
-            for (i in range(length(voices))) {
-                unsafe { ma_sf2_voice_note_off(addr(voices[i])); }
+            for (v in voices) {
+                unsafe { ma_sf2_voice_note_off(addr(v)); }
             }
             note_off_sent = true
         }
-        for (i in range(length(voices))) {
+        for (v in voices) {
             unsafe {
-                ma_sf2_voice_render(addr(voices[i]), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
+                ma_sf2_voice_render(addr(v), addr(sf2.sample_data[0]), length(sf2.sample_data), addr(output[0]), frame * 2, frames)
             }
         }
         frame += frames

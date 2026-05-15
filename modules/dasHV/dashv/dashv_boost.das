@@ -188,9 +188,7 @@ def get_body_bytes(resp : HttpResponse?) : array<uint8> {
     //! Extracts the response body as an ``array<uint8>``.
     //! Returns an empty array if the response is null, non-OK, or has no content.
     var bytes : array<uint8>
-    if (resp == null || resp.status_code != http_status.OK || resp.content_length == 0) {
-        return <- bytes
-    }
+    if (resp == null || resp.status_code != http_status.OK || resp.content_length == 0) return <- bytes
     bytes |> resize(resp.content_length)
     peek(resp.body) $(bodybytes) {
         unsafe {

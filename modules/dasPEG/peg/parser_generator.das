@@ -570,7 +570,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
 
             for (rule in rules) {
                 for (expr in gen |> generate(rule.rule)) {
-                    result |> push(expr)
+                    result |> push(expr)  // nolint:PERF006 — nested generator loop; total size unknown until exhausted
                 }
             }
 
@@ -587,29 +587,17 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
             return <- results
         }
 
-        if (Rule(maybe_repeat = $v(rule_))) {
-            return <- gen |> generate_maybe_repeat(rule_)
-        }
+        if (Rule(maybe_repeat = $v(rule_))) return <- gen |> generate_maybe_repeat(rule_)
 
-        if (Rule(not_rule = $v(rule_))) {
-            return <- gen |> generate_not(rule_)
-        }
+        if (Rule(not_rule = $v(rule_))) return <- gen |> generate_not(rule_)
 
-        if (Rule(and_rule = $v(rule_))) {
-            return <- gen |> generate_and(rule_)
-        }
+        if (Rule(and_rule = $v(rule_))) return <- gen |> generate_and(rule_)
 
-        if (Rule(repeat = $v(rule_))) {
-            return <- gen |> generate_repeat(rule_)
-        }
+        if (Rule(repeat = $v(rule_))) return <- gen |> generate_repeat(rule_)
 
-        if (Rule(subrule = $v(subrule))) {
-            abort("TODO: Suburle")
-        }
+        if (Rule(subrule = $v(subrule))) abort("TODO: Suburle")
 
-        if (Rule(option = $v(rule_))) {
-            return <- gen |> generate_option(rule_)
-        }
+        if (Rule(option = $v(rule_))) return <- gen |> generate_option(rule_)  // nolint:STYLE005 — last arm of match block
     }
 
     unreachable()
@@ -909,13 +897,9 @@ def describe_terminal(term : Terminal) : string {
             return "any"
         }
 
-        if (Terminal(string_ = $v(handle))) {
-            return "string_"
-        }
+        if (Terminal(string_ = $v(handle))) return "string_"
 
-        if (Terminal(double_ = $v(handle))) {
-            return "double_"
-        }
+        if (Terminal(double_ = $v(handle))) return "double_"  // nolint:STYLE005 — last arm of match block
     }
 
     unreachable()
@@ -925,9 +909,7 @@ def describe_terminal(term : Terminal) : string {
 
 def describe_rule(r : Rule_?) : string {
     match (r.rule) {
-        if (Rule(terminal = $v(term))) {
-            return describe_terminal(term)
-        }
+        if (Rule(terminal = $v(term))) return describe_terminal(term)
 
         if (Rule(nonterminal = $v(nonterm))) {
             let name = nonterm
@@ -939,41 +921,23 @@ def describe_rule(r : Rule_?) : string {
             return "{name}"
         }
 
-        if (Rule(text_extraction = $v(subrule))) {
-            return describe_rule(subrule)
-        }
+        if (Rule(text_extraction = $v(subrule))) return describe_rule(subrule)
 
-        if (Rule(seq = $v(rules))) {
-            abort("Don't need this")
-        }
+        if (Rule(seq = $v(rules))) abort("Don't need this")
 
-        if (Rule(alt = $v(alts))) {
-            abort("Don't need this")
-        }
+        if (Rule(alt = $v(alts))) abort("Don't need this")
 
-        if (Rule(maybe_repeat = $v(rule_))) {
-            return "*{describe_rule(rule_)}"
-        }
+        if (Rule(maybe_repeat = $v(rule_))) return "*{describe_rule(rule_)}"
 
-        if (Rule(not_rule = $v(rule_))) {
-            return "!{describe_rule(rule_)}"
-        }
+        if (Rule(not_rule = $v(rule_))) return "!{describe_rule(rule_)}"
 
-        if (Rule(and_rule = $v(rule_))) {
-            return "PEEK({describe_rule(rule_)})"
-        }
+        if (Rule(and_rule = $v(rule_))) return "PEEK({describe_rule(rule_)})"
 
-        if (Rule(repeat = $v(rule_))) {
-            return "+{describe_rule(rule_)}"
-        }
+        if (Rule(repeat = $v(rule_))) return "+{describe_rule(rule_)}"
 
-        if (Rule(subrule = $v(subrule))) {
-            abort("Don't need this")
-        }
+        if (Rule(subrule = $v(subrule))) abort("Don't need this")
 
-        if (Rule(option = $v(rule_))) {
-            return "?{describe_rule(rule_)}"
-        }
+        if (Rule(option = $v(rule_))) return "?{describe_rule(rule_)}"  // nolint:STYLE005 — last arm of match block
     }
 
     unreachable()
@@ -1349,7 +1313,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
             }
         }
 
-        if (Terminal(double_ = $v(handle))) {
+        if (Terminal(double_ = $v(handle))) {  // nolint:STYLE005 — last arm of match block; body is multi-line qmacro_block
 
             return <- qmacro_block() {
                 let $i(name) <- parser |> match_double_literal
@@ -1367,9 +1331,7 @@ def generate_terminal(var gen : ParserGenerator; var terminal : Terminal) : Expr
                     return <- default<$t(return_type)>
                 }
 
-                if ($v(gen.tracing)) {
-                    parser |> log_success <| "Matched a double {$i(name).value}"
-                }
+                if ($v(gen.tracing)) parser |> log_success <| "Matched a double {$i(name).value}"
                 var $i(handle) = $i(name).value // nolint:LINT003
             }
         }

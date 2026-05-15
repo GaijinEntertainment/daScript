@@ -79,9 +79,7 @@ Section 1 — lint_macro (compile-time analysis)
             let cm = compiling_module()
             let WARN_THRESHOLD = 4
             cm |> for_each_function("") $(var func : FunctionPtr) {
-                if (func.body == null || !(func.body is ExprBlock)) {
-                    return
-                }
+                if (func.body == null || !(func.body is ExprBlock)) return
                 let body = func.body as ExprBlock
                 let nStmts = length(body.list)
                 if (nStmts > WARN_THRESHOLD) {
@@ -149,7 +147,7 @@ The visitor walks the AST and modifies function bodies:
                 return <- fun
             }
             var body = fun.body as ExprBlock
-            if (length(body.list) == 0) {
+            if (empty(body.list)) {
                 func = null
                 return <- fun
             }

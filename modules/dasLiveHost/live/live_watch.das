@@ -33,9 +33,7 @@ var watch_file_count : int = -1
 
 def private refresh_file_list() {
     let count = get_watched_file_count()
-    if (count == watch_file_count) {
-        return
-    }
+    if (count == watch_file_count) return
     watch_file_count = count
     watch_snapshots |> clear()
     for (i in range(count)) {
@@ -62,14 +60,10 @@ class LiveWatchAgent : DapiDebugAgent {
     def override onTick() : void {
         // Refresh file list if host updated it
         refresh_file_list()
-        if (watch_file_count <= 0) {
-            return
-        }
+        if (watch_file_count <= 0) return
         // Throttle: check twice per second (uptime is high-resolution)
         let now = get_uptime()
-        if (now - watch_last_uptime < 0.5) {
-            return
-        }
+        if (now - watch_last_uptime < 0.5) return
         watch_last_uptime = now
         // Check file mtimes and sizes
         for (f, snap in keys(watch_snapshots), values(watch_snapshots)) {

@@ -143,8 +143,7 @@ def is_builtin_like(name : das_string) : bool {
 
 def collect_public_deps(mod : Module?; root_mod : string; var exported : table<string>) {
     module_for_each_dependency(mod) $(dep, is_pub) {
-        if (!is_pub) return
-        if (is_builtin_like(dep.name) || dep.name == "") return
+        if (!is_pub || is_builtin_like(dep.name) || dep.name == "") return
         let dep_name = "{dep.name}"
         if (!key_exists(exported, dep_name)) {
             exported |> insert(dep_name)
@@ -156,13 +155,13 @@ def collect_public_deps(mod : Module?; root_mod : string; var exported : table<s
 def collect_required_modules(prog : smart_ptr<Program>) : array<RequiredModule> {
     var result : array<RequiredModule>
     prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
-        var rd : RequiredModule
-        rd.mod = mod
-        rd.mod_name = "{mod.name}"
-        rd.req_name = "{req_name}"
-        rd.is_public = pub
-        rd.line = int(at.line)
-        result |> push(rd)
+        var rd = RequiredModule(
+            mod = mod,
+            mod_name = "{mod.name}",
+            req_name = "{req_name}",
+            is_public = pub,
+            line = int(at.line))
+        result |> emplace(rd)
     }
     return <- result
 }
@@ -239,7 +238,7 @@ def dedup_providers(ctx : RequirefixContext?; var usage_tab : table<string, Modu
     for (mod_name, list in keys(extra_usages), values(extra_usages)) {
         for (dep_name in list) {
             let ref = ref_pub_require(dep_name, uint(usage_tab[mod_name].required_at))
-            usage_tab[mod_name].refs |> push(ref)
+            usage_tab[mod_name].refs |> push(ref)  // nolint:PERF006 — keyed table-lookup target; reserve() needs same row
         }
     }
 }
@@ -338,8 +337,7 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; var cop : C
         // that happens to export "foo" as used (all of them!)
         for (func_name, call_lines in keys(visitor.unresolved_call_names), values(visitor.unresolved_call_names)) {
             for (req in required) {
-                if (req.mod == null) continue
-                if (!func_is_provided_by(req.mod, func_name)) continue
+                if (req.mod == null || !func_is_provided_by(req.mod, func_name)) continue
                 for (call_line in call_lines) {
                     let ref = ref_function_call(func_name, call_line)
                     visitor.mod_usages[req.mod_name] |> push(ref)
@@ -392,13 +390,13 @@ def analyze_file(var ctx : RequirefixContext?; var mg : ModuleGroup; var cop : C
 
 // Build source text from lines, commenting out the specified line (lines are 1-based).
 def comment_out_src_line(source : string; skip_line : int) : string {
-    return build_string() <| $(str) {
+    return build_string() $(str) {
         var line_num = 1
         var i = 0
         let src_len = length(source)
         while (i < src_len) {
             var eol = i
-            while (eol < src_len && character_at(source, eol) != '\n') {
+            while (eol < src_len && character_at(source, eol) != '\n') {  // nolint:PERF003 — cold path: source-insertion runs once per fix
                 eol++
             }
             if (eol < src_len) {
@@ -467,9 +465,10 @@ class ModuleRefsVisitor : AstVisitor {
     unresolved_call_names : table<string, array<uint>>
 
     def add_module_ref(mod : Module const?; ref : ModuleRef) {
-        if (mod == null) return
-        if (is_builtin_like(mod.name)) return
-        if (mod.name == ctx.mod_name || mod.name == "") return
+        if (mod == null
+            || is_builtin_like(mod.name)
+            || mod.name == ctx.mod_name
+            || mod.name == "") return
         let mod_name = "{mod.name}"
         mod_mapping |> insert(mod_name, mod)
         mod_usages[mod_name] |> push(ref)

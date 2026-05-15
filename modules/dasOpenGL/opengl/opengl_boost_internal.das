@@ -60,17 +60,11 @@ def get_shader_const_name(arg : ExpressionPtr; var errors : das_string) {
 class BgfxCompileShaderFunctionAnnotation : AstFunctionAnnotation {
     def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         // see if there
-        if (call.arguments[0]._type == null || call.arguments[1]._type == null) {
-            return default<ExpressionPtr>
-        }
+        if (call.arguments[0]._type == null || call.arguments[1]._type == null) return default<ExpressionPtr>
         let vs_name = get_shader_const_name(call.arguments[0], errors)
-        if (vs_name == "") {
-            return default<ExpressionPtr>
-        }
+        if (vs_name == "") return default<ExpressionPtr>
         let fs_name = get_shader_const_name(call.arguments[1], errors)
-        if (fs_name == "") {
-            return default<ExpressionPtr>
-        }
+        if (fs_name == "") return default<ExpressionPtr>
         var cll <- new ExprCall(at = call.at, name := "create_shader_program")
         cll.arguments |> emplace_new <| new ExprVar(at = call.at, name := vs_name)
         cll.arguments |> emplace_new <| new ExprVar(at = call.at, name := fs_name)
@@ -82,13 +76,9 @@ class BgfxCompileShaderFunctionAnnotation : AstFunctionAnnotation {
 class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation {
     def override transform(var call : ExprCallFunc?; var errors : das_string) : ExpressionPtr {
         // see if there
-        if (call.arguments[0]._type == null) {
-            return default<ExpressionPtr>
-        }
+        if (call.arguments[0]._type == null) return default<ExpressionPtr>
         let cs_name = get_shader_const_name(call.arguments[0], errors)
-        if (cs_name == "") {
-            return default<ExpressionPtr>
-        }
+        if (cs_name == "") return default<ExpressionPtr>
         let func <- (call.arguments[0] as ExprAddr).func
         let _target = func._module.name != "" ? "{func._module.name}::{func.name}" : "{func.name}"
         var cll <- new ExprCall(at = call.at, name := "create_compute_shader_program")
@@ -102,7 +92,7 @@ class GlslVertexBuffer : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool {
         // [template(self)] bind_vertex_buffer(vbo:uint; self:VertexType; vindex:uint=0u)
         var fn <- new Function(at = st.at, atDecl = st.at, name := "bind_vertex_buffer")
-        fn.flags |= FunctionFlags.generated
+        fn.flags.generated = true
         fn.result = new TypeDecl(baseType = Type.tVoid, at = st.at)
         fn.arguments |> emplace_new() <| new Variable(at = st.at,
             name := "ptrd",

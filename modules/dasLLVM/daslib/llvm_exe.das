@@ -184,9 +184,7 @@ class CollectExternVisitor : AstVisitor {
     def register_function(fn : Function?) : LLVMOpaqueValue? {
         let fnmna = uid.get_dll_fn_name_ptr(fn)
         let fn_publ = LLVMGetNamedFunction(g_mod, fnmna.publ())
-        if (fn_publ == null) {
-            return null
-        }
+        if (fn_publ == null) return null
         let fn_ptr_cast = LLVMBuildPointerCast(builder, fn_publ, types.LLVMVoidPtrType(), "")
         var reg_args = fixed_array<LLVMOpaqueValue?>(
             standalone_ctx,
@@ -225,17 +223,16 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def ensure_module(m : Module?) {
-        if (m == null) { return ; }
+        if (m == null) return
         let mod_name = string(m.name)
-        if (key_exists(registered_modules, mod_name)) { return ; }
-        if (key_exists(dynamic_modules, mod_name)) { return ; }
+        if (key_exists(registered_modules, mod_name) || key_exists(dynamic_modules, mod_name)) return
         registered_modules[mod_name] = true
         // First ensure all dependencies of this module are registered
-        module_for_each_dependency(m) <| $(var dep : Module?; var pub : bool) {
+        module_for_each_dependency(m) $(var dep : Module?; var pub : bool) {
             ensure_module(dep)
         }
         let cpp_name = string(m.cppClassName)
-        if (empty(cpp_name)) { return ; }
+        if (empty(cpp_name)) return
         let reg_fn_name = "jit_register_{cpp_name}"
         to_log(LOG_INFO, "LLVM EXE: NEED_MODULE({cpp_name}) for `{mod_name}`\n")
         var reg_fn = LLVMAddFunctionWithType(g_mod, reg_fn_name, register_mod_type)
@@ -243,11 +240,10 @@ class CollectExternVisitor : AstVisitor {
     }
 
     def make_call(expr : ExprCallFunc?) {
-        if (expr.func == null) { return ; }
-        if (has_intrinsic(expr)) { return ; }
+        if (expr.func == null || has_intrinsic(expr)) return
         if (expr.func.flags.builtIn) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
-            if (FUNC_PTR == null) { return ; }
+            if (FUNC_PTR == null) return
             let name = uid.get_dll_fn_name_ptr(expr.func)
             if (initialize(name)) {
                 // For each used extern builtin function, emit a call to a registration
@@ -259,9 +255,7 @@ class CollectExternVisitor : AstVisitor {
                 // d901e741b164f6328660178e8ed3ae406d78c8e1.
                 // Simplest way is to skip global if it wasn't created, which
                 // means it was never accessed.
-                if (global_var == null) {
-                    return
-                }
+                if (global_var == null) return
                 let mod_name = string(expr.func._module.name)
                 extern_modules[mod_name] = true
                 ensure_module(expr.func._module)
@@ -346,7 +340,7 @@ class CollectExternVisitor : AstVisitor {
                 register_new_from_annotation(name, expr.typeexpr.annotation)
             }
         } else {
-            if (expr.typeexpr.dim |> length > 0) {
+            if (!empty(expr.typeexpr.dim)) {
                 if (expr.typeexpr.baseType == Type.tHandle) {
                     var elemT = clone_type(expr.typeexpr)
                     elemT.dim |> clear() // hack to get correct ptr to ctor
@@ -393,15 +387,11 @@ class CollectExternVisitor : AstVisitor {
 
     def override preVisitExprAddr(expr : ExprAddr?) {
         let fn_ptr = register_function(expr.func)
-        if (fn_ptr == null) {
-            return
-        }
+        if (fn_ptr == null) return
         let name = uid.get_addr(expr)
         let global_var = LLVMGetNamedGlobal(mod, name.glob())
-        if (global_var == null) {
-            // Can be unvisited, e.g. default function argument.
-            return
-        }
+        // Can be unvisited, e.g. default function argument.
+        if (global_var == null) return
         LLVMBuildStore(builder, fn_ptr, global_var)
     }
 
@@ -422,7 +412,6 @@ class CollectExternVisitor : AstVisitor {
 
     def private get_table_t(subexprT : TypeDeclPtr) {
         assume firstT = subexprT.firstType
-        var keyType : Type
         if (firstT.isWorkhorseType) {
             return firstT.baseType
         } else {
@@ -507,7 +496,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             // (issue #2582). init_globals must be JIT-compiled first so the
             // function-pointer globals exist — make_call bails on missing globals.
             prog |> for_each_module() $(m) {
-                if (m.moduleFlags.builtIn) { return ; }
+                if (m.moduleFlags.builtIn) return ;
                 m |> for_each_global() $(var glob) {
                     if (glob.init != null && glob.flags.used) {
                         visit_expression(glob.init, adapter_resolve)
@@ -525,8 +514,8 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             }
         }
     }
-    var any_unimp = extern_resolver.any_unimplemented
-    var whole_lib = extern_resolver.needs_whole_lib
+    let any_unimp = extern_resolver.any_unimplemented
+    let whole_lib = extern_resolver.needs_whole_lib
     for (mod_name in keys(extern_resolver.extern_modules)) {
         used_modules[mod_name] = true
     }
@@ -543,7 +532,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     if (jit_reg_dyn_mod == null) {
         jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
     }
-    for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name)) {
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
             let rel = compute_modules_relative_suffix(path)
@@ -560,7 +549,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     if (jit_reg_native_path == null) {
         jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path", reg_native_path_type)
     }
-    for_each_registered_native_path() <| $(mod_name, src_path, dst_path) {
+    for_each_registered_native_path() $(mod_name, src_path, dst_path) {
         let mod_str = get_string_constant_ptr(ib, mod_name)
         let src_str = get_string_constant_ptr(ib, src_path)
         let dst_str = get_string_constant_ptr(ib, dst_path)
@@ -596,17 +585,11 @@ let private MAX_DAS_PACKAGE_WALKUP_LEVELS = 8
 
 def private find_enclosing_das_package(start_dir : string) : string {
     var dir = to_generic_path(start_dir)
-    for (i in range(MAX_DAS_PACKAGE_WALKUP_LEVELS)) {
-        if (empty(dir) || dir == "/" || dir == ".") {
-            return ""
-        }
-        if (fexist("{dir}/.das_package")) {
-            return dir
-        }
+    for (_ in range(MAX_DAS_PACKAGE_WALKUP_LEVELS)) {
+        if (empty(dir) || dir == "/" || dir == ".") return ""
+        if (fexist("{dir}/.das_package")) return dir
         let last_slash = rfind(dir, "/")
-        if (last_slash <= 0) {
-            return ""
-        }
+        if (last_slash <= 0) return ""
         dir = slice(dir, 0, last_slash)
     }
     return ""
@@ -650,9 +633,7 @@ struct private ReleaseDeps {
 // suffix — used to let `-force-shared-module dasGlfw` match by package name as
 // well as by the daslang-side module name.
 def private dylib_package_name(rel : string) : string {
-    if (empty(rel)) {
-        return ""
-    }
+    if (empty(rel)) return ""
     let after_modules = slice(rel, length("modules/"))
     let next_slash = find(after_modules, "/")
     return next_slash > 0 ? slice(after_modules, 0, next_slash) : after_modules
@@ -663,9 +644,7 @@ def private dylib_package_name(rel : string) : string {
 // .shared_module file can host several daslang modules (dasStbImage hosts
 // stbimage, raster, stbtruetype) and each would otherwise produce a duplicate.
 def private push_shared_unique(entry : SharedModuleEntry; var seen : table<string; bool>; var deps : ReleaseDeps) {
-    if (key_exists(seen, entry.abs)) {
-        return
-    }
+    if (key_exists(seen, entry.abs)) return
     seen[entry.abs] = true
     deps.shared_modules |> push(entry)
 }
@@ -691,15 +670,13 @@ def private write_release_deps(prog : Program?) {
         return
     }
     let cfg <- r |> move_unwrap
-    if (empty(cfg.list_shared_modules)) {
-        return
-    }
+    if (empty(cfg.list_shared_modules)) return
     // Snapshot the dynamic-module registry once; key by daslang-side name, with
     // a parallel by-package-name lookup so `--force-shared-module dasGlfw` works
     // alongside `--force-shared-module dasglfw` (the daslang-side name).
     var by_das : table<string; SharedModuleEntry>
     var by_pkg : table<string; SharedModuleEntry>
-    for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         let abs = string(path)
         let rel = compute_modules_relative_suffix(abs)
         let entry = SharedModuleEntry(rel = rel, abs = abs, das_name = string(das_name))
@@ -712,7 +689,7 @@ def private write_release_deps(prog : Program?) {
     var deps : ReleaseDeps
     var shared_seen : table<string; bool>
     // Auto-detected: every program module that has a registered dylib.
-    prog |> for_each_module <| $(m) {
+    prog |> for_each_module() $(m) {
         let mod_name = string(m.name)
         if (key_exists(by_das, mod_name)) {
             push_shared_unique(by_das[mod_name], shared_seen, deps)
@@ -770,10 +747,8 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     var has_no_jit = false
     var any_pinvoke = false
     var used_modules : table<string; bool>
-    prog |> for_each_module <| $(m) {
-        if (m.name == "llvm_func" || m.name == "llvm_macro") {
-            return
-        }
+    prog |> for_each_module() $(m) {
+        if (m.name == "llvm_func" || m.name == "llvm_macro") return
         m |> for_each_function("") $(fun) {
             if (fun.flags.used) {
                 if (!fun.flags.builtIn && fun.moreFlags.requestNoJit) {
@@ -824,7 +799,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
 
     // Collect dynamic module names — used by CollectExternVisitor to skip dlopen'd modules
     var dynamic_modules : table<string; bool>
-    for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         dynamic_modules[das_name] = true
     }
 
@@ -835,13 +810,9 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
     LLVMBuildCall2(builder, das_ensure_env_type, das_ensure_env, array<LLVMValueRef>(), "")
     var has_cpp_modules = false
     for (mod_name in keys(used_modules)) {
-        if (key_exists(dynamic_modules, mod_name)) {
-            continue
-        }
-        prog |> for_each_module <| $(m) {
-            if (string(m.name) != mod_name) {
-                return
-            }
+        if (key_exists(dynamic_modules, mod_name)) continue
+        prog |> for_each_module() $(m) {
+            if (m.name != mod_name) return
             if (!empty(m.cppClassName)) {
                 has_cpp_modules = true
                 let reg_fn_name = "jit_register_{m.cppClassName}"
@@ -864,7 +835,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         )
     )
     var jit_reg_dyn_mod = LLVMAddFunctionWithType(g_mod, "jit_register_dynamic_module_resolve", reg_dyn_mod_type)
-    for_each_registered_dynamic_module() <| $(path, mod_name, das_name) {
+    for_each_registered_dynamic_module() $(path, mod_name, das_name) {
         if (key_exists(used_modules, das_name)) {
             has_cpp_modules = true
             to_log(LOG_INFO, "LLVM EXE: include dynamic module: `{das_name}`\n")
@@ -889,7 +860,7 @@ def public inject_main(program_context : Context?; ctx : LLVMContextRef;
         )
     )
     var jit_reg_native_path = LLVMAddFunctionWithType(g_mod, "jit_register_native_path", reg_native_path_type)
-    for_each_registered_native_path() <| $(mod_name, src_path, dst_path) {
+    for_each_registered_native_path() $(mod_name, src_path, dst_path) {
         let mod_str = get_string_constant_ptr(builder, mod_name)
         let src_str = get_string_constant_ptr(builder, src_path)
         let dst_str = get_string_constant_ptr(builder, dst_path)

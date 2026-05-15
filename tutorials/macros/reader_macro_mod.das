@@ -62,13 +62,11 @@ class CsvReader : AstReaderMacro {
     def override visit(prog : ProgramPtr; mod : Module?; expr : ExprReader?) : ExpressionPtr {
         //! Parse the collected CSV text at compile time and embed
         //! the resulting string array directly in the AST.
-        if (is_in_completion()) {
-            return default<ExpressionPtr>
-        }
+        if (is_in_completion()) return default<ExpressionPtr>
         let seq = string(expr.sequence)
         var items <- split(seq, ",")
-        for (i in range(length(items))) {
-            items[i] = strip(items[i])
+        for (item in items) {
+            item = strip(item)
         }
         // convert_to_expression turns any daScript value into AST nodes.
         // Here it produces an ExprMakeArray of ExprConstString values.
@@ -115,9 +113,7 @@ class BasicReader : AstReaderMacro {
         var stmts : array<string>
         for (line in lines) {
             let trimmed = strip(line)
-            if (empty(trimmed)) {
-                continue
-            }
+            if (empty(trimmed)) continue
             // DEF name — must appear first
             if (starts_with(trimmed, "DEF ")) {
                 func_name = strip(slice(trimmed, 4))
@@ -126,9 +122,7 @@ class BasicReader : AstReaderMacro {
             // Numbered lines: skip the number, parse COMMAND args
             // Find first space (after the line number)
             let sp1 = find(trimmed, " ")
-            if (sp1 < 0) {
-                continue
-            }
+            if (sp1 < 0) continue
             let after_num = strip(slice(trimmed, sp1 + 1))
             if (starts_with(after_num, "PRINT ")) {
                 let arg = strip(slice(after_num, 6))

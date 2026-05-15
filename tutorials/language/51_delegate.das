@@ -18,6 +18,7 @@ options gen2
 options no_unused_function_arguments = false
 
 require daslib/delegate
+require math
 
 // ============================================================
 // Section 1: What are delegates?
@@ -210,7 +211,7 @@ typedef OnPlayerHit = delegate(type<function<(player : string; damage : int) : i
 def armor_reduction(player : string; damage : int) : int {
     let reduced = damage - 5
     print("  armor: {damage} -> {reduced}\n")
-    return reduced > 0 ? reduced : 0
+    return max(reduced, 0)
 }
 
 def log_hit(player : string; damage : int) : int {

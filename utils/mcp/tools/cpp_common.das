@@ -789,8 +789,7 @@ def ensure_cpp_index() {
         cpp_index_error := err
         return
     }
-    for (i in range(length(entries))) {
-        let e & = unsafe(entries[i])
+    for (e in entries) {
         if (empty(e.name)) continue
         cpp_index_entries |> push(e)
         let new_idx = length(cpp_index_entries) - 1
@@ -857,11 +856,10 @@ def cpp_lookup_by_name_in_entries(cppName : string; entries : array<CppMatch>; v
     if (empty(cppName)) return false
     let last_sep = rfind(cppName, "::")
     let unq = last_sep >= 0 ? slice(cppName, last_sep + 2) : ""
-    for (i in range(length(entries))) {
-        let e & = unsafe(entries[i])
+    for (e in entries) {
         if (empty(e.name)) continue
         if (e.name == cppName || e.qualified == cppName || (!empty(unq) && e.name == unq)) {
-            match = entries[i]
+            match = e
             return true
         }
     }

@@ -66,7 +66,7 @@ def sum_numbers(a, b : auto(T)) : T {
 def process_with_cleanup() {
     var counter = 0
     for (_i in range(3)) {
-        counter += 1
+        counter++
     } finally {
         print("  iter cleanup, counter={counter}\n")
     }

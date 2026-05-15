@@ -77,15 +77,9 @@ def divmod(a, b : int) : tuple<quotient : int; remainder : int> {
 // === Early return ===
 
 def classifyAge(age : int) : string {
-    if (age < 0) {
-        return "invalid"
-    }
-    if (age < 13) {
-        return "child"
-    }
-    if (age < 20) {
-        return "teenager"
-    }
+    if (age < 0) return "invalid"
+    if (age < 13) return "child"
+    if (age < 20) return "teenager"
     return "adult"
 }
 

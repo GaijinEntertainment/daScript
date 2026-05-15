@@ -36,9 +36,8 @@ def private parse_inline_list(value : string) : array<string> {
     var out : array<string>
     let trimmed = strip(value)
     // The trailing-`]` check uses character_at to keep the guard a one-liner.
-    if (length(trimmed) < 2 || first_character(trimmed) != '[' || character_at(trimmed, length(trimmed) - 1) != ']') {  // nolint:PERF003
-        return <- out
-    }
+    if (length(trimmed) < 2 || first_character(trimmed) != '['
+        || character_at(trimmed, length(trimmed) - 1) != ']') return <- out  // nolint:PERF003 — single trailing-byte check
     let inner = slice(trimmed, 1, length(trimmed) - 1)
     if (empty(strip(inner))) return <- out
     for (item in split(inner, ",")) {
@@ -108,8 +107,8 @@ def parse_questions(body : string) : array<string> {
     var out : array<string>
     let lines <- split(body, "\n")
     var in_section = false
-    for (i in range(length(lines))) {
-        let stripped = strip(lines[i])
+    for (line in lines) {
+        let stripped = strip(line)
         if (!in_section) {
             if (to_lower(stripped) == "## questions") {
                 in_section = true

@@ -22,7 +22,7 @@ def private save_strudel_state() {
     var t0 = ref_time_ticks()
     let data <- strudel_save_state()
     to_log(0, "strudel_live: save_state {get_time_usec(t0)}us ({length(data)} bytes)\n")
-    if (length(data) > 0) {
+    if (!empty(data)) {
         t0 = ref_time_ticks()
         live_store_bytes(STORE_KEY, data)
         to_log(0, "strudel_live: store player {get_time_usec(t0)}us\n")
@@ -30,7 +30,7 @@ def private save_strudel_state() {
     t0 = ref_time_ticks()
     let sf2_data <- strudel_save_sf2_state()
     to_log(0, "strudel_live: save_sf2 {get_time_usec(t0)}us ({length(sf2_data)} bytes)\n")
-    if (length(sf2_data) > 0) {
+    if (!empty(sf2_data)) {
         t0 = ref_time_ticks()
         live_store_bytes(SF2_STORE_KEY, sf2_data)
         to_log(0, "strudel_live: store sf2 {get_time_usec(t0)}us\n")
@@ -41,7 +41,7 @@ def private save_strudel_state() {
 def private restore_strudel_state() {
     var t0 = ref_time_ticks()
     var sf2_data : array<uint8>
-    if (live_load_bytes(SF2_STORE_KEY, sf2_data) && length(sf2_data) > 0) {
+    if (live_load_bytes(SF2_STORE_KEY, sf2_data) && !empty(sf2_data)) {
         to_log(0, "strudel_live: load_bytes sf2 {get_time_usec(t0)}us ({length(sf2_data)} bytes)\n")
         t0 = ref_time_ticks()
         strudel_restore_sf2_state(sf2_data)
@@ -49,7 +49,7 @@ def private restore_strudel_state() {
     }
     t0 = ref_time_ticks()
     var data : array<uint8>
-    if (live_load_bytes(STORE_KEY, data) && length(data) > 0) {
+    if (live_load_bytes(STORE_KEY, data) && !empty(data)) {
         to_log(0, "strudel_live: load_bytes player {get_time_usec(t0)}us ({length(data)} bytes)\n")
         t0 = ref_time_ticks()
         strudel_restore_state(data)

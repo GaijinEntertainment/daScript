@@ -44,8 +44,8 @@ struct PackageReleaseInfo {
 
 // Run the `package()` function of a .das_package and extract metadata
 def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bool {
-    var args : array<string>
-    var ok = run_das_package(das_package_path, "package", args) $(ctx) {
+    let args : array<string>
+    let ok = run_das_package(das_package_path, "package", args) $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_pkg_meta"))
         if (p != null) {
             let src = unsafe(reinterpret<PackageMeta?>(p))
@@ -65,8 +65,8 @@ def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bo
 
 // Run the `resolve()` function of a .das_package and extract download info
 def run_das_package_resolve(das_package_path : string; sdk_version, version : string; var result : ResolveResult) : bool {
-    var args <- [sdk_version, version]
-    var ok = run_das_package(das_package_path, "resolve", args) $(ctx) {
+    let args <- [sdk_version, version]
+    let ok = run_das_package(das_package_path, "resolve", args) $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_download_ref"))
         if (p != null) {
             let ref = unsafe(reinterpret<string?>(p))
@@ -91,8 +91,8 @@ def run_das_package_resolve(das_package_path : string; sdk_version, version : st
 
 // Run the `dependencies()` function of a .das_package and extract deps
 def run_das_package_deps(das_package_path : string; version : string; var deps : array<PackageDependency>) : bool {
-    var args <- [version]
-    var ok = run_das_package(das_package_path, "dependencies", args) $(ctx) {
+    let args <- [version]
+    let ok = run_das_package(das_package_path, "dependencies", args) $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_dependencies"))
         if (p != null) {
             let arr = unsafe(reinterpret<array<Dependency>?>(p))
@@ -106,8 +106,8 @@ def run_das_package_deps(das_package_path : string; version : string; var deps :
 
 // Run the `release()` function of a .das_package and extract release info
 def run_das_package_release(das_package_path : string; var info : PackageReleaseInfo) : bool {
-    var args : array<string>
-    var ok = run_das_package(das_package_path, "release", args) $(ctx) {
+    let args : array<string>
+    let ok = run_das_package(das_package_path, "release", args) $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_release_spec"))
         if (p != null) {
             let src = unsafe(reinterpret<ReleaseSpec?>(p))
@@ -133,8 +133,8 @@ def run_das_package_release(das_package_path : string; var info : PackageRelease
 
 // Run the `build()` function of a .das_package and extract build info
 def run_das_package_build(das_package_path : string; var info : PackageBuildInfo) : bool {
-    var args : array<string>
-    var ok = run_das_package(das_package_path, "build", args) $(ctx) {
+    let args : array<string>
+    let ok = run_das_package(das_package_path, "build", args) $(ctx) {
         var p = unsafe(get_context_global_variable(ctx, "_build_kind"))
         if (p != null) {
             let kind = *unsafe(reinterpret<BuildKind?>(p))

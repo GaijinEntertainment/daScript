@@ -20,7 +20,7 @@ class TelnetServer : Server {
         print("connected\n")
     }
     def override onDisconnect {
-        if (length(current_string) > 0) {
+        if (!empty(current_string)) {
             print(string(current_string))
             current_string |> clear()
         }
@@ -112,9 +112,7 @@ def test {
     let port = 9000
     print("sever at port {port}\n")
     var telnet = new TelnetServer()
-    if (!telnet->init(9000)) {
-        return false
-    }
+    if (!telnet->init(9000)) return false
     while (!telnet.done) {
         telnet->tick()
         sleep(0u)

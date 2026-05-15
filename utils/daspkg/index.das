@@ -505,13 +505,13 @@ def private entry_to_jv(name : string; entry : IndexEntry) : JsonValue? {
 }
 
 def private manifest_to_entry(manifest : PackageManifest; url : string) : IndexEntry {
-    var entry : IndexEntry
-    entry.url = url
-    entry.description = manifest.description
-    entry.author = manifest.author
-    entry.license = manifest.license
-    entry.min_sdk = manifest.min_sdk
-    entry.has_native = manifest.has_native
+    var entry = IndexEntry(
+        url = url,
+        description = manifest.description,
+        author = manifest.author,
+        license = manifest.license,
+        min_sdk = manifest.min_sdk,
+        has_native = manifest.has_native)
     entry.tags |> reserve(length(manifest.tags))
     for (t in manifest.tags) {
         entry.tags |> push_clone(t)
@@ -691,9 +691,7 @@ def generate_index_readme_from_index(index : table<string; IndexEntry>) : string
 def add_to_index_json(index_text, name, url, description : string) : string {
     var index : table<string; IndexEntry>
     if (!parse_index_json(index_text, index)) return ""
-    var entry : IndexEntry
-    entry.url = url
-    entry.description = description
+    let entry = IndexEntry(url = url, description = description)
     unsafe {
         index[name] := entry
     }

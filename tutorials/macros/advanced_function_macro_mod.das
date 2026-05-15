@@ -83,7 +83,7 @@ class MemoizeMacro : AstFunctionAnnotation {
             errors := "cannot memoize a void function — there is nothing to cache"
             return false
         }
-        if (length(func.arguments) == 0) {
+        if (empty(func.arguments)) {
             errors := "cannot memoize a function with no arguments — there is nothing to hash"
             return false
         }
@@ -106,9 +106,7 @@ class MemoizeMacro : AstFunctionAnnotation {
                        var errors : das_string; var astChanged : bool&) : bool {
 
         // Guard: already processed?
-        if (find_arg(args, "patched") is tBool) {
-            return true
-        }
+        if (find_arg(args, "patched") is tBool) return true
 
         // Validate: return type must be cloneable (needed for insert_clone)
         if (!fn.result.canClone) {
@@ -156,8 +154,8 @@ class MemoizeMacro : AstFunctionAnnotation {
         // Step 2: Create the private global cache variable
         //         var private `memoize`cache`fib : table<uint64; RetType>
         var retType = clone_type(fn.result)
-        retType.flags &= ~TypeDeclFlags.constant
-        retType.flags &= ~TypeDeclFlags.ref
+        retType.flags.constant = false
+        retType.flags.ref = false
         // Clone again — retType will be consumed by the cache table type,
         // we need a separate copy for the wrapper function's return type.
         var wrapperRetType = clone_type(retType)

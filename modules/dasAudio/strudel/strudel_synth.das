@@ -33,7 +33,7 @@ def noise(var seed : uint&) : float {
 def private poly_blep(t, dt : float) : float {
     var dt2 = dt
     if (dt2 > 0.5) { dt2 = 0.5; }
-    if (dt2 < 0.0001) { return 0.0; }
+    if (dt2 < 0.0001) return 0.0;
     if (t < dt2) {
         let x = t / dt2
         return x + x - x * x - 1.0
@@ -46,25 +46,15 @@ def private poly_blep(t, dt : float) : float {
 
 // ADSR envelope. Returns amplitude 0.0–1.0 for a given time position.
 def private adsr(t, attack, decay, sustain, release, duration : float) : float {
-    if (t < 0.0) {
-        return 0.0
-    }
-    if (t < attack) {
-        return t / attack
-    }
+    if (t < 0.0) return 0.0
+    if (t < attack) return t / attack
     let t2 = t - attack
-    if (t2 < decay) {
-        return 1.0 - (1.0 - sustain) * (t2 / decay)
-    }
+    if (t2 < decay) return 1.0 - (1.0 - sustain) * (t2 / decay)
     // release starts at note-off (= duration), extends PAST the slot boundary
     // total sound length = duration + release
-    if (t < duration) {
-        return sustain
-    }
+    if (t < duration) return sustain
     let t3 = t - duration
-    if (t3 < release) {
-        return sustain * (1.0 - t3 / release)
-    }
+    if (t3 < release) return sustain * (1.0 - t3 / release)
     return 0.0
 }
 
@@ -73,9 +63,7 @@ def private adsr(t, attack, decay, sustain, release, duration : float) : float {
 // Apply convolution reverb to a mono buffer. amount=0.0 is dry, 1.0 is full wet.
 // Uses a synthetic impulse response (noise with exponential decay + lowpass sweep).
 def private apply_room(var samples : array<float>; amount : float = 0.3, decay_sec : float = 0.4) {
-    if (amount <= 0.0) {
-        return
-    }
+    if (amount <= 0.0) return
     let n = length(samples)
     // Create a short convolution reverb for the drum room
     // decay=0.4s gives a nice small room, lpFreqStart=12kHz→lpFreqEnd=2kHz darkens the tail
@@ -548,9 +536,7 @@ def to_osc_type(sound : string) : OscType {
         return OscType.osc_supersaw
     } elif (sound == "pink") {
         return OscType.osc_pink_noise
-    } elif (sound == "white") {
-        return OscType.osc_white_noise
-    }
+    } elif (sound == "white") return OscType.osc_white_noise
     return OscType.osc_unknown
 }
 
@@ -847,9 +833,7 @@ def fx_apply(var fx : VoiceFX; var buf : array<float>; n_frames : int) {
     //! Apply the enabled effects to an interleaved stereo buffer in place.
     //! Order: crush -> shape -> djfilter -> bandpass -> phaser -> tremolo -> compressor
     //! (phaser/tremolo modulate the finished tone, compressor is last so it sees the post-FX signal).
-    if (!fx.active || n_frames <= 0 || length(buf) < n_frames * 2) {
-        return
-    }
+    if (!fx.active || n_frames <= 0 || length(buf) < n_frames * 2) return
     if (fx.has_crush)      { unsafe { bitcrush_process(addr(fx.bc), addr(buf[0]), n_frames); } }
     if (fx.has_shape)      { unsafe { waveshaper_process(addr(fx.ws), addr(buf[0]), n_frames); } }
     if (fx.has_djf)        { unsafe { djfilter_process(addr(fx.dj), addr(buf[0]), n_frames); } }
@@ -863,9 +847,7 @@ def fx_apply_to_samples(event : Event; var samples : array<float>; sample_rate :
     //! Apply Event-driven effects to a pre-rendered stereo buffer as a one-shot.
     //! Effect state is local to this call, so effects reset every render; used for drum/sample voices that don't stream.
     let n_frames = length(samples) / 2
-    if (n_frames <= 0) {
-        return
-    }
+    if (n_frames <= 0) return
     var fx : VoiceFX
     fx_init_from_event(fx, event, sample_rate)
     fx_apply(fx, samples, n_frames)
@@ -1291,9 +1273,7 @@ def render_event_stereo(event : Event; duration_sec : float; bank : SampleBank) 
     //! Returns raw stereo — gain and pan are applied later by the scheduler.
     if (key_exists(bank.sounds, event.s)) {
         var samples <- render_sample(bank, event.s, event.n, event.speed, event.begin, event.end_pos)
-        if (length(samples) > 0) {
-            return <- samples
-        }
+        if (!empty(samples)) return <- samples
     }
     return <- render_event_stereo(event, duration_sec)
 }

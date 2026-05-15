@@ -89,10 +89,10 @@ def public do_detect_duplicates(paths : string; corpus : string;
     }
     let json_st = stat(json_out)
     if (!json_st.is_valid || !json_st.is_reg) return make_tool_result("detect-dupe completed but JSON report missing: {json_out}\nSubprocess output:\n{output}", true)
-    var envelope : DetectDuplicatesEnvelope
-    envelope.exit_code = exit_code
-    envelope.report := fread(json_out)
-    envelope.stdout := output
+    let envelope = DetectDuplicatesEnvelope(
+        exit_code = exit_code,
+        report = fread(json_out),
+        stdout = output)
     remove(json_out)
     return make_tool_result(sprint_json(envelope, false), false)
 }

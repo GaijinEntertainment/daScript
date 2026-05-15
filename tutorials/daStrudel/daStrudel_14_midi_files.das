@@ -23,12 +23,8 @@ let MEDIA = "{get_das_root()}/examples/media"
 def find_sf2() : string {
     let dir = "{get_das_root()}/examples/daStrudel/midi_sf2_demo"
     var st : FStat
-    if (stat("{dir}/FluidR3_GM.sf2", st)) {
-        return "{dir}/FluidR3_GM.sf2"
-    }
-    if (stat("{dir}/GeneralUser GS v1.471.sf2", st)) {
-        return "{dir}/GeneralUser GS v1.471.sf2"
-    }
+    if (stat("{dir}/FluidR3_GM.sf2", st)) return "{dir}/FluidR3_GM.sf2"
+    if (stat("{dir}/GeneralUser GS v1.471.sf2", st)) return "{dir}/GeneralUser GS v1.471.sf2"
     return ""
 }
 
@@ -48,7 +44,7 @@ def example_parse() {
     print("=== Section 1: Parse Fur Elise ===\n")
     let path = "{MEDIA}/midi/fur_elise.mid"
     let midi = load_midi(path)
-    if (length(midi.tracks) == 0) {
+    if (empty(midi.tracks)) {
         print("  (file not found — skipping)\n")
         return
     }
@@ -71,7 +67,7 @@ def example_parse() {
 def example_tempo() {
     print("\n=== Section 2: Tempo events ===\n")
     let midi = load_midi("{MEDIA}/midi/fur_elise.mid")
-    if (length(midi.tracks) == 0) {
+    if (empty(midi.tracks)) {
         print("  (file not found — skipping)\n")
         return
     }

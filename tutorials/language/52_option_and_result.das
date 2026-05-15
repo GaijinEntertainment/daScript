@@ -68,9 +68,9 @@ def test_option_map {
 
 def safe_parse_positive(s : string) : Option<int> {
     // pretend-parse: "1".."9" accepted, everything else is none
-    if (s == "1") { return some(1); }
-    if (s == "2") { return some(2); }
-    if (s == "3") { return some(3); }
+    if (s == "1") return some(1);
+    if (s == "2") return some(2);
+    if (s == "3") return some(3);
     return none(type<int>)
 }
 
@@ -208,8 +208,8 @@ def test_result_map {
 // === Result<T, E> — monadic chaining ===
 
 def parse_digit(s : string) : Result<int; string> {
-    if (s == "1") { return ok(1, type<string>); }
-    if (s == "2") { return ok(2, type<string>); }
+    if (s == "1") return ok(1, type<string>);
+    if (s == "2") return ok(2, type<string>);
     return err("not a digit: {s}", type<int>)
 }
 

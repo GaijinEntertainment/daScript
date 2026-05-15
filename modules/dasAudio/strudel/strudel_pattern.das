@@ -287,9 +287,7 @@ def bjorklund(k, n : int) : array<bool> {
     //! Bjorklund's algorithm — distributes `k` onsets as evenly as possible across `n` slots. Example: `bjorklund(3, 8)` gives `[x . . x . . x .]`.
     var pattern : array<bool>
     pattern |> resize(n)
-    if (k <= 0) {
-        return <- pattern
-    }
+    if (k <= 0) return <- pattern
     if (k >= n) {
         for (i in range(n)) {
             pattern[i] = true
@@ -636,95 +634,94 @@ def private set_compressor_release(var pat : Pattern; r : float) : Pattern {
 // GM instrument name → program number mapping.
 def private gm_program_by_name(name : string) : int {
     // Piano family
-    if (name == "piano" || name == "acoustic_grand_piano") { return 0; }
-    if (name == "bright_piano") { return 1; }
-    if (name == "epiano" || name == "electric_piano") { return 4; }
-    if (name == "honkytonk") { return 3; }
-    if (name == "rhodes") { return 4; }
-    if (name == "chorus_piano") { return 5; }
-    if (name == "harpsichord") { return 6; }
-    if (name == "clavinet") { return 7; }
+    if (name == "piano" || name == "acoustic_grand_piano") return 0;
+    if (name == "bright_piano") return 1;
+    if (name == "epiano" || name == "electric_piano") return 4;
+    if (name == "honkytonk") return 3;
+    if (name == "rhodes") return 4;
+    if (name == "chorus_piano") return 5;
+    if (name == "harpsichord") return 6;
+    if (name == "clavinet") return 7;
     // Chromatic Percussion
-    if (name == "celesta") { return 8; }
-    if (name == "glockenspiel") { return 9; }
-    if (name == "music_box") { return 10; }
-    if (name == "vibraphone") { return 11; }
-    if (name == "marimba") { return 12; }
-    if (name == "xylophone") { return 13; }
-    if (name == "tubular_bells") { return 14; }
+    if (name == "celesta") return 8;
+    if (name == "glockenspiel") return 9;
+    if (name == "music_box") return 10;
+    if (name == "vibraphone") return 11;
+    if (name == "marimba") return 12;
+    if (name == "xylophone") return 13;
+    if (name == "tubular_bells") return 14;
     // Organ
-    if (name == "organ") { return 19; }
-    if (name == "church_organ") { return 19; }
-    if (name == "reed_organ") { return 20; }
-    if (name == "accordion") { return 21; }
-    if (name == "harmonica") { return 22; }
+    if (name == "organ" || name == "church_organ") return 19;
+    if (name == "reed_organ") return 20;
+    if (name == "accordion") return 21;
+    if (name == "harmonica") return 22;
     // Guitar
-    if (name == "guitar" || name == "nylon_guitar") { return 24; }
-    if (name == "steel_guitar") { return 25; }
-    if (name == "electric_guitar" || name == "clean_guitar") { return 27; }
-    if (name == "overdriven_guitar") { return 29; }
-    if (name == "distortion_guitar") { return 30; }
+    if (name == "guitar" || name == "nylon_guitar") return 24;
+    if (name == "steel_guitar") return 25;
+    if (name == "electric_guitar" || name == "clean_guitar") return 27;
+    if (name == "overdriven_guitar") return 29;
+    if (name == "distortion_guitar") return 30;
     // Bass
-    if (name == "bass" || name == "acoustic_bass") { return 32; }
-    if (name == "electric_bass" || name == "finger_bass") { return 33; }
-    if (name == "pick_bass") { return 34; }
-    if (name == "fretless_bass") { return 35; }
-    if (name == "slap_bass") { return 36; }
-    if (name == "synth_bass") { return 38; }
+    if (name == "bass" || name == "acoustic_bass") return 32;
+    if (name == "electric_bass" || name == "finger_bass") return 33;
+    if (name == "pick_bass") return 34;
+    if (name == "fretless_bass") return 35;
+    if (name == "slap_bass") return 36;
+    if (name == "synth_bass") return 38;
     // Strings
-    if (name == "violin") { return 40; }
-    if (name == "viola") { return 41; }
-    if (name == "cello") { return 42; }
-    if (name == "contrabass") { return 43; }
-    if (name == "strings" || name == "tremolo_strings") { return 44; }
-    if (name == "pizzicato") { return 45; }
-    if (name == "harp") { return 46; }
-    if (name == "timpani") { return 47; }
+    if (name == "violin") return 40;
+    if (name == "viola") return 41;
+    if (name == "cello") return 42;
+    if (name == "contrabass") return 43;
+    if (name == "strings" || name == "tremolo_strings") return 44;
+    if (name == "pizzicato") return 45;
+    if (name == "harp") return 46;
+    if (name == "timpani") return 47;
     // Ensemble
-    if (name == "string_ensemble") { return 48; }
-    if (name == "synth_strings") { return 50; }
-    if (name == "choir") { return 52; }
-    if (name == "voice_oohs") { return 53; }
-    if (name == "orchestra_hit") { return 55; }
+    if (name == "string_ensemble") return 48;
+    if (name == "synth_strings") return 50;
+    if (name == "choir") return 52;
+    if (name == "voice_oohs") return 53;
+    if (name == "orchestra_hit") return 55;
     // Brass
-    if (name == "trumpet") { return 56; }
-    if (name == "trombone") { return 57; }
-    if (name == "tuba") { return 58; }
-    if (name == "muted_trumpet") { return 59; }
-    if (name == "french_horn") { return 60; }
-    if (name == "brass" || name == "brass_section") { return 61; }
+    if (name == "trumpet") return 56;
+    if (name == "trombone") return 57;
+    if (name == "tuba") return 58;
+    if (name == "muted_trumpet") return 59;
+    if (name == "french_horn") return 60;
+    if (name == "brass" || name == "brass_section") return 61;
     // Reed
-    if (name == "soprano_sax") { return 64; }
-    if (name == "alto_sax") { return 65; }
-    if (name == "tenor_sax") { return 66; }
-    if (name == "baritone_sax") { return 67; }
-    if (name == "oboe") { return 68; }
-    if (name == "english_horn") { return 69; }
-    if (name == "bassoon") { return 70; }
-    if (name == "clarinet") { return 71; }
+    if (name == "soprano_sax") return 64;
+    if (name == "alto_sax") return 65;
+    if (name == "tenor_sax") return 66;
+    if (name == "baritone_sax") return 67;
+    if (name == "oboe") return 68;
+    if (name == "english_horn") return 69;
+    if (name == "bassoon") return 70;
+    if (name == "clarinet") return 71;
     // Pipe
-    if (name == "piccolo") { return 72; }
-    if (name == "flute") { return 73; }
-    if (name == "recorder") { return 74; }
-    if (name == "pan_flute") { return 75; }
-    if (name == "shakuhachi") { return 77; }
-    if (name == "whistle") { return 78; }
-    if (name == "ocarina") { return 79; }
+    if (name == "piccolo") return 72;
+    if (name == "flute") return 73;
+    if (name == "recorder") return 74;
+    if (name == "pan_flute") return 75;
+    if (name == "shakuhachi") return 77;
+    if (name == "whistle") return 78;
+    if (name == "ocarina") return 79;
     // Synth Lead
-    if (name == "synth_lead" || name == "square_lead") { return 80; }
-    if (name == "saw_lead") { return 81; }
+    if (name == "synth_lead" || name == "square_lead") return 80;
+    if (name == "saw_lead") return 81;
     // Synth Pad
-    if (name == "synth_pad" || name == "new_age") { return 88; }
-    if (name == "warm_pad") { return 89; }
+    if (name == "synth_pad" || name == "new_age") return 88;
+    if (name == "warm_pad") return 89;
     // Ethnic
-    if (name == "sitar") { return 104; }
-    if (name == "banjo") { return 105; }
-    if (name == "shamisen") { return 106; }
-    if (name == "koto") { return 107; }
-    if (name == "kalimba") { return 108; }
-    if (name == "bagpipe") { return 109; }
-    if (name == "fiddle") { return 110; }
-    if (name == "shanai") { return 111; }
+    if (name == "sitar") return 104;
+    if (name == "banjo") return 105;
+    if (name == "shamisen") return 106;
+    if (name == "koto") return 107;
+    if (name == "kalimba") return 108;
+    if (name == "bagpipe") return 109;
+    if (name == "fiddle") return 110;
+    if (name == "shanai") return 111;
     return -1
 }
 
@@ -1021,9 +1018,7 @@ def innerJoin(var param_pat : Pattern; var fn : lambda<(val : float) : Pattern>)
         var result : array<Hap>
         var outer_haps <- param_pat(span)
         for (oh in outer_haps) {
-            if (!oh.has_whole) {
-                continue
-            }
+            if (!oh.has_whole) continue
             var inner_pat <- fn(oh.value.note) // nolint:LINT003
             var inner_haps <- inner_pat(span)
             for (ih in inner_haps) {
@@ -1053,13 +1048,9 @@ def slow(var pat : Pattern; var factor_pat : Pattern) : Pattern {
         var result : array<Hap>
         var outer_haps <- factor_pat(span)
         for (oh in outer_haps) {
-            if (!oh.has_whole) {
-                continue
-            }
+            if (!oh.has_whole) continue
             let factor = double(oh.value.note)
-            if (factor == 0.0lf) {
-                continue
-            }
+            if (factor == 0.0lf) continue
             let n = 1.0lf / factor
             let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
             var haps <- pat(innerSpan)
@@ -1090,13 +1081,9 @@ def fast(var pat : Pattern; var factor_pat : Pattern) : Pattern {
         var result : array<Hap>
         var outer_haps <- factor_pat(span)
         for (oh in outer_haps) {
-            if (!oh.has_whole) {
-                continue
-            }
+            if (!oh.has_whole) continue
             let n = double(oh.value.note)
-            if (n == 0.0lf) {
-                continue
-            }
+            if (n == 0.0lf) continue
             let innerSpan = TimeSpan(start = span.start * n, stop = span.stop * n)
             var haps <- pat(innerSpan)
             for (h in haps) {
@@ -1923,9 +1910,7 @@ def compress(var pat : Pattern; b, e : double) : Pattern {
             let winStop = cycle + b + dur
             let overStart = max(sub.start, winStart)
             let overStop = min(sub.stop, winStop)
-            if (overStart >= overStop) {
-                continue
-            }
+            if (overStart >= overStop) continue
             // map [winStart,winStop] → [cycle,cycle+1]
             let innerStart = cycle + (overStart - winStart) / dur
             let innerStop = cycle + (overStop - winStart) / dur
@@ -1972,9 +1957,7 @@ def chunk(var pat : Pattern; n : int; transform : PatternTransform) : Pattern {
                 let chunkStop = cyc + double(i + 1) / nf
                 let overStart = max(sub.start, chunkStart)
                 let overStop = min(sub.stop, chunkStop)
-                if (overStart >= overStop) {
-                    continue
-                }
+                if (overStart >= overStop) continue
                 let querySpan = TimeSpan(start = overStart, stop = overStop)
                 if (i == activeChunk) {
                     var haps <- transformed(querySpan)
@@ -2033,9 +2016,7 @@ def struct_(var pat : Pattern; var bool_pat : Pattern) : Pattern {
         var result : array<Hap>
         var mask_haps <- bool_pat(span)
         for (mh in mask_haps) {
-            if (!mh.has_whole) {
-                continue
-            }
+            if (!mh.has_whole) continue
             // query inner pattern at mask hap's whole
             var inner_haps <- pat(mh.whole)
             for (ih in inner_haps) {
@@ -2064,9 +2045,7 @@ def mask(var pat : Pattern; var mask_pat : Pattern) : Pattern {
         var result : array<Hap>
         var haps <- pat(span)
         for (h in haps) {
-            if (!h.has_whole) {
-                continue
-            }
+            if (!h.has_whole) continue
             // check if mask has any event overlapping this hap
             var mask_haps <- mask_pat(h.whole)
             if (length(mask_haps) > 0) {
@@ -2203,9 +2182,7 @@ def shuffle(var pat : Pattern; n : int) : Pattern {
                 let slotStop = cyc + double(i + 1) / nf
                 let overStart = max(sub.start, slotStart)
                 let overStop = min(sub.stop, slotStop)
-                if (overStart >= overStop) {
-                    continue
-                }
+                if (overStart >= overStop) continue
                 // query the perm[i]-th subdivision
                 let srcStart = cyc + double(perm[i]) / nf
                 let srcStop = cyc + double(perm[i] + 1) / nf
@@ -2242,9 +2219,7 @@ def scramble(var pat : Pattern; n : int) : Pattern {
                 let slotStop = cyc + double(i + 1) / nf
                 let overStart = max(sub.start, slotStart)
                 let overStop = min(sub.stop, slotStop)
-                if (overStart >= overStop) {
-                    continue
-                }
+                if (overStart >= overStop) continue
                 let srcIdx = int(strudel_hash32(double(cycle), i) % uint(n))
                 let srcStart = cyc + double(srcIdx) / nf
                 let srcStop = cyc + double(srcIdx + 1) / nf

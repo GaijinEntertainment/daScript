@@ -110,9 +110,7 @@ class TutorialHttpServer : HvWebServer {
             // Parse JSON from request body, add a field, return it
             var err : string
             var parsed = read_json(string(req.body), err)
-            if (parsed == null) {
-                return resp |> TEXT_PLAIN("parse error: {err}", http_status.BAD_REQUEST)
-            }
+            if (parsed == null) return resp |> TEXT_PLAIN("parse error: {err}", http_status.BAD_REQUEST)
             // Echo it back as-is
             return resp |> JSON(write_json(parsed))
         }

@@ -161,7 +161,7 @@ def do_live_launch(file, project, port : string) : string {
         if (exit_code != 0) return make_tool_result("Failed to launch daslang-live (exit {exit_code})", true)
     }
     // Poll for startup (up to 10 seconds)
-    for (i in range(20)) {
+    for (_ in range(20)) {
         sleep(500u)
         if (live_is_running(p)) {
             let status = live_get("/status", p)

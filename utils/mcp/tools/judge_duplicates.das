@@ -116,11 +116,11 @@ def public run_find_dupe_judge(input_path : string;
         if (looks_like_api_key_missing(output)) return make_tool_result("{api_key_hint()}\n\n--- subprocess output ---\n{output}", true)
         return make_tool_result("find-dupe failed (exit code {exit_code}):\n{output}", true)
     }
-    var envelope : JudgeDuplicatesEnvelope
-    envelope.exit_code = exit_code
-    envelope.out_dir := resolved_out
-    envelope.dry_run = dry_run
-    envelope.stdout_tail := tail_chars(output, 4096)
+    var envelope = JudgeDuplicatesEnvelope(
+        exit_code = exit_code,
+        out_dir = resolved_out,
+        dry_run = dry_run,
+        stdout_tail = tail_chars(output, 4096))
     if (dry_run) return make_tool_result(sprint_json(envelope, false))
     let json_path = path_join(resolved_out, "find_dupe_verdicts.json")
     let md_path = path_join(resolved_out, "find_dupe_verdicts.md")

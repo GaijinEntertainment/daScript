@@ -21,8 +21,8 @@ def get_context() : GameState? {
 [export]
 def test_simple_table {
     var tab : table<int; int>
-    var key = 1
-    var val = 10
+    let key = 1
+    let val = 10
 
     // += pattern
     tab.insert(key, tab.get_value(key) + val)
@@ -52,9 +52,9 @@ def test_simple_table {
 [export]
 def test_indexed_table {
     var tabtab : table<int; table<int; int>>
-    var idx = 1
-    var scoreSrc = 0
-    var score = 5
+    let idx = 1
+    let scoreSrc = 0
+    let score = 5
 
     // the original pattern from the question
     tabtab[1].insert(scoreSrc, tabtab[1].get_value(scoreSrc) + score)
@@ -77,10 +77,10 @@ def test_indexed_table {
 [export]
 def test_double_indexed {
     var deep : table<int; table<int; table<string; int>>>
-    var i = 0
-    var j = 1
-    var key = "hits"
-    var delta = 3
+    let i = 0
+    let j = 1
+    let key = "hits"
+    let delta = 3
 
     deep[i][j].insert(key, deep[i][j].get_value(key) + delta)
     deep[i][j].insert(key, deep[i][j].get_value(key) - 1)
@@ -109,8 +109,8 @@ def test_complex_expr {
 [export]
 def test_pipe_syntax {
     var tab : table<int; int>
-    var key = 1
-    var val = 10
+    let key = 1
+    let val = 10
 
     tab |> insert(key, tab |> get_value(key) + val)
     tab |> insert(key, tab |> get_value(key) - val)
@@ -121,8 +121,8 @@ def test_pipe_syntax {
 [export]
 def test_free_function {
     var tab : table<int; int>
-    var key = 1
-    var val = 10
+    let key = 1
+    let val = 10
 
     insert(tab, key, get_value(tab, key) + val)
     insert(tab, key, get_value(tab, key) - val)
@@ -138,8 +138,8 @@ def foo() : int {
 [export]
 def test_compound_expr {
     var tab : table<int; int>
-    var key = 1
-    var val = 10
+    let key = 1
+    let val = 10
 
     // get_value + literal + call
     tab.insert(key, tab.get_value(key) + 1 + foo())
@@ -179,8 +179,8 @@ def test_compound_expr {
 def test_negative {
     var tab : table<int; int>
     var other : table<int; int>
-    var key = 1
-    var val = 10
+    let key = 1
+    let val = 10
 
     // different tables — NOT foldable
     tab.insert(key, other.get_value(key) + val)

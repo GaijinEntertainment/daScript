@@ -117,7 +117,7 @@ struct Counter {
 
 // prefix ++: called before the value is used
 def operator ++(var c : Counter) : Counter {
-    c.value += 1
+    c.value++
     return c
 }
 

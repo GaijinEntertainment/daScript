@@ -245,9 +245,7 @@ def finalize(var f : SF2File explicit) {
 // ─── Binary Readers (Little-Endian) ───
 
 def private read_u8(data : array<uint8>; var cursor : int&) : int {
-    if (cursor >= length(data)) {
-        return 0
-    }
+    if (cursor >= length(data)) return 0
     let v = int(data[cursor])
     cursor ++
     return v
@@ -265,9 +263,7 @@ def private read_u16_le(data : array<uint8>; var cursor : int&) : int {
 
 def private read_i16_le(data : array<uint8>; var cursor : int&) : int {
     let v = read_u16_le(data, cursor)
-    if (v >= int(0x8000)) {
-        return v - int(0x10000)
-    }
+    if (v >= int(0x8000)) return v - int(0x10000)
     return v
 }
 
@@ -299,9 +295,7 @@ def private read_fixed_string(data : array<uint8>; var cursor : int&; max_len : 
     let end_pos = min(cursor + max_len, length(data))
     let result = build_string() $(var writer) {
         for (i in range(cursor, end_pos)) {
-            if (data[i] == 0u8) {
-                break
-            }
+            if (data[i] == 0u8) break
             write(writer, character_at(data[i]))
         }
     }
@@ -313,9 +307,7 @@ def private read_fixed_string(data : array<uint8>; var cursor : int&; max_len : 
 
 def public timecents_to_seconds(tc : int) : float {
     //! Convert SF2 timecents to seconds.
-    if (tc <= -32768) {
-        return 0.0
-    }
+    if (tc <= -32768) return 0.0
     return pow(2.0, float(tc) / 1200.0)
 }
 
@@ -335,13 +327,11 @@ def private parse_sample_headers(data : array<uint8>; offset, size : int) : arra
     var result : array<SF2SampleHeader>
     let record_size = 46
     let count = size / record_size
-    if (count <= 1) {
-        return <- result    // last record is terminal
-    }
+    if (count <= 1) return <- result    // last record is terminal
     result |> reserve(count - 1)
     var cursor = offset
     for (_ in range(count - 1)) {
-        var sh = SF2SampleHeader()
+        var sh = SF2SampleHeader()  // nolint:STYLE013 — sequenced reads advance cursor; constructor would change eval order
         sh.name = read_fixed_string(data, cursor, 20)   // 20 bytes
         sh.start = read_u32_le(data, cursor)             // 4 bytes
         sh.end = read_u32_le(data, cursor)               // 4 bytes
@@ -379,13 +369,11 @@ def private parse_preset_headers(data : array<uint8>; offset, size : int) : arra
     var result : array<RawPresetHeader>
     let record_size = 38
     let count = size / record_size
-    if (count <= 1) {
-        return <- result
-    }
+    if (count <= 1) return <- result
     result |> reserve(count)
     var cursor = offset
     for (_ in range(count)) {
-        var ph = RawPresetHeader()
+        var ph = RawPresetHeader()  // nolint:STYLE013 — sequenced reads advance cursor; constructor would change eval order
         ph.name = read_fixed_string(data, cursor, 20)
         ph.preset = read_u16_le(data, cursor)
         ph.bank = read_u16_le(data, cursor)
@@ -400,13 +388,11 @@ def private parse_instrument_headers(data : array<uint8>; offset, size : int) : 
     var result : array<RawInstrumentHeader>
     let record_size = 22
     let count = size / record_size
-    if (count <= 1) {
-        return <- result
-    }
+    if (count <= 1) return <- result
     result |> reserve(count)
     var cursor = offset
     for (_ in range(count)) {
-        var ih = RawInstrumentHeader()
+        var ih = RawInstrumentHeader()  // nolint:STYLE013 — sequenced reads advance cursor
         ih.name = read_fixed_string(data, cursor, 20)
         ih.ibag_index = read_u16_le(data, cursor)
         result |> push(ih)
@@ -421,7 +407,7 @@ def private parse_bags(data : array<uint8>; offset, size : int) : array<RawBag> 
     result |> reserve(count)
     var cursor = offset
     for (_ in range(count)) {
-        var bag = RawBag()
+        var bag = RawBag()  // nolint:STYLE013 — sequenced reads advance cursor
         bag.gen_index = read_u16_le(data, cursor)
         bag.mod_index = read_u16_le(data, cursor)
         result |> push(bag)
@@ -455,13 +441,11 @@ def private parse_modulators(data : array<uint8>; offset, size : int) : array<SF
     var result : array<SF2Modulator>
     let record_size = 10
     let count = size / record_size
-    if (count <= 1) {
-        return <- result  // last entry is terminal
-    }
+    if (count <= 1) return <- result  // last entry is terminal
     result |> reserve(count - 1)
     var cursor = offset
     for (_ in range(count - 1)) {
-        var m = SF2Modulator()
+        var m = SF2Modulator()  // nolint:STYLE013 — sequenced reads advance cursor
         m.src_oper = read_u16_le(data, cursor)
         m.dest_oper = read_u16_le(data, cursor)
         let amount = read_u16_le(data, cursor)
@@ -478,9 +462,7 @@ def private parse_modulators(data : array<uint8>; offset, size : int) : array<SF
 def public has_generator(zone : SF2Zone; oper : int) : bool {
     //! Check whether a zone has a specific generator.
     for (gen in zone.generators) {
-        if (gen.oper == oper) {
-            return true
-        }
+        if (gen.oper == oper) return true
     }
     return false
 }
@@ -488,9 +470,7 @@ def public has_generator(zone : SF2Zone; oper : int) : bool {
 def public get_generator(zone : SF2Zone; oper : int; def_val : int = 0) : int {
     //! Get the value of a generator from a zone. Returns def_val if not found.
     for (gen in zone.generators) {
-        if (gen.oper == oper) {
-            return gen.amount_i16
-        }
+        if (gen.oper == oper) return gen.amount_i16
     }
     return def_val
 }
@@ -498,9 +478,7 @@ def public get_generator(zone : SF2Zone; oper : int; def_val : int = 0) : int {
 def public get_generator_range(zone : SF2Zone; oper : int) : int2 {
     //! Get the range (low, high) of a range-type generator. Returns int2(0, 127) if not found.
     for (gen in zone.generators) {
-        if (gen.oper == oper) {
-            return int2(gen.amount_lo, gen.amount_hi)
-        }
+        if (gen.oper == oper) return int2(gen.amount_lo, gen.amount_hi)
     }
     return int2(0, 127)
 }
@@ -545,9 +523,7 @@ def private resolve_zones(bags : array<RawBag>; all_gens : array<SF2Generator>; 
 }
 
 def private split_global_zone(var zones : array<SF2Zone?>; terminal_oper : int) : SF2Zone? {
-    if (length(zones) == 0) {
-        return null
-    }
+    if (empty(zones)) return null
     // first zone is global if it has NO terminal generator (instrument or sampleID)
     if (!has_generator(*zones[0], terminal_oper)) {
         var gz = zones[0]
@@ -743,23 +719,15 @@ def public sf2_find_preset(sf2 : SF2File; bank, program : int) : int {
 def public sf2_find_zones(sf2 : SF2File; preset_index : int; key, velocity : int) : array<int2> {
     //! Find instrument zones matching a key and velocity for a given preset. Returns array of (instrument_index, zone_index) pairs.
     var result : array<int2>
-    if (preset_index < 0 || preset_index >= length(sf2.presets)) {
-        return <- result
-    }
+    if (preset_index < 0 || preset_index >= length(sf2.presets)) return <- result
     let preset = sf2.presets[preset_index]
     for (pzone in preset.zones) {
         // check key/vel range
-        if (key < pzone.key_lo || key > pzone.key_hi) {
-            continue
-        }
-        if (velocity < pzone.vel_lo || velocity > pzone.vel_hi) {
-            continue
-        }
+        if (key < pzone.key_lo || key > pzone.key_hi
+            || velocity < pzone.vel_lo || velocity > pzone.vel_hi) continue
         // get instrument index
         let inst_idx = get_generator(*pzone, int(SF2GenOper.instrument), -1)
-        if (inst_idx < 0 || inst_idx >= length(sf2.instruments)) {
-            continue
-        }
+        if (inst_idx < 0 || inst_idx >= length(sf2.instruments)) continue
         let inst = sf2.instruments[inst_idx]
         // SF2 spec: instrument zones inherit key/vel ranges from global zone
         // when they don't specify their own. Intersect ranges accordingly.
@@ -772,16 +740,12 @@ def public sf2_find_zones(sf2 : SF2File; preset_index : int; key, velocity : int
         for (iz_idx in range(length(inst.zones))) {
             let izone = inst.zones[iz_idx]
             // intersect izone range with global zone range
-            let eff_key_lo = izone.key_lo > gi_key_lo ? izone.key_lo : gi_key_lo
-            let eff_key_hi = izone.key_hi < gi_key_hi ? izone.key_hi : gi_key_hi
-            let eff_vel_lo = izone.vel_lo > gi_vel_lo ? izone.vel_lo : gi_vel_lo
-            let eff_vel_hi = izone.vel_hi < gi_vel_hi ? izone.vel_hi : gi_vel_hi
-            if (key < eff_key_lo || key > eff_key_hi) {
-                continue
-            }
-            if (velocity < eff_vel_lo || velocity > eff_vel_hi) {
-                continue
-            }
+            let eff_key_lo = max(izone.key_lo, gi_key_lo)
+            let eff_key_hi = min(izone.key_hi, gi_key_hi)
+            let eff_vel_lo = max(izone.vel_lo, gi_vel_lo)
+            let eff_vel_hi = min(izone.vel_hi, gi_vel_hi)
+            if (key < eff_key_lo || key > eff_key_hi
+                || velocity < eff_vel_lo || velocity > eff_vel_hi) continue
             result |> push(int2(inst_idx, iz_idx))
         }
     }

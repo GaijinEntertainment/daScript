@@ -30,7 +30,7 @@ def do_convert_to_gen2(file : string; inplace : bool) : string {
     let exe = args[0]
     let exe_dir = dir_name(exe)
     let fmt_exe = "{exe_dir}/das-fmt"
-    var inplace_flag = inplace ? " -i" : ""
+    let inplace_flag = inplace ? " -i" : ""
     let cmd = "{fmt_exe} -v2{inplace_flag} {file}"
     var output : string
     var exit_code = 0

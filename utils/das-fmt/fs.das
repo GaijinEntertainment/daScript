@@ -35,7 +35,7 @@ def join_path(a, path_b : string) : string {
     let b = trim_path(path_b)
     if (empty(a)) return fix_path(b)
     if (empty(b)) return fix_path(a)
-    var res = build_string() <| $(builder) {
+    let res = build_string() $(builder) {
         builder |> write(a)
         let ends = ends_with_separator(a)
         let starts = starts_with_separator(b)
@@ -60,7 +60,7 @@ def fix_path(path : string) : string {
 def scan_dir(path : string; var cache : table<string; void?>; var res : array<string>; suffix = ".das") : bool {
     let dirStat = stat(path)
     if (!dirStat.is_dir) return false
-    fio::dir(path) <| $(n) {
+    fio::dir(path) $(n) {
         if (n == "." || n == "..") return
         let f = path |> join_path(n)
         let fStat = stat(f)

@@ -77,7 +77,7 @@ it to chain fallible steps; the chain short-circuits on the first ``none``.
 .. code-block:: das
 
     def safe_parse_positive(s : string) : Option<int> {
-        if (s == "1") { return some(1); }
+        if (s == "1") return some(1);
         return none(type<int>)
     }
 
@@ -185,7 +185,7 @@ recovers from errors.
 .. code-block:: das
 
     def parse_digit(s : string) : Result<int; string> {
-        if (s == "1") { return ok(1, type<string>); }
+        if (s == "1") return ok(1, type<string>);
         return err("not a digit: {s}", type<int>)
     }
 
