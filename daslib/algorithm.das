@@ -408,8 +408,8 @@ def erase_all(var arr; value) {
 
 def fill(var a : array<auto(TT)>; value : TT const -&) {
     //! Sets all elements of the array to the given value using clone.
-    for (i in range(length(a))) {
-        a[i] := value
+    for (e in a) {
+        e := value
     }
 }
 
@@ -419,8 +419,8 @@ def fill(var a; value) {
     static_if (typeinfo stripped_typename(a[0]) != typeinfo stripped_typename(value)) {
         concept_assert(false, "value type {typeinfo stripped_typename(value)} should be the same as array {typeinfo stripped_typename(a)} element type {typeinfo stripped_typename(a[0])}")
     } else {
-        for (i in range(length(a))) {
-            a[i] := value
+        for (e in a) {
+            e := value
         }
     }
 }
@@ -486,7 +486,7 @@ def rotate(var a; mid : int) {
 
 def min_element(a : array<auto(TT)>) : int {
     //! Returns the index of the minimum element in the array, or -1 if the array is empty.
-    if (length(a) == 0) return -1
+    if (empty(a)) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (a[i] < a[best]) {
@@ -498,7 +498,7 @@ def min_element(a : array<auto(TT)>) : int {
 
 def min_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) : int {
     //! Returns the index of the minimum element according to the provided less function, or -1 if the array is empty.
-    if (length(a) == 0) return -1
+    if (empty(a)) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (invoke(less, a[i], a[best])) {
@@ -510,7 +510,7 @@ def min_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) 
 
 def max_element(a : array<auto(TT)>) : int {
     //! Returns the index of the maximum element in the array, or -1 if the array is empty.
-    if (length(a) == 0) return -1
+    if (empty(a)) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (a[best] < a[i]) {
@@ -522,7 +522,7 @@ def max_element(a : array<auto(TT)>) : int {
 
 def max_element(a : array<auto(TT)>; less : block<(a, b : TT const -&) : bool>) : int {
     //! Returns the index of the maximum element according to the provided less function, or -1 if the array is empty.
-    if (length(a) == 0) return -1
+    if (empty(a)) return -1
     var best = 0
     for (i in range(1, length(a))) {
         if (invoke(less, a[best], a[i])) {
@@ -561,11 +561,11 @@ def topological_sort(nodes : array<auto(Node)>) {
         if (lnodes != 0) {
             sorted |> reserve(lnodes)
             var unsorted : array<Node> := nodes
-            while (length(unsorted) > 0) {
+            while (!empty(unsorted)) {
                 var removed = 0
                 var i = 0
                 while (i < length(unsorted)) {
-                    if (length(unsorted[i].before) == 0) {
+                    if (empty(unsorted[i].before)) {
                         var node <- unsorted[i]
                         unsorted |> erase(i)
                         for (other in unsorted) {

@@ -847,7 +847,7 @@ def take(arr : array<auto(TT)>; var total : int) : array<TT -& -const> {
 def take_inplace(var arr : array<auto(TT)>; var total : int) {
     //! Keeps only the first `total` elements in an array in place
     let len = length(arr)
-    let taking = (total < len)  ? total : len
+    let taking = min(total, len)
     arr.resize(taking)
 }
 
@@ -1902,7 +1902,7 @@ def union_by_to_array(var srca, srcb : iterator<auto(TT)>; key : block<(arg : TT
 
 def any(src : array<auto(TT)>) : bool {
     //! Returns true if the array has at least one element
-    return length(src) != 0
+    return !empty(src)
 }
 
 def any(var src : iterator<auto(TT)>) : bool {
@@ -1961,7 +1961,7 @@ def all(src : array<auto(TT)>; predicate : block<(arg : TT -&) : bool>) : bool {
 
 def none(src : array<auto(TT)>) : bool {
     //! Returns true if the array has no elements
-    return length(src) == 0
+    return empty(src)
 }
 
 def none(var src : iterator<auto(TT)>) : bool {
@@ -2372,7 +2372,7 @@ def element_at_or_default(var src : iterator<auto(TT)>; index : int) : TT -const
 
 def first(src : array<auto(TT)>) : TT -const -& {
     //! Returns the first element of an array
-    panic("sequence contains no elements") if (length(src) == 0)
+    panic("sequence contains no elements") if (empty(src))
     static_if (typeinfo can_copy(src[0])) {
         return src[0]
     } else {
@@ -2396,7 +2396,7 @@ def first(var src : iterator<auto(TT)>) : TT -const -& {
 
 def first_or_default(src : array<auto(TT)>; defaultValue : TT -&) : TT -const -& {
     //! Returns the first element of an array, or a default value if the array is empty
-    if (length(src) == 0) {
+    if (empty(src)) {
         static_if (typeinfo can_copy(defaultValue)) {
             return defaultValue
         } else {
@@ -2745,7 +2745,7 @@ def private chunk_impl(var src; tt : auto(TT); size : int) : array<array<TT -con
             buffer.emplace(chunk)
         }
     }
-    if (chunk.length() > 0) {
+    if (!empty(chunk)) {
         buffer.emplace(chunk)
     }
     return <- buffer

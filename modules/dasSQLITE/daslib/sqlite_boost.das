@@ -1129,8 +1129,7 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     for (j in range(length(got))) {
         by_name |> insert(got[j].name, j)
     }
-    for (i in range(length(want))) {
-        let w = want[i]
+    for (w in want) {
         let g_idx = by_name?[w.name] ?? -1
         if (g_idx < 0) return some("check_schema: \"{table_name}\" struct field \"{w.name}\" not found in DB columns.")
         let g = got[g_idx]

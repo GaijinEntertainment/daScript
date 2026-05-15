@@ -143,7 +143,7 @@ def glUniformMatrix4fv(location : int; value : float4x4) {
 [expect_any_array(arr)]
 def glBufferData(target : GLenum; arr; usage : GLenum) {
     unsafe {
-        assert(length(arr) > 0)
+        assert(!empty(arr))
         glBufferData(target, int64(length(arr) * typeinfo sizeof(arr[0])), reinterpret<void?> addr(arr[0]), usage)
     }
 }

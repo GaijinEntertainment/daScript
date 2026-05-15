@@ -441,11 +441,9 @@ def expectsLocalTemp(expr : ExprMakeLocal?) : bool {
     if (!expr.makeFlags.doesNotNeedSp && expr.stackTop != 0u) {
         if (expr is ExprMakeStruct) {
             let mks = expr as ExprMakeStruct
-            if (mks.makeType.baseType == Type.tHandle &&
-                !mks.makeType.isRefType &&
-                mks.constructor == null) {
-                return false
-            }
+            if (mks.makeType.baseType == Type.tHandle
+                    && !mks.makeType.isRefType
+                    && mks.constructor == null) return false
         }
         return true
     }
