@@ -1,0 +1,138 @@
+/* ──────────────────────────────────────────────────────────────────
+ * Forge — additive refinements on top of custom.css.
+ *
+ * Drop next to custom.css and load AFTER it:
+ *   html_css_files = ['custom.css', 'custom-patch.css']
+ *
+ * Covers gaps G1–G11 documented in SPHINX_AUDIT.md.
+ * ────────────────────────────────────────────────────────────────── */
+
+/* G1 — bare links, no permanent underline */
+.rst-content a, .rst-content a:visited {
+    text-decoration: none !important;
+    border-bottom: 1px dotted transparent !important;
+    transition: border-color 0.12s, color 0.12s;
+}
+.rst-content a:hover {
+    color: var(--fg) !important;
+    border-bottom-color: var(--fg) !important;
+}
+
+/* G2 — admonition title takes the kind color */
+.rst-content .admonition .admonition-title { color: var(--blue) !important; }
+.rst-content .admonition.warning .admonition-title,
+.rst-content .admonition.attention .admonition-title,
+.rst-content .admonition.caution .admonition-title { color: var(--amber) !important; }
+.rst-content .admonition.error .admonition-title,
+.rst-content .admonition.danger .admonition-title  { color: var(--red)   !important; }
+.rst-content .admonition.tip .admonition-title,
+.rst-content .admonition.hint .admonition-title    { color: var(--green) !important; }
+
+/* G3 — kill table row striping, swap solid grid for dashed rows */
+.rst-content table.docutils,
+.wy-table-responsive table {
+    border-left: none !important;
+    border-right: none !important;
+    border-top: 1px solid var(--rule) !important;
+    border-bottom: 1px solid var(--rule) !important;
+}
+.rst-content table.docutils tbody tr td,
+.rst-content table.docutils tbody tr:nth-child(odd) td,
+.wy-table-responsive table tbody tr td,
+.wy-table-responsive table tbody tr:nth-child(odd) td {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px dashed var(--rule) !important;
+}
+.rst-content table.docutils thead th,
+.wy-table-responsive table thead th {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid var(--rule) !important;
+    font-family: var(--font-mono) !important;
+    font-size: 11px !important;
+    letter-spacing: 1.2px !important;
+    text-transform: uppercase !important;
+    color: var(--fg-faint) !important;
+    text-align: left;
+}
+
+/* G4 — anchors don't disappear under the sticky nav */
+html { scroll-padding-top: 80px; }
+.rst-content h1, .rst-content h2, .rst-content h3,
+.rst-content h4, .rst-content h5, .rst-content h6 {
+    scroll-margin-top: 80px;
+}
+
+/* G5 — headerlink ¶ becomes a subtle hover-only → */
+.rst-content a.headerlink {
+    color: transparent !important;
+    background: transparent !important;
+    border-bottom: none !important;
+    margin-left: 10px;
+    font-size: 0 !important;          /* hide the ¶ glyph */
+    transition: color 0.12s;
+    vertical-align: middle;
+}
+.rst-content a.headerlink::before {
+    content: '→';
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: inherit;
+}
+.rst-content h1:hover a.headerlink, .rst-content h1:focus-within a.headerlink,
+.rst-content h2:hover a.headerlink, .rst-content h2:focus-within a.headerlink,
+.rst-content h3:hover a.headerlink, .rst-content h3:focus-within a.headerlink,
+.rst-content h4:hover a.headerlink, .rst-content h4:focus-within a.headerlink,
+.rst-content h5:hover a.headerlink, .rst-content h5:focus-within a.headerlink,
+.rst-content h6:hover a.headerlink, .rst-content h6:focus-within a.headerlink {
+    color: var(--fg-faint) !important;
+}
+.rst-content a.headerlink:hover,
+.rst-content a.headerlink:focus-visible { color: var(--amber) !important; }
+
+/* G6 — branded text selection */
+::selection { background: rgba(232,161,58,0.28); color: var(--fg); }
+
+/* G7 — kbd */
+.rst-content kbd, kbd.kbd, kbd.docutils.literal {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: var(--bg-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 1px 6px;
+    color: var(--fg);
+    box-shadow: 0 1px 0 var(--rule);
+}
+
+/* G8 — list markers */
+.rst-content ul > li::marker  { color: var(--fg-faint); }
+.rst-content ol > li::marker  {
+    color: var(--amber);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+}
+
+/* G9 — narrower prose, keep code/tables wide.
+ * <p> is never used for code blocks or tables, so capping every <p> is safe.
+ * Cells (td/th) explicitly opt out so wide tabular data still spans full width. */
+.rst-content p { max-width: 720px; }
+.rst-content td p,
+.rst-content th p { max-width: none; }
+
+/* G10 — heading scale matches landing/artboard */
+.rst-content h1 { font-size: 44px !important; line-height: 1.1  !important; letter-spacing: -0.02em  !important; }
+.rst-content h2 { font-size: 26px !important; line-height: 1.3  !important; letter-spacing: -0.015em !important; margin-top: 40px; }
+.rst-content h3 { font-size: 20px !important; line-height: 1.4  !important; letter-spacing: -0.01em  !important; margin-top: 28px; }
+
+/* G11 — inner <pre> shouldn't redraw the rounded corner */
+.rst-content div[class^="highlight"] pre {
+    border-radius: 0 !important;
+    border: none !important;
+}
+
+/* Fallback: any un-tokenized signature text still reads as dim grey. */
+.rst-content dt.sig-object { color: var(--fg-dim); }
+.rst-content dt.sig-object .sig-name,
+.rst-content dt.sig-object .sig-name.descname { color: var(--amber) !important; }

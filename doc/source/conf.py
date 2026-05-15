@@ -157,7 +157,7 @@ html_static_path = ['_static']
 
 # Custom CSS — Forge token overlay on top of sphinx_rtd_theme.
 # See doc/source/_static/custom.css for the retoken rules.
-html_css_files = ['custom.css']
+html_css_files = ['custom.css', 'custom-patch.css']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

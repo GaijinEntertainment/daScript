@@ -19,6 +19,49 @@ from pygments.token import (
     Comment, Keyword, Name, Number, Operator, Punctuation, String, Text, Token
 )
 
+# G13b — signature syntax highlighting. We reuse DaslangLexer (defined
+# further down in this file) to tokenize each signature's arglist and
+# return type, then emit Pygments-classed inline nodes. CSS rules in
+# _static/custom.css of the form `.highlight .k`, `.highlight .kt`, etc.
+# then color signatures the same way they color code blocks.
+from pygments import lex as _pygments_lex
+from pygments.token import STANDARD_TYPES as _PYG_STANDARD_TYPES
+
+
+def _das_token_class(ttype):
+    """Map a Pygments token type to its short HTML class ('k', 'kt', 'n', …).
+    Walks up the token hierarchy until a STANDARD_TYPES match is found."""
+    while ttype is not None:
+        if ttype in _PYG_STANDARD_TYPES:
+            return _PYG_STANDARD_TYPES[ttype]
+        ttype = ttype.parent
+    return ''
+
+
+# Lazy singleton — DaslangLexer is cheap but no need to rebuild per call.
+_DAS_LEXER_SINGLETON = None
+def _das_lexer():
+    global _DAS_LEXER_SINGLETON
+    if _DAS_LEXER_SINGLETON is None:
+        _DAS_LEXER_SINGLETON = DaslangLexer()
+    return _DAS_LEXER_SINGLETON
+
+
+def _append_highlighted(signode, text):
+    """Tokenize `text` with DaslangLexer and append classed inline nodes
+    to `signode`. Each token is wrapped with both `highlight` and the
+    Pygments short class (e.g. `kt` for type, `k` for keyword), so the
+    existing `.highlight .kt` style rules apply without modification."""
+    if not text:
+        return
+    for ttype, value in _pygments_lex(text, _das_lexer()):
+        cls = _das_token_class(ttype)
+        classes = ['highlight']
+        if cls:
+            classes.append(cls)
+        signode += nodes.inline(value, value, classes=classes)
+
+
 from sphinx import version_info
 
 from sphinx import addnodes
@@ -130,11 +173,22 @@ class DASObject(ObjectDescription):
         if self.has_arguments:
             if not arglist:
                 if not self.skip_empty_arguments:
-                    signode += addnodes.desc_parameterlist()
+                    # Empty () for callables with skip_empty_arguments=False
+                    signode += addnodes.desc_sig_punctuation('(', '(')
+                    signode += addnodes.desc_sig_punctuation(')', ')')
             else:
-                _pseudo_parse_arglist(signode, arglist)
+                # G13b — tokenize the arglist with DaslangLexer so each
+                # token (type, name, operator, etc.) ends up in its own
+                # span with a Pygments class name. Wrap with explicit
+                # parens so CSS layout stays consistent with the pre-
+                # patch behavior.
+                signode += addnodes.desc_sig_punctuation('(', '(')
+                _append_highlighted(signode, arglist)
+                signode += addnodes.desc_sig_punctuation(')', ')')
         if retType:
-            signode += addnodes.desc_type(retType, retType)
+            # retType retains its leading ':' from handle_signature's
+            # split, so we can hand it to the lexer as-is.
+            _append_highlighted(signode, retType)
         return fullname, prefix
 
     def add_target_and_index(self, name_obj, sig, signode):
